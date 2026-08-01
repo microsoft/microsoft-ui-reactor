@@ -183,11 +183,14 @@ class C
     [Fact]
     public async Task Fires_For_Padding_On_Grid_And_RelativePanel()
     {
+        // Grid is pooled and RelativePanel is not, so the same gated write reports under two
+        // different ids. That pairing is the point: it pins rule selection to the receiver
+        // rather than to the property, which a same-id pair could not distinguish.
         var source = Stubs + @"
 class C
 {
     GridElement G(GridElement g) => {|REACTOR_POOL_001:g.Set(x => x.Padding = new Thickness(8))|};
-    RelativePanelElement R(RelativePanelElement r) => {|REACTOR_POOL_001:r.Set(x => x.Padding = new Thickness(8))|};
+    RelativePanelElement R(RelativePanelElement r) => {|REACTOR_MOD_002:r.Set(x => x.Padding = new Thickness(8))|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -248,13 +251,16 @@ class C
     [Fact]
     public async Task Fires_For_Padding_And_CornerRadius_On_Concrete_Panels()
     {
+        // RelativePanel still fires — the gate admits it, so the modifier really does reach the
+        // control — but as REACTOR_MOD_002, because ElementPool never recycles a RelativePanel
+        // and POOL_001's "unwound on pool return" clause would be false for it.
         var source = Stubs + @"
 class C
 {
     StackElement A(StackElement s) => {|REACTOR_POOL_001:s.Set(x => x.Padding = new Thickness(4))|};
     StackElement B(StackElement s) => {|REACTOR_POOL_001:s.Set(x => x.CornerRadius = new CornerRadius(4))|};
     GridElement G(GridElement g) => {|REACTOR_POOL_001:g.Set(x => x.CornerRadius = new CornerRadius(4))|};
-    RelativePanelElement R(RelativePanelElement r) => {|REACTOR_POOL_001:r.Set(x => x.CornerRadius = new CornerRadius(4))|};
+    RelativePanelElement R(RelativePanelElement r) => {|REACTOR_MOD_002:r.Set(x => x.CornerRadius = new CornerRadius(4))|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {

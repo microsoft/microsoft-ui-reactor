@@ -290,7 +290,8 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             {
                 reportable.Add((
                     assignment.SpanStart, hit.PropName, hit.PropName,
-                    "." + hit.Info.Modifier + "(...)", hit.Info.PoolReset));
+                    "." + hit.Info.Modifier + "(...)",
+                    hit.Info.PoolReset && PassesPoolResetGate(context, hit.Info, leftAccess)));
             }
             else
             {
@@ -460,6 +461,41 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             return null;
 
         return (propName, info);
+    }
+
+    /// <summary>
+    /// True when <c>ElementPool</c> actually resets this property <em>on this receiver</em>, so
+    /// <c>REACTOR_POOL_001</c>'s claim that the write is unwound on pool return is true of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A property is pool-reset as a whole, but only the receivers in
+    /// <see cref="ModifierInfo.PoolResetGate"/> are recycled. <c>RelativePanel</c> is gated for
+    /// <c>Padding</c> and <c>CornerRadius</c> yet is never pooled, so reporting POOL_001 there
+    /// asserts something false at Warning severity — a build break for anyone using
+    /// <c>TreatWarningsAsErrors</c>. Such a receiver falls to <c>REACTOR_MOD_002</c>, which
+    /// describes the hazard it does have.
+    /// </para>
+    /// <para>
+    /// No gate means no receiver restriction — the reset applies wherever the property is
+    /// written — so the absence of a list is a pass here, unlike
+    /// <see cref="PassesControlGate"/> where absence means "not applicable" and must fail.
+    /// The two read alike and mean opposite things, which is why they are separate methods.
+    /// </para>
+    /// </remarks>
+    private static bool PassesPoolResetGate(
+        SyntaxNodeAnalysisContext context,
+        ModifierInfo info,
+        MemberAccessExpressionSyntax leftAccess)
+    {
+        if (info.PoolResetGate is not { } gate)
+            return true;
+
+        var controlType = context.SemanticModel
+            .GetTypeInfo(leftAccess.Expression, context.CancellationToken).Type;
+
+        return gate.Any(allowed =>
+            SetLambdaHelpers.InheritsFrom(controlType, allowed, "Microsoft.UI.Xaml.Controls"));
     }
 
     /// <summary>

@@ -12,12 +12,14 @@ internal sealed class ModifierInfo
         string modifier,
         bool poolReset = false,
         string[]? controlGate = null,
-        string[]? elementTypes = null)
+        string[]? elementTypes = null,
+        string[]? poolResetGate = null)
     {
         Modifier = modifier;
         PoolReset = poolReset;
         ControlGate = controlGate;
         ElementTypes = elementTypes;
+        PoolResetGate = poolResetGate;
     }
 
     /// <summary>Name of the fluent modifier method to suggest.</summary>
@@ -28,6 +30,11 @@ internal sealed class ModifierInfo
     /// <c>.Set</c> write is silently lost on pool reuse. Selects the higher-severity
     /// <c>REACTOR_POOL_001</c>; everything else reports <c>REACTOR_MOD_002</c>.
     /// </summary>
+    /// <remarks>
+    /// Property-level. Where the reset only applies to some of the gated receivers,
+    /// <see cref="PoolResetGate"/> narrows it — see that member for why the distinction is
+    /// load-bearing rather than cosmetic.
+    /// </remarks>
     public bool PoolReset { get; }
 
     /// <summary>
@@ -58,6 +65,33 @@ internal sealed class ModifierInfo
     /// </para>
     /// </summary>
     public string[]? ElementTypes { get; }
+
+    /// <summary>
+    /// The subset of <see cref="ControlGate"/> the pool actually resets, or <c>null</c> when
+    /// every gated receiver is reset.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="PoolReset"/> is per-property, but poolability is per-receiver, and the two
+    /// do not coincide: <c>ApplyModifiers</c> writes <c>Padding</c> to <c>RelativePanel</c>,
+    /// yet <c>RelativePanel</c> is absent from <c>ElementPool.PoolableTypes</c>, so nothing
+    /// is ever recycled and no write is ever unwound. Reporting <c>REACTOR_POOL_001</c> there
+    /// states something false — and at Warning severity, which becomes a build break for
+    /// consumers using <c>TreatWarningsAsErrors</c>. Narrowing to this list reports
+    /// <c>REACTOR_MOD_002</c> instead, which is the hazard such a receiver does have: the
+    /// write is dropped by the next render.
+    /// </para>
+    /// <para>
+    /// This is a name-level mirror of <c>ControlGate ∩ ElementPool.PoolableTypes</c>, kept
+    /// here because the analyzer targets <c>netstandard2.0</c> and cannot reference
+    /// <c>src/Reactor</c>. It is not maintained by hand:
+    /// <c>ModifierUnsetClearValueTests.Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement</c>
+    /// derives the same intersection from both real sources, and
+    /// <c>Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection</c> fails if this list
+    /// drifts from it in either direction.
+    /// </para>
+    /// </remarks>
+    public string[]? PoolResetGate { get; }
 }
 
 /// <summary>
@@ -232,6 +266,11 @@ internal static class ModifierTable
     private static readonly string[] RichTextBlockOnly = { "RichTextBlockElement" };
     private static readonly string[] TextOrRichTextBlock = { "TextBlockElement", "RichTextBlockElement" };
 
+    // The two groups above minus RelativePanel, which ApplyModifiers writes to but
+    // ElementPool never recycles. Used as poolResetGate, never as controlGate.
+    private static readonly string[] ControlBorderGridStackText = { "Control", "Border", "Grid", "StackPanel", "TextBlock" };
+    private static readonly string[] ControlBorderGridStack = { "Control", "Border", "Grid", "StackPanel" };
+
     /// <summary>
     /// Property name → modifier mapping. Keyed by the WinUI property name as written inside
     /// the <c>.Set</c> lambda.
@@ -260,15 +299,15 @@ internal static class ModifierTable
             // apply: the gate decides whether the modifier reaches the control at all,
             // poolReset decides which rule id reports it.
             //
-            // poolReset is a per-property flag, so POOL_001 reports it for every receiver the
-            // gate admits — including ones the pool never recycles. RelativePanel is gated for
-            // Padding/CornerRadius but is absent from ElementPool.PoolableTypes, so a .Set write
-            // there is NOT unwound on pool return and POOL_001's leading clause is false for it.
-            // The advice still holds (the write is dropped by the next render, which is the
-            // MOD_002 hazard), but the severity and the reason are wrong. Making rule selection
-            // receiver-aware needs PoolableTypes mirrored into this netstandard2.0 assembly plus
-            // a parity gate; tracked as issue #1051. Every other gated receiver is poolable, so
-            // for Control | Border | Grid | StackPanel | TextBlock the clause is accurate.
+            // poolReset is per-property but poolability is per-receiver, and Padding and
+            // CornerRadius are gated for RelativePanel, which ElementPool never recycles. On
+            // that receiver POOL_001's leading clause is simply false, and it is a Warning, so
+            // a consumer building with TreatWarningsAsErrors would fail on a hazard they do not
+            // have. poolResetGate narrows rule selection to the receivers the pool really
+            // resets; everything outside it falls to MOD_002, which is the hazard those
+            // receivers do have (the write is dropped by the next render). The lists are not
+            // hand-maintained — ModifierUnsetClearValueTests derives the same intersection from
+            // ElementPool.PoolableTypes and fails if either drifts. Closes issue #1051.
             //
             // WinUI declares most of these on Panel subclasses too, and the allow-lists
             // genuinely differ: Panel itself declares only Background; Grid, StackPanel, and
@@ -276,8 +315,8 @@ internal static class ModifierTable
             // Padding but not CornerRadius. IsEnabled needs no gate — WinUI declares it on
             // Control, so if the .Set lambda compiles the receiver already qualifies.
             { "IsEnabled",       new ModifierInfo("IsEnabled",       poolReset: true) },
-            { "Padding",         new ModifierInfo("Padding",         poolReset: true, controlGate: ControlBorderGridStackRelativeText) },
-            { "CornerRadius",    new ModifierInfo("CornerRadius",    poolReset: true, controlGate: ControlBorderGridStackRelative) },
+            { "Padding",         new ModifierInfo("Padding",         poolReset: true, controlGate: ControlBorderGridStackRelativeText, poolResetGate: ControlBorderGridStackText) },
+            { "CornerRadius",    new ModifierInfo("CornerRadius",    poolReset: true, controlGate: ControlBorderGridStackRelative,     poolResetGate: ControlBorderGridStack) },
             { "BorderThickness", new ModifierInfo("BorderThickness", poolReset: true, controlGate: ControlBorder) },
             { "BorderBrush",     new ModifierInfo("BorderBrush",     poolReset: true, controlGate: ControlBorder) },
             { "Background",      new ModifierInfo("Background",      poolReset: true, controlGate: PanelControlBorder) },

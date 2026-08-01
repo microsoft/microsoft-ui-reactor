@@ -290,6 +290,71 @@ public class ModifierUnsetClearValueTests
             "poolable set, so it cannot be silenced by editing a list.");
     }
 
+    /// <summary>
+    /// <c>ModifierTable</c>'s <c>poolResetGate</c> lists are a name-level mirror of
+    /// <c>ControlGate ∩ ElementPool.PoolableTypes</c>, needed because the analyzer targets
+    /// <c>netstandard2.0</c> and cannot reference <c>src/Reactor</c>. This is the parity gate
+    /// that makes the mirror maintained rather than remembered.
+    /// </summary>
+    /// <remarks>
+    /// Compared as a <b>set</b>, in both directions. A count would pass on the same size with
+    /// different members, and a one-directional check would miss the half that matters: a gate
+    /// that is too <i>wide</i> reports POOL_001 on a receiver the pool never touches — a false
+    /// Warning, which is a build break under <c>TreatWarningsAsErrors</c> — while one that is
+    /// too <i>narrow</i> silently downgrades a real pooling hazard to Info.
+    /// </remarks>
+    [Fact]
+    public void Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection()
+    {
+        var closure = ReadPoolableReceiverClosure(ReadPoolableTypes());
+        var checkedProperties = new List<string>();
+
+        foreach (var (property, info) in ModifierTable.Properties)
+        {
+            if (!info.PoolReset || info.ControlGate is null) continue;
+
+            var derived = info.ControlGate
+                .Where(closure.ContainsKey)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var declared = (info.PoolResetGate ?? info.ControlGate).ToHashSet(StringComparer.Ordinal);
+
+            var tooWide = declared.Except(derived, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
+            var tooNarrow = derived.Except(declared, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
+
+            Assert.True(
+                tooWide.Count == 0,
+                $"'{property}' reports REACTOR_POOL_001 on [{string.Join(", ", tooWide)}], which " +
+                "ElementPool never recycles — so the diagnostic asserts that a .Set write is " +
+                "unwound on pool return when nothing of the sort happens. POOL_001 is a Warning, " +
+                $"so this breaks consumers building with TreatWarningsAsErrors. Add the receiver " +
+                $"to ElementPool.PoolableTypes, or drop it from '{property}'s poolResetGate so it " +
+                "falls to REACTOR_MOD_002.");
+
+            Assert.True(
+                tooNarrow.Count == 0,
+                $"'{property}' is pool-reset on [{string.Join(", ", tooNarrow)}] but its " +
+                "poolResetGate omits them, so a .Set write that really is lost on pool reuse " +
+                "reports as REACTOR_MOD_002 (Info, 'a modifier exists') instead of " +
+                "REACTOR_POOL_001 (Warning, 'this write is dropped'). Add them to the gate.");
+
+            checkedProperties.Add(property);
+        }
+
+        Assert.True(
+            checkedProperties.Count >= 5,
+            $"Only {checkedProperties.Count} gated pool-reset propert(ies) were compared, so this " +
+            "parity gate has stopped seeing the table it exists to check.");
+
+        // The mirror is only load-bearing where it actually narrows something. If no property
+        // declares a poolResetGate, every assertion above is satisfied by `?? ControlGate`
+        // comparing the gate against itself — true by construction, and it would stay true if
+        // the analyzer stopped consulting the gate entirely.
+        Assert.Contains(
+            ModifierTable.Properties.Values,
+            info => info.PoolReset && info.PoolResetGate is not null);
+    }
+
     // ── Source-scanning helpers ─────────────────────────────────────────────
 
     /// <summary>
