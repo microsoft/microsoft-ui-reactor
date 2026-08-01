@@ -141,9 +141,9 @@ public sealed class GalleryCardIndependenceTests
     /// Discards are skipped — they bind nothing and so can never be referenced from a card.
     /// Returned in source order, which is what <c>DescendantNodes</c> pre-order already gives.
     /// </summary>
-    internal static IReadOnlyList<(IReadOnlyList<string> Names, int Line, SyntaxNode? Scope)> StateSlots(SyntaxNode pageRoot)
+    internal static IReadOnlyList<(IReadOnlyList<string> Names, int Line, SyntaxNode? Scope, SyntaxNode Region)> StateSlots(SyntaxNode pageRoot)
     {
-        var slots = new List<(IReadOnlyList<string> Names, int Line, SyntaxNode? Scope)>();
+        var slots = new List<(IReadOnlyList<string> Names, int Line, SyntaxNode? Scope, SyntaxNode Region)>();
 
         foreach (var node in pageRoot.DescendantNodes())
         {
@@ -174,7 +174,7 @@ public sealed class GalleryCardIndependenceTests
 
             if (names is null || names.Count == 0) continue;
 
-            slots.Add((names, node.GetLocation().GetLineSpan().StartLinePosition.Line + 1, DeclaringMember(node)));
+            slots.Add((names, node.GetLocation().GetLineSpan().StartLinePosition.Line + 1, DeclaringMember(node), DeclaringRegion(node)));
         }
 
         return slots;
@@ -216,6 +216,34 @@ public sealed class GalleryCardIndependenceTests
     /// the file scope a node outside any member sits in.
     /// </summary>
     static int ScopeKey(SyntaxNode? scope) => scope?.SpanStart ?? -1;
+
+    /// <summary>
+    /// The innermost block a slot's declaration sits in — the region a reference must sit inside to
+    /// be reading <em>that</em> declaration rather than a same-named one beside it.
+    ///
+    /// <para>This is one granularity finer than <see cref="DeclaringMember"/> and exists for the
+    /// case that one cannot separate: two slots binding the same name in non-overlapping blocks of
+    /// a single member. That is ordinary compiling C# — CS0136 forbids shadowing, not reuse across
+    /// disjoint scopes — so the two must be told apart rather than merged. A block is the right
+    /// unit because it is exactly the scope a local is visible in.</para>
+    ///
+    /// <para>Falls back to the declaring member when the declaration sits in no block, and to the
+    /// file root when it sits in no member either (top-level statements) — the region a file-scope
+    /// local is readable from. Widening the fallback keeps those references resolving exactly as
+    /// they did before regions existed; narrowing it would drop them silently.</para>
+    /// </summary>
+    static SyntaxNode DeclaringRegion(SyntaxNode declaration)
+    {
+        var member = DeclaringMember(declaration);
+
+        foreach (var ancestor in declaration.Ancestors())
+        {
+            if (ancestor is BlockSyntax) return ancestor;
+            if (ancestor == member) break;
+        }
+
+        return member ?? declaration.SyntaxTree.GetRoot();
+    }
 
     // ── attributing a reference to a card ────────────────────────────────────
 
@@ -288,17 +316,19 @@ public sealed class GalleryCardIndependenceTests
         var slots = StateSlots(pageRoot);
 
         // A name can only speak for a slot inside the member that declares it, so the lookup is
-        // keyed by (member, name). Scoping the key is load-bearing in *both* directions, and the
-        // second is the easy one to miss: a sibling member's identically-named local must not be
-        // mistaken for this slot, and it must not collide with it either — a file-wide key marks
-        // the name ambiguous and then drops a genuine finding in Render(), which is a silent miss
-        // of the very defect this gate exists to catch. CS0136 does not reach across member
-        // bodies, so two members each holding a `value` slot is ordinary compiling code.
+        // keyed by (member, name). CS0136 does not reach across member bodies, so two members each
+        // holding a `value` slot is ordinary compiling code, and a file-wide key conflated them —
+        // the false negative `64b05561` fixed. The key still carries weight that block resolution
+        // below cannot: a `static` local function may shadow the name with an ordinary local that
+        // is not a slot at all, and with nothing to resolve against, only the member boundary stops
+        // that reference being read as the enclosing slot.
         //
         // Ambiguity stays real *within* one member: two slots in non-overlapping blocks may both
-        // bind `value`, and there the scan genuinely cannot say which one a reference means.
-        var slotOfName = new Dictionary<(int Scope, string Name), int>();
-        var ambiguous = new HashSet<(int Scope, string Name)>();
+        // bind `value`. That is ordinary compiling code, and each card in such a page is genuinely
+        // independent, so the name is resolved at the use site by the block that contains it rather
+        // than reported. Merging the two would invent a coupling; reporting them would block a
+        // correct page in a gate that has no allowlist to waive it with.
+        var candidates = new Dictionary<(int Scope, string Name), List<int>>();
 
         for (var index = 0; index < slots.Count; index++)
         {
@@ -307,10 +337,11 @@ public sealed class GalleryCardIndependenceTests
 
             foreach (var key in slots[index].Names.Select(name => (scope, name)))
             {
-                if (slotOfName.TryGetValue(key, out var existing) && existing != index)
-                    ambiguous.Add(key);
-                else
-                    slotOfName[key] = index;
+                if (!candidates.TryGetValue(key, out var declarations))
+                    candidates[key] = declarations = [];
+
+                // One slot can bind a name only once; a repeat is the same declaration seen again.
+                if (!declarations.Contains(index)) declarations.Add(index);
             }
         }
 
@@ -334,8 +365,18 @@ public sealed class GalleryCardIndependenceTests
 
             if (IsNameOfOperand(reference)) continue;
 
-            if (ambiguous.Contains(key))
+            if (!candidates.TryGetValue(key, out var declarations)) continue;
+
+            var index = Resolve(declarations, reference);
+
+            // Bound more than once and attributable to none of them: the scan has no basis to say
+            // what this reference reads. Bound *once* and not contained is different and ordinary —
+            // the name is simply something else here, a field most likely — so it is skipped the
+            // same way a reference from another member is.
+            if (index < 0)
             {
+                if (declarations.Count < 2) continue;
+
                 if (!reachedByAmbiguous.TryGetValue(key, out var ambiguousCards))
                     reachedByAmbiguous[key] = ambiguousCards = [];
 
@@ -343,9 +384,29 @@ public sealed class GalleryCardIndependenceTests
                 continue;
             }
 
-            if (!slotOfName.TryGetValue(key, out var index)) continue;
-
             RecordCard(reached[index], reference);
+        }
+
+        // Which declaration a reference means: the one whose block contains it. C# guarantees at
+        // most one candidate can apply — shadowing is CS0136, so same-named declarations sit in
+        // disjoint blocks — and the innermost tie-break is what the language would do anyway if a
+        // future construct made nesting legal. Returns -1 when no candidate's region contains the
+        // reference, which the caller reads as "not this slot" or "cannot say" depending on how
+        // many declarations there were.
+        int Resolve(List<int> declarations, SyntaxNode reference)
+        {
+            var best = -1;
+
+            foreach (var candidate in declarations)
+            {
+                var region = slots[candidate].Region;
+
+                if (!region.Span.Contains(reference.Span)) continue;
+
+                if (best < 0 || region.Span.Length < slots[best].Region.Span.Length) best = candidate;
+            }
+
+            return best;
         }
 
         void RecordCard(List<InvocationExpressionSyntax> into, IdentifierNameSyntax reference)
@@ -369,11 +430,13 @@ public sealed class GalleryCardIndependenceTests
                 slots[index].Line));
         }
 
-        // An ambiguous name that reaches two or more cards is reported as unadjudicable. Reaching
-        // one card or none stays silent: there is nothing for the ambiguity to be hiding, so a page
-        // that merely reuses a name across two disjoint blocks is not blocked by it. That keeps the
-        // arm scoped to the case where the missing information is load-bearing, which matters here
-        // because this gate has no allowlist and a finding it raises cannot be waived.
+        // A name that no declaration's block accounts for, reaching two or more cards, is reported
+        // as unadjudicable. Resolution above already handles the ordinary case — two same-named
+        // slots in disjoint blocks, each driving its own card — so what is left here is a reference
+        // standing outside every candidate's region, where the scan has no basis to attribute it
+        // and silence would read as "these cards are independent". Reaching one card or none stays
+        // silent: there is nothing for the missing information to be hiding, and this gate has no
+        // allowlist, so a finding it raises cannot be waived.
         foreach (var entry in reachedByAmbiguous.OrderBy(e => e.Key.Name, StringComparer.Ordinal))
         {
             if (entry.Value.Count < 2) continue;
@@ -381,7 +444,9 @@ public sealed class GalleryCardIndependenceTests
             findings.Add(new Finding(
                 entry.Key.Name,
                 entry.Value.Select(CardTitle).ToList(),
-                slotOfName.TryGetValue(entry.Key, out var declaredAt) ? slots[declaredAt].Line : 0,
+                candidates.TryGetValue(entry.Key, out var declarations) && declarations.Count > 0
+                    ? slots[declarations[0]].Line
+                    : 0,
                 Unadjudicable: true));
         }
 
@@ -418,8 +483,12 @@ public sealed class GalleryCardIndependenceTests
         Assert.True(cards >= 150, $"only {cards} SampleCard invocations were inspected — the lint is barely looking.");
         Assert.True(slots >= 100, $"only {slots} state slots were found — the slot detector has stopped recognising them.");
 
+        // The header counts findings, not shared slots. Most findings *are* a shared slot, but an
+        // unadjudicable one asserts the opposite — that the scan could not tell — so a header
+        // spelling every finding as a confirmed share would state the one thing that finding
+        // declines to. Each line below says which it is; this line only says how many there are.
         Assert.True(offenders.Count == 0,
-            $"{offenders.Count} state slot(s) are shared across sample cards " +
+            $"{offenders.Count} sample-card state independence finding(s) " +
             $"({pages} pages, {cards} cards, {slots} slots inspected):" +
             global::System.Environment.NewLine +
             string.Join(global::System.Environment.NewLine, offenders));
@@ -717,19 +786,24 @@ public sealed class GalleryCardIndependenceTests
     /// (<see cref="ASameNamedSlotInASiblingMember_DoesNotHideARealSharedSlot"/>); it shrank the
     /// ambiguous set without emptying it.
     ///
-    /// <para>The scan cannot say which declaration a reference means, and the arm that handles
-    /// that used to <c>continue</c>. Skipping reads as conservative and is the opposite: silence
-    /// from this gate means "these cards are independent", so an unresolvable name returned the
-    /// clean answer on the one input where the scan knew nothing. Reporting it as
-    /// <c>Unadjudicable</c> claims only what was measured — more than one binding, and the cards
-    /// the references reach.</para>
+    /// <para>The remaining collision is resolved rather than reported. C# already decides it: a
+    /// local is visible in its own block, shadowing is CS0136, so the candidate blocks are disjoint
+    /// and a reference sits inside at most one of them. Merging the two would invent a coupling
+    /// across independent cards; dropping the name would answer "these cards are independent" on
+    /// the one input where the scan had no idea. Resolving gives the <em>right</em> answer to both
+    /// halves of this page at once.</para>
+    ///
+    /// <para>Which is what this asserts: the first block really does wire one slot into two cards
+    /// and is convicted by name, while the second block's identically-named slot drives its own
+    /// card and is left alone. A scan that collapsed the two would name all three cards; one that
+    /// dropped the name would report nothing at all.</para>
     ///
     /// <para>Measured before it was written: zero gallery pages bind a slot name twice in one
     /// member, so this fires on nothing today. That is what makes the synthetic drive necessary —
     /// an arm the real corpus never exercises is one no run has ever watched reject anything.</para>
     /// </summary>
     [Fact]
-    public void AnUnresolvableSlotName_IsReportedRatherThanSilentlyDropped()
+    public void SameNamedSlotsInDisjointBlocks_ResolveToTheBlockThatDeclaresThem()
     {
         var scan = ScanSource("""
             namespace Gallery;
@@ -756,30 +830,30 @@ public sealed class GalleryCardIndependenceTests
             }
             """);
 
-        // Both halves of the pair are ambiguous, so both are named. The signature says AMBIGUOUS
-        // rather than asserting a coupling — the scan cannot tell whether "Basic"/"Spin" share the
-        // first slot or not, and that inability is the finding.
-        Assert.Equal(
-            ["setValue: AMBIGUOUS: Basic | Spin | Other", "value: AMBIGUOUS: Basic | Spin | Other"],
-            scan.Findings.Select(f => f.Signature()));
+        // The first block's slot is wired into two cards and is named as the shared slot it is.
+        // "Other" reads the second block's slot and appears nowhere — resolution kept the two
+        // apart, so neither an invented three-card coupling nor a silent drop.
+        Assert.Equal(["(value, setValue): Basic | Spin"], scan.Findings.Select(f => f.Signature()));
 
-        // Both declarations were seen, so the report above is the scan declining to adjudicate two
-        // known slots rather than having missed one of them.
+        // Both declarations were seen, so the verdict above is the scan telling two known slots
+        // apart rather than having missed one of them.
         Assert.Equal(2, scan.Slots);
     }
 
     /// <summary>
-    /// The other half of the ambiguity arm: a name the scan cannot resolve, whose references reach
-    /// fewer than two cards, is harmless — nothing is being hidden — and must not block the tree.
-    /// This gate has no allowlist, so an over-eager arm here has no escape hatch.
+    /// Two same-named slots in disjoint blocks, each driving <em>its own</em> card. This is correct
+    /// independent C# and the exact page an over-eager ambiguity arm blocks: both names collide on
+    /// one key, both reach a card, and reporting the collision would convict a page that has
+    /// nothing wrong with it. This gate has no allowlist, so a false positive here is a blocked
+    /// tree with no escape hatch — the expensive direction.
     ///
     /// <para>Written as a conviction rather than as <c>Assert.Empty</c>. A page asserting only
-    /// silence can be satisfied by the scan collapsing everything, which is the failure this arm
-    /// exists to prevent; pairing the harmless duplicate with a real coupling means a collapse
-    /// takes the conviction with it and the test reddens.</para>
+    /// silence is satisfied by a scan that collapsed everything, which is the opposite failure;
+    /// pairing the legitimate duplicate with a real coupling on a third slot means a collapse takes
+    /// the conviction with it and the test reddens either way.</para>
     /// </summary>
     [Fact]
-    public void AnUnresolvableNameReachingNoCard_StaysSilentAndHidesNothing()
+    public void SameNamedSlotsEachDrivingTheirOwnCard_AreNotReported()
     {
         var scan = ScanSource("""
             namespace Gallery;
@@ -789,24 +863,132 @@ public sealed class GalleryCardIndependenceTests
                 public override Element Render()
                 {
                     var (shared, setShared) = UseState(0.0);
+                    Element alpha, beta;
 
-                    { var (tmp, setTmp) = UseState(1); setTmp(2); }
-                    { var (tmp, setTmp) = UseState(3); setTmp(4); }
+                    { var (value, setValue) = UseState(1.0);
+                      alpha = SampleCard("Alpha", NumberBox(value, v => setValue(v)), sourceCode: @"x"); }
 
-                    return VStack(
+                    { var (value, setValue) = UseState(2.0);
+                      beta = SampleCard("Beta", NumberBox(value, v => setValue(v)), sourceCode: @"x"); }
+
+                    return VStack(alpha, beta,
                         SampleCard("Basic", NumberBox(shared, v => setShared(v)), sourceCode: @"x"),
                         SampleCard("Spin", NumberBox(shared, v => setShared(v)), sourceCode: @"x"));
                 }
             }
             """);
 
-        // `tmp`/`setTmp` are ambiguous but reach no card, so they are not reported — and the real
-        // coupling on `shared` is still convicted despite sharing the member with them.
+        // "Alpha" and "Beta" are independent despite sharing a slot *name*, so neither the pair nor
+        // an unadjudicable notice appears — and the real coupling on `shared` is still convicted
+        // despite sitting in the same member as them.
         Assert.Equal(["(shared, setShared): Basic | Spin"], scan.Findings.Select(f => f.Signature()));
 
-        // All three declarations were seen, so the silence about `tmp` is the arm declining to
-        // report a harmless ambiguity rather than the slot scan having skipped the blocks.
+        // All three declarations were seen, so the silence about `value` is resolution telling the
+        // two blocks apart rather than the slot scan having skipped them.
         Assert.Equal(3, scan.Slots);
+    }
+
+    /// <summary>
+    /// The fail-closed residue, and the reason the unadjudicable arm still exists after resolution:
+    /// a reference that sits outside <em>every</em> candidate block. Resolution has no basis to
+    /// attribute it — the name is bound twice and neither binding reaches it — so the scan reports
+    /// what it measured (more than one declaration, and the cards the references reach) rather than
+    /// claiming a coupling it cannot see or staying silent, which this gate's readers take to mean
+    /// "these cards are independent".
+    ///
+    /// <para>The fixture below compiles: a local may shadow a <em>field</em>, so each block's
+    /// <c>value</c> is legal and the references beyond them bind to the field instead. That is what
+    /// makes the case reachable rather than merely parseable — and it is genuinely worth a report,
+    /// since two cards driven by a name spelled three different ways in one member is exactly the
+    /// shape whose independence a reader cannot verify either.</para>
+    ///
+    /// <para>Reaching fewer than two cards stays silent: there is nothing for the missing
+    /// information to hide, and an unwaivable finding must not fire on a page where the answer
+    /// cannot matter. <see cref="SameNamedSlotsEachDrivingTheirOwnCard_AreNotReported"/> is the
+    /// other side of that floor.</para>
+    /// </summary>
+    [Fact]
+    public void AReferenceOutsideEveryCandidateBlock_IsReportedRatherThanSilentlyDropped()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                double value;
+                Action<double> setValue = _ => { };
+
+                public override Element Render()
+                {
+                    { var (value, setValue) = UseState(1.0); setValue(value); }
+                    { var (value, setValue) = UseState(2.0); setValue(value); }
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x"));
+                }
+            }
+            """);
+
+        // Both halves of the pair are unresolvable at the two cards, so both are named. The
+        // signature says AMBIGUOUS rather than asserting a coupling — the scan cannot tell what
+        // those references read, and that inability is the finding.
+        Assert.Equal(
+            ["setValue: AMBIGUOUS: Basic | Spin", "value: AMBIGUOUS: Basic | Spin"],
+            scan.Findings.Select(f => f.Signature()));
+
+        // Both declarations were seen, so the report is the scan declining to adjudicate two known
+        // slots rather than having missed one of them.
+        Assert.Equal(2, scan.Slots);
+    }
+
+    /// <summary>
+    /// The other side of the residue, and the case that keeps the arm from firing on correct code:
+    /// a name bound <em>once</em> whose reference sits outside that binding's block. There is no
+    /// ambiguity here — C# resolves it to the field, and the scan can say so — so the reference is
+    /// simply not this slot, and is skipped the same way a reference from a sibling member is.
+    ///
+    /// <para>Reporting it would be a false positive on compiling, correct code in a gate with no
+    /// allowlist to waive it, and <see cref="Finding.Describe"/> would lie: it would say more than
+    /// one declaration binds the name when exactly one does. Under-reporting here is also the
+    /// cheap direction — the slot drives one card, so there is no coupling to miss.</para>
+    ///
+    /// <para>This pins the declaration-count floor specifically. The two-declaration fixture in
+    /// <see cref="AReferenceOutsideEveryCandidateBlock_IsReportedRatherThanSilentlyDropped"/>
+    /// cannot: removing the floor leaves that page reported exactly as before, because it has two
+    /// declarations either way. Only a one-declaration page separates "cannot say" from "not this
+    /// slot", and that separation is the whole content of the floor.</para>
+    /// </summary>
+    [Fact]
+    public void ASingleBindingThatDoesNotReachAReference_IsSkippedRatherThanReported()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                double value;
+                Action<double> setValue = _ => { };
+
+                public override Element Render()
+                {
+                    { var (value, setValue) = UseState(1.0); setValue(value); }
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x"));
+                }
+            }
+            """);
+
+        // Two cards read `value`/`setValue` and the page is still clean: those references are the
+        // fields, and the one slot that spells them the same way is confined to its block.
+        Assert.Empty(scan.Findings);
+
+        // The slot was seen, so the silence is the scan resolving the reference away from it rather
+        // than never having found a declaration to attribute anything to.
+        Assert.Equal(1, scan.Slots);
+        Assert.Equal(2, scan.Cards);
     }
 
     /// <summary>
@@ -854,13 +1036,19 @@ public sealed class GalleryCardIndependenceTests
     /// exempt from CS0136, after a discard and a lambda parameter in a sibling member.
     ///
     /// <para>The obvious form of this test — a page with no coupling, asserting the scan stays
-    /// silent — is <em>vacuous</em>, and was written that way first. Silence has two producers:
-    /// the scope rule telling the two <c>value</c>s apart, or the two collapsing onto one key,
-    /// being marked ambiguous and dropped. Deleting the carve-out swaps the first for the second
-    /// and the assertion never notices. So this is the <see cref="ASameNamedSlotInASiblingMember_DoesNotHideARealSharedSlot"/>
-    /// shape instead: give <c>Render</c> a <em>real</em> coupling, then require it to be convicted
-    /// and named <em>despite</em> the static local function's same-named slot. Now the collapse has
-    /// somewhere to show — it drops the finding, and the assertion reddens.</para>
+    /// silent — is <em>vacuous</em>, and was written that way first. So this is the
+    /// <see cref="ASameNamedSlotInASiblingMember_DoesNotHideARealSharedSlot"/> shape instead: give
+    /// <c>Render</c> a <em>real</em> coupling, then require it to be convicted and named <em>and no
+    /// wider</em> despite the static local functions beside it.</para>
+    ///
+    /// <para><c>Aside</c> holds its own slot; <c>Bare</c> shadows the name with an ordinary local
+    /// that is not a slot at all, and that second one is what pins the carve-out. Deleting
+    /// <c>static</c> from the boundary rule keys <c>Bare</c>'s <c>value</c> to <c>Render</c>, where
+    /// exactly one slot binds that name and its block encloses the whole method — so the reference
+    /// resolves to <c>Render</c>'s slot and "Bare" joins the finding. <c>Aside</c> alone could not
+    /// show that: its <c>value</c> <em>is</em> a slot, so block resolution separates the two
+    /// declarations on its own and the mutation would pass unnoticed. The carve-out is load-bearing
+    /// precisely where no candidate declaration exists to resolve against.</para>
     ///
     /// <para>Each carve-out in the scope rule earns a test, because the rule is an approximation of
     /// name resolution and approximations fail silently; and each such test has to assert a
@@ -881,25 +1069,33 @@ public sealed class GalleryCardIndependenceTests
                     return VStack(
                         SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
                         SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
-                        Aside());
+                        Aside(),
+                        Bare());
 
                     static Element Aside()
                     {
                         var (value, setValue) = UseState(0.0);
                         return SampleCard("Aside", NumberBox(value, v => setValue(v)), sourceCode: @"x");
                     }
+
+                    static Element Bare()
+                    {
+                        double value = 2;
+                        return SampleCard("Bare", NumberBox(value, v => { }), sourceCode: @"x");
+                    }
                 }
             }
             """);
 
-        // Render's coupling is convicted and named, and `Aside` is absent from it — the static
-        // local function's `value` is a different symbol, so neither slot reaches the other's card.
+        // Render's coupling is convicted and named, and neither "Aside" nor "Bare" is in it — a
+        // static local function's `value` is a different symbol whether or not it is a slot.
         Assert.Equal(["(value, setValue): Basic | Spin"], scan.Findings.Select(f => f.Signature()));
 
-        // Both slots and all three cards were seen, so the finding above is the scan telling the
-        // two `value`s apart rather than having missed one declaration outright.
+        // Both slots and all four cards were seen, so the finding above is the scan telling the
+        // `value`s apart rather than having missed one declaration outright. `Bare`'s local is
+        // deliberately not counted: it is an ordinary local, not a state slot.
         Assert.Equal(2, scan.Slots);
-        Assert.Equal(3, scan.Cards);
+        Assert.Equal(4, scan.Cards);
     }
 
     /// <summary>
@@ -979,9 +1175,10 @@ public sealed class GalleryCardIndependenceTests
     /// A page that only ever writes a slot can discard the value half. The discard binds nothing,
     /// so it cannot be referenced from a card and has no business in the reported signature — and
     /// leaving it in would be worse than untidy: <c>_</c> is the one name that can plausibly recur
-    /// across two slots, and a repeated name is treated as ambiguous and dropped, which would take
-    /// the real setter names down with it. Still a shared slot, still reported, named for the half
-    /// that actually binds.
+    /// across two slots <em>in the same block</em>, where the use-site resolution below has no
+    /// disjoint regions to tell them apart and would attribute every <c>_</c> to whichever slot
+    /// came first, taking the real setter names down with it. Still a shared slot, still reported,
+    /// named for the half that actually binds.
     /// </summary>
     [Fact]
     public void DiscardHalfOfASlot_IsNotPartOfTheSignature() =>
