@@ -71,10 +71,22 @@ public sealed class GalleryCardIndependenceTests
 
     // ── findings ─────────────────────────────────────────────────────────────
 
-    internal readonly record struct Finding(string Slot, IReadOnlyList<string> Cards, int Line)
+    /// <param name="Unadjudicable">
+    /// Set when the scan could not resolve <paramref name="Slot"/> to a single declaration, so it
+    /// reports that the rule <em>cannot be checked</em> here rather than that a slot is shared.
+    /// The two carry different evidence and must not share a message: a coupling is observed, an
+    /// ambiguity is precisely the absence of an observation.
+    /// </param>
+    internal readonly record struct Finding(
+        string Slot,
+        IReadOnlyList<string> Cards,
+        int Line,
+        bool Unadjudicable = false)
     {
         /// <summary>Compact form the detector's own tests compare against.</summary>
-        public string Signature() => $"{Slot}: {string.Join(" | ", Cards)}";
+        public string Signature() => Unadjudicable
+            ? $"{Slot}: AMBIGUOUS: {string.Join(" | ", Cards)}"
+            : $"{Slot}: {string.Join(" | ", Cards)}";
 
         /// <remarks>
         /// Only the first sentence is measured. This lint reads source and never renders, so it
@@ -82,13 +94,22 @@ public sealed class GalleryCardIndependenceTests
         /// from a deliberate share. Both remedies are offered rather than the likelier one alone,
         /// because a message that names a single cause pushes the reader toward a single fix — and
         /// in the one case the lint cannot distinguish, that fix is the wrong one.
+        ///
+        /// <para>The unadjudicable form claims strictly less: how many declarations bind the name
+        /// and which cards its references reach, both measured, and no coupling either way.</para>
         /// </remarks>
-        public string Describe() =>
-            $"the {Slot} state slot is wired into {Cards.Count} sample cards — " +
-            string.Join(", ", Cards.Select(c => $"\"{c}\"")) + ". " +
-            "Cards are meant to be independent demonstrations, so this almost always means driving " +
-            "one silently moves the others. Give every card its own state hook — or, if the sharing " +
-            "is deliberate, fold them into a single card.";
+        public string Describe() => Unadjudicable
+            ? $"the name {Slot} is bound by more than one state slot in the same member, so the scan " +
+              $"cannot tell which slot each reference means. Its references reach {Cards.Count} " +
+              "sample cards — " + string.Join(", ", Cards.Select(c => $"\"{c}\"")) + ". Whether that " +
+              "is one slot shared across cards or separate slots that happen to agree on a name is " +
+              "exactly what the ambiguity hides, so the rule cannot be checked here either way. " +
+              "Give the slots distinct names."
+            : $"the {Slot} state slot is wired into {Cards.Count} sample cards — " +
+              string.Join(", ", Cards.Select(c => $"\"{c}\"")) + ". " +
+              "Cards are meant to be independent demonstrations, so this almost always means driving " +
+              "one silently moves the others. Give every card its own state hook — or, if the sharing " +
+              "is deliberate, fold them into a single card.";
     }
 
     internal sealed record PageScan(IReadOnlyList<Finding> Findings, int Cards, int Slots);
@@ -296,6 +317,13 @@ public sealed class GalleryCardIndependenceTests
         // Cards reached per slot, in source order, de-duplicated by the card's own span.
         var reached = slots.Select(_ => new List<InvocationExpressionSyntax>()).ToList();
 
+        // Cards reached by a name the scan could *not* narrow to one slot. Tracked rather than
+        // dropped. Skipping an unresolvable name looks conservative and is not: the rule cannot be
+        // checked on that name, so staying silent reports "no coupling here" on the one input where
+        // the scan has no idea — a false negative on exactly the defect this gate exists to catch,
+        // and one no allowlist is needed to produce.
+        var reachedByAmbiguous = new Dictionary<(int Scope, string Name), List<InvocationExpressionSyntax>>();
+
         // A `sourceCode:` snippet is a string literal, so it contributes no IdentifierNameSyntax
         // and needs no special-casing: only the live half of a card is ever inspected here.
         foreach (var reference in GallerySnippetAgreementTests.ReferenceNames(pageRoot))
@@ -304,15 +332,29 @@ public sealed class GalleryCardIndependenceTests
             // fails to resolve and no separate containment check is needed after the lookup.
             var key = (ScopeKey(DeclaringMember(reference)), reference.Identifier.Text);
 
-            if (ambiguous.Contains(key)) continue;
-            if (!slotOfName.TryGetValue(key, out var index)) continue;
             if (IsNameOfOperand(reference)) continue;
 
-            var card = OwningCard(reference, cards);
-            if (card is null) continue;
+            if (ambiguous.Contains(key))
+            {
+                if (!reachedByAmbiguous.TryGetValue(key, out var ambiguousCards))
+                    reachedByAmbiguous[key] = ambiguousCards = [];
 
-            if (!reached[index].Any(seen => seen.Span == card.Span))
-                reached[index].Add(card);
+                RecordCard(ambiguousCards, reference);
+                continue;
+            }
+
+            if (!slotOfName.TryGetValue(key, out var index)) continue;
+
+            RecordCard(reached[index], reference);
+        }
+
+        void RecordCard(List<InvocationExpressionSyntax> into, IdentifierNameSyntax reference)
+        {
+            var card = OwningCard(reference, cards);
+            if (card is null) return;
+
+            if (!into.Any(seen => seen.Span == card.Span))
+                into.Add(card);
         }
 
         var findings = new List<Finding>();
@@ -325,6 +367,22 @@ public sealed class GalleryCardIndependenceTests
                 "(" + string.Join(", ", slots[index].Names) + ")",
                 reached[index].Select(CardTitle).ToList(),
                 slots[index].Line));
+        }
+
+        // An ambiguous name that reaches two or more cards is reported as unadjudicable. Reaching
+        // one card or none stays silent: there is nothing for the ambiguity to be hiding, so a page
+        // that merely reuses a name across two disjoint blocks is not blocked by it. That keeps the
+        // arm scoped to the case where the missing information is load-bearing, which matters here
+        // because this gate has no allowlist and a finding it raises cannot be waived.
+        foreach (var entry in reachedByAmbiguous.OrderBy(e => e.Key.Name, StringComparer.Ordinal))
+        {
+            if (entry.Value.Count < 2) continue;
+
+            findings.Add(new Finding(
+                entry.Key.Name,
+                entry.Value.Select(CardTitle).ToList(),
+                slotOfName.TryGetValue(entry.Key, out var declaredAt) ? slots[declaredAt].Line : 0,
+                Unadjudicable: true));
         }
 
         return new PageScan(findings, cards.Count, slots.Count);
@@ -650,6 +708,105 @@ public sealed class GalleryCardIndependenceTests
         // Both slots were seen — so the finding above is the scan distinguishing them, not the
         // scan having missed the sibling declaration altogether.
         Assert.Equal(2, scan.Slots);
+    }
+
+    /// <summary>
+    /// Two slots binding the same name in <em>one</em> member — legal C# when the blocks do not
+    /// overlap, and the residue of a false negative already fixed once here. Adding the declaring
+    /// member to the key stopped a <em>sibling</em> member's slot from colliding
+    /// (<see cref="ASameNamedSlotInASiblingMember_DoesNotHideARealSharedSlot"/>); it shrank the
+    /// ambiguous set without emptying it.
+    ///
+    /// <para>The scan cannot say which declaration a reference means, and the arm that handles
+    /// that used to <c>continue</c>. Skipping reads as conservative and is the opposite: silence
+    /// from this gate means "these cards are independent", so an unresolvable name returned the
+    /// clean answer on the one input where the scan knew nothing. Reporting it as
+    /// <c>Unadjudicable</c> claims only what was measured — more than one binding, and the cards
+    /// the references reach.</para>
+    ///
+    /// <para>Measured before it was written: zero gallery pages bind a slot name twice in one
+    /// member, so this fires on nothing today. That is what makes the synthetic drive necessary —
+    /// an arm the real corpus never exercises is one no run has ever watched reject anything.</para>
+    /// </summary>
+    [Fact]
+    public void AnUnresolvableSlotName_IsReportedRatherThanSilentlyDropped()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    Element first, second, third;
+
+                    {
+                        var (value, setValue) = UseState(0.0);
+                        first = SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x");
+                        second = SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x");
+                    }
+
+                    {
+                        var (value, setValue) = UseState(1.0);
+                        third = SampleCard("Other", NumberBox(value, v => setValue(v)), sourceCode: @"x");
+                    }
+
+                    return VStack(first, second, third);
+                }
+            }
+            """);
+
+        // Both halves of the pair are ambiguous, so both are named. The signature says AMBIGUOUS
+        // rather than asserting a coupling — the scan cannot tell whether "Basic"/"Spin" share the
+        // first slot or not, and that inability is the finding.
+        Assert.Equal(
+            ["setValue: AMBIGUOUS: Basic | Spin | Other", "value: AMBIGUOUS: Basic | Spin | Other"],
+            scan.Findings.Select(f => f.Signature()));
+
+        // Both declarations were seen, so the report above is the scan declining to adjudicate two
+        // known slots rather than having missed one of them.
+        Assert.Equal(2, scan.Slots);
+    }
+
+    /// <summary>
+    /// The other half of the ambiguity arm: a name the scan cannot resolve, whose references reach
+    /// fewer than two cards, is harmless — nothing is being hidden — and must not block the tree.
+    /// This gate has no allowlist, so an over-eager arm here has no escape hatch.
+    ///
+    /// <para>Written as a conviction rather than as <c>Assert.Empty</c>. A page asserting only
+    /// silence can be satisfied by the scan collapsing everything, which is the failure this arm
+    /// exists to prevent; pairing the harmless duplicate with a real coupling means a collapse
+    /// takes the conviction with it and the test reddens.</para>
+    /// </summary>
+    [Fact]
+    public void AnUnresolvableNameReachingNoCard_StaysSilentAndHidesNothing()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    var (shared, setShared) = UseState(0.0);
+
+                    { var (tmp, setTmp) = UseState(1); setTmp(2); }
+                    { var (tmp, setTmp) = UseState(3); setTmp(4); }
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(shared, v => setShared(v)), sourceCode: @"x"),
+                        SampleCard("Spin", NumberBox(shared, v => setShared(v)), sourceCode: @"x"));
+                }
+            }
+            """);
+
+        // `tmp`/`setTmp` are ambiguous but reach no card, so they are not reported — and the real
+        // coupling on `shared` is still convicted despite sharing the member with them.
+        Assert.Equal(["(shared, setShared): Basic | Spin"], scan.Findings.Select(f => f.Signature()));
+
+        // All three declarations were seen, so the silence about `tmp` is the arm declining to
+        // report a harmless ambiguity rather than the slot scan having skipped the blocks.
+        Assert.Equal(3, scan.Slots);
     }
 
     /// <summary>
