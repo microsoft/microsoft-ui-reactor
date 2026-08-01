@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using static Microsoft.UI.Reactor.Factories;
+using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -1138,9 +1139,16 @@ internal static class ModifierEventFixtures
                     },
                     phase switch
                     {
+                        // Padding and CornerRadius are declared by Grid, not by Panel, so they
+                        // exercise the nested arm inside CleanElement's Panel branch. Without
+                        // them the Grid carrier reaches only Panel.Background and the two
+                        // Grid-specific clears are covered by the raw source scan alone —
+                        // which cannot tell a live clear from a commented-out one.
                         0 => Factories.Grid([GridSize.Star()], [GridSize.Star()],
                                 Factories.TextBlock("pool-cp-panel"))
-                            .Background("#FF884422"),
+                            .Background("#FF884422")
+                            .Padding(19)
+                            .CornerRadius(7),
                         1 => Empty(),
                         _ => Factories.Grid([GridSize.Star()], [GridSize.Star()],
                                 Factories.TextBlock("pool-cp-panel-2")),
@@ -1164,9 +1172,11 @@ internal static class ModifierEventFixtures
                 && firstControl.ReadLocalValue(Control.BorderBrushProperty) != DependencyProperty.UnsetValue
                 && firstControl.ReadLocalValue(Control.BackgroundProperty) != DependencyProperty.UnsetValue
                 && firstControl.ReadLocalValue(Control.IsEnabledProperty) != DependencyProperty.UnsetValue);
-            H.Check("PoolCp_Phase0_PanelLocalValueWritten",
+            H.Check("PoolCp_Phase0_PanelLocalValuesWritten",
                 firstPanel is not null
-                && firstPanel.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue);
+                && firstPanel.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue
+                && firstPanel.ReadLocalValue(WinUI.Grid.PaddingProperty) != DependencyProperty.UnsetValue
+                && firstPanel.ReadLocalValue(WinUI.Grid.CornerRadiusProperty) != DependencyProperty.UnsetValue);
 
             H.ClickButton("DropPoolCp");
             await Harness.Render();
@@ -1217,15 +1227,22 @@ internal static class ModifierEventFixtures
                 && secondControl.IsEnabled);
             H.Check("PoolCp_Phase2_PanelBackgroundCleared",
                 secondPanel.ReadLocalValue(Panel.BackgroundProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_PanelPaddingCleared",
+                secondPanel.ReadLocalValue(WinUI.Grid.PaddingProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_PanelCornerRadiusCleared",
+                secondPanel.ReadLocalValue(WinUI.Grid.CornerRadiusProperty) == DependencyProperty.UnsetValue);
         }
     }
 
     // ════════════════════════════════════════════════════════════════════
     //  Issue #985, StackPanel half — StackPanel is a Panel, not a Control, so
-    //  its Padding needs its own clear inside the Panel arm. It gets its own
-    //  fixture because the Grid above cannot reach that line: Grid is a Panel
-    //  but not a StackPanel, and ApplyModifiers only writes Padding to the
-    //  StackPanel subset.
+    //  its Padding and CornerRadius need their own clears inside the Panel
+    //  arm. It gets its own fixture because the Grid above cannot reach those
+    //  lines: CleanElement's Grid and StackPanel arms are mutually exclusive
+    //  `else if` branches under the same Panel receiver, so a Grid takes the
+    //  first arm and never executes the StackPanel one. (Both types do carry
+    //  the properties — #1003 widened the gates to Grid — which is exactly why
+    //  the exclusivity, not the property set, is what splits the fixtures.)
     // ════════════════════════════════════════════════════════════════════
 
     internal class ModifierPoolClearValueStackPadding(Harness h) : SelfTestFixtureBase(h)
@@ -1244,6 +1261,7 @@ internal static class ModifierEventFixtures
                     {
                         0 => VStack(Factories.TextBlock("pool-stack-carrier"))
                             .Padding(17)
+                            .CornerRadius(9)
                             .Background("#FF335577"),
                         1 => Empty(),
                         // Remounted with no modifiers at all.
@@ -1258,6 +1276,7 @@ internal static class ModifierEventFixtures
             H.Check("PoolStack_Phase0_LocalValuesWritten",
                 first is not null
                 && first.ReadLocalValue(StackPanel.PaddingProperty) != DependencyProperty.UnsetValue
+                && first.ReadLocalValue(StackPanel.CornerRadiusProperty) != DependencyProperty.UnsetValue
                 && first.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue);
 
             H.ClickButton("DropPoolStack");
@@ -1281,6 +1300,8 @@ internal static class ModifierEventFixtures
 
             H.Check("PoolStack_Phase2_PaddingCleared",
                 second.ReadLocalValue(StackPanel.PaddingProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolStack_Phase2_CornerRadiusCleared",
+                second.ReadLocalValue(StackPanel.CornerRadiusProperty) == DependencyProperty.UnsetValue);
             H.Check("PoolStack_Phase2_BackgroundCleared",
                 second.ReadLocalValue(Panel.BackgroundProperty) == DependencyProperty.UnsetValue);
         }
