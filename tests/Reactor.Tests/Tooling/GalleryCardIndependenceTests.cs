@@ -680,6 +680,64 @@ public sealed class GalleryCardIndependenceTests
     }
 
     /// <summary>
+    /// The complement of the case above, and the reason <see cref="DeclaringMember"/> carves out
+    /// <c>static</c> rather than treating every local function alike. A <c>static</c> local
+    /// function cannot capture, so the enclosing method's locals are not in scope inside it — and
+    /// C# therefore permits it to declare a local of the same name. Verified by compiling the
+    /// shape, not by reading the rule: <c>static void Local() { int value = 2; }</c> nested in a
+    /// method holding its own <c>value</c> builds clean, 0 warnings. This is the third construct
+    /// exempt from CS0136, after a discard and a lambda parameter in a sibling member.
+    ///
+    /// <para>The obvious form of this test — a page with no coupling, asserting the scan stays
+    /// silent — is <em>vacuous</em>, and was written that way first. Silence has two producers:
+    /// the scope rule telling the two <c>value</c>s apart, or the two collapsing onto one key,
+    /// being marked ambiguous and dropped. Deleting the carve-out swaps the first for the second
+    /// and the assertion never notices. So this is the <see cref="ASameNamedSlotInASiblingMember_DoesNotHideARealSharedSlot"/>
+    /// shape instead: give <c>Render</c> a <em>real</em> coupling, then require it to be convicted
+    /// and named <em>despite</em> the static local function's same-named slot. Now the collapse has
+    /// somewhere to show — it drops the finding, and the assertion reddens.</para>
+    ///
+    /// <para>Each carve-out in the scope rule earns a test, because the rule is an approximation of
+    /// name resolution and approximations fail silently; and each such test has to assert a
+    /// conviction, because that is the only outcome the approximation cannot fake.</para>
+    /// </summary>
+    [Fact]
+    public void AStaticLocalFunctionsOwnSlot_DoesNotHideARealSharedSlot()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    var (value, setValue) = UseState(0.0);
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        Aside());
+
+                    static Element Aside()
+                    {
+                        var (value, setValue) = UseState(0.0);
+                        return SampleCard("Aside", NumberBox(value, v => setValue(v)), sourceCode: @"x");
+                    }
+                }
+            }
+            """);
+
+        // Render's coupling is convicted and named, and `Aside` is absent from it — the static
+        // local function's `value` is a different symbol, so neither slot reaches the other's card.
+        Assert.Equal(["(value, setValue): Basic | Spin"], scan.Findings.Select(f => f.Signature()));
+
+        // Both slots and all three cards were seen, so the finding above is the scan telling the
+        // two `value`s apart rather than having missed one declaration outright.
+        Assert.Equal(2, scan.Slots);
+        Assert.Equal(3, scan.Cards);
+    }
+
+    /// <summary>
     /// Coupling across more than two cards is reported once, listing every card involved — the
     /// AutoSuggestBox shape, where one <c>query</c> drove three cards.
     /// </summary>
