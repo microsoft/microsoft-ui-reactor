@@ -104,10 +104,10 @@ public sealed class GalleryCardIndependenceTests
     /// Two spellings bind a slot and both are recognised:
     /// <list type="bullet">
     /// <item><c>var (x, setX) = UseState(...)</c> — the deconstruction the gallery uses.</item>
-    /// <item><c>var s = UseState(...)</c> — <see cref="Core.RenderContext.UseState"/> returns the
-    /// <em>named</em> tuple <c>(T Value, Action&lt;T&gt; Set)</c>, so <c>s.Value</c> / <c>s.Set</c>
-    /// is legal and drives a card exactly as the deconstructed pair does. Missing it would leave
-    /// the rule avoidable by rewriting one line.</item>
+    /// <item><c>var s = UseState(...)</c> — <see cref="Microsoft.UI.Reactor.Core.RenderContext.UseState{T}(T, bool)"/>
+    /// returns the <em>named</em> tuple <c>(T Value, Action&lt;T&gt; Set)</c>, so <c>s.Value</c> /
+    /// <c>s.Set</c> is legal and drives a card exactly as the deconstructed pair does. Missing it
+    /// would leave the rule avoidable by rewriting one line.</item>
     /// </list>
     /// Discards are skipped — they bind nothing and so can never be referenced from a card.
     /// Returned in source order, which is what <c>DescendantNodes</c> pre-order already gives.
