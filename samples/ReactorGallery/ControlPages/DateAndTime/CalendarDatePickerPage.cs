@@ -11,8 +11,9 @@ class CalendarDatePickerPage : Component
 {
     public override Element Render()
     {
-        var (date, setDate) = UseState<DateTimeOffset?>(DateTimeOffset.Now);
-        var (clearableDate, setClearableDate) = UseState<DateTimeOffset?>(DateTimeOffset.Now);
+        DateTimeOffset? initialDate = DateTimeOffset.Now;
+        var (date, setDate) = UseState<DateTimeOffset?>(initialDate);
+        var (clearableDate, setClearableDate) = UseState<DateTimeOffset?>(initialDate);
 
         return ScrollView(
             VStack(16,

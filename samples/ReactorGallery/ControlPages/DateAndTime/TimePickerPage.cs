@@ -11,8 +11,9 @@ class TimePickerPage : Component
 {
     public override Element Render()
     {
-        var (time, setTime) = UseState(DateTime.Now.TimeOfDay);
-        var (presetTime, setPresetTime) = UseState(DateTime.Now.TimeOfDay);
+        var initialTime = DateTime.Now.TimeOfDay;
+        var (time, setTime) = UseState(initialTime);
+        var (presetTime, setPresetTime) = UseState(initialTime);
 
         return ScrollView(
             VStack(16,

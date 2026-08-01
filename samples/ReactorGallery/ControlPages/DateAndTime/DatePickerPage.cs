@@ -11,8 +11,9 @@ class DatePickerPage : Component
 {
     public override Element Render()
     {
-        var (date, setDate) = UseState(DateTimeOffset.Now);
-        var (resetDate, setResetDate) = UseState(DateTimeOffset.Now);
+        var initialDate = DateTimeOffset.Now;
+        var (date, setDate) = UseState(initialDate);
+        var (resetDate, setResetDate) = UseState(initialDate);
 
         return ScrollView(
             VStack(16,
