@@ -563,6 +563,54 @@ public sealed class GallerySampleLintTests
         }
     }
 
+    /// <summary>
+    /// <see cref="StateSlots"/> matches a set of hook names, and two pieces of prose describe that
+    /// set to a human: the rule summary on
+    /// <see cref="SampleCards_SharedStateDoesNotSpread"/> and the message it fails with. Both were
+    /// written saying "UseState" while the pattern already matched <c>UseReducer</c>, so a shared
+    /// reducer slot would have been reported in words that denied it could happen.
+    /// <para>
+    /// Adding a third hook to the pattern is a one-line edit far away from either sentence, and
+    /// nothing else here would notice. So the names are read back out of the pattern and required
+    /// to appear in both — which fails in the direction that matters: widening the detector
+    /// without widening what it claims to detect.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SharedStateMessage_NamesEveryHookTheDetectorMatches()
+    {
+        var source = global::System.IO.File.ReadAllText(ThisFile());
+
+        // The hook names as the pattern itself spells them, not as remembered here.
+        var hooks = Regex.Matches(source, @"InvokedName\(\w+\) is ((?:""\w+""(?: or )?)+)")
+            .SelectMany(m => Regex.Matches(m.Groups[1].Value, @"""(\w+)""").Select(h => h.Groups[1].Value))
+            .Distinct(global::System.StringComparer.Ordinal)
+            .OrderBy(h => h, global::System.StringComparer.Ordinal)
+            .ToList();
+
+        // A pattern reworded past that regex would otherwise leave this requiring nothing of
+        // anything, and passing.
+        Assert.True(hooks.Count >= 2,
+            $"only {hooks.Count} hook name(s) were read back out of the StateSlots pattern — the " +
+            "shape it is parsed with has changed, so this check no longer sees what it guards.");
+
+        var declaration = source.IndexOf("public void SampleCards_SharedStateDoesNotSpread()", global::System.StringComparison.Ordinal);
+        Assert.True(declaration >= 0, "Could not locate SampleCards_SharedStateDoesNotSpread — this check reads its doc and body.");
+
+        var docStart = source.LastIndexOf("/// <summary>", declaration, global::System.StringComparison.Ordinal);
+        Assert.True(docStart >= 0, "SampleCards_SharedStateDoesNotSpread has no doc comment to check.");
+
+        var bodyEnd = source.IndexOf("\r\n    }\r\n", declaration, global::System.StringComparison.Ordinal);
+        Assert.True(bodyEnd > declaration, "Could not find the end of SampleCards_SharedStateDoesNotSpread.");
+
+        var region = source[docStart..bodyEnd];
+        var missing = hooks.Where(h => !region.Contains(h, global::System.StringComparison.Ordinal)).ToList();
+
+        Assert.True(missing.Count == 0,
+            "StateSlots matches these hooks, but the rule summary and failure message of " +
+            "SampleCards_SharedStateDoesNotSpread never name them, so a slot shared through one " +
+            "would be reported in words that exclude it:\n  " + string.Join("\n  ", missing));
+    }
     /// <summary>The outermost <c>SampleCard(...)</c> calls — one per card the reader sees.</summary>
     static List<InvocationExpressionSyntax> SampleCards(SyntaxNode root) =>
         root.DescendantNodes()
@@ -859,8 +907,12 @@ public sealed class GallerySampleLintTests
     }
 
     /// <summary>
-    /// No SampleCard on a gallery page may share a <c>UseState</c> slot with another card on the
-    /// same page: driving one silently retargets its neighbour (#982). The fourteen pages that
+    /// No SampleCard on a gallery page may share a state-hook slot with another card on the same
+    /// page: driving one silently retargets its neighbour (#982). "State-hook" rather than
+    /// <c>UseState</c> because <see cref="StateSlots"/> recognises <c>UseReducer</c> too, so
+    /// naming a single hook would misdescribe the rule the moment a reducer slot is the shared
+    /// one — and <see cref="SharedStateMessage_NamesEveryHookTheDetectorMatches"/> fails if this
+    /// prose and that pattern ever drift apart. The fourteen pages that
     /// were doing so when this rule was written are fixed by #980, so the tree is clean and there
     /// is no allowlist here — an emptied suppression mechanism left standing is an invitation to
     /// refill it rather than a fixed rule.
@@ -899,8 +951,8 @@ public sealed class GallerySampleLintTests
         offenders.Sort(global::System.StringComparer.Ordinal);
 
         Assert.True(offenders.Count == 0,
-            "these SampleCards share a UseState slot, so driving one silently retargets its " +
-            "neighbour (#982). Give each card its own slot:\n  " + string.Join("\n  ", offenders));
+            "these SampleCards share a UseState/UseReducer slot, so driving one silently " +
+            "retargets its neighbour (#982). Give each card its own slot:\n  " + string.Join("\n  ", offenders));
     }
 
     [Theory]
