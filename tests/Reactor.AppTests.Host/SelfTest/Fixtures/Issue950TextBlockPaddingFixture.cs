@@ -419,6 +419,17 @@ internal static class Issue950TextBlockPaddingFixture
                 ReferenceEquals(
                     DependencyProperty.UnsetValue,
                     bdr.ReadLocalValue(WinUI.Border.PaddingProperty)));
+
+            // Load-bearing, not decorative: StackPanel.Padding is now released by
+            // ElementPool.CleanElement (#985). That makes the absence check below
+            // fail-open on its own — a recycled `sp` reads UnsetValue because the
+            // pool cleaned it, which is indistinguishable from the unset arm having
+            // cleared it on the live control. Pinning identity first is what keeps
+            // the next assertion a statement about ApplyModifiers.
+            H.Check("Issue950_AllTypes_StackSameInstance",
+                ReferenceEquals(sp, H.FindControl<WinUI.StackPanel>(s =>
+                    s.Children.Count == 1 && s.Children[0] is WinUI.TextBlock c
+                    && c.Text == "Issue950_AllTypes_StackChild")));
             H.Check("Issue950_AllTypes_StackCleared",
                 ReferenceEquals(
                     DependencyProperty.UnsetValue,
