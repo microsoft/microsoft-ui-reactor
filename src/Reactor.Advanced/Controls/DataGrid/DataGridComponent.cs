@@ -462,8 +462,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         // modifier-blind by contract (see its remarks), so the answer is the same either
                         // way — and deciding it here means the keyboard is probed only for the handful of
                         // keys the grid owns, never for ordinary typing, which reaches this
-                        // handledEventsToo handler too. DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind
-                        // enforces that contract, so this gate cannot start silently dropping chords.
+                        // handledEventsToo handler too. That contract is enforced by
+                        // DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind_SoTheCaptureGateCannotDropChords,
+                        // so this gate cannot start silently dropping chords.
                         if (ShouldHandleKey(state, currentEl, KeyChord.Unmodified(e.Key)))
                         {
                             e.Handled = true;
@@ -1366,7 +1367,8 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // claim from KeyChord.Unmodified(e.Key) and only probes the real keyboard once the key is
         // claimed, so the grid does no modifier work for keys it does not own. Making this
         // modifier-dependent therefore ALSO requires moving KeyChord.Capture() back above that gate.
-        // DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind fails if this drifts.
+        // DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind_SoTheCaptureGateCannotDropChords
+        // fails if this drifts.
         if (state.IsEditing)
         {
             return chord.Key is VirtualKey.Enter or VirtualKey.Escape or VirtualKey.Tab;
