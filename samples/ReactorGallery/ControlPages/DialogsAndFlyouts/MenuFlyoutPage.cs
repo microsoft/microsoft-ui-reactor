@@ -28,11 +28,15 @@ class MenuFlyoutPage : Component
                             MenuItem("Paste", () => setLastAction("Paste"), icon: "Paste")),
                         TextBlock($"Last action: {lastAction}").Foreground(Theme.SecondaryText)
                     ),
-                    @"MenuFlyout(
-    Button(""Open Menu""),
-    MenuItem(""Cut"", () => {}, icon: ""Cut""),
-    MenuItem(""Copy"", () => {}, icon: ""Copy""),
-    MenuItem(""Paste"", () => {}, icon: ""Paste""))"),
+                    @"var (lastAction, setLastAction) = UseState(""(none)"");
+
+VStack(8,
+    MenuFlyout(
+        Button(""Open Menu""),
+        MenuItem(""Cut"", () => setLastAction(""Cut""), icon: ""Cut""),
+        MenuItem(""Copy"", () => setLastAction(""Copy""), icon: ""Copy""),
+        MenuItem(""Paste"", () => setLastAction(""Paste""), icon: ""Paste"")),
+    TextBlock($""Last action: {lastAction}""));"),
 
                 SampleCard("MenuFlyout with Separators and SubItems",
                     VStack(8,

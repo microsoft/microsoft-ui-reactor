@@ -31,13 +31,17 @@ class CommandBarFlyoutPage : Component
                             }),
                         TextBlock($"Last action: {lastAction}").Foreground(Theme.SecondaryText)
                     ),
-                    @"CommandBarFlyout(
-    Button(""Show Commands""),
-    primaryCommands: new AppBarItemBase[] {
-        AppBarButton(""Cut"", () => {}, icon: ""Cut""),
-        AppBarButton(""Copy"", () => {}, icon: ""Copy""),
-        AppBarButton(""Paste"", () => {}, icon: ""Paste""),
-    })"),
+                    @"var (lastAction, setLastAction) = UseState(""(none)"");
+
+VStack(8,
+    CommandBarFlyout(
+        Button(""Show Commands""),
+        primaryCommands: new AppBarItemBase[] {
+            AppBarButton(""Cut"", () => setLastAction(""Cut""), icon: ""Cut""),
+            AppBarButton(""Copy"", () => setLastAction(""Copy""), icon: ""Copy""),
+            AppBarButton(""Paste"", () => setLastAction(""Paste""), icon: ""Paste""),
+        }),
+    TextBlock($""Last action: {lastAction}""));"),
 
                 SampleCard("CommandBarFlyout with Secondary",
                     VStack(8,

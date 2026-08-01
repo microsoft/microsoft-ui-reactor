@@ -32,12 +32,16 @@ class CommandBarPage : Component
                             }),
                         TextBlock($"Last action: {lastAction}").Foreground(Theme.SecondaryText)
                     ),
-                    @"CommandBar(primaryCommands: new AppBarItemBase[] {
-    AppBarButton(""Add"", () => setLastAction(""Add""), icon: ""Add""),
-    AppBarButton(""Edit"", () => setLastAction(""Edit""), icon: ""Edit""),
-    AppBarSeparator(),
-    AppBarButton(""Delete"", () => setLastAction(""Delete""), icon: ""Delete""),
-})"),
+                    @"var (lastAction, setLastAction) = UseState(""(none)"");
+
+VStack(8,
+    CommandBar(primaryCommands: new AppBarItemBase[] {
+        AppBarButton(""Add"", () => setLastAction(""Add""), icon: ""Add""),
+        AppBarButton(""Edit"", () => setLastAction(""Edit""), icon: ""Edit""),
+        AppBarSeparator(),
+        AppBarButton(""Delete"", () => setLastAction(""Delete""), icon: ""Delete""),
+    }),
+    TextBlock($""Last action: {lastAction}""));"),
 
                 SampleCard("Primary and Secondary Commands",
                     VStack(8,

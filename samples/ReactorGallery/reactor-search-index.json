@@ -457,7 +457,7 @@
         {
           "header": "Primary Commands",
           "language": "csharp",
-          "code": "CommandBar(primaryCommands: new AppBarItemBase[] {\n    AppBarButton(\"Add\", () => setLastAction(\"Add\"), icon: \"Add\"),\n    AppBarButton(\"Edit\", () => setLastAction(\"Edit\"), icon: \"Edit\"),\n    AppBarSeparator(),\n    AppBarButton(\"Delete\", () => setLastAction(\"Delete\"), icon: \"Delete\"),\n})"
+          "code": "var (lastAction, setLastAction) = UseState(\"(none)\");\n\nVStack(8,\n    CommandBar(primaryCommands: new AppBarItemBase[] {\n        AppBarButton(\"Add\", () => setLastAction(\"Add\"), icon: \"Add\"),\n        AppBarButton(\"Edit\", () => setLastAction(\"Edit\"), icon: \"Edit\"),\n        AppBarSeparator(),\n        AppBarButton(\"Delete\", () => setLastAction(\"Delete\"), icon: \"Delete\"),\n    }),\n    TextBlock($\"Last action: {lastAction}\"));"
         }
       ]
     },
@@ -484,7 +484,7 @@
         {
           "header": "Basic CommandBarFlyout",
           "language": "csharp",
-          "code": "CommandBarFlyout(\n    Button(\"Show Commands\"),\n    primaryCommands: new AppBarItemBase[] {\n        AppBarButton(\"Cut\", () => {}, icon: \"Cut\"),\n        AppBarButton(\"Copy\", () => {}, icon: \"Copy\"),\n        AppBarButton(\"Paste\", () => {}, icon: \"Paste\"),\n    })"
+          "code": "var (lastAction, setLastAction) = UseState(\"(none)\");\n\nVStack(8,\n    CommandBarFlyout(\n        Button(\"Show Commands\"),\n        primaryCommands: new AppBarItemBase[] {\n            AppBarButton(\"Cut\", () => setLastAction(\"Cut\"), icon: \"Cut\"),\n            AppBarButton(\"Copy\", () => setLastAction(\"Copy\"), icon: \"Copy\"),\n            AppBarButton(\"Paste\", () => setLastAction(\"Paste\"), icon: \"Paste\"),\n        }),\n    TextBlock($\"Last action: {lastAction}\"));"
         }
       ]
     },
@@ -1256,7 +1256,7 @@
         {
           "header": "File/Edit/View Menus",
           "language": "csharp",
-          "code": "MenuBar(\n    Menu(\"File\",\n        MenuItem(\"New\", () => {}, icon: \"Page2\"),\n        MenuItem(\"Open\", () => {}, icon: \"OpenFile\"),\n        MenuSeparator(),\n        MenuItem(\"Save\", () => {}, icon: \"Save\")),\n    Menu(\"Edit\",\n        MenuItem(\"Undo\", () => {}, icon: \"Undo\"),\n        MenuItem(\"Cut\", () => {}),\n        MenuItem(\"Copy\", () => {})))"
+          "code": "var (lastAction, setLastAction) = UseState(\"(none)\");\n\nVStack(8,\n    MenuBar(\n        Menu(\"File\",\n            MenuItem(\"New\", () => setLastAction(\"New\"), icon: \"Page2\"),\n            MenuItem(\"Open\", () => setLastAction(\"Open\"), icon: \"OpenFile\"),\n            MenuSeparator(),\n            MenuItem(\"Save\", () => setLastAction(\"Save\"), icon: \"Save\"),\n            MenuItem(\"Exit\", () => setLastAction(\"Exit\"))),\n        Menu(\"Edit\",\n            MenuItem(\"Undo\", () => setLastAction(\"Undo\"), icon: \"Undo\"),\n            MenuItem(\"Redo\", () => setLastAction(\"Redo\"), icon: \"Redo\"),\n            MenuSeparator(),\n            MenuItem(\"Cut\", () => setLastAction(\"Cut\")),\n            MenuItem(\"Copy\", () => setLastAction(\"Copy\")),\n            MenuItem(\"Paste\", () => setLastAction(\"Paste\"))),\n        Menu(\"View\",\n            MenuItem(\"Zoom In\", () => setLastAction(\"Zoom In\"), icon: \"ZoomIn\"),\n            MenuItem(\"Zoom Out\", () => setLastAction(\"Zoom Out\"), icon: \"ZoomOut\"))),\n    TextBlock($\"Last action: {lastAction}\"));"
         }
       ]
     },
@@ -1283,7 +1283,7 @@
         {
           "header": "Basic MenuFlyout",
           "language": "csharp",
-          "code": "MenuFlyout(\n    Button(\"Open Menu\"),\n    MenuItem(\"Cut\", () => {}, icon: \"Cut\"),\n    MenuItem(\"Copy\", () => {}, icon: \"Copy\"),\n    MenuItem(\"Paste\", () => {}, icon: \"Paste\"))"
+          "code": "var (lastAction, setLastAction) = UseState(\"(none)\");\n\nVStack(8,\n    MenuFlyout(\n        Button(\"Open Menu\"),\n        MenuItem(\"Cut\", () => setLastAction(\"Cut\"), icon: \"Cut\"),\n        MenuItem(\"Copy\", () => setLastAction(\"Copy\"), icon: \"Copy\"),\n        MenuItem(\"Paste\", () => setLastAction(\"Paste\"), icon: \"Paste\")),\n    TextBlock($\"Last action: {lastAction}\"));"
         }
       ]
     },
