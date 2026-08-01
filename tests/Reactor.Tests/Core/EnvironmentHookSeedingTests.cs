@@ -69,6 +69,17 @@ public sealed class EnvironmentHookSeedingTests
             .Any(i => GallerySources.InvokedName(i) == "UseEffect");
 
     /// <summary>
+    /// True when <paramref name="assignment"/> writes to <c>state.&lt;field&gt;</c> — receiver
+    /// included. Matching the member name alone would count
+    /// <c>other.IsReducedMotion = !state.Settings.AnimationsEnabled;</c>, i.e. a hook that seeds
+    /// something other than its own state, as a correct seed.
+    /// </summary>
+    static bool TargetsState(AssignmentExpressionSyntax assignment, string field) =>
+        assignment.Left is MemberAccessExpressionSyntax m
+        && m.Name.Identifier.ValueText == field
+        && m.Expression is IdentifierNameSyntax { Identifier.ValueText: "state" };
+
+    /// <summary>
     /// True when <paramref name="assignment"/>'s right-hand side reads
     /// <c>state.&lt;settings&gt;.&lt;property&gt;</c> with the expected polarity — i.e. the value
     /// comes from the live WinRT settings object, from the <em>right</em> property on it, the
@@ -115,7 +126,7 @@ public sealed class EnvironmentHookSeedingTests
     {
         var targets = method.DescendantNodes()
             .OfType<AssignmentExpressionSyntax>()
-            .Where(a => a.Left is MemberAccessExpressionSyntax m && m.Name.Identifier.ValueText == field)
+            .Where(a => TargetsState(a, field))
             .Where(a => settings is null || ReadsLiveSetting(a, settings, property!, negated))
             .ToList();
 
@@ -187,6 +198,7 @@ public sealed class EnvironmentHookSeedingTests
                 void Hook()
                 {
                     state.Live = !state.Settings.AnimationsEnabled;
+                    other.Live = !state.Settings.AnimationsEnabled;
                     state.Constant = false;
                     state.WrongReceiver = !other.Settings.AnimationsEnabled;
                     state.WrongPolarity = state.Settings.AnimationsEnabled;
@@ -202,6 +214,14 @@ public sealed class EnvironmentHookSeedingTests
             Writes(method, field, "Settings", "AnimationsEnabled", negated: true).DuringRender;
 
         Assert.Equal(1, Filtered("Live"));
+
+        // The write TARGET must be state too, not merely a member with the right name. The
+        // synthetic source assigns `other.Live` from a perfectly good live read; counting it
+        // would mean a hook that seeds some other object passes as one that seeds its own state.
+        // Symmetric with the receiver check on the read side, and it was missing here after that
+        // one was added — fixing one side of a symmetry is a good way to believe both are done.
+        Assert.Equal(1, Writes(method, "Live", "Settings", "AnimationsEnabled", negated: true)
+            .DuringRender);
 
         // A constant seed reintroduces the original bug outright.
         Assert.Equal(0, Filtered("Constant"));
@@ -238,8 +258,7 @@ public sealed class EnvironmentHookSeedingTests
 
         var seeds = method.DescendantNodes()
             .OfType<AssignmentExpressionSyntax>()
-            .Where(a => a.Left is MemberAccessExpressionSyntax m
-                && m.Name.Identifier.ValueText == "HighContrastScheme")
+            .Where(a => TargetsState(a, "HighContrastScheme"))
             .Where(a => !InsideUseEffect(a, method))
             .ToList();
 
