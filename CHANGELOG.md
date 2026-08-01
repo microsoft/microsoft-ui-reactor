@@ -195,6 +195,16 @@ Conventions for contributors:
   writing a local `Thickness(0)`, so a themed padding comes back instead of
   being pinned to zero.
 
+- **Panel border-box modifiers now reach the concrete WinUI panels that declare
+  them (issue #950).** `.CornerRadius(...)` now applies to `Grid`,
+  `VStack`/`HStack`, and `RelativePanel`; `.Padding(...)` now also applies to
+  `Grid` and `RelativePanel`. Existing code that asked for those modifiers will
+  begin rendering rounded corners or inner spacing instead of remaining square
+  or flush. The gate deliberately names those concrete types rather than
+  `Panel`, whose other subclasses do not declare the properties. Removing
+  `.CornerRadius(...)` now uses `ClearValue`, so style/theme values return
+  instead of being shadowed by a local zero.
+
 - **`Flyout(...)` no longer terminates the process when opened at its default
   placement.** Reactor's flyout elements default `Placement` to
   `FlyoutPlacementMode.Auto`, and that value was written straight onto the WinUI

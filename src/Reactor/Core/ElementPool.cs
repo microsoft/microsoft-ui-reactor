@@ -300,6 +300,19 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(Layout.FlexPanel.RightProperty);
         fe.ClearValue(Layout.FlexPanel.BottomProperty);
 
+        // These properties are declared by the concrete panel types, not by Panel.
+        // Keep their resets above the type dispatch so the pool/reset consistency
+        // tests can account for the concrete-panel resets added by this gate widening.
+        if (fe is WinUI.Grid resetGrid)
+        {
+            resetGrid.ClearValue(WinUI.Grid.PaddingProperty);
+            resetGrid.ClearValue(WinUI.Grid.CornerRadiusProperty);
+        }
+        else if (fe is WinUI.StackPanel resetStack)
+        {
+            resetStack.ClearValue(WinUI.StackPanel.CornerRadiusProperty);
+        }
+
         // Type-specific cleanup
         switch (fe)
         {
