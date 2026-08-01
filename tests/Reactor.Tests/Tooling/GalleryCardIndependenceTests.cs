@@ -39,6 +39,15 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// projection, or a helper invoked twice;</item>
 /// <item>a card element built into a local and then rendered in two places.</item>
 /// </list>
+/// <para>One more escapes for a different reason: two cards driven by a page <em>field</em> or
+/// property rather than a state slot are coupled in exactly the way this rule is about, and are
+/// invisible to it — a field is not minted by a state hook, so it is never a slot. That is the
+/// deliberate scope above (shared data is not per-card state) meeting a shape where it happens
+/// to be wrong, not an oversight; narrowing it would need to tell mutable per-card state held in
+/// a field from the ordinary shared data the same declaration form expresses. Measured rather
+/// than assumed: no page under <c>ControlPages/</c> reaches one field or property from two cards
+/// today, so this is a documented limit rather than a live miss.</para>
+///
 /// <para>Each needs call-graph or data-flow reasoning this tier does not have, and silence is
 /// the cheaper error: this lint has no allowlist, so a false positive is a blocked tree. The
 /// one shape that errs the other way is two <em>mutually exclusive</em> cards — a
@@ -46,14 +55,21 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// only one ever renders. No gallery page builds a card conditionally; if one ever does, the
 /// fix is to give each branch its own slot, which is what the reader would expect anyway.</para>
 ///
-/// <para>Lambda-parameter shadowing is not on this list, but the reason is narrower than it
-/// first looks and only the narrow version holds. Inside the member that declares the slot, a
-/// lambda parameter cannot reuse the name (CS0136), so in code that compiles no shadowed name
-/// exists to be misattributed. That argument stops at the member boundary: CS0136 says nothing
-/// about a lambda parameter in a <em>sibling</em> method, which compiles happily and — since
-/// this scan walks the file, not the <c>Render</c> node — would be read as a reference to the
-/// slot. What rules that out is not CS0136 but scope: attribution requires a reference to sit
-/// in the same member that declares the slot (see <see cref="DeclaringMember"/>). Pinned by
+/// <para>Lambda-parameter shadowing <em>was</em> on this list, on an argument that turned out to
+/// be false. Inside the member that declares the slot, a lambda parameter was taken to be unable
+/// to reuse the name (CS0136), so no shadowed name could exist to be misattributed. Compiling the
+/// shape says otherwise: <c>value =&gt; setSpinValue(value)</c> beside a <c>value</c> slot builds
+/// clean, as do a parenthesized lambda's parameter, a local-function parameter, and an ordinary
+/// local declared in a nested lambda body. CS0136 governs nested <em>blocks</em>; it does not
+/// reach across a lambda or local-function boundary. Handled rather than argued away, by
+/// <see cref="DeclaredNames"/> — a reference inside a narrower scope binding the same name reads
+/// that declaration, not the slot.</para>
+///
+/// <para>The member bound is still load-bearing and is a separate rule: CS0136 says nothing about
+/// a lambda parameter in a <em>sibling</em> method, which compiles happily and — since this scan
+/// walks the file, not the <c>Render</c> node — would be read as a reference to the slot.
+/// Attribution therefore requires a reference to sit in the same member that declares the slot
+/// (see <see cref="DeclaringMember"/>). Pinned by
 /// <see cref="ALambdaParameterInAnotherMethod_DoesNotCountAsAReference"/>, which reported
 /// <c>(value, setValue): Basic | Extras</c> against a correct page before that bound existed.
 /// </para>
@@ -71,22 +87,13 @@ public sealed class GalleryCardIndependenceTests
 
     // ── findings ─────────────────────────────────────────────────────────────
 
-    /// <param name="Unadjudicable">
-    /// Set when the scan could not resolve <paramref name="Slot"/> to a single declaration, so it
-    /// reports that the rule <em>cannot be checked</em> here rather than that a slot is shared.
-    /// The two carry different evidence and must not share a message: a coupling is observed, an
-    /// ambiguity is precisely the absence of an observation.
-    /// </param>
     internal readonly record struct Finding(
         string Slot,
         IReadOnlyList<string> Cards,
-        int Line,
-        bool Unadjudicable = false)
+        int Line)
     {
         /// <summary>Compact form the detector's own tests compare against.</summary>
-        public string Signature() => Unadjudicable
-            ? $"{Slot}: AMBIGUOUS: {string.Join(" | ", Cards)}"
-            : $"{Slot}: {string.Join(" | ", Cards)}";
+        public string Signature() => $"{Slot}: {string.Join(" | ", Cards)}";
 
         /// <remarks>
         /// Only the first sentence is measured. This lint reads source and never renders, so it
@@ -94,18 +101,9 @@ public sealed class GalleryCardIndependenceTests
         /// from a deliberate share. Both remedies are offered rather than the likelier one alone,
         /// because a message that names a single cause pushes the reader toward a single fix — and
         /// in the one case the lint cannot distinguish, that fix is the wrong one.
-        ///
-        /// <para>The unadjudicable form claims strictly less: how many declarations bind the name
-        /// and which cards its references reach, both measured, and no coupling either way.</para>
         /// </remarks>
-        public string Describe() => Unadjudicable
-            ? $"the name {Slot} is bound by more than one state slot in the same member, so the scan " +
-              $"cannot tell which slot each reference means. Its references reach {Cards.Count} " +
-              "sample cards — " + string.Join(", ", Cards.Select(c => $"\"{c}\"")) + ". Whether that " +
-              "is one slot shared across cards or separate slots that happen to agree on a name is " +
-              "exactly what the ambiguity hides, so the rule cannot be checked here either way. " +
-              "Give the slots distinct names."
-            : $"the {Slot} state slot is wired into {Cards.Count} sample cards — " +
+        public string Describe() =>
+            $"the {Slot} state slot is wired into {Cards.Count} sample cards — " +
               string.Join(", ", Cards.Select(c => $"\"{c}\"")) + ". " +
               "Cards are meant to be independent demonstrations, so this almost always means driving " +
               "one silently moves the others. Give every card its own state hook — or, if the sharing " +
@@ -199,10 +197,11 @@ public sealed class GalleryCardIndependenceTests
     ///
     /// <para>An ordinary local function is deliberately <em>not</em> a boundary. It captures the
     /// enclosing method's locals, so a card extracted into one still reads the very same slot —
-    /// treating it as its own scope made that reference fail to resolve and hid real coupling.
-    /// Nothing can shadow the slot inside it either, since CS0136 does reach into a nested local
-    /// function body. A <c>static</c> local function is a boundary, because <c>static</c> is
-    /// precisely the modifier that severs capture.</para>
+    /// treating it as its own scope made that reference fail to resolve and hid real coupling. It
+    /// can still shadow the slot from the inside, which CS0136 does not prevent across a
+    /// local-function boundary; <see cref="DeclaredNames"/> handles that, not this bound. A
+    /// <c>static</c> local function is a boundary, because <c>static</c> is precisely the modifier
+    /// that severs capture.</para>
     /// </summary>
     static SyntaxNode? DeclaringMember(SyntaxNode node) =>
         node.Ancestors().FirstOrDefault(a =>
@@ -218,19 +217,30 @@ public sealed class GalleryCardIndependenceTests
     static int ScopeKey(SyntaxNode? scope) => scope?.SpanStart ?? -1;
 
     /// <summary>
-    /// The innermost block a slot's declaration sits in — the region a reference must sit inside to
-    /// be reading <em>that</em> declaration rather than a same-named one beside it.
+    /// The innermost scope a slot's declaration sits in — the region a reference must sit inside to
+    /// be reading <em>that</em> declaration rather than a same-named one beside or around it.
     ///
-    /// <para>This is one granularity finer than <see cref="DeclaringMember"/> and exists for the
-    /// case that one cannot separate: two slots binding the same name in non-overlapping blocks of
-    /// a single member. That is ordinary compiling C# — CS0136 forbids shadowing, not reuse across
-    /// disjoint scopes — so the two must be told apart rather than merged. A block is the right
-    /// unit because it is exactly the scope a local is visible in.</para>
+    /// <para>This is one granularity finer than <see cref="DeclaringMember"/> and exists for two
+    /// shapes that key alike but mean different slots. The first is two slots binding one name in
+    /// <em>disjoint</em> blocks of a member: CS0136 forbids shadowing, not reuse across scopes that
+    /// do not nest, so this compiles and the two must be told apart rather than merged. The second
+    /// is a slot redeclared in a <em>nested</em> lambda or non-static local function body, which
+    /// also compiles — measured, not assumed: the same redeclaration in a plain nested block is
+    /// CS0136, but across a lambda or local-function boundary it is legal, so nesting is real and
+    /// the innermost region wins.</para>
+    ///
+    /// <para>A switch section counts as a region even without braces. Its statements have their own
+    /// scope, and a declaration directly under a <c>case</c> label sits in no block of its own; if
+    /// the walk skipped past it to the enclosing method block, the region would be wider than the
+    /// scope and references after the switch — which bind to a field, not to the local — would be
+    /// attributed to that slot. This gate has no allowlist, so that is a blocked tree on correct
+    /// code. Unbraced <c>if</c>/<c>while</c> bodies need no such arm: a declaration cannot be an
+    /// embedded statement (CS1023).</para>
     ///
     /// <para>Falls back to the declaring member when the declaration sits in no block, and to the
-    /// file root when it sits in no member either (top-level statements) — the region a file-scope
-    /// local is readable from. Widening the fallback keeps those references resolving exactly as
-    /// they did before regions existed; narrowing it would drop them silently.</para>
+    /// file root when it sits in no member either — the region a file-scope local is readable from.
+    /// Widening the fallback keeps those references resolving exactly as they did before regions
+    /// existed; narrowing it would drop them silently.</para>
     /// </summary>
     static SyntaxNode DeclaringRegion(SyntaxNode declaration)
     {
@@ -238,11 +248,75 @@ public sealed class GalleryCardIndependenceTests
 
         foreach (var ancestor in declaration.Ancestors())
         {
-            if (ancestor is BlockSyntax) return ancestor;
+            if (ancestor is BlockSyntax or SwitchSectionSyntax) return ancestor;
             if (ancestor == member) break;
         }
 
         return member ?? declaration.SyntaxTree.GetRoot();
+    }
+
+    /// <summary>
+    /// The scope a parameter is readable from: the lambda or local function it belongs to, or the
+    /// member for an ordinary parameter list. Unlike a local, a parameter is not introduced by a
+    /// statement inside a block, so <see cref="DeclaringRegion"/> would walk past the construct
+    /// that owns it and hand back a scope wider than the parameter's.
+    /// </summary>
+    static SyntaxNode ParameterScope(SyntaxNode parameter) =>
+        parameter.Ancestors().FirstOrDefault(a =>
+            a is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax or MemberDeclarationSyntax)
+        ?? parameter.SyntaxTree.GetRoot();
+
+    /// <summary>
+    /// Every name a declaration introduces, paired with the scope it is readable from — slots and
+    /// non-slots alike. A reference inside one of these scopes reads <em>that</em> declaration, so
+    /// a slot whose region encloses it does not own it.
+    ///
+    /// <para>This exists because the shadowing rule is narrower than it reads. CS0136 stops a
+    /// nested <em>block</em> from reusing an enclosing local's name, and that was taken here as
+    /// meaning no shadowed name can exist inside the declaring member at all. It does not reach
+    /// across a lambda or local-function boundary: <c>value =&gt; setSpinValue(value)</c> beside a
+    /// <c>value</c> slot compiles, as does an ordinary local or <c>catch</c> variable declared in a
+    /// nested lambda body. Measured on the repo's language version rather than reasoned about —
+    /// simple and parenthesized lambda parameters and local-function parameters all compile, while
+    /// the same name on a <c>foreach</c> in the declaring block is CS0136.</para>
+    ///
+    /// <para>Without this, such a parameter is read as a reference to the slot, and two cards that
+    /// each spell one lambda parameter after the page's slot are reported as sharing it. That is a
+    /// false positive on compiling code, and this gate has no allowlist to waive it with. No
+    /// gallery page does it today; the shape is one rename away, which is exactly the reachability
+    /// the switch-section arm has.</para>
+    /// </summary>
+    static IEnumerable<(string Name, SyntaxNode Scope)> DeclaredNames(SyntaxNode pageRoot)
+    {
+        foreach (var node in pageRoot.DescendantNodes())
+        {
+            switch (node)
+            {
+                case ParameterSyntax parameter:
+                    yield return (parameter.Identifier.ValueText, ParameterScope(parameter));
+                    break;
+
+                // Covers `var s = UseState(...)` slots as well as ordinary locals and fields. A
+                // slot's own declaration yields its own region, never a narrower one, so it can
+                // never shadow itself — the containment test below is strict for that reason.
+                case VariableDeclaratorSyntax declarator:
+                    yield return (declarator.Identifier.ValueText, DeclaringRegion(declarator));
+                    break;
+
+                case SingleVariableDesignationSyntax designation:
+                    yield return (designation.Identifier.ValueText, DeclaringRegion(designation));
+                    break;
+
+                // A loop variable's scope is the loop, not the block around it.
+                case ForEachStatementSyntax loop:
+                    yield return (loop.Identifier.ValueText, loop);
+                    break;
+
+                case CatchDeclarationSyntax caught when caught.Parent is { } clause:
+                    yield return (caught.Identifier.ValueText, clause);
+                    break;
+            }
+        }
     }
 
     // ── attributing a reference to a card ────────────────────────────────────
@@ -324,10 +398,11 @@ public sealed class GalleryCardIndependenceTests
         // that reference being read as the enclosing slot.
         //
         // Ambiguity stays real *within* one member: two slots in non-overlapping blocks may both
-        // bind `value`. That is ordinary compiling code, and each card in such a page is genuinely
-        // independent, so the name is resolved at the use site by the block that contains it rather
-        // than reported. Merging the two would invent a coupling; reporting them would block a
-        // correct page in a gate that has no allowlist to waive it with.
+        // bind `value`, and a nested lambda or local-function body may redeclare an enclosing
+        // slot's name. Both compile, and each card in such a page is genuinely independent, so the
+        // name is resolved at the use site by the innermost region containing it rather than
+        // reported. Merging them would invent a coupling; reporting them would block a correct page
+        // in a gate that has no allowlist to waive it with.
         var candidates = new Dictionary<(int Scope, string Name), List<int>>();
 
         for (var index = 0; index < slots.Count; index++)
@@ -348,12 +423,21 @@ public sealed class GalleryCardIndependenceTests
         // Cards reached per slot, in source order, de-duplicated by the card's own span.
         var reached = slots.Select(_ => new List<InvocationExpressionSyntax>()).ToList();
 
-        // Cards reached by a name the scan could *not* narrow to one slot. Tracked rather than
-        // dropped. Skipping an unresolvable name looks conservative and is not: the rule cannot be
-        // checked on that name, so staying silent reports "no coupling here" on the one input where
-        // the scan has no idea — a false negative on exactly the defect this gate exists to catch,
-        // and one no allowlist is needed to produce.
-        var reachedByAmbiguous = new Dictionary<(int Scope, string Name), List<InvocationExpressionSyntax>>();
+        // Same key shape as `candidates`, so a reference looks both up with the one key it already
+        // built. These are every declaration of the name, slots included; a slot yields exactly its
+        // own region, which the strict containment test in `IsShadowed` discards.
+        var shadowers = new Dictionary<(int Scope, string Name), List<SyntaxNode>>();
+
+        foreach (var (name, scope) in DeclaredNames(pageRoot))
+        {
+            if (IsDiscard(name)) continue;
+
+            var key = (ScopeKey(DeclaringMember(scope)), name);
+
+            if (!shadowers.TryGetValue(key, out var scopes)) shadowers[key] = scopes = [];
+
+            scopes.Add(scope);
+        }
 
         // A `sourceCode:` snippet is a string literal, so it contributes no IdentifierNameSyntax
         // and needs no special-casing: only the live half of a card is ever inspected here.
@@ -369,30 +453,28 @@ public sealed class GalleryCardIndependenceTests
 
             var index = Resolve(declarations, reference);
 
-            // Bound more than once and attributable to none of them: the scan has no basis to say
-            // what this reference reads. Bound *once* and not contained is different and ordinary —
-            // the name is simply something else here, a field most likely — so it is skipped the
-            // same way a reference from another member is.
-            if (index < 0)
-            {
-                if (declarations.Count < 2) continue;
+            // Outside every candidate's region, and that is a determination rather than a shrug: a
+            // local is visible only inside the scope that declares it, so a reference beyond all of
+            // them is reading something else — a field, most likely — and is skipped exactly as a
+            // reference from another member is. How many declarations bind the name cannot change
+            // what "inside none of them" means, so nothing here is left unadjudicated.
+            if (index < 0) continue;
 
-                if (!reachedByAmbiguous.TryGetValue(key, out var ambiguousCards))
-                    reachedByAmbiguous[key] = ambiguousCards = [];
-
-                RecordCard(ambiguousCards, reference);
-                continue;
-            }
+            // Inside the slot's region, but inside something narrower that binds the same name —
+            // a lambda parameter, or a local in a nested lambda body. C# gives the reference to the
+            // inner declaration, and only a slot can be shared between cards.
+            if (shadowers.TryGetValue(key, out var scopes)
+                && IsShadowed(reference, slots[index].Region, scopes)) continue;
 
             RecordCard(reached[index], reference);
         }
 
-        // Which declaration a reference means: the one whose block contains it. C# guarantees at
-        // most one candidate can apply — shadowing is CS0136, so same-named declarations sit in
-        // disjoint blocks — and the innermost tie-break is what the language would do anyway if a
-        // future construct made nesting legal. Returns -1 when no candidate's region contains the
-        // reference, which the caller reads as "not this slot" or "cannot say" depending on how
-        // many declarations there were.
+        // Which declaration a reference means: the innermost candidate whose region contains it.
+        // Candidates in disjoint scopes cannot both contain a point, but nested ones can — a lambda
+        // or non-static local function body may redeclare an enclosing slot's name and still
+        // compile, where a plain nested block is CS0136 — so the smallest-span tie-break is the arm
+        // that picks the inner slot, not defensive padding. Returns -1 when no candidate's region
+        // contains the reference, which the caller reads as "this name is not these slots".
         int Resolve(List<int> declarations, SyntaxNode reference)
         {
             var best = -1;
@@ -407,6 +489,22 @@ public sealed class GalleryCardIndependenceTests
             }
 
             return best;
+        }
+
+        // Does something narrower than the slot's region bind the same name over this reference?
+        // Strict on both halves: a scope as wide as the region is the slot's own declaration (or a
+        // sibling that cannot enclose the reference anyway), and a scope that merely overlaps the
+        // region without nesting inside it belongs to a different branch of the tree.
+        static bool IsShadowed(SyntaxNode reference, SyntaxNode region, List<SyntaxNode> scopes)
+        {
+            foreach (var scope in scopes)
+            {
+                if (scope.Span.Length >= region.Span.Length) continue;
+
+                if (region.Span.Contains(scope.Span) && scope.Span.Contains(reference.Span)) return true;
+            }
+
+            return false;
         }
 
         void RecordCard(List<InvocationExpressionSyntax> into, IdentifierNameSyntax reference)
@@ -428,26 +526,6 @@ public sealed class GalleryCardIndependenceTests
                 "(" + string.Join(", ", slots[index].Names) + ")",
                 reached[index].Select(CardTitle).ToList(),
                 slots[index].Line));
-        }
-
-        // A name that no declaration's block accounts for, reaching two or more cards, is reported
-        // as unadjudicable. Resolution above already handles the ordinary case — two same-named
-        // slots in disjoint blocks, each driving its own card — so what is left here is a reference
-        // standing outside every candidate's region, where the scan has no basis to attribute it
-        // and silence would read as "these cards are independent". Reaching one card or none stays
-        // silent: there is nothing for the missing information to be hiding, and this gate has no
-        // allowlist, so a finding it raises cannot be waived.
-        foreach (var entry in reachedByAmbiguous.OrderBy(e => e.Key.Name, StringComparer.Ordinal))
-        {
-            if (entry.Value.Count < 2) continue;
-
-            findings.Add(new Finding(
-                entry.Key.Name,
-                entry.Value.Select(CardTitle).ToList(),
-                candidates.TryGetValue(entry.Key, out var declarations) && declarations.Count > 0
-                    ? slots[declarations[0]].Line
-                    : 0,
-                Unadjudicable: true));
         }
 
         return new PageScan(findings, cards.Count, slots.Count);
@@ -787,11 +865,11 @@ public sealed class GalleryCardIndependenceTests
     /// ambiguous set without emptying it.
     ///
     /// <para>The remaining collision is resolved rather than reported. C# already decides it: a
-    /// local is visible in its own block, shadowing is CS0136, so the candidate blocks are disjoint
-    /// and a reference sits inside at most one of them. Merging the two would invent a coupling
-    /// across independent cards; dropping the name would answer "these cards are independent" on
-    /// the one input where the scan had no idea. Resolving gives the <em>right</em> answer to both
-    /// halves of this page at once.</para>
+    /// local is visible only in the scope that declares it, so the innermost candidate region
+    /// containing a reference is the declaration that reference means. Merging the two would invent
+    /// a coupling across independent cards; dropping the name would answer "these cards are
+    /// independent" on the one input where the scan had no idea. Resolving gives the <em>right</em>
+    /// answer to both halves of this page at once.</para>
     ///
     /// <para>Which is what this asserts: the first block really does wire one slot into two cards
     /// and is convicted by name, while the second block's identically-named slot drives its own
@@ -889,26 +967,118 @@ public sealed class GalleryCardIndependenceTests
     }
 
     /// <summary>
-    /// The fail-closed residue, and the reason the unadjudicable arm still exists after resolution:
-    /// a reference that sits outside <em>every</em> candidate block. Resolution has no basis to
-    /// attribute it — the name is bound twice and neither binding reaches it — so the scan reports
-    /// what it measured (more than one declaration, and the cards the references reach) rather than
-    /// claiming a coupling it cannot see or staying silent, which this gate's readers take to mean
-    /// "these cards are independent".
+    /// A lambda parameter spelled after the page's slot. C# binds the references inside that lambda
+    /// to the parameter, so the two cards holding them are independent — and the shape compiles,
+    /// which is the whole problem: CS0136 governs nested blocks and stops at the lambda boundary.
+    /// Measured, not reasoned about. A simple lambda parameter, a parenthesized one, and a
+    /// local-function parameter all build clean beside a slot of the same name.
     ///
-    /// <para>The fixture below compiles: a local may shadow a <em>field</em>, so each block's
-    /// <c>value</c> is legal and the references beyond them bind to the field instead. That is what
-    /// makes the case reachable rather than merely parseable — and it is genuinely worth a report,
-    /// since two cards driven by a name spelled three different ways in one member is exactly the
-    /// shape whose independence a reader cannot verify either.</para>
+    /// <para>Before <see cref="DeclaredNames"/> existed the scan read all four references as the
+    /// slot and reported <c>(value, setValue): Basic | Spin</c> — a blocked tree on correct code,
+    /// in a gate with no allowlist to waive it with. No gallery page spells a parameter this way
+    /// today, so this arm is driven from synthetic source rather than from a live page; a guard
+    /// nobody has ever watched reject anything is not a guard.</para>
     ///
-    /// <para>Reaching fewer than two cards stays silent: there is nothing for the missing
-    /// information to hide, and an unwaivable finding must not fire on a page where the answer
-    /// cannot matter. <see cref="SameNamedSlotsEachDrivingTheirOwnCard_AreNotReported"/> is the
-    /// other side of that floor.</para>
+    /// <para><c>shared</c> is the conviction, so a scan that had stopped attributing anything at
+    /// all fails here rather than passing as silence.</para>
     /// </summary>
     [Fact]
-    public void AReferenceOutsideEveryCandidateBlock_IsReportedRatherThanSilentlyDropped()
+    public void ALambdaParameterShadowingASlot_IsNotAReferenceToIt()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    var (value, setValue) = UseState(0.0);
+                    var (shared, setShared) = UseState(1.0);
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(0.0, value => Log(value)), sourceCode: @"x"),
+                        SampleCard("Spin", NumberBox(0.0, (double value) => Log(value)), sourceCode: @"x"),
+                        SampleCard("Third", NumberBox(shared, v => setShared(v)), sourceCode: @"x"),
+                        SampleCard("Fourth", NumberBox(shared, v => setShared(v)), sourceCode: @"x"));
+                }
+            }
+            """);
+
+        Assert.Equal(
+            ["(shared, setShared): Third | Fourth"],
+            scan.Findings.Select(f => f.Signature()));
+
+        // The `value` slot was found — so its absence from the findings is the parameter binding
+        // those references, not the slot detector having missed the declaration.
+        Assert.Equal(2, scan.Slots);
+        Assert.Equal(4, scan.Cards);
+    }
+
+    /// <summary>
+    /// The same rule one construct over: an ordinary local declared inside a nested lambda body,
+    /// which is legal for the same reason a parameter is and is <em>not</em> a slot, so the
+    /// smallest-span tie-break between slots cannot reach it. Only a scope that binds the name
+    /// without being a state hook can.
+    /// </summary>
+    [Fact]
+    public void ANonSlotLocalInANestedLambda_IsNotAReferenceToTheEnclosingSlot()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    var (value, setValue) = UseState(0.0);
+                    var (shared, setShared) = UseState(1.0);
+
+                    Func<Element> first = () =>
+                    {
+                        var value = 2.0;
+                        return SampleCard("Basic", NumberBox(value, _ => { }), sourceCode: @"x");
+                    };
+
+                    Func<Element> second = () =>
+                    {
+                        var value = 3.0;
+                        return SampleCard("Spin", NumberBox(value, _ => { }), sourceCode: @"x");
+                    };
+
+                    return VStack(
+                        first(),
+                        second(),
+                        SampleCard("Third", NumberBox(shared, v => setShared(v)), sourceCode: @"x"),
+                        SampleCard("Fourth", NumberBox(shared, v => setShared(v)), sourceCode: @"x"));
+                }
+            }
+            """);
+
+        Assert.Equal(
+            ["(shared, setShared): Third | Fourth"],
+            scan.Findings.Select(f => f.Signature()));
+
+        Assert.Equal(2, scan.Slots);
+    }
+
+    /// <summary>
+    /// A reference standing outside <em>every</em> candidate region reads something else — here a
+    /// field the slots shadow — and is skipped rather than attributed. Both arities are on one page
+    /// because they are one code path: <c>value</c> is bound twice and <c>lone</c> once, and
+    /// "inside none of them" means the same thing either way. An earlier revision reported the
+    /// two-declaration case as unadjudicable, which was a false positive on compiling code in a
+    /// gate with no allowlist to waive it.
+    ///
+    /// <para>The shape compiles: a local may shadow a field, so each block's <c>value</c> is legal
+    /// and the references past those blocks bind to the field. That is what makes it reachable
+    /// rather than merely parseable.</para>
+    ///
+    /// <para><c>shared</c> is the conviction. Without it every assertion here would be satisfied by
+    /// a detector that had stopped reporting anything at all, which is the one explanation for
+    /// silence that a silence-shaped test cannot exclude.</para>
+    /// </summary>
+    [Fact]
+    public void ReferencesOutsideEveryCandidateRegion_ReadSomethingElseAndAreNotReported()
     {
         var scan = ScanSource("""
             namespace Gallery;
@@ -917,50 +1087,101 @@ public sealed class GalleryCardIndependenceTests
             {
                 double value;
                 Action<double> setValue = _ => { };
+                double lone;
+                Action<double> setLone = _ => { };
 
                 public override Element Render()
                 {
                     { var (value, setValue) = UseState(1.0); setValue(value); }
                     { var (value, setValue) = UseState(2.0); setValue(value); }
+                    { var (lone, setLone) = UseState(3.0); setLone(lone); }
+
+                    var (shared, setShared) = UseState(4.0);
 
                     return VStack(
-                        SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
-                        SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x"));
+                        SampleCard("TwiceA", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        SampleCard("TwiceB", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        SampleCard("OnceA", NumberBox(lone, v => setLone(v)), sourceCode: @"x"),
+                        SampleCard("OnceB", NumberBox(lone, v => setLone(v)), sourceCode: @"x"),
+                        SampleCard("Third", NumberBox(shared, v => setShared(v)), sourceCode: @"x"),
+                        SampleCard("Fourth", NumberBox(shared, v => setShared(v)), sourceCode: @"x"));
                 }
             }
             """);
 
-        // Both halves of the pair are unresolvable at the two cards, so both are named. The
-        // signature says AMBIGUOUS rather than asserting a coupling — the scan cannot tell what
-        // those references read, and that inability is the finding.
         Assert.Equal(
-            ["setValue: AMBIGUOUS: Basic | Spin", "value: AMBIGUOUS: Basic | Spin"],
+            ["(shared, setShared): Third | Fourth"],
             scan.Findings.Select(f => f.Signature()));
 
-        // Both declarations were seen, so the report is the scan declining to adjudicate two known
-        // slots rather than having missed one of them.
-        Assert.Equal(2, scan.Slots);
+        // All four slots were seen, so the silence about `value` and `lone` is resolution declining
+        // to attribute their references rather than the scan never having found the declarations.
+        Assert.Equal(4, scan.Slots);
+        Assert.Equal(6, scan.Cards);
     }
 
     /// <summary>
-    /// The other side of the residue, and the case that keeps the arm from firing on correct code:
-    /// a name bound <em>once</em> whose reference sits outside that binding's block. There is no
-    /// ambiguity here — C# resolves it to the field, and the scan can say so — so the reference is
-    /// simply not this slot, and is skipped the same way a reference from a sibling member is.
+    /// A slot redeclared inside a nested lambda. Both bindings key to the same member, so both are
+    /// candidates, and the inner reference sits inside <em>both</em> regions — the only shape where
+    /// more than one candidate contains a point, and therefore the only thing the smallest-span
+    /// tie-break in <c>Resolve</c> decides.
     ///
-    /// <para>Reporting it would be a false positive on compiling, correct code in a gate with no
-    /// allowlist to waive it, and <see cref="Finding.Describe"/> would lie: it would say more than
-    /// one declaration binds the name when exactly one does. Under-reporting here is also the
-    /// cheap direction — the slot drives one card, so there is no coupling to miss.</para>
+    /// <para>That nesting is legal was measured rather than reasoned about, and the obvious
+    /// reasoning is wrong: the same redeclaration in a plain nested block is CS0136, but across a
+    /// lambda or non-static local-function boundary it compiles. An earlier comment on that
+    /// tie-break called it unreachable defence for a construct the language does not have. It is
+    /// live, and picking the outer slot instead would report the two cards as sharing one.</para>
     ///
-    /// <para>This pins the declaration-count floor specifically. The two-declaration fixture in
-    /// <see cref="AReferenceOutsideEveryCandidateBlock_IsReportedRatherThanSilentlyDropped"/>
-    /// cannot: removing the floor leaves that page reported exactly as before, because it has two
-    /// declarations either way. Only a one-declaration page separates "cannot say" from "not this
-    /// slot", and that separation is the whole content of the floor.</para>
+    /// <para><c>shared</c> is the conviction, for the same reason as in
+    /// <see cref="ReferencesOutsideEveryCandidateRegion_ReadSomethingElseAndAreNotReported"/>.</para>
     /// </summary>
     [Fact]
-    public void ASingleBindingThatDoesNotReachAReference_IsSkippedRatherThanReported()
+    public void ASlotRedeclaredInANestedLambda_ResolvesToTheInnermostDeclaration()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    var (value, setValue) = UseState(1.0);
+                    var (shared, setShared) = UseState(9.0);
+
+                    Func<Element> inner = () =>
+                    {
+                        var (value, setValue) = UseState(2.0);
+                        return SampleCard("Inner", NumberBox(value, v => setValue(v)), sourceCode: @"x");
+                    };
+
+                    return VStack(
+                        SampleCard("Outer", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        inner(),
+                        SampleCard("Third", NumberBox(shared, v => setShared(v)), sourceCode: @"x"),
+                        SampleCard("Fourth", NumberBox(shared, v => setShared(v)), sourceCode: @"x"));
+                }
+            }
+            """);
+
+        // The inner card reads the inner slot and the outer card the outer one, so neither `value`
+        // slot reaches two cards. Resolving the inner reference outward instead yields the extra
+        // finding `(value, setValue): Outer | Inner` on a correct page.
+        Assert.Equal(
+            ["(shared, setShared): Third | Fourth"],
+            scan.Findings.Select(f => f.Signature()));
+
+        Assert.Equal(3, scan.Slots);
+    }
+
+    /// <summary>
+    /// A slot declared directly under a <c>case</c> label, with no block of its own. Its scope is
+    /// the switch section; if <see cref="DeclaringRegion"/> walked past that to the enclosing method
+    /// block, the region would be wider than the scope and the two cards below — which read the
+    /// <em>field</em>, since the local is out of scope there — would be attributed to it and
+    /// reported as sharing a slot. That is a false positive on compiling code, and this gate has no
+    /// allowlist to waive it with.
+    /// </summary>
+    [Fact]
+    public void ASlotDeclaredInAnUnbracedSwitchSection_DoesNotClaimReferencesBeyondIt()
     {
         var scan = ScanSource("""
             namespace Gallery;
@@ -972,25 +1193,31 @@ public sealed class GalleryCardIndependenceTests
 
                 public override Element Render()
                 {
-                    { var (value, setValue) = UseState(1.0); setValue(value); }
+                    switch (Mode)
+                    {
+                        case 1:
+                            var (value, setValue) = UseState(1.0);
+                            setValue(value);
+                            break;
+                    }
+
+                    var (shared, setShared) = UseState(2.0);
 
                     return VStack(
                         SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
-                        SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x"));
+                        SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        SampleCard("Third", NumberBox(shared, v => setShared(v)), sourceCode: @"x"),
+                        SampleCard("Fourth", NumberBox(shared, v => setShared(v)), sourceCode: @"x"));
                 }
             }
             """);
 
-        // Two cards read `value`/`setValue` and the page is still clean: those references are the
-        // fields, and the one slot that spells them the same way is confined to its block.
-        Assert.Empty(scan.Findings);
+        Assert.Equal(
+            ["(shared, setShared): Third | Fourth"],
+            scan.Findings.Select(f => f.Signature()));
 
-        // The slot was seen, so the silence is the scan resolving the reference away from it rather
-        // than never having found a declaration to attribute anything to.
-        Assert.Equal(1, scan.Slots);
-        Assert.Equal(2, scan.Cards);
+        Assert.Equal(2, scan.Slots);
     }
-
     /// <summary>
     /// A card extracted into a local function. A local function <em>captures</em> the enclosing
     /// method's locals, so the slot it reads there is the same slot — but while
@@ -1032,8 +1259,9 @@ public sealed class GalleryCardIndependenceTests
     /// function cannot capture, so the enclosing method's locals are not in scope inside it — and
     /// C# therefore permits it to declare a local of the same name. Verified by compiling the
     /// shape, not by reading the rule: <c>static void Local() { int value = 2; }</c> nested in a
-    /// method holding its own <c>value</c> builds clean, 0 warnings. This is the third construct
-    /// exempt from CS0136, after a discard and a lambda parameter in a sibling member.
+    /// method holding its own <c>value</c> builds clean, 0 warnings. It joins a discard, a lambda
+    /// parameter in a sibling member, and a lambda or local-function body nested in the declaring
+    /// member on the list of places a slot's name legally reappears.
     ///
     /// <para>The obvious form of this test — a page with no coupling, asserting the scan stays
     /// silent — is <em>vacuous</em>, and was written that way first. So this is the
