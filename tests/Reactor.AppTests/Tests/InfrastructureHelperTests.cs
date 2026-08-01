@@ -86,6 +86,58 @@ public sealed class InfrastructureHelperTests
         Assert.AreEqual("text=x vk=0x11", UiElement.ToSendKeysTokens("x" + Keys.Control));
     }
 
+    [TestMethod]
+    public void SendKeysGuard_RejectsEveryKeysConstant()
+    {
+        var constants = KeysConstants();
+
+        // Population gate. Every assertion below lives inside the loop, so a reflection query that
+        // silently returned nothing would assert exactly nothing and still report green.
+        Assert.IsTrue(
+            constants.Count >= 9,
+            $"expected the Keys.* constants to be discoverable by reflection, found {constants.Count}");
+
+        foreach (var (name, value) in constants)
+        {
+            var ex = Assert.Throws<ArgumentException>(
+                () => WinAppUi.RejectUntranslatedKeyConstants("before " + value + " after"),
+                $"Keys.{name} (U+{(int)value[0]:X4}) reached the winapp token grammar untranslated " +
+                "and was not rejected");
+
+            // The message must name the constant, not just the code point — the whole value of the
+            // guard is that it tells the caller which token to fix.
+            StringAssert.Contains(ex.Message, name);
+        }
+    }
+
+    [TestMethod]
+    public void SendKeysGuard_AllowsPrivateUseThatIsNotAKeysConstant()
+    {
+        // SendKeys documents `text=` literals as part of the grammar, and a text= payload carries
+        // arbitrary user data. U+E500 is inside the private-use area but is not a Keys.* constant,
+        // so it is ordinary literal text and must pass.
+        //
+        // Non-vacuous by construction: this call THROWS on the previous implementation, which
+        // rejected the whole private-use range (U+E000..U+F8FF) regardless of token position.
+        const char notAKeyConstant = '\ue500';
+
+        // Control: if a future Keys.* constant ever took this code point, the test would be asserting
+        // the opposite of its own premise rather than failing.
+        Assert.IsFalse(
+            KeysConstants().Any(c => c.Value[0] == notAKeyConstant),
+            $"U+{(int)notAKeyConstant:X4} is now a Keys.* constant — pick a different non-constant " +
+            "private-use code point for this test");
+
+        WinAppUi.RejectUntranslatedKeyConstants("text=payload" + notAKeyConstant);
+    }
+
+    private static List<(string Name, string Value)> KeysConstants() => typeof(Keys)
+        .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+        .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+        .Select(f => (f.Name, Value: (string)f.GetRawConstantValue()!))
+        .Where(x => x.Value.Length == 1)
+        .ToList();
+
     private static void AssertThrowsWinAppException(Action action)
     {
         try
