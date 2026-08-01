@@ -412,6 +412,63 @@ public class DataGridEditorFocusTests
         Assert.True(state.IsRowEditing);
     }
 
+    /// <summary>
+    /// The "no cursor yet" arm of <c>MoveRowEditFocus</c> — backward from -1 has to start one PAST
+    /// the end so it settles on the LAST candidate, not the second-to-last.
+    ///
+    /// <para>#976 parks the cursor on whatever editor <c>BeginRowEdit</c> focuses, which deletes the
+    /// scenario that arm was originally written for (row edit opened from the Edit button with no
+    /// prior cell focus). It does NOT delete the arm: <c>BeginRowEdit</c> still returns true when the
+    /// row has pending values but no VISIBLE editor, and leaves the cursor at -1. Column visibility
+    /// is mutable during an edit — <c>ShowColumn</c> is public and does not guard on
+    /// <c>_isRowEditing</c> — so an editor can appear afterwards and make the traversal live.</para>
+    ///
+    /// <para>The assertions name the two DESTINATIONS rather than "focus moved": the offset does not
+    /// change which columns get swept (both forms visit all of them), only where the sweep starts,
+    /// so an implementation missing it still returns true and still lands somewhere. Dropping the
+    /// <c>colCount</c> origin makes the backward arm settle on Score instead of Notes, which is the
+    /// exact value asserted below. The forward arm is the control — it does not use the offset and
+    /// must stay on Score either way.</para>
+    /// </summary>
+    [Fact]
+    public async Task RowEditTraversal_FromAnUnsetCursor_WalksBackwardToTheLastVisibleEditor()
+    {
+        var state = await LoadedState();
+
+        // No VISIBLE editable column: Id is read-only, the other three are hidden. BeginRowEdit
+        // still succeeds — the pending values exist — but has nothing to park the cursor on.
+        state.HideColumn("Name");
+        state.HideColumn("Score");
+        state.HideColumn("Notes");
+        Assert.True(state.BeginRowEdit(1));
+
+        // Precondition, not decoration: if #976's park ever reaches this state the cursor is >= 0,
+        // the arm under test is skipped, and both assertions below would hold for the wrong reason.
+        Assert.Equal(-1, state.FocusedColIndex);
+
+        // Two editors reappear mid-edit. Two, not one: with a single candidate every start position
+        // converges on it and the arm becomes unobservable.
+        state.ShowColumn("Score");
+        state.ShowColumn("Notes");
+
+        Assert.True(state.FocusPrevRowEditColumn());
+        var backward = state.FocusedColIndex;
+
+        var forward = await LoadedState();
+        forward.HideColumn("Name");
+        forward.HideColumn("Score");
+        forward.HideColumn("Notes");
+        Assert.True(forward.BeginRowEdit(1));
+        Assert.Equal(-1, forward.FocusedColIndex);
+        forward.ShowColumn("Score");
+        forward.ShowColumn("Notes");
+        Assert.True(forward.FocusNextRowEditColumn());
+
+        Assert.Equal(NotesCol, backward);                 // last visible editable
+        Assert.Equal(ScoreCol, forward.FocusedColIndex);  // first visible editable — control
+        Assert.NotEqual(backward, forward.FocusedColIndex);
+    }
+
     // ── HasRowEditFocusTarget (the KeyDown suppression gate) ─────────
 
     [Fact]

@@ -1512,11 +1512,22 @@ public class DataGridState<T>
         // in there without a rendered editor — skip those too. Indices are into the full _columns
         // list, matching FocusNextCell and every other focus API.
         //
-        // _focusedColIndex is -1 when the row edit began from the Edit button with no prior cell
-        // focus. Walking forward from -1 naturally lands on column 0; walking backward has to
-        // mirror that and land on the LAST column, so treat "no focus" as one position PAST the
-        // end in that direction. Without this, backward from -1 would start at colCount - 2 and
-        // never reach the last column at all.
+        // _focusedColIndex is -1 only while it still holds its initial value: every other write to
+        // it is clamped or guarded non-negative, and since #976 BeginRowEdit parks the cursor on
+        // whatever editor it focused. So reaching here at -1 means BeginRowEdit found NO visible
+        // editable column and left the cursor alone — it still returns true, because the row's
+        // pending values exist even when none of their editors is rendered.
+        //
+        // That state is not frozen: HideColumn/ShowColumn/ToggleColumnVisibility are public and do
+        // not guard on _isRowEditing, so a column can become visible partway through a row edit and
+        // make this traversal meaningful again.
+        //
+        // Walking forward from -1 naturally lands on column 0; walking backward has to mirror that
+        // and land on the LAST column, so treat "no focus" as one position PAST the end in that
+        // direction. The offset does not change WHICH columns get visited — both forms sweep all
+        // colCount of them — it changes where the sweep STARTS, and so which visible editable
+        // column it stops on first. Without it, backward from -1 starts at colCount - 2 and settles
+        // on the second-to-last candidate instead of the last.
         var origin = _focusedColIndex < 0 && direction < 0 ? colCount : _focusedColIndex;
 
         for (int step = 1; step <= colCount; step++)
