@@ -361,16 +361,53 @@ public sealed class GallerySampleLintTests
     /// <summary>
     /// The outermost fluent chain / argument expression the invocation participates in, so a
     /// `.Set(...)` hung off `AnimatedIcon(src).Size(32, 32)` is still attributed to that icon.
+    /// <para>
+    /// <see cref="WithExpressionSyntax"/> is in the walk because Reactor elements are immutable
+    /// records, so `(AnimatedIcon(src) with { ... }).Set(...)` is legal and idiomatic — and it is
+    /// the *only* legal spelling, since `AnimatedIcon(src) with { ... }.Set(...)` is a syntax
+    /// error (`with` binds looser than member access). Without this arm the walk stops at the
+    /// operand, never reaching the parenthesis it does handle, and a correctly-driven icon is
+    /// reported as static. Mirrors the unwrapping <see cref="ChainHeadName"/> already does.
+    /// </para>
     /// </summary>
     static SyntaxNode EnclosingChain(InvocationExpressionSyntax invocation)
     {
         SyntaxNode current = invocation;
         while (current.Parent is MemberAccessExpressionSyntax or InvocationExpressionSyntax
-               or PostfixUnaryExpressionSyntax or ParenthesizedExpressionSyntax)
+               or PostfixUnaryExpressionSyntax or ParenthesizedExpressionSyntax
+               or WithExpressionSyntax)
         {
             current = current.Parent;
         }
         return current;
+    }
+
+    /// <summary>
+    /// Chain attribution decides which icon a state write belongs to, so both directions are
+    /// pinned: the walk must reach a `.Set(...)` hung off the icon's own chain, and must *not*
+    /// cross an argument boundary — letting one driven icon vouch for a static sibling is most
+    /// of what shipped in #983. The third case is the negative control: it fails if the walk
+    /// ever widens far enough to make the first two vacuously true.
+    /// </summary>
+    [Theory]
+    [InlineData("AnimatedIcon(src).Size(32, 32).Set(i => XamlAnimatedIcon.SetState(i, s))", true)]
+    [InlineData("(AnimatedIcon(src) with { Foo = 1 }).Set(i => XamlAnimatedIcon.SetState(i, s))", true)]
+    [InlineData("VStack(AnimatedIcon(src), Other().Set(i => XamlAnimatedIcon.SetState(i, s)))", false)]
+    public void EnclosingChain_SpansWithExpressions_ButNotSiblingArguments(string call, bool expected)
+    {
+        var tree = CSharpSyntaxTree.ParseText($"class C {{ void M() {{ var x = {call}; }} }}",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // A snippet that does not parse would give this test an arbitrary tree to agree with.
+        Assert.Empty(tree.GetDiagnostics(TestContext.Current.CancellationToken));
+
+        var icon = tree.GetRoot(TestContext.Current.CancellationToken).DescendantNodes()
+            .OfType<InvocationExpressionSyntax>().Single(i => InvokedName(i) == "AnimatedIcon");
+
+        var reached = EnclosingChain(icon).DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Any(i => InvokedName(i) == "SetState");
+
+        Assert.Equal(expected, reached);
     }
 
     /// <summary>
