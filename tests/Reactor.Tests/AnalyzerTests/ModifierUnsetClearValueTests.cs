@@ -816,6 +816,19 @@ public class ModifierUnsetClearValueTests
     /// comment whose inner line begins with the dispatch text defeats the anchored one; a
     /// <see cref="SwitchStatementSyntax"/> cannot be forged by a comment of any shape.
     /// Do not "simplify" this back to a string search.
+    /// <para>
+    /// Closing the forgery route does not make the presence-shaped detectors redundant, and
+    /// they must not be deleted on that reasoning. The two halves guard different things: the
+    /// presence pins guard this region's <em>scope</em> (a truncated region makes every
+    /// absence-shaped assertion pass more readily, so it goes vacuous without failing), and the
+    /// absence scan guards the pin list's <em>closed world</em> (a pin list only knows the names
+    /// someone thought to write down). Neither subsumes the other. The presence half lives in
+    /// <see cref="CleanElement_Releases_Every_Modifier_Backed_Dependency_Property"/> here, and in
+    /// <c>Every_TrappedProperty_Is_Reset_In_CleanElement</c>,
+    /// <c>Every_TrappedAttachedProperty_Is_Reset_In_CleanElement</c> and
+    /// <c>Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names</c> in
+    /// <see cref="PoolResetSetConsistencyTests"/> — four detectors across two files.
+    /// </para>
     /// </remarks>
     private static string ReadCleanElementCommonBlock(out string paramName)
     {
