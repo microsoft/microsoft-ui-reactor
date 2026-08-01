@@ -47,14 +47,18 @@ class MenuFlyoutPage : Component
                                 MenuItem("Large", () => setFormatAction("Large")))),
                         TextBlock($"Last action: {formatAction}").Foreground(Theme.SecondaryText)
                     ),
-                    @"MenuFlyout(
-    Button(""Format""),
-    MenuItem(""Bold"", () => {}),
-    MenuItem(""Italic"", () => {}),
-    MenuSeparator(),
-    MenuSubItem(""Font Size"",
-        MenuItem(""Small"", () => {}),
-        MenuItem(""Medium"", () => {})))")
+                    @"var (formatAction, setFormatAction) = UseState(""(none)"");
+
+VStack(8,
+    MenuFlyout(
+        Button(""Format""),
+        MenuItem(""Bold"", () => setFormatAction(""Bold"")),
+        MenuItem(""Italic"", () => setFormatAction(""Italic"")),
+        MenuSeparator(),
+        MenuSubItem(""Font Size"",
+            MenuItem(""Small"", () => setFormatAction(""Small"")),
+            MenuItem(""Medium"", () => setFormatAction(""Medium"")))),
+    TextBlock($""Last action: {formatAction}""));")
             ).Margin(36, 24, 36, 36)
         );
     }

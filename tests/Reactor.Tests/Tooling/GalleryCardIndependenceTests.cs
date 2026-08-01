@@ -195,10 +195,21 @@ public sealed class GalleryCardIndependenceTests
     /// The <em>innermost</em> containing invocation wins, so a card nested inside another card's
     /// sample is attributed to itself rather than to its host.
     /// </summary>
-    static InvocationExpressionSyntax? OwningCard(SyntaxNode node, IReadOnlyList<InvocationExpressionSyntax> cards) =>
-        cards.Where(card => card.Span.Contains(node.Span))
-            .OrderBy(card => card.Span.Length)
-            .FirstOrDefault();
+    static InvocationExpressionSyntax? OwningCard(SyntaxNode node, IReadOnlyList<InvocationExpressionSyntax> cards)
+    {
+        // A single pass rather than Where(...).OrderBy(...).FirstOrDefault(): this runs once per
+        // identifier reference on every gallery page, and sorting to read one element allocated an
+        // iterator and a sorted buffer each time. Strict `<` keeps the first of any equal-length
+        // pair, which is what the stable OrderBy did.
+        InvocationExpressionSyntax? innermost = null;
+
+        foreach (var card in cards)
+            if (card.Span.Contains(node.Span)
+                && (innermost is null || card.Span.Length < innermost.Span.Length))
+                innermost = card;
+
+        return innermost;
+    }
 
     /// <summary>
     /// A card's title: the <c>title:</c> label wherever it sits, otherwise the first positional

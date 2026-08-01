@@ -54,13 +54,19 @@ class CommandBarFlyoutPage : Component
                             }),
                         TextBlock($"Last action: {commandAction}").Foreground(Theme.SecondaryText)
                     ),
-                    @"CommandBarFlyout(
-    Button(""More Options""),
-    primaryCommands: new[] { AppBarButton(""Share"", ...) },
-    secondaryCommands: new[] {
-        AppBarButton(""Select All"", ...),
-        AppBarButton(""Print"", ...),
-    })")
+                    @"var (commandAction, setCommandAction) = UseState(""(none)"");
+
+VStack(8,
+    CommandBarFlyout(
+        Button(""More Options""),
+        primaryCommands: new AppBarItemBase[] {
+            AppBarButton(""Share"", () => setCommandAction(""Share""), icon: ""Share""),
+        },
+        secondaryCommands: new AppBarItemBase[] {
+            AppBarButton(""Select All"", () => setCommandAction(""Select All"")),
+            AppBarButton(""Print"", () => setCommandAction(""Print"")),
+        }),
+    TextBlock($""Last action: {commandAction}""));")
             ).Margin(36, 24, 36, 36)
         );
     }

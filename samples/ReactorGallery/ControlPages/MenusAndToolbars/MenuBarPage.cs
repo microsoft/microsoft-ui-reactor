@@ -67,13 +67,18 @@ class MenuBarPage : Component
                         ),
                         TextBlock($"Last action: {formatAction}").Foreground(Theme.SecondaryText)
                     ),
-                    @"Menu(""Format"",
-    MenuSubItem(""Text Size"",
-        MenuItem(""Small"", () => {}),
-        MenuItem(""Medium"", () => {})),
-    MenuSubItem(""Alignment"",
-        MenuItem(""Left"", () => {}),
-        MenuItem(""Center"", () => {})))")
+                    @"var (formatAction, setFormatAction) = UseState(""(none)"");
+
+VStack(8,
+    MenuBar(
+        Menu(""Format"",
+            MenuSubItem(""Text Size"",
+                MenuItem(""Small"", () => setFormatAction(""Small"")),
+                MenuItem(""Medium"", () => setFormatAction(""Medium""))),
+            MenuSubItem(""Alignment"",
+                MenuItem(""Left"", () => setFormatAction(""Left"")),
+                MenuItem(""Center"", () => setFormatAction(""Center""))))),
+    TextBlock($""Last action: {formatAction}""));")
             ).Margin(36, 24, 36, 36)
         );
     }
