@@ -190,9 +190,26 @@ public class ModifierUnsetClearValueTests
     }
 
     /// <summary>
-    /// The positive half: an outright deleted <c>ClearValue</c> produces no offender for
-    /// <see cref="CleanElement_Resets_Through_ClearValue_Not_Default_Assignment"/> to catch,
-    /// so the required releases are pinned by name.
+    /// The positive half of <see cref="CleanElement_Resets_Through_ClearValue_Not_Default_Assignment"/>,
+    /// and its dual rather than its subordinate. Three distinct faults, three different halves:
+    /// <list type="bullet">
+    ///   <item>an outright deleted <c>ClearValue</c> produces no offender for the scan to
+    ///     catch, so the required releases are pinned by name — the original reason;</item>
+    ///   <item>anything that SHRINKS the scanned region (see the anchor note in
+    ///     <c>ReadCleanElementCommonBlock</c>) makes the scan vacuous rather than failing,
+    ///     and only this pin set notices — MEASURED: region 12922 -&gt; 7335 chars leaves the
+    ///     scan green and reddens this test;</item>
+    ///   <item>conversely, a default-assignment reset of a property NOT among these rows is
+    ///     invisible here and caught only by the scan — MEASURED: injecting
+    ///     <c>fe.AllowDrop = false;</c> reddens the scan, names the property, and leaves this
+    ///     test green.</item>
+    /// </list>
+    /// So the pin set guards the scan's SCOPE and the scan guards the pin set's CLOSED WORLD:
+    /// a hardcoded list defends only the names someone thought to write down, and the scan
+    /// catches the 35th. Each is precisely blind where the other is loud, which is why neither
+    /// is redundant. Note that the first bullet — the stated original reason — is the one that
+    /// looks dispensable next to the pool analyzer, so anyone collapsing this pair will most
+    /// likely do it by reading that bullet alone and dropping two protections nobody wrote down.
     /// </summary>
     [Fact]
     public void CleanElement_Releases_Every_Modifier_Backed_Dependency_Property()
@@ -713,9 +730,24 @@ public class ModifierUnsetClearValueTests
         var braceStart = source.IndexOf('{', signature.Index + signature.Length);
         Assert.True(braceStart > signature.Index, "CleanElement opening brace not found");
 
-        // Anchored to the start of a line so a comment mentioning the type dispatch cannot
-        // masquerade as the boundary — see the matching note in
+        // Anchored to the start of a line, which stops a `//` comment mentioning the type
+        // dispatch from masquerading as the boundary — see the matching note in
         // PoolResetSetConsistencyTests.ReadCleanElementCommonBlock.
+        //
+        // The anchor is NOT total, and the residual is worth naming rather than implying
+        // away. MEASURED against this file: a `//` line mentioning the dispatch leaves the
+        // region intact (12922 -> 13011 chars: it GREW by the comment, nothing truncated),
+        // but a block comment whose inner line BEGINS with the dispatch text still satisfies
+        // `^\s*switch` and truncates it (12922 -> 7335). Truncation is silent here by
+        // construction: every assertion over this region that is absence-shaped — "no
+        // offender is present" — passes MORE readily on a smaller region, so it goes vacuous
+        // without failing. What actually catches it is the presence-shaped half, measured on
+        // that same mutation: CleanElement_Releases_Every_Modifier_Backed_Dependency_Property
+        // below, plus Every_TrappedProperty_Is_Reset_In_CleanElement,
+        // Every_TrappedAttachedProperty_Is_Reset_In_CleanElement and
+        // Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names in PoolResetSetConsistencyTests.
+        // Four detectors, in two files. Harden the anchor if you like, but do not delete any
+        // of them on the grounds that the anchor makes them unnecessary — it does not.
         var switchStart = Regex.Match(
             source[braceStart..],
             $@"^\s*switch\s*\(\s*{Regex.Escape(paramName)}\s*\)",

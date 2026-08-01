@@ -522,9 +522,20 @@ namespace Microsoft.UI.Reactor
 
         // The FE-common block runs from the opening brace up to the first
         // `switch (<param>)` that starts the type-specific cleanup. Anchored to the start
-        // of a line (Multiline) so a *comment* mentioning the dispatch cannot masquerade as
-        // the boundary — an unanchored match truncated the scanned region at a doc comment
+        // of a line (Multiline) so a `//` comment mentioning the dispatch cannot masquerade
+        // as the boundary — an unanchored match truncated the scanned region at a doc comment
         // once, which silently shrank every invariant built on this block.
+        //
+        // The anchor closes the `//` case, not every case: a block comment whose inner line
+        // BEGINS with the dispatch text still matches `^\s*switch` and truncates the region
+        // (MEASURED: 12922 -> 7335 chars). Truncation cannot fail an absence-shaped assertion
+        // — a smaller region holds fewer offenders — so the detectors are the presence-shaped
+        // ones: Every_TrappedProperty_Is_Reset_In_CleanElement,
+        // Every_TrappedAttachedProperty_Is_Reset_In_CleanElement and
+        // Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names in this file all redden on that
+        // mutation (54/0 -> 54/3), as does
+        // ModifierUnsetClearValueTests.CleanElement_Releases_Every_Modifier_Backed_Dependency_Property.
+        // They are load-bearing for this helper's correctness, not just for their own subject.
         var switchRegex = new Regex(
             $@"^\s*switch\s*\(\s*{Regex.Escape(paramName)}\s*\)", RegexOptions.Multiline);
         var switchMatch = switchRegex.Match(source, braceStart);
