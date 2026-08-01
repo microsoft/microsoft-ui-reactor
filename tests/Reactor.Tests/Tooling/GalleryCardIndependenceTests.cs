@@ -44,9 +44,15 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// invisible to it — a field is not minted by a state hook, so it is never a slot. That is the
 /// deliberate scope above (shared data is not per-card state) meeting a shape where it happens
 /// to be wrong, not an oversight; narrowing it would need to tell mutable per-card state held in
-/// a field from the ordinary shared data the same declaration form expresses. Measured rather
-/// than assumed: no page under <c>ControlPages/</c> reaches one field or property from two cards
-/// today, so this is a documented limit rather than a live miss.</para>
+/// a field from the ordinary shared data the same declaration form expresses. Measured with that
+/// distinction applied: <c>ImagePage</c> reaches two members from two cards each
+/// (<c>SampleImage</c>, <c>SampleImageAltText</c>), but both are <c>const string</c> — the shared
+/// data above, not per-card state. No page under <c>ControlPages/</c> reaches a <em>mutable</em>
+/// field or property from two cards, so this is a documented limit rather than a live miss. An
+/// earlier revision claimed no page reached <em>any</em> field from two cards and badged it
+/// "measured rather than assumed"; that was false when written — those two constants predate this
+/// branch. It counted every field, having named mutability one clause earlier as the distinction
+/// that matters, so the discriminator was identified and then not applied.</para>
 ///
 /// <para>Each needs call-graph or data-flow reasoning this tier does not have, and silence is
 /// the cheaper error: this lint has no allowlist, so a false positive is a blocked tree. The
