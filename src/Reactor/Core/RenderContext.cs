@@ -1350,6 +1350,19 @@ public sealed class RenderContext
     {
         var (state, _) = UseState(new HighContrastState());
 
+        // Seeded during render for the same reason as UseReducedMotionState above: a value
+        // first read inside UseEffect is not available to the frame the user sees, so the
+        // first paint reported IsHighContrast=false / scheme=null to every caller —
+        // including callers running under high contrast. Guarded so the WinRT settings
+        // objects are constructed once per component rather than once per render.
+        if (!state.Seeded)
+        {
+            state.A11ySettings ??= new global::Windows.UI.ViewManagement.AccessibilitySettings();
+            state.IsHighContrast = state.A11ySettings.HighContrast;
+            state.HighContrastScheme = state.A11ySettings.HighContrast ? state.A11ySettings.HighContrastScheme : null;
+            state.Seeded = true;
+        }
+
         // AccessibilitySettings.HighContrastChanged throws ERROR_NOT_FOUND
         // (0x80070490) in WinUI 3 desktop apps because it requires a CoreWindow.
         // Instead, use UISettings.ColorValuesChanged which fires reliably for
@@ -1370,9 +1383,17 @@ public sealed class RenderContext
 
             state.UiSettings.ColorValuesChanged += OnColorValuesChanged;
 
-            // Sync initial value
-            state.IsHighContrast = state.A11ySettings.HighContrast;
-            state.HighContrastScheme = state.A11ySettings.HighContrast ? state.A11ySettings.HighContrastScheme : null;
+            // Re-read after subscribing: the window between the seed above and this
+            // subscription has no listener, so a toggle inside it would otherwise persist
+            // until an unrelated theme notification arrived.
+            var hc = state.A11ySettings.HighContrast;
+            var scheme = hc ? state.A11ySettings.HighContrastScheme : null;
+            if (hc != state.IsHighContrast || scheme != state.HighContrastScheme)
+            {
+                state.IsHighContrast = hc;
+                state.HighContrastScheme = scheme;
+                rerender?.Invoke();
+            }
             return () => state.UiSettings.ColorValuesChanged -= OnColorValuesChanged;
         });
 
@@ -1385,6 +1406,7 @@ public sealed class RenderContext
         public global::Windows.UI.ViewManagement.UISettings? UiSettings;
         public bool IsHighContrast;
         public string? HighContrastScheme;
+        public bool Seeded;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -1407,6 +1429,27 @@ public sealed class RenderContext
     {
         var (state, _) = UseState(new ReducedMotionState());
 
+        // Seed during render, not in the effect below. UseEffect does not run until after
+        // the first render commits, so a value read there is invisible to the frame the
+        // user actually sees: every consumer rendered its first frame with
+        // IsReducedMotion=false, and a component that never re-renders keeps that value
+        // forever. For an accessibility hook that is the worst possible direction — the
+        // first frame animates for precisely the users who asked it not to. Guarded so
+        // UISettings is constructed once per component, not once per render.
+        //
+        // UseExternalStore also closes the render-to-subscribe race, but it is a public hook
+        // for app-authored stores with zero internal callers, it requires a stable subscribe
+        // delegate (so it would need extra memoization here), and it re-reads the snapshot on
+        // every render. Seed-then-subscribe is what every sibling environment hook in this
+        // file does — UseWindowPosition seeds via UseState(win.Position) — so this stays
+        // consistent with them.
+        if (!state.Seeded)
+        {
+            state.Settings ??= new global::Windows.UI.ViewManagement.UISettings();
+            state.IsReducedMotion = !state.Settings.AnimationsEnabled;
+            state.Seeded = true;
+        }
+
         UseEffect(() =>
         {
             state.Settings ??= new global::Windows.UI.ViewManagement.UISettings();
@@ -1418,7 +1461,16 @@ public sealed class RenderContext
             }
             // UISettings.ColorValuesChanged also fires for AnimationsEnabled changes
             state.Settings.ColorValuesChanged += OnChanged;
-            state.IsReducedMotion = !state.Settings.AnimationsEnabled;
+
+            // Re-read after subscribing: the preference can flip between the seed above and
+            // this subscription, and that window has no listener, so the change would
+            // otherwise be missed until some unrelated notification happened to arrive.
+            var current = !state.Settings.AnimationsEnabled;
+            if (current != state.IsReducedMotion)
+            {
+                state.IsReducedMotion = current;
+                rerender?.Invoke();
+            }
             return () =>
             {
                 if (state.Settings is not null)
@@ -1433,6 +1485,7 @@ public sealed class RenderContext
     {
         public global::Windows.UI.ViewManagement.UISettings? Settings;
         public bool IsReducedMotion;
+        public bool Seeded;
     }
 
     // ════════════════════════════════════════════════════════════════

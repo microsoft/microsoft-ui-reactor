@@ -55,12 +55,31 @@ class AnimatedIconPage : Component
         var (open, setOpen) = UseReducer(false);
         var menuState = open ? "Pressed" : hovering ? "PointerOver" : "Normal";
 
+        // A page whose whole subject is motion cannot demonstrate itself when the system
+        // has motion switched off: every control below still changes State, but AnimatedIcon
+        // hard-cuts to the segment's end frame, so nothing moves and the page reads exactly
+        // like the bug this page was rewritten to fix (#983). The paragraph above states the
+        // caveat unconditionally; only a runtime check can tell a reader it applies to them.
+        // UseReducedMotion re-renders on change, so the notice clears itself the moment the
+        // setting flips — no restart, and the transition plays as the InfoBar disappears.
+        var reducedMotion = UseReducedMotion();
+
         return ScrollView(VStack(16,
             PageHeader("AnimatedIcon",
                 "An icon whose animation is a state transition: write AnimatedIcon.State and the "
                 + "control plays the \"<from>To<to>\" marker segment baked into its visual source. "
                 + "There is no Play() to call. With system animations turned off it hard-cuts to "
                 + "the transition's end frame instead."),
+
+            reducedMotion
+                ? InfoBar("System animation effects are turned off",
+                        "Every sample on this page still changes State, but AnimatedIcon jumps "
+                        + "straight to each transition's end frame instead of playing it. Turn on "
+                        + "Settings → Accessibility → Visual effects → Animation effects to watch "
+                        + "the transitions animate.")
+                    .Warning()
+                    .IsClosable(false)
+                : null,
 
             SampleCard("Play a state transition",
                 VStack(12,

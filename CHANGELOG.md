@@ -125,6 +125,21 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Accessibility environment hooks now report the real system value on the
+  first render (issue #983).** `UseReducedMotion()`, `UseHighContrast()` and
+  `UseHighContrastScheme()` seeded their state inside `UseEffect`, which does
+  not run until after the first render commits. Every caller therefore rendered
+  its first frame against the default — `false` / `null` — and a component that
+  never re-renders kept that value for its whole lifetime. All three failed in
+  the one direction an accessibility hook must not: the first paint reports
+  "no accommodation needed", so it animates for exactly the users who asked it
+  not to. Each hook now reads its value during render (guarded so the WinRT
+  settings objects are still constructed once per component) and keeps the
+  effect for change notifications, plus a re-read after subscribing so a
+  preference flipped in the window between the two is not missed. Matches the
+  seed-then-subscribe shape the other environment hooks in `RenderContext`
+  already use.
+
 - **Unsetting a common modifier no longer permanently overrides the control's
   style (issue #952).** `Reconciler.ApplyModifiers` reset a dropped modifier by
   *assigning* the dependency property's default value (`fe.Margin =
