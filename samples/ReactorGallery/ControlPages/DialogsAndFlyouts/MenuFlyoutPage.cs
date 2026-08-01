@@ -57,7 +57,8 @@ VStack(8,
         MenuSeparator(),
         MenuSubItem(""Font Size"",
             MenuItem(""Small"", () => setFormatAction(""Small"")),
-            MenuItem(""Medium"", () => setFormatAction(""Medium"")))),
+            MenuItem(""Medium"", () => setFormatAction(""Medium"")),
+            MenuItem(""Large"", () => setFormatAction(""Large"")))),
     TextBlock($""Last action: {formatAction}""));")
             ).Margin(36, 24, 36, 36)
         );

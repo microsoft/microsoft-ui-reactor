@@ -74,10 +74,12 @@ VStack(8,
         Menu(""Format"",
             MenuSubItem(""Text Size"",
                 MenuItem(""Small"", () => setFormatAction(""Small"")),
-                MenuItem(""Medium"", () => setFormatAction(""Medium""))),
+                MenuItem(""Medium"", () => setFormatAction(""Medium"")),
+                MenuItem(""Large"", () => setFormatAction(""Large""))),
             MenuSubItem(""Alignment"",
                 MenuItem(""Left"", () => setFormatAction(""Left"")),
-                MenuItem(""Center"", () => setFormatAction(""Center""))))),
+                MenuItem(""Center"", () => setFormatAction(""Center"")),
+                MenuItem(""Right"", () => setFormatAction(""Right""))))),
     TextBlock($""Last action: {formatAction}""));")
             ).Margin(36, 24, 36, 36)
         );
