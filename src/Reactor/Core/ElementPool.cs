@@ -42,6 +42,30 @@ public sealed class ElementPool : IDisposable
     /// </summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// The exact runtime types <see cref="TryRent"/> and <see cref="Return"/> recycle.
+    /// Membership is tested with <see cref="HashSet{T}.Contains"/> on
+    /// <see cref="object.GetType"/>, so it is an <em>exact</em>-type set: a subclass of a
+    /// listed type is not poolable. <c>CheckBox</c> and <c>RelativePanel</c> are the cases
+    /// that catch people out — they pass the <c>Control</c> and <c>Panel</c> gates
+    /// <c>ApplyModifiers</c> dispatches on, but they are not here.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This list is mirrored by name in <c>Reactor.Analyzers.ModifierTable.PoolableTypeNameSet</c>,
+    /// which <c>PoolResetSetAnalyzer</c> uses to decide whether <c>REACTOR_POOL_001</c> (the
+    /// receiver is recycled, so the write is unwound on pool return) or <c>REACTOR_MOD_002</c>
+    /// (the receiver is not recycled, so the write is merely dropped by the next render)
+    /// describes a <c>.Set</c> write. The analyzer targets <c>netstandard2.0</c> and cannot
+    /// reference this assembly, hence the copy.
+    /// </para>
+    /// <para>
+    /// Adding or removing a type here without updating that mirror fails
+    /// <c>Analyzer_Poolable_Type_Mirror_Matches_ElementPool</c>, and adding one that
+    /// <see cref="CleanElement"/> does not reset fails
+    /// <c>Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement</c>.
+    /// </para>
+    /// </remarks>
     private static readonly HashSet<Type> PoolableTypes = new()
     {
         typeof(TextBlock),
