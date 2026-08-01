@@ -81,7 +81,7 @@ Pass the full URL to the Figma MCP tool — the server handles node scoping.
 | `paddingTop/Right/Bottom/Left` | symmetric (h≠v) | `.Padding(horizontal, vertical)` on the stack (or wrapping `Border`) |
 | `paddingTop/Right/Bottom/Left` | mixed | `.Padding(left: L, top: T, right: R, bottom: B)` on the stack (or wrapping `Border`) |
 
-**Important:** `.Padding()` works on `Border`, control-based elements, `VStack`/`HStack`, and `TextBlock`-based text — so a padded auto-layout frame can map straight onto the stack without a wrapping `Border`. Reach for a `Border` when the frame also carries a fill, stroke, or corner radius, or when the container is a `Grid` (which `.Padding()` is not applied to). Use `.Margin()` when the spacing is between the element and its siblings rather than internal padding.
+**Important:** `.Padding()` works on `Border`, control-based elements, `Grid`, `VStack`/`HStack`, `RelativePanel`, and `TextBlock`-based text. `Grid`, `VStack`/`HStack`, and `RelativePanel` also take `.Background()` and `.CornerRadius()` directly, so a padded or rounded auto-layout frame does not need a wrapping `Border`. Use a `Border` when the frame needs a stroke, because `.WithBorder()` is still gated to `Control`/`Border`. Use `.Margin()` when the spacing is between the element and its siblings rather than internal padding.
 
 **Margin overloads:**
 - `.Margin(uniform)` — all four sides equal
@@ -463,7 +463,7 @@ Note: `dotnet watch` does not maintain MCP/devtools sessions across rebuilds. Us
 2. **Skip hidden elements** — any Figma node with `visible: false` must be omitted from generated code entirely. Do not emit placeholders or comments for hidden nodes. Check visibility before processing each node and skip the entire subtree when a parent is hidden.
 3. **Follow design.md best practices** — all generated code must comply with the `design.md` skill rules. Key requirements:
    - Use `.ApplyStyle()` or Reactor text factories (`Caption()`, `SubHeading()`, `Heading()`) for typography — not raw `FontSize`/`FontWeight` (§4).
-   - `.Padding()` works directly on `VStack`/`HStack`; wrap in a `Border` only when the frame also needs a fill, stroke, or corner radius, or when the container is a `Grid` (§5).
+   - `.Padding()` and `.CornerRadius()` work directly on `Grid`, `VStack`/`HStack`, and `RelativePanel`; wrap in a `Border` when the frame needs a stroke (§5).
    - Use `.Width(N)` / `.Height(N)` / `.Size(W, H)` for fixed Figma dimensions. Only use `MinWidth`/`MinHeight` when Figma explicitly sets min/max constraints (§5).
    - Use `.HAlign()` / `.VAlign()` for alignment — not `.HorizontalAlignment()` / `.VerticalAlignment()` (§5).
    - Set `HorizontalContentAlignment = Stretch` on vertical `ScrollView` (§5).

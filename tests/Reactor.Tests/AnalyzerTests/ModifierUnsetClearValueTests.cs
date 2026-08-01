@@ -137,6 +137,9 @@ public class ModifierUnsetClearValueTests
         "FrameworkElement.RenderTransform",
         "FrameworkElement.FlowDirection",
         "Control.IsTabStop",
+        "Grid.Padding",
+        "Grid.CornerRadius",
+        "StackPanel.CornerRadius",
     ];
 
     [Fact]

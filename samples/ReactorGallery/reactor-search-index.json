@@ -1948,7 +1948,7 @@
         {
           "header": "Margin vs Padding",
           "language": "csharp",
-          "code": "// Margin — works on ALL elements\nTextBlock(\"Hello\").Margin(8)\nVStack(TextBlock(\"A\"), TextBlock(\"B\")).Margin(16)\nBorder(TextBlock(\"Content\")).Margin(12)\n\n// Padding — Border, Control, StackPanel and TextBlock\nBorder(TextBlock(\"Content\")).Padding(16)               // ✓ works\nButton(\"Go\").Padding(12)                               // ✓ works\nVStack(8, TextBlock(\"A\"), TextBlock(\"B\")).Padding(16)  // ✓ works\nTextBlock(\"Hello\").Padding(8)                          // ✓ works\n\n// .Padding() is not applied to Grid — wrap in Border instead:\nBorder(\n    Grid(columns: [GridSize.Star()], rows: [GridSize.Auto], TextBlock(\"Cell\"))\n).Padding(16)  // ✓ padding applied to the Border"
+          "code": "// Margin — works on ALL elements\nTextBlock(\"Hello\").Margin(8)\nVStack(TextBlock(\"A\"), TextBlock(\"B\")).Margin(16)\nBorder(TextBlock(\"Content\")).Margin(12)\n\n// Padding — Border, Control, Grid, StackPanel, RelativePanel and TextBlock\nBorder(TextBlock(\"Content\")).Padding(16)               // ✓ works\nButton(\"Go\").Padding(12)                               // ✓ works\nGrid(columns: [GridSize.Star()], rows: [GridSize.Auto], TextBlock(\"Cell\"))\n    .Padding(16)                                         // ✓ works\nVStack(8, TextBlock(\"A\"), TextBlock(\"B\")).Padding(16)  // ✓ works\nTextBlock(\"Hello\").Padding(8)                          // ✓ works"
         }
       ]
     },
