@@ -412,16 +412,13 @@ public sealed class WinAppUi
         // and nothing moved. A no-op that reports success is the worst possible failure mode for an
         // input primitive — an E2E built on it fails much later, somewhere else, claiming the
         // product did not respond. Reject it loudly at the call instead, and name the fix.
-        foreach (var ch in keys)
+        foreach (var ch in keys.Where(c => c is >= '\ue000' and <= '\uf8ff'))
         {
-            if (ch is >= '\ue000' and <= '\uf8ff')
-            {
-                throw new global::System.ArgumentException(
-                    $"SendKeys received the private-use key constant U+{(int)ch:X4}. WinAppUi.SendKeys takes " +
-                    "winapp token syntax — pass \"tab\"/\"enter\"/\"esc\" directly, or run the string through " +
-                    "UiElement.ToSendKeysTokens first. Keys.* constants only work with UiElement.SendKeys.",
-                    nameof(keys));
-            }
+            throw new global::System.ArgumentException(
+                $"SendKeys received the private-use key constant U+{(int)ch:X4}. WinAppUi.SendKeys takes " +
+                "winapp token syntax — pass \"tab\"/\"enter\"/\"esc\" directly, or run the string through " +
+                "UiElement.ToSendKeysTokens first. Keys.* constants only work with UiElement.SendKeys.",
+                nameof(keys));
         }
 
         // send-input routes OS-wide and fails with ACCESS_DENIED off the interactive input desktop, just
