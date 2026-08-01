@@ -68,6 +68,12 @@ Specifically, **drop**:
   `IsAotCompatible=true` / trim-warning-as-error settings already flag. The core
   Reactor library treats IL trimming / AOT warnings as errors.
 
+Do not treat a comforting negative as evidence by itself. A no-match search,
+clean sweep, or deterministic pass is not a measurement until a positive control
+shows the probe could produce the opposite result. If the answer to "could this
+have come out the other way?" is "no -- it always passes", emit the finding; do
+not record that invariance as confirmation.
+
 **Keep**:
 
 - Bugs, logic errors, race conditions, missed edge cases.

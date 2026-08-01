@@ -55,6 +55,16 @@ dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~ReconcilerMountUpda
 
 Tests that write to `Console.Out`/`Console.Error` must be grouped with `[Collection("ConsoleTests")]` to prevent cross-test interference.
 
+### Mutation checks must prove the mutation ran
+
+Before interpreting a green mutation run, verify the intended edit is present at exactly the
+target site and that the rebuilt assembly is newer than it. Check each build/test process exit
+code directly; do not infer success by matching stdout, because pipelines can swallow failures
+and stale binaries can still report `Passed`. CRLF-sensitive replacements, ambiguous anchors,
+failed compilation, node races, and timestamp-preserving restores can all make a mutation look
+tested when it was absent or applied elsewhere. After restoring, require a clean `git diff`
+rather than treating the expected post-mutation test failure as proof of the restore.
+
 ### Repo lints ride in this tier
 
 Some tests here parse repo *sources* with Roslyn rather than exercising Reactor at runtime, so a gallery or docs edit can fail `dotnet test tests/Reactor.Tests` with no code change at all. The ones under `Tooling/`:
@@ -209,6 +219,11 @@ dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.Ac
 > **Requires:** the **winapp CLI** (`winapp ui`). Install it with `winget install Microsoft.WinAppCli` (or run `./bootstrap.ps1`, which installs it for you). The harness resolves it from `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe` or `winapp` on PATH. Unit and selftest runs don't need it.
 >
 > **WinForms tests** also require `Reactor.WinFormsTests.Host` to build. It launches a separate WinForms app with a XAML Island.
+
+When `viaSendInput: true` injects a modifier chord, the key messages arrive with no human-scale
+gap. If the defect is *when* state is read rather than *whether* input arrived, fixed queue
+ordering may make the race always won or always lost (`p` is `0` or `1`). Prove that detector
+with a mutation before counting repeated green E2E runs as evidence.
 
 ---
 

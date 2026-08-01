@@ -233,6 +233,11 @@ Coverage block and include its short "what I checked" note in a final
   already catch. The Team Lead Test (see any dimension file) is mandatory.
 - **Cite evidence.** Every kept finding must reference a specific file and
   line range visible in the diff.
+- **Treat finding fixes as new code.** If a commit that fixes a review finding
+  asserts a fact about framework or repo behavior in prose, a comment, or docs,
+  require it to cite the in-repo test, call site, analyzer table, or other source
+  that establishes the claim. If no such source can be found, flag the claim
+  rather than accepting the fix at face value.
 
 ## Sub-agent prompt template
 
