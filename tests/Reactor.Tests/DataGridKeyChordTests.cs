@@ -247,6 +247,16 @@ public class DataGridKeyChordTests
         // constant invites the reader to update it, which is precisely the edit that yields a
         // green, direction-blind test. (Not redundant with any later assertion: nothing else in
         // this test pins where the row edit began.)
+        //
+        // Whether editing those destination constants is legitimate depends on WHY they moved, and
+        // the two cases look identical at the diff. Moving them to absorb a collapse REMOVES the
+        // discrimination and is the failure this test exists to catch. Moving them after a
+        // structural change that RESTORES it — widening the editable ring past two, so the two
+        // directions diverge again from any origin — is correct, and an even ring cannot be
+        // rescued by any choice of constants. The invariant defended here is that the directions
+        // DIFFER, carried by the cross-arm NotEqual below, the only assertion in this test that
+        // compares two measured values; the specific indices are consequences of the fixture's
+        // column set and may legitimately change with it.
         var back = await LoadedState();
         back.SetFocus(0, IdCol);
         Assert.True(back.BeginRowEdit(0));
