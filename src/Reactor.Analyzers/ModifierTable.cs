@@ -258,8 +258,17 @@ internal static class ModifierTable
             // through a Control | Border | Panel/Grid/StackPanel | TextBlock chain that mirrors
             // the receivers ApplyModifiers writes them to, so the control gates below still
             // apply: the gate decides whether the modifier reaches the control at all,
-            // poolReset decides which rule id reports it. A .Set write to any of them is now
-            // unwound on pool return.
+            // poolReset decides which rule id reports it.
+            //
+            // poolReset is a per-property flag, so POOL_001 reports it for every receiver the
+            // gate admits — including ones the pool never recycles. RelativePanel is gated for
+            // Padding/CornerRadius but is absent from ElementPool.PoolableTypes, so a .Set write
+            // there is NOT unwound on pool return and POOL_001's leading clause is false for it.
+            // The advice still holds (the write is dropped by the next render, which is the
+            // MOD_002 hazard), but the severity and the reason are wrong. Making rule selection
+            // receiver-aware needs PoolableTypes mirrored into this netstandard2.0 assembly plus
+            // a parity gate; tracked as issue #1051. Every other gated receiver is poolable, so
+            // for Control | Border | Grid | StackPanel | TextBlock the clause is accurate.
             //
             // WinUI declares most of these on Panel subclasses too, and the allow-lists
             // genuinely differ: Panel itself declares only Background; Grid, StackPanel, and
