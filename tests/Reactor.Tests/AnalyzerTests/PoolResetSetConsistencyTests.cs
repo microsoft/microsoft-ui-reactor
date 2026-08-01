@@ -440,9 +440,9 @@ namespace Microsoft.UI.Reactor
             "Control",
             // Issue #985: CleanElement's FE-common block now clears the Padding /
             // CornerRadius / BorderThickness / BorderBrush / Background family through a
-            // Control | Border | Panel/StackPanel chain that mirrors ApplyModifiers'
-            // receivers. Border.PaddingProperty and friends are ordinary instance
-            // properties; without them here the attached scan would claim them and
+            // Control | Border | Panel/Grid/StackPanel | TextBlock chain that mirrors
+            // ApplyModifiers' receivers. Border.PaddingProperty and friends are ordinary
+            // instance properties; without them here the attached scan would claim them and
             // Every_Reset_Attached_Property_Is_Classified would fail on owners that have
             // no business being in the attached table.
             "Border",

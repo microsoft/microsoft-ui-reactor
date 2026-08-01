@@ -269,19 +269,26 @@ public sealed class ElementPool : IDisposable
         // them and ModifierTable would keep claiming the property is not pool-reset.
         // Placement is the fix, not an implementation detail.
         //
-        // The chain mirrors ApplyModifiers' receiver types exactly (Reconciler.cs):
-        // Padding → Control | Border | StackPanel | TextBlock, IsEnabled → Control,
-        // CornerRadius/BorderBrush/BorderThickness → Control | Border,
-        // Background → Panel | Control | Border.
+        // The chain mirrors ApplyModifiers' receiver types for the receivers that are actually
+        // pooled (Reconciler.cs): Padding → Control | Border | Grid | StackPanel | TextBlock,
+        // CornerRadius → Control | Border | Grid | StackPanel, BorderBrush/BorderThickness →
+        // Control | Border, Background → Panel | Control | Border, IsEnabled → Control.
+        // The Padding and CornerRadius gates also admit RelativePanel, which gets no clear
+        // here because RelativePanel is not in PoolableTypes — it is never returned to the
+        // pool, so there is no local value for a later renter to inherit. Canvas is the
+        // opposite case and is covered: it is poolable, and the only gate that admits it is
+        // Background, which the Panel arm clears for every Panel.
         //
         // Two claims live here and only the first is structural. Dispatch: Control, Border,
         // Panel and TextBlock are pairwise disjoint, so `else if` selects exactly one arm —
         // true regardless of what the gates say. Coverage is not: each arm clears a
         // per-property allow-list, and the Panel arm clears Background for every Panel but
-        // Padding only for StackPanel, because Panel itself declares neither Padding nor
-        // CornerRadius. Any other Panel subclass added to one of those gates lands in this
-        // arm and gets no clear — the disjointness sentence stays true while the guarantee
-        // it implies quietly narrows. Widening a gate obliges you to widen the arm.
+        // Padding and CornerRadius only for Grid and StackPanel, because Panel itself
+        // declares neither. Any other poolable Panel subclass added to one of those gates
+        // lands in this arm and gets no clear — the disjointness sentence stays true while
+        // the guarantee it implies quietly narrows. Widening a gate obliges you to widen the
+        // arm, and that is not hypothetical: #1003 widened Padding/CornerRadius to the
+        // concrete panels and this arm had to grow with it in the same merge.
         // The consistency invariant will not remind you: it checks reset ⇒ marked, never
         // marked ⇒ reset on every gated receiver (see #1017).
         if (fe is Control resetControl)

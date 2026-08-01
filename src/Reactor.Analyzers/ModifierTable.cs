@@ -255,10 +255,11 @@ internal static class ModifierTable
             { "IsTabStop",           new ModifierInfo("IsTabStop",           poolReset: true) },
 
             // Pool-reset but only on some receivers (issue #985). CleanElement clears these
-            // through a Control | Border | Panel/StackPanel chain that mirrors the receivers
-            // ApplyModifiers writes them to, so the control gates below still apply: the gate
-            // decides whether the modifier reaches the control at all, poolReset decides which
-            // rule id reports it. A .Set write to any of them is now unwound on pool return.
+            // through a Control | Border | Panel/Grid/StackPanel | TextBlock chain that mirrors
+            // the receivers ApplyModifiers writes them to, so the control gates below still
+            // apply: the gate decides whether the modifier reaches the control at all,
+            // poolReset decides which rule id reports it. A .Set write to any of them is now
+            // unwound on pool return.
             //
             // WinUI declares most of these on Panel subclasses too, and the allow-lists
             // genuinely differ: Panel itself declares only Background; Grid, StackPanel, and
