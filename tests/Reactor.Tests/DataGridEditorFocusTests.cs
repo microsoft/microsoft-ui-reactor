@@ -246,6 +246,31 @@ public class DataGridEditorFocusTests
     }
 
     [Fact]
+    public async Task BeginRowEdit_DoesNotParkOnTheCursorColumn_WhenThatColumnIsHidden()
+    {
+        var state = await LoadedState();
+
+        // "Notes" is editable but HIDDEN. Preserving the cursor there would arm a focus request for
+        // a column RenderRow never walks — it projects the VISIBLE columns — so nothing would ever
+        // consume it: no editor takes focus, and the cursor names a cell the user cannot see. That
+        // is the dead-keystroke bug #976 exists to remove, which is why the preserve guard tests
+        // visibility as well as editability. Dropping the IsColumnVisible conjunct passes every
+        // other test in this file.
+        state.HideColumn("Notes");
+        state.SetFocus(1, NotesCol);
+
+        Assert.True(state.BeginRowEdit(1));
+
+        // Falls through to the first VISIBLE editable column...
+        Assert.Equal(NameCol, state.FocusedColIndex);
+        // ...and arms the request there rather than on the hidden column. Both are asserted because
+        // the cursor and the armed request are separate observables: a change that moved one without
+        // the other would reintroduce the cursor/focus disagreement in a new place.
+        Assert.True(state.HasEditorFocusRequest(Row(1), "Name"));
+        Assert.False(state.HasEditorFocusRequest(Row(1), "Notes"));
+    }
+
+    [Fact]
     public async Task BeginRowEdit_MovesTheCursorToTheFallbackEditor_WhenTheCursorColumnHasNone()
     {
         var state = await LoadedState();
