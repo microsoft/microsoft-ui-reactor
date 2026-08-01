@@ -1224,9 +1224,18 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     ///
     /// A null focused element, or one that is not a <c>DependencyObject</c>, reports false — focus
     /// that cannot be located is treated as outside, which is the safe direction for both callers.
+    ///
+    /// A null <c>XamlRoot</c> reports false for the same reason: the element is disconnected, so
+    /// focus cannot be inside it. That guard is load-bearing rather than cosmetic —
+    /// <c>FocusManager.GetFocusedElement(null)</c> throws <c>ArgumentException</c> (measured, not
+    /// assumed), and a disconnected element's <c>XamlRoot</c> really is null. <see cref="ScheduleFocus"/>
+    /// reaches here on a later dispatcher tick, so the grid captured at LostFocus can have been
+    /// unmounted in the interval.
     /// </remarks>
     private static bool IsFocusInside(FrameworkElement root)
     {
+        if (root.XamlRoot is null) return false;
+
         if (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root.XamlRoot) is not DependencyObject focused)
             return false;
 
@@ -1774,6 +1783,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// </summary>
     internal static void HandleKeyDownForTests(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
         => HandleKeyDown(state, el, key);
+
+    /// <summary>
+    /// Test seam (issue #976). Exposes the private focus-location helper so a selftest can pin the
+    /// disconnected-root guard against a live <c>XamlRoot</c>. Headless tests cannot reach this —
+    /// every arm needs a real WinUI element — so the caller is a selftest fixture, not an xUnit test.
+    /// </summary>
+    internal static bool IsFocusInsideForTests(FrameworkElement root) => IsFocusInside(root);
 
     /// <summary>
     /// Default placeholder cell: a rounded gray bar that mimics a text shimmer.

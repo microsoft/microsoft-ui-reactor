@@ -1508,4 +1508,114 @@ internal static class DataGridEditFixtures
             return false;
         }
     }
+
+    /// <summary>
+    /// #976 — <c>IsFocusInside</c> must treat a root whose <c>XamlRoot</c> is null as "focus is
+    /// outside", instead of handing the null to <c>FocusManager.GetFocusedElement</c>.
+    /// </summary>
+    /// <remarks>
+    /// Both halves of the hazard were measured on a live window before this fixture was written,
+    /// and both are load-bearing:
+    /// <list type="bullet">
+    /// <item><description><c>FocusManager.GetFocusedElement(null)</c> <b>throws</b>
+    /// <c>ArgumentException</c> — it does not return null — so an unguarded call is a crash, not a
+    /// wrong answer.</description></item>
+    /// <item><description>A <c>FrameworkElement</c> that is not connected to a window really does
+    /// report a null <c>XamlRoot</c>, so the guard is reachable.</description></item>
+    /// </list>
+    /// <c>ScheduleFocus</c> reaches this helper on a later dispatcher tick, by which time the grid
+    /// it captured can have been unmounted — that is the real route to a disconnected root.
+    ///
+    /// The fixture uses a never-parented <c>Grid</c> rather than racing an unmount: both were
+    /// measured to give <c>XamlRoot == null</c>, and only the first is deterministic. Nothing here
+    /// renders a DataGrid, because the helper is a static that takes any element; the integration
+    /// path is already covered by <see cref="EditorFocusDebtRepaid"/>.
+    /// </remarks>
+    internal class EditorFocusDisconnectedRoot(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var anchorRef = new Microsoft.UI.Reactor.Input.ElementRef();
+
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(Button("anchor", () => { }).Ref(anchorRef)));
+
+            H.Check("EditorFocusDetached_Rendered",
+                await Harness.WaitFor(() => anchorRef.Current is not null,
+                    maxPasses: 40, perPassMs: 25));
+
+            var anchor = anchorRef.Current as Microsoft.UI.Xaml.Controls.Button;
+            if (anchor is null)
+            {
+                H.Check("EditorFocusDetached_AnchorMounted", false);
+                return;
+            }
+
+            var xamlRoot = anchor.XamlRoot;
+            if (xamlRoot is null)
+            {
+                H.Check("EditorFocusDetached_XamlRootAvailable", false);
+                return;
+            }
+
+            object? Focused() => Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot);
+
+            // Positive control: on a window that cannot report focus at all, the connected arm
+            // below would fail for reasons that have nothing to do with the product.
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render(60);
+            if (!ReferenceEquals(Focused(), anchor))
+            {
+                H.Skip("EditorFocusDetached_PositiveControl",
+                    $"window cannot report focus (got '{Focused()?.GetType().Name ?? "null"}')");
+                return;
+            }
+            H.Check("EditorFocusDetached_PositiveControl", true);
+
+            // ── Precondition ─────────────────────────────────────────────────────────────────
+            // If a never-parented element somehow reported a non-null XamlRoot, the guard would
+            // never be reached and both assertions below would be tautologies. Log the input, not
+            // just the verdict, and stop rather than report a pass the run cannot support.
+            var detached = new Microsoft.UI.Xaml.Controls.Grid();
+            var detachedRoot = detached.XamlRoot;
+            H.Check($"EditorFocusDetached_RootIsDisconnected (xamlRoot='{detachedRoot?.GetType().Name ?? "null"}')",
+                detachedRoot is null);
+            if (detachedRoot is not null) return;
+
+            // ── Arm 1: the guard ─────────────────────────────────────────────────────────────
+            // Seeded with the WRONG answer so a throw cannot leave a value that satisfies the
+            // assertion below.
+            var detachedResult = true;
+            string? threw = null;
+            try
+            {
+                detachedResult = DataGridComponent<TestProduct>.IsFocusInsideForTests(detached);
+            }
+            catch (global::System.Exception ex)
+            {
+                threw = $"{ex.GetType().Name}: {ex.Message}";
+            }
+
+            H.Check($"EditorFocusDetached_DoesNotThrow (threw='{threw ?? "no"}')", threw is null);
+            H.Check($"EditorFocusDetached_ReportsOutside (threw='{threw ?? "no"}', result={detachedResult})",
+                threw is null && !detachedResult);
+
+            // ── Arm 2: differential ──────────────────────────────────────────────────────────
+            // Same method, a connected root, and the opposite answer. Without this a guard that
+            // simply returned false for every input would satisfy arm 1.
+            var selfResult = DataGridComponent<TestProduct>.IsFocusInsideForTests(anchor);
+            H.Check($"EditorFocusDetached_FocusedRootReportsInside (result={selfResult})", selfResult);
+
+            // The walk starts at the focused element itself, so the arm above never leaves the
+            // first iteration. Run it once more from the anchor's parent to cover the ancestor
+            // walk as well; a mounted button always has a visual parent inside this host, so a
+            // null here is a structural surprise and should redden rather than be skipped.
+            var parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(anchor)
+                as Microsoft.UI.Xaml.FrameworkElement;
+            var parentResult = parent is not null
+                && DataGridComponent<TestProduct>.IsFocusInsideForTests(parent);
+            H.Check($"EditorFocusDetached_AncestorRootReportsInside (parent='{parent?.GetType().Name ?? "null"}', result={parentResult})",
+                parentResult);
+        }
+    }
 }

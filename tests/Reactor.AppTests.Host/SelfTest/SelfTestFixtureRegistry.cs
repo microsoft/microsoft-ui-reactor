@@ -802,6 +802,7 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditorRealFocusVirtualized",
         "DataGrid_EditorFocusCustomEditors",
         "DataGrid_EditorFocusDebtRepaid",
+        "DataGrid_EditorFocusDisconnectedRoot",
         // DataGrid row-detail expansion (issue #919)
         "DataGrid_ExpandRowKeepsRealizedRow",
         "DataGrid_LazyStackRootTypeFlip",
@@ -2420,6 +2421,7 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditorRealFocusVirtualized" => new DataGridEditFixtures.EditorRealFocusVirtualized(harness),
         "DataGrid_EditorFocusCustomEditors" => new DataGridEditFixtures.EditorFocusCustomEditors(harness),
         "DataGrid_EditorFocusDebtRepaid" => new DataGridEditFixtures.EditorFocusDebtRepaid(harness),
+        "DataGrid_EditorFocusDisconnectedRoot" => new DataGridEditFixtures.EditorFocusDisconnectedRoot(harness),
         // DataGrid row-detail expansion (issue #919)
         "DataGrid_ExpandRowKeepsRealizedRow" => new DataGridExpandFixtures.ExpandRowKeepsRealizedRow(harness),
         "DataGrid_LazyStackRootTypeFlip" => new DataGridExpandFixtures.LazyStackRootTypeFlip(harness),
