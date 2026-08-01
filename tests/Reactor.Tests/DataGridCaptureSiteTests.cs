@@ -59,6 +59,13 @@ public class DataGridCaptureSiteTests
     /// <c>KeyChord.Capture(..)</c> (member access), <c>dq?.TryEnqueue(..)</c> (member binding, via
     /// the null-conditional) and <c>HandleKeyDown(..)</c> (a bare identifier — it is a static
     /// method called unqualified from inside its own type).
+    /// <para>The <see cref="GenericNameSyntax"/> arm is breadth, not a fourth anchor shape. The
+    /// scanned file does contain generic-form invocations (<c>UseRef&lt;..&gt;(..)</c>), but neither
+    /// name this helper is asked for is ever spelled with explicit type arguments, so the arm is
+    /// unreachable for the questions actually posed. Deleting it leaves both tests below passing —
+    /// measured, not assumed. It is kept so the switch stays total over the shapes that genuinely
+    /// occur in this file, and it is recorded as non-load-bearing so a later reader does not
+    /// mistake it for part of the guard.</para>
     /// </summary>
     private static string? InvokedName(InvocationExpressionSyntax invocation) => invocation.Expression switch
     {
