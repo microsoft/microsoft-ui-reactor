@@ -807,6 +807,16 @@ public class ModifierUnsetClearValueTests
     /// reset content slots (<c>Content</c>, <c>Child</c>, <c>Source</c>) whose correct empty
     /// state really is a written null, so they are not subject to this rule.
     /// </summary>
+    /// <remarks>
+    /// The boundary is located through Roslyn syntax nodes, not a text scan, and that is
+    /// load-bearing rather than stylistic. Any text form — <c>IndexOf("switch (fe)")</c> or an
+    /// anchored <c>^\s*switch</c> regex alike — can be made to match inside a comment, which
+    /// silently truncates the region and turns every absence-shaped assertion over it vacuous
+    /// while still reporting green. A line comment defeats the unanchored form and a block
+    /// comment whose inner line begins with the dispatch text defeats the anchored one; a
+    /// <see cref="SwitchStatementSyntax"/> cannot be forged by a comment of any shape.
+    /// Do not "simplify" this back to a string search.
+    /// </remarks>
     private static string ReadCleanElementCommonBlock(out string paramName)
     {
         var root = RepoRootFinder.FindRepoRoot();
@@ -815,16 +825,29 @@ public class ModifierUnsetClearValueTests
         Assert.True(File.Exists(file), $"ElementPool.cs not found at {file}");
 
         var source = File.ReadAllText(file);
-        var signature = Regex.Match(source, @"static\s+void\s+CleanElement\s*\(\s*FrameworkElement\s+(\w+)\s*\)");
-        Assert.True(signature.Success, "Could not locate CleanElement(FrameworkElement) in ElementPool.cs");
-        paramName = signature.Groups[1].Value;
+        var method = CSharpSyntaxTree.ParseText(source).GetRoot()
+            .DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .FirstOrDefault(candidate =>
+                candidate.Identifier.ValueText == "CleanElement"
+                && candidate.Modifiers.Any(SyntaxKind.StaticKeyword)
+                && candidate.ParameterList.Parameters.Count == 1
+                && candidate.ParameterList.Parameters[0].Type?.ToString()
+                    .EndsWith("FrameworkElement", StringComparison.Ordinal) == true);
+        Assert.True(method is not null, "Could not locate static CleanElement(FrameworkElement) in ElementPool.cs");
 
-        var braceStart = source.IndexOf('{', signature.Index + signature.Length);
-        Assert.True(braceStart > signature.Index, "CleanElement opening brace not found");
+        var body = method!.Body;
+        Assert.True(body is not null, "CleanElement no longer has a block body — the FE-common region is undefined.");
 
-        var switchStart = source.IndexOf($"switch ({paramName})", braceStart, StringComparison.Ordinal);
-        Assert.True(switchStart > braceStart, $"CleanElement layout changed — no 'switch ({paramName})' boundary found.");
+        paramName = method.ParameterList.Parameters[0].Identifier.ValueText;
+        var governingName = paramName;
 
-        return source[braceStart..switchStart];
+        var dispatch = body!.DescendantNodes()
+            .OfType<SwitchStatementSyntax>()
+            .FirstOrDefault(candidate => candidate.Expression is IdentifierNameSyntax governing
+                && governing.Identifier.ValueText == governingName);
+        Assert.True(dispatch is not null, $"CleanElement layout changed — no 'switch ({governingName})' boundary found.");
+
+        return source[body.OpenBraceToken.SpanStart..dispatch!.SpanStart];
     }
 }
