@@ -83,7 +83,11 @@ VStack(8,
     HStack(8,
         TextBox(urlText, s => setUrlText(s), ""https://example.com"").Width(400).UrlInput(),
         Button(""Go"", () => { if (target is not null) setLoadedUrl(target); })
-            .IsEnabled(target is not null)),
+            .IsEnabled(target is not null)
+            .VAlign(VerticalAlignment.Center)),
+    target is null
+        ? Caption(""Enter an absolute http:// or https:// URL."").Foreground(Theme.SystemCritical)
+        : Caption($""Showing {loadedUrl}"").Foreground(Theme.SecondaryText),
     WebView2(loadedUrl).Width(600).Height(400))
 "),
 
