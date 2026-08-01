@@ -176,6 +176,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
+    # The suite's own process budget (SelfTestBatch.DefaultSelfTestTimeoutSeconds) is deliberately
+    # generous so that a healthy-but-slow run is never killed and blamed on an arbitrary fixture
+    # (issue #988). This job-level cap is the outer backstop for a genuinely wedged runner, so it
+    # must sit above that budget but well below the 360-minute default.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -646,6 +651,52 @@ jobs:
       - name: Compile docs
         run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots --ci
 
+      # Non-destructiveness gate for issue #989: a compile with
+      # --no-screenshots must never touch a committed screenshot. Phase 3 is
+      # the pipeline's only binary writer, and this proves — on a real runner,
+      # via the real invocation, on every PR — that skipping it leaves
+      # docs/guide/images alone. The compile above is the subject; this step is
+      # only the assertion, so it genuinely can come out either way (it fails
+      # if anyone reintroduces a write on the skip path).
+      #
+      # Scope note: this watches the whole directory, which is broader than the
+      # guarantee it defends. Phase 5.5 (diagrams) also writes there — *.svg
+      # copies and .mmd.sha256 sidecars — and is not skipped by
+      # --no-screenshots. Keep it broad on purpose: narrowing to *.png to match
+      # the screenshot guarantee would stop it noticing a diagram write that
+      # appears on the skip path, and an unexpected write is the signal here
+      # regardless of which phase produced it. The failure message therefore
+      # reports what changed instead of naming a cause it cannot know.
+      #
+      # `git status --porcelain`, not `git diff`: diff sees tracked
+      # modifications only. A capture emitting a *new* PNG (new topic, renamed
+      # asset) leaves an untracked file that diff reports as nothing at all —
+      # and the near-miss this gate exists for reached the index through
+      # `git add -A`, which stages precisely those. Verified by planting each
+      # case against this command: tracked overwrite and untracked create both
+      # produce output; a clean tree produces none.
+      #
+      # `--untracked-files=all` is for the *message*, not the verdict: the
+      # default (normal) collapses a wholly-new directory to `?? path/dir/`,
+      # which is still non-empty output, so the gate fires either way. Measured
+      # both modes against a planted subdirectory — `all` names each PNG, so
+      # whoever hits this in CI sees which files appeared instead of a
+      # directory they then have to go and inspect.
+      - name: Verify --no-screenshots left committed images untouched
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $dirty = git status --porcelain --untracked-files=all -- docs/guide/images
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "git status failed (exit $LASTEXITCODE) — the gate could not run, so treat this as a failure rather than an all-clear."
+            exit 1
+          }
+          if ($dirty) {
+            $dirty | ForEach-Object { Write-Host "  $_" }
+            Write-Error 'docs compile --no-screenshots added, modified or deleted the files listed above under docs/guide/images. That path must be non-destructive on the skip path: capture (Phase 3) does not run, so no screenshot may be written. A .png here means a capture write was reintroduced; a .svg or .mmd.sha256 means Phase 5.5 (diagrams) wrote — that phase is not skipped by this flag, so check whether the source diagram or its committed copy drifted. See issue #989 and docs/contributing/doc-pipeline.md section 4.'
+            exit 1
+          }
+
       # Docs version freshness gate. The compile above substitutes the
       # {{reactorVersion}} token — whose single source is <ReactorPublicVersion>
       # in Directory.Build.props — into the guide pages that name the package
@@ -670,6 +721,14 @@ jobs:
             Write-Error 'docs/guide is out of date with the doc templates and/or ReactorPublicVersion. Run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots  then commit the regenerated docs/guide pages (the {{reactorVersion}} token is substituted from <ReactorPublicVersion> in Directory.Build.props).'
             exit 1
           }
+
+      # tests/Reactor.DocPipeline.Tests is in Reactor.slnx but ran in no
+      # workflow, so every assertion in it was a gate that could not fail.
+      # It covers the doc-pipeline internals this job exercises (template
+      # compilation, image processing, the blank-screenshot gate), so it
+      # belongs here rather than in the WinUI unit-test job.
+      - name: Doc-pipeline tests
+        run: dotnet test tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj -p:Platform=x64 --nologo
 
       - uses: actions/setup-python@v7
         with:

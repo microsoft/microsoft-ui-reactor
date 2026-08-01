@@ -206,6 +206,11 @@ internal static class SelfTestFixtureRegistry
         "KLIA_AuthorNameReachesItem",
         "KLIA_AuthorNameTracksUpdates",
         "KLIA_AuthorNameClearedWhenRemoved",
+        // Issue #981 — a declared label (Header / AutomationName / on-off
+        // content) must reach the control's UIA Name; a bare one must not
+        // acquire one on its own.
+        "HAN_ComboBoxHeaderBecomesName",
+        "HAN_ToggleSwitchLabelBecomesName",
         // Spec 047 §14 — panel descriptor migration: keyed reconcile identity,
         // lockstep attached-prop reapply, stale-state clears, unmount cleanup.
         "PDM_Stack_KeyedSwap_PreservesIdentity",
@@ -1605,6 +1610,8 @@ internal static class SelfTestFixtureRegistry
         "PropEntryOptional_Execution",
         "IsOpenEdge_InfoBar",
         "IsOpenEdge_TeachingTip",
+        "IsOpenEdge_TeachingTipMountOpen",
+        "DescriptorUnmount_HookFiresForCallbackFreeElement",
         "ElementPoolOptionalReset",
         "ControlledOptionalCustomerRepro",
         "ControlledOptionalSelectionFamily",
@@ -1858,6 +1865,9 @@ internal static class SelfTestFixtureRegistry
         "KLIA_AuthorNameReachesItem" => new KeyedListItemAutomationNameFixtures.AuthorNameReachesItem(harness),
         "KLIA_AuthorNameTracksUpdates" => new KeyedListItemAutomationNameFixtures.AuthorNameTracksUpdates(harness),
         "KLIA_AuthorNameClearedWhenRemoved" => new KeyedListItemAutomationNameFixtures.AuthorNameClearedWhenRemoved(harness),
+        // Issue #981 — gallery samples with a null accessible Name.
+        "HAN_ComboBoxHeaderBecomesName" => new HeaderAutomationNameFixtures.ComboBoxHeaderBecomesName(harness),
+        "HAN_ToggleSwitchLabelBecomesName" => new HeaderAutomationNameFixtures.ToggleSwitchLabelBecomesName(harness),
         "PDM_Stack_KeyedSwap_PreservesIdentity" => new PanelDescriptorMigrationFixtures.Stack_KeyedSwap_PreservesIdentity(harness),
         "PDM_Grid_KeyedSwap_PreservesIdentity_And_RowFollows" => new PanelDescriptorMigrationFixtures.Grid_KeyedSwap_PreservesIdentity_And_RowFollows(harness),
         "PDM_Canvas_KeyedReorder_PreservesIdentity_And_PositionFollows" => new PanelDescriptorMigrationFixtures.Canvas_KeyedReorder_PreservesIdentity_And_PositionFollows(harness),
@@ -3193,6 +3203,8 @@ internal static class SelfTestFixtureRegistry
         "PropEntryOptional_Execution" => new PropEntryOptionalFixture.Execution(harness),
         "IsOpenEdge_InfoBar" => new IsOpenEdgeTriggeredFixtures.InfoBarEdgeTriggered(harness),
         "IsOpenEdge_TeachingTip" => new IsOpenEdgeTriggeredFixtures.TeachingTipEdgeTriggered(harness),
+        "IsOpenEdge_TeachingTipMountOpen" => new IsOpenEdgeTriggeredFixtures.TeachingTipMountOpen(harness),
+        "DescriptorUnmount_HookFiresForCallbackFreeElement" => new DescriptorUnmountHookFixtures.HookFiresForCallbackFreeElement(harness),
         "ElementPoolOptionalReset" => new ElementPoolOptionalResetFixture.Execution(harness),
         "ControlledOptionalCustomerRepro" => new ControlledOptionalCustomerRepro.Execution(harness),
         "ControlledOptionalSelectionFamily" => new ControlledOptionalSelectionFamilyFixture.Execution(harness),

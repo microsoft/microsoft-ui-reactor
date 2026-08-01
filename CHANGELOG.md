@@ -105,6 +105,19 @@ Conventions for contributors:
   owners the pool does not clear (`Canvas`, `ScrollViewer`, `Grid`) are
   unaffected.
 
+- **`ControlDescriptor.OnUnmount` / `.WithUnmount(...)` — descriptor teardown hook
+  (spec 047 §6, issue #949).** The engine already dispatched unmount to hand-coded
+  `IElementHandler` implementations, but `DescriptorHandler` never forwarded it, so
+  descriptor authors had no teardown seam at all. A descriptor can now declare
+  `.WithUnmount((in UnmountContext ctx, TControl c) => ...)` to invalidate
+  control-scoped state the pool reset contract cannot see — a pending deferred
+  write, a one-shot lifecycle subscription, a disposable. It is not for event
+  trampolines, which anchor to the control's lifetime by design. Declaring the hook
+  makes the handler force the control's `ReactorState` into existence at mount,
+  because the engine's unmount dispatch is tag-gated; without that the hook would
+  fire for callback-bearing elements of a type and silently not for callback-free
+  ones.
+
 ### Changed
 
 - **`WithNavigation` gained an optional `settingsRoute` argument (binary-breaking,
@@ -139,6 +152,23 @@ Conventions for contributors:
   preference flipped in the window between the two is not missed. Matches the
   seed-then-subscribe shape the other environment hooks in `RenderContext`
   already use.
+
+- **`TeachingTip` declared `IsOpen: true` on its first render now actually opens
+  (issue #949).** The mount-time write was issued and then silently dropped: WinUI
+  only holds a pending open on an *unparented* `TeachingTip` while nothing else is
+  written to it, and Reactor — like XAML — fully configures a control before handing
+  it to its parent, so the later prop entries, setters, content slots and common
+  modifiers all discarded it. Ordering the entry last was not enough, because most of
+  those writes happen outside the descriptor. `IsOpen` is now a bespoke descriptor
+  entry that defers a mount-time `true` to the control's `Loaded` event, the first
+  moment the tip is parented into a live tree. Post-mount edges are unchanged and
+  stay edge-triggered, so a re-render carrying the same declared `true` still does
+  not re-assert against a natively dismissed tip. One consequence worth knowing: a
+  `.Set(t => t.IsOpen = false)` can no longer override a declared mount-time `true`,
+  because the deferred write lands after the setter pass — declare the value instead.
+  The gallery's "TeachingTip (Title Only)" card, which declared a tip with no
+  `IsOpen` and no trigger and so could never appear, now uses the state-driven shape
+  its sibling card already used.
 
 - **Unsetting a common modifier no longer permanently overrides the control's
   style (issue #952).** `Reconciler.ApplyModifiers` reset a dropped modifier by

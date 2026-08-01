@@ -162,6 +162,7 @@ internal static partial class CompileCommand
 
         // Build screenshot registry from manifests
         var allScreenshots = new Dictionary<string, ScreenshotInfo>(StringComparer.OrdinalIgnoreCase);
+        var reservedSuffixIds = new List<(string Id, string FullId, string ManifestPath)>();
         foreach (var (topicId, appDir) in apps)
         {
             var manifestPath = Path.Combine(appDir, "doc-manifest.yaml");
@@ -170,8 +171,36 @@ internal static partial class CompileCommand
             foreach (var ss in manifest.Screenshots)
             {
                 var fullId = $"{topicId}/{ss.Id}";
+                // The `-thumb` suffix is how ImageProcessor.ContentRegionFor tells a
+                // chrome-free catalog thumbnail from a full-size capture that has a
+                // border and drop shadow. A full-size screenshot named `<x>-thumb`
+                // would be scored whole, and its own chrome would then mask a blank
+                // capture from the REACTOR_DOC_IMAGE_002 gate. Reserve the suffix so
+                // that collision cannot be authored in the first place.
+                if (ImageProcessor.IdHasThumbSuffix(ss.Id)
+                    && !string.Equals(ss.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase))
+                {
+                    reservedSuffixIds.Add((ss.Id, fullId, manifestPath));
+                }
                 allScreenshots[fullId] = new ScreenshotInfo(ss.Id, topicId, ss.Description, ss.Format, ss.Kind);
             }
+        }
+        if (reservedSuffixIds.Count > 0)
+        {
+            // The id is quoted on its own, not folded into the location, because
+            // it is the string an author greps their manifest for. Emitting
+            // "screenshot id 'topic/x-thumb (path/to/screenshots.yml)'" labels a
+            // composed locator as an id and finds nothing when pasted into a
+            // search — the diagnostic naming a value that does not exist in the
+            // file it is pointing at.
+            foreach (var (id, fullId, manifestPath) in reservedSuffixIds)
+            {
+                Console.Error.WriteLine(
+                    $"  ✗ REACTOR_DOC_SHOT_002: screenshot id '{id}' ends in the reserved " +
+                    $"'{ImageProcessor.ThumbSuffix}' suffix, which is only valid for " +
+                    $"'kind: catalog-thumb'. Rename it, or set the kind. ({fullId} in {manifestPath})");
+            }
+            return 1;
         }
         Console.WriteLine($"  Screenshot definitions: {allScreenshots.Count}");
         if (screenshotFilter is not null)
@@ -345,13 +374,39 @@ internal static partial class CompileCommand
 
         // ── Phase 3: Capture ──────────────────────────────────────────────
         Console.WriteLine();
+        int captureFailed = 0;
         if (noScreenshots)
         {
-            Console.WriteLine("═══ Phase 3: Capture (skipped) ═══");
+            // Explicit about the guarantee, and about its edge: this phase is
+            // the only thing in the pipeline that writes a *screenshot* — the
+            // only binary writer — so skipping it leaves every committed
+            // screenshot exactly as it was (issue #989).
+            //
+            // It is not the only writer under docs/guide/images/. Phase 5.5
+            // (Diagrams) also targets that tree: DiagramProcessor.Process is
+            // called with imagesDir and writes three kinds of file into it —
+            // copied docs/_pipeline/diagrams/<topic>/*.svg, mmdc-rendered
+            // <name>.svg, and .<name>.mmd.sha256 cache sidecars. All are text
+            // with filenames disjoint from any captured .png, so they cannot
+            // collide — but "--no-screenshots means nothing writes here" is
+            // false, and stating it that way would invite someone to weaken the
+            // CI gate to match. The gate is deliberately broader than this
+            // guarantee: it watches the whole directory, so a diagram write on
+            // the skip path is caught too rather than assumed impossible.
+            //
+            // The mmdc render is the easy one to miss: it happens in a separate
+            // process, so no File.Write*/File.Copy search of this repo finds it,
+            // and the first version of this comment listed only the two managed
+            // writes. Its .svg destination is hard-coded at the DiagramProcessor
+            // call site rather than being a property of mmdc — which renders PNG
+            // on request — and DiagramTests pins the full written set so a
+            // fourth writer breaks a test instead of outdating this quietly.
+            Console.WriteLine("═══ Phase 3: Capture (skipped — existing screenshots left untouched) ═══");
         }
         else
         {
             Console.WriteLine("═══ Phase 3: Capture ═══");
+            int captureWritten = 0, captureRequested = 0;
             foreach (var (topicId, appDir) in apps)
             {
                 var manifestPath = Path.Combine(appDir, "doc-manifest.yaml");
@@ -365,8 +420,24 @@ internal static partial class CompileCommand
                 }
 
                 Console.WriteLine($"  Capturing for {topicId}...");
-                ScreenshotCapture.CaptureAsync(appDir, topicId, manifest, imagesDir, screenshotFilter)
+                var result = ScreenshotCapture
+                    .CaptureAsync(appDir, topicId, manifest, imagesDir, screenshotFilter)
                     .GetAwaiter().GetResult();
+                captureWritten += result.Written;
+                captureRequested += result.Requested;
+            }
+
+            Console.WriteLine($"  Captured {captureWritten}/{captureRequested} screenshot(s).");
+            captureFailed = captureRequested - captureWritten;
+            if (captureFailed > 0)
+            {
+                // A capture pass that produced nothing used to exit 0 with a
+                // few lines of stderr nobody read. Surface it as an error so a
+                // headless run fails loudly instead of quietly shipping a
+                // half-updated screenshot corpus.
+                Console.Error.WriteLine(
+                    $"  ✗ {captureFailed} screenshot(s) failed to capture; their existing files were left unchanged.");
+                hasErrors = true;
             }
         }
 
@@ -446,6 +517,15 @@ internal static partial class CompileCommand
         Console.WriteLine("═══ Phase 6: Assemble ═══");
         Directory.CreateDirectory(outputDir);
 
+        // Shared across every page so the screenshot corpus is decoded once per
+        // compile rather than once per referencing page. Keyed by resolved file
+        // path, so it uses the platform's path comparison rather than a fixed
+        // case-insensitive one: on a case-sensitive filesystem `a.png` and
+        // `A.png` are two files, and collapsing them would serve one's verdict
+        // for the other — a blank image inheriting a clean neighbour's Ok and
+        // never reaching REACTOR_DOC_IMAGE_002.
+        var blankImageCache = new Dictionary<string, DiagramProcessor.RasterVerdict>(DocPaths.PathComparer);
+
         foreach (var (topicId, template) in templates)
         {
             Console.Write($"  Assembling {topicId}...");
@@ -467,15 +547,74 @@ internal static partial class CompileCommand
             foreach (var e in errors) Console.Error.WriteLine($"\n    ✗ {e}");
             foreach (var w in warnings) Console.WriteLine($"\n    ⚠ {w}");
 
+            // Path.Join, not Path.Combine: topicId is derived from
+            // GetRelativePath, which yields a rooted path when the template
+            // lives on another volume and a ../-prefixed one when it resolves
+            // outside templatesDir (a junction or symlink is enough). Combine
+            // silently discards outputDir for the rooted case, so the base
+            // would come entirely from the discovered path. Join keeps the
+            // base; the containment check then covers the traversal case,
+            // which a rooted-only guard would miss.
+            //
+            // Containment is necessary and not sufficient, and the sufficiency
+            // gap is narrower and stranger than the earlier version of this
+            // comment claimed. It said a drive-rooted id "fails later at the
+            // write", and that this was "a worse error message, not an escape".
+            // Measured, both halves and the boundary between them:
+            //
+            //   Join(root, "D:/other/topic.md") -> root\D:\other\topic.md
+            //       IsUnder=True, write THROWS  (a stream name cannot contain
+            //       a separator) — so for THIS shape the old claim held.
+            //   Join(root, "D:foo")             -> root\D:foo
+            //       IsUnder=True, write SUCCEEDS into the alternate data stream
+            //       "foo" on a file named D. The directory then lists a single
+            //       zero-byte D and the real bytes are invisible to a listing,
+            //       to git, and to any size check.
+            //
+            // So the old comment generalised from the one colon shape that is
+            // loud to the one that is silent, and the difference is whether the
+            // tail happens to contain a separator. GetRelativePath across
+            // volumes usually produces the loud shape, which is exactly why the
+            // quiet one would have gone unnoticed. Rather than depend on that —
+            // a coupling nobody would think to preserve — the shared helper
+            // rejects any colon up front, before the join, with a message that
+            // names the cause.
+            //
+            // Using the helper rather than spelling the pair inline is the
+            // point: the colon rule lives with the containment rule, so a call
+            // site cannot end up with one and not the other. This one had.
+            var outputPath = DocPaths.ResolveContained(
+                outputDir, $"{topicId}.md", $"Topic '{topicId}'",
+                "Templates must live under the templates root.");
+
             // Image-ref validation per spec §10.3: every ![..](images/...)
-            // path in the compiled output must resolve.
-            foreach (var f in DiagramProcessor.ValidateImageRefs(template.FilePath, assembled, imagesDir))
+            // path in the compiled output must resolve — and, since issue #989,
+            // must not be a blank stub left behind by a failed capture.
+            // Resolved against the page's own directory, so a nested topic's
+            // ../ run is validated rather than assumed correct.
+            foreach (var f in DiagramProcessor.ValidateImageRefs(
+                         template.FilePath, assembled, imagesDir,
+                         Path.GetDirectoryName(outputPath)!, blankImageCache))
             {
-                Console.Error.WriteLine(f.Format());
-                hasErrors = true;
+                if (IsBuildBreaking(f))
+                {
+                    Console.Error.WriteLine(f.Format());
+                    hasErrors = true;
+                }
+                else
+                {
+                    // REACTOR_DOC_IMAGE_004 is the only non-error finding this
+                    // gate emits: the decoder was unavailable, so the blank scan
+                    // could not run. That is "not checked", not "checked and
+                    // bad" — and it is raised precisely on the platform that
+                    // cannot decode, so breaking --ci on it would fail a docs
+                    // build over a missing codec while nothing is wrong with the
+                    // docs. Routed like every other warning in this file:
+                    // visible on stdout, not fatal.
+                    Console.WriteLine($"  ⚠ {f.Format()}");
+                }
             }
 
-            var outputPath = Path.Combine(outputDir, $"{topicId}.md");
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
             var normalized = NormalizeLineEndings(assembled);
             File.WriteAllText(outputPath, normalized);
@@ -491,6 +630,23 @@ internal static partial class CompileCommand
                 File.WriteAllText(readmePath, normalized);
                 Console.WriteLine($"   → {Path.GetRelativePath(repoRoot, readmePath)} (GitHub directory browser)");
             }
+        }
+
+        // A failed capture reports on an action this invocation just took: the
+        // run was asked to refresh N screenshots and refreshed fewer. That is
+        // wrong regardless of --ci, and printing "compiled successfully" after
+        // it is how a half-updated corpus reaches `git add -A` unnoticed
+        // (issue #989). Validation findings keep the existing --ci-gated
+        // behaviour because they report on pre-existing tree state, which an
+        // author may legitimately be part-way through fixing.
+        if (captureFailed > 0)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine(
+                $"Compile finished with {captureFailed} failed screenshot capture(s). " +
+                "Existing images were left untouched; re-run capture on an interactive desktop, " +
+                "or pass --no-screenshots to skip Phase 3 entirely.");
+            return 1;
         }
 
         if (hasErrors && ci)
@@ -848,6 +1004,27 @@ internal static partial class CompileCommand
 
     internal static bool HasFlag(string[] args, string name) =>
         args.Contains(name, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether an image-gate finding should fail the compile.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The severity a finding declares is the severity that gets honoured. This
+    /// exists as a named predicate rather than an inline comparison so the
+    /// decision is reachable from a test: the image-ref loop previously set
+    /// <c>hasErrors</c> for <em>every</em> finding, which silently promoted
+    /// <c>REACTOR_DOC_IMAGE_004</c> — declared <see cref="TierLintSeverity.Warning"/>
+    /// — to a build break. Nothing could observe the disagreement, because the
+    /// only thing that read the severity was the code that ignored it.
+    /// </para>
+    /// <para>
+    /// Deliberately <c>== Error</c> rather than <c>!= Warning</c>: a severity
+    /// added later defaults to non-fatal, which is the recoverable direction.
+    /// </para>
+    /// </remarks>
+    internal static bool IsBuildBreaking(TierLintFinding finding) =>
+        finding.Severity == TierLintSeverity.Error;
 
     internal static IReadOnlySet<string>? ParseScreenshotFilter(string[] args, string? topic)
     {

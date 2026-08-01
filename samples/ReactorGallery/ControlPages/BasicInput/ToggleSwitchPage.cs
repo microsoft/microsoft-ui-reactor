@@ -20,10 +20,10 @@ class ToggleSwitchPage: Component
 
             SampleCard("Basic ToggleSwitch",
                 VStack(8,
-                    ToggleSwitch(isOn, v => setIsOn(v)),
+                    ToggleSwitch(isOn, v => setIsOn(v)).AutomationName("Basic toggle"),
                     TextBlock($"State: {(isOn ? "On" : "Off")}").Foreground(Theme.SecondaryText)),
                 sourceCode: @"
-ToggleSwitch(isOn, v => setIsOn(v))
+ToggleSwitch(isOn, v => setIsOn(v)).AutomationName(""Basic toggle"")
 "),
 
             SampleCard("Custom On/Off Labels",

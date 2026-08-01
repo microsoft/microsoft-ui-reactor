@@ -18,6 +18,21 @@ public delegate void AfterChildrenMountCallback<TElement, TControl>(
     where TControl : FrameworkElement;
 
 /// <summary>
+/// Teardown callback signature for <see cref="ControlDescriptor{TElement,TControl}.OnUnmount"/>.
+/// Invoked by <see cref="DescriptorHandler{TElement,TControl}"/> from the engine's
+/// <see cref="IElementHandler{TElement,TControl}.Unmount"/> dispatch, so a descriptor can
+/// invalidate control-scoped state it set up during mount — pending deferred writes, one-shot
+/// lifecycle subscriptions, disposables. Takes <see cref="UnmountContext"/> by <c>in</c> to
+/// preserve the allocation-free ref-struct contract.
+/// </summary>
+/// <remarks>
+/// The engine still runs the pool reset contract afterwards; this hook is for state the reset
+/// contract cannot see, such as a <c>Loaded</c> handler the descriptor attached itself.
+/// </remarks>
+public delegate void DescriptorUnmountCallback<TControl>(in UnmountContext ctx, TControl control)
+    where TControl : FrameworkElement;
+
+/// <summary>
 /// Spec 047 §6 / §14 Phase 2 (Q1 spike) — declarative control description.
 ///
 /// <para>A descriptor is the data-driven alternative to a hand-coded
@@ -112,6 +127,41 @@ public sealed class ControlDescriptor<TElement, TControl>
         AfterChildrenMountCallback<TElement, TControl> callback)
     {
         _afterChildrenMount = callback ?? throw new ArgumentNullException(nameof(callback));
+        return this;
+    }
+
+    /// <summary>Optional teardown hook. The interpreter
+    /// (<see cref="DescriptorHandler{TElement,TControl}"/>) surfaces it through
+    /// <see cref="IElementHandler{TElement,TControl}.Unmount"/>, which the engine invokes when
+    /// the control leaves the tree. Use it to invalidate control-scoped state the descriptor
+    /// created during mount and that the pool reset contract cannot see — a pending deferred
+    /// write, a one-shot <c>Loaded</c> subscription, a disposable. Defaults to <c>null</c>
+    /// (no hook). Set it from an object initializer, or — from a generated descriptor's
+    /// <c>Customize</c> hook, which receives an already-constructed descriptor — via
+    /// <see cref="WithUnmount"/>.
+    ///
+    /// <para>Not for event trampolines: those anchor to the control's lifetime by design (see
+    /// the <c>unsubscribe</c> no-op contract on <see cref="Controlled{TValue,TArgs}"/>).</para>
+    ///
+    /// <para>Declaring this hook makes <see cref="DescriptorHandler{TElement,TControl}"/> force
+    /// the control's <c>ReactorState</c> into existence at mount, because the engine's unmount
+    /// dispatch is tag-gated. That costs one small allocation per mounted control of this type,
+    /// so declare it only when there is real teardown to do.</para></summary>
+    public DescriptorUnmountCallback<TControl>? OnUnmount
+    {
+        get => _onUnmount;
+        init => _onUnmount = value;
+    }
+
+    private DescriptorUnmountCallback<TControl>? _onUnmount;
+
+    /// <summary>Fluent form of <see cref="OnUnmount"/>, for authors whose descriptor is already
+    /// constructed by the time they can customize it (the <c>[WrapManual]</c> <c>Customize</c>
+    /// hook is handed a built descriptor, so the init-only property is out of reach there).</summary>
+    public ControlDescriptor<TElement, TControl> WithUnmount(
+        DescriptorUnmountCallback<TControl> callback)
+    {
+        _onUnmount = callback ?? throw new ArgumentNullException(nameof(callback));
         return this;
     }
 
