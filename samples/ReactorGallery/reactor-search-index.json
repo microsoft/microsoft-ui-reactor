@@ -430,7 +430,7 @@
         {
           "header": "Basic ComboBox",
           "language": "csharp",
-          "code": "ComboBox(colors, selectedIndex, i => setSelectedIndex(i))"
+          "code": "ComboBox(colors, selectedIndex, i => setSelectedIndex(i)).Header(\"Colors\")"
         }
       ]
     },
@@ -2291,7 +2291,7 @@
         {
           "header": "Basic ToggleSwitch",
           "language": "csharp",
-          "code": "ToggleSwitch(isOn, v => setIsOn(v))"
+          "code": "ToggleSwitch(isOn, v => setIsOn(v)).AutomationName(\"Basic toggle\")"
         }
       ]
     },
