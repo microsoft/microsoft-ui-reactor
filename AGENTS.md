@@ -347,8 +347,10 @@ the one that bites hardest, because a broken instrument is trusted by default.
 ### Environment
 
 - Work in a clean worktree, not `main`: `git worktree add -b <branch> <path> origin/main`.
-- Don't build under deep or OneDrive-synced paths — WinUI can fail with `MSB3073`/`PRI210`;
-  prefer a short local path (e.g. `C:\src\`).
+- Don't build under deep or OneDrive-synced paths — WinUI can fail with `MSB3073`/`PRI210`
+  or XAML compiler `WMC1006`/`WMC9999`, sometimes naming an unrelated project such as
+  `Reactor.AppTests.ThirdPartyControls`. Before concluding your branch broke the build, check
+  out the same HEAD at a short path (e.g. `C:\src\probe`); if it passes, the path was the cause.
 
 ### Repo skills (`.github/skills/`)
 
