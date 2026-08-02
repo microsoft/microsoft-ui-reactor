@@ -342,10 +342,21 @@ public class ModifierUnsetClearValueTests
 
         foreach (var (property, writtenTypes) in writes)
         {
-            // A property with no type-gated clear at all is a missing *arm*, which is
-            // Every_Diff_Guarded_Modifier_Has_An_Unset_Arm's question — and several properties
-            // legitimately clear through an ungated `fe.ClearValue(…)`. Only an arm that
-            // already dispatches on type is asked to dispatch over the same set of types.
+            // Division of labour, both halves measured. Deleting an unset arm outright while
+            // keeping its write reddens Every_Diff_Guarded_Modifier_Has_An_Unset_Arm, naming the
+            // property — so a missing arm is already covered and this test does not restate it.
+            // What is left for the `continue` is an arm that exists but expresses its clear
+            // through an ungated `fe.ClearValue(…)` instead of the gate's own pattern variable:
+            // semantically identical, and correctly not a type-dispatch chain to compare against.
+            //
+            // No property reaches this branch today — measured through this test's own parser,
+            // every one of the 11 written properties is also present in `clears`. That makes it
+            // look like dead code, and it is not: deleting it would report the ungated shape as a
+            // widened write with no clear, and tightening it into "assert nothing was skipped"
+            // would fail on that same correct shape. The obvious remediation for either would be
+            // to re-gate a clear that never needed gating — churn in the most contended file in
+            // the repo, fixing nothing. Only an arm that already dispatches on type is asked to
+            // dispatch over the same set of types.
             if (!clears.TryGetValue(property, out var clearedTypes)) continue;
 
             foreach (var type in writtenTypes.Except(clearedTypes))
