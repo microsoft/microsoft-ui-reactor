@@ -281,9 +281,14 @@ public class ModifierUnsetClearValueTests
             // the pool never recycles that receiver and owes it no reset. Filtering explicitly
             // rather than with a `continue` keeps that exclusion visible at the loop header,
             // which is where a reader looks to find out what this derivation ranges over.
-            foreach (var gateName in info.ControlGate.Where(closure.ContainsKey))
+            // The filter runs on the projection, not the key: `Where(closure.ContainsKey)`
+            // followed by `closure[gateName]` would hash the same key twice, so resolve each
+            // gate once and drop the misses.
+            foreach (var receiver in info.ControlGate
+                         .Select(closure.GetValueOrDefault)
+                         .OfType<Type>())
             {
-                required.Add(closure[gateName].Name + "." + property);
+                required.Add(receiver.Name + "." + property);
             }
         }
 
