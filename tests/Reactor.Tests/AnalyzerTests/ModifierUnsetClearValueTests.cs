@@ -58,8 +58,12 @@ public class ModifierUnsetClearValueTests
     /// not a dependency property at all — reconciler bookkeeping that happens to live inside the
     /// arm — so the #952 precedence argument does not apply to it. Add one only with a reason;
     /// anything that <em>is</em> a DP must go through <c>ClearValue</c>.
+    /// <para>
+    /// Scoped to every method in <see cref="ScannedMethods"/>, not to <c>ApplyModifiers</c> alone —
+    /// the sole entry below comes from <c>ApplyAccessibilityModifiers</c>.
+    /// </para>
     /// </summary>
-    private static readonly Dictionary<string, string> ApplyModifiersAssignmentExceptions =
+    private static readonly Dictionary<string, string> UnsetArmAssignmentExceptions =
         new(StringComparer.Ordinal)
         {
             ["PendingLabeledBy"] =
@@ -107,8 +111,13 @@ public class ModifierUnsetClearValueTests
             ["Tag"] = "framework-internal element-identity slot, never style-provided",
         };
 
+    /// <summary>
+    /// Every unset arm in <see cref="ScannedMethods"/> — both <c>ApplyModifiers</c> and
+    /// <c>ApplyAccessibilityModifiers</c> — must reset through <c>ClearValue</c> rather than
+    /// assigning a value.
+    /// </summary>
     [Fact]
-    public void Every_ApplyModifiers_Unset_Arm_Clears_The_Dependency_Property()
+    public void Every_Unset_Arm_Clears_The_Dependency_Property()
     {
         var arms = ReadUnsetArms();
 
@@ -130,7 +139,7 @@ public class ModifierUnsetClearValueTests
             {
                 var target = assignment.Left.ToString();
                 var property = target.Contains('.') ? target[(target.LastIndexOf('.') + 1)..] : target;
-                if (ApplyModifiersAssignmentExceptions.ContainsKey(property)) continue;
+                if (UnsetArmAssignmentExceptions.ContainsKey(property)) continue;
 
                 offenders.Add($"{method}.{modifier}: `{assignment.ToString().Trim()}`");
             }
@@ -145,11 +154,12 @@ public class ModifierUnsetClearValueTests
     }
 
     /// <summary>
-    /// The positive half of <see cref="Every_ApplyModifiers_Unset_Arm_Clears_The_Dependency_Property"/>:
+    /// The positive half of <see cref="Every_Unset_Arm_Clears_The_Dependency_Property"/>:
     /// an arm that neither assigns nor clears would satisfy that test while resetting nothing.
+    /// Same scope — every method in <see cref="ScannedMethods"/>.
     /// </summary>
     [Fact]
-    public void Every_ApplyModifiers_Unset_Arm_Actually_Resets_Something()
+    public void Every_Unset_Arm_Actually_Resets_Something()
     {
         var inert = ReadUnsetArms()
             .Where(entry => !entry.Arm.DescendantNodes()
