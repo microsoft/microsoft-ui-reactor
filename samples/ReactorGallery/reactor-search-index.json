@@ -55,7 +55,7 @@
         {
           "header": "Play a state transition",
           "language": "csharp",
-          "code": "// using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;\n//   `using static Factories` shadows the WinUI type with the AnimatedIcon factory method.\nvar settings = UseMemo(() => new AnimatedSettingsVisualSource());\nvar states = new[] { \"Normal\", \"PointerOver\", \"Pressed\" };\nvar (stateIdx, setStateIdx) = UseState(0);\n// A controlled ComboBox passes WinUI's -1 (\"nothing selected\") straight through.\nvar state = states[Math.Clamp(stateIdx, 0, states.Length - 1)];\n\nAnimatedIcon(settings).Size(32, 32)\n    .Set(icon => XamlAnimatedIcon.SetState(icon, state))\n// Each write of State plays the \"<from>To<to>\" marker segment — that transition IS\n// the animation; there is no Play(). UseMemo the source: Source is reference-compared,\n// so a fresh instance per render rebuilds the visual and cancels the transition."
+          "code": "// `using static Factories` shadows the WinUI type, so SetState needs an alias:\n//   using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;\nvar settings = UseMemo(() => new AnimatedSettingsVisualSource());\nvar states = new[] { \"Normal\", \"PointerOver\", \"Pressed\" };\nvar (stateIdx, setStateIdx) = UseState(0);\nvar state = states[Math.Clamp(stateIdx, 0, states.Length - 1)];\n\nAnimatedIcon(settings).Size(32, 32)\n    .Set(icon => XamlAnimatedIcon.SetState(icon, state))\n// Each write of State plays the \"<from>To<to>\" marker segment — that transition IS the\n// animation; there is no Play(). UseMemo the source: Source is reference-compared, so a\n// fresh instance per render cancels the transition."
         }
       ]
     },
