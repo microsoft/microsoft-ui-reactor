@@ -279,6 +279,13 @@ internal static class Issue950TextBlockPaddingFixture
             // under a local zero and the themed value under a clear.
             H.Check("Issue950_Unset_ControlFallsBackToThemedPadding", btn.Padding == themed);
 
+            // Same reason as the StackPanel pin below: TextBlock.Padding is released by
+            // ElementPool.CleanElement, so a stale `inlineTb` would read UnsetValue because
+            // the pool cleaned it — indistinguishable from the unset arm having cleared it
+            // on the live control. Without this, the next check cannot fail for its reason.
+            H.Check("Issue950_Unset_InlineSameInstance",
+                ReferenceEquals(inlineTb, H.FindText("Issue950_inline_only")));
+
             H.Check("Issue950_Unset_InlineOnlyLocalValueCleared",
                 ReferenceEquals(
                     DependencyProperty.UnsetValue,
@@ -434,6 +441,11 @@ internal static class Issue950TextBlockPaddingFixture
                 ReferenceEquals(
                     DependencyProperty.UnsetValue,
                     sp.ReadLocalValue(WinUI.StackPanel.PaddingProperty)));
+
+            // Pins identity for the same reason as the StackPanel check above — TextBlock.Padding
+            // is pool-released, so a recycled `tb` reads UnsetValue regardless of the unset arm.
+            H.Check("Issue950_AllTypes_TextSameInstance",
+                ReferenceEquals(tb, H.FindText("Issue950_AllTypes_InlineEnd")));
 
             // oldM.Padding is null on this one — only PaddingInlineEnd was ever set — so a
             // `hadPadding` that forgot the InlineEnd slot would leave (0,0,23,0) in place.
