@@ -415,6 +415,14 @@ internal static class Issue950TextBlockPaddingFixture
             H.Check("Issue950_AllTypes_StackApplied", sp.Padding == new Thickness(22));
             H.Check("Issue950_AllTypes_InlineEndApplied", tb.Padding == new Thickness(0, 0, 23, 0));
 
+            // Sentinel for the pool, written natively so no modifier ever touches it:
+            // ElementPool.CleanElement releases Panel.Background (#985), and this element
+            // never declares `.Background(...)`, so ApplyModifiers has no unset arm to run
+            // against it. If `sp` survives the toggle, this brush survives with it; if the
+            // pool recycled `sp`, CleanElement wiped it. See the StackSameInstance comment.
+            sp.Background = new global::Microsoft.UI.Xaml.Media.SolidColorBrush(
+                global::Microsoft.UI.Colors.Red);
+
             H.ClickButton("Issue950_AllTypes_Toggle");
             await Harness.Render();
 
@@ -431,12 +439,23 @@ internal static class Issue950TextBlockPaddingFixture
             // ElementPool.CleanElement (#985). That makes the absence check below
             // fail-open on its own — a recycled `sp` reads UnsetValue because the
             // pool cleaned it, which is indistinguishable from the unset arm having
-            // cleared it on the live control. Pinning identity first is what keeps
-            // the next assertion a statement about ApplyModifiers.
+            // cleared it on the live control.
+            //
+            // Identity alone does NOT rule that out. ElementPool.Return pushes onto a
+            // per-type stack and TryRent pops it, so an unmount immediately followed by a
+            // remount of the same type hands back *that exact instance* — ReferenceEquals
+            // stays true across a round-trip that ran CleanElement. Identity is the cheap
+            // half; the Background sentinel written before the toggle is what actually
+            // closes the LIFO hole, because CleanElement would have wiped it. Together
+            // they make the next assertion a statement about ApplyModifiers.
             H.Check("Issue950_AllTypes_StackSameInstance",
                 ReferenceEquals(sp, H.FindControl<WinUI.StackPanel>(s =>
                     s.Children.Count == 1 && s.Children[0] is WinUI.TextBlock c
                     && c.Text == "Issue950_AllTypes_StackChild")));
+            H.Check("Issue950_AllTypes_StackNotPooled",
+                !ReferenceEquals(
+                    DependencyProperty.UnsetValue,
+                    sp.ReadLocalValue(WinUI.Panel.BackgroundProperty)));
             H.Check("Issue950_AllTypes_StackCleared",
                 ReferenceEquals(
                     DependencyProperty.UnsetValue,
