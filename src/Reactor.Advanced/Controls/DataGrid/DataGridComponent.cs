@@ -1104,6 +1104,30 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     }
 
     /// <summary>
+    /// Drop an unpaid focus debt once no edit remains that could ever settle it.
+    /// </summary>
+    /// <remarks>
+    /// Called from the not-current arm of <c>Apply</c> — the only path that returns before the
+    /// unconditional settlement below it, and therefore the only path that can strand a debt.
+    ///
+    /// The clear is conditional because that arm covers two situations and only one is terminal:
+    ///   • Superseded while the edit is STILL OPEN — request v1 loses the version check to v2.
+    ///     v2's own <c>Apply</c> settles the debt, so leave it; clearing here would drop a live one
+    ///     and the suppressed blur-commit would never be repaid.
+    ///   • The edit ENDED — commit, cancel, or blur-commit — before this tick ran. Nothing will
+    ///     arm another request for it, so the pointer would survive to be honoured by some later,
+    ///     unrelated failed focus move, yanking the caret back onto an old grid root.
+    /// </remarks>
+    internal static void SettleStaleFocusDebt(
+        DataGridState<T> state, Ref<FrameworkElement?>? focusDebtRef)
+    {
+        if (focusDebtRef is null) return;
+        if (state.IsEditing || state.IsRowEditing) return;
+
+        focusDebtRef.Current = null;
+    }
+
+    /// <summary>
     /// Focus <paramref name="fe"/> once it can actually take focus.
     /// </summary>
     /// <remarks>
@@ -1120,7 +1144,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// because either one can outlive the edit that armed the request.
     ///
     /// <paramref name="focusDebtRef"/> carries the grid root of a blur-commit that was suppressed
-    /// and not yet repaid — see the fallback inside <c>Apply</c>.
+    /// and not yet repaid — see the fallback inside <c>Apply</c>. A request that loses the
+    /// staleness re-check returns before that fallback, so it hands the debt to
+    /// <see cref="SettleStaleFocusDebt"/> rather than stranding it.
     /// </remarks>
     private static void ScheduleFocus(
         FrameworkElement fe,
@@ -1148,7 +1174,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         {
             void Apply()
             {
-                if (!IsFocusRequestStillCurrent(state, rowKey, columnName, version)) return;
+                if (!IsFocusRequestStillCurrent(state, rowKey, columnName, version))
+                {
+                    SettleStaleFocusDebt(state, focusDebtRef);
+                    return;
+                }
 
                 // Settle any outstanding focus debt on this attempt, whatever the outcome. The
                 // debt is one-shot for the same reason SuppressNextLostFocusCommit is: a pointer

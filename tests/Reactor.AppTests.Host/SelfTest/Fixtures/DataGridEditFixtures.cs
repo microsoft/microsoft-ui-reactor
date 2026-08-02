@@ -1454,6 +1454,27 @@ internal static class DataGridEditFixtures
             H.Check($"EditorFocusDebt_RepaidOntoTheGrid (focused='{landed?.GetType().Name ?? "null"}', containsEditors={containsEditors}, containsAnchor={containsAnchor})",
                 containsEditors && !containsAnchor);
 
+            // ── The stale-request arm of Apply, exercised directly ─────────────────────────────
+            // Staging "the edit ends between the enqueue and the deferred tick" through the real
+            // dispatcher is not deterministic; SettleStaleFocusDebt IS that arm, so call it. Two
+            // arms, so neither the "always clear" nor the "never clear" mutation stays green.
+            var debtProbe = new global::Microsoft.UI.Reactor.Core.Ref<Microsoft.UI.Xaml.FrameworkElement?>(anchor);
+
+            state.CancelRowEdit();
+            await Harness.Render(60);
+            DataGridComponent<TestProduct>.SettleStaleFocusDebt(state, debtProbe);
+            H.Check($"EditorFocusDebt_DroppedWhenTheEditIsOver (editing={state.IsEditing}, rowEditing={state.IsRowEditing}, debt='{debtProbe.Current?.GetType().Name ?? "null"}')",
+                debtProbe.Current is null);
+
+            // The mirror arm. A request superseded DURING a live edit is settled by the newer
+            // request's own tick, so an unconditional clear here would drop a legitimate debt.
+            debtProbe.Current = anchor;
+            state.BeginRowEdit(1);
+            await Harness.Render(60);
+            DataGridComponent<TestProduct>.SettleStaleFocusDebt(state, debtProbe);
+            H.Check($"EditorFocusDebt_KeptWhileTheEditIsStillOpen (rowEditing={state.IsRowEditing}, debt='{debtProbe.Current?.GetType().Name ?? "null"}')",
+                state.IsRowEditing && ReferenceEquals(debtProbe.Current, anchor));
+
             state.CancelRowEdit();
             await Harness.Render(60);
         }
