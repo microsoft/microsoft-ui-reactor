@@ -153,6 +153,20 @@ Conventions for contributors:
   seed-then-subscribe shape the other environment hooks in `RenderContext`
   already use.
 
+- **Reduced motion now updates while the app is running (issue #983).**
+  `UseReducedMotion()` and the charting host both listened on
+  `UISettings.ColorValuesChanged`, which does not fire when Windows'
+  "Animation effects" toggle changes — measured with a live subscription to both
+  events, it fired zero times in either direction while
+  `AnimationsEnabledChanged` fired on both. Because `UISettings.AnimationsEnabled`
+  still *reads back* the new value, the wrong subscription was invisible to any
+  static reading: the value was correct on first render and then frozen for the
+  life of the process, so a user turning animations off had to restart the app to
+  be taken at their word. Both listeners now subscribe to
+  `AnimationsEnabledChanged`, gated behind an `ApiInformation` probe because that
+  event needs Windows 10 2004 (19041) and Reactor's minimum is 17763; on older
+  builds the existing `ColorValuesChanged` re-read remains as the fallback.
+
 - **`TeachingTip` declared `IsOpen: true` on its first render now actually opens
   (issue #949).** The mount-time write was issued and then silently dropped: WinUI
   only holds a pending open on an *unparented* `TeachingTip` while nothing else is

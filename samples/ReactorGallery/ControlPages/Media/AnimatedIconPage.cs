@@ -4,17 +4,15 @@ using Microsoft.UI.Xaml.Controls.AnimatedVisuals;
 using static Microsoft.UI.Reactor.Factories;
 using static WinUIGalleryReactor.SamplePageHost;
 
-// `using static Factories` shadows the WinUI type name with the AnimatedIcon(...) factory
-// method, so the SetState attached-property helper has to be reached through an alias.
+// `using static Factories` shadows the WinUI type name, so SetState needs an alias.
 using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
 
 namespace WinUIGalleryReactor.ControlPages.Media;
 
 class AnimatedIconPage : Component
 {
-    // The states every built-in animated visual source ships markers for
-    // ("NormalToPointerOver_Start", "PressedToNormal_End", …). A static array keeps the
-    // ComboBox items reference-stable across renders.
+    // States all three sources below ship markers for. Static keeps the ComboBox
+    // items reference-stable across renders.
     static readonly string[] States = ["Normal", "PointerOver", "Pressed"];
 
     static Element Cell(string label, Element icon) =>
@@ -24,44 +22,26 @@ class AnimatedIconPage : Component
 
     public override Element Render()
     {
-        // UseMemo is load-bearing, not tidiness: AnimatedIcon.Source is a reference-compared
-        // one-way binding, so a `new …VisualSource()` built inside Render() would be a fresh
-        // instance every render and rebuild the composition visual mid-transition — the
-        // animation would be cancelled by the very re-render that asked for it.
-        //
-        // Settings/Find/GlobalNavigationButton are picked because each ships a non-empty
-        // marker segment for all six ordered pairs of the states below, so every value the
-        // ComboBox offers plays a real animation. Not every built-in source does: the
-        // ChevronDownSmall asset's NormalToPointerOver segment is zero-length (a chevron looks
-        // the same hovered), and the ChevronRightDownSmall/ChevronUpDownSmall/Accept assets
-        // carry Collapsed/Expanded-style markers instead of these three states entirely.
+        // UseMemo is load-bearing: AnimatedIcon.Source is reference-compared, so a source
+        // built inline would be a new instance every render and would rebuild the
+        // composition visual mid-transition, cancelling the animation.
         var settings = UseMemo(() => new AnimatedSettingsVisualSource());
         var find = UseMemo(() => new AnimatedFindVisualSource());
         var nav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
         var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 
         var (stateIdx, setStateIdx) = UseState(0);
-        // A controlled ComboBox surfaces WinUI's -1 ("nothing selected") straight through
-        // the SelectionChanged trampoline, so clamp rather than indexing the raw value —
-        // an out-of-range read here would throw inside Render.
+        // A controlled ComboBox passes WinUI's -1 ("nothing selected") straight through.
         var state = States[Math.Clamp(stateIdx, 0, States.Length - 1)];
 
         var (hovering, setHovering) = UseState(false);
-        // UseReducer, not UseState: the click handler derives the next value from the
-        // current one. RequestRender enqueues on the dispatcher and coalesces, so two
-        // clicks can run against the same closure before a render replaces it, and
-        // setOpen(!open) would write the same value twice and drop a toggle. The
-        // functional updater reads the live hook value instead of a captured local.
+        // UseReducer, not UseState: the functional updater reads the live value, so two
+        // clicks coalesced into one render can't both write the same value and drop a toggle.
         var (open, setOpen) = UseReducer(false);
         var menuState = open ? "Pressed" : hovering ? "PointerOver" : "Normal";
 
-        // A page whose whole subject is motion cannot demonstrate itself when the system
-        // has motion switched off: every control below still changes State, but AnimatedIcon
-        // hard-cuts to the segment's end frame, so nothing moves and the page reads exactly
-        // like the bug this page was rewritten to fix (#983). The paragraph above states the
-        // caveat unconditionally; only a runtime check can tell a reader it applies to them.
-        // UseReducedMotion re-renders on change, so the notice clears itself the moment the
-        // setting flips — no restart, and the transition plays as the InfoBar disappears.
+        // With animations off, every sample still changes State but AnimatedIcon hard-cuts
+        // to each segment's end frame — say so rather than appear broken (#983).
         var reducedMotion = UseReducedMotion();
 
         return ScrollView(VStack(16,
@@ -76,7 +56,7 @@ class AnimatedIconPage : Component
                         "Every sample on this page still changes State, but AnimatedIcon jumps "
                         + "straight to each transition's end frame instead of playing it. Turn on "
                         + "Settings → Accessibility → Visual effects → Animation effects to watch "
-                        + "the transitions animate.")
+                        + "the transitions animate — this page updates as soon as you do.")
                     .Warning()
                     .IsClosable(false)
                 : null,
@@ -98,18 +78,14 @@ class AnimatedIconPage : Component
 var settings = UseMemo(() => new AnimatedSettingsVisualSource());
 var states = new[] { ""Normal"", ""PointerOver"", ""Pressed"" };
 var (stateIdx, setStateIdx) = UseState(0);
-// A controlled ComboBox surfaces WinUI's -1 (""nothing selected"") straight through,
-// so clamp rather than indexing the raw value — an out-of-range read throws in Render.
+// A controlled ComboBox passes WinUI's -1 (""nothing selected"") straight through.
 var state = states[Math.Clamp(stateIdx, 0, states.Length - 1)];
 
 AnimatedIcon(settings).Size(32, 32)
     .Set(icon => XamlAnimatedIcon.SetState(icon, state))
-// Each write of State plays the ""<from>To<to>"" marker segment — that transition
-// IS the animation. UseMemo the source: Source is reference-compared, so a fresh
-// instance per render rebuilds the visual and cancels the transition.
-// Check the source's Markers before wiring a state to it: assets built for other
-// states leave ""<from>To<to>"" missing or zero-length, and then nothing moves.
-// Pass a FallbackIconSource for machines that cannot play Lottie visuals.
+// Each write of State plays the ""<from>To<to>"" marker segment — that transition IS
+// the animation; there is no Play(). UseMemo the source: Source is reference-compared,
+// so a fresh instance per render rebuilds the visual and cancels the transition.
 ",
                 OptionPanel(
                     TextBlock("State"),
@@ -139,8 +115,7 @@ AnimatedIcon(settings).Size(32, 32)
 var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 var (hovering, setHovering) = UseState(false);
 // UseReducer's functional updater reads the live value; setOpen(!open) would use the
-// captured local, and RequestRender coalesces, so two clicks against one closure would
-// write the same value twice and drop a toggle.
+// captured local and drop a toggle when two clicks coalesce into one render.
 var (open, setOpen) = UseReducer(false);
 var menuState = open ? ""Pressed"" : hovering ? ""PointerOver"" : ""Normal"";
 
@@ -152,8 +127,6 @@ Button(
     () => setOpen(o => !o))
     .OnPointerEntered((_, _) => setHovering(true))
     .OnPointerExited((_, _) => setHovering(false))
-// XamlAnimatedIcon is a `using` alias for Microsoft.UI.Xaml.Controls.AnimatedIcon —
-// `using static Factories` shadows the type name with the AnimatedIcon factory method.
 // .OnPointerPressed would never fire here — Button marks PointerPressed handled to
 // drive its own Click — so the click handler owns the ""Pressed"" state.
 ")

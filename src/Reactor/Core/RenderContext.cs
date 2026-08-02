@@ -1422,6 +1422,12 @@ public sealed class RenderContext
     /// force-graph simulations immediately, and keep only ≤ 150 ms opacity fades
     /// (WCAG 2.3.3).
     /// </para>
+    /// <para>
+    /// The value is seeded during the first render and then tracked live through
+    /// <c>UISettings.AnimationsEnabledChanged</c>. That event needs Windows 10 2004 (19041);
+    /// on older builds the preference is re-read whenever a theme or palette change arrives
+    /// instead, so it updates on the next such notification rather than immediately.
+    /// </para>
     /// </summary>
     public bool UseReducedMotion() => UseReducedMotionState().IsReducedMotion;
 
@@ -1456,11 +1462,21 @@ public sealed class RenderContext
             var rerender = _requestRerender;
             void OnChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
             {
-                state.IsReducedMotion = !sender.AnimationsEnabled;
+                var value = !sender.AnimationsEnabled;
+                if (value == state.IsReducedMotion) return;
+                state.IsReducedMotion = value;
                 rerender?.Invoke();
             }
-            // UISettings.ColorValuesChanged also fires for AnimationsEnabled changes
+
+            // AnimationsEnabledChanged is the only event raised for this preference.
+            // ColorValuesChanged is NOT — measured with a live subscription to both while
+            // toggling Settings > Accessibility > Visual effects > Animation effects, it
+            // fired zero times in either direction. It is kept as the pre-19041 fallback
+            // because OnChanged re-reads the current value, so a theme or palette change
+            // picks up a missed animation flip as a side effect.
             state.Settings.ColorValuesChanged += OnChanged;
+            if (UiSettingsCapabilities.HasAnimationsEnabledChanged)
+                state.Settings.AnimationsEnabledChanged += OnChanged;
 
             // Re-read after subscribing: the preference can flip between the seed above and
             // this subscription, and that window has no listener, so the change would
@@ -1473,8 +1489,12 @@ public sealed class RenderContext
             }
             return () =>
             {
-                if (state.Settings is not null)
-                    state.Settings.ColorValuesChanged -= OnChanged;
+                if (state.Settings is null) return;
+                state.Settings.ColorValuesChanged -= OnChanged;
+                // Called rather than captured: CA1416's flow analysis does not carry a
+                // guard's outcome across a closure boundary.
+                if (UiSettingsCapabilities.HasAnimationsEnabledChanged)
+                    state.Settings.AnimationsEnabledChanged -= OnChanged;
             };
         });
 
