@@ -41,15 +41,24 @@ public class ModifierUnsetClearValueTests
     /// the transition it needed to handle, so dropping the whole accessibility sub-record
     /// released nothing.
     /// </summary>
-    private static readonly (string Method, string Bag, string OldBag, int MinArms)[] ScannedMethods =
+    private static readonly (string Method, string Bag, string OldBag, int MinArms, int MinUnsetArms)[] ScannedMethods =
     [
-        // MinArms is a per-method non-vacuity floor, deliberately close to the real count
-        // (37 and 12 at the time of writing). A single total floor is not enough: if the
-        // matcher stopped recognizing ApplyAccessibilityModifiers entirely, ApplyModifiers
-        // alone would still clear a global threshold and the a11y half would go unchecked
-        // in silence — which is exactly the half issue #986 found broken.
-        ("ApplyModifiers", "m", "oldM", 32),
-        ("ApplyAccessibilityModifiers", "a", "oldA", 10),
+        // Both are per-method non-vacuity floors, deliberately close to the real count. A
+        // single total floor is not enough: if the matcher stopped recognizing
+        // ApplyAccessibilityModifiers entirely, ApplyModifiers alone would still clear a
+        // global threshold and the a11y half would go unchecked in silence — which is exactly
+        // the half issue #986 found broken.
+        //
+        // MinArms governs the *set*-arm scan (Every_Diff_Guarded_Modifier_Has_An_Unset_Arm);
+        // MinUnsetArms governs the *unset*-arm scan and is enforced inside ReadUnsetArms, so
+        // every consumer of that helper inherits it rather than having to remember a floor.
+        // They are separate populations and must not be collapsed into one constant.
+        //
+        // Real counts when these were set: set arms 37 / 12, unset arms 36 / 12. Read them out
+        // of the assertion message (raise the floor to 99999 and run) rather than re-deriving
+        // with a text scan — the scan walks syntax nodes, so a line-scoped regex undercounts.
+        ("ApplyModifiers", "m", "oldM", 32, 31),
+        ("ApplyAccessibilityModifiers", "a", "oldA", 10, 10),
     ];
 
     /// <summary>
@@ -119,17 +128,10 @@ public class ModifierUnsetClearValueTests
     [Fact]
     public void Every_Unset_Arm_Clears_The_Dependency_Property()
     {
+        // The non-vacuity floor lives inside ReadUnsetArms and is enforced *per method*, so a
+        // shape change that silently stops matching one of the two scanned methods fails here
+        // rather than hiding behind the other method's arm count.
         var arms = ReadUnsetArms();
-
-        // A parser that finds nothing would make every assertion below vacuous. The two
-        // methods have ~45 unset arms today; 20 is a floor that survives ordinary churn but
-        // not a shape change that silently stops matching.
-        Assert.True(
-            arms.Count >= 20,
-            $"Only {arms.Count} modifier-unset arm(s) were read out of the reconciler. " +
-            "The unset-transition shape ('!m.X.HasValue && oldM?.X.HasValue == true' or " +
-            "'m.X is null && oldM?.X is not null') has probably changed, which would make this " +
-            "whole test pass without checking anything.");
 
         var offenders = new List<string>();
 
@@ -200,7 +202,7 @@ public class ModifierUnsetClearValueTests
     {
         var missing = new List<string>();
 
-        foreach (var (method, bag, oldBag, minArms) in ScannedMethods)
+        foreach (var (method, bag, oldBag, minArms, _) in ScannedMethods)
         {
             var unset = ReadUnsetModifierNames(method, bag, oldBag);
             var found = 0;
@@ -287,7 +289,7 @@ public class ModifierUnsetClearValueTests
         var writes = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         var clears = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
 
-        foreach (var (method, _, _, _) in ScannedMethods)
+        foreach (var (method, _, _, _, _) in ScannedMethods)
         {
             var gated = ReadIfStatements(method)
                 .Select(ifStatement => (ifStatement, Gate: ReadTypeGate(ifStatement)))
@@ -767,8 +769,9 @@ public class ModifierUnsetClearValueTests
     {
         var arms = new List<(string, string, StatementSyntax)>();
 
-        foreach (var (method, bag, oldBag, _) in ScannedMethods)
+        foreach (var (method, bag, oldBag, _, minUnsetArms) in ScannedMethods)
         {
+            var found = 0;
             foreach (var ifStatement in ReadIfStatements(method))
             {
                 var modifier = UnsetTransitionModifier(ifStatement.Condition, bag, oldBag)
@@ -779,7 +782,22 @@ public class ModifierUnsetClearValueTests
                 // one's Else clause, and attributing that arm's statements here would report
                 // every following modifier under the first one's name.
                 arms.Add((method, modifier, ifStatement.Statement));
+                found++;
             }
+
+            // Per-method non-vacuity floor, asserted here rather than at the call sites so no
+            // consumer can forget it — Every_Unset_Arm_Actually_Resets_Something had no floor
+            // at all, and Every_Unset_Arm_Clears_The_Dependency_Property had only a combined
+            // one. A combined floor cannot see a single method disappear: the ~37 arms in
+            // ApplyModifiers clear any plausible total on their own, so the a11y half could
+            // stop matching entirely and both tests would still report zero offenders.
+            Assert.True(
+                found >= minUnsetArms,
+                $"Only {found} modifier-unset arm(s) were read out of {method} (expected at " +
+                $"least {minUnsetArms}). The unset-transition shape ('!{bag}.X.HasValue && " +
+                $"{oldBag}?.X.HasValue == true' or '{bag}.X is null && {oldBag}?.X is not " +
+                "null') has probably changed, which would make every caller of ReadUnsetArms " +
+                "pass without checking anything.");
         }
 
         return arms;
