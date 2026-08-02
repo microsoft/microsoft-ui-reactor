@@ -234,7 +234,7 @@ public class ModifierUnsetClearValueTests
 
     /// <summary>
     /// Every control type a modifier is <em>written</em> to must also be a control type it is
-    /// <em>cleared</em> on.
+    /// <em>cleared</em> on — and a modifier written anywhere must be released somewhere.
     /// </summary>
     /// <remarks>
     /// <see cref="Every_Diff_Guarded_Modifier_Has_An_Unset_Arm"/> asks a per-<em>property</em>
@@ -255,8 +255,20 @@ public class ModifierUnsetClearValueTests
     /// it fails on the merge result, naming the property and the orphaned type.
     /// </para>
     /// <para>
+    /// The second obligation exists because the per-property sibling test is not total. Its
+    /// exclusion list covers the three modifiers that compute a local before testing it —
+    /// <c>Margin</c>, <c>Padding</c>, <c>BorderThickness</c> — whose conditions never name
+    /// <c>m.X</c>, so it cannot see them at all. Deleting <c>BorderThickness</c>'s whole unset
+    /// arm while keeping its two type-gated writes therefore left every test in this file green:
+    /// the sibling excludes it, both floors have slack, and the property simply vanished from
+    /// <c>clears</c> and was skipped. Those three are exactly the properties this file's other
+    /// tripwires talk about most, which is what made the hole comfortable to look at.
+    /// </para>
+    /// <para>
     /// Verified by mutation — deleting a single <c>else if (fe is WinUI.T …) …ClearValue(…)</c>
-    /// branch while leaving its write branch in place reddens this test and nothing else.
+    /// branch while leaving its write branch in place reddens this test and nothing else, naming
+    /// the property and the orphaned type; deleting an entire unset arm reddens it naming the
+    /// property alone.
     /// </para>
     /// </remarks>
     [Fact]
@@ -339,29 +351,60 @@ public class ModifierUnsetClearValueTests
             $"seen: [{string.Join(", ", clears.Keys)}]");
 
         var offenders = new List<string>();
+        var unreleased = new List<string>();
+
+        // Receiver-blind: is the property released *at all*, through any
+        // `x.ClearValue(WinUI.T.PropProperty)`? The gate-bound reader above cannot answer that,
+        // because an arm is free to clear through the method's own `fe` rather than a gate's
+        // pattern variable. Both readers share one extraction, so this is a superset of `clears`
+        // by construction — which is precisely what makes the assert below a check on the one
+        // axis that can independently break: the *scope* it walks.
+        var releasedSomehow = ReadAnyClearedProperties();
+
+        Assert.True(
+            clears.Keys.All(releasedSomehow.Contains),
+            "The receiver-blind ClearValue reader missed a property the gate-bound reader found. " +
+            "It matches a superset of the same invocations, so this only happens if it walked the " +
+            "wrong scope — and a reader that walks nothing turns the branch below into the " +
+            "unconditional `continue` it replaced. Gate-bound: " +
+            $"[{string.Join(", ", clears.Keys)}]; receiver-blind: " +
+            $"[{string.Join(", ", releasedSomehow.OrderBy(name => name, StringComparer.Ordinal))}]");
 
         foreach (var (property, writtenTypes) in writes)
         {
-            // Division of labour, both halves measured. Deleting an unset arm outright while
-            // keeping its write reddens Every_Diff_Guarded_Modifier_Has_An_Unset_Arm, naming the
-            // property — so a missing arm is already covered and this test does not restate it.
-            // What is left for the `continue` is an arm that exists but expresses its clear
-            // through an ungated `fe.ClearValue(…)` instead of the gate's own pattern variable:
-            // semantically identical, and correctly not a type-dispatch chain to compare against.
-            //
-            // No property reaches this branch today — measured through this test's own parser,
-            // every one of the 11 written properties is also present in `clears`. That makes it
-            // look like dead code, and it is not: deleting it would report the ungated shape as a
-            // widened write with no clear, and tightening it into "assert nothing was skipped"
-            // would fail on that same correct shape. The obvious remediation for either would be
-            // to re-gate a clear that never needed gating — churn in the most contended file in
-            // the repo, fixing nothing. Only an arm that already dispatches on type is asked to
-            // dispatch over the same set of types.
-            if (!clears.TryGetValue(property, out var clearedTypes)) continue;
+            if (!clears.TryGetValue(property, out var clearedTypes))
+            {
+                // No type-dispatch chain to compare against. Legitimate for an arm that expresses
+                // its clear as an ungated `fe.ClearValue(…)` instead of through the gate's own
+                // pattern variable: semantically identical, and correctly not a chain. Only an arm
+                // that already dispatches on type is asked to dispatch over the same set of types.
+                //
+                // Not legitimate when the property is released nowhere — that is the #986 defect
+                // itself, and skipping it unconditionally is how this test used to certify it.
+                // Every_Diff_Guarded_Modifier_Has_An_Unset_Arm does not cover the gap: it
+                // deliberately excludes the three modifiers that compute a local first (Margin,
+                // Padding, BorderThickness — see its remarks), so for exactly those three a
+                // deleted unset arm is invisible to both tests. Verified by mutation — deleting
+                // BorderThickness's whole unset arm while keeping its two type-gated writes left
+                // all seven tests in this file green before this branch existed. The write-side
+                // floor cannot catch it either: `writes` is untouched by a clear-side deletion,
+                // and the clear-side floor only falls from 28 to 26, still over 24.
+                if (!releasedSomehow.Contains(property)) unreleased.Add(property);
+                continue;
+            }
 
             foreach (var type in writtenTypes.Except(clearedTypes))
                 offenders.Add($"{property} on {type}");
         }
+
+        Assert.True(
+            unreleased.Count == 0,
+            "These modifiers are written to at least one control type and released on none of " +
+            "them — no type-gated clear, and no ungated `fe.ClearValue(…)` either — so the value " +
+            "stays pinned on the control forever once the modifier is dropped from the chain " +
+            $"(issue #986): [{string.Join(", ", unreleased)}]. Restore the unset arm. If you " +
+            "reached this after resolving a Reconciler.cs merge conflict, the resolution dropped " +
+            "the whole arm — reapply it rather than deleting the write.");
 
         Assert.True(
             offenders.Count == 0,
@@ -407,18 +450,60 @@ public class ModifierUnsetClearValueTests
     /// writes.
     /// </summary>
     private static IEnumerable<string> ReadClearedProperties(SyntaxNode branch, string variable) =>
-        branch.DescendantNodesAndSelf()
+        ReadClearedPropertyNames(branch, variable);
+
+    /// <summary>
+    /// The <c>ClearValue</c> shape, in one place. <paramref name="variable"/> restricts the
+    /// receiver; <see langword="null"/> accepts any. Both callers share this so the gate-bound
+    /// and receiver-blind readers cannot drift into disagreeing about what a clear looks like.
+    /// </summary>
+    private static IEnumerable<string> ReadClearedPropertyNames(SyntaxNode scope, string? variable) =>
+        scope.DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
             .Where(invocation => invocation.Expression is MemberAccessExpressionSyntax access
                                  && access.Name.Identifier.Text == "ClearValue"
                                  && access.Expression is IdentifierNameSyntax id
-                                 && id.Identifier.Text == variable)
+                                 && (variable is null || id.Identifier.Text == variable))
             .SelectMany(invocation => invocation.ArgumentList.Arguments)
             .Select(argument => argument.Expression)
             .OfType<MemberAccessExpressionSyntax>()
             .Select(access => access.Name.Identifier.Text)
             .Where(name => name.EndsWith("Property", StringComparison.Ordinal))
             .Select(name => name[..^"Property".Length]);
+
+    /// <summary>
+    /// Every property released through <c>ClearValue(WinUI.T.PropProperty)</c> anywhere in the
+    /// scanned methods, whatever the receiver.
+    /// </summary>
+    /// <remarks>
+    /// Answers "is this released at all", which the gate-bound reader cannot: a clear expressed
+    /// as an ungated <c>fe.ClearValue(…)</c> is invisible to it, and treating that absence as
+    /// "nothing to compare" is indistinguishable from the arm having been deleted outright.
+    /// Whole-method scope on purpose — an unset arm need not sit inside a type gate, and reading
+    /// gates only would reproduce the blind spot in a new place.
+    /// </remarks>
+    private static HashSet<string> ReadAnyClearedProperties()
+    {
+        var scanned = ScannedMethods
+            .Select(entry => entry.Method)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var methods = ReconcilerRoot.Value
+            .DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .Where(method => scanned.Contains(method.Identifier.Text))
+            .ToList();
+
+        Assert.True(
+            methods.Count > 0,
+            $"None of the scanned methods ({string.Join(", ", scanned)}) were found in " +
+            "Reconciler.cs, so the receiver-blind clear scan would report every property as " +
+            "never released.");
+
+        return methods
+            .SelectMany(method => ReadClearedPropertyNames(method, variable: null))
+            .ToHashSet(StringComparer.Ordinal);
+    }
 
     private static void Add(Dictionary<string, SortedSet<string>> map, string key, string value)
     {
