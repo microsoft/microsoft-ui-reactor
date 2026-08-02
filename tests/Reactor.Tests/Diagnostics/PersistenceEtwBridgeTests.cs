@@ -56,6 +56,15 @@ public class PersistenceEtwBridgeTests : IDisposable
         try { if (global::System.IO.File.Exists(_path)) global::System.IO.File.Delete(_path); } catch { }
     }
 
+    /// <summary>
+    /// Operation label used by
+    /// <see cref="AssertEvent_discriminates_against_a_concurrent_foreign_event"/> to stand in for
+    /// a concurrent subsystem's event. Prefixed with this class's name so it matches no operation
+    /// real code emits today. Nothing enforces that — it is implausible by construction, not
+    /// reserved, so a future operation could in principle claim the same label.
+    /// </summary>
+    private const string ForeignOperation = "PersistenceEtwBridgeTests.ForeignEventProbe";
+
     private static EventWrittenEventArgs AssertEvent(
         IReadOnlyList<EventWrittenEventArgs> events,
         string name,
@@ -162,8 +171,14 @@ public class PersistenceEtwBridgeTests : IDisposable
         // foreign event won the race and it failed with "Intl != Persistence" — observed
         // ~1 full-suite run in 4, and 9/9 passing in isolation, which is why it was
         // mis-triaged for so long. It was the only one of this class's three SwallowedError
-        // lookups missing the discriminator; AssertEvent now makes that omission
-        // unrepresentable rather than something each author has to remember.
+        // lookups missing the discriminator. Every lookup in this class now goes through
+        // AssertEvent, which cannot be called without a discriminator argument.
+        //
+        // That is a convention backed by a helper, NOT a structural guarantee: a raw
+        // _listener.Events query is still writable, and there is one at the collision repro
+        // below — deliberately, as the specimen. What holds is that no lookup here omits the
+        // discriminator, not that none could. Making it genuinely unrepresentable would take
+        // an analyzer rule, or putting the raw event list out of reach.
         var evt = AssertEvent(
             _listener.Events,
             nameof(ReactorEventSource.SwallowedError),
@@ -182,6 +197,114 @@ public class PersistenceEtwBridgeTests : IDisposable
         Assert.DoesNotContain("not json", string.Join("|", evt.Payload?.OfType<string>() ?? Array.Empty<string>()));
     }
 
+    // ── The discriminator itself is load-bearing; pin it ────────────────
+
+    [Fact]
+    public void AssertEvent_discriminates_against_a_concurrent_foreign_event()
+    {
+        // When this guard was added, removing the discriminator clause from AssertEvent left
+        // every other test in this class still passing — the flake it prevents is invisible to
+        // the coverage that already exists, which is why the fix needs a test of its own. The
+        // exact count is deliberately not pinned here; it is recorded on #996 and would go stale
+        // as tests are added or removed.
+        //
+        // ReactorEventSource.Log is process-global, so this listener also receives SwallowedError
+        // events raised by any test class running concurrently. Emitting one here turns that
+        // interleaving from a ~1-in-4 race into a certainty of write order on a single thread,
+        // so the guard is provable in milliseconds without sleeps or retries. LogCategory.Intl
+        // reproduces the exact reported symptom ("Expected: Persistence, Actual: Intl").
+        //
+        // Safe to emit globally: it goes out under Keywords.Errors, which this class has held
+        // open since its constructor either way, so no concurrent listener's keyword mask
+        // changes. ReactorTraceRegressionTests' allocation probe subscribes to Keywords.Reconcile
+        // only and already early-returns when Errors is enabled elsewhere; IntlEtwBridgeTests
+        // matches on per-test discriminators that ForeignOperation cannot collide with.
+        DiagnosticLog.SwallowedError(
+            LogCategory.Intl, ForeignOperation, new InvalidOperationException());
+
+        global::System.IO.File.WriteAllText(_path, "this is not json{{{");
+        var store = new JsonFileStore(_path);
+        Assert.False(store.TryRead("main", out _));
+
+        // ONE snapshot for every assertion below. _listener.Events hands back a fresh copy per
+        // call, so re-reading it between the probe and the lookup would let a concurrently
+        // emitted event change the buffer underneath them.
+        var events = _listener.Events;
+
+        // Setup oracle: prove the injected event actually landed, WITHOUT going through the
+        // helper under test — verifying it with AssertEvent would be circular, since a helper
+        // with no discriminator returns a non-null event either way. Its index also anchors the
+        // slice below.
+        var foreignIndex = IndexOfForeignProbe(events);
+        Assert.True(foreignIndex >= 0, $"The injected {ForeignOperation} event was not observed.");
+
+        // Slice at the probe. This deliberately does NOT claim that everything before it
+        // predates the test — a concurrent class can emit between this test starting and the
+        // probe landing, so that would be false. The determinism does not rest on it: it rests
+        // only on those events being EXCLUDED, which the slice does by construction. Within the
+        // slice our probe is first, so nothing outside it can reach the two assertions below.
+        var since = events.Skip(foreignIndex).ToArray();
+
+        // `since[0]` is the probe by construction, so this is the event an UNdiscriminated
+        // lookup is forced to return. Capturing it is not itself an assertion — asserting
+        // anything about its operation here would be tautological, since the slice already
+        // fixes what it is. It earns its place as the comparison target below.
+        var firstByNameOnly = since.First(e =>
+            e.EventName == nameof(ReactorEventSource.SwallowedError));
+
+        // Note this may find a sibling class's event rather than the one emitted above:
+        // JsonFileStoreTests writes the same malformed JSON and xUnit runs classes in parallel,
+        // so an identical Persistence/JsonFileStore.TryRead.parse event can land in this window.
+        // That is harmless here — the subject of this test is AssertEvent's discrimination, not
+        // the persistence path (JsonFileStore_malformed_json_... covers that). Any parse event
+        // other than the probe demonstrates the property equally well.
+        var evt = AssertEvent(
+            since,
+            nameof(ReactorEventSource.SwallowedError),
+            1,
+            "JsonFileStore.TryRead.parse");
+
+        // THE property under test, and the assertion that dies under mutation: the discriminated
+        // lookup must not return what an undiscriminated one would. Remove the
+        // payload[discriminatorIndex] clause from AssertEvent and it returns `since[0]` — which
+        // IS firstByNameOnly — so this fails by reference, before the payload assertions below
+        // run. (IndexOfForeignProbe and AssertEvent both read payloads earlier; what this
+        // assertion avoids depending on is the payload comparison, not payload reads generally.)
+        Assert.NotSame(firstByNameOnly, evt);
+
+        // And it must be the right event, not merely a different one. This is the assertion that
+        // reproduces the originally reported symptom ("Expected: Persistence, Actual: Intl").
+        Assert.Equal(nameof(LogCategory.Persistence), evt.Payload?[0]);
+        Assert.Equal("JsonFileStore.TryRead.parse", evt.Payload?[1]);
+    }
+
+    /// <summary>
+    /// Locates the probe event injected by
+    /// <see cref="AssertEvent_discriminates_against_a_concurrent_foreign_event"/>. Deliberately
+    /// hand-rolled rather than routed through <c>AssertEvent</c>: this is the setup oracle for a
+    /// test whose subject IS <c>AssertEvent</c>, so using the helper here would be circular.
+    /// Bounds-checks the payload the same way <c>AssertEvent</c> does — <c>Payload?[0]</c> guards
+    /// a null payload but not a short one, and this scans every SwallowedError in a
+    /// process-global buffer, so a differently-shaped one must not throw here and fail the test
+    /// for a reason unrelated to its subject.
+    /// </summary>
+    private static int IndexOfForeignProbe(IReadOnlyList<EventWrittenEventArgs> events)
+    {
+        for (int i = 0; i < events.Count; i++)
+        {
+            var e = events[i];
+            if (e.EventName == nameof(ReactorEventSource.SwallowedError)
+                && e.Payload is { Count: > 1 } payload
+                && (payload[0] as string) == nameof(LogCategory.Intl)
+                && (payload[1] as string) == ForeignOperation)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     [Fact]
     public void JsonFileStore_malformed_base64_emits_SwallowedError_FormatException()
     {
@@ -190,11 +313,12 @@ public class PersistenceEtwBridgeTests : IDisposable
 
         Assert.False(store.TryRead("main", out _));
 
-        var evt = _listener.Events.FirstOrDefault(e =>
-            e.EventName == nameof(ReactorEventSource.SwallowedError)
-            && (e.Payload?[1] as string) == "JsonFileStore.TryRead.base64");
-        Assert.NotNull(evt);
-        Assert.Equal(nameof(LogCategory.Persistence), evt!.Payload?[0]);
+        var evt = AssertEvent(
+            _listener.Events,
+            nameof(ReactorEventSource.SwallowedError),
+            1,
+            "JsonFileStore.TryRead.base64");
+        Assert.Equal(nameof(LogCategory.Persistence), evt.Payload?[0]);
         Assert.Equal(nameof(FormatException), evt.Payload?[2]);
     }
 
@@ -211,11 +335,12 @@ public class PersistenceEtwBridgeTests : IDisposable
         var result = store.TryRead("anything", out _);
 
         Assert.False(result);
-        var evt = _listener.Events.FirstOrDefault(e =>
-            e.EventName == nameof(ReactorEventSource.SwallowedError)
-            && (e.Payload?[1] as string) == "PackagedSettingsStore.TryRead");
-        Assert.NotNull(evt);
-        Assert.Equal(nameof(LogCategory.Persistence), evt!.Payload?[0]);
+        var evt = AssertEvent(
+            _listener.Events,
+            nameof(ReactorEventSource.SwallowedError),
+            1,
+            "PackagedSettingsStore.TryRead");
+        Assert.Equal(nameof(LogCategory.Persistence), evt.Payload?[0]);
     }
 
     [Fact]
@@ -225,11 +350,12 @@ public class PersistenceEtwBridgeTests : IDisposable
 
         store.Write("anything", new byte[] { 1, 2, 3 });
 
-        var evt = _listener.Events.FirstOrDefault(e =>
-            e.EventName == nameof(ReactorEventSource.SwallowedError)
-            && (e.Payload?[1] as string) == "PackagedSettingsStore.Write");
-        Assert.NotNull(evt);
-        Assert.Equal(nameof(LogCategory.Persistence), evt!.Payload?[0]);
+        var evt = AssertEvent(
+            _listener.Events,
+            nameof(ReactorEventSource.SwallowedError),
+            1,
+            "PackagedSettingsStore.Write");
+        Assert.Equal(nameof(LogCategory.Persistence), evt.Payload?[0]);
     }
 
     // ── WindowPlacementCodec rejects ────────────────────────────────────
@@ -247,11 +373,24 @@ public class PersistenceEtwBridgeTests : IDisposable
         var monitors = new[] { new MonitorRect(null, 0, 0, 1920, 1080) };
         Assert.False(WindowPlacementCodec.Restore(hwnd: 0, ms.ToArray(), monitors));
 
-        var evt = _listener.Events.FirstOrDefault(e =>
-            e.EventName == nameof(ReactorEventSource.PersistenceRejected)
-            && (e.Payload?[1] as string) == "implausible-monitor-count");
-        Assert.NotNull(evt);
-        Assert.Equal("placement", evt!.Payload?[0]);
+        // Discriminated on the REASON (payload[1]), not the storeKind (payload[0]), deliberately:
+        // WindowPlacementCodec emits "placement" for three distinct rejections
+        // (implausible-monitor-count, implausible-rect, truncated), so storeKind matches any of
+        // the three while each reason matches exactly one. The storeKind is asserted separately
+        // below, so both fields are still checked — only the lookup key differs.
+        //
+        // ReactorEventSourcePhaseBTests discriminates PersistenceRejected on payload[0] and pairs
+        // it with Assert.Single, but that test emits its OWN namespaced storeKind directly to the
+        // event source, so it can manufacture uniqueness and then assert it. A test driving
+        // production code cannot: "placement" is fixed by WindowPlacementCodec. Copying that
+        // shape here would be wrong twice over — the less selective key, plus an Assert.Single
+        // that throws whenever a sibling class co-emits.
+        var evt = AssertEvent(
+            _listener.Events,
+            nameof(ReactorEventSource.PersistenceRejected),
+            1,
+            "implausible-monitor-count");
+        Assert.Equal("placement", evt.Payload?[0]);
     }
 
     [Fact]
@@ -266,10 +405,11 @@ public class PersistenceEtwBridgeTests : IDisposable
         var monitors = new[] { new MonitorRect(null, 0, 0, 1920, 1080) };
         Assert.False(WindowPlacementCodec.Restore(hwnd: 0, ms.ToArray(), monitors));
 
-        var evt = _listener.Events.FirstOrDefault(e =>
-            e.EventName == nameof(ReactorEventSource.PersistenceRejected)
-            && (e.Payload?[1] as string) == "truncated");
-        Assert.NotNull(evt);
-        Assert.Equal("placement", evt!.Payload?[0]);
+        var evt = AssertEvent(
+            _listener.Events,
+            nameof(ReactorEventSource.PersistenceRejected),
+            1,
+            "truncated");
+        Assert.Equal("placement", evt.Payload?[0]);
     }
 }

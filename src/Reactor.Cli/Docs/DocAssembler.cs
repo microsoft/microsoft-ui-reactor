@@ -84,10 +84,9 @@ internal static partial class DocAssembler
             var format = screenshots.TryGetValue(screenshotId, out var info) ? info.Format : "png";
             // Catalog-thumb captures land at `<id>-thumb.<format>` so the
             // generated URL must match (spec 041 §6.3, §12 Q7).
-            var fileBase = info != null
-                && string.Equals(info.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase)
-                ? $"{id}-thumb"
-                : id;
+            var fileBase = ImageProcessor.ThumbAwareFileBase(
+                id,
+                info != null && string.Equals(info.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase));
 
             return $"![{altText}]({imagePrefix}images/{topic}/{fileBase}.{format})";
         });

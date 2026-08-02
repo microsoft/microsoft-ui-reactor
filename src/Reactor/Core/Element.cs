@@ -5361,10 +5361,12 @@ public record MenuFlyoutContentElement(MenuFlyoutItemBase[] Items) : Element
     public FlyoutPlacementMode Placement { get; init; } = FlyoutPlacementMode.Auto;
 }
 
-// Spec 058 §15 (P5.23) — Title/IsOpen/PreferredPlacement/ActionButtonContent/CloseButtonContent
+// Spec 058 §15 (P5.23) — Title/PreferredPlacement/ActionButtonContent/CloseButtonContent
 // (string→object) auto-map. Content+HeroContent are both Element-typed → overwrite d.Children with
 // NamedSlots. Subtitle (?? "" clear-on-null), Target (.Reference ElementRef→FrameworkElement),
-// IconSource (reference comparer), PlacementMargin (non-nullable Thickness) are bespoke. The
+// IconSource (reference comparer), PlacementMargin (non-nullable Thickness) are bespoke. IsOpen is
+// bespoke too — see MountOpenDeferral (issue #949): the auto-mapped one-way write lands while the
+// tip is still unparented and is then discarded by the next property write. The
 // ActionButtonClick + Closed events are Excluded. Replaces TeachingTipDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.TeachingTip), Exclude = new[] { "ActionButtonClick", "Closed" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
@@ -5373,6 +5375,7 @@ public record MenuFlyoutContentElement(MenuFlyoutItemBase[] Items) : Element
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Target")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IconSource")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("PlacementMargin")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsOpen")]
 public partial record TeachingTipElement(
     string Title,
     string? Subtitle = null
@@ -5380,12 +5383,20 @@ public partial record TeachingTipElement(
 {
     /// <summary>
     /// Whether the tip is shown. Defaults to <c>false</c> — drive it from state.
-    /// <para><b>Edge-triggered.</b> This declares a <i>transition</i>, not a mirror: Reactor
-    /// writes the control only when the declared value <i>changes</i>. A light dismiss or the
-    /// tip's own close button sets <c>IsOpen</c> to <c>false</c> on the control without touching
-    /// the declared value, so re-rendering the same declared <c>true</c> will not re-open it.
-    /// Wire <see cref="OnClosed"/> back into the state that drives this property; a later
-    /// <c>false → true</c> transition then re-opens the tip.</para>
+    /// <para><b>Edge-triggered.</b> This declares a <i>transition</i>, not a mirror: after the
+    /// initial render Reactor writes the control only when the declared value <i>changes</i>. A
+    /// light dismiss or the tip's own close button sets <c>IsOpen</c> to <c>false</c> on the
+    /// control without touching the declared value, so re-rendering the same declared
+    /// <c>true</c> will not re-open it. Wire <see cref="OnClosed"/> back into the state that
+    /// drives this property; a later <c>false → true</c> transition then re-opens the tip.</para>
+    /// <para><b>Mount is the one exception</b> (issue #949): a first render that declares
+    /// <c>true</c> does open the tip. WinUI drops a pending open if the tip is written again
+    /// while it is still unparented, and Reactor configures controls before parenting them, so
+    /// the mount-time open is deferred until the control is loaded. One consequence worth
+    /// knowing: because that write lands after the setter pass, a
+    /// <c>.Set(t =&gt; t.IsOpen = false)</c> cannot override a declared mount-time <c>true</c>
+    /// the way setters normally win. Declare the value instead of reaching for
+    /// <c>.Set</c> — this property is the supported channel for it.</para>
     /// </summary>
     public bool IsOpen { get; init; }
     public Element? Content { get; init; }
@@ -5451,6 +5462,21 @@ public partial record TeachingTipElement(
                 set:         static (c, v) => c.IconSource = global::Microsoft.UI.Reactor.Core.V1Protocol.IconResolver.ResolveIconSource(v),
                 shouldWrite: static e => e.IconSource is not null,
                 comparer:    TeachingTipIconReferenceComparer.Instance)
+            // Issue #949 — IsOpen cannot be a plain one-way entry. The generator chains the
+            // auto-mapped entries onto Customize's result, so this write is followed by
+            // PreferredPlacement/Title and then by everything outside the prop loop (setters,
+            // the Content/HeroContent slots, common modifiers, parenting) — each of which
+            // discards a pending open while the tip is unparented. MountOpenDeferral moves the
+            // mount-time open past all of them.
+            .Imperative(
+                mount:  static (c, e) => MountOpenDeferral.Write(c, e.IsOpen),
+                update: static (c, oldEl, newEl) =>
+                {
+                    // Edge-triggered (#940 contract): a re-render carrying the same declared
+                    // value must not re-assert against a natively dismissed tip.
+                    if (oldEl.IsOpen != newEl.IsOpen)
+                        MountOpenDeferral.Write(c, newEl.IsOpen);
+                })
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.TeachingTip, object>>(
                 subscribe:        static (c, h) => c.ActionButtonClick += h,
@@ -5464,7 +5490,105 @@ public partial record TeachingTipElement(
                 callbackPresent:  static e => e.OnClosed,
                 trampoline:       __ClosedTrampoline,
                 slotIsNull:       static p => p.ClosedTrampoline is null,
-                setSlot:          static (p, h) => p.ClosedTrampoline = h);
+                setSlot:          static (p, h) => p.ClosedTrampoline = h)
+            // A tip can be unmounted before it ever loads, which would otherwise leave the
+            // deferred open armed on a control Reactor no longer owns.
+            .WithUnmount(static (in global::Microsoft.UI.Reactor.Core.V1Protocol.UnmountContext _, WinUI.TeachingTip c)
+                => MountOpenDeferral.Cancel(c));
+    }
+
+    /// <summary>
+    /// Issue #949 — makes a mount-time <c>IsOpen: true</c> actually present the tip.
+    ///
+    /// <para><b>Why this exists.</b> WinUI's <c>TeachingTip</c> only holds a pending open while
+    /// nothing else is written to it: on an <i>unparented</i> tip, the next property write
+    /// silently discards it (an already-parented tip is unaffected). Reactor — like XAML —
+    /// fully configures a control before handing it to its parent, and the writes that follow
+    /// the descriptor's prop loop (setters, the Content/HeroContent slots, common modifiers)
+    /// are outside the descriptor's reach, so ordering <c>IsOpen</c> last is not enough on its
+    /// own. The mount-time open is therefore deferred to <c>Loaded</c>, the first moment the
+    /// tip is parented into a live tree and an open is guaranteed to stick.</para>
+    ///
+    /// <para>Post-mount edges are unaffected: by then the tip is normally loaded, so the write
+    /// goes straight through and keeps the edge-triggered contract intact.</para>
+    ///
+    /// <para><b>Where the arm lives.</b> In the control's <c>TeachingTipEventPayload</c>, via
+    /// the engine's <c>ReactorState</c> attached-DP store — the documented home for per-element
+    /// state. A side <c>ConditionalWeakTable</c> would be keyed per RCW, so two RCWs over the
+    /// same native tip would see different arms (the hazard that motivated the attached-DP store
+    /// in the first place). Arming also forces the <c>ReactorState</c> into existence, which is
+    /// what lets the engine's tag-gated unmount dispatch reach the descriptor's
+    /// <c>OnUnmount</c> hook and cancel the arm.</para>
+    /// </summary>
+    private static class MountOpenDeferral
+    {
+        internal static void Write(WinUI.TeachingTip tip, bool isOpen)
+        {
+            if (!isOpen)
+            {
+                // Closing is never deferred, and it disarms any still-pending open: whether the
+                // app withdrew the request before the tip ever loaded or is closing a presented
+                // tip, its latest word wins.
+                Cancel(tip);
+                tip.IsOpen = false;
+                return;
+            }
+
+            Open(tip);
+        }
+
+        /// <summary>Writes <c>true</c> now when the tip is already in a live tree, otherwise
+        /// defers to the next <c>Loaded</c>.</summary>
+        private static void Open(WinUI.TeachingTip tip)
+        {
+            if (tip.IsLoaded)
+            {
+                Cancel(tip);
+                tip.IsOpen = true;
+                return;
+            }
+
+            var payload = global::Microsoft.UI.Reactor.Core.Reconciler
+                .GetOrCreateControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(tip);
+            payload.MountOpenWanted = true;
+            if (payload.MountOpenLoadedHandler is not null) return;
+
+            RoutedEventHandler handler = null!;
+            handler = (sender, _) =>
+            {
+                if (sender is not WinUI.TeachingTip loaded) return;
+                loaded.Loaded -= handler;
+
+                // Re-read rather than trust the closure: a falling edge or an unmount may have
+                // disarmed this tip while it was still unparented.
+                var state = global::Microsoft.UI.Reactor.Core.Reconciler
+                    .TryGetControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(loaded);
+                if (state is null) return;
+                state.MountOpenLoadedHandler = null;
+                if (!state.MountOpenWanted) return;
+                state.MountOpenWanted = false;
+
+                loaded.IsOpen = true;
+            };
+
+            payload.MountOpenLoadedHandler = handler;
+            tip.Loaded += handler;
+        }
+
+        /// <summary>Drops any pending open and unsubscribes its <c>Loaded</c> hook. Called on
+        /// every declared <c>false</c> and from the descriptor's unmount hook, so an arm can
+        /// never outlive the intent — or the mount — that created it. Uses the non-allocating
+        /// payload probe: a tip that never armed must not be forced to allocate state here.</summary>
+        internal static void Cancel(WinUI.TeachingTip tip)
+        {
+            var payload = global::Microsoft.UI.Reactor.Core.Reconciler
+                .TryGetControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(tip);
+            if (payload is null) return;
+            payload.MountOpenWanted = false;
+            if (payload.MountOpenLoadedHandler is null) return;
+            tip.Loaded -= payload.MountOpenLoadedHandler;
+            payload.MountOpenLoadedHandler = null;
+        }
     }
 
     private sealed class TeachingTipIconReferenceComparer : global::System.Collections.Generic.IEqualityComparer<IconData?>

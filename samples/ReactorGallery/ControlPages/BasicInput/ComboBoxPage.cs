@@ -20,22 +20,22 @@ class ComboBoxPage: Component
 
             SampleCard("Basic ComboBox",
                 VStack(8,
-                    ComboBox(colors, selectedIndex, i => setSelectedIndex(i)),
+                    ComboBox(colors, selectedIndex, i => setSelectedIndex(i)).Header("Colors"),
                     TextBlock($"Selected: {colors[selectedIndex]}").Foreground(Theme.SecondaryText)),
                 sourceCode: @"
-ComboBox(colors, selectedIndex, i => setSelectedIndex(i))
+ComboBox(colors, selectedIndex, i => setSelectedIndex(i)).Header(""Colors"")
 "),
 
             SampleCard("ComboBox with Placeholder",
-                ComboBox(colors).PlaceholderText("Pick a color"),
+                ComboBox(colors).Header("Colors").PlaceholderText("Pick a color"),
                 sourceCode: @"
-ComboBox(colors).PlaceholderText(""Pick a color"")
+ComboBox(colors).Header(""Colors"").PlaceholderText(""Pick a color"")
 "),
 
             SampleCard("Editable ComboBox",
-                ComboBox(colors, editableIndex, i => setEditableIndex(i)).IsEditable(),
+                ComboBox(colors, editableIndex, i => setEditableIndex(i)).Header("Colors").IsEditable(),
                 sourceCode: @"
-ComboBox(colors, editableIndex, i => setEditableIndex(i)).IsEditable()
+ComboBox(colors, editableIndex, i => setEditableIndex(i)).Header(""Colors"").IsEditable()
 ")
         ).Margin(36, 24, 36, 36));
     }
