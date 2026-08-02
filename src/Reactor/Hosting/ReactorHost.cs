@@ -854,7 +854,10 @@ public sealed class ReactorHost : IDisposable
         // OnColorValuesChanged, so bail out when nothing actually moved.
         if (value == _isReducedMotion) return;
         _isReducedMotion = value;
-        PushChartingState();
+        // No PushChartingState here, matching OnColorValuesChanged: D3Charts' flags are
+        // [ThreadStatic] and this runs on the WinRT notification thread, so a push here
+        // would write a copy the render thread never reads. Render() pushes on the UI
+        // thread every frame, so RequestRender is what actually propagates this.
         RequestRender();
     }
 

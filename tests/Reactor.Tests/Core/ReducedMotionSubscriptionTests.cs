@@ -70,26 +70,36 @@ public sealed class ReducedMotionSubscriptionTests
     }
 
     /// <summary>
-    /// Event names bound with <c>+=</c> or <c>-=</c> under <paramref name="scope"/>, taken
-    /// from the member name on the left of the operator.
+    /// Event/handler pairs bound with <c>+=</c> or <c>-=</c> under <paramref name="scope"/>,
+    /// taken from the member name on the left of the operator and the handler on the right.
     /// </summary>
-    static string[] EventBindings(SyntaxNode scope, SyntaxKind op) =>
+    static (string Event, string Handler)[] EventHandlerBindings(SyntaxNode scope, SyntaxKind op) =>
         scope.DescendantNodes()
             .OfType<AssignmentExpressionSyntax>()
             .Where(a => a.IsKind(op))
-            .Select(a => a.Left)
-            .OfType<MemberAccessExpressionSyntax>()
-            .Select(m => m.Name.Identifier.ValueText)
+            .Where(a => a.Left is MemberAccessExpressionSyntax)
+            .Select(a => (
+                Event: ((MemberAccessExpressionSyntax)a.Left).Name.Identifier.ValueText,
+                Handler: a.Right is MemberAccessExpressionSyntax m
+                    ? m.Name.Identifier.ValueText
+                    : a.Right.ToString()))
             .ToArray();
 
-    [Theory]
-    [InlineData(HookFile, "UseReducedMotionState")]
-    [InlineData(HostFile, "InitChartingState")]
-    public void ReducedMotionListeners_SubscribeToTheEventThatActuallyFires(string file, string name)
-    {
-        var subscriptions = EventBindings(Method(file, name), SyntaxKind.AddAssignmentExpression);
+    static string[] EventBindings(SyntaxNode scope, SyntaxKind op) =>
+        EventHandlerBindings(scope, op).Select(b => b.Event).ToArray();
 
-        Assert.Contains(AnimationsEvent, subscriptions);
+    [Theory]
+    [InlineData(HookFile, "UseReducedMotionState", "OnChanged")]
+    [InlineData(HostFile, "InitChartingState", "OnAnimationsEnabledChanged")]
+    public void ReducedMotionListeners_SubscribeToTheEventThatActuallyFires(
+        string file, string name, string handler)
+    {
+        var subscriptions = EventHandlerBindings(
+            Method(file, name), SyntaxKind.AddAssignmentExpression);
+
+        // The pair, not just the event: binding the right event to the wrong handler is
+        // the same defect wearing a passing name.
+        Assert.Contains((AnimationsEvent, handler), subscriptions);
     }
 
     [Theory]
@@ -97,15 +107,17 @@ public sealed class ReducedMotionSubscriptionTests
     [InlineData(HostFile, "InitChartingState", "Dispose")]
     public void EverySubscription_HasAMatchingRelease(string file, string subscribeIn, string releaseIn)
     {
-        var subscribed = EventBindings(Method(file, subscribeIn), SyntaxKind.AddAssignmentExpression);
-        var released = EventBindings(Method(file, releaseIn), SyntaxKind.SubtractAssignmentExpression);
+        var subscribed = EventHandlerBindings(Method(file, subscribeIn), SyntaxKind.AddAssignmentExpression);
+        var released = EventHandlerBindings(Method(file, releaseIn), SyntaxKind.SubtractAssignmentExpression);
 
         // Non-vacuity floor: the empty set is a subset of everything.
-        Assert.Contains(AnimationsEvent, subscribed);
+        Assert.Contains(AnimationsEvent, subscribed.Select(b => b.Event));
 
+        // Pairs, so releasing a *different* delegate than the one subscribed — which leaks
+        // silently, because -= on a non-matching instance is a no-op — fails here.
         // Subset, not equality: ReactorHost.Dispose also releases events subscribed at other
         // sites (ActualThemeChanged among them), so an extra release is correct there.
-        Assert.Empty(subscribed.Except(released, global::System.StringComparer.Ordinal));
+        Assert.Empty(subscribed.Except(released));
     }
 
     /// <summary>
@@ -125,6 +137,34 @@ public sealed class ReducedMotionSubscriptionTests
         Assert.Contains(AnimationsEvent, reducedMotion);
         Assert.DoesNotContain(AnimationsEvent, highContrast);
         Assert.Contains(ColorEvent, highContrast);
+    }
+
+    /// <summary>
+    /// True when <paramref name="binding"/> is reached only if the capability probe said
+    /// <em>yes</em>. Checks polarity and branch, not just mention: <c>if (!Probe)</c> and
+    /// <c>if (Probe) { } else { bind; }</c> both name the probe while running exactly when
+    /// it is absent.
+    /// </summary>
+    static bool GuardedByProbe(SyntaxNode binding)
+    {
+        foreach (var branch in binding.Ancestors().OfType<IfStatementSyntax>())
+        {
+            // The else-branch runs when the probe said no.
+            if (branch.Else is { } negative && negative.Span.Contains(binding.Span))
+                continue;
+
+            var affirmed = branch.Condition.DescendantNodesAndSelf()
+                .OfType<SimpleNameSyntax>()
+                .Where(n => n.Identifier.ValueText
+                    == nameof(UiSettingsCapabilities.HasAnimationsEnabledChanged))
+                .Any(n => !n.Ancestors()
+                    .TakeWhile(a => a != branch)
+                    .Any(a => a.IsKind(SyntaxKind.LogicalNotExpression)));
+
+            if (affirmed) return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -152,17 +192,59 @@ public sealed class ReducedMotionSubscriptionTests
 
         foreach (var binding in bindings)
         {
-            var guarded = binding.Ancestors()
-                .OfType<IfStatementSyntax>()
-                .Any(i => i.Condition.ToString().Contains(
-                    nameof(UiSettingsCapabilities.HasAnimationsEnabledChanged),
-                    global::System.StringComparison.Ordinal));
-
             Assert.True(
-                guarded,
+                GuardedByProbe(binding),
                 $"{file}: `{binding.Left} {binding.OperatorToken}` is not under a "
                 + $"{nameof(UiSettingsCapabilities.HasAnimationsEnabledChanged)} check — it throws on "
                 + "Windows builds before 19041, which TargetPlatformMinVersion still admits.");
         }
+    }
+
+    static AssignmentExpressionSyntax ParseBinding(string statement) =>
+        CSharpSyntaxTree.ParseText($"class C {{ void M() {{ {statement} }} }}")
+            .GetRoot()
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Single(a => a.IsKind(SyntaxKind.AddAssignmentExpression));
+
+    /// <summary>
+    /// The polarity check above is the whole value of that test, so it needs a case it
+    /// answers "no" to. A mention-only check (<c>Condition.ToString().Contains(...)</c>)
+    /// passes all four of these.
+    /// </summary>
+    [Theory]
+    [InlineData("if (UiSettingsCapabilities.HasAnimationsEnabledChanged) s.AnimationsEnabledChanged += H;", true)]
+    [InlineData("if (!UiSettingsCapabilities.HasAnimationsEnabledChanged) s.AnimationsEnabledChanged += H;", false)]
+    [InlineData("if (UiSettingsCapabilities.HasAnimationsEnabledChanged) { } else { s.AnimationsEnabledChanged += H; }", false)]
+    [InlineData("if (someUnrelatedFlag) s.AnimationsEnabledChanged += H;", false)]
+    public void TheProbeGuardCheck_RejectsConditionsThatMerelyMentionTheProbe(
+        string statement, bool expected)
+    {
+        Assert.Equal(expected, GuardedByProbe(ParseBinding(statement)));
+    }
+
+    /// <summary>
+    /// <c>D3Charts</c>'s accessibility flags are <c>[ThreadStatic]</c> and these handlers run
+    /// on the WinRT notification thread, so a push from here writes a copy the render thread
+    /// never reads — silently, since the write itself succeeds. <c>Render()</c> already pushes
+    /// on the UI thread every frame, so <c>RequestRender</c> is the whole propagation path.
+    /// </summary>
+    [Theory]
+    [InlineData("OnAnimationsEnabledChanged")]
+    [InlineData("OnColorValuesChanged")]
+    public void UiSettingsHandlers_LeaveTheChartingPushToTheRenderThread(string handler)
+    {
+        var body = Method(HostFile, handler);
+
+        var calls = body.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(i => i.Expression.ToString())
+            .ToArray();
+
+        // Non-vacuity floor: an empty call list would satisfy the DoesNotContain below, and
+        // RequestRender is the propagation these handlers exist to trigger.
+        Assert.Contains("RequestRender", calls);
+
+        Assert.DoesNotContain("PushChartingState", calls);
     }
 }
