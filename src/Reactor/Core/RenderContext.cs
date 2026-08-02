@@ -1355,8 +1355,8 @@ public sealed class RenderContext
         // first paint reported IsHighContrast=false / scheme=null to every caller —
         // including callers running under high contrast. Guarded so the WinRT settings
         // objects are constructed once per component rather than once per render.
-        // Guarded for the same reason as the reduced-motion seed: constructing the WinRT
-        // settings object is fallible, and seeding during render widens where that happens.
+        // Guarded for the same reason as the reduced-motion seed, and broad for the same
+        // reason: the try holds only interop and field assignment.
         if (!state.Seeded)
         {
             try
@@ -1470,6 +1470,12 @@ public sealed class RenderContext
         // widens where that runs: the effect below only executes under a live reconciler.
         // Degrade to the default rather than failing the frame, and set Seeded either way so
         // a host that cannot provide it does not throw once per render.
+        //
+        // The catches are deliberately broad. What bounds them is the scope of the try —
+        // only interop and field assignment, no application logic whose bug could be masked.
+        // A narrower list would have to enumerate every way a projection can be absent, which
+        // is not something this repo can test: measured in the headless host, both
+        // constructors and every property read off them succeed.
         if (!state.Seeded)
         {
             try
