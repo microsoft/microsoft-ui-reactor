@@ -38,9 +38,17 @@ internal static class UiSettingsCapabilities
         }
         catch
         {
-            // Headless / unit-test host with no WinRT projection. Report the member as
-            // absent so callers take the ColorValuesChanged-only path, which is what
+            // A capability probe has one safe answer when it cannot determine the truth:
+            // "absent". Callers then take the ColorValuesChanged-only path, which is what
             // they did before this probe existed.
+            //
+            // Deliberately not narrowed to specific exception types. Measured: this call
+            // does not throw in the headless xUnit host — IsEventPresent returns true there
+            // — so the conditions that would throw are not ones this repo can enumerate or
+            // test, and an incomplete list fails in the worst available direction. The probe
+            // runs from a static field initializer, so an escaping exception surfaces as a
+            // TypeInitializationException at whatever unrelated site first touches this
+            // type. Same reasoning as ReactorHost.InitChartingState.
             return false;
         }
     }
