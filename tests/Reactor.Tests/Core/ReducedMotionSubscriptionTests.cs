@@ -145,27 +145,17 @@ public sealed class ReducedMotionSubscriptionTests
     /// <c>if (Probe) { } else { bind; }</c> both name the probe while running exactly when
     /// it is absent.
     /// </summary>
-    static bool GuardedByProbe(SyntaxNode binding)
-    {
-        foreach (var branch in binding.Ancestors().OfType<IfStatementSyntax>())
-        {
-            // The else-branch runs when the probe said no.
-            if (branch.Else is { } negative && negative.Span.Contains(binding.Span))
-                continue;
-
-            var affirmed = branch.Condition.DescendantNodesAndSelf()
+    static bool GuardedByProbe(SyntaxNode binding) =>
+        binding.Ancestors().OfType<IfStatementSyntax>()
+            // The else-branch runs when the probe said no, so it does not guard.
+            .Where(branch => branch.Else is not { } negative || !negative.Span.Contains(binding.Span))
+            .Any(branch => branch.Condition.DescendantNodesAndSelf()
                 .OfType<SimpleNameSyntax>()
                 .Where(n => n.Identifier.ValueText
                     == nameof(UiSettingsCapabilities.HasAnimationsEnabledChanged))
                 .Any(n => !n.Ancestors()
                     .TakeWhile(a => a != branch)
-                    .Any(a => a.IsKind(SyntaxKind.LogicalNotExpression)));
-
-            if (affirmed) return true;
-        }
-
-        return false;
-    }
+                    .Any(a => a.IsKind(SyntaxKind.LogicalNotExpression))));
 
     /// <summary>
     /// <c>AnimationsEnabledChanged</c> arrived in Windows 10 2004 (19041) and Reactor declares
@@ -246,5 +236,57 @@ public sealed class ReducedMotionSubscriptionTests
         Assert.Contains("RequestRender", calls);
 
         Assert.DoesNotContain("PushChartingState", calls);
+    }
+
+    /// <summary>
+    /// Every WinRT settings object these hooks construct must be constructed inside a
+    /// <c>try</c>, so an unavailable projection degrades to the hook's default instead of
+    /// failing the frame.
+    ///
+    /// <para>
+    /// The seed runs during render, which widened the reach of these constructors: before
+    /// seeding existed they ran only from <c>UseEffect</c>, and effects flush only under a
+    /// live reconciler. <c>FlushEffectsTraced</c> wraps the flush in <c>try</c>/<c>finally</c>,
+    /// not <c>try</c>/<c>catch</c>, so neither path has a backstop above it.
+    /// </para>
+    ///
+    /// <para>
+    /// Asserted structurally because the failure cannot be produced: measured in this test
+    /// host, <c>new UISettings()</c>, <c>new AccessibilitySettings()</c> and the properties
+    /// read off both succeed. A runtime test would therefore pass with the guards deleted.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("UseReducedMotionState", 2)]
+    [InlineData("UseHighContrastState", 3)]
+    public void SettingsConstruction_IsGuarded(string hook, int expected)
+    {
+        var method = Method(HookFile, hook);
+
+        var constructions = method.DescendantNodes()
+            .OfType<ObjectCreationExpressionSyntax>()
+            .Where(c => c.Type.ToString().Contains("Windows.UI.ViewManagement"))
+            .ToArray();
+
+        // Non-vacuity floor: zero constructions satisfies an "all are guarded" assertion.
+        // Reduced-motion builds UISettings in the seed and in the effect; high contrast also
+        // needs AccessibilitySettings in both, plus UISettings for the event source.
+        Assert.Equal(expected, constructions.Length);
+
+        foreach (var construction in constructions)
+        {
+            // Ancestors().OfType<TryStatementSyntax>() would also accept a construction sitting
+            // in the catch or finally clause, which is not guarded by that try.
+            var guarded = construction.Ancestors()
+                .OfType<TryStatementSyntax>()
+                .Any(t => t.Block.Span.Contains(construction.Span));
+
+            Assert.True(
+                guarded,
+                $"{hook}: `new {construction.Type}` at line "
+                    + $"{construction.GetLocation().GetLineSpan().StartLinePosition.Line + 1} is not inside a try "
+                    + "block — an unavailable projection would fail the render instead of "
+                    + "degrading to the hook's default.");
+        }
     }
 }
