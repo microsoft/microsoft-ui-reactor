@@ -120,8 +120,9 @@ internal sealed class ModifierInfo
 /// <c>CleanElement</c> only runs on a control the pool recycles, so
 /// <c>PoolResetSetAnalyzer</c> also requires the <c>.Set</c> lambda parameter's exact type
 /// to be in <see cref="ModifierTable.PoolableTypeNames"/>; on anything else the same write reports
-/// <c>REACTOR_MOD_002</c>, because the modifier still exists and the write is still dropped
-/// by the next render — it just is not the pool that drops it. The instance and attached
+/// <c>REACTOR_MOD_002</c>: the modifier still exists, but the pool-return claim does not — the
+/// write lands and is never unwound, so what it costs is the element's structural skip
+/// (<c>Element.SettersEqual</c>), not the value. The instance and attached
 /// halves resolve that one fact the same way and once per <c>.Set</c> body, so a body
 /// mixing both shapes on one receiver cannot report two different ids. See
 /// <c>Attached_Setter_Reports_ModifierAvailable_On_An_Unpooled_Receiver</c>.
