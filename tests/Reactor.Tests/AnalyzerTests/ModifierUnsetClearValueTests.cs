@@ -314,6 +314,30 @@ public class ModifierUnsetClearValueTests
             "changed, which would make this test pass without checking anything. Properties " +
             $"seen: [{string.Join(", ", writes.Keys)}]");
 
+        // The floor above is computed from `writes` alone, so it is structurally incapable of
+        // noticing a failure confined to the *clear* side — and the `continue` below turns that
+        // blindness into a pass rather than an error. If ReadClearedProperties stops matching
+        // (the reconciler routes clears through a helper, the invocation shape changes, the
+        // matcher regresses), `clears` is empty, every property takes the `continue`, `offenders`
+        // is empty, and `Assert.True(offenders.Count == 0, …)` is vacuously true. Both arms of
+        // this test then agree that nothing is wrong, and no other test calls that reader.
+        //
+        // Measured through this test's own parser rather than a text scan, for the reason given
+        // above: 28 type-gated clears over the same 11 properties, mirroring the write side
+        // exactly (Padding 6, CornerRadius 5, Background 3, six properties at 2, the two
+        // ContentAlignment properties at 1). Same floor and same calibration as its sibling —
+        // losing either of the two longest chains trips it, with four arms of slack.
+        var clearPairs = clears.Sum(entry => entry.Value.Count);
+
+        Assert.True(
+            clearPairs >= 24,
+            $"Only {clearPairs} type-gated modifier clear(s) were read out of the reconciler " +
+            "(expected at least 24), while the write side still reads " + pairs + ". Either the " +
+            "unset arms were removed wholesale, or the `v.ClearValue(WinUI.T.PropProperty)` " +
+            "shape has changed and this test can no longer see the clears it compares against — " +
+            "in which case the comparison below passes without checking anything. Properties " +
+            $"seen: [{string.Join(", ", clears.Keys)}]");
+
         var offenders = new List<string>();
 
         foreach (var (property, writtenTypes) in writes)
