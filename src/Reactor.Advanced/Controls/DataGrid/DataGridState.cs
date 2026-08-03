@@ -1497,6 +1497,43 @@ public class DataGridState<T>
     }
 
     /// <summary>
+    /// Whether a cell-mode Tab/Shift+Tab would land on a visible editable cell whose editor can
+    /// render and therefore settle a suppressed <c>LostFocus</c> claim.
+    /// </summary>
+    /// <param name="direction">+1 for Tab, -1 for Shift+Tab.</param>
+    internal bool HasCellEditFocusTarget(int direction)
+    {
+        if (!IsEditing || _isRowEditing) return false;
+        if (ItemCount == 0 || _columns.Count == 0) return false;
+        if (_focusedRowIndex < 0 || _focusedColIndex < 0) return false;
+
+        var row = _focusedRowIndex;
+        var col = _focusedColIndex + direction;
+
+        if (col >= _columns.Count)
+        {
+            row++;
+            col = 0;
+        }
+        else if (col < 0)
+        {
+            row--;
+            col = _columns.Count - 1;
+        }
+
+        if (row < 0 || row >= ItemCount) return false;
+        if (col < 0 || col >= _columns.Count) return false;
+
+        var descriptor = _columns[col];
+        if (descriptor.IsReadOnly || descriptor.SetValue is null) return false;
+        if (!IsColumnVisible(descriptor.Name)) return false;
+        if (GetItemAt(row) is null) return false;
+        if (GetRowKeyAt(row) is null) return false;
+
+        return true;
+    }
+
+    /// <summary>
     /// Shared traversal for <see cref="FocusNextRowEditColumn"/> / <see cref="FocusPrevRowEditColumn"/>.
     /// </summary>
     /// <param name="direction">+1 to walk forward, -1 to walk backward.</param>

@@ -535,9 +535,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     // deliberately BROADER than the cell-only guard #987 shipped inline here: row edit
                     // now moves real focus between editors within the row (#976), so that focus-out is
                     // owed the same claim whenever the row has a focus target. Direction-agnostic on
-                    // purpose: Shift+Tab moves focus backward out of the grid just as Tab moves it
-                    // forward out, so the same one-shot claim is owed to both.
-                    if (ShouldClaimNextLostFocus(state, chord.Key))
+                    // purpose for row edit: Shift+Tab moves focus backward out of the grid just as
+                    // Tab moves it forward out, so the same one-shot claim is owed to both. Cell
+                    // edit uses the captured direction to claim only landings that can reopen an
+                    // editor and therefore settle the claim.
+                    if (ShouldClaimNextLostFocus(state, chord))
                         state.SuppressNextLostFocusCommit = true;
                     Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                     {
@@ -1027,9 +1029,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// Called SYNCHRONOUSLY from the KeyDown handler, before either handler defers, so the guard
     /// is robust to dispatcher ordering.
     ///
-    /// <para><b>Cell edit</b> — Tab moves real focus out of the single-tab-stop grid. The editing-Tab
-    /// path (<c>HandleKeyDown</c>) already commits the current cell and reopens the editor on the
-    /// next one, so a second commit from LostFocus would tear that editor straight back down.</para>
+    /// <para><b>Cell edit</b> — Tab moves real focus out of the single-tab-stop grid. When the
+    /// editing-Tab path (<c>HandleKeyDown</c>) can reopen an editor on the landing cell, a second
+    /// commit from LostFocus would tear that editor straight back down. When it lands on a read-only,
+    /// hidden, or boundary cell, no editor-focus request will run, so there is no claim to suppress:
+    /// the ordinary deferred LostFocus net is allowed to observe that the edit ended.</para>
     ///
     /// <para><b>Row edit (#976)</b> — same claim, different reason. Native Tab has already walked
     /// focus onto Save/Cancel or out of the grid, and LostFocus enqueues its "is focus still inside
@@ -1053,9 +1057,14 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// predicate alone — do not read the gate as a guarantee on its own.</para>
     /// </remarks>
     internal static bool ShouldClaimNextLostFocus(DataGridState<T> state, VirtualKey key)
+        => ShouldClaimNextLostFocus(state, KeyChord.Unmodified(key));
+
+    internal static bool ShouldClaimNextLostFocus(DataGridState<T> state, KeyChord chord)
     {
-        if (key != VirtualKey.Tab || !state.IsEditing) return false;
-        return !state.IsRowEditing || state.HasRowEditFocusTarget();
+        if (chord.Key != VirtualKey.Tab || !state.IsEditing) return false;
+        if (state.IsRowEditing) return state.HasRowEditFocusTarget();
+
+        return state.HasCellEditFocusTarget(chord.Shift ? -1 : +1);
     }
 
     /// <summary>

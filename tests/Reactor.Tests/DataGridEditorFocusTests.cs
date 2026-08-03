@@ -595,6 +595,40 @@ public class DataGridEditorFocusTests
     }
 
     [Fact]
+    public async Task ShouldClaimNextLostFocus_IsFalseForCellTabToReadOnlyColumn()
+    {
+        var forward = await LoadedState();
+        Assert.True(forward.BeginEdit(0, NotesCol));
+
+        // Forward Tab lands on the next row's Id column. It is read-only, so BeginEdit() will not
+        // arm a replacement editor-focus request; claiming LostFocus here would create debt no
+        // ScheduleFocus call can settle.
+        Assert.False(DataGridComponent<TestItem>.ShouldClaimNextLostFocus(
+            forward, new KeyChord(VirtualKey.Tab, Shift: false, Ctrl: false)));
+
+        var backward = await LoadedState();
+        Assert.True(backward.BeginEdit(0, NameCol));
+
+        // Same proof in the opposite direction: Shift+Tab lands on the read-only Id column in the
+        // same row. This fails if the claim gate ignores the captured Shift state.
+        Assert.False(DataGridComponent<TestItem>.ShouldClaimNextLostFocus(
+            backward, new KeyChord(VirtualKey.Tab, Shift: true, Ctrl: false)));
+    }
+
+    [Fact]
+    public async Task ShouldClaimNextLostFocus_IsFalseForCellTabToHiddenEditableColumn()
+    {
+        var state = await LoadedState();
+        state.HideColumn("Notes");
+        Assert.True(state.BeginEdit(1, ScoreCol));
+
+        // FocusNextCell still lands on Notes, and BeginEdit would accept it because the column is
+        // editable. But hidden columns render no editor, so no focus hook will consume the request.
+        Assert.False(DataGridComponent<TestItem>.ShouldClaimNextLostFocus(
+            state, new KeyChord(VirtualKey.Tab, Shift: false, Ctrl: false)));
+    }
+
+    [Fact]
     public async Task ShouldClaimNextLostFocus_IsFalseWhenNotEditing()
     {
         var state = await LoadedState();
