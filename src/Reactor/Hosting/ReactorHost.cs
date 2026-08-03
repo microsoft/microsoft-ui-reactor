@@ -310,7 +310,7 @@ public sealed class ReactorHost : IDisposable
             // NOT fire for AnimationsEnabled — that needs AnimationsEnabledChanged, which
             // requires Windows 10 2004 (19041), above this assembly's minimum.
             _uiSettings.ColorValuesChanged += OnColorValuesChanged;
-            if (Core.UiSettingsCapabilities.HasAnimationsEnabledChanged)
+            if (UiSettingsCapabilities.HasAnimationsEnabledChanged)
                 _uiSettings.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
         }
         catch { /* headless / unit-test host — no UI settings */ }
@@ -954,7 +954,7 @@ public sealed class ReactorHost : IDisposable
         if (_uiSettings is not null)
         {
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
-            if (Core.UiSettingsCapabilities.HasAnimationsEnabledChanged)
+            if (UiSettingsCapabilities.HasAnimationsEnabledChanged)
                 _uiSettings.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
         }
 
