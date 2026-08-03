@@ -19,11 +19,10 @@
     the issue is a race on reading Process.ExitTime before the OS reaps a heavy
     process. A cmd.exe fake dies too fast to reproduce it, so the duration
     assertion here is a bounds check on the symptom, not a discriminator
-    between a Stopwatch and a correctly-sequenced ExitTime read. See case 4.
+    between a Stopwatch and a correctly-sequenced ExitTime read. See case 5.
 
-    A distinctly-named fake also keeps the sweep tests safe — Stop-NewProcessesByName
-    is never pointed at `pwsh`, so an exclude-list regression cannot take out the
-    test host.
+    A distinctly-named fake also keeps these tests safe: nothing here is ever
+    pointed at `pwsh`, so an attribution regression cannot take out the test host.
 
     Run locally:  pwsh tests/vs_reactor/ci/VsProcessLib.Tests.ps1
 #>
@@ -86,8 +85,18 @@ Copy-Item "$env:SystemRoot\System32\cmd.exe" $fakeExe
 $hangArgs  = '/c "' + $fakeExe + '" /c ping -n 600 127.0.0.1 >nul'
 $quickArgs = '/c exit 0'
 
+# Pings that already existed before this run. Teardown asserts we add no
+# permanent ones — an earlier revision killed only $fakeName and leaked the
+# grandchild ping on every case.
+$script:PreExistingPings = @(Get-Process -Name 'PING' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+
 function Get-FakeCount {
     @(Get-Process -Name $fakeName -ErrorAction SilentlyContinue).Count
+}
+
+function Get-LeakedPingCount {
+    @(Get-Process -Name 'PING' -ErrorAction SilentlyContinue |
+        Where-Object { $script:PreExistingPings -notcontains $_.Id }).Count
 }
 
 function Start-Fake {
@@ -108,9 +117,25 @@ function Wait-ForFakeCount {
     Get-FakeCount
 }
 
+# Teardown must take the whole tree, not just the $fakeName layer: the grandchild
+# is `ping`, and killing its parent does not kill it.
 function Remove-AllFakes {
     foreach ($p in @(Get-Process -Name $fakeName -ErrorAction SilentlyContinue)) {
+        try { Stop-ProcessTreeViaTaskkill -Id $p.Id } catch { }
+    }
+    foreach ($p in @(Get-Process -Name 'PING' -ErrorAction SilentlyContinue |
+                     Where-Object { $script:PreExistingPings -notcontains $_.Id })) {
         try { $p.Kill() } catch { }
+    }
+}
+
+function Wait-FakeNameCleared {
+    param([int]$TimeoutSeconds = 20)
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ($true) {
+        if ((Get-FakeCount) -eq 0) { return $true }
+        if ([DateTime]::UtcNow -ge $deadline) { return $false }
+        Start-Sleep -Milliseconds 250
     }
 }
 
@@ -121,9 +146,8 @@ try {
     $p = Start-Fake -Arguments $hangArgs
     $count = Wait-ForFakeCount -AtLeast 2
     Assert-True ($count -ge 2) "harness: fake devenv spawns a real tree (saw $count '$fakeName' processes, expected >= 2)"
-    try { $p.Kill() } catch { }
     Remove-AllFakes
-    Assert-True (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 15) 'harness: fakes are cleaned up between cases'
+    Assert-True (Wait-FakeNameCleared) 'harness: fakes are cleaned up between cases'
 
     # -- 3. Stop-ProcessTreeSafely reaps descendants, not just the root. --
     # This is the #1074 fix. Against `$proc.Kill()` the inner fake survives.
@@ -131,19 +155,31 @@ try {
     Wait-ForFakeCount -AtLeast 2 | Out-Null
     $exited = Stop-ProcessTreeSafely -Process $p -WaitSeconds 20
     Assert-True $exited 'Stop-ProcessTreeSafely: root process exited within the wait'
-    Assert-True (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20) 'Stop-ProcessTreeSafely: no descendant is left running'
+    Assert-True (Wait-FakeNameCleared) 'Stop-ProcessTreeSafely: no descendant is left running'
     Assert-Equal 0 (Get-FakeCount) 'Stop-ProcessTreeSafely: process name is fully clear'
-    # Explicit teardown so a failure here is attributed to this case rather than
-    # cascading into the next one's counts.
     Remove-AllFakes
-    Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20 | Out-Null
+    Wait-FakeNameCleared | Out-Null
 
-    # -- 4. Timeout path: nothing survives, duration is a real measurement. --
+    # -- 4. The taskkill fallback works on its own. --
+    # Under pwsh the reflection probe in Stop-ProcessTreeSafely always finds
+    # Kill([bool]), so the Windows PowerShell 5.1 branch never runs in CI.
+    # Calling it directly is what stops that branch from rotting: pointing
+    # taskkill.exe at a bogus path reddens these two assertions.
+    $p = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 2 | Out-Null
+    $global:LASTEXITCODE = 0
+    Stop-ProcessTreeViaTaskkill -Id $p.Id
+    Assert-True (Wait-FakeNameCleared) 'Stop-ProcessTreeViaTaskkill: kills the whole tree'
+    Assert-Equal 0 $LASTEXITCODE 'Stop-ProcessTreeViaTaskkill: leaves $LASTEXITCODE at 0'
+    Remove-AllFakes
+    Wait-FakeNameCleared | Out-Null
+
+    # -- 5. Timeout path: nothing of ours survives, duration is a real measurement. --
     $timeout = 4
     $r = Invoke-DevenvUpdateConfiguration -DevenvPath $fakeExe -Arguments $hangArgs `
         -TimeoutSeconds $timeout -ProcessName $fakeName -DrainTimeoutSeconds 20
     Assert-True $r.TimedOut 'timeout: TimedOut is reported'
-    Assert-True $r.Drained  'timeout: Drained is reported true (name cleared)'
+    Assert-True $r.Drained  'timeout: Drained is reported true'
     Assert-Equal 0 (Get-FakeCount) 'timeout: no fake devenv survives the call'
     # The pre-fix instrument read ExitTime on a process that had not been reaped
     # yet, which returns the 1601 epoch and printed "-13430263500.8s". This
@@ -158,8 +194,10 @@ try {
     # ExitCode must be readable, i.e. we waited for the kill to complete rather
     # than racing it.
     Assert-True ($null -ne $r.ExitCode) 'timeout: ExitCode is defined after the tree kill'
+    Remove-AllFakes
+    Wait-FakeNameCleared | Out-Null
 
-    # -- 5. Happy path is untouched (guards the VS 18.7 flow). --
+    # -- 6. Happy path is untouched (guards the VS 18.7 flow). --
     $r = Invoke-DevenvUpdateConfiguration -DevenvPath $fakeExe -Arguments $quickArgs `
         -TimeoutSeconds 30 -ProcessName $fakeName -DrainTimeoutSeconds 10
     Assert-Equal $false $r.TimedOut 'happy path: TimedOut is false when the process exits on its own'
@@ -167,38 +205,81 @@ try {
     Assert-Equal 0 $r.KilledPids.Count 'happy path: nothing is killed'
     Assert-InRange $r.DurationSeconds 0 30 'happy path: DurationSeconds is non-negative and bounded'
 
-    # -- 6. The sweep spares pre-existing processes. --
-    # A developer who opens VS mid-run must not have their IDE killed; the
-    # pre-start snapshot is what protects them.
-    $pre = Start-Fake -Arguments $hangArgs
-    # Wait for the *whole* pre-existing tree before snapshotting: if the inner
-    # process were missed by the snapshot the sweep would kill it, the outer
-    # would exit with it, and "excluded process is still alive" would flake.
+    # -- 7. Ancestry: we kill our own tree and nobody else's. --
+    # THE safety property. `devenv` is a shared process name, so identifying
+    # victims by name would take out a developer's IDE. Attribution is by
+    # Win32_Process ancestry captured while the tree is still alive.
+    $mine = Start-Fake -Arguments $hangArgs
     Wait-ForFakeCount -AtLeast 2 | Out-Null
-    $preIds = @(Get-Process -Name $fakeName -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-    $new = Start-Fake -Arguments $hangArgs
-    Wait-ForFakeCount -AtLeast ($preIds.Count + 1) | Out-Null
+    $theirs = Start-Fake -Arguments $hangArgs   # stands in for the developer's IDE
+    Wait-ForFakeCount -AtLeast 4 | Out-Null
 
-    $killed = @(Stop-NewProcessesByName -Name $fakeName -ExcludePids $preIds -WaitSeconds 20)
-    Assert-True ($killed -contains $new.Id) "sweep: kills the process started after the snapshot (pid $($new.Id))"
-    Assert-True ($killed -notcontains $pre.Id) "sweep: does not kill the excluded pre-existing process (pid $($pre.Id))"
-    $pre.Refresh()
-    Assert-Equal $false $pre.HasExited 'sweep: the excluded process is still alive'
-    Assert-True $new.HasExited 'sweep: the swept process is gone'
+    $descendants = @(Get-DescendantProcessIds -ParentId $mine.Id)
+    Assert-True ($descendants.Count -ge 1) "ancestry: finds the descendant of pid $($mine.Id) (saw $($descendants.Count))"
+    Assert-True ($descendants -notcontains $theirs.Id) 'ancestry: an unrelated same-named process is not a descendant'
 
+    $ours = @($mine.Id) + $descendants
+    $killed = @(Stop-ProcessIds -Ids $ours -RequireName $fakeName -WaitSeconds 20)
+    Assert-True ($killed -contains $mine.Id) 'attribution: our own root is killed'
+    $theirs.Refresh()
+    Assert-Equal $false $theirs.HasExited "attribution: the unrelated process (pid $($theirs.Id)) is left running"
+    Assert-True ($killed -notcontains $theirs.Id) 'attribution: the unrelated process is never targeted'
     Remove-AllFakes
-    Assert-True (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20) 'sweep: teardown clears the name'
+    Assert-True (Wait-FakeNameCleared) 'attribution: teardown clears the name'
 
-    # -- 7. Wait-ProcessNameCleared reports failure rather than lying. --
+    # -- 8. END-TO-END: a foreign same-named process survives a timeout. --
+    # The safety property that matters, asserted through the real entry point.
+    # Case 7 exercises the helpers directly, so it does NOT catch a regression
+    # in how Invoke-DevenvUpdateConfiguration decides what is "ours" — verified
+    # by mutation: swapping the ancestry call for a name lookup leaves case 7
+    # green and reddens only the assertions below.
+    $theirs = Start-Fake -Arguments $hangArgs   # the developer's open IDE
+    Wait-ForFakeCount -AtLeast 2 | Out-Null
+    $theirsId = $theirs.Id
+
+    $r = Invoke-DevenvUpdateConfiguration -DevenvPath $fakeExe -Arguments $hangArgs `
+        -TimeoutSeconds 3 -ProcessName $fakeName -DrainTimeoutSeconds 15
+    Assert-True $r.TimedOut 'e2e attribution: the run timed out (precondition for the sweep path)'
+    $theirs.Refresh()
+    Assert-Equal $false $theirs.HasExited "e2e attribution: the developer's IDE (pid $theirsId) is still running"
+    Assert-True ($r.KilledPids -notcontains $theirsId) 'e2e attribution: the foreign pid is never killed'
+    Assert-True ($r.ForeignPids -contains $theirsId) 'e2e attribution: the foreign pid is reported, not silently ignored'
+    Remove-AllFakes
+    Wait-FakeNameCleared | Out-Null
+
+    # -- 9. Stop-ProcessIds refuses a pid whose name no longer matches. --
+    # Guards pid reuse between the ancestry snapshot and the kill.
+    $survivor = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 1 | Out-Null
+    $killed = @(Stop-ProcessIds -Ids @($survivor.Id) -RequireName 'some-other-name' -WaitSeconds 5)
+    Assert-Equal 0 $killed.Count 'pid reuse: a pid whose name does not match RequireName is skipped'
+    $survivor.Refresh()
+    Assert-Equal $false $survivor.HasExited 'pid reuse: the mismatched process is left alone'
+    Remove-AllFakes
+    Wait-FakeNameCleared | Out-Null
+
+    # -- 10. Wait-ProcessIdsCleared reports failure rather than lying. --
     # Without a truthful negative, a false "drained" would let the next run trip
     # the guard with no explanation.
     $stubborn = Start-Fake -Arguments $hangArgs
     Wait-ForFakeCount -AtLeast 1 | Out-Null
-    Assert-Equal $false (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 2) 'Wait-ProcessNameCleared: returns false while a process is still running'
+    Assert-Equal $false (Wait-ProcessIdsCleared -Ids @($stubborn.Id) -TimeoutSeconds 2) 'Wait-ProcessIdsCleared: false while the pid is still running'
     Remove-AllFakes
-    Assert-True (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20) 'Wait-ProcessNameCleared: returns true once the name is clear'
+    Wait-FakeNameCleared | Out-Null
+    Assert-True (Wait-ProcessIdsCleared -Ids @($stubborn.Id) -TimeoutSeconds 20) 'Wait-ProcessIdsCleared: true once the pid is gone'
 
-    # -- 8. Stop-ProcessTreeSafely does not leak $LASTEXITCODE. --
+    # -- 11. Drained=false actually propagates to the caller. --
+    # Shadow the drain helper so the failure is deterministic; without this the
+    # Drained field could be hard-coded $true and the suite would not notice.
+    function Wait-ProcessIdsCleared { param([int[]]$Ids = @(), [int]$TimeoutSeconds = 30) return $false }
+    $r = Invoke-DevenvUpdateConfiguration -DevenvPath $fakeExe -Arguments $hangArgs `
+        -TimeoutSeconds 2 -ProcessName $fakeName -DrainTimeoutSeconds 3
+    Assert-Equal $false $r.Drained 'Drained: a failed drain is reported, not swallowed'
+    . $libPath   # restore the real implementation
+    Remove-AllFakes
+    Wait-FakeNameCleared | Out-Null
+
+    # -- 12. Stop-ProcessTreeSafely does not leak $LASTEXITCODE. --
     # The 5.1 path shells out to taskkill, whose non-zero "not found" status
     # would otherwise ride out to the caller's exit code (the #1074 defect class).
     $done = Start-Fake -Arguments $quickArgs
@@ -206,12 +287,23 @@ try {
     $global:LASTEXITCODE = 0
     Stop-ProcessTreeSafely -Process $done -WaitSeconds 5 | Out-Null
     Assert-Equal 0 $LASTEXITCODE 'Stop-ProcessTreeSafely: leaves $LASTEXITCODE at 0'
+
+    # -- 13. The exit-code contract three scripts depend on. --
+    # Reinstall-Vsix.ps1 exits with this; bootstrap.ps1 and `mur upgrade` branch
+    # on it. Mutating the mapping reddens here instead of silently changing what
+    # CI does with a partly-failed install.
+    Assert-Equal 3 (Get-VsixReinstallExitCode -UpdateConfigIncomplete $true)  'exit contract: incomplete /updateconfiguration maps to 3'
+    Assert-Equal 0 (Get-VsixReinstallExitCode -UpdateConfigIncomplete $false) 'exit contract: a completed run maps to 0'
 }
 finally {
     Remove-AllFakes
-    Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20 | Out-Null
+    Wait-FakeNameCleared | Out-Null
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# The harness spawns `ping` grandchildren; leaking them would slowly fill a CI
+# runner's process table across repeated runs.
+Assert-Equal 0 (Get-LeakedPingCount) 'teardown: the harness leaks no ping processes'
 
 # -- Report --
 Write-Host ""

@@ -35,6 +35,20 @@ function Get-ProcessIdsByName {
     return @(Get-Process -Name $Name -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 }
 
+# Kill a process tree with `taskkill /T /F`. Split out from Stop-ProcessTreeSafely
+# so the Windows PowerShell 5.1 path can be tested directly: under pwsh the
+# reflection probe below always finds Kill([bool]), so this branch would
+# otherwise never execute in CI.
+function Stop-ProcessTreeViaTaskkill {
+    param([Parameter(Mandatory)][int]$Id)
+
+    & "$env:SystemRoot\System32\taskkill.exe" '/PID' $Id '/T' '/F' 2>&1 | Out-Null
+    # taskkill returns non-zero when the process is already gone. That is not an
+    # error here, and letting it linger would leak into the exit code of
+    # whichever script dot-sourced us — which is defect 3 of #1074.
+    $global:LASTEXITCODE = 0
+}
+
 # Terminate a process AND its descendants, then block until it is really gone.
 # Returns $true when the process exited within $WaitSeconds.
 function Stop-ProcessTreeSafely {
@@ -54,11 +68,7 @@ function Stop-ProcessTreeSafely {
         if ($killTree) {
             $killTree.Invoke($Process, @($true)) | Out-Null
         } else {
-            & "$env:SystemRoot\System32\taskkill.exe" '/PID' $Process.Id '/T' '/F' 2>&1 | Out-Null
-            # taskkill returns non-zero when the process is already gone. That
-            # is not an error here, and letting it linger would leak into the
-            # exit code of whichever script dot-sourced us.
-            $global:LASTEXITCODE = 0
+            Stop-ProcessTreeViaTaskkill -Id $Process.Id
         }
     } catch {
         # Raced with a natural exit, or access denied on a process owned by
@@ -68,84 +78,141 @@ function Stop-ProcessTreeSafely {
     try { return $Process.WaitForExit($WaitSeconds * 1000) } catch { return $true }
 }
 
-# Kill every process named $Name whose id is not in $ExcludePids, tree and all.
-# Returns the ids it killed.
+# Every descendant of $ParentId, to any depth, via the Win32_Process parent link.
 #
-# This is the belt to Stop-ProcessTreeSafely's braces: Kill($true) enumerates
-# descendants at kill time, so a grandchild that has already re-parented can be
-# missed. $ExcludePids carries the pre-start snapshot, so processes that were
-# running before we started are never touched.
-function Stop-NewProcessesByName {
+# MUST be called while the tree is still alive. Windows never re-parents an
+# orphan — when a parent dies, its children keep pointing at the now-dead pid —
+# so once the root is killed the ancestry is unrecoverable.
+#
+# Returns $null (not @()) when CIM is unavailable, so a caller can tell
+# "no descendants" apart from "could not tell".
+function Get-DescendantProcessIds {
+    param([Parameter(Mandatory)][int]$ParentId)
+
+    try {
+        $all = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop |
+            Select-Object -Property ProcessId, ParentProcessId)
+    } catch {
+        return $null
+    }
+
+    $found = New-Object System.Collections.Generic.List[int]
+    $frontier = New-Object System.Collections.Generic.List[int]
+    $frontier.Add($ParentId) | Out-Null
+    while ($frontier.Count -gt 0) {
+        $current = $frontier[0]
+        $frontier.RemoveAt(0)
+        foreach ($p in $all) {
+            if ($p.ParentProcessId -ne $current) { continue }
+            $childId = [int]$p.ProcessId
+            if ($childId -eq $current -or $found.Contains($childId)) { continue }
+            $found.Add($childId) | Out-Null
+            $frontier.Add($childId) | Out-Null
+        }
+    }
+    # Bare array, not `,$array` — see Get-ProcessIdsByName. Callers wrap with @().
+    return $found.ToArray()
+}
+
+# Kill the given pids, tree and all. Returns the ids it actually killed.
+#
+# $RequireName guards against pid reuse: between the ancestry snapshot and the
+# kill, a pid we recorded may have exited and been handed to something
+# unrelated. Killing by pid alone would then terminate an innocent process.
+function Stop-ProcessIds {
     param(
-        [Parameter(Mandatory)][string]$Name,
-        [int[]]$ExcludePids = @(),
+        [int[]]$Ids = @(),
+        [string]$RequireName,
         [int]$WaitSeconds = 30
     )
 
     $killed = New-Object System.Collections.Generic.List[int]
-    foreach ($p in @(Get-Process -Name $Name -ErrorAction SilentlyContinue)) {
-        if ($ExcludePids -contains $p.Id) { continue }
-        $killed.Add($p.Id) | Out-Null
+    foreach ($id in $Ids) {
+        $p = Get-Process -Id $id -ErrorAction SilentlyContinue
+        if (-not $p) { continue }
+        if ($RequireName -and $p.Name -ne $RequireName) { continue }
+        $killed.Add($id) | Out-Null
         Stop-ProcessTreeSafely -Process $p -WaitSeconds $WaitSeconds | Out-Null
     }
     # Bare array, not `,$array` — see Get-ProcessIdsByName. Callers wrap with @().
     return $killed.ToArray()
 }
 
-# Poll until no process named $Name (excluding $ExcludePids) is left, or the
-# timeout elapses. Returns $true when the name is clear.
+# Poll until none of $Ids is running any more, or the timeout elapses.
+# Returns $true when they are all gone.
 #
 # This poll is the actual guarantee the caller needs: it is what makes it
 # impossible for the *next* Reinstall-Vsix.ps1 invocation to trip the
 # "Visual Studio is running" guard on a process this one started.
-function Wait-ProcessNameCleared {
+function Wait-ProcessIdsCleared {
     param(
-        [Parameter(Mandatory)][string]$Name,
-        [int[]]$ExcludePids = @(),
+        [int[]]$Ids = @(),
         [int]$TimeoutSeconds = 30
     )
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ($true) {
-        $remaining = @(Get-Process -Name $Name -ErrorAction SilentlyContinue |
-            Where-Object { $ExcludePids -notcontains $_.Id })
-        if ($remaining.Count -eq 0) { return $true }
+        $alive = @($Ids | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+        if ($alive.Count -eq 0) { return $true }
         if ([DateTime]::UtcNow -ge $deadline) { return $false }
         Start-Sleep -Milliseconds 250
     }
 }
 
+# The Reinstall-Vsix.ps1 exit-code contract, in one place because three parties
+# depend on it: Reinstall-Vsix.ps1 emits it, and bootstrap.ps1 and `mur upgrade`
+# (UpgradeCommand.cs) both branch on it.
+#
+#   0  VSIX installed and `devenv /updateconfiguration` completed.
+#   3  VSIX installed, but /updateconfiguration did not complete — it timed out,
+#      or was skipped (duplicate installs detected, or devenv.exe missing).
+#
+# Install failures exit 1 at their failure site and never reach here.
+function Get-VsixReinstallExitCode {
+    param([bool]$UpdateConfigIncomplete)
+
+    if ($UpdateConfigIncomplete) { return 3 }
+    return 0
+}
+
 <#
 .SYNOPSIS
     Run `devenv /updateconfiguration` with a hard timeout that leaves nothing
-    running behind it.
+    of ours running behind it.
 
 .OUTPUTS
     [pscustomobject] with:
       TimedOut        [bool]  the process did not exit within $TimeoutSeconds
       ExitCode        [int?]  exit code, or $null if it could not be read
       DurationSeconds [double] wall-clock time, measured with a Stopwatch
-      KilledPids      [int[]] ids reaped by the post-timeout sweep
-      Drained         [bool]  no $ProcessName process was left behind
+      KilledPids      [int[]] ids reaped after the timeout (the launched process
+                              and its descendants)
+      Drained         [bool]  nothing we started is still running
+      ForeignPids     [int[]] processes named $ProcessName that we did NOT start
+                              and deliberately left alone
 
 .NOTES
     DurationSeconds is deliberately measured with a Stopwatch rather than
     ($proc.ExitTime - $proc.StartTime): ExitTime on a process that has not
     exited returns the 1601 epoch, which is how #1074 came to log "-13430263500.8s".
+
+    Only processes we can prove are ours — the launched process and its
+    descendants, captured from the live ancestry before the kill — are ever
+    terminated. An earlier revision swept every same-named process outside a
+    pre-start snapshot; because Reinstall-Vsix.ps1 refuses to run while any
+    devenv is alive, that snapshot is virtually always empty, which made the
+    sweep a "kill every devenv" with /F. A developer who opened Visual Studio
+    during the timeout window would have lost unsaved work. Anything we cannot
+    attribute to ourselves is now reported in ForeignPids instead of killed.
 #>
 function Invoke-DevenvUpdateConfiguration {
     param(
         [Parameter(Mandatory)][string]$DevenvPath,
         [string]$Arguments = '/updateconfiguration',
-        [int]$TimeoutSeconds = 120,
+        [ValidateRange(1, 86400)][int]$TimeoutSeconds = 120,
         [string]$ProcessName = 'devenv',
-        [int]$DrainTimeoutSeconds = 30
+        [ValidateRange(1, 86400)][int]$DrainTimeoutSeconds = 30
     )
-
-    # Snapshot first. Reinstall-Vsix.ps1 refuses to run while any devenv is
-    # alive, so in practice this is empty — but if a developer launches VS
-    # mid-run we must not kill their IDE.
-    $preexisting = @(Get-ProcessIdsByName -Name $ProcessName)
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $DevenvPath
@@ -158,16 +225,27 @@ function Invoke-DevenvUpdateConfiguration {
     $exited = $proc.WaitForExit($TimeoutSeconds * 1000)
 
     $killed = @()
+    $ours = @($proc.Id)
     $drained = $true
     if (-not $exited) {
+        # Capture ancestry BEFORE killing anything — see Get-DescendantProcessIds.
+        # $null means CIM could not answer; treat that as "no extra ids" rather
+        # than falling back to a name sweep that could hit someone's IDE.
+        $descendants = Get-DescendantProcessIds -ParentId $proc.Id
+        if ($null -ne $descendants) { $ours = @($ours) + @($descendants) }
+
         Stop-ProcessTreeSafely -Process $proc -WaitSeconds $DrainTimeoutSeconds | Out-Null
-        $killed = @(Stop-NewProcessesByName -Name $ProcessName -ExcludePids $preexisting -WaitSeconds $DrainTimeoutSeconds)
-        $drained = Wait-ProcessNameCleared -Name $ProcessName -ExcludePids $preexisting -TimeoutSeconds $DrainTimeoutSeconds
+        $killed = @(Stop-ProcessIds -Ids @($ours) -RequireName $ProcessName -WaitSeconds $DrainTimeoutSeconds)
+        $drained = Wait-ProcessIdsCleared -Ids @($ours) -TimeoutSeconds $DrainTimeoutSeconds
     }
     $sw.Stop()
 
     $exitCode = $null
     try { if ($proc.HasExited) { $exitCode = $proc.ExitCode } } catch { $exitCode = $null }
+
+    # Same-named processes that are not ours. Reported, never killed: on a
+    # developer's machine this is their IDE.
+    $foreign = @(Get-ProcessIdsByName -Name $ProcessName | Where-Object { @($ours) -notcontains $_ })
 
     return [pscustomobject]@{
         TimedOut        = (-not $exited)
@@ -175,5 +253,6 @@ function Invoke-DevenvUpdateConfiguration {
         DurationSeconds = [Math]::Round($sw.Elapsed.TotalSeconds, 1)
         KilledPids      = @($killed)
         Drained         = $drained
+        ForeignPids     = @($foreign)
     }
 }

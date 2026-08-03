@@ -90,7 +90,7 @@ It exits with:
 | --- | --- |
 | `0` | VSIX installed and `devenv /updateconfiguration` completed. |
 | `1` | Install failed (build, `vswhere`, `VSIXInstaller`, or VS already running). |
-| `3` | VSIX installed, but `devenv /updateconfiguration` timed out and was terminated. The extension is usable; the menu merge may need one manual VS launch. |
+| `3` | VSIX installed, but `devenv /updateconfiguration` did not complete — it timed out and was terminated, or it was skipped (duplicate installs detected, or `devenv.exe` missing). The extension is usable; the menu merge may need one manual VS launch. |
 
 `bootstrap.ps1` and `mur upgrade` both treat `3` as a warning and carry on.
 
@@ -104,14 +104,21 @@ On VS **18.8** (`18.8.12023.21` and later in that band), `devenv /updateconfigur
 never returns — it does the work but does not exit. VS 18.7 completes the same
 call in 27–99 s. `Reinstall-Vsix.ps1` therefore treats the timeout as an expected
 outcome on 18.8: it waits `-UpdateConfigurationTimeoutSec` (default 120), then
-terminates the whole `devenv` process tree, sweeps any `devenv` that appeared
-during its window, waits for the name to clear, and exits `3`.
+terminates the `devenv` it launched **and that process's descendants**, waits for
+them to exit, and exits `3`.
 
-That sweep matters. `Process.Kill()` with no argument kills only the top process
-and returns without waiting, so the second `devenv` that `/updateconfiguration`
-spawns used to survive and make every later run of this script fail its
-"Visual Studio is running" guard (issue #1074). The logic lives in
-`VsProcessLib.ps1` and is covered by `tests/vs_reactor/ci/VsProcessLib.Tests.ps1`
+That descendant kill matters. `Process.Kill()` with no argument kills only the
+top process and returns without waiting, so the second `devenv` that
+`/updateconfiguration` spawns used to survive and make every later run of this
+script fail its "Visual Studio is running" guard (issue #1074).
+
+Only processes the script can prove are its own are ever terminated. Ownership
+comes from the `Win32_Process` parent chain, captured while the tree is still
+alive — Windows does not re-parent orphans, so once the root is killed that
+ancestry is unrecoverable. Any *other* `devenv` (your open IDE) is reported as
+`Left running (not started by us)` and deliberately untouched; matching on the
+process name instead would `/F`-kill a developer's IDE mid-edit. The logic lives
+in `VsProcessLib.ps1` and is covered by `tests/vs_reactor/ci/VsProcessLib.Tests.ps1`
 (run by the *VS extension script tests* workflow).
 
 If you see `Visual Studio is running (PIDs: ...)` on a machine where you have no

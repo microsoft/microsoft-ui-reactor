@@ -153,14 +153,32 @@ try {
     }
 
     # -- 6. Reinstall-Vsix.ps1 exposes the documented exit codes. --
+    # The literal codes now live in Get-VsixReinstallExitCode (VsProcessLib.ps1)
+    # so bootstrap.ps1 and `mur upgrade` can't drift from the emitter; the 0/3
+    # mapping itself is asserted behaviourally in VsProcessLib.Tests.ps1 case 13.
+    # What must hold *here* is that the script's exit is actually driven by that
+    # helper rather than by an unconditional literal — a hard-coded `exit 0`
+    # would report success for a run whose pkgdef merge never happened.
     $reinstallAst = Get-Ast $reinstall
-    $exitCodes = @($reinstallAst.FindAll({
+    $exits = @($reinstallAst.FindAll({
         param($n) $n -is [System.Management.Automation.Language.ExitStatementAst]
     }, $true) | ForEach-Object {
         if ($null -ne $_.Pipeline) { $_.Pipeline.Extent.Text } else { '' }
     })
-    Assert-True ($exitCodes -contains '3') 'Reinstall-Vsix.ps1: signals the /updateconfiguration timeout with `exit 3`'
-    Assert-True ($exitCodes -contains '0') 'Reinstall-Vsix.ps1: signals full success with an explicit `exit 0`'
+    $contractExits = @($exits | Where-Object { $_ -match 'Get-VsixReinstallExitCode' })
+    Assert-True (@($contractExits).Count -ge 1) 'Reinstall-Vsix.ps1: its exit code is produced by Get-VsixReinstallExitCode'
+
+    # Every path that leaves the pkgdef merge unfinished must feed that helper.
+    # Regression guard for the two paths that used to fall through to a bare
+    # `exit 0` while the .OUTPUTS table claimed /updateconfiguration had run:
+    # duplicate installs, and a missing devenv.exe.
+    $reinstallText = Get-Content -LiteralPath $reinstall -Raw
+    $incompleteWrites = @([regex]::Matches($reinstallText, '\$updateConfigIncomplete\s*=')).Count
+    Assert-True ($incompleteWrites -ge 3) `
+        "Reinstall-Vsix.ps1: all three incomplete-merge paths set `$updateConfigIncomplete (found $incompleteWrites, expected >= 3)"
+
+    # The install-failure code is still a plain literal and must stay reachable.
+    Assert-True ($exits -contains '1') 'Reinstall-Vsix.ps1: install failures still exit 1'
 
     # bootstrap.ps1 must actually branch on 3 rather than lumping it into the
     # generic failure warning — otherwise it prints `[ok] VS extension installed`

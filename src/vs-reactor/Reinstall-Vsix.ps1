@@ -13,9 +13,10 @@
     Exit codes:
       0  VSIX installed and `devenv /updateconfiguration` completed.
       1  Install failed (build, vswhere, VSIXInstaller, or VS already running).
-      3  VSIX installed, but `devenv /updateconfiguration` did not complete —
-         it timed out and was terminated. The extension is usable; the menu
-         merge may need one manual VS launch.
+      3  VSIX installed, but `devenv /updateconfiguration` did not complete.
+         It timed out and was terminated, or it was skipped (duplicate
+         installs detected, or devenv.exe missing). The extension is usable;
+         the menu merge may need one manual VS launch.
 #>
 [CmdletBinding()]
 param(
@@ -24,7 +25,7 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
     [string]$VsInstanceId,
-    [int]$UpdateConfigurationTimeoutSec = 120
+    [ValidateRange(1, 86400)][int]$UpdateConfigurationTimeoutSec = 120
 )
 
 $ErrorActionPreference = 'Stop'
@@ -195,7 +196,9 @@ if ($installedFoldersArray.Count -eq 0) {
     Write-Host ("Installed v{0} at {1}" -f $m.PackageManifest.Metadata.Identity.Version, $folder.FullName)
 }
 
-$updateConfigTimedOut = $false
+# Tracks whether the pkgdef merge actually ran to completion. Every path that
+# leaves it unfinished must set this, or the exit-code contract below lies.
+$updateConfigIncomplete = $skipUpdateConfig
 if (-not $skipUpdateConfig) {
     Write-Host ""
     Write-Host "Running 'devenv /updateconfiguration' to force the menu/pkgdef merge synchronously."
@@ -205,7 +208,7 @@ if (-not $skipUpdateConfig) {
     if (Test-Path -LiteralPath $devenv) {
         $r = Invoke-DevenvUpdateConfiguration -DevenvPath $devenv -TimeoutSeconds $UpdateConfigurationTimeoutSec
         if ($r.TimedOut) {
-            $updateConfigTimedOut = $true
+            $updateConfigIncomplete = $true
             Write-Warning ("/updateconfiguration timed out after {0}s and was terminated (tree kill). This is the known Visual Studio 18.8 hang - see issue #1074." -f $UpdateConfigurationTimeoutSec)
             if ($r.KilledPids.Count -gt 0) {
                 Write-Warning ("  Reaped leftover devenv PIDs: {0}" -f ($r.KilledPids -join ', '))
@@ -213,12 +216,18 @@ if (-not $skipUpdateConfig) {
             if (-not $r.Drained) {
                 # The next invocation's "Visual Studio is running" guard will
                 # fail. Say so here rather than letting it look like a fresh bug.
-                Write-Warning "  A devenv process is still running after the sweep. Close it before re-running this script."
+                Write-Warning "  A devenv we started is STILL running after the kill. Close it before re-running this script."
+            }
+            if ($r.ForeignPids.Count -gt 0) {
+                # Deliberately left alone - we only ever kill what we started,
+                # so this is almost certainly the developer's own IDE.
+                Write-Warning ("  Left running (not started by us): devenv PIDs {0}." -f ($r.ForeignPids -join ', '))
             }
         }
         $exitText = if ($null -ne $r.ExitCode) { $r.ExitCode } else { 'unknown' }
         Write-Host ("  /updateconfiguration exit code: {0} ({1:0.0}s)" -f $exitText, $r.DurationSeconds)
     } else {
+        $updateConfigIncomplete = $true
         Write-Warning "devenv.exe not found at $devenv. Run /updateconfiguration manually before launching VS."
     }
     Write-Host ""
@@ -229,6 +238,6 @@ if (-not $skipUpdateConfig) {
 
 # See .OUTPUTS in the header for the exit-code contract. 3 means "the VSIX is
 # installed, but the pkgdef merge didn't finish" — callers warn instead of
-# claiming success, and instead of failing outright.
-if ($updateConfigTimedOut) { exit 3 }
-exit 0
+# claiming success, and instead of failing outright. The mapping lives in
+# VsProcessLib.ps1 because bootstrap.ps1 and `mur upgrade` both branch on it.
+exit (Get-VsixReinstallExitCode -UpdateConfigIncomplete $updateConfigIncomplete)

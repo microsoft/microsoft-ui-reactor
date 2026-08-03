@@ -226,12 +226,12 @@ public static class UpgradeCommand
             }
             proc.WaitForExit();
             // Reinstall-Vsix.ps1's exit-code contract (see its .OUTPUTS): 3 means
-            // the VSIX installed but `devenv /updateconfiguration` timed out and
-            // was terminated. That's a partial success, not a failure — report it
-            // on stdout so it doesn't read as a broken upgrade.
+            // the VSIX installed but `devenv /updateconfiguration` did not complete
+            // — it timed out, or was skipped. That's a partial success, not a
+            // failure — report it on stdout so it doesn't read as a broken upgrade.
             if (proc.ExitCode == 3)
             {
-                Console.WriteLine("  VS extension installed, but `devenv /updateconfiguration` timed out and was terminated.");
+                Console.WriteLine("  VS extension installed, but `devenv /updateconfiguration` did not complete (see the warnings above).");
                 Console.WriteLine("  Launch Visual Studio once to finish the menu merge.");
             }
             else if (proc.ExitCode != 0)
