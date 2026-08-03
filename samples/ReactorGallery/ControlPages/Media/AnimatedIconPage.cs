@@ -14,11 +14,6 @@ class AnimatedIconPage : Component
     // States all three sources below ship markers for.
     static readonly string[] States = ["Normal", "PointerOver", "Pressed"];
 
-    static Element Cell(string label, Element icon) =>
-        VStack(6,
-            Border(icon.Center()).Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6),
-            Caption(label).Foreground(Theme.SecondaryText).Center());
-
     public override Element Render()
     {
         // AnimatedIcon.Source is reference-compared: a source built inline would be a new
@@ -30,6 +25,30 @@ class AnimatedIconPage : Component
 
         var (stateIdx, setStateIdx) = UseState(0);
         var state = States[Math.Clamp(stateIdx, 0, States.Length - 1)];
+
+        // Tracked per cell (-1 = none) so hovering one icon doesn't animate its neighbours.
+        var (hoverIdx, setHoverIdx) = UseState(-1);
+        var (pressIdx, setPressIdx) = UseState(-1);
+
+        Element Cell(int index, string label, object source)
+        {
+            var cellState = pressIdx == index ? "Pressed"
+                : hoverIdx == index ? "PointerOver"
+                : state;
+
+            return VStack(6,
+                // The Background is load-bearing: a null-background element is hit-test
+                // invisible, so the pointer events below would never fire.
+                Border(AnimatedIcon(source).Size(32, 32)
+                        .Set(icon => XamlAnimatedIcon.SetState(icon, cellState))
+                        .Center())
+                    .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6)
+                    .OnPointerEntered((_, _) => setHoverIdx(index))
+                    .OnPointerExited((_, _) => { setHoverIdx(-1); setPressIdx(-1); })
+                    .OnPointerPressed((_, _) => setPressIdx(index))
+                    .OnPointerReleased((_, _) => setPressIdx(-1)),
+                Caption(label).Foreground(Theme.SecondaryText).Center());
+        }
 
         var (hovering, setHovering) = UseState(false);
         var (open, setOpen) = UseReducer(false);
@@ -59,24 +78,29 @@ class AnimatedIconPage : Component
             SampleCard("Play a state transition",
                 VStack(12,
                     HStack(20,
-                        Cell("Settings", AnimatedIcon(settings).Size(32, 32)
-                            .Set(icon => XamlAnimatedIcon.SetState(icon, state))),
-                        Cell("Find", AnimatedIcon(find).Size(32, 32)
-                            .Set(icon => XamlAnimatedIcon.SetState(icon, state))),
-                        Cell("Nav", AnimatedIcon(nav).Size(32, 32)
-                            .Set(icon => XamlAnimatedIcon.SetState(icon, state)))),
-                    Caption($"State: {state} — pick another value to play the transition into it.")
+                        Cell(0, "Settings", settings),
+                        Cell(1, "Find", find),
+                        Cell(2, "Nav", nav)),
+                    Caption($"Hover or press an icon to play a transition. Resting state: {state}.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 // `using static Factories` shadows the WinUI type, so SetState needs an alias:
 //   using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
-var settings = UseMemo(() => new AnimatedSettingsVisualSource());
-var states = new[] { ""Normal"", ""PointerOver"", ""Pressed"" };
-var (stateIdx, setStateIdx) = UseState(0);
-var state = states[Math.Clamp(stateIdx, 0, states.Length - 1)];
+var source = UseMemo(() => new AnimatedSettingsVisualSource());
+var (hovering, setHovering) = UseState(false);
+var (pressing, setPressing) = UseState(false);
+var state = pressing ? ""Pressed"" : hovering ? ""PointerOver"" : ""Normal"";
 
-AnimatedIcon(settings).Size(32, 32)
-    .Set(icon => XamlAnimatedIcon.SetState(icon, state))
+// The Background is load-bearing: a null-background element is hit-test invisible,
+// so the pointer events below would never fire.
+Border(AnimatedIcon(source).Size(32, 32)
+        .Set(icon => XamlAnimatedIcon.SetState(icon, state))
+        .Center())
+    .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6)
+    .OnPointerEntered((_, _) => setHovering(true))
+    .OnPointerExited((_, _) => { setHovering(false); setPressing(false); })
+    .OnPointerPressed((_, _) => setPressing(true))
+    .OnPointerReleased((_, _) => setPressing(false))
 // Each write of State plays the ""<from>To<to>"" marker segment — that transition IS the
 // animation; there is no Play(). UseMemo the source: Source is reference-compared, so a
 // fresh instance per render cancels the transition.
