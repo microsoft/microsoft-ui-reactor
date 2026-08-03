@@ -31,11 +31,6 @@ class AnimatedIconPage : Component
         // Tracked per cell (-1 = none) so hovering one icon doesn't animate its neighbours.
         var (hoverIdx, setHoverIdx) = UseState(-1);
         var (pressIdx, setPressIdx) = UseState(-1);
-        // Pointer-event tallies. A spurious PointerExited while the pointer is still over the
-        // control bounces the state back mid-transition, which looks exactly like "no animation";
-        // showing the counts makes that visible instead of leaving it to be inferred.
-        var (enters, bumpEnters) = UseReducer(0);
-        var (exits, bumpExits) = UseReducer(0);
 
         // Pointer-driven only. Mixing in a second driver -- an explicit "resting state" picker,
         // say -- makes hover a no-op whenever the two agree on a value, because writing State
@@ -59,8 +54,8 @@ class AnimatedIconPage : Component
                             .Set(icon => XamlAnimatedIcon.SetState(icon, cellState)),
                         TextBlock(label)),
                     () => { })
-                .OnPointerEntered((_, _) => { setHoverIdx(index); bumpEnters(n => n + 1); })
-                .OnPointerExited((_, _) => { setHoverIdx(-1); setPressIdx(-1); bumpExits(n => n + 1); })
+                .OnPointerEntered((_, _) => setHoverIdx(index))
+                .OnPointerExited((_, _) => { setHoverIdx(-1); setPressIdx(-1); })
                 .OnPointerPressed((_, _) => setPressIdx(index))
                 .OnPointerReleased((_, _) => setPressIdx(-1));
         }
@@ -102,8 +97,7 @@ class AnimatedIconPage : Component
                     Caption((hoverIdx < 0 && pressIdx < 0
                             ? "All three are resting on Normal — hover one to play its transition."
                             : $"{CellNames[pressIdx >= 0 ? pressIdx : hoverIdx]}: "
-                              + (pressIdx >= 0 ? "Pressed" : "PointerOver"))
-                            + $"    (entered {enters} · exited {exits})")
+                              + (pressIdx >= 0 ? "Pressed" : "PointerOver")))
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 // `using static Factories` shadows the WinUI type, so SetState needs an alias:

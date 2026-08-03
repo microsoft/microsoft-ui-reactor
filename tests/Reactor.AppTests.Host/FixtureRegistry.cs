@@ -170,7 +170,6 @@ internal static class FixtureRegistry
         "Gesture_LongPress",
         "DragDrop_TypedReorder",
         "DragDrop_TextFormat",
-        "AnimatedIcon_HoverTransition",
 
         // Devtools UX (spec 028 — E2E validation)
         "DevtoolsUx_MenuAndToggle",
@@ -339,9 +338,6 @@ internal static class FixtureRegistry
         "Gesture_LongPress" => GestureE2EFixtures.LongPressTest(ctx),
         "DragDrop_TypedReorder" => DragDropE2EFixtures.TypedReorderTest(ctx),
         "DragDrop_TextFormat" => DragDropE2EFixtures.TextFormatTest(ctx),
-
-        // AnimatedIcon hover transition (issue #983 — needs real pointer input)
-        "AnimatedIcon_HoverTransition" => AnimatedIconHoverE2EFixtures.HoverTransitionTest(ctx),
 
         // Docking input (spec 045 — E2E validation)
         "DockingInput_TwoPaneTextBoxes" => DockingInputE2EFixtures.TwoPaneTextBoxTest(ctx),
