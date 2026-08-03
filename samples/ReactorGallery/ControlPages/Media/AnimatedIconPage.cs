@@ -31,32 +31,38 @@ class AnimatedIconPage : Component
         // Tracked per cell (-1 = none) so hovering one icon doesn't animate its neighbours.
         var (hoverIdx, setHoverIdx) = UseState(-1);
         var (pressIdx, setPressIdx) = UseState(-1);
+        // Pointer-event tallies. A spurious PointerExited while the pointer is still over the
+        // control bounces the state back mid-transition, which looks exactly like "no animation";
+        // showing the counts makes that visible instead of leaving it to be inferred.
+        var (enters, bumpEnters) = UseReducer(0);
+        var (exits, bumpExits) = UseReducer(0);
 
-        // Pointer- and focus-driven only. Mixing in a second driver -- an explicit "resting
-        // state" picker, say -- makes hover a no-op whenever the two agree on a value, because
-        // writing State the value it already holds plays no segment. That card is separate.
+        // Pointer-driven only. Mixing in a second driver -- an explicit "resting state" picker,
+        // say -- makes hover a no-op whenever the two agree on a value, because writing State
+        // the value it already holds plays no segment. That card is separate for that reason.
         //
-        // A Button rather than a bare Border: it is unambiguously hit-testable, it looks
-        // interactive, and it is reachable by Tab. Hover is a mouse-only affordance, so the
-        // focus arms below are what make this demo work for keyboard users at all.
+        // Shape matters, and this one is copied from the menu sample below rather than invented:
+        // an icon nested in a layout panel inside a Button is the only arrangement observed to
+        // play its hover transition. The same source and the same Normal->PointerOver write did
+        // not animate as a Button's direct content, nor inside a Border with .Center() on the
+        // icon -- in both of those the state changed, pointer enter/exit counts stayed balanced,
+        // the control was not remounted and the mount write landed, and it still sat still.
         Element Cell(int index, string label, object source)
         {
             var cellState = pressIdx == index ? "Pressed"
                 : hoverIdx == index ? "PointerOver"
                 : "Normal";
 
-            return VStack(6,
-                Button(AnimatedIcon(source).Size(32, 32)
+            return Button(
+                    HStack(8,
+                        AnimatedIcon(source).Size(20, 20)
                             .Set(icon => XamlAnimatedIcon.SetState(icon, cellState)),
-                        () => { })
-                    .Size(72, 56)
-                    .OnPointerEntered((_, _) => setHoverIdx(index))
-                    .OnPointerExited((_, _) => { setHoverIdx(-1); setPressIdx(-1); })
-                    .OnPointerPressed((_, _) => setPressIdx(index))
-                    .OnPointerReleased((_, _) => setPressIdx(-1))
-                    .OnGotFocus((_, _) => setHoverIdx(index))
-                    .OnLostFocus((_, _) => { setHoverIdx(-1); setPressIdx(-1); }),
-                Caption(label).Foreground(Theme.SecondaryText).Center());
+                        TextBlock(label)),
+                    () => { })
+                .OnPointerEntered((_, _) => { setHoverIdx(index); bumpEnters(n => n + 1); })
+                .OnPointerExited((_, _) => { setHoverIdx(-1); setPressIdx(-1); bumpExits(n => n + 1); })
+                .OnPointerPressed((_, _) => setPressIdx(index))
+                .OnPointerReleased((_, _) => setPressIdx(-1));
         }
 
         var (stateIdx, setStateIdx) = UseState(0);
@@ -93,10 +99,11 @@ class AnimatedIconPage : Component
                         Cell(0, "Settings", settings),
                         Cell(1, "Find", find),
                         Cell(2, "Nav", nav)),
-                    Caption(hoverIdx < 0 && pressIdx < 0
-                            ? "All three are resting on Normal — hover or Tab to one to play its transition."
+                    Caption((hoverIdx < 0 && pressIdx < 0
+                            ? "All three are resting on Normal — hover one to play its transition."
                             : $"{CellNames[pressIdx >= 0 ? pressIdx : hoverIdx]}: "
                               + (pressIdx >= 0 ? "Pressed" : "PointerOver"))
+                            + $"    (entered {enters} · exited {exits})")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 // `using static Factories` shadows the WinUI type, so SetState needs an alias:
@@ -106,18 +113,19 @@ var (hovering, setHovering) = UseState(false);
 var (pressing, setPressing) = UseState(false);
 var state = pressing ? ""Pressed"" : hovering ? ""PointerOver"" : ""Normal"";
 
-// A Button, not a bare Border: unambiguously hit-testable, and reachable by Tab.
-// Hover is mouse-only, so the focus arms are what make this work from the keyboard.
-Button(AnimatedIcon(source).Size(32, 32)
-            .Set(icon => XamlAnimatedIcon.SetState(icon, state)),
+// Nest the icon in a layout panel inside the Button. As a Button's direct content, or
+// inside a Border with .Center() on the icon, the same Normal->PointerOver write did not
+// play its transition -- the state changed and the icon sat still.
+Button(
+        HStack(8,
+            AnimatedIcon(source).Size(20, 20)
+                .Set(icon => XamlAnimatedIcon.SetState(icon, state)),
+            TextBlock(""Settings"")),
         () => { })
-    .Size(72, 56)
     .OnPointerEntered((_, _) => setHovering(true))
     .OnPointerExited((_, _) => { setHovering(false); setPressing(false); })
     .OnPointerPressed((_, _) => setPressing(true))
     .OnPointerReleased((_, _) => setPressing(false))
-    .OnGotFocus((_, _) => setHovering(true))
-    .OnLostFocus((_, _) => { setHovering(false); setPressing(false); })
 // Each write of State plays the ""<from>To<to>"" marker segment — that transition IS the
 // animation; there is no Play(). UseMemo the source: Source is reference-compared, so a
 // fresh instance per render cancels the transition.
@@ -125,9 +133,8 @@ Button(AnimatedIcon(source).Size(32, 32)
 
             SampleCard("Set the state directly",
                 VStack(12,
-                    Border(AnimatedIcon(picker).Size(32, 32)
-                            .Set(icon => XamlAnimatedIcon.SetState(icon, state))
-                            .Center())
+                    Border(HStack(AnimatedIcon(picker).Size(32, 32)
+                                .Set(icon => XamlAnimatedIcon.SetState(icon, state))))
                         .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6),
                     Caption($"State: {state} — pick another value to play the transition into it.")
                         .Foreground(Theme.SecondaryText)),
@@ -152,6 +159,7 @@ AnimatedIcon(picker).Size(32, 32)
                     Button(
                         HStack(8,
                             AnimatedIcon(menuNav).Size(20, 20)
+                                .IsHitTestVisible(false)
                                 .Set(icon => XamlAnimatedIcon.SetState(icon, menuState)),
                             TextBlock(open ? "Close" : "Menu")),
                         () => setOpen(o => !o))

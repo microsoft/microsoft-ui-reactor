@@ -336,6 +336,12 @@ internal static class AnimatedIconStateFixtures
 
             await Harness.Render();
             var directBefore = H.FindControl<XamlAnimatedIcon>(_ => true);
+            // The mount write matters as much as the update: AnimatedIcon hard-cuts on the
+            // *first* State it is ever given and only animates subsequent ones. If mounting
+            // inside a Button's content slot skips the setter, the user's first hover becomes
+            // that first write -- a hard cut -- and only the second interaction animates.
+            // That is precisely the reported symptom: click animates, hover does not.
+            var directMountState = directBefore is null ? null : XamlAnimatedIcon.GetState(directBefore);
             H.ClickButton("BumpDirect");
             await Harness.Render();
             var directAfter = H.FindControl<XamlAnimatedIcon>(_ => true);
@@ -360,6 +366,7 @@ internal static class AnimatedIconStateFixtures
 
             await Harness.Render();
             var nestedBefore = H.FindControl<XamlAnimatedIcon>(_ => true);
+            var nestedMountState = nestedBefore is null ? null : XamlAnimatedIcon.GetState(nestedBefore);
             H.ClickButton("BumpNested");
             await Harness.Render();
             var nestedAfter = H.FindControl<XamlAnimatedIcon>(_ => true);
@@ -382,6 +389,18 @@ internal static class AnimatedIconStateFixtures
                 directBefore is not null && ReferenceEquals(directBefore, directAfter));
             H.Check("AnimIconInButton_NestedContentUpdatedInPlace",
                 nestedBefore is not null && ReferenceEquals(nestedBefore, nestedAfter));
+
+            // The mount write must land in *both* content shapes. A missing one here is not a
+            // cosmetic gap: it silently converts the user's first interaction into the icon's
+            // first-ever State set, which AnimatedIcon renders as a hard cut.
+            H.Check("AnimIconInButton_NestedMountWroteState", nestedMountState == "Normal");
+            H.Check("AnimIconInButton_DirectMountWroteState", () =>
+                directMountState == "Normal"
+                    ? true
+                    : throw new global::System.InvalidOperationException(
+                        $"direct Button content mounted with State='{directMountState ?? "<null>"}', "
+                        + "expected 'Normal' — the mount setter did not run, so the first hover "
+                        + "becomes the icon's first State write and hard-cuts instead of animating"));
         }
     }
 }
