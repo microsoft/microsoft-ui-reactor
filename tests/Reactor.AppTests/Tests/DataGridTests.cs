@@ -190,11 +190,19 @@ public class DataGridTests : AppTestBase
 
     /// <summary>
     /// Regression for the SuppressNextLostFocusCommit guard's one-shot lifetime: an editing-Tab into a
-    /// NON-editable next cell reopens no editor (IsEditing ends false), so the guard must still be
-    /// consumed — otherwise it lingers on the persistent state and silently suppresses the NEXT
+    /// NON-editable next cell reopens no editor (IsEditing ends false), so the guard must not be left
+    /// standing — otherwise it lingers on the persistent state and silently suppresses the NEXT
     /// legitimate focus-out commit, losing that edit. Here: edit row-1 LastName (its next tab-order
     /// cell, Salary, is read-only), press Tab, then edit a different row's cell and move focus off the
     /// grid (click the anchor button). That second edit must commit.
+    ///
+    /// <para>Deliberately asserted on the OUTCOME rather than on the mechanism, because the mechanism
+    /// has already changed once. It originally armed the guard unconditionally on the Tab key and
+    /// relied on the Tab's own LostFocus to consume it; the claim gate is now narrowed to landings
+    /// that can actually reopen an editor, so on this read-only landing the guard is never armed in
+    /// the first place. Both satisfy this test, and that is the point — the invariant it defends is
+    /// "the next legitimate commit still lands", which outlives either implementation. A version
+    /// written against the consume-it path would have had to be rewritten rather than merely re-run.</para>
     /// </summary>
     [E2eRetry(3)]
     [TestMethod]
@@ -419,12 +427,18 @@ public class DataGridTests : AppTestBase
 
     /// <summary>
     /// The backward twin of <see cref="Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit"/>.
-    /// The <c>SuppressNextLostFocusCommit</c> guard is armed on the Tab KEY, deliberately without
-    /// looking at the direction (#987), so Shift+Tab arms it exactly like Tab — and must therefore
-    /// consume it exactly like Tab when the cell it lands on has no editor. Here: edit row-1
-    /// FirstName (its PREVIOUS tab-order cell, Id, is read-only), press Shift+Tab, then edit a
-    /// different row's cell and move focus off the grid. That second edit must commit — if the
-    /// guard leaked, it silently swallows the focus-out commit and 'Bobby' is lost.
+    /// Here: edit row-1 FirstName (its PREVIOUS tab-order cell, Id, is read-only), press Shift+Tab,
+    /// then edit a different row's cell and move focus off the grid. That second edit must commit —
+    /// if the guard were left standing, it silently swallows the focus-out commit and 'Bobby' is lost.
+    ///
+    /// <para>The claim gate reads the captured chord, so the direction is what decides which cell is
+    /// examined: backward from FirstName is read-only Id, forward is editable LastName. That makes
+    /// this test a direction oracle as well as a lifetime one — see the AssertNoEditorSettles call
+    /// below, which is the half that fails if the modifier is dropped between the routed handler and
+    /// the deferred dispatch (#987). The lifetime half is asserted on the OUTCOME, not the mechanism:
+    /// the guard was originally armed on the Tab key regardless of landing and relied on being
+    /// consumed, and is now not armed at all when the landing cell can reopen no editor. Both satisfy
+    /// this test, which is why it survived that change without an edit.</para>
     /// </summary>
     [E2eRetry(3)]
     [TestMethod]
