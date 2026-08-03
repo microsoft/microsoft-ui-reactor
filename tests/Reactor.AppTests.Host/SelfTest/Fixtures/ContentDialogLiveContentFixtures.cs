@@ -49,12 +49,11 @@ internal static class ContentDialogProbe
         foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot))
         {
             // Popup.Child is not enumerated by VisualTreeHelper.GetChildrenCount,
-            // so descend into it explicitly before recursing.
-            if (popup.Child is DependencyObject child)
-            {
-                var found = Walk<WinUI.ContentDialog>(child, cd => cd.Title as string == title);
-                if (found is not null) return found;
-            }
+            // so descend into it explicitly before recursing. It is already a
+            // UIElement, so the only thing being screened out here is null.
+            if (popup.Child is null) continue;
+            var found = Walk<WinUI.ContentDialog>(popup.Child, cd => cd.Title as string == title);
+            if (found is not null) return found;
         }
         return null;
     }
@@ -254,6 +253,62 @@ public static class ContentDialogLiveContentFixtures
             {
                 dialog.Hide();
                 await ContentDialogProbe.WaitForClosed(H, "LiveProps");
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Optional button labels converge on null — a render that drops
+    //  SecondaryButtonText/CloseButtonText has to remove the button, or it
+    //  becomes unremovable once shown and Update stops matching Mount.
+    // ────────────────────────────────────────────────────────────────────
+    internal class ContentDialog_ClearsOptionalButtonsOnNull(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (trimmed, setTrimmed) = ctx.UseState(false);
+                return VStack(
+                    TextBlock("anchor"),
+                    ContentDialog(
+                        "OptionalLabels",
+                        VStack(Button("Trim", () => setTrimmed(true))),
+                        "OK") with
+                    {
+                        IsOpen = true,
+                        SecondaryButtonText = trimmed ? null : "Maybe",
+                        CloseButtonText = trimmed ? null : "Cancel",
+                    }
+                );
+            });
+
+            var dialog = await ContentDialogProbe.WaitForOpen(H, "OptionalLabels");
+            H.Check("ContentDialogLive_OptionalLabels_Opened", dialog is not null);
+            if (dialog is null) return;
+
+            try
+            {
+                await Harness.WaitFor(() => dialog.SecondaryButtonText == "Maybe");
+                H.Check("ContentDialogLive_OptionalLabels_InitialSecondary", dialog.SecondaryButtonText == "Maybe");
+                H.Check("ContentDialogLive_OptionalLabels_InitialClose", dialog.CloseButtonText == "Cancel");
+
+                var clicked = await ContentDialogProbe.WaitAndClick(dialog, "Trim");
+                H.Check("ContentDialogLive_OptionalLabels_ClickLanded", clicked);
+                await Harness.WaitFor(() => string.IsNullOrEmpty(dialog.SecondaryButtonText));
+
+                // WinUI hides each optional button when its label is null-or-empty,
+                // so an empty label is the observable "button is gone" state.
+                H.Check("ContentDialogLive_OptionalLabels_SecondaryCleared",
+                    string.IsNullOrEmpty(dialog.SecondaryButtonText));
+                H.Check("ContentDialogLive_OptionalLabels_CloseCleared",
+                    string.IsNullOrEmpty(dialog.CloseButtonText));
+            }
+            finally
+            {
+                dialog.Hide();
+                await ContentDialogProbe.WaitForClosed(H, "OptionalLabels");
             }
         }
     }

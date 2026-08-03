@@ -107,13 +107,16 @@ internal static class OverlayLifecycle
         if (dialog.DefaultButton != n.DefaultButton) dialog.DefaultButton = n.DefaultButton;
         if (dialog.IsPrimaryButtonEnabled != n.IsPrimaryButtonEnabled) dialog.IsPrimaryButtonEnabled = n.IsPrimaryButtonEnabled;
         if (dialog.IsSecondaryButtonEnabled != n.IsSecondaryButtonEnabled) dialog.IsSecondaryButtonEnabled = n.IsSecondaryButtonEnabled;
-        // Null means "leave WinUI's default" on the mount path — pushing null
-        // here would blank the button rather than restore the default, so only
-        // ever write a value forward.
-        if (n.SecondaryButtonText is not null && dialog.SecondaryButtonText != n.SecondaryButtonText)
-            dialog.SecondaryButtonText = n.SecondaryButtonText;
-        if (n.CloseButtonText is not null && dialog.CloseButtonText != n.CloseButtonText)
-            dialog.CloseButtonText = n.CloseButtonText;
+        // Optional labels converge on null: the element's null means "no such
+        // button", so a render that drops one has to clear the text or the
+        // button would be unremovable once shown. Normalizing to "" — WinUI's
+        // own DP default, and what the mount path leaves behind when it skips
+        // the write — keeps Update(o, n) landing exactly where Mount(n) would,
+        // and keeps the comparison from thrashing null against "".
+        var secondary = n.SecondaryButtonText ?? string.Empty;
+        if (dialog.SecondaryButtonText != secondary) dialog.SecondaryButtonText = secondary;
+        var close = n.CloseButtonText ?? string.Empty;
+        if (dialog.CloseButtonText != close) dialog.CloseButtonText = close;
     }
 
     /// <summary>

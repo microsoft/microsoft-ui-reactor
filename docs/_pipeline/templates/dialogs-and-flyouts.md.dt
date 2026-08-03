@@ -86,6 +86,9 @@ reconciles the dialog the same way it reconciles the rest of the tree:
 - **Properties re-sync.** `Title`, `IsPrimaryButtonEnabled`,
   `DefaultButton`, and the button labels track the element on every
   render, so they can depend on state that lives inside the dialog.
+  `SecondaryButtonText` and `CloseButtonText` are nullable, and null
+  means "no such button" — dropping one back to null on a later render
+  removes the button, the same as never setting it.
 - **`IsOpen` is fully controlled.** Setting `IsOpen = false` closes the
   dialog, exactly as `true` opens it. The close runs the normal dismissal
   path, so `OnClosed` still fires with `ContentDialogResult.None`.
