@@ -1484,7 +1484,7 @@ Full keyboard grid navigation following ARIA grid patterns:
 |-----|--------|
 | Arrow keys | Move focus between cells |
 | Tab | `EditMode.Cell`: commit the open editor and move to the next editable cell. `EditMode.Row`: cycle real keyboard focus among the row's open editors, wrapping past the last back to the first — see below |
-| Shift+Tab¹ | The same traversal in reverse. **Not yet wired** — currently behaves like Tab and moves *forward*; see footnote |
+| Shift+Tab | The same traversal in reverse |
 | Enter | Start editing focused cell (or commit edit and move down). In `EditMode.Row`, commits the whole row |
 | Escape | Cancel editing |
 | F2 | Start editing (alternative to Enter) |
@@ -1493,14 +1493,6 @@ Full keyboard grid navigation following ARIA grid patterns:
 | Page Up/Down | Scroll by viewport height |
 | Home/End | Move to first/last column |
 | Ctrl+Home/End | Move to first/last row |
-
-¹ **Shift+Tab is not yet wired.** The grid's KeyDown path forwards a bare `VirtualKey` and drops
-modifier state, so Shift+Tab is currently indistinguishable from Tab and moves *forward*. Tracked
-in [#987](https://github.com/microsoft/microsoft-ui-reactor/issues/987). The downstream half is
-already in place — `FocusPrevRowEditColumn` walks backward and arms the same editor-focus request
-as its forward twin — so closing #987 is upstream plumbing, not new focus work. **When #987 lands,
-delete this footnote and the `¹` marker; the Shift+Tab row's description is already correct for the
-wired behaviour.**
 
 Arrow-key navigation moves a *logical* cursor and paints a roving focus ring; the grid itself
 is the single tab stop. **Editors are the exception** — opening a cell or row editor moves real
