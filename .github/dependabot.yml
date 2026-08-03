@@ -16,6 +16,8 @@ updates:
   # those projects (e.g. GitHub.Copilot.SDK, YamlDotNet) are therefore backfilled
   # by .github/workflows/windows-nuget-updates.yml on a windows-latest runner.
   # Dependabot still owns every Linux-restorable package.
+    cooldown:
+      default-days: 7
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
