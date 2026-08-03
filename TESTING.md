@@ -120,9 +120,10 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 ### Fixture registration is two-place — and what that does to name searches
 
 Selftest: add the fixture to `AllFixtures` **and** to the `Create()` switch in
-`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. E2E: add it to `AllFixtures`
-**and** to the `Build` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Miss the
-second place and `--list-fixtures` reports a name the run cannot produce.
+`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`; miss the second and
+`--list-fixtures` reports a name the run cannot produce. E2E: add it to `AllFixtures` **and**
+to the `Build` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs` — `--list-fixtures`
+is selftest-only, so nothing warns you about the E2E half.
 
 That split also makes searching for a TAP name unsafe unless you search the whole tree. TAP
 carries two kinds of name and they live in different files: *fixture* names (registry only, and
@@ -261,29 +262,30 @@ Before converting a fixed wait you find that way, re-read the `WaitFor` short-ci
 >
 > An **earlier** measurement of the same change showed a 14.4 % win. It was wrong: the "legacy" arm it compared against still subscribed the frame counter before checking the opt-out flag, so the baseline carried the continuous-frame cost and the win was mostly the instrument. If you re-attempt this, verify the control arm is byte-for-byte the shipping path before believing any number it produces.
 
-### The two `CenterOnCurrent` fixtures fail as a pair — for two different reasons
+### The two `CenterOnCurrent` fixtures fail — or skip — as a pair, for two different reasons
 
 `CenterOnCurrent_UsesCursorMonitor` (`Phase1WindowingFixtures.cs`) and
 `PersistPlacement_FallbackWhenEmpty` (`Phase3WindowingFixtures.cs`) are **selftest** fixtures,
 not unit tests — don't go hunting for them in `Reactor.Tests`. They are the *same assertion
 twice*: both open a `WindowStartPosition.CenterOnCurrent` window and check its centre lands in
-the work area of the monitor under the mouse, so they fail as a **pair** — seeing only one of
+the work area of the monitor under the mouse, so they move as a **pair** — seeing only one of
 them is the surprise, not seeing both. Neither is a render-timing race, so `WaitFor` will not
 help. **Two different mechanisms in two different environments — check which one you are in
 before theorising:**
 
 - **Non-interactive session (CI agents, RDP-disconnected, locked, headless).** `GetCursorPos`
   returns **ACCESS_DENIED (err 5)** and never writes its `out` param, so the cursor monitor
-  cannot be determined at all. This is a **100% deterministic failure, not a flake** — the pair
-  simply cannot pass there. Confirmed by direct P/Invoke probe on two separate machines. Fixed
-  by skipping rather than asserting when the cursor is undeterminable; if you see these fail,
-  probe first: `GetCursorPos(out p)` returning `False` with `LastError=5` means you are in this
-  case and the fixtures are innocent. Note `System.Windows.Forms.Cursor.Position` **hides**
-  this — it surfaces the uninitialised `(0,0)` instead of the failure.
+  cannot be determined at all — a **100% deterministic** condition, not a flake. Confirmed by
+  direct P/Invoke probe on two separate machines. Both fixtures now `H.Skip` here rather than
+  assert, so the expected symptom on such a machine is a **skip, not a red**; a red means this
+  is not your mechanism. Note `System.Windows.Forms.Cursor.Position` **hides** the condition —
+  it surfaces the uninitialised `(0,0)` instead of the failure, so probe `GetCursorPos(out p)`
+  directly (`False` / `LastError=5`) rather than through it.
 - **Interactive multi-monitor box.** A TOCTOU: `GetCursorPos` is sampled *before*
   `OpenAndSettle`, so a cursor crossing a monitor boundary while the window opens invalidates
   the captured work rect. Intermittent, and **structurally impossible on a single display** —
   if you are on one virtual desktop with no boundary to cross, this is not your mechanism.
+  This is the only one of the two that still produces a red.
 
 Do not assume "quiet machine ⇒ passes": that holds only in the interactive case.
 
@@ -417,9 +419,8 @@ Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segme
 
 `tools/coverage/run-coverage.ps1` (`-UnitOnly`, `-SkipBuild`) drives the recipe above and writes
 `coverage/merged.cobertura.xml`. It **aborts before the merge step on any test failure**, so a
-known flake — `CenterOnCurrent_UsesCursorMonitor` or `PersistPlacement_FallbackWhenEmpty`, both
-selftest fixtures covered in §2 above — leaves you with both legs collected and no merged file.
-Merge them by hand:
+red selftest fixture — the `CenterOnCurrent` pair in §2 above is the usual one — leaves you with
+both legs collected and no merged file. Merge them by hand:
 
 ```powershell
 dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xml --output coverage\merged.cobertura.xml --output-format cobertura

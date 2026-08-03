@@ -211,12 +211,12 @@ state with**. A broken instrument is trusted by default, so the last one bites h
 - **An oracle proves nothing where its healthy and broken branches coincide.** If a live
   value is `0`, `NaN`, empty, or already equal to what it's compared against, the
   comparison is a tautology regardless of the product. Log the input, not just the verdict
-  — mutation testing cannot catch this, because the defect is upstream of the code it
-  perturbs.
-- **A no-match is not a measurement until a positive control shows the probe can match.**
-  Zero from a broken grep and zero from a clean repo are the same character on screen.
-  Applies to greps, `gh --jq`, CI queries — anything whose output you act on. Renames make
-  today's identifier structurally blind to older revisions.
+  — mutation testing cannot catch an environment-derived oracle, because the defect is
+  upstream of the code it perturbs.
+- **A no-match is not a measurement** until a positive control — same probe, same wrapping,
+  same file set — shows it can match. Zero from a broken grep and zero from a clean repo are
+  the same character on screen. Applies to greps, `gh --jq`, CI queries. Renames make today's
+  identifier structurally blind to older revisions.
 - **Self-consistency is not currency.** Counts from one stale checkout corroborate each
   other perfectly. Pin measurements to a commit OID and compare against a live remote ref.
 - **Green runs corroborate a fix; a mechanism establishes it.** At a 25% failure rate,
