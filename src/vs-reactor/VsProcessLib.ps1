@@ -234,8 +234,13 @@ function Invoke-DevenvUpdateConfiguration {
         # nothing can attribute it to us, and killing it by name would mean
         # killing a developer's IDE. That case is *reported* instead, via
         # Drained, and Reinstall-Vsix.ps1 turns it into an actionable warning.
-        $recordedAt = [DateTime]::Now
         $tree = @(Get-ProcessDescendantIds -RootPid $proc.Id -IncludeRoot)
+        # Timestamp AFTER the walk, never before. Every pid in $tree was already
+        # running when the walk observed it, so it necessarily started at or
+        # before this instant — whereas a timestamp taken first would be earlier
+        # than a descendant spawned *during* the walk, and Stop-ProcessIdsSafely
+        # would then skip that pid as "too young" and leave the stray behind.
+        $recordedAt = [DateTime]::Now
 
         Stop-ProcessTreeSafely -Process $proc -WaitSeconds $DrainTimeoutSeconds | Out-Null
         $killed = @(Stop-ProcessIdsSafely -ProcessIds $tree -ExpectedName $ProcessName -NotStartedAfter $recordedAt -WaitSeconds $DrainTimeoutSeconds)

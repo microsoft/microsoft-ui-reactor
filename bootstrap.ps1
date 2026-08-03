@@ -604,7 +604,11 @@ Write-Host ''
 Write-Host 'Visual Studio preview (if VS installed): View -> Other Windows -> Reactor Preview'
 
 # Every hard failure above exits via Fail (exit 1), so reaching here means
-# success. Say so explicitly: any best-effort step that shelled out to a native
-# command leaves its code in $LASTEXITCODE, and PowerShell propagates that to
-# the caller when a -File script falls off the end (issue #1074).
+# success. Say so explicitly: bootstrap.yml runs this script *in-process* and
+# checks $LASTEXITCODE on the next line, and $LASTEXITCODE is a global — so a
+# code left behind by any best-effort step that shelled out to a native command
+# survives to that check (issue #1074). Measured: in-process, a leaked 7 is
+# still readable afterwards; `pwsh -File` returns 0 on fall-through and does
+# not reproduce it. This line makes the outcome independent of which one the
+# caller used.
 exit 0
