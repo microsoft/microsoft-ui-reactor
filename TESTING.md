@@ -47,6 +47,23 @@ timestamp-preserving restores can all make a mutation look tested when it was ab
 elsewhere. After restoring, require `git status --porcelain` to match the pre-mutation state
 rather than treating a subsequent passing test as proof of the restore.
 
+### Judging whether a flake fix worked
+
+N clean runs only support a fix if `(1-p)^N` is small for an observed failure rate with
+`0 < p < 1`. At `p = 0.25`, three consecutive passes happen **42%** of the time, and roughly
+`N = 10` is needed for ~95% confidence. Synthetic-input E2E tests for timing defects often have
+`p` fixed at `0` or `1` by queue ordering; reruns then have zero statistical power, so
+mutation-test the detector instead. Prefer a *mechanism* that explains the observed failure text
+over any number of green runs; run counts corroborate a cause, they don't establish one.
+
+**Budget increases only refute one class of race.** Raising a poll/wait budget and still failing
+rules out "we sampled too early". It does not rule out an event that never fires, an ordering
+race decided before the first poll, or a lost wakeup — all budget-insensitive. The sound
+conclusion is "not a *too-short-poll* problem", which is narrower than "not a race". Don't let
+the narrower finding promote a fixture into an "environmental" bucket it then stops being
+investigated in; confirm that label by running it on a quiet machine with a known
+window-manager state, and only apply it if it goes clean there.
+
 ---
 
 ## 1. Unit tests (`tests/Reactor.Tests`) — xUnit
@@ -100,6 +117,33 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 ```
 
+### Fixture registration is two-place — and what that does to name searches
+
+Selftest: add the fixture to `AllFixtures` **and** to the `Create()` switch in
+`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. E2E: add it to `AllFixtures`
+**and** to the `Build` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Miss the
+second place and `--list-fixtures` reports a name the run cannot produce.
+
+That split also makes searching for a TAP name unsafe unless you search the whole tree. TAP
+carries two kinds of name and they live in different files: *fixture* names (registry only, and
+the class they map to is often spelled differently — `CenterOnCurrent_UsesCursorMonitor` →
+`CenterOnCurrentUsesCursorMonitor`) and *check* names (string literals in `H.Check(...)` inside
+`Fixtures/`). Neither location is a superset:
+
+| probe | blind spot |
+|---|---|
+| grep `SelfTest/Fixtures/` only | fixture names whose class name differs |
+| grep `SelfTestFixtureRegistry.cs` only | check-only names — e.g. `WindowLevel_RuntimeFlip_Topmost`, `TabViewFill_Mounted`, `ExitTr_Removed` are all registry=0 |
+| **grep `tests/Reactor.AppTests.Host/` whole** | **none — use this** |
+
+Both narrow probes return a *confident zero*, which reads as "this fixture doesn't exist" and
+invites re-attributing a real flake as branch-local or renamed. Both directions were hit during
+one flakiness audit, and the check-only example above is the assertion at the centre of issue
+#927 — a rule that silently fails on the most-discussed flake in the audit is worse than no
+rule, because its user has no reason to doubt the answer. Two probes with complementary blind
+spots don't compose into coverage unless you run both, and if you're running both the
+whole-tree grep is cheaper than remembering why.
+
 ### Selftest waiting patterns — `Render` vs `WaitFor` vs `WaitForIdleAsync`
 
 Selftests run against a real WinUI dispatcher: most user-visible work (template realization, layout, content-presenter materialization, control intrinsic `Loaded` handlers) lands on *later* dispatcher waves, not synchronously with the mount call. Always wait on a concrete idle signal — never `Task.Delay(<n>)` — and pick the right primitive for the host you're driving:
@@ -147,6 +191,8 @@ Rules of thumb:
   - *"X did not happen"* / *"fired exactly once"* / *"state is unchanged"* — e.g. `count == 0`, `CycleCountForTests == 1`, `IsExpanded` still true. Converting these to `WaitFor` makes them **vacuous**: they pass at t=0 without ever giving a violation time to appear. Keep an explicit `Render(N)` window and assert after it.
   - Conversely, `WaitFor` is correct for *positive eventual* conditions — a control appears, a bit flips, a callback lands — because the predicate is false until the transition completes.
   - The test: **can the predicate be true before the action you are testing?** If yes, either keep the fixed window or strengthen the predicate so it cannot (e.g. gate on `sv.VerticalOffset < 1` as well as the row text, so a still-realized row can't satisfy it while scrolled away).
+- **Converting a fixed delay to `WaitFor` is not a safe default — the remediation can itself be the vacuous one.** Because `WaitFor` establishes its predicate *at the moment it returns* and nothing more, the conversion is correct for an *eventual* assertion (false at t=0, converges) and silently vacuous for a *survival* assertion — "still visible", "still expanded" — which is true at t=0 and short-circuits at zero elapsed time. Before converting, ask: **if the predicate is true the instant `WaitFor` is called, does the next assertion still mean what I think it means?**
+- **Ask the same of a precondition `throw`.** Report-and-return when the fixture's other checks remain meaningful; throw loudly when the fixture is structurally invalid (a renamed reflection target) and they do not.
 - **Converting a gate can strip a settle a *later* assertion relied on.** If a following `H.Check` depended on the removed `Render(N)` rather than on its own wait, it will start failing. Give each check its own `WaitFor` instead of letting it inherit someone else's delay.
 - **`host.WaitForIdleAsync()` for isolated hosts.** If you constructed your own `ReactorHost`, neither `Harness.Render` nor `Harness.WaitFor` knows about it.
 - **Save and restore `ReactorApp.ActiveHostInternal`** when using an isolated host so subsequent fixtures see the shared host they expect (`var prev = ReactorApp.ActiveHostInternal; try { … } finally { if (prev is not null) ReactorApp.ActiveHostInternal = prev; }`).
@@ -214,6 +260,32 @@ Before converting a fixed wait you find that way, re-read the `WaitFor` short-ci
 > Interleaved on one machine, alternating arms, three pairs: **≈0–3 %**, inside the run-to-run noise. The reason it doesn't pay is the same reason it looks attractive — subscribing to `CompositionTarget.Rendering` makes the UI thread produce frames continuously, so the frame arm buys back most of the delay it saves. And the delay is not arbitrary padding: it is a documented guard against fixture transitions outpacing the compositor and faulting natively, which is what the truncated run above looks like.
 >
 > An **earlier** measurement of the same change showed a 14.4 % win. It was wrong: the "legacy" arm it compared against still subscribed the frame counter before checking the opt-out flag, so the baseline carried the continuous-frame cost and the win was mostly the instrument. If you re-attempt this, verify the control arm is byte-for-byte the shipping path before believing any number it produces.
+
+### The two `CenterOnCurrent` fixtures fail as a pair — for two different reasons
+
+`CenterOnCurrent_UsesCursorMonitor` (`Phase1WindowingFixtures.cs`) and
+`PersistPlacement_FallbackWhenEmpty` (`Phase3WindowingFixtures.cs`) are **selftest** fixtures,
+not unit tests — don't go hunting for them in `Reactor.Tests`. They are the *same assertion
+twice*: both open a `WindowStartPosition.CenterOnCurrent` window and check its centre lands in
+the work area of the monitor under the mouse, so they fail as a **pair** — seeing only one of
+them is the surprise, not seeing both. Neither is a render-timing race, so `WaitFor` will not
+help. **Two different mechanisms in two different environments — check which one you are in
+before theorising:**
+
+- **Non-interactive session (CI agents, RDP-disconnected, locked, headless).** `GetCursorPos`
+  returns **ACCESS_DENIED (err 5)** and never writes its `out` param, so the cursor monitor
+  cannot be determined at all. This is a **100% deterministic failure, not a flake** — the pair
+  simply cannot pass there. Confirmed by direct P/Invoke probe on two separate machines. Fixed
+  by skipping rather than asserting when the cursor is undeterminable; if you see these fail,
+  probe first: `GetCursorPos(out p)` returning `False` with `LastError=5` means you are in this
+  case and the fixtures are innocent. Note `System.Windows.Forms.Cursor.Position` **hides**
+  this — it surfaces the uninitialised `(0,0)` instead of the failure.
+- **Interactive multi-monitor box.** A TOCTOU: `GetCursorPos` is sampled *before*
+  `OpenAndSettle`, so a cursor crossing a monitor boundary while the window opens invalidates
+  the captured work rect. Intermittent, and **structurally impossible on a single display** —
+  if you are on one virtual desktop with no boundary to cross, this is not your mechanism.
+
+Do not assume "quiet machine ⇒ passes": that holds only in the interactive case.
 
 ### Running selftests under NativeAOT
 
@@ -291,6 +363,18 @@ or `1`) for that environment and tool version. If the defect is *when* state is 
 *whether* input arrived, prove the detector with a mutation before counting repeated green E2E
 runs as evidence.
 
+### Don't co-locate the E2E and selftest tiers
+
+CI runs them as separate jobs on separate runners today, and that isolation is load-bearing
+rather than incidental. E2E drives real pointer input, foregrounds windows and changes Z-order;
+several selftest fixtures read live desktop state (the two `CenterOnCurrent`-based ones read the
+cursor's monitor; `UseIsCovered_RerendersOnZOrderChange` reads Z-order). Running E2E first on one
+machine and then `--self-test` took a clean unmodified tree from 0 to 8 failures — reproducible,
+and the standing repro for those fixtures. So if you consolidate jobs to save runner minutes, or
+run both tiers locally back-to-back, expect selftest reds that are an artefact of tier ordering
+and not of your change. Fix the fixtures' desktop-state dependence before merging the jobs, not
+after.
+
 ---
 
 ## Code coverage
@@ -328,6 +412,18 @@ dotnet-coverage merge unit.cobertura.xml selftest.cobertura.xml \
 ```
 
 Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segment if you used the default platform from `Directory.Build.props`. The `coverage.settings.xml` file in the repo root controls which modules are included and excludes generated code (`obj/`, `*.g.cs`) and test-host scaffolding exercised only by the winapp/E2E runner.
+
+### When `run-coverage.ps1` aborts before the merge
+
+`tools/coverage/run-coverage.ps1` (`-UnitOnly`, `-SkipBuild`) drives the recipe above and writes
+`coverage/merged.cobertura.xml`. It **aborts before the merge step on any test failure**, so a
+known flake — `CenterOnCurrent_UsesCursorMonitor` or `PersistPlacement_FallbackWhenEmpty`, both
+selftest fixtures covered in §2 above — leaves you with both legs collected and no merged file.
+Merge them by hand:
+
+```powershell
+dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xml --output coverage\merged.cobertura.xml --output-format cobertura
+```
 
 ### Running coverage in CI
 

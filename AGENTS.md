@@ -201,133 +201,31 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
 
 ### Checks that actually prove something
 
-Applies to anything whose output you would act on: xUnit assertions, selftest
-`H.Check`s, and the ad-hoc commands you verify state with — log greps, freshness
-checks, CI queries. The failure mode is identical in all three, and the last one is
-the one that bites hardest, because a broken instrument is trusted by default.
+Applies to xUnit assertions, selftest `H.Check`s, **and the ad-hoc commands you verify
+state with**. A broken instrument is trusted by default, so the last one bites hardest.
 
-- **Every assertion must fail if its target code is deleted / no-op'd / returns default.**
-  Bare non-null, "no throw" on a `void`, and always-emitted shape markers are vacuous.
-  Use throw-position/arity, differential-isolation (`Assert.NotEqual` between two variants
-  differing only by the setter), structural counts, reflection `DeclaringType`, or
-  corrupt-then-recompute oracles. **Copilot review does not catch vacuous assertions** —
-  run the `.github/skills/pr-review/` multi-model dimension (different model family, high
-  reasoning) on the *final* commit and fix every finding.
-- **A value oracle proves nothing where its healthy and broken branches coincide.**
-  This is the shared failure behind deleting a "redundant" guard and citing a passing but
-  non-differential check as an oracle. Before either, identify where both branches produce
-  the same value; preserve a guard or use a structural/differential oracle that cannot.
-- **Mutation testing does not reach an assertion whose *inputs* are environment-derived.**
-  It perturbs the code under test, so it only exposes an oracle whose value depends on that
-  code. `double preOffset = sv.VerticalOffset;` … `Math.Abs(sv.VerticalOffset - preOffset)
-  <= 3.0` passes identically in a healthy and a degraded environment when both sides are
-  `0.00` — no product mutation separates them. **Log the input once, not just the verdict:**
-  if a value read from live state is `0`, `NaN`, empty, or equal to the thing it is compared
-  against, the assertion is a tautology regardless of what the product does. Same shape as a
-  `-1` "not found" sentinel satisfying `bodyOn > bodyOff * 3` (`-1 > -3`) — prefer
-  `double.NaN`, which makes every comparison false. The bug is upstream of the comparison.
-- **The obvious remediation can itself be the vacuous one.** `Harness.WaitFor(P)` establishes
-  P *at the moment it returns* and nothing more — it evaluates P **before** its first
-  `Render`. So converting a fixed delay to a `WaitFor` is correct for an *eventual* assertion
-  (false at t=0, converges) and silently vacuous for a *survival* assertion ("still visible"),
-  which is true at t=0 and short-circuits at zero elapsed time. Before converting, ask: **if
-  the predicate is true the instant `WaitFor` is called, does the next assertion still mean
-  what I think it means?** Same question for a precondition `throw`: report-and-return when
-  the fixture's other checks remain meaningful, throw loudly when it is structurally invalid
-  (a renamed reflection target) and they do not.
-- **This applies to your verification tooling, not just to tests.** A check that cannot fail
-  loudly will eventually report something false with total confidence, and the direction is
-  arbitrary — it can manufacture an alarm or an all-clear, and nobody audits the one that says
-  what they hoped. A malformed `gh --jq` expression exits non-zero to stderr while a pipeline
-  reading stdout sees an empty string indistinguishable from a legitimate zero. Prefer
-  parameterised GraphQL (`-f`/`-F`, no interpolation), or fetch JSON and filter in the host
-  language so a parse failure throws. **The tell is implausible uniformity:** an identical
-  value across subjects that have nothing in common is a bug report about the instrument.
-  The unifying question for a test and a tool alike is the same — **could this have come out
-  the other way?** If the answer is "no — it always passes", that is the finding, not
-  confirmation. **A no-match result is not a measurement** until a positive control proves
-  the same probe, wrapping, and file set can produce a match.
-- **Historical searches need historical vocabulary.** A rename or unit change makes a grep for
-  the current identifier/value structurally blind to earlier revisions. Before trusting a zero,
-  establish when the identifier first existed; use `git log --follow -p -- <file>` or pickaxe
-  searches over the changed value rather than projecting today's name backward through history.
-- **Self-consistency does not prove currency.** Counts from one stale checkout can corroborate
-  each other perfectly. Attach the commit OID and timestamp to measurements and compare against
-  a live remote ref when identity matters. `git rev-parse` identifies a commit; a tree OID only
-  identifies content and can remain unchanged after a message-only amend.
-- **Fixture registration is two-place.** Selftest: add to `AllFixtures` **and** the
-  `Create()` switch in `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`.
-  E2E: add to `AllFixtures` **and** the `Build` switch in
-  `tests/Reactor.AppTests.Host/FixtureRegistry.cs`.
-- **…which makes searching for a TAP name unsafe unless you search the whole tree.** TAP
-  carries two kinds of name and they live in different files: *fixture* names (registry only,
-  and the class they map to is often spelled differently — `CenterOnCurrent_UsesCursorMonitor`
-  → `CenterOnCurrentUsesCursorMonitor`) and *check* names (string literals in `H.Check(...)`
-  inside `Fixtures/`). Neither location is a superset:
+- **An assertion must fail when its target is broken.** Delete or no-op the code and
+  confirm it reddens. Bare non-null, "no throw" on a `void`, and always-emitted shape
+  markers are vacuous. Prefer differential oracles, structural counts, or
+  corrupt-then-recompute.
+- **An oracle proves nothing where its healthy and broken branches coincide.** If a live
+  value is `0`, `NaN`, empty, or already equal to what it's compared against, the
+  comparison is a tautology regardless of the product. Log the input, not just the verdict
+  — mutation testing cannot catch this, because the defect is upstream of the code it
+  perturbs.
+- **A no-match is not a measurement until a positive control shows the probe can match.**
+  Zero from a broken grep and zero from a clean repo are the same character on screen.
+  Applies to greps, `gh --jq`, CI queries — anything whose output you act on. Renames make
+  today's identifier structurally blind to older revisions.
+- **Self-consistency is not currency.** Counts from one stale checkout corroborate each
+  other perfectly. Pin measurements to a commit OID and compare against a live remote ref.
+- **Green runs corroborate a fix; a mechanism establishes it.** At a 25% failure rate,
+  three clean passes happen 42% of the time.
 
-  | probe | blind spot |
-  |---|---|
-  | grep `SelfTest/Fixtures/` only | fixture names whose class name differs |
-  | grep `SelfTestFixtureRegistry.cs` only | check-only names — e.g. `WindowLevel_RuntimeFlip_Topmost`, `TabViewFill_Mounted`, `ExitTr_Removed` are all registry=0 |
-  | **grep `tests/Reactor.AppTests.Host/` whole** | **none — use this** |
-
-  Both narrow probes return a *confident zero*, which reads as "this fixture doesn't exist"
-  and invites re-attributing a real flake as branch-local or renamed. Both directions were hit
-  during one flakiness audit, and the check-only example above is the assertion at the centre
-  of issue #927 — a rule that silently fails on the most-discussed flake in the audit is worse
-  than no rule, because its user has no reason to doubt the answer. Two probes with
-  complementary blind spots don't compose into coverage unless you run both, and if you're
-  running both the whole-tree grep is cheaper than remembering why.
-- **Coverage** starts from `tools/coverage/run-coverage.ps1` (`-UnitOnly`, `-SkipBuild`);
-  output `coverage/merged.cobertura.xml`. The script **aborts before the merge step on any
-  test failure** — if a known flake trips it (`CenterOnCurrent_UsesCursorMonitor`,
-  `PersistPlacement_FallbackWhenEmpty`), merge the legs manually with
-  `dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xml --output coverage\merged.cobertura.xml --output-format cobertura`.
-  Both are **selftest** fixtures (`Phase1WindowingFixtures.cs` / `Phase3WindowingFixtures.cs`),
-  not unit tests — don't go hunting for them in `Reactor.Tests`. They are the
-  *same assertion twice*: both open a `WindowStartPosition.CenterOnCurrent` window and check
-  its centre lands in the work area of the monitor under the mouse, so they fail as a **pair**
-  — seeing only one of them is the surprise, not seeing both. Neither is a render-timing race,
-  so `WaitFor` will not help. **Two different mechanisms in two different environments — check
-  which one you are in before theorising:**
-  - **Non-interactive session (CI agents, RDP-disconnected, locked, headless).**
-    `GetCursorPos` returns **ACCESS_DENIED (err 5)** and never writes its `out` param, so the
-    cursor monitor cannot be determined at all. This is a **100% deterministic failure, not a
-    flake** — the pair simply cannot pass there. Confirmed by direct P/Invoke probe on two
-    separate machines. Fixed by skipping rather than asserting when the cursor is
-    undeterminable; if you see these fail, probe first:
-    `GetCursorPos(out p)` → `False` / `LastError=5` means you are in this case and the fixtures
-    are innocent. Note `System.Windows.Forms.Cursor.Position` **hides** this — it surfaces the
-    uninitialised `(0,0)` instead of the failure.
-  - **Interactive multi-monitor box.** A TOCTOU: `GetCursorPos` is sampled *before*
-    `OpenAndSettle`, so a cursor crossing a monitor boundary while the window opens invalidates
-    the captured work rect. Intermittent, and **structurally impossible on a single display** —
-    if you are on one virtual desktop with no boundary to cross, this is not your mechanism.
-  Do not assume "quiet machine ⇒ passes": that holds only in the interactive case.
-- **Don't co-locate the E2E and selftest tiers.** CI runs them as separate jobs on separate
-  runners today, and that isolation is load-bearing rather than incidental. E2E drives real
-  pointer input, foregrounds windows and changes Z-order; several selftest fixtures read live
-  desktop state (the two `CenterOnCurrent`-based ones above read the cursor's monitor;
-  `UseIsCovered_RerendersOnZOrderChange` reads Z-order). Running E2E first on one machine and
-  then `--self-test` took a clean unmodified tree from 0 to 8 failures — reproducible, and the
-  standing repro for those fixtures. So if you consolidate jobs to save runner minutes, or run
-  both tiers locally back-to-back, expect selftest reds that are an artefact of tier ordering
-  and not of your change. Fix the fixtures' desktop-state dependence before merging the jobs,
-  not after.
-- **Judging whether a flake fix worked.** N clean runs only supports a fix if `(1-p)^N` is
-  small for an observed failure rate with `0 < p < 1`. At `p = 0.25`, three consecutive
-  passes happen **42%** of the time, and roughly `N = 10` is needed for ~95% confidence.
-  Synthetic-input E2E tests for timing defects often have `p` fixed at `0` or `1` by queue
-  ordering; reruns then have zero statistical power, so mutation-test the detector instead.
-  Prefer a *mechanism* that explains the observed failure text over any number of green runs;
-  run counts corroborate a cause, they don't establish one.
-- **Budget increases only refute one class of race.** Raising a poll/wait budget and still
-  failing rules out "we sampled too early". It does not rule out an event that never fires,
-  an ordering race decided before the first poll, or a lost wakeup — all budget-insensitive.
-  The sound conclusion is "not a *too-short-poll* problem", which is narrower than "not a
-  race". Don't let the narrower finding promote a fixture into an "environmental" bucket it
-  then stops being investigated in; confirm that label by running it on a quiet machine with
-  a known window-manager state, and only apply it if it goes clean there.
+**When to stop.** One positive control per instrument is enough. Verify the assertion that
+gates correctness — not the verifier of the verifier. If you are writing a check about a
+check, or correcting the wording of a comment rather than the behaviour of code, you are
+past the point of return: stop and ship.
 
 ### Analyzers, CLI checks, docs & public API
 
