@@ -81,6 +81,27 @@ flips it back when the user dismisses.
 | `IsPrimaryButtonEnabled` | Disable the primary action without removing it. |
 | `IsSecondaryButtonEnabled` | Same for the secondary. |
 
+### The dialog is live while it is open
+
+An open dialog is not a snapshot. Every render of the owning component
+reconciles the dialog the same way it reconciles the rest of the tree:
+
+- **Content re-renders in place.** State updated from inside the dialog —
+  a `TextBox` the user is typing into, a counter its own button
+  increments — re-renders immediately. Because the content subtree is
+  patched rather than remounted, transient control state (focus, caret,
+  scroll position, text selection) survives the update.
+- **Properties re-sync.** `Title`, `IsPrimaryButtonEnabled`,
+  `DefaultButton`, and the button labels track the element on every
+  render, so they can depend on state that lives inside the dialog.
+- **`IsOpen` is fully controlled.** Setting `IsOpen = false` closes the
+  dialog, exactly as `true` opens it. The close runs the normal dismissal
+  path, so `OnClosed` still fires with `ContentDialogResult.None`.
+- **Content is unmounted on close.** Effect cleanups and
+  [`UseEffect`](effects.md) teardowns inside the dialog run when it
+  closes — including when the component that owns the dialog element
+  unmounts while the dialog is still showing.
+
 ### Three-button dialogs
 
 The three-button shape (`Primary` + `Secondary` + `Close`) is the
@@ -170,6 +191,11 @@ class DialogGatedPrimaryDemo : Component
 ```
 
 ![Dialog with TextBox; primary disabled until non-empty](images/dialogs-and-flyouts/dialog-gated-primary.png)
+
+The gate works because the dialog's properties re-sync on every render:
+the `TextBox` inside the content updates the state, the component
+re-renders, and `IsPrimaryButtonEnabled` follows on the already-open
+dialog without it flickering closed.
 
 > **Caveat:** `ContentDialog.ShowAsync` is single-instance per `XamlRoot` — the WinUI
 > control raises `Show another ContentDialog before closing the previous`

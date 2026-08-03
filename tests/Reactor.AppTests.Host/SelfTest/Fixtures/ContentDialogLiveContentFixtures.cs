@@ -79,14 +79,31 @@ internal static class ContentDialogProbe
         => Walk<WinUI.Button>(root, b => b.Content is string s && s == label);
 
     /// <summary>Invokes a button living inside the dialog subtree via its automation peer.</summary>
-    internal static void ClickButton(DependencyObject root, string label)
+    internal static bool ClickButton(DependencyObject root, string label)
     {
         var btn = FindButton(root, label);
-        if (btn is null || !btn.IsEnabled) return;
+        if (btn is null || !btn.IsEnabled) return false;
         var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
         var invoke = (Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
             peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke);
         invoke.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// Pumps render passes until the button is realized and enabled, then invokes it.
+    /// A dialog's content presenter realizes over several dispatcher waves after the
+    /// dialog object itself appears in the popup tree, so clicking straight after
+    /// <see cref="WaitForOpen"/> can silently hit nothing. Returns whether it clicked.
+    /// </summary>
+    internal static async Task<bool> WaitAndClick(DependencyObject root, string label, int maxPasses = 25)
+    {
+        for (int i = 0; i < maxPasses; i++)
+        {
+            if (FindButton(root, label) is { IsEnabled: true }) return ClickButton(root, label);
+            await Harness.Render();
+        }
+        return ClickButton(root, label);
     }
 }
 
@@ -150,10 +167,12 @@ public static class ContentDialogLiveContentFixtures
 
             try
             {
+                await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "dialog-count:0") is not null);
                 H.Check("ContentDialogLive_Rerender_InitialText",
                     ContentDialogProbe.FindText(dialog, "dialog-count:0") is not null);
 
-                ContentDialogProbe.ClickButton(dialog, "Bump");
+                var clicked = await ContentDialogProbe.WaitAndClick(dialog, "Bump");
+                H.Check("ContentDialogLive_Rerender_ClickLanded", clicked);
                 await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "dialog-count:1") is not null);
 
                 // The #1069 regression: before the fix the dialog kept showing
@@ -165,7 +184,7 @@ public static class ContentDialogLiveContentFixtures
                     ContentDialogProbe.FindText(dialog, "dialog-count:0") is null);
 
                 // A second update proves the path stays live, not just first-flush.
-                ContentDialogProbe.ClickButton(dialog, "Bump");
+                await ContentDialogProbe.WaitAndClick(dialog, "Bump");
                 await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "dialog-count:2") is not null);
                 H.Check("ContentDialogLive_Rerender_SecondUpdate_#1069",
                     ContentDialogProbe.FindText(dialog, "dialog-count:2") is not null);
@@ -215,10 +234,19 @@ public static class ContentDialogLiveContentFixtures
             {
                 H.Check("ContentDialogLive_Props_InitiallyDisabled", !dialog.IsPrimaryButtonEnabled);
                 H.Check("ContentDialogLive_Props_InitialButtonText", dialog.PrimaryButtonText == "OK");
+                await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "not-ready") is not null);
+                H.Check("ContentDialogLive_Props_InitialContent",
+                    ContentDialogProbe.FindText(dialog, "not-ready") is not null);
 
-                ContentDialogProbe.ClickButton(dialog, "MakeReady");
+                var clicked = await ContentDialogProbe.WaitAndClick(dialog, "MakeReady");
+                H.Check("ContentDialogLive_Props_ClickLanded", clicked);
                 await Harness.WaitFor(() => dialog.IsPrimaryButtonEnabled);
 
+                // Proves the click landed and the render reached the dialog, so
+                // the property checks below are not vacuously passing on a
+                // fixture that simply never re-rendered.
+                H.Check("ContentDialogLive_Props_ContentReacted",
+                    ContentDialogProbe.FindText(dialog, "ready") is not null);
                 H.Check("ContentDialogLive_Props_EnabledFlipped_#1069", dialog.IsPrimaryButtonEnabled);
                 H.Check("ContentDialogLive_Props_ButtonTextFlipped_#1069", dialog.PrimaryButtonText == "Save");
             }
@@ -253,7 +281,8 @@ public static class ContentDialogLiveContentFixtures
 
             try
             {
-                ContentDialogProbe.ClickButton(dialog, "CloseMe");
+                var clicked = await ContentDialogProbe.WaitAndClick(dialog, "CloseMe");
+                H.Check("ContentDialogLive_FallingEdge_ClickLanded", clicked);
                 var closed = await ContentDialogProbe.WaitForClosed(H, "FallingEdge");
 
                 // Before the fix IsOpen=false was inert — the dialog stayed up.
@@ -328,11 +357,13 @@ public static class ContentDialogLiveContentFixtures
 
             try
             {
+                await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "cleanup-child") is not null);
                 H.Check("ContentDialogLive_TypeSwap_InitialContent",
                     ContentDialogProbe.FindText(dialog, "cleanup-child") is not null);
                 H.Check("ContentDialogLive_TypeSwap_NoCleanupBeforeSwap", s_cleanupCount == 0);
 
-                ContentDialogProbe.ClickButton(dialog, "Swap");
+                var clicked = await ContentDialogProbe.WaitAndClick(dialog, "Swap");
+                H.Check("ContentDialogLive_TypeSwap_ClickLanded", clicked);
                 await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "swapped-content") is not null);
 
                 H.Check("ContentDialogLive_TypeSwap_NewContentShown",
@@ -387,16 +418,25 @@ public static class ContentDialogLiveContentFixtures
 
             H.Check("ContentDialogLive_Teardown_NoCleanupWhileMounted", s_cleanupCount == 0);
 
-            ContentDialogProbe.ClickButton(dialog, "Drop");
+            var clicked = await ContentDialogProbe.WaitAndClick(dialog, "Drop");
+            H.Check("ContentDialogLive_Teardown_ClickLanded", clicked);
             var closed = await ContentDialogProbe.WaitForClosed(H, "Teardown");
             await Harness.WaitFor(() => s_cleanupCount == 1);
 
+            // Proves the owner actually left the tree, so the teardown checks
+            // below are not vacuously passing on a fixture that never unmounted.
+            H.Check("ContentDialogLive_Teardown_OwnerUnmounted", H.FindText("(gone)") is not null);
             H.Check("ContentDialogLive_Teardown_DialogHidden", closed);
             H.Check("ContentDialogLive_Teardown_ContentCleanupRan", s_cleanupCount == 1);
             // Teardown is not a dismissal: OnClosed belongs to the user, not the
             // unmount. The handler clears the placeholder tag before hiding so
             // the tag-routed callback stays silent.
             H.Check("ContentDialogLive_Teardown_OnClosedNotRaised", s_closedCount == 0);
+
+            // Never leave a dialog up — WinUI allows only one per XamlRoot, so a
+            // leak here would fail (or crash) every later dialog fixture.
+            ContentDialogProbe.FindOpen(H, "Teardown")?.Hide();
+            await ContentDialogProbe.WaitForClosed(H, "Teardown");
         }
     }
 }
