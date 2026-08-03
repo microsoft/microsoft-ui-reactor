@@ -12,10 +12,16 @@
 .OUTPUTS
     Exit codes:
       0  VSIX installed and `devenv /updateconfiguration` completed.
-      1  Install failed (build, vswhere, VSIXInstaller, or VS already running).
-      3  VSIX installed, but `devenv /updateconfiguration` did not complete —
-         it timed out and was terminated. The extension is usable; the menu
-         merge may need one manual VS launch.
+      1  The script did not reach a good state and needs developer action —
+         build / vswhere / VSIXInstaller failure, VS already running, or
+         duplicate installs detected (VS silently disables all of them).
+      3  VSIX installed, but `devenv /updateconfiguration` did not complete:
+         it timed out and was terminated, or devenv.exe was not found. The
+         extension is usable; the menu merge needs one manual VS launch.
+
+    Every path that skips or abandons `/updateconfiguration` exits 3, and every
+    path that leaves work for the developer exits 1 — so `0` really does mean
+    "installed and merged", which is what bootstrap.ps1 prints [ok] for.
 #>
 [CmdletBinding()]
 param(
@@ -24,6 +30,10 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
     [string]$VsInstanceId,
+    # Upper bound is a sanity rail, not a policy: anything past an hour is a
+    # typo. 0 or negative would make the very first WaitForExit time out and
+    # kill devenv instantly.
+    [ValidateRange(1, 3600)]
     [int]$UpdateConfigurationTimeoutSec = 120
 )
 
@@ -182,6 +192,7 @@ Write-Host ""
 Write-Host "=== Result ==="
 $installedFoldersArray = @($installedFolders)
 $skipUpdateConfig = $false
+$installIncomplete = $false
 if ($installedFoldersArray.Count -eq 0) {
     Write-Warning "Install reported success (VSIXInstaller exit 0) but no Reactor.VsExtension folder appeared within 30s. Proceeding with /updateconfiguration anyway. If VS still doesn't show the menus, inspect %TEMP%\dd_VSIXInstaller_*.log."
 } elseif ($installedFoldersArray.Count -gt 1) {
@@ -189,8 +200,12 @@ if ($installedFoldersArray.Count -eq 0) {
     $installedFoldersArray | ForEach-Object { Write-Warning "  $($_.FullName)" }
     Write-Warning "Skipping /updateconfiguration; clean up duplicates and re-run."
     $skipUpdateConfig = $true
-} else {
-    $folder = $installedFoldersArray[0]
+    # Not a success: the extension is installed but very likely disabled, and
+    # only a human can resolve which copy to keep. Exiting 0 here would make
+    # bootstrap.ps1 print [ok] over the exact failure mode this script exists
+    # to prevent.
+    $installIncomplete = $true
+} else {    $folder = $installedFoldersArray[0]
     [xml]$m = Get-Content (Join-Path $folder.FullName 'extension.vsixmanifest')
     Write-Host ("Installed v{0} at {1}" -f $m.PackageManifest.Metadata.Identity.Version, $folder.FullName)
 }
@@ -220,6 +235,8 @@ if (-not $skipUpdateConfig) {
         Write-Host ("  /updateconfiguration exit code: {0} ({1:0.0}s)" -f $exitText, $r.DurationSeconds)
     } else {
         Write-Warning "devenv.exe not found at $devenv. Run /updateconfiguration manually before launching VS."
+        # Same observable outcome as a timeout: installed, not merged.
+        $updateConfigTimedOut = $true
     }
     Write-Host ""
     Write-Host "Next steps:"
@@ -227,8 +244,10 @@ if (-not $skipUpdateConfig) {
     Write-Host "  2. View -> Other Windows -> Reactor Preview."
 }
 
-# See .OUTPUTS in the header for the exit-code contract. 3 means "the VSIX is
-# installed, but the pkgdef merge didn't finish" — callers warn instead of
-# claiming success, and instead of failing outright.
+# See .OUTPUTS in the header for the exit-code contract.
+#   1 — the developer has to do something before this can work.
+#   3 — installed, but the pkgdef merge didn't finish; one VS launch fixes it.
+# Callers warn on both instead of printing [ok], and neither fails the build.
+if ($installIncomplete) { exit 1 }
 if ($updateConfigTimedOut) { exit 3 }
 exit 0

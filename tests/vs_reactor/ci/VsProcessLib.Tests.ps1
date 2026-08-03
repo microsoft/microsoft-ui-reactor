@@ -5,15 +5,26 @@
 
 .DESCRIPTION
     Windows-only and headless: no build, no dotnet, no Visual Studio. Wired into
-    .github/workflows/vs-reactor-lib-tests.yml. Exits non-zero on any failed
-    assertion.
+    .github/workflows/vs-reactor-lib-tests.yml, which runs this file under BOTH
+    pwsh and Windows PowerShell 5.1 — 5.1 is a real entry point (bootstrap.ps1
+    re-launches with the current host, `mur upgrade` falls back to
+    powershell.exe), so nothing here may use PowerShell 6+ syntax such as the
+    $IsWindows automatic variable. Exits non-zero on any failed assertion.
 
     The fake "devenv" is a copy of cmd.exe renamed to reactor-fake-devenv.exe,
     launched as `/c "<fake>" /c ping -n 600 127.0.0.1`. That produces a real
-    two-level, same-named, genuinely-hanging process tree, which is what makes
-    these assertions non-vacuous: mutation-checked against the shipped pre-fix
-    implementation (`$proc.Kill()`, no argument, no wait) the inner
-    reactor-fake-devenv.exe survives and the tree assertions redden.
+    two-level, same-named, genuinely-hanging process tree — which is what makes
+    the orphan assertions non-vacuous: mutation-checked against the shipped
+    pre-fix implementation (`$proc.Kill()`, no argument, no wait) the inner
+    reactor-fake-devenv.exe survives and case 3 and case 6 redden.
+
+    Case 6 is the attribution oracle and it cuts both ways: it runs a real
+    timeout against one tree while an unrelated same-named tree is running, and
+    requires that the unrelated one survives untouched. An earlier revision of
+    the lib swept by process name against a pre-start snapshot, which would kill
+    a developer's IDE (Reinstall-Vsix.ps1 refuses to start while any devenv
+    lives, so that snapshot is always empty). That revision passes case 3 and
+    fails case 6.
 
     Known limit, stated rather than papered over: the "-425 years" duration in
     the issue is a race on reading Process.ExitTime before the OS reaps a heavy
@@ -21,23 +32,26 @@
     assertion here is a bounds check on the symptom, not a discriminator
     between a Stopwatch and a correctly-sequenced ExitTime read. See case 4.
 
-    A distinctly-named fake also keeps the sweep tests safe — Stop-NewProcessesByName
-    is never pointed at `pwsh`, so an exclude-list regression cannot take out the
+    A distinctly-named fake also keeps the sweep tests safe — nothing here is
+    ever pointed at `pwsh`, so an attribution regression cannot take out the
     test host.
 
     Run locally:  pwsh tests/vs_reactor/ci/VsProcessLib.Tests.ps1
+                  powershell -File tests/vs_reactor/ci/VsProcessLib.Tests.ps1
 #>
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if (-not $IsWindows) {
+# $IsWindows does not exist before PowerShell 6, and this file must run on 5.1.
+$onWindows = if ($PSVersionTable.ContainsKey('Platform')) { $PSVersionTable.Platform -eq 'Win32NT' } else { $true }
+if (-not $onWindows) {
     Write-Host "VsProcessLib tests: skipped (Windows-only process semantics)."
     exit 0
 }
 
 $script:Pass = 0
 $script:Fail = 0
-$script:Failures = [System.Collections.Generic.List[string]]::new()
+$script:Failures = New-Object System.Collections.Generic.List[string]
 
 function Assert-Equal {
     param($Expected, $Actual, [string]$Message)
@@ -55,14 +69,17 @@ function Assert-InRange {
     else { $script:Fail++; $script:Failures.Add("$Message`n    expected: [$Min..$Max]`n    actual:   [$Value]") }
 }
 
-$vsReactor = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' 'src' 'vs-reactor')).Path
+$vsReactor = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..\src\vs-reactor')).Path
 $libPath = Join-Path $vsReactor 'VsProcessLib.ps1'
 
 # -- 1. Parse-check the lib and the script that dot-sources it. --
+# ParseInput over UTF8-decoded text, not ParseFile: these files are BOM-less
+# UTF-8, and Windows PowerShell 5.1's ParseFile decodes them as ANSI, which
+# turns any non-ASCII comment character into a spurious syntax error.
 foreach ($p in @($libPath, (Join-Path $vsReactor 'Reinstall-Vsix.ps1'))) {
     $parseErrors = $null
-    [System.Management.Automation.Language.Parser]::ParseInput(
-        (Get-Content $p -Raw), [ref]$null, [ref]$parseErrors) | Out-Null
+    $text = [System.IO.File]::ReadAllText($p, [System.Text.Encoding]::UTF8)
+    [System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$null, [ref]$parseErrors) | Out-Null
     if ($parseErrors -and $parseErrors.Count -gt 0) {
         Write-Host "$(Split-Path $p -Leaf) has $($parseErrors.Count) parse error(s):" -ForegroundColor Red
         $parseErrors | ForEach-Object { Write-Host "  line $($_.Extent.StartLineNumber): $($_.Message)" -ForegroundColor Red }
@@ -83,7 +100,7 @@ Copy-Item "$env:SystemRoot\System32\cmd.exe" $fakeExe
 
 # Outer fake spawns an inner fake, which spawns ping. `>nul` on the outer
 # command line suppresses the whole tree's output.
-$hangArgs  = '/c "' + $fakeExe + '" /c ping -n 600 127.0.0.1 >nul'
+$hangArgs = '/c "' + $fakeExe + '" /c ping -n 600 127.0.0.1 >nul'
 $quickArgs = '/c exit 0'
 
 function Get-FakeCount {
@@ -112,6 +129,7 @@ function Remove-AllFakes {
     foreach ($p in @(Get-Process -Name $fakeName -ErrorAction SilentlyContinue)) {
         try { $p.Kill() } catch { }
     }
+    Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20 | Out-Null
 }
 
 try {
@@ -121,9 +139,8 @@ try {
     $p = Start-Fake -Arguments $hangArgs
     $count = Wait-ForFakeCount -AtLeast 2
     Assert-True ($count -ge 2) "harness: fake devenv spawns a real tree (saw $count '$fakeName' processes, expected >= 2)"
-    try { $p.Kill() } catch { }
     Remove-AllFakes
-    Assert-True (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 15) 'harness: fakes are cleaned up between cases'
+    Assert-Equal 0 (Get-FakeCount) 'harness: fakes are cleaned up between cases'
 
     # -- 3. Stop-ProcessTreeSafely reaps descendants, not just the root. --
     # This is the #1074 fix. Against `$proc.Kill()` the inner fake survives.
@@ -136,7 +153,6 @@ try {
     # Explicit teardown so a failure here is attributed to this case rather than
     # cascading into the next one's counts.
     Remove-AllFakes
-    Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20 | Out-Null
 
     # -- 4. Timeout path: nothing survives, duration is a real measurement. --
     $timeout = 4
@@ -158,6 +174,7 @@ try {
     # ExitCode must be readable, i.e. we waited for the kill to complete rather
     # than racing it.
     Assert-True ($null -ne $r.ExitCode) 'timeout: ExitCode is defined after the tree kill'
+    Remove-AllFakes
 
     # -- 5. Happy path is untouched (guards the VS 18.7 flow). --
     $r = Invoke-DevenvUpdateConfiguration -DevenvPath $fakeExe -Arguments $quickArgs `
@@ -166,50 +183,101 @@ try {
     Assert-Equal 0 $r.ExitCode 'happy path: real exit code is surfaced'
     Assert-Equal 0 $r.KilledPids.Count 'happy path: nothing is killed'
     Assert-InRange $r.DurationSeconds 0 30 'happy path: DurationSeconds is non-negative and bounded'
-
-    # -- 6. The sweep spares pre-existing processes. --
-    # A developer who opens VS mid-run must not have their IDE killed; the
-    # pre-start snapshot is what protects them.
-    $pre = Start-Fake -Arguments $hangArgs
-    # Wait for the *whole* pre-existing tree before snapshotting: if the inner
-    # process were missed by the snapshot the sweep would kill it, the outer
-    # would exit with it, and "excluded process is still alive" would flake.
-    Wait-ForFakeCount -AtLeast 2 | Out-Null
-    $preIds = @(Get-Process -Name $fakeName -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-    $new = Start-Fake -Arguments $hangArgs
-    Wait-ForFakeCount -AtLeast ($preIds.Count + 1) | Out-Null
-
-    $killed = @(Stop-NewProcessesByName -Name $fakeName -ExcludePids $preIds -WaitSeconds 20)
-    Assert-True ($killed -contains $new.Id) "sweep: kills the process started after the snapshot (pid $($new.Id))"
-    Assert-True ($killed -notcontains $pre.Id) "sweep: does not kill the excluded pre-existing process (pid $($pre.Id))"
-    $pre.Refresh()
-    Assert-Equal $false $pre.HasExited 'sweep: the excluded process is still alive'
-    Assert-True $new.HasExited 'sweep: the swept process is gone'
-
     Remove-AllFakes
-    Assert-True (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20) 'sweep: teardown clears the name'
 
-    # -- 7. Wait-ProcessNameCleared reports failure rather than lying. --
+    # -- 6. The timeout sweep is attributed, not name-matched. --
+    # The scenario: a developer opens Visual Studio during the two-minute
+    # window. Their IDE shares the process name but is not ours, and must
+    # survive. Meanwhile every process from *our* tree must be gone — killing
+    # only the root is what #1074 was.
+    $victim = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 2 | Out-Null
+    $victimIds = @(Get-ProcessIdsByName -Name $fakeName)
+
+    $r = Invoke-DevenvUpdateConfiguration -DevenvPath $fakeExe -Arguments $hangArgs `
+        -TimeoutSeconds 4 -ProcessName $fakeName -DrainTimeoutSeconds 4
+
+    $victim.Refresh()
+    Assert-Equal $false $victim.HasExited "attribution: an unrelated same-named process survives the sweep (pid $($victim.Id))"
+    $strays = @(@(Get-ProcessIdsByName -Name $fakeName) | Where-Object { $victimIds -notcontains $_ })
+    Assert-Equal 0 $strays.Count "attribution: no process from the invoked tree survives (strays: $($strays -join ', '))"
+    # Drained is a report on the machine, not on our tree: an unrelated process
+    # legitimately holds the name, and saying otherwise would tell the caller
+    # the next run's guard will pass when it will not.
+    Assert-Equal $false $r.Drained 'attribution: Drained is false while an unrelated process still holds the name'
+    Remove-AllFakes
+
+    # -- 7. Get-ProcessDescendantIds resolves the tree by parentage. --
+    # This is what makes case 6 possible: without it the sweep has nothing to
+    # distinguish our processes from anyone else's.
+    $root = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 2 | Out-Null
+    $kids = @(Get-ProcessDescendantIds -RootPid $root.Id)
+    Assert-True ($kids.Count -ge 1) "descendants: the child of the fake tree is found (got $($kids.Count))"
+    Assert-True ($kids -notcontains $root.Id) 'descendants: the root is excluded by default'
+    $withRoot = @(Get-ProcessDescendantIds -RootPid $root.Id -IncludeRoot)
+    Assert-True ($withRoot -contains $root.Id) 'descendants: -IncludeRoot returns the root'
+    Assert-Equal ($kids.Count + 1) $withRoot.Count 'descendants: -IncludeRoot adds exactly the root'
+
+    $unrelated = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 4 | Out-Null
+    $kidsAgain = @(Get-ProcessDescendantIds -RootPid $root.Id)
+    Assert-True ($kidsAgain -notcontains $unrelated.Id) "descendants: an unrelated same-named process is not claimed as a descendant (pid $($unrelated.Id))"
+    Remove-AllFakes
+
+    # -- 8. Wait-ProcessNameCleared reports failure rather than lying. --
     # Without a truthful negative, a false "drained" would let the next run trip
     # the guard with no explanation.
     $stubborn = Start-Fake -Arguments $hangArgs
     Wait-ForFakeCount -AtLeast 1 | Out-Null
     Assert-Equal $false (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 2) 'Wait-ProcessNameCleared: returns false while a process is still running'
+    Assert-True ($stubborn.Id -gt 0) 'Wait-ProcessNameCleared: observes only — the process it reported on is untouched'
+    $stubborn.Refresh()
+    Assert-Equal $false $stubborn.HasExited 'Wait-ProcessNameCleared: does not kill what it polls'
     Remove-AllFakes
     Assert-True (Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20) 'Wait-ProcessNameCleared: returns true once the name is clear'
 
-    # -- 8. Stop-ProcessTreeSafely does not leak $LASTEXITCODE. --
-    # The 5.1 path shells out to taskkill, whose non-zero "not found" status
-    # would otherwise ride out to the caller's exit code (the #1074 defect class).
-    $done = Start-Fake -Arguments $quickArgs
-    $done.WaitForExit(10000) | Out-Null
-    $global:LASTEXITCODE = 0
-    Stop-ProcessTreeSafely -Process $done -WaitSeconds 5 | Out-Null
-    Assert-Equal 0 $LASTEXITCODE 'Stop-ProcessTreeSafely: leaves $LASTEXITCODE at 0'
+    # -- 9. Stop-ProcessIdsSafely will not act on a pid it cannot attribute. --
+    # Windows recycles pids, so by sweep time a recorded pid may belong to
+    # something else. Both guards are checked against a live process.
+    $bystander = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 1 | Out-Null
+    $killed = @(Stop-ProcessIdsSafely -ProcessIds @($bystander.Id) -ExpectedName 'some-other-name' -WaitSeconds 5)
+    Assert-Equal 0 $killed.Count 'pid reuse: a pid whose name no longer matches is left alone'
+    $bystander.Refresh()
+    Assert-Equal $false $bystander.HasExited 'pid reuse: the name-mismatched process is still running'
+
+    $killed = @(Stop-ProcessIdsSafely -ProcessIds @($bystander.Id) -ExpectedName $fakeName `
+            -NotStartedAfter ([DateTime]::Now.AddHours(-1)) -WaitSeconds 5)
+    Assert-Equal 0 $killed.Count 'pid reuse: a pid that started after we recorded it is left alone'
+    $bystander.Refresh()
+    Assert-Equal $false $bystander.HasExited 'pid reuse: the too-young process is still running'
+
+    # Positive control for the two assertions above: with both guards satisfied
+    # the same call really does kill. Without this, "0 killed" would be
+    # indistinguishable from a Stop-ProcessIdsSafely that never kills anything.
+    $killed = @(Stop-ProcessIdsSafely -ProcessIds @($bystander.Id) -ExpectedName $fakeName -WaitSeconds 20)
+    Assert-Equal 1 $killed.Count 'pid reuse: an attributable pid IS killed (positive control)'
+    Remove-AllFakes
+
+    # -- 10. Stop-ProcessTreeSafely does not leak $LASTEXITCODE. --
+    # It shells out to taskkill on every host now, and taskkill reports non-zero
+    # when its target is already gone — #1074's third defect is exactly that
+    # class of leak riding out to the caller's exit code.
+    #
+    # Honest scope: this asserts the boundary contract (the lib hands back 0
+    # after shelling out). It cannot force taskkill's already-gone status
+    # without racing the HasExited check, so deleting the reset line alone will
+    # not redden it. The line is kept because it costs one statement and the
+    # failure mode is a red CI job with no local repro.
+    $global:LASTEXITCODE = 42
+    $live = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 1 | Out-Null
+    Stop-ProcessTreeSafely -Process $live -WaitSeconds 20 | Out-Null
+    Assert-Equal 0 $LASTEXITCODE 'Stop-ProcessTreeSafely: leaves $LASTEXITCODE at 0 after shelling out to taskkill'
 }
 finally {
     Remove-AllFakes
-    Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20 | Out-Null
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
 

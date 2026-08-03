@@ -3,19 +3,30 @@
 #   - src/vs-reactor/Reinstall-Vsix.ps1 + bootstrap.ps1 (the exit-code handshake)
 # No build, no dotnet, no Visual Studio — the "devenv" under test is a renamed
 # copy of cmd.exe. Runs on windows-latest because the process semantics being
-# tested (tree kill, taskkill fallback, Get-Process by name) are Windows-specific.
+# tested (tree kill, taskkill, Get-Process by name, Win32_Process parentage) are
+# Windows-specific.
+#
+# Both suites run twice: once under pwsh (PowerShell 7) and once under Windows
+# PowerShell 5.1. 5.1 is a real entry point, not a formality — bootstrap.ps1
+# re-launches Reinstall-Vsix.ps1 with the *current* host, and `mur upgrade`
+# falls back to powershell.exe when pwsh is absent. Testing only pwsh would
+# leave that half of the shipped path unexercised.
 #
 # Guards issue #1074: on VS 18.8 `devenv /updateconfiguration` never returns, and
 # a bare Process.Kill() orphaned its child, poisoning every later VSIX install on
 # the machine. Each test script exits non-zero on any failed assertion.
 name: VS extension script tests
 
+# Note: the two path lists are duplicated because GitHub Actions does not
+# support YAML anchors. Keep them in sync.
 on:
   push:
     paths:
       - 'bootstrap.ps1'
       - 'src/vs-reactor/VsProcessLib.ps1'
       - 'src/vs-reactor/Reinstall-Vsix.ps1'
+      - 'src/vs-reactor/TESTING.md'
+      - 'src/Reactor.Cli/Upgrade/UpgradeCommand.cs'
       - 'tests/vs_reactor/ci/**'
       - '.github/workflows/vs-reactor-lib-tests.yml'
   pull_request:
@@ -23,6 +34,8 @@ on:
       - 'bootstrap.ps1'
       - 'src/vs-reactor/VsProcessLib.ps1'
       - 'src/vs-reactor/Reinstall-Vsix.ps1'
+      - 'src/vs-reactor/TESTING.md'
+      - 'src/Reactor.Cli/Upgrade/UpgradeCommand.cs'
       - 'tests/vs_reactor/ci/**'
       - '.github/workflows/vs-reactor-lib-tests.yml'
 
@@ -33,17 +46,30 @@ jobs:
   vs-reactor-scripts:
     name: VsProcessLib + bootstrap exit-code tests
     runs-on: windows-latest
-    timeout-minutes: 10
+    # These tests deliberately start hanging processes. A stuck runner should
+    # fail the job, not sit for six hours — this PR is about a hang, after all.
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Run VsProcessLib tests
+      - name: Run VsProcessLib tests (PowerShell 7)
         shell: pwsh
         run: ./tests/vs_reactor/ci/VsProcessLib.Tests.ps1
 
-      - name: Run bootstrap exit-code tests
+      - name: Run bootstrap exit-code tests (PowerShell 7)
         shell: pwsh
+        run: ./tests/vs_reactor/ci/BootstrapExitCode.Tests.ps1
+
+      # `shell: powershell` is Windows PowerShell 5.1 — the host `mur upgrade`
+      # falls back to. Its Process type has no Kill(bool) and it has no
+      # $IsWindows, so this step is what keeps the shipped scripts 5.1-clean.
+      - name: Run VsProcessLib tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./tests/vs_reactor/ci/VsProcessLib.Tests.ps1
+
+      - name: Run bootstrap exit-code tests (Windows PowerShell 5.1)
+        shell: powershell
         run: ./tests/vs_reactor/ci/BootstrapExitCode.Tests.ps1

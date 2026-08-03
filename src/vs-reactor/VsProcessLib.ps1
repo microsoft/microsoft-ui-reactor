@@ -18,12 +18,21 @@
     that had not exited yet, which returns the 1601 epoch and printed a
     duration of roughly -425 years.
 
+    ATTRIBUTION, NOT NAME MATCHING: the post-timeout sweep acts only on pids
+    this module recorded as descendants of the process *it* started. An earlier
+    revision swept by process name with a pre-start snapshot as the exclude
+    list, which is unsafe: Reinstall-Vsix.ps1 refuses to start while any devenv
+    is alive, so that snapshot is always empty and the sweep degenerated to
+    "kill every devenv" — including an IDE a developer opened during the
+    two-minute window. Anything we cannot attribute is reported (see Drained),
+    never killed.
+
     COMPATIBILITY: these functions must stay Windows PowerShell 5.1 clean.
     bootstrap.ps1 re-launches Reinstall-Vsix.ps1 with `(Get-Process -Id
     $PID).Path`, and `mur upgrade` falls back to powershell.exe when pwsh is
-    absent. That rules out `Process.Kill([bool])` (.NET 5+) and
-    `ProcessStartInfo.ArgumentList` (.NET Core only) as unconditional calls —
-    see Stop-ProcessTreeSafely for the reflection probe + taskkill fallback.
+    absent. That rules out `Process.Kill([bool])` (.NET 5+),
+    `ProcessStartInfo.ArgumentList` (.NET Core only), and the `$IsWindows`
+    automatic variable (PowerShell 6+).
 #>
 
 # Ids of every running process with the given name. Callers wrap with @() —
@@ -33,6 +42,62 @@ function Get-ProcessIdsByName {
     param([Parameter(Mandatory)][string]$Name)
 
     return @(Get-Process -Name $Name -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+}
+
+# Every descendant pid of $RootPid, breadth-first, via the Win32_Process
+# parent links. Add -IncludeRoot to get the root back in the result.
+#
+# Windows recycles pids, and a process keeps its ParentProcessId after that
+# parent exits — so a stale ppid can point at an unrelated recycled process.
+# A child that was created *before* its claimed parent cannot really be its
+# child, so those edges are dropped.
+function Get-ProcessDescendantIds {
+    param(
+        [Parameter(Mandatory)][int]$RootPid,
+        [switch]$IncludeRoot
+    )
+
+    $all = @(Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId, CreationDate -ErrorAction SilentlyContinue)
+    if ($all.Count -eq 0) {
+        # CIM unavailable. Report only what we know for certain rather than
+        # guessing by name; the caller's drain poll still tells the truth.
+        if ($IncludeRoot) { return @($RootPid) }
+        return @()
+    }
+
+    $childrenOf = @{}
+    $createdAt = @{}
+    foreach ($p in $all) {
+        $processId = [int]$p.ProcessId
+        $parentId = [int]$p.ParentProcessId
+        $createdAt[$processId] = $p.CreationDate
+        if (-not $childrenOf.ContainsKey($parentId)) {
+            $childrenOf[$parentId] = New-Object System.Collections.Generic.List[int]
+        }
+        $childrenOf[$parentId].Add($processId) | Out-Null
+    }
+
+    $seen = New-Object System.Collections.Generic.HashSet[int]
+    $seen.Add($RootPid) | Out-Null
+    $found = New-Object System.Collections.Generic.List[int]
+    $queue = New-Object System.Collections.Generic.Queue[int]
+    $queue.Enqueue($RootPid)
+
+    while ($queue.Count -gt 0) {
+        $current = $queue.Dequeue()
+        if (-not $childrenOf.ContainsKey($current)) { continue }
+        foreach ($child in $childrenOf[$current]) {
+            if (-not $seen.Add($child)) { continue }
+            $childBirth = $createdAt[$child]
+            $parentBirth = $createdAt[$current]
+            if ($null -ne $childBirth -and $null -ne $parentBirth -and $childBirth -lt $parentBirth) { continue }
+            $found.Add($child) | Out-Null
+            $queue.Enqueue($child)
+        }
+    }
+
+    if ($IncludeRoot) { return @(@($RootPid) + $found.ToArray()) }
+    return $found.ToArray()
 }
 
 # Terminate a process AND its descendants, then block until it is really gone.
@@ -45,71 +110,71 @@ function Stop-ProcessTreeSafely {
 
     try { if ($Process.HasExited) { return $true } } catch { return $true }
 
-    # .NET 5+ (pwsh) has Kill($entireProcessTree). Windows PowerShell 5.1 runs
-    # on .NET Framework, which only has the single-process Kill() — the exact
-    # overload that caused #1074. Probe by reflection and fall back to
-    # `taskkill /T /F`, which walks the tree on every supported Windows.
-    $killTree = $Process.GetType().GetMethod('Kill', [type[]]@([bool]))
+    # `taskkill /T` walks the tree on every supported Windows and on both
+    # PowerShell hosts. Process.Kill($true) would do the same but needs .NET 5+,
+    # which Windows PowerShell 5.1 does not have — and its no-argument sibling
+    # Kill() is the exact call that caused #1074. One path, tested everywhere,
+    # beats a host-dependent pair where only one half runs in CI.
     try {
-        if ($killTree) {
-            $killTree.Invoke($Process, @($true)) | Out-Null
-        } else {
-            & "$env:SystemRoot\System32\taskkill.exe" '/PID' $Process.Id '/T' '/F' 2>&1 | Out-Null
-            # taskkill returns non-zero when the process is already gone. That
-            # is not an error here, and letting it linger would leak into the
-            # exit code of whichever script dot-sourced us.
-            $global:LASTEXITCODE = 0
-        }
+        & "$env:SystemRoot\System32\taskkill.exe" '/PID' $Process.Id '/T' '/F' 2>&1 | Out-Null
     } catch {
         # Raced with a natural exit, or access denied on a process owned by
         # another user. Fall through to the wait, which reports the truth.
     }
+    # taskkill returns non-zero when the process is already gone. That is not an
+    # error here, and letting it linger would leak into the exit code of
+    # whichever script dot-sourced us — #1074's third defect, in miniature.
+    $global:LASTEXITCODE = 0
 
     try { return $Process.WaitForExit($WaitSeconds * 1000) } catch { return $true }
 }
 
-# Kill every process named $Name whose id is not in $ExcludePids, tree and all.
-# Returns the ids it killed.
+# Kill the given pids (tree and all) and return the ones that were still alive.
 #
-# This is the belt to Stop-ProcessTreeSafely's braces: Kill($true) enumerates
-# descendants at kill time, so a grandchild that has already re-parented can be
-# missed. $ExcludePids carries the pre-start snapshot, so processes that were
-# running before we started are never touched.
-function Stop-NewProcessesByName {
+# This is the belt to Stop-ProcessTreeSafely's braces: `taskkill /T` enumerates
+# descendants at kill time, so a grandchild that has already re-parented is
+# missed. The caller records the tree *before* killing and passes it here.
+#
+# $ExpectedName and $NotStartedAfter exist because Windows recycles pids: by the
+# time we sweep, a recorded pid may belong to something else entirely. A pid
+# that no longer carries the expected name, or that started after we recorded
+# it, is somebody else's and is left alone.
+function Stop-ProcessIdsSafely {
     param(
-        [Parameter(Mandatory)][string]$Name,
-        [int[]]$ExcludePids = @(),
+        [int[]]$ProcessIds = @(),
+        [string]$ExpectedName = '',
+        [datetime]$NotStartedAfter = [datetime]::MaxValue,
         [int]$WaitSeconds = 30
     )
 
     $killed = New-Object System.Collections.Generic.List[int]
-    foreach ($p in @(Get-Process -Name $Name -ErrorAction SilentlyContinue)) {
-        if ($ExcludePids -contains $p.Id) { continue }
-        $killed.Add($p.Id) | Out-Null
+    foreach ($processId in @($ProcessIds)) {
+        $p = Get-Process -Id $processId -ErrorAction SilentlyContinue
+        if (-not $p) { continue }
+        if ($ExpectedName -and $p.Name -ne $ExpectedName) { continue }
+        try { if ($p.StartTime -gt $NotStartedAfter) { continue } } catch { continue }
+        $killed.Add($processId) | Out-Null
         Stop-ProcessTreeSafely -Process $p -WaitSeconds $WaitSeconds | Out-Null
     }
     # Bare array, not `,$array` — see Get-ProcessIdsByName. Callers wrap with @().
     return $killed.ToArray()
 }
 
-# Poll until no process named $Name (excluding $ExcludePids) is left, or the
-# timeout elapses. Returns $true when the name is clear.
+# Poll until no process named $Name is left, or the timeout elapses.
+# Returns $true when the name is clear. Observes only — never kills.
 #
-# This poll is the actual guarantee the caller needs: it is what makes it
-# impossible for the *next* Reinstall-Vsix.ps1 invocation to trip the
-# "Visual Studio is running" guard on a process this one started.
+# This answers the question the caller actually has: will the *next*
+# Reinstall-Vsix.ps1 invocation trip its "Visual Studio is running" guard? That
+# guard matches by name with no exclusions, so this must too.
 function Wait-ProcessNameCleared {
     param(
         [Parameter(Mandatory)][string]$Name,
-        [int[]]$ExcludePids = @(),
         [int]$TimeoutSeconds = 30
     )
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ($true) {
-        $remaining = @(Get-Process -Name $Name -ErrorAction SilentlyContinue |
-            Where-Object { $ExcludePids -notcontains $_.Id })
-        if ($remaining.Count -eq 0) { return $true }
+        if (@(Get-ProcessIdsByName -Name $Name).Count -eq 0) { return $true }
         if ([DateTime]::UtcNow -ge $deadline) { return $false }
         Start-Sleep -Milliseconds 250
     }
@@ -118,7 +183,7 @@ function Wait-ProcessNameCleared {
 <#
 .SYNOPSIS
     Run `devenv /updateconfiguration` with a hard timeout that leaves nothing
-    running behind it.
+    of its own running behind it.
 
 .OUTPUTS
     [pscustomobject] with:
@@ -126,12 +191,16 @@ function Wait-ProcessNameCleared {
       ExitCode        [int?]  exit code, or $null if it could not be read
       DurationSeconds [double] wall-clock time, measured with a Stopwatch
       KilledPids      [int[]] ids reaped by the post-timeout sweep
-      Drained         [bool]  no $ProcessName process was left behind
+      Drained         [bool]  no $ProcessName process is left on the machine
 
 .NOTES
     DurationSeconds is deliberately measured with a Stopwatch rather than
     ($proc.ExitTime - $proc.StartTime): ExitTime on a process that has not
     exited returns the 1601 epoch, which is how #1074 came to log "-13430263500.8s".
+
+    Drained is deliberately unfiltered — it reports the machine state the next
+    run's guard will see, which may legitimately be $false because a developer
+    has Visual Studio open. It is a report, not a kill list.
 #>
 function Invoke-DevenvUpdateConfiguration {
     param(
@@ -141,11 +210,6 @@ function Invoke-DevenvUpdateConfiguration {
         [string]$ProcessName = 'devenv',
         [int]$DrainTimeoutSeconds = 30
     )
-
-    # Snapshot first. Reinstall-Vsix.ps1 refuses to run while any devenv is
-    # alive, so in practice this is empty — but if a developer launches VS
-    # mid-run we must not kill their IDE.
-    $preexisting = @(Get-ProcessIdsByName -Name $ProcessName)
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $DevenvPath
@@ -160,14 +224,28 @@ function Invoke-DevenvUpdateConfiguration {
     $killed = @()
     $drained = $true
     if (-not $exited) {
+        # Record the tree BEFORE killing anything: `taskkill /T` resolves
+        # descendants at kill time, so a child whose own parent dies during the
+        # kill drops out of the walk mid-flight. Capturing first closes that
+        # window.
+        #
+        # Scope, stated plainly: this does NOT recover a process that was
+        # already re-parented before the capture — once its parent is gone
+        # nothing can attribute it to us, and killing it by name would mean
+        # killing a developer's IDE. That case is *reported* instead, via
+        # Drained, and Reinstall-Vsix.ps1 turns it into an actionable warning.
+        $recordedAt = [DateTime]::Now
+        $tree = @(Get-ProcessDescendantIds -RootPid $proc.Id -IncludeRoot)
+
         Stop-ProcessTreeSafely -Process $proc -WaitSeconds $DrainTimeoutSeconds | Out-Null
-        $killed = @(Stop-NewProcessesByName -Name $ProcessName -ExcludePids $preexisting -WaitSeconds $DrainTimeoutSeconds)
-        $drained = Wait-ProcessNameCleared -Name $ProcessName -ExcludePids $preexisting -TimeoutSeconds $DrainTimeoutSeconds
+        $killed = @(Stop-ProcessIdsSafely -ProcessIds $tree -ExpectedName $ProcessName -NotStartedAfter $recordedAt -WaitSeconds $DrainTimeoutSeconds)
+        $drained = Wait-ProcessNameCleared -Name $ProcessName -TimeoutSeconds $DrainTimeoutSeconds
     }
     $sw.Stop()
 
     $exitCode = $null
     try { if ($proc.HasExited) { $exitCode = $proc.ExitCode } } catch { $exitCode = $null }
+    $proc.Dispose()
 
     return [pscustomobject]@{
         TimedOut        = (-not $exited)
