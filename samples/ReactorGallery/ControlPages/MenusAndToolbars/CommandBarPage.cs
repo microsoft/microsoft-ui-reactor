@@ -12,6 +12,7 @@ class CommandBarPage : Component
     public override Element Render()
     {
         var (lastAction, setLastAction) = UseState("(none)");
+        var (commandAction, setCommandAction) = UseState("(none)");
         var (isBold, setIsBold) = UseState(false);
 
         return ScrollView(
@@ -31,34 +32,46 @@ class CommandBarPage : Component
                             }),
                         TextBlock($"Last action: {lastAction}").Foreground(Theme.SecondaryText)
                     ),
-                    @"CommandBar(primaryCommands: new AppBarItemBase[] {
-    AppBarButton(""Add"", () => setLastAction(""Add""), icon: ""Add""),
-    AppBarButton(""Edit"", () => setLastAction(""Edit""), icon: ""Edit""),
-    AppBarSeparator(),
-    AppBarButton(""Delete"", () => setLastAction(""Delete""), icon: ""Delete""),
-})"),
+                    @"var (lastAction, setLastAction) = UseState(""(none)"");
+
+VStack(8,
+    CommandBar(primaryCommands: new AppBarItemBase[] {
+        AppBarButton(""Add"", () => setLastAction(""Add""), icon: ""Add""),
+        AppBarButton(""Edit"", () => setLastAction(""Edit""), icon: ""Edit""),
+        AppBarSeparator(),
+        AppBarButton(""Delete"", () => setLastAction(""Delete""), icon: ""Delete""),
+    }),
+    TextBlock($""Last action: {lastAction}""));"),
 
                 SampleCard("Primary and Secondary Commands",
-                    CommandBar(
-                        primaryCommands: new AppBarItemBase[]
-                        {
-                            AppBarButton("Share", () => setLastAction("Share"), icon: "Share"),
-                            AppBarToggleButton("Bold", isBold, b => setIsBold(b), icon: "Bold"),
-                        },
-                        secondaryCommands: new AppBarItemBase[]
-                        {
-                            AppBarButton("Copy", () => setLastAction("Copy")),
-                            AppBarButton("Paste", () => setLastAction("Paste")),
-                        }),
-                    @"CommandBar(
-    primaryCommands: new AppBarItemBase[] {
-        AppBarButton(""Share"", () => {}, icon: ""Share""),
-        AppBarToggleButton(""Bold"", isBold, b => setIsBold(b), icon: ""Bold""),
-    },
-    secondaryCommands: new AppBarItemBase[] {
-        AppBarButton(""Copy"", () => {}),
-        AppBarButton(""Paste"", () => {}),
-    })")
+                    VStack(8,
+                        CommandBar(
+                            primaryCommands: new AppBarItemBase[]
+                            {
+                                AppBarButton("Share", () => setCommandAction("Share"), icon: "Share"),
+                                AppBarToggleButton("Bold", isBold, b => setIsBold(b), icon: "Bold"),
+                            },
+                            secondaryCommands: new AppBarItemBase[]
+                            {
+                                AppBarButton("Copy", () => setCommandAction("Copy")),
+                                AppBarButton("Paste", () => setCommandAction("Paste")),
+                            }),
+                        TextBlock($"Last action: {commandAction}").Foreground(Theme.SecondaryText)
+                    ),
+                    @"var (commandAction, setCommandAction) = UseState(""(none)"");
+var (isBold, setIsBold) = UseState(false);
+
+VStack(8,
+    CommandBar(
+        primaryCommands: new AppBarItemBase[] {
+            AppBarButton(""Share"", () => setCommandAction(""Share""), icon: ""Share""),
+            AppBarToggleButton(""Bold"", isBold, b => setIsBold(b), icon: ""Bold""),
+        },
+        secondaryCommands: new AppBarItemBase[] {
+            AppBarButton(""Copy"", () => setCommandAction(""Copy"")),
+            AppBarButton(""Paste"", () => setCommandAction(""Paste"")),
+        }),
+    TextBlock($""Last action: {commandAction}""));")
             ).Margin(36, 24, 36, 36)
         );
     }

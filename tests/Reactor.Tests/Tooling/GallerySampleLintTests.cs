@@ -982,6 +982,63 @@ public sealed class GallerySampleLintTests
         }
     }
 
+    /// <summary>
+    /// <see cref="StateSlots"/> matches a set of hook names, and two pieces of prose describe that
+    /// set to a human: the rule summary on
+    /// <see cref="SampleCards_SharedStateDoesNotSpread"/> and the message it fails with. Both were
+    /// written saying "UseState" while the pattern already matched <c>UseReducer</c>, so a shared
+    /// reducer slot would have been reported in words that denied it could happen.
+    /// <para>
+    /// Adding a third hook to the pattern is a one-line edit far away from either sentence, and
+    /// nothing else here would notice. So the names are read back out of the pattern and required
+    /// to appear in both — which fails in the direction that matters: widening the detector
+    /// without widening what it claims to detect.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SharedStateMessage_NamesEveryHookTheDetectorMatches()
+    {
+        var source = global::System.IO.File.ReadAllText(ThisFile());
+
+        // The hook names as the pattern itself spells them, not as remembered here.
+        var hooks = Regex.Matches(source, @"InvokedName\(\w+\) is ((?:""\w+""(?: or )?)+)")
+            .SelectMany(m => Regex.Matches(m.Groups[1].Value, @"""(\w+)""").Select(h => h.Groups[1].Value))
+            .Distinct(global::System.StringComparer.Ordinal)
+            .OrderBy(h => h, global::System.StringComparer.Ordinal)
+            .ToList();
+
+        // A pattern reworded past that regex would otherwise leave this requiring nothing of
+        // anything, and passing.
+        Assert.True(hooks.Count >= 2,
+            $"only {hooks.Count} hook name(s) were read back out of the StateSlots pattern — the " +
+            "shape it is parsed with has changed, so this check no longer sees what it guards.");
+
+        // The method's own span, taken from the syntax tree rather than from string offsets. The
+        // doc comment is leading trivia on the declaration, so ToFullString() carries both halves
+        // the message has to agree with. Searching for a literal "\r\n    }\r\n" instead would pin
+        // this check to one line-ending convention, and would stop at the first four-space `}` that
+        // happens to follow rather than at the end of the method.
+        var declarations = CSharpSyntaxTree
+            .ParseText(source, cancellationToken: TestContext.Current.CancellationToken)
+            .GetRoot(TestContext.Current.CancellationToken)
+            .DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .Where(m => m.Identifier.ValueText == "SampleCards_SharedStateDoesNotSpread")
+            .ToList();
+
+        Assert.True(declarations.Count == 1,
+            $"expected exactly one SampleCards_SharedStateDoesNotSpread to read the doc and body " +
+            $"of, found {declarations.Count} — this check no longer reads the rule it guards.");
+
+        var region = declarations[0].ToFullString();
+        var missing = hooks.Where(h => !region.Contains(h, global::System.StringComparison.Ordinal)).ToList();
+
+        Assert.True(missing.Count == 0,
+            "StateSlots matches these hooks, but the rule summary and failure message of " +
+            "SampleCards_SharedStateDoesNotSpread never name them, so a slot shared through one " +
+            "would be reported in words that exclude it:\n  " + string.Join("\n  ", missing));
+    }
+
     /// <summary>The outermost <c>SampleCard(...)</c> calls — one per card the reader sees.</summary>
     static List<InvocationExpressionSyntax> SampleCards(SyntaxNode root) =>
         root.DescendantNodes()
@@ -1278,140 +1335,28 @@ public sealed class GallerySampleLintTests
     }
 
     /// <summary>
-    /// Pages that predate the rule, tracked by issue #980. An explicit set rather than a count: a
-    /// count stays green when one page is fixed and another regresses in the same change, which is
-    /// exactly the drift the rule exists to stop. A floor and a ceiling each miss one of those two
-    /// directions too.
+    /// No SampleCard on a gallery page may share a state-hook slot with another card on the same
+    /// page: driving one silently retargets its neighbour (#982). "State-hook" rather than
+    /// <c>UseState</c> because <see cref="StateSlots"/> recognises <c>UseReducer</c> too, so
+    /// naming a single hook would misdescribe the rule the moment a reducer slot is the shared
+    /// one — and <see cref="SharedStateMessage_NamesEveryHookTheDetectorMatches"/> fails if this
+    /// prose and that pattern ever drift apart. The fourteen pages that
+    /// were doing so when this rule was written are fixed by #980, so the tree is clean and there
+    /// is no allowlist here — an emptied suppression mechanism left standing is an invitation to
+    /// refill it rather than a fixed rule.
     /// <para>
-    /// Pinned in <em>both</em> directions: an offender missing from the list fails, and a list
-    /// entry with no matching offender fails too. An upper bound alone was the earlier design,
-    /// on the reasoning that #980 drains this list in a separate change and an equality pin would
-    /// redden the moment that lands — on a branch whose own checks nothing re-runs, so the break
-    /// would surface on main rather than on either PR. That trade is the wrong way round. Every
-    /// page listed here is one #980 fixes, so a stale entry is this list's expected end state
-    /// rather than an edge case, and an entry that outlives its offender is indistinguishable
-    /// from a permanent suppression of the exact page-and-slot pair the rule exists to protect.
-    /// The red is the draining mechanism: it names the lines to delete, is discharged by deleting
-    /// them, and cannot recur once they are gone — whereas a masked re-regression is silent and
-    /// survives forever. Both directions the rule is for are kept either way: a page that is not
-    /// on the list fails, and so does a compensating edit that fixes one page while breaking
-    /// another — not because of anything on this list, which such an edit leaves consistent, but
-    /// because the new offender is absent from <see cref="SharedStateDebtAtIntroduction"/>.
-    /// </para>
-    /// <para>
-    /// This does not make the test vacuous when the list drains to nothing: non-vacuity here comes
-    /// from <see cref="CrossCardRule_ReportsOnlySlotsSpanningCards"/> driving the detector over
+    /// A clean tree does not make this vacuous. Non-vacuity comes from
+    /// <see cref="CrossCardRule_ReportsOnlySlotsSpanningCards"/> driving the detector over
     /// synthetic source, plus the multi-card floor below — neither of which depends on the tree
     /// still containing offenders.
     /// </para>
     /// <para>
-    /// At zero, emptying this array is on its own enough to keep the tree green — measured against
-    /// the real combined tree rather than reasoned about: merging the fix branch with this array
-    /// intact fails exactly one test, <see cref="SampleCards_SharedStateDoesNotSpread"/> via the
-    /// staleness arm, naming the entries; emptying it and nothing else takes that to
-    /// <c>Failed: 0</c>, with <c>Skipped: 0</c> in both legs. Absolute pass counts are deliberately
-    /// omitted: the pair was measured twice, hours apart, on the same two branches, and the totals
-    /// differed by five as the other branch added tests while every load-bearing term — which test,
-    /// which arm, the 1→0, the <c>Skipped: 0</c> — was identical. Only the delta is evidence; a
-    /// total is a scalar summary of a set and can be satisfied by the wrong members.
-    /// </para>
-    /// <para>
-    /// The rest of the apparatus is inert once <c>offenders</c> is empty <em>and this array has been
-    /// emptied with it</em> — both conditions, not just the first. The staleness arm runs the other
-    /// way round, <c>KnownSharedStatePages.Except(offenders)</c>, so an empty <c>offenders</c>
-    /// measured against a populated ledger hands back all fourteen entries: that is the single red
-    /// measured above, not a trivially satisfied arm. Stated with only the first condition the
-    /// sentence is false, and false in the direction that reads as "nothing here is required" — which
-    /// is how it was in fact read by the first person to check it against the code.
-    /// </para>
-    /// <para>
-    /// Sharper, and not dependent on <c>offenders</c> reaching exactly zero: <c>stale</c> is empty
-    /// only while every entry still names a live offender, i.e. while <c>KnownSharedStatePages</c> is
-    /// a subset of <c>offenders</c> — which is to say, only while nothing has been fixed.
-    /// <em>Any</em> partial fix reddens it. So there is no state except "no page was ever fixed" in
-    /// which emptying this array is optional, and that, rather than the measured red alone, is why
-    /// the emptying belongs in the same commit as the fix.
-    /// </para>
-    /// <para>
-    /// <em>Emptying</em> this array is required, per the paragraphs above. <em>Deleting</em> the
-    /// emptied declaration and the arms around it is cleanup, not a correctness requirement. Two
-    /// different edits; collapsing them into one reading is what makes this section look
-    /// self-contradictory, and the list below is the second edit only. The distinction is
-    /// recorded because stating it the other way round is what makes a merge instruction rot: a
-    /// required-looking list whose items stop existing (this one already outlived a size ceiling and
-    /// a <c>StaysClosed</c> fact) still parses as true, and the reader cannot tell which items were
-    /// load-bearing. The cleanup is: this array's emptied declaration,
-    /// <see cref="SharedStateDebtAtIntroduction"/>, all
-    /// three <c>Except</c> arms, and the ambiguity arm — which exists only because <c>Except</c>
-    /// dedups, so with no ledger to dedup through it guards nothing that <c>offenders.Count == 0</c>
-    /// does not already catch. What remains is that single assertion plus the vacuity floors.
-    /// </para>
-    /// <para>
-    /// Do it in the same commit as the fix that empties it. The intermediate state — pages fixed,
-    /// entries still listed — is the red measured above, so splitting it across two commits puts
-    /// that red on <c>main</c> rather than on either branch; and an emptied list left standing is a
-    /// suppression mechanism with nothing in it, which is an invitation to refill rather than a
-    /// fixed rule.
+    /// The premise is falsifiable rather than assumed: a card is an independently copy-pasteable
+    /// demo, so a slot spanning two of them is the anti-pattern by construction. A demo whose
+    /// subject genuinely <em>is</em> shared state belongs inside a single card, where this rule
+    /// does not look.
     /// </para>
     /// </summary>
-    static readonly string[] KnownSharedStatePages =
-    [
-        "samples/ReactorGallery/ControlPages/BasicInput/NumberBoxPage.cs: value/setValue",
-        "samples/ReactorGallery/ControlPages/BasicInput/RatingControlPage.cs: rating/setRating",
-        "samples/ReactorGallery/ControlPages/DateAndTime/CalendarDatePickerPage.cs: date/setDate",
-        "samples/ReactorGallery/ControlPages/DateAndTime/DatePickerPage.cs: date/setDate",
-        "samples/ReactorGallery/ControlPages/DateAndTime/TimePickerPage.cs: time/setTime",
-        "samples/ReactorGallery/ControlPages/DialogsAndFlyouts/CommandBarFlyoutPage.cs: lastAction/setLastAction",
-        "samples/ReactorGallery/ControlPages/DialogsAndFlyouts/MenuFlyoutPage.cs: lastAction/setLastAction",
-        "samples/ReactorGallery/ControlPages/Layout/StackPanelPage.cs: spacing/setSpacing",
-        "samples/ReactorGallery/ControlPages/MenusAndToolbars/CommandBarPage.cs: lastAction/setLastAction",
-        "samples/ReactorGallery/ControlPages/MenusAndToolbars/MenuBarPage.cs: lastAction/setLastAction",
-        "samples/ReactorGallery/ControlPages/Navigation/NavigationViewPage.cs: selectedTag/setSelectedTag",
-        "samples/ReactorGallery/ControlPages/Text/AutoSuggestBoxPage.cs: query/setQuery",
-        "samples/ReactorGallery/ControlPages/Text/RichEditBoxPage.cs: charCount/setCharCount",
-        "samples/ReactorGallery/ControlPages/Text/RichEditBoxPage.cs: text/setText",
-    ];
-
-    /// <summary>
-    /// The same 14 pairs, frozen as the debt that existed when this rule was written (#982).
-    /// <see cref="KnownSharedStatePages"/> is the live ledger; this does not move, and is compared
-    /// against the <em>tree</em> rather than against the ledger.
-    /// <para>
-    /// The ledger does not drain an entry at a time. That is worth stating because "shrinks as pages
-    /// get fixed" is the natural reading of a mutable allowlist and it is wrong here: #980's fix
-    /// branch rewrites all thirteen distinct files this array names, so the entire ledger goes stale
-    /// on a single merge. Measured rather than predicted — swapping that branch's copies of those
-    /// thirteen files into this tree fails <see cref="SampleCards_SharedStateDoesNotSpread"/> with
-    /// the staleness arm naming all fourteen entries, and restoring the files takes it back to
-    /// green. The merge instruction above is therefore all-or-nothing; an entry-at-a-time reading of
-    /// it leaves a red tree.
-    /// </para>
-    /// <para>
-    /// Two identical arrays look redundant and are not: the point is that no single edit reaches
-    /// both. Every arm that consults only the ledger can be satisfied by editing the ledger — add
-    /// the page you just broke and the tree-vs-ledger arms agree again. Checking offenders against
-    /// a record the ledger cannot influence is the only shape where suppressing a new defect
-    /// requires appending to a list that says, in its name, that it is history.
-    /// </para>
-    /// </summary>
-    static readonly string[] SharedStateDebtAtIntroduction =
-    [
-        "samples/ReactorGallery/ControlPages/BasicInput/NumberBoxPage.cs: value/setValue",
-        "samples/ReactorGallery/ControlPages/BasicInput/RatingControlPage.cs: rating/setRating",
-        "samples/ReactorGallery/ControlPages/DateAndTime/CalendarDatePickerPage.cs: date/setDate",
-        "samples/ReactorGallery/ControlPages/DateAndTime/DatePickerPage.cs: date/setDate",
-        "samples/ReactorGallery/ControlPages/DateAndTime/TimePickerPage.cs: time/setTime",
-        "samples/ReactorGallery/ControlPages/DialogsAndFlyouts/CommandBarFlyoutPage.cs: lastAction/setLastAction",
-        "samples/ReactorGallery/ControlPages/DialogsAndFlyouts/MenuFlyoutPage.cs: lastAction/setLastAction",
-        "samples/ReactorGallery/ControlPages/Layout/StackPanelPage.cs: spacing/setSpacing",
-        "samples/ReactorGallery/ControlPages/MenusAndToolbars/CommandBarPage.cs: lastAction/setLastAction",
-        "samples/ReactorGallery/ControlPages/MenusAndToolbars/MenuBarPage.cs: lastAction/setLastAction",
-        "samples/ReactorGallery/ControlPages/Navigation/NavigationViewPage.cs: selectedTag/setSelectedTag",
-        "samples/ReactorGallery/ControlPages/Text/AutoSuggestBoxPage.cs: query/setQuery",
-        "samples/ReactorGallery/ControlPages/Text/RichEditBoxPage.cs: charCount/setCharCount",
-        "samples/ReactorGallery/ControlPages/Text/RichEditBoxPage.cs: text/setText",
-    ];
-
     [Fact]
     public void SampleCards_SharedStateDoesNotSpread()
     {
@@ -1430,57 +1375,12 @@ public sealed class GallerySampleLintTests
         Assert.True(pagesWithMultipleCards >= 20,
             $"only {pagesWithMultipleCards} gallery pages were seen to have multiple SampleCards — the rule would pass near-vacuously.");
 
-        // Offenders are keyed by page and slot names only, so two same-named slots in disjoint
-        // scopes on one page collapse to one key — and `Except` dedups, so an entry covering the
-        // first would silently cover the second. Every arm below assumes the key identifies one
-        // slot; if it does not, say so rather than reporting on subjects that cannot be told apart.
-        var ambiguous = offenders.GroupBy(entry => entry, global::System.StringComparer.Ordinal)
-            .Where(g => g.Count() > 1)
-            .Select(g => $"{g.Key}  (x{g.Count()})")
-            .OrderBy(entry => entry, global::System.StringComparer.Ordinal)
-            .ToList();
+        // Sorted only so the failure message is stable: the detector reports in file-walk order.
+        offenders.Sort(global::System.StringComparer.Ordinal);
 
-        Assert.True(ambiguous.Count == 0,
-            "these pages declare more than one state slot with the same names, so one allowlist " +
-            "entry would mask all of them. Rename the slots, or key the entry by declaration " +
-            "site:\n  " + string.Join("\n  ", ambiguous));
-
-        var added = offenders.Except(KnownSharedStatePages)
-            .OrderBy(entry => entry, global::System.StringComparer.Ordinal)
-            .ToList();
-
-        Assert.True(added.Count == 0,
-            "these SampleCards share a UseState slot, so driving one silently retargets its " +
-            "neighbour (#982). Give each card its own slot:\n  " + string.Join("\n  ", added));
-
-        // The other direction. Once a listed page is fixed its entry stops describing the tree and
-        // starts suppressing it, silently, for the one page-and-slot pair most likely to regress.
-        var stale = KnownSharedStatePages.Except(offenders)
-            .OrderBy(entry => entry, global::System.StringComparer.Ordinal)
-            .ToList();
-
-        Assert.True(stale.Count == 0,
-            "these KnownSharedStatePages entries no longer match a live offender — the page was " +
-            "fixed (#980), so the entry now only masks a re-regression of that exact page and " +
-            "slot. Delete them from KnownSharedStatePages:\n  " + string.Join("\n  ", stale));
-
-        // Both arms above compare the tree to the ledger, so both are satisfied by editing the
-        // ledger: acknowledge the page you just broke and they agree again. Neither can see that,
-        // because "already listed" and "never should have been listed" are the same input to them.
-        // This one asks the tree against a record the ledger cannot influence.
-        var unrecorded = offenders.Except(SharedStateDebtAtIntroduction)
-            .OrderBy(entry => entry, global::System.StringComparer.Ordinal)
-            .ToList();
-
-        Assert.True(unrecorded.Count == 0,
-            "these SampleCards share a UseState slot on a page that was not already doing so when " +
-            "the rule was written (#982), so this is new coupling rather than the debt #980 is " +
-            "draining. Give each card its own slot — adding it to KnownSharedStatePages will not " +
-            "silence this. That leaves no escape on purpose, and the premise is falsifiable rather " +
-            "than assumed: a card is an independently copy-pasteable demo, so a slot spanning two " +
-            "of them is the anti-pattern by construction. A demo whose subject genuinely is shared " +
-            "state belongs inside a single card, where this rule does not look:\n  "
-            + string.Join("\n  ", unrecorded));
+        Assert.True(offenders.Count == 0,
+            "these SampleCards share a UseState/UseReducer slot, so driving one silently " +
+            "retargets its neighbour (#982). Give each card its own slot:\n  " + string.Join("\n  ", offenders));
     }
 
     [Theory]
@@ -1635,10 +1535,13 @@ public sealed class GallerySampleLintTests
 
     /// <summary>
     /// The offender key is page + slot names, so two same-named slots in disjoint scopes collapse
-    /// to a single key — which is what the ambiguity arm of
-    /// <see cref="SampleCards_SharedStateDoesNotSpread"/> exists to refuse. Without a live example
-    /// that arm would be a guard nobody has watched reject anything, and the tree has none today.
-    /// If the key ever gains a declaration site this fails, and the arm should be deleted with it.
+    /// to a single key. <see cref="SampleCards_SharedStateDoesNotSpread"/> asserts only that the
+    /// offender count is zero, which the collapse cannot hide — the list keeps both entries, so
+    /// two colliding offenders still count as two. What the collapse would defeat is anything
+    /// that tries to <em>name</em> one slot by this key: an allowlist entry, a baseline row or a
+    /// per-entry suppression would cover both declarations while reading as though it covered
+    /// one. Pinned here so that a future entry-keyed mechanism is written knowing the key is not
+    /// unique, rather than discovering it after one has masked a live defect.
     /// </summary>
     [Fact]
     public void CrossCardRule_SameNamedSlotsInDisjointScopesShareOneKey()
@@ -1660,8 +1563,8 @@ public sealed class GallerySampleLintTests
 
         var slots = CrossCardState(root);
 
-        // Two distinct declarations, both reported — and one key between them, so an allowlist
-        // entry naming that key cannot mean one of them rather than the other.
+        // Two distinct declarations, both reported — and one key between them, so anything that
+        // identifies a slot by this key cannot mean one of them rather than the other.
         Assert.Equal(2, slots.Count);
         Assert.Single(slots.Select(s => s.Names).Distinct(global::System.StringComparer.Ordinal));
     }

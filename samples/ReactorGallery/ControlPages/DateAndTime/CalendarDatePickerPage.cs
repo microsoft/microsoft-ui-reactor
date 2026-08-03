@@ -11,7 +11,9 @@ class CalendarDatePickerPage : Component
 {
     public override Element Render()
     {
-        var (date, setDate) = UseState<DateTimeOffset?>(DateTimeOffset.Now);
+        DateTimeOffset? initialDate = DateTimeOffset.Now;
+        var (date, setDate) = UseState<DateTimeOffset?>(initialDate);
+        var (clearableDate, setClearableDate) = UseState<DateTimeOffset?>(initialDate);
 
         return ScrollView(
             VStack(16,
@@ -28,13 +30,13 @@ class CalendarDatePickerPage : Component
 
                 SampleCard("CalendarDatePicker with Clear",
                     VStack(8,
-                        CalendarDatePicker(date, d => setDate(d)),
-                        Button("Clear Date", () => setDate(null)),
-                        TextBlock($"Selected: {date?.ToString("D") ?? "No date selected"}")
+                        CalendarDatePicker(clearableDate, d => setClearableDate(d)),
+                        Button("Clear Date", () => setClearableDate(null)),
+                        TextBlock($"Selected: {clearableDate?.ToString("D") ?? "No date selected"}")
                             .Foreground(Theme.SecondaryText)
                     ),
-                    @"CalendarDatePicker(date, d => setDate(d))
-Button(""Clear"", () => setDate(null))")
+                    @"CalendarDatePicker(clearableDate, d => setClearableDate(d))
+Button(""Clear Date"", () => setClearableDate(null))")
             ).Margin(36, 24, 36, 36)
         );
     }

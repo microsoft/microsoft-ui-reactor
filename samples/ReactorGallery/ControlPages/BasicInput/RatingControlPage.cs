@@ -12,6 +12,7 @@ class RatingControlPage: Component
     public override Element Render()
     {
         var (rating, setRating) = UseState(3.0);
+        var (customRating, setCustomRating) = UseState(3.0);
 
         return ScrollView(VStack(16,
             PageHeader("RatingControl", "A control that lets users provide a star rating."),
@@ -31,9 +32,9 @@ RatingControl(4.0).IsReadOnly()
 "),
 
             SampleCard("Custom Max Rating",
-                RatingControl(rating, v => setRating(v)).MaxRating(10),
+                RatingControl(customRating, v => setCustomRating(v)).MaxRating(10),
                 sourceCode: @"
-RatingControl(rating, v => setRating(v)).MaxRating(10)
+RatingControl(customRating, v => setCustomRating(v)).MaxRating(10)
 ")
         ).Margin(36, 24, 36, 36));
     }
