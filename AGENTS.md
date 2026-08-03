@@ -222,10 +222,10 @@ state with**. A broken instrument is trusted by default, so the last one bites h
 - **Green runs corroborate a fix; a mechanism establishes it.** At a 25% failure rate,
   three clean passes happen 42% of the time.
 
-**When to stop.** One positive control per instrument is enough. Verify the assertion that
-gates correctness — not the verifier of the verifier. If you are writing a check about a
-check, or correcting the wording of a comment rather than the behaviour of code, you are
-past the point of return: stop and ship.
+**When to stop.** Validate each instrument once — then stop. Verify the assertion that gates
+correctness, not the verifier of the verifier. If you are adding a *second* layer of checking,
+or correcting the wording of a comment rather than the behaviour of code, you are past the
+point of return: stop and ship.
 
 ### Analyzers, CLI checks, docs & public API
 

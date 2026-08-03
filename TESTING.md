@@ -135,7 +135,11 @@ the class they map to is often spelled differently — `CenterOnCurrent_UsesCurs
 |---|---|
 | grep `SelfTest/Fixtures/` only | fixture names whose class name differs |
 | grep `SelfTestFixtureRegistry.cs` only | check-only names — e.g. `WindowLevel_RuntimeFlip_Topmost`, `TabViewFill_Mounted`, `ExitTr_Removed` are all registry=0 |
-| **grep `tests/Reactor.AppTests.Host/` whole** | **none — use this** |
+| **grep `tests/Reactor.AppTests.Host/` whole** | **literal names: none — use this** |
+
+One blind spot survives even the whole-tree grep: check names built by interpolation —
+`H.Check($"A11y_Role_{role}_Mounted", …)` — match no literal anywhere, so grepping the TAP name
+you actually saw returns zero. Search the invariant stem (`A11y_Role_`) instead.
 
 Both narrow probes return a *confident zero*, which reads as "this fixture doesn't exist" and
 invites re-attributing a real flake as branch-local or renamed. Both directions were hit during
@@ -369,13 +373,12 @@ runs as evidence.
 
 CI runs them as separate jobs on separate runners today, and that isolation is load-bearing
 rather than incidental. E2E drives real pointer input, foregrounds windows and changes Z-order;
-several selftest fixtures read live desktop state (the two `CenterOnCurrent`-based ones read the
-cursor's monitor; `UseIsCovered_RerendersOnZOrderChange` reads Z-order). Running E2E first on one
-machine and then `--self-test` took a clean unmodified tree from 0 to 8 failures — reproducible,
-and the standing repro for those fixtures. So if you consolidate jobs to save runner minutes, or
-run both tiers locally back-to-back, expect selftest reds that are an artefact of tier ordering
-and not of your change. Fix the fixtures' desktop-state dependence before merging the jobs, not
-after.
+some selftest fixtures read live desktop state — the two `CenterOnCurrent`-based ones sample the
+cursor's monitor while opening a real window. Running E2E first on one machine and then
+`--self-test` took a clean unmodified tree from 0 to 8 failures — reproducible, and the standing
+repro for those fixtures. So if you consolidate jobs to save runner minutes, or run both tiers
+locally back-to-back, expect selftest reds that are an artefact of tier ordering and not of your
+change. Fix the fixtures' desktop-state dependence before merging the jobs, not after.
 
 ---
 
