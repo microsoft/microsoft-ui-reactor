@@ -402,14 +402,67 @@ public class DataGridEditorFocusTests
         Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Name"));
 
         var versionBefore = state.FocusRequestVersion;
-        DataGridComponent<TestItem>.HandleKeyDownForTests(state, el, VirtualKey.Tab);
+        DataGridComponent<TestItem>.HandleKeyDownForTests(state, el, KeyChord.Unmodified(VirtualKey.Tab));
 
         // The whole point of #976: the key path — not just the public API — has to arm.
         Assert.True(state.FocusRequestVersion > versionBefore);
-        Assert.True(state.TryConsumeEditorFocusRequest(Row(1), Columns[state.FocusedColIndex].Name));
+
+        // Assert the DESTINATION, not merely that something moved. Reading the landing column back
+        // out of the state (Columns[state.FocusedColIndex].Name) would consume whatever the state
+        // decided and pass just as happily if the traversal inverted — the editable ring here is
+        // {Name, Score, Notes}, so forward from Name is Score and backward is Notes, and only a
+        // literal can tell those apart.
+        Assert.Equal(ScoreCol, state.FocusedColIndex);
+        Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Score"));
 
         // …and it must not have committed or torn down the row on the way.
         Assert.True(state.IsRowEditing);
+    }
+
+    [Fact]
+    public async Task RowEditShiftTabThroughTheKeyHandlerArmsABackwardFocusRequest()
+    {
+        var state = await LoadedState();
+        var el = Grid(EditMode.Row);
+        Assert.True(state.BeginRowEdit(1));
+        Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Name"));
+
+        var versionBefore = state.FocusRequestVersion;
+        // The backward twin, and the reason it exists: #987 carries the modifier through the
+        // deferred dispatch, #976 turns the landing into a real focus request. Either half can
+        // regress on its own — dropping Shift lands on Score with a request still armed, so a test
+        // that only checked "a request was armed" would stay green through exactly the bug the
+        // chord plumbing exists to prevent.
+        DataGridComponent<TestItem>.HandleKeyDownForTests(state, el, new KeyChord(VirtualKey.Tab, Shift: true, Ctrl: false));
+
+        Assert.True(state.FocusRequestVersion > versionBefore);
+
+        // Backward off the FIRST editable column wraps to the LAST one. Notes is reachable only by
+        // going backward from Name: forward would need two steps, and this test takes one.
+        Assert.Equal(NotesCol, state.FocusedColIndex);
+        Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Notes"));
+        Assert.True(state.IsRowEditing);
+    }
+
+    [Fact]
+    public async Task RowEditTabDirectionsDisagreeThroughTheKeyHandler()
+    {
+        // Cross-arm differential, step-matched: one Tab against one Shift+Tab from the SAME origin.
+        // Its job is edit robustness rather than logical independence — it is the line that still
+        // fails if someone "repairs" both destination literals above to whatever a regressed tree
+        // reports, which is how a direction test goes permanently green.
+        var forward = await LoadedState();
+        var back = await LoadedState();
+        var el = Grid(EditMode.Row);
+
+        Assert.True(forward.BeginRowEdit(1));
+        Assert.True(back.BeginRowEdit(1));
+        Assert.Equal(back.FocusedColIndex, forward.FocusedColIndex); // same origin, or nothing below means anything
+
+        DataGridComponent<TestItem>.HandleKeyDownForTests(forward, el, KeyChord.Unmodified(VirtualKey.Tab));
+        DataGridComponent<TestItem>.HandleKeyDownForTests(back, el, new KeyChord(VirtualKey.Tab, Shift: true, Ctrl: false));
+
+        Assert.NotEqual(back.FocusedColIndex, forward.FocusedColIndex);
     }
 
     /// <summary>

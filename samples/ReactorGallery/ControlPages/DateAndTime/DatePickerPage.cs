@@ -11,7 +11,9 @@ class DatePickerPage : Component
 {
     public override Element Render()
     {
-        var (date, setDate) = UseState(DateTimeOffset.Now);
+        var initialDate = DateTimeOffset.Now;
+        var (date, setDate) = UseState(initialDate);
+        var (resetDate, setResetDate) = UseState(initialDate);
 
         return ScrollView(
             VStack(16,
@@ -27,14 +29,14 @@ class DatePickerPage : Component
 
                 SampleCard("DatePicker with Reset",
                     VStack(8,
-                        DatePicker(date, d => setDate(d)),
+                        DatePicker(resetDate, d => setResetDate(d)),
                         HStack(8,
-                            Button("Today", () => setDate(DateTimeOffset.Now)),
-                            TextBlock($"Selected: {date:D}").Foreground(Theme.SecondaryText)
+                            Button("Today", () => setResetDate(DateTimeOffset.Now)),
+                            TextBlock($"Selected: {resetDate:D}").Foreground(Theme.SecondaryText)
                         )
                     ),
-                    @"DatePicker(date, d => setDate(d))
-Button(""Today"", () => setDate(DateTimeOffset.Now))")
+                    @"DatePicker(resetDate, d => setResetDate(d))
+Button(""Today"", () => setResetDate(DateTimeOffset.Now))")
             ).Margin(36, 24, 36, 36)
         );
     }

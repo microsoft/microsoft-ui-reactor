@@ -13,6 +13,8 @@ class AutoSuggestBoxPage : Component
     public override Element Render()
     {
         var (query, setQuery) = UseState("");
+        var (submitQuery, setSubmitQuery) = UseState("");
+        var (filterQuery, setFilterQuery) = UseState("");
         var (submitted, setSubmitted) = UseState("");
         var allItems = new[] { "Apple", "Apricot", "Banana", "Blueberry", "Cherry", "Coconut", "Date", "Fig", "Grape" };
 
@@ -32,26 +34,26 @@ class AutoSuggestBoxPage : Component
 
                 SampleCard("With Query Submitted",
                     VStack(8,
-                        AutoSuggestBox(query, setQuery, s => setSubmitted(s)).Width(300),
+                        AutoSuggestBox(submitQuery, setSubmitQuery, s => setSubmitted(s)).Width(300),
                         When(submitted != "",
                             () => TextBlock($"Submitted: \"{submitted}\"").Foreground(Theme.SystemSuccess))
                     ),
-                    @"AutoSuggestBox(query, setQuery, s => setSubmitted(s))"),
+                    @"AutoSuggestBox(submitQuery, setSubmitQuery, s => setSubmitted(s))"),
 
                 SampleCard("Filtered Results Display",
                     VStack(8,
-                        AutoSuggestBox(query, setQuery).Width(300),
+                        AutoSuggestBox(filterQuery, setFilterQuery).Width(300),
                         TextBlock("Matching items:").Bold(),
                         VStack(2,
                             allItems
-                                .Where(i => string.IsNullOrEmpty(query) || i.Contains(query, System.StringComparison.OrdinalIgnoreCase))
+                                .Where(i => string.IsNullOrEmpty(filterQuery) || i.Contains(filterQuery, System.StringComparison.OrdinalIgnoreCase))
                                 .Select(i => TextBlock($"  • {i}").Foreground(Theme.SecondaryText))
                                 .ToArray()
                         )
                     ),
                     """
-                    AutoSuggestBox(query, setQuery)
-                    allItems.Where(i => i.Contains(query)).Select(...)
+                    AutoSuggestBox(filterQuery, setFilterQuery)
+                    allItems.Where(i => i.Contains(filterQuery)).Select(...)
                     """)
             ).Margin(36, 24, 36, 36)
         );

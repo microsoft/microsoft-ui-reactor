@@ -122,6 +122,73 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
+    /// Regression for issue #987: the grid's KeyDown pipeline captured only the raw
+    /// <c>VirtualKey</c> and deferred dispatch through <c>DispatcherQueue.TryEnqueue</c>, so the
+    /// modifier state never reached the handler and <c>Shift+Tab</c> was indistinguishable from
+    /// <c>Tab</c> — an editing Shift+Tab moved FORWARD. This is the only tier that exercises the
+    /// real synchronous modifier read and the mounted handler wiring; the headless tests construct
+    /// the chord themselves and cannot see either.
+    ///
+    /// <para>Scope, because "the only tier" invites a wider reading than it earns. What this detects
+    /// is a modifier that is never captured at all — no timing involved, the chord is wrong on every
+    /// run. What it does NOT detect is the capture sinking BELOW the <c>TryEnqueue</c> deferral,
+    /// which is a timing defect: <c>viaSendInput</c> injects the whole chord microseconds apart, and
+    /// a posted dispatcher wake outranks the queued <c>WM_KEYUP(Shift)</c>, so the deferred read
+    /// most likely still sees Shift down. Whichever way that resolves, it resolves the same way
+    /// every run — so a green result here is evidence of nothing about capture position (#1049).
+    /// That regression is covered deterministically, in the only tier that can express it, by
+    /// <c>DataGridCaptureSiteTests</c>.</para>
+    ///
+    /// <para>The oracle is the direction, not the commit: both directions commit the LastName edit
+    /// identically, so the EditLog right after the chord cannot tell them apart. What differs is
+    /// where the editor reopens — backward lands on FirstName (editable, editor reopens), forward
+    /// lands on Salary (read-only, NO editor at all). Typing into the reopened editor and
+    /// committing therefore produces <c>[1:Alicia,Smythe]</c> only if the move went backward; the
+    /// forward bug cannot get that far, because there is no editor to type into.</para>
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_EditingShiftTab_ReopensEditorOnPreviousCell()
+    {
+        NavigateToFixtureFresh("DataGrid_EditableGrid");
+        WaitForText("EditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName, the PREVIOUS cell) should be visible");
+        Assert.IsNotNull(WaitForName("Smith"), "'Smith' (row 1 LastName) should be visible");
+
+        // Edit row-1 LastName (Smith -> Smythe); type a new value but do NOT commit.
+        TapCell("Smith");
+        TypeIntoFocusedEditor("Smythe");
+
+        // Editing Shift+Tab: commits LastName and must reopen the editor on the PREVIOUS cell
+        // (FirstName). Forward would land on read-only Salary and reopen nothing.
+        App.SendKeys("shift+tab", viaSendInput: true);
+
+        // Fast-fail diagnostic, NOT an oracle: this can legitimately observe the OUTGOING LastName
+        // editor before it is torn down, so its success proves nothing about direction. It is here
+        // so the buggy case (no editor anywhere, because the chord moved forward onto the read-only
+        // Salary column) reports that cause instead of timing out on the commit wait below.
+        try { WaitForEditor(timeoutMs: 4000); }
+        catch (WinAppException ex)
+        {
+            Assert.Fail("Inline editor did not reopen after the editing Shift+Tab. The chord most likely moved " +
+                        "FORWARD onto the read-only Salary column — i.e. the modifier was dropped between the " +
+                        "routed handler and the deferred dispatch (#987). " + ex.Message);
+        }
+
+        // The LastName commit from the chord must have landed, with FirstName untouched.
+        WaitForTextContaining("EditLog", "[1:Alice,Smythe]", timeoutMs: 5000);
+
+        // Unconditional proof the editor reopened on FirstName and not somewhere else: type into it
+        // and commit. Editing FirstName commits row 1 as [1:Alicia,Smythe], preserving the LastName
+        // just committed above. Had the editor reopened on LastName, this would read
+        // [1:Alice,Alicia] and the wait would time out.
+        TypeIntoFocusedEditor("Alicia", commitWithEnter: true);
+        WaitForTextContaining("EditLog", "[1:Alicia,Smythe]", timeoutMs: 5000);
+        Assert.IsNotNull(WaitForName("Alicia"), "Edited FirstName 'Alicia' should be visible after commit.");
+        Assert.IsNotNull(WaitForName("Smythe"), "'Smythe' should still be visible after the second commit.");
+    }
+
+    /// <summary>
     /// Regression for the SuppressNextLostFocusCommit guard's one-shot lifetime: an editing-Tab into a
     /// NON-editable next cell reopens no editor (IsEditing ends false), so the guard must still be
     /// consumed — otherwise it lingers on the persistent state and silently suppresses the NEXT
@@ -351,6 +418,52 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
+    /// The backward twin of <see cref="Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit"/>.
+    /// The <c>SuppressNextLostFocusCommit</c> guard is armed on the Tab KEY, deliberately without
+    /// looking at the direction (#987), so Shift+Tab arms it exactly like Tab — and must therefore
+    /// consume it exactly like Tab when the cell it lands on has no editor. Here: edit row-1
+    /// FirstName (its PREVIOUS tab-order cell, Id, is read-only), press Shift+Tab, then edit a
+    /// different row's cell and move focus off the grid. That second edit must commit — if the
+    /// guard leaked, it silently swallows the focus-out commit and 'Bobby' is lost.
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_EditingShiftTabToReadOnly_DoesNotSuppressNextCommit()
+    {
+        NavigateToFixtureFresh("DataGrid_EditableGrid");
+        WaitForText("EditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
+
+        // Edit row-1 FirstName (Alice -> Alicia); Shift+Tab moves BACKWARD to Id (read-only), so no
+        // editor reopens. The commit itself still has to land.
+        TapCell("Alice");
+        TypeIntoFocusedEditor("Alicia");
+        App.SendKeys("shift+tab", viaSendInput: true);
+        WaitForTextContaining("EditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
+
+        // This is the direction oracle, and it is why this test is not just a slower copy of its
+        // forward twin. The commit above lands identically whichever way the chord goes, but the
+        // LANDING does not: backward is read-only Id (no editor), forward is editable LastName (an
+        // editor reopens and stays open). Without this, dropping Shift still produces both EditLog
+        // entries below and the test would pass on the very bug it exists to catch.
+        AssertNoEditorSettles(
+            "An inline editor was open after the editing Shift+Tab. The chord moved FORWARD onto " +
+            "editable LastName instead of backward onto read-only Id — i.e. the modifier was " +
+            "dropped between the routed handler and the deferred dispatch (#987).");
+
+        // Now edit a different row's cell and move focus OUT of the grid by clicking the anchor
+        // button, firing the grid's "focus left the grid" LostFocus commit — the exact path the
+        // guard suppresses. If the guard leaked from the Shift+Tab-into-read-only above, this
+        // second edit is discarded and the wait below times out.
+        Assert.IsNotNull(WaitForName("Bob"), "'Bob' (row 2 FirstName) should be visible");
+        TapCell("Bob");
+        TypeIntoFocusedEditor("Bobby");
+        Element("BlurAnchor").Click(); // focus leaves the grid -> blur-commit through LostFocus
+
+        WaitForTextContaining("EditLog", "[2:Bobby,Jones]", timeoutMs: 5000);
+    }
+
+    /// <summary>
     /// Tap a DataGrid cell by its visible text to enter/commit cell edit. The cells are
     /// display-only TextBlocks (no InvokePattern), and a WinUI <c>Tapped</c> only fires on an
     /// ACTIVE window, so winapp's UIA invoke/click can't drive them. We foreground the host and
@@ -448,6 +561,37 @@ public class DataGridTests : AppTestBase
             Thread.Sleep(100);
         }
         throw new WinAppException("DataGrid inline editor (Edit control) did not appear after the cell tap.");
+    }
+
+    /// <summary>
+    /// Assert that no inline editor is open, and that this keeps being true. Used as the direction
+    /// oracle when a chord must land on a READ-ONLY cell: the commit it performs is the same in
+    /// either direction, so absence of an editor is what distinguishes them.
+    ///
+    /// <para>Allows a short grace period for the OUTGOING editor to tear down, then requires
+    /// absence across the whole settle window rather than at a single instant. A wrong-direction
+    /// move lands on an editable cell and reopens an editor that STAYS open, so it fails every
+    /// sample; sampling once could otherwise catch the momentary gap between the old editor
+    /// closing and the new one opening and wrongly pass.</para>
+    ///
+    /// <para>The probe cannot silently always-succeed: callers reach this only after
+    /// <see cref="TypeIntoFocusedEditor"/>, which drives the same
+    /// <c>FindFirstEditableSelector()</c> through <see cref="WaitForEditor"/> and throws if it
+    /// never finds an editor — so the instrument is proven positive earlier in the same test.</para>
+    /// </summary>
+    private void AssertNoEditorSettles(string because, int graceMs = 2000, int settleMs = 1200)
+    {
+        var graceDeadline = DateTime.UtcNow.AddMilliseconds(graceMs);
+        while (App.FindFirstEditableSelector() is not null && DateTime.UtcNow < graceDeadline)
+            Thread.Sleep(100);
+
+        var settleDeadline = DateTime.UtcNow.AddMilliseconds(settleMs);
+        do
+        {
+            Assert.IsNull(App.FindFirstEditableSelector(), because);
+            Thread.Sleep(150);
+        }
+        while (DateTime.UtcNow < settleDeadline);
     }
 
     private UiElement? WaitForName(string name, int timeoutMs = 5000)

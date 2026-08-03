@@ -11,7 +11,9 @@ class TimePickerPage : Component
 {
     public override Element Render()
     {
-        var (time, setTime) = UseState(DateTime.Now.TimeOfDay);
+        var initialTime = DateTime.Now.TimeOfDay;
+        var (time, setTime) = UseState(initialTime);
+        var (presetTime, setPresetTime) = UseState(initialTime);
 
         return ScrollView(
             VStack(16,
@@ -28,14 +30,14 @@ class TimePickerPage : Component
 
                 SampleCard("TimePicker with Preset",
                     VStack(8,
-                        TimePicker(time, t => setTime(t)),
+                        TimePicker(presetTime, t => setPresetTime(t)),
                         HStack(8,
-                            Button("Set to Noon", () => setTime(new TimeSpan(12, 0, 0))),
-                            Button("Set to Now", () => setTime(DateTime.Now.TimeOfDay))
+                            Button("Set to Noon", () => setPresetTime(new TimeSpan(12, 0, 0))),
+                            Button("Set to Now", () => setPresetTime(DateTime.Now.TimeOfDay))
                         )
                     ),
-                    @"TimePicker(time, t => setTime(t))
-Button(""Noon"", () => setTime(new TimeSpan(12, 0, 0)))")
+                    @"TimePicker(presetTime, t => setPresetTime(t))
+Button(""Set to Noon"", () => setPresetTime(new TimeSpan(12, 0, 0)))")
             ).Margin(36, 24, 36, 36)
         );
     }
