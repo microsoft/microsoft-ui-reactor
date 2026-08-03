@@ -472,6 +472,109 @@ public sealed class GallerySampleLintTests
     }
 
     /// <summary>
+    /// An <c>AnimatedIcon</c> must have <em>one</em> driver for its state. Writing
+    /// <c>AnimatedIcon.State</c> the value it already holds plays no marker segment at all — so
+    /// when a conditional state expression can fall back to a resting value that one of its own
+    /// branches also writes, that branch is a silent no-op exactly when the two agree.
+    /// <para>
+    /// This shipped: the gallery page drove three icons from both the pointer <em>and</em> an
+    /// explicit state picker, as <c>press ? "Pressed" : hover ? "PointerOver" : picked</c>. With
+    /// the picker on <c>Normal</c> or <c>Pressed</c> hovering animated; with it on
+    /// <c>PointerOver</c> hovering did nothing, because the hover branch wrote the value the
+    /// resting expression was already holding. Nothing threw, no test failed, and the icon simply
+    /// sat still for one of the three picker values — the #983 failure mode re-entering through a
+    /// second driver rather than a missing one.
+    /// </para>
+    /// <para>
+    /// The fix is structural, not a special case: give each icon a single driver. This lint is
+    /// what makes that stick.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnimatedIconStates_HaveASingleDriver()
+    {
+        var offenders = new List<string>();
+        var inspectedConditionals = 0;
+
+        foreach (var (path, root) in Pages())
+        {
+            var receivers = AnimatedIconReceivers(root);
+            foreach (var write in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                         .Where(i => IsAnimatedIconStateWrite(i, receivers)))
+            {
+                if (ResolveToConditional(root, write.ArgumentList.Arguments[1].Expression)
+                    is not { } conditional)
+                {
+                    continue;
+                }
+
+                inspectedConditionals++;
+
+                // Walk the `a ? x : b ? y : rest` chain: every `whenTrue` is a driven branch,
+                // and the final `whenFalse` is the resting expression the icon returns to.
+                var branchValues = new HashSet<string>(global::System.StringComparer.Ordinal);
+                ExpressionSyntax resting = conditional;
+                for (var node = conditional; node is not null;)
+                {
+                    foreach (var literal in DirectStringLiterals(node.WhenTrue))
+                    {
+                        branchValues.Add(literal);
+                    }
+
+                    resting = node.WhenFalse;
+                    node = node.WhenFalse as ConditionalExpressionSyntax;
+                }
+
+                var collisions = StateLiteralsReaching(root, resting)
+                    .Where(branchValues.Contains)
+                    .Distinct(global::System.StringComparer.Ordinal)
+                    .OrderBy(value => value, global::System.StringComparer.Ordinal)
+                    .ToList();
+
+                if (collisions.Count > 0)
+                {
+                    offenders.Add($"{Where(path, write)}: this icon's resting state can be " +
+                                  string.Join("/", collisions.Select(value => $"\"{value}\"")) +
+                                  ", which a branch of the same expression also writes. Writing State the value it " +
+                                  "already holds plays no segment, so that branch is a silent no-op whenever the two " +
+                                  "agree — give the icon a single driver instead (issue #983).");
+                }
+            }
+        }
+
+        Assert.True(inspectedConditionals > 0,
+            "no conditional AnimatedIcon state expressions were inspected — the lint would pass vacuously.");
+        Assert.True(offenders.Count == 0, string.Join("\n", offenders));
+    }
+
+    /// <summary>
+    /// The conditional expression that computes <paramref name="stateExpression"/>, whether it is
+    /// written inline or reached through the local it names. Returns null when the state is not
+    /// conditional at all (a picker-driven icon, say), which has no resting/branch split to check.
+    /// </summary>
+    static ConditionalExpressionSyntax? ResolveToConditional(SyntaxNode root, ExpressionSyntax stateExpression)
+    {
+        if (stateExpression is ConditionalExpressionSyntax inline) return inline;
+        if (stateExpression is not IdentifierNameSyntax name) return null;
+
+        var declarators = root.DescendantNodes().OfType<VariableDeclaratorSyntax>()
+            .Where(d => d.Initializer is not null)
+            .ToLookup(d => d.Identifier.Text, global::System.StringComparer.Ordinal);
+
+        return VisibleInitializer(declarators, name.Identifier.Text, stateExpression)
+            as ConditionalExpressionSyntax;
+    }
+
+    /// <summary>
+    /// String literals written directly in <paramref name="expression"/> — the values a branch
+    /// itself writes, as opposed to anything reachable through the locals it names.
+    /// </summary>
+    static IEnumerable<string> DirectStringLiterals(ExpressionSyntax expression) =>
+        expression.DescendantNodesAndSelf().OfType<LiteralExpressionSyntax>()
+            .Select(literal => literal.Token.Value)
+            .OfType<string>();
+
+    /// <summary>
     /// The outermost fluent chain / argument expression the invocation participates in, so a
     /// `.Set(...)` hung off `AnimatedIcon(src).Size(32, 32)` is still attributed to that icon.
     /// <para>

@@ -21,20 +21,21 @@ class AnimatedIconPage : Component
         var settings = UseMemo(() => new AnimatedSettingsVisualSource());
         var find = UseMemo(() => new AnimatedFindVisualSource());
         var nav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
+        var picker = UseMemo(() => new AnimatedSettingsVisualSource());
         var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
-
-        var (stateIdx, setStateIdx) = UseState(0);
-        var state = States[Math.Clamp(stateIdx, 0, States.Length - 1)];
 
         // Tracked per cell (-1 = none) so hovering one icon doesn't animate its neighbours.
         var (hoverIdx, setHoverIdx) = UseState(-1);
         var (pressIdx, setPressIdx) = UseState(-1);
 
+        // Pointer-driven only. Mixing in a second driver -- an explicit "resting state" picker,
+        // say -- makes hover a no-op whenever the two agree on a value, because writing State the
+        // value it already holds plays no segment. That card is separate for exactly that reason.
         Element Cell(int index, string label, object source)
         {
             var cellState = pressIdx == index ? "Pressed"
                 : hoverIdx == index ? "PointerOver"
-                : state;
+                : "Normal";
 
             return VStack(6,
                 // The Background is load-bearing: a null-background element is hit-test
@@ -49,6 +50,9 @@ class AnimatedIconPage : Component
                     .OnPointerReleased((_, _) => setPressIdx(-1)),
                 Caption(label).Foreground(Theme.SecondaryText).Center());
         }
+
+        var (stateIdx, setStateIdx) = UseState(0);
+        var state = States[Math.Clamp(stateIdx, 0, States.Length - 1)];
 
         var (hovering, setHovering) = UseState(false);
         var (open, setOpen) = UseReducer(false);
@@ -75,13 +79,15 @@ class AnimatedIconPage : Component
                     .IsClosable(false)
                 : null,
 
-            SampleCard("Play a state transition",
+            SampleCard("Hover or press an icon",
                 VStack(12,
                     HStack(20,
                         Cell(0, "Settings", settings),
                         Cell(1, "Find", find),
                         Cell(2, "Nav", nav)),
-                    Caption($"Hover or press an icon to play a transition. Resting state: {state}.")
+                    Caption("Each icon owns its own state: Normal → PointerOver on hover, "
+                            + "→ Pressed while held. This is the shape WinUI itself uses to drive "
+                            + "AnimatedIcon inside NavigationViewItem, Expander and AutoSuggestBox.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 // `using static Factories` shadows the WinUI type, so SetState needs an alias:
@@ -104,6 +110,27 @@ Border(AnimatedIcon(source).Size(32, 32)
 // Each write of State plays the ""<from>To<to>"" marker segment — that transition IS the
 // animation; there is no Play(). UseMemo the source: Source is reference-compared, so a
 // fresh instance per render cancels the transition.
+"),
+
+            SampleCard("Set the state directly",
+                VStack(12,
+                    Border(AnimatedIcon(picker).Size(32, 32)
+                            .Set(icon => XamlAnimatedIcon.SetState(icon, state))
+                            .Center())
+                        .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6),
+                    Caption($"State: {state} — pick another value to play the transition into it.")
+                        .Foreground(Theme.SecondaryText)),
+                sourceCode: @"
+var picker = UseMemo(() => new AnimatedSettingsVisualSource());
+var states = new[] { ""Normal"", ""PointerOver"", ""Pressed"" };
+var (stateIdx, setStateIdx) = UseState(0);
+var state = states[Math.Clamp(stateIdx, 0, states.Length - 1)];
+
+AnimatedIcon(picker).Size(32, 32)
+    .Set(icon => XamlAnimatedIcon.SetState(icon, state))
+// State is just a property, so anything can drive it — but keep it to one driver per icon.
+// A second driver that can agree on a value makes the other a silent no-op, since writing
+// State the value it already holds plays no segment at all.
 ",
                 OptionPanel(
                     TextBlock("State"),

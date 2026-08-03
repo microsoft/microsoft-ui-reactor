@@ -53,7 +53,7 @@
       "galleryRoute": "animated-icon",
       "samples": [
         {
-          "header": "Play a state transition",
+          "header": "Hover or press an icon",
           "language": "csharp",
           "code": "// `using static Factories` shadows the WinUI type, so SetState needs an alias:\n//   using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;\nvar source = UseMemo(() => new AnimatedSettingsVisualSource());\nvar (hovering, setHovering) = UseState(false);\nvar (pressing, setPressing) = UseState(false);\nvar state = pressing ? \"Pressed\" : hovering ? \"PointerOver\" : \"Normal\";\n\n// The Background is load-bearing: a null-background element is hit-test invisible,\n// so the pointer events below would never fire.\nBorder(AnimatedIcon(source).Size(32, 32)\n        .Set(icon => XamlAnimatedIcon.SetState(icon, state))\n        .Center())\n    .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6)\n    .OnPointerEntered((_, _) => setHovering(true))\n    .OnPointerExited((_, _) => { setHovering(false); setPressing(false); })\n    .OnPointerPressed((_, _) => setPressing(true))\n    .OnPointerReleased((_, _) => setPressing(false))\n// Each write of State plays the \"<from>To<to>\" marker segment — that transition IS the\n// animation; there is no Play(). UseMemo the source: Source is reference-compared, so a\n// fresh instance per render cancels the transition."
         }
