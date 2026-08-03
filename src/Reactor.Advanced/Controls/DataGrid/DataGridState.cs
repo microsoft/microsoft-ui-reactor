@@ -1403,9 +1403,8 @@ public class DataGridState<T>
     /// when no row edit is active, or when no visible column in the row has an editor.
     /// </summary>
     /// <remarks>
-    /// The grid's own KeyDown handler cannot call this today — it forwards only the raw key with no
-    /// modifier state, so it never sees Shift+Tab. That gap is tracked in #987; until it closes, this
-    /// is public for the same reason <see cref="FocusPrevCell"/> is: app authors driving custom
+    /// This is what the grid's own KeyDown handler runs for Shift+Tab during a row edit (#987). It
+    /// is also public for the same reason <see cref="FocusPrevCell"/> is: app authors driving custom
     /// keyboard handling need both directions. The logical-cursor caveat on
     /// <see cref="FocusNextRowEditColumn"/> applies here too.
     /// </remarks>
@@ -1656,11 +1655,28 @@ public class DataGridState<T>
         StateChanged?.Invoke();
     }
 
-    /// <summary>Commit the current edit and move focus to the next cell. Starts editing if the next cell is editable.</summary>
+    /// <summary>
+    /// Commit the current edit and move focus to the next cell. Focus lands on the next cell whether
+    /// or not it is editable; reopening an editor there is the caller's job (see
+    /// <c>DataGridComponent&lt;T&gt;</c>'s Tab handling), not this method's.
+    /// </summary>
     public (RowKey Key, T NewItem)? CommitAndMoveNext()
     {
         var result = CommitEdit();
         FocusNextCell();
+        return result;
+    }
+
+    /// <summary>
+    /// Commit the current edit and move focus to the PREVIOUS cell — the Shift+Tab counterpart of
+    /// <see cref="CommitAndMoveNext"/>, committing exactly what that would and differing only in
+    /// where the cursor lands (issue #987). Like its twin it lands on the previous cell whether or
+    /// not that cell is editable, and leaves reopening an editor to the caller.
+    /// </summary>
+    public (RowKey Key, T NewItem)? CommitAndMovePrev()
+    {
+        var result = CommitEdit();
+        FocusPrevCell();
         return result;
     }
 

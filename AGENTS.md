@@ -175,6 +175,11 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   `Reactor.AppTests`, `Reactor.AppTests.Host`, etc. fail with *"WindowsAppSDKSelfContained
   requires a supported Windows architecture"*. (`dotnet build Reactor.slnx` handles the
   solution defaults; single app/test projects usually do not.)
+- **A green Debug build does not clear the `Build solution` CI job.**
+  `TreatWarningsAsErrors` is Release-only and CI builds Release, so verify with
+  `dotnet build Reactor.slnx -c Release`. If `WMC0110` / `WMC1509` follows a C# error,
+  treat the markup errors as a likely cascade: fix the earlier error first, then confirm
+  they disappear before investigating them independently.
 - **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
   XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Reactor.dll' ... used by another process`. If it still races under
   parallel WinUI builds, prebuild `src/Reactor` alone first, then add `-m:1`
@@ -208,6 +213,10 @@ the one that bites hardest, because a broken instrument is trusted by default.
   corrupt-then-recompute oracles. **Copilot review does not catch vacuous assertions** —
   run the `.github/skills/pr-review/` multi-model dimension (different model family, high
   reasoning) on the *final* commit and fix every finding.
+- **A value oracle proves nothing where its healthy and broken branches coincide.**
+  This is the shared failure behind deleting a "redundant" guard and citing a passing but
+  non-differential check as an oracle. Before either, identify where both branches produce
+  the same value; preserve a guard or use a structural/differential oracle that cannot.
 - **Mutation testing does not reach an assertion whose *inputs* are environment-derived.**
   It perturbs the code under test, so it only exposes an oracle whose value depends on that
   code. `double preOffset = sv.VerticalOffset;` … `Math.Abs(sv.VerticalOffset - preOffset)
@@ -235,7 +244,17 @@ the one that bites hardest, because a broken instrument is trusted by default.
   language so a parse failure throws. **The tell is implausible uniformity:** an identical
   value across subjects that have nothing in common is a bug report about the instrument.
   The unifying question for a test and a tool alike is the same — **could this have come out
-  the other way?**
+  the other way?** If the answer is "no — it always passes", that is the finding, not
+  confirmation. **A no-match result is not a measurement** until a positive control proves
+  the same probe, wrapping, and file set can produce a match.
+- **Historical searches need historical vocabulary.** A rename or unit change makes a grep for
+  the current identifier/value structurally blind to earlier revisions. Before trusting a zero,
+  establish when the identifier first existed; use `git log --follow -p -- <file>` or pickaxe
+  searches over the changed value rather than projecting today's name backward through history.
+- **Self-consistency does not prove currency.** Counts from one stale checkout can corroborate
+  each other perfectly. Attach the commit OID and timestamp to measurements and compare against
+  a live remote ref when identity matters. `git rev-parse` identifies a commit; a tree OID only
+  identifies content and can remain unchanged after a message-only amend.
 - **Fixture registration is two-place.** Selftest: add to `AllFixtures` **and** the
   `Create()` switch in `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`.
   E2E: add to `AllFixtures` **and** the `Build` switch in
@@ -296,13 +315,12 @@ the one that bites hardest, because a broken instrument is trusted by default.
   and not of your change. Fix the fixtures' desktop-state dependence before merging the jobs,
   not after.
 - **Judging whether a flake fix worked.** N clean runs only supports a fix if `(1-p)^N` is
-  small for the *observed* failure rate `p`. At `p = 0.25`, three consecutive passes happen
-  **42%** of the time — so "3 clean runs" is consistent with the bug being entirely unfixed,
-  and roughly `N = 10` is needed for ~95% confidence. This is the "did this check have the
-  power to return the other answer?" test in probabilistic clothing, and it is the same
-  question the non-vacuous-assertion rule above asks. Prefer a *mechanism* that explains the
-  observed failure text over any number of green runs; run counts corroborate a cause, they
-  don't establish one.
+  small for an observed failure rate with `0 < p < 1`. At `p = 0.25`, three consecutive
+  passes happen **42%** of the time, and roughly `N = 10` is needed for ~95% confidence.
+  Synthetic-input E2E tests for timing defects often have `p` fixed at `0` or `1` by queue
+  ordering; reruns then have zero statistical power, so mutation-test the detector instead.
+  Prefer a *mechanism* that explains the observed failure text over any number of green runs;
+  run counts corroborate a cause, they don't establish one.
 - **Budget increases only refute one class of race.** Raising a poll/wait budget and still
   failing rules out "we sampled too early". It does not rule out an event that never fires,
   an ordering race decided before the first poll, or a lost wakeup — all budget-insensitive.
@@ -337,8 +355,10 @@ the one that bites hardest, because a broken instrument is trusted by default.
 ### Environment
 
 - Work in a clean worktree, not `main`: `git worktree add -b <branch> <path> origin/main`.
-- Don't build under deep or OneDrive-synced paths — WinUI can fail with `MSB3073`/`PRI210`;
-  prefer a short local path (e.g. `C:\src\`).
+- Don't build under deep or OneDrive-synced paths — WinUI can fail with `MSB3073`/`PRI210`
+  or XAML compiler `WMC1006`/`WMC9999`, sometimes naming an unrelated project such as
+  `Reactor.AppTests.ThirdPartyControls`. Before concluding your branch broke the build, check
+  out the same HEAD at a short path (e.g. `C:\src\probe`); if it passes, the path was the cause.
 
 ### Repo skills (`.github/skills/`)
 

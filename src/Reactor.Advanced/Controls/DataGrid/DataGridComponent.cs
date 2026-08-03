@@ -458,10 +458,23 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     new Microsoft.UI.Xaml.Input.KeyEventHandler((sender, e) =>
                     {
                         var currentEl = elRef.Current;
-                        if (ShouldHandleKey(state, currentEl, e.Key))
+                        // Settle the claim FIRST, from a chord with no modifiers. ShouldHandleKey is
+                        // modifier-blind by contract (see its remarks), so the answer is the same either
+                        // way — and deciding it here means the keyboard is probed only for the handful of
+                        // keys the grid owns, never for ordinary typing, which reaches this
+                        // handledEventsToo handler too. That contract is enforced by
+                        // DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind_SoTheCaptureGateCannotDropChords,
+                        // so this gate cannot start silently dropping chords.
+                        if (ShouldHandleKey(state, currentEl, KeyChord.Unmodified(e.Key)))
                         {
                             e.Handled = true;
-                            var capturedKey = e.Key;
+                            // Snapshot the key AND its modifiers here, before anything else defers — this is
+                            // the only moment the two are known to agree. KeyRoutedEventArgs carries no
+                            // modifier state, so it has to come from the live keyboard, and dispatch below is
+                            // deferred: reading Shift inside HandleKeyDown would sample the keyboard a frame
+                            // or more later and race the user releasing it, making Shift+Tab intermittently
+                            // wrong. (#987)
+                            var chord = KeyChord.Capture(e.Key);
                             // A cell editing-Tab moves real focus out of the single-tab-stop grid, which fires
                             // the grid's LostFocus commit. But the editing-Tab path (HandleKeyDown) itself
                             // commits the current cell and reopens the editor on the next cell, so the LostFocus
@@ -469,11 +482,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                             // Claim that one focus-out here, synchronously (before either handler defers), so the
                             // guard is robust to dispatcher ordering. Cell edit only: in row-edit mode IsEditing
                             // is also true, but the LostFocus there commits the whole ROW and must not be suppressed.
-                            if (capturedKey == VirtualKey.Tab && state.IsEditing && !state.IsRowEditing)
+                            // Direction-agnostic on purpose: Shift+Tab moves focus backward OUT of the grid just
+                            // as Tab moves it forward out, so the same one-shot claim is owed to both.
+                            if (chord.Key == VirtualKey.Tab && state.IsEditing && !state.IsRowEditing)
                                 state.SuppressNextLostFocusCommit = true;
                             Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                             {
-                                HandleKeyDown(state, currentEl, capturedKey);
+                                HandleKeyDown(state, currentEl, chord);
                             });
                         }
                     }),
@@ -1333,7 +1348,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
     // ── Keyboard handling ───────────────────────────────────────────
 
-    private static bool ShouldHandleKey(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
+    private static bool ShouldHandleKey(DataGridState<T> state, DataGridElement<T> el, KeyChord chord)
     {
         // IsEditing is true in BOTH cell- and row-edit (BeginRowEdit also sets _editingRowKey), and
         // both modes claim the same three keys. This gate runs in the grid root's handledEventsToo
@@ -1341,12 +1356,25 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // FocusManager has already moved focus for Tab: setting e.Handled here stops the key going
         // further UP the tree, it does not stop the editor below from seeing it. HandleKeyDown is
         // where the two modes diverge; keep the key set here in sync with it.
+        //
+        // The claim is deliberately modifier-blind for every key it currently answers: Shift+Tab is
+        // claimed exactly as Tab is, because HandleKeyDown handles both (walking backward instead of
+        // forward). Gating a claim on a modifier here would hand that chord back to FocusManager and
+        // the grid would never see it. The chord is threaded through so a future modifier-dependent
+        // arm (Ctrl+Home / Ctrl+End, spec 017 §6.8) can be claimed and handled in step. (#987)
+        //
+        // That blindness is load-bearing, not incidental: the KeyDown handler in OnMount settles this
+        // claim from KeyChord.Unmodified(e.Key) and only probes the real keyboard once the key is
+        // claimed, so the grid does no modifier work for keys it does not own. Making this
+        // modifier-dependent therefore ALSO requires moving KeyChord.Capture() back above that gate.
+        // DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind_SoTheCaptureGateCannotDropChords
+        // fails if this drifts.
         if (state.IsEditing)
         {
-            return key is VirtualKey.Enter or VirtualKey.Escape or VirtualKey.Tab;
+            return chord.Key is VirtualKey.Enter or VirtualKey.Escape or VirtualKey.Tab;
         }
 
-        return key switch
+        return chord.Key switch
         {
             VirtualKey.Up or VirtualKey.Down or VirtualKey.Left or VirtualKey.Right => true,
             VirtualKey.Tab or VirtualKey.Home or VirtualKey.End => true,
@@ -1356,7 +1384,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         };
     }
 
-    private static void HandleKeyDown(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
+    private static void HandleKeyDown(DataGridState<T> state, DataGridElement<T> el, KeyChord chord)
     {
         // Row-mode edit MUST be dispatched before the single-cell block below. IsEditing is true
         // here too (BeginRowEdit sets _editingRowKey while leaving _editingColumnName null as the
@@ -1364,7 +1392,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // with a null column name, leaving _isRowEditing set and the row's pending values dropped. (#853)
         if (state.IsRowEditing)
         {
-            switch (key)
+            switch (chord.Key)
             {
                 case VirtualKey.Enter:
                     {
@@ -1386,7 +1414,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     // click-away (spec 017 §6.7/§6.8). Real keyboard focus is WinUI's FocusManager
                     // tab order, which already ran before this handledEventsToo handler; this only
                     // syncs the logical index, exactly as the cell path's FocusNextCell does.
-                    state.FocusNextRowEditColumn();
+                    // Shift+Tab walks the same ring backward, with the same never-commit guarantee.
+                    if (chord.Shift)
+                        state.FocusPrevRowEditColumn();
+                    else
+                        state.FocusNextRowEditColumn();
                     return;
             }
             return;
@@ -1394,7 +1426,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
         if (state.IsEditing)
         {
-            switch (key)
+            switch (chord.Key)
             {
                 case VirtualKey.Enter:
                     {
@@ -1414,7 +1446,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     {
                         var editRowKey = state.EditingRowKey;
                         var originalItem = editRowKey is not null ? GetOriginalItem(state, editRowKey.Value) : default;
-                        var tabResult = state.CommitAndMoveNext();
+                        // Shift+Tab commits the same cell Tab would; only the cell it lands on next
+                        // differs. Both then reopen the editor when the landing cell is editable.
+                        var tabResult = chord.Shift ? state.CommitAndMovePrev() : state.CommitAndMoveNext();
                         if (tabResult is not null && el.OnRowChanged is not null)
                             HandleAsyncCommit(state, el, tabResult.Value.Key, tabResult.Value.NewItem, originalItem!);
                         if (el.Editable)
@@ -1425,15 +1459,19 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             return;
         }
 
-        switch (key)
+        switch (chord.Key)
         {
             case VirtualKey.Up:    state.MoveFocus(-1, 0);  break;
             case VirtualKey.Down:  state.MoveFocus(1, 0);   break;
             case VirtualKey.Left:  state.MoveFocus(0, -1);  break;
             case VirtualKey.Right: state.MoveFocus(0, 1);   break;
-            case VirtualKey.Tab:   state.FocusNextCell();    break;
             case VirtualKey.Home:  state.FocusHome();        break;
             case VirtualKey.End:   state.FocusEnd();         break;
+
+            case VirtualKey.Tab:
+                if (chord.Shift) state.FocusPrevCell();
+                else             state.FocusNextCell();
+                break;
 
             case VirtualKey.Enter:
             case VirtualKey.F2:
@@ -1455,19 +1493,20 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     }
 
     /// <summary>
-    /// Test seam (issue #853). Exposes the private key filter so the headless tests can pin which
-    /// keys the grid claims in each edit mode without fabricating a WinUI KeyRoutedEventArgs.
+    /// Test seam (issues #853, #987). Exposes the private key filter so the headless tests can pin
+    /// which keys the grid claims in each edit mode without fabricating a WinUI KeyRoutedEventArgs.
     /// </summary>
-    internal static bool ShouldHandleKeyForTests(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
-        => ShouldHandleKey(state, el, key);
+    internal static bool ShouldHandleKeyForTests(DataGridState<T> state, DataGridElement<T> el, KeyChord chord)
+        => ShouldHandleKey(state, el, chord);
 
     /// <summary>
-    /// Test seam (issue #853). Drives the private keyboard dispatcher so the headless tests can
-    /// assert the cell- vs row-edit branch split. Pass an element with a null <c>OnRowChanged</c>
-    /// to keep the async-commit (dispatcher) path out of a headless run.
+    /// Test seam (issues #853, #987). Drives the private keyboard dispatcher so the headless tests
+    /// can assert the cell- vs row-edit branch split and the Shift+Tab direction split. Pass an
+    /// element with a null <c>OnRowChanged</c> to keep the async-commit (dispatcher) path out of a
+    /// headless run.
     /// </summary>
-    internal static void HandleKeyDownForTests(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
-        => HandleKeyDown(state, el, key);
+    internal static void HandleKeyDownForTests(DataGridState<T> state, DataGridElement<T> el, KeyChord chord)
+        => HandleKeyDown(state, el, chord);
 
     /// <summary>
     /// Default placeholder cell: a rounded gray bar that mimics a text shimmer.

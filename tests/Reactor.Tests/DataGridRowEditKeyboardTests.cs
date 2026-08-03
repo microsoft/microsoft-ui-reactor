@@ -93,7 +93,12 @@ public class DataGridRowEditKeyboardTests
     };
 
     private static void Key(DataGridState<TestItem> state, DataGridElement<TestItem> el, VirtualKey key)
-        => DataGridComponent<TestItem>.HandleKeyDownForTests(state, el, key);
+        => DataGridComponent<TestItem>.HandleKeyDownForTests(
+            state, el, new KeyChord(key, Shift: false, Ctrl: false));
+
+    private static bool Should(DataGridState<TestItem> state, DataGridElement<TestItem> el, VirtualKey key)
+        => DataGridComponent<TestItem>.ShouldHandleKeyForTests(
+            state, el, new KeyChord(key, Shift: false, Ctrl: false));
 
     // Same shape as Columns, except Name carries a Required validator so a blank pending value
     // makes CommitRowEdit() bail out and leave the row open.
@@ -169,7 +174,6 @@ public class DataGridRowEditKeyboardTests
         // column, and never down to the next row the way the cell-mode FocusNextCell would.
         Key(state, el, VirtualKey.Tab);
         Assert.Equal(NameCol, state.FocusedColIndex);
-        Assert.NotEqual(IdCol, state.FocusedColIndex);
         Assert.Equal(0, state.FocusedRowIndex);
         Assert.True(state.IsRowEditing);
     }
@@ -218,11 +222,10 @@ public class DataGridRowEditKeyboardTests
         Key(state, el, VirtualKey.Tab);
 
         // Name is the very next column and IS in _rowEditValues, so a traversal that ignored
-        // visibility would stop there. Landing on Score instead proves the hidden column was
-        // stepped over — and the move off IdCol proves the traversal ran at all.
+        // visibility would stop there. Landing on Score instead proves both that the hidden column
+        // was stepped over and that the traversal ran at all — Score is neither Name nor the IdCol
+        // it started on.
         Assert.Equal(ScoreCol, state.FocusedColIndex);
-        Assert.NotEqual(NameCol, state.FocusedColIndex);
-        Assert.NotEqual(IdCol, state.FocusedColIndex);
         Assert.Equal(0, state.FocusedRowIndex);
         Assert.True(state.IsRowEditing);
     }
@@ -255,30 +258,48 @@ public class DataGridRowEditKeyboardTests
     {
         var state = await LoadedState();
 
-        // Start on the read-only Id column. With only Name and Score editable, that is the one
-        // position where forward and backward traversal disagree — from anywhere else the two
-        // directions ping-pong between the same two columns, so a test that started elsewhere
-        // would pass even if this method walked forward.
+        // Start on the read-only Id column. With only Name and Score editable the ring has size 2,
+        // so exactly TWO origins make forward and backward disagree: IdCol, and the -1 no-prior-focus
+        // sentinel used by the test further down this file that begins a row edit without setting
+        // column focus first. From either editable column both directions land on the same place, so
+        // a test started there passes even if this method walks forward.
+        //
+        // The origin assertion below is load-bearing, and was added after measuring what happens
+        // without it. #976 parks the row edit on the first editable column, silently rewriting this
+        // origin from Id(0) to Name(1). Measured, in order:
+        //   1. only the FORWARD destination constant fails (Expected 1 / Actual 2), which invites the
+        //      reader to update that one number;
+        //   2. after that repair the file is fully green with backward == forward == ScoreCol — i.e.
+        //      direction-blind — and this file carries no cross-arm Assert.NotEqual to catch it;
+        //   3. inverting MoveRowEditFocus then leaves this test PASSING: it drops out of that mutant's
+        //      killer set entirely (5 killers become 4).
+        // With the origin asserted, the same change fails at Expected 0 / Actual 1 — on its CAUSE
+        // rather than on a destination constant, pointing the reader at the parking behaviour instead
+        // of at a number to edit.
         state.SetFocus(0, IdCol);
         Assert.True(state.BeginRowEdit(0));
+        Assert.Equal(IdCol, state.FocusedColIndex);
 
         // Backward off column 0 wraps to the LAST editable column, not the first.
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(ScoreCol, state.FocusedColIndex);
 
+        // Landing on Name rather than Id is itself the proof that the read-only column is skipped
+        // going backward, just as it was going forward.
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(NameCol, state.FocusedColIndex);
-        Assert.NotEqual(IdCol, state.FocusedColIndex); // read-only column is skipped both ways
         Assert.Equal(0, state.FocusedRowIndex);
         Assert.True(state.IsRowEditing);
 
-        // Differential isolation: same grid, same start, only the direction differs.
+        // Differential isolation: same grid, same start, only the direction differs. The origin is
+        // asserted on this arm too: if a future change moves the start column, both arms must fail on
+        // the origin, not just whichever one the runner happens to reach first.
         var forward = await LoadedState();
         forward.SetFocus(0, IdCol);
         Assert.True(forward.BeginRowEdit(0));
+        Assert.Equal(IdCol, forward.FocusedColIndex);
         Assert.True(forward.FocusNextRowEditColumn());
         Assert.Equal(NameCol, forward.FocusedColIndex);
-        Assert.NotEqual(ScoreCol, forward.FocusedColIndex);
     }
 
     [Fact]
@@ -512,14 +533,14 @@ public class DataGridRowEditKeyboardTests
         var el = Grid(EditMode.Row);
         Assert.True(state.BeginRowEdit(0));
 
-        Assert.True(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Enter));
-        Assert.True(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Escape));
-        Assert.True(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Tab));
+        Assert.True(Should(state, el, VirtualKey.Enter));
+        Assert.True(Should(state, el, VirtualKey.Escape));
+        Assert.True(Should(state, el, VirtualKey.Tab));
 
         // Arrows/Home/End must reach the focused editor for in-text caret movement.
-        Assert.False(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Down));
-        Assert.False(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Left));
-        Assert.False(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Home));
-        Assert.False(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.F2));
+        Assert.False(Should(state, el, VirtualKey.Down));
+        Assert.False(Should(state, el, VirtualKey.Left));
+        Assert.False(Should(state, el, VirtualKey.Home));
+        Assert.False(Should(state, el, VirtualKey.F2));
     }
 }

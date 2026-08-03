@@ -36,6 +36,17 @@ Both `Reactor.SelfTests` and `Reactor.AppTests` declare a `ProjectReference` to 
 
 Rule of thumb: start with a unit test. Drop to selftest only when you need a live control. Reach for E2E only when you need cross-process UIA — E2E is the slowest and flakiest tier.
 
+### Mutation checks must prove the mutation ran
+
+Before interpreting a green mutation run, verify the source diff contains the intended edit at
+exactly the target site, the build and test processes both exited successfully, and the product
+assembly containing that source was rebuilt after the edit. Do not infer success by matching
+stdout: pipelines can swallow failures and stale binaries can still report `Passed`.
+CRLF-sensitive replacements, ambiguous anchors, failed compilation, node races, and
+timestamp-preserving restores can all make a mutation look tested when it was absent or applied
+elsewhere. After restoring, require `git status --porcelain` to match the pre-mutation state
+rather than treating a subsequent passing test as proof of the restore.
+
 ---
 
 ## 1. Unit tests (`tests/Reactor.Tests`) — xUnit
@@ -273,6 +284,12 @@ dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.Ac
 > **Requires:** the **winapp CLI** (`winapp ui`). Install it with `winget install Microsoft.WinAppCli` (or run `./bootstrap.ps1`, which installs it for you). The harness resolves it from `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe` or `winapp` on PATH. Unit and selftest runs don't need it.
 >
 > **WinForms tests** also require `Reactor.WinFormsTests.Host` to build. It launches a separate WinForms app with a XAML Island.
+
+When `viaSendInput: true` injects a modifier chord, it can compress the gap between key messages
+enough that queue ordering makes a timing-sensitive race always won or always lost (`p` is `0`
+or `1`) for that environment and tool version. If the defect is *when* state is read rather than
+*whether* input arrived, prove the detector with a mutation before counting repeated green E2E
+runs as evidence.
 
 ---
 
