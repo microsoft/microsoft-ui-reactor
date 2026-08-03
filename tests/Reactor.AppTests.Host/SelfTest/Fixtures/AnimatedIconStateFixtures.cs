@@ -304,4 +304,84 @@ internal static class AnimatedIconStateFixtures
                     && !ReferenceEquals(inlineBefore, inlineAfter));
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  4. The icon must survive a state change *inside a Button*. The gallery's
+    //     interactive cells put an AnimatedIcon directly in a Button's content slot;
+    //     the menu sample nests it in an HStack. If a direct content swap remounts the
+    //     control, the composition visual restarts and the transition is swallowed —
+    //     the icon jumps to the new state's end frame with nothing drawn in between,
+    //     which is indistinguishable from "hover does nothing" (issue #983).
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class StateSurvivesInsideButton(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // Arm A — icon is the Button's direct content (what the gallery cells do).
+            var directHost = H.CreateHost();
+            directHost.Mount(ctx =>
+            {
+                var source = ctx.UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
+                var (idx, setIdx) = ctx.UseState(0);
+                var state = GalleryStates[idx];
+                return VStack(
+                    Button(AnimatedIcon(source).Size(32, 32)
+                                .Set(icon => XamlAnimatedIcon.SetState(icon, state)),
+                            () => { })
+                        .Size(72, 56),
+                    TextBlock($"Direct:{state}"),
+                    Button("BumpDirect", () => setIdx((idx + 1) % GalleryStates.Length)));
+            });
+
+            await Harness.Render();
+            var directBefore = H.FindControl<XamlAnimatedIcon>(_ => true);
+            H.ClickButton("BumpDirect");
+            await Harness.Render();
+            var directAfter = H.FindControl<XamlAnimatedIcon>(_ => true);
+
+            // Arm B — icon nested in an HStack (what the menu sample does), as the control
+            // for arm A: if both remount, the defect is not about the content slot at all.
+            var nestedHost = H.CreateHost();
+            nestedHost.Mount(ctx =>
+            {
+                var source = ctx.UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
+                var (idx, setIdx) = ctx.UseState(0);
+                var state = GalleryStates[idx];
+                return VStack(
+                    Button(HStack(8,
+                                AnimatedIcon(source).Size(32, 32)
+                                    .Set(icon => XamlAnimatedIcon.SetState(icon, state)),
+                                TextBlock("label")),
+                            () => { }),
+                    TextBlock($"Nested:{state}"),
+                    Button("BumpNested", () => setIdx((idx + 1) % GalleryStates.Length)));
+            });
+
+            await Harness.Render();
+            var nestedBefore = H.FindControl<XamlAnimatedIcon>(_ => true);
+            H.ClickButton("BumpNested");
+            await Harness.Render();
+            var nestedAfter = H.FindControl<XamlAnimatedIcon>(_ => true);
+
+            // Non-vacuity: a null on either side would make every ReferenceEquals below
+            // trivially decidable for the wrong reason.
+            H.Check("AnimIconInButton_BothArmsFoundControls",
+                directBefore is not null && directAfter is not null
+                && nestedBefore is not null && nestedAfter is not null);
+
+            // The state write has to actually land, or "updated in place" is measuring an
+            // icon nobody wrote to.
+            H.Check("AnimIconInButton_DirectStateMoved",
+                directAfter is not null && XamlAnimatedIcon.GetState(directAfter) == "PointerOver");
+            H.Check("AnimIconInButton_NestedStateMoved",
+                nestedAfter is not null && XamlAnimatedIcon.GetState(nestedAfter) == "PointerOver");
+
+            // The claim under test: a state change must not remount the icon.
+            H.Check("AnimIconInButton_DirectContentUpdatedInPlace",
+                directBefore is not null && ReferenceEquals(directBefore, directAfter));
+            H.Check("AnimIconInButton_NestedContentUpdatedInPlace",
+                nestedBefore is not null && ReferenceEquals(nestedBefore, nestedAfter));
+        }
+    }
 }
