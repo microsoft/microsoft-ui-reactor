@@ -1,0 +1,49 @@
+# Fast, headless tests for the PowerShell that installs the Reactor VS extension:
+#   - src/vs-reactor/VsProcessLib.ps1  (devenv /updateconfiguration timeout + tree kill)
+#   - src/vs-reactor/Reinstall-Vsix.ps1 + bootstrap.ps1 (the exit-code handshake)
+# No build, no dotnet, no Visual Studio — the "devenv" under test is a renamed
+# copy of cmd.exe. Runs on windows-latest because the process semantics being
+# tested (tree kill, taskkill fallback, Get-Process by name) are Windows-specific.
+#
+# Guards issue #1074: on VS 18.8 `devenv /updateconfiguration` never returns, and
+# a bare Process.Kill() orphaned its child, poisoning every later VSIX install on
+# the machine. Each test script exits non-zero on any failed assertion.
+name: VS extension script tests
+
+on:
+  push:
+    paths:
+      - 'bootstrap.ps1'
+      - 'src/vs-reactor/VsProcessLib.ps1'
+      - 'src/vs-reactor/Reinstall-Vsix.ps1'
+      - 'tests/vs_reactor/ci/**'
+      - '.github/workflows/vs-reactor-lib-tests.yml'
+  pull_request:
+    paths:
+      - 'bootstrap.ps1'
+      - 'src/vs-reactor/VsProcessLib.ps1'
+      - 'src/vs-reactor/Reinstall-Vsix.ps1'
+      - 'tests/vs_reactor/ci/**'
+      - '.github/workflows/vs-reactor-lib-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  vs-reactor-scripts:
+    name: VsProcessLib + bootstrap exit-code tests
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run VsProcessLib tests
+        shell: pwsh
+        run: ./tests/vs_reactor/ci/VsProcessLib.Tests.ps1
+
+      - name: Run bootstrap exit-code tests
+        shell: pwsh
+        run: ./tests/vs_reactor/ci/BootstrapExitCode.Tests.ps1

@@ -554,15 +554,28 @@ if ($SkipVsExtension) {
                     # the next launch. -VsInstanceId pins to the same instance we probed.
                     $powerShellExe = (Get-Process -Id $PID).Path
                     & $powerShellExe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $reinstall -Configuration $Configuration -VsInstanceId $target.instanceId
-                    if ($LASTEXITCODE -ne 0) {
+                    $vsixExit = $LASTEXITCODE
+                    # Reinstall-Vsix.ps1's exit-code contract (see its .OUTPUTS):
+                    # 3 == VSIX installed but `devenv /updateconfiguration`
+                    # timed out. Don't claim [ok] for that, and don't fail
+                    # either — the extension is installed and usable.
+                    if ($vsixExit -eq 3) {
+                        Write-Host ''
+                        Write-Host "    [warn] VS extension installed into $($target.displayName), but 'devenv /updateconfiguration' timed out and was terminated. Launch VS once to finish the menu merge; if View -> Other Windows -> Reactor Preview is missing, re-run src\vs-reactor\Reinstall-Vsix.ps1." -ForegroundColor Yellow
+                    } elseif ($vsixExit -ne 0) {
                         # Don't fail the whole bootstrap — the rest of the install is
                         # usable without the VS extension. Surface the failure clearly
                         # so users debugging install issues see it.
                         Write-Host ''
-                        Write-Host "    [warn] VS extension install reported a non-zero exit code ($LASTEXITCODE). The rest of the bootstrap completed; re-run src\vs-reactor\Reinstall-Vsix.ps1 directly to retry." -ForegroundColor Yellow
+                        Write-Host "    [warn] VS extension install reported a non-zero exit code ($vsixExit). The rest of the bootstrap completed; re-run src\vs-reactor\Reinstall-Vsix.ps1 directly to retry." -ForegroundColor Yellow
                     } else {
                         Write-Ok "VS extension installed into $($target.displayName) — launch VS, then View -> Other Windows -> Reactor Preview."
                     }
+                    # Write-Host does NOT clear $LASTEXITCODE, so without this
+                    # the child's non-zero code survives to the end of the
+                    # script and fails callers that check it (issue #1074:
+                    # bootstrap.yml's `if ($LASTEXITCODE -ne 0) { throw }`).
+                    $global:LASTEXITCODE = 0
                 }
             }
         }
@@ -589,3 +602,9 @@ Write-Host 'Run the E2E UI tests (needs the winapp CLI installed above):'
 Write-Host "    dotnet test tests/Reactor.AppTests -c Debug -p:Platform=$hostArch"
 Write-Host ''
 Write-Host 'Visual Studio preview (if VS installed): View -> Other Windows -> Reactor Preview'
+
+# Every hard failure above exits via Fail (exit 1), so reaching here means
+# success. Say so explicitly: any best-effort step that shelled out to a native
+# command leaves its code in $LASTEXITCODE, and PowerShell propagates that to
+# the caller when a -File script falls off the end (issue #1074).
+exit 0

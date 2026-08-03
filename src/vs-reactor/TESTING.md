@@ -84,9 +84,39 @@ VSIX silently into the highest-version VS instance reported by `vswhere`. Pass
 `-VsInstanceId <id>` to target a specific install. Skip `-SkipBuild` if the
 VSIX is already current.
 
+It exits with:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | VSIX installed and `devenv /updateconfiguration` completed. |
+| `1` | Install failed (build, `vswhere`, `VSIXInstaller`, or VS already running). |
+| `3` | VSIX installed, but `devenv /updateconfiguration` timed out and was terminated. The extension is usable; the menu merge may need one manual VS launch. |
+
+`bootstrap.ps1` and `mur upgrade` both treat `3` as a warning and carry on.
+
 After it completes, launch VS once with `devenv /updateconfiguration` if the
 menu still does not appear — that forces a synchronous pkgdef merge before the
 shell starts.
+
+### `devenv /updateconfiguration` hangs on Visual Studio 18.8
+
+On VS **18.8** (`18.8.12023.21` and later in that band), `devenv /updateconfiguration`
+never returns — it does the work but does not exit. VS 18.7 completes the same
+call in 27–99 s. `Reinstall-Vsix.ps1` therefore treats the timeout as an expected
+outcome on 18.8: it waits `-UpdateConfigurationTimeoutSec` (default 120), then
+terminates the whole `devenv` process tree, sweeps any `devenv` that appeared
+during its window, waits for the name to clear, and exits `3`.
+
+That sweep matters. `Process.Kill()` with no argument kills only the top process
+and returns without waiting, so the second `devenv` that `/updateconfiguration`
+spawns used to survive and make every later run of this script fail its
+"Visual Studio is running" guard (issue #1074). The logic lives in
+`VsProcessLib.ps1` and is covered by `tests/vs_reactor/ci/VsProcessLib.Tests.ps1`
+(run by the *VS extension script tests* workflow).
+
+If you see `Visual Studio is running (PIDs: ...)` on a machine where you have no
+IDE open, check the reported start times: a process seconds old is a leftover
+from a hung `/updateconfiguration`, and killing it is safe.
 
 ### `NoApplicableSKUsException` on VS 2026
 
