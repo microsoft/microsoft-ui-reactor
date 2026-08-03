@@ -58,6 +58,7 @@ function Assert-True {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $bootstrap = Join-Path $repoRoot 'bootstrap.ps1'
 $reinstall = Join-Path $repoRoot 'src\vs-reactor\Reinstall-Vsix.ps1'
+$vsProcessLib = Join-Path $repoRoot 'src\vs-reactor\VsProcessLib.ps1'
 $testingDoc = Join-Path $repoRoot 'src\vs-reactor\TESTING.md'
 
 # These files are BOM-less UTF-8. Windows PowerShell 5.1 decodes such files as
@@ -252,6 +253,22 @@ try {
         ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
     Assert-Equal ($actual -join ',') ($docTable -join ',') `
         'contract: src/vs-reactor/TESTING.md documents exactly the exit codes the script can return'
+
+    # -- 7. No carriage return outside a CRLF pair. --
+    # These files are CRLF. An edit that inserts a bare LF leaves a mid-line CR,
+    # which merges the following statement onto the brace line — still valid
+    # PowerShell, so it survives a parse check and every behavioural assertion
+    # above, and is near-invisible in a diff. It happened once in this PR's own
+    # history; four lines of guard is cheaper than the next reviewer finding it.
+    foreach ($f in @($bootstrap, $reinstall, $vsProcessLib)) {
+        $bytes = [System.IO.File]::ReadAllBytes($f)
+        $loneCr = 0
+        for ($i = 0; $i -lt $bytes.Length; $i++) {
+            if ($bytes[$i] -ne 13) { continue }
+            if (($i + 1) -ge $bytes.Length -or $bytes[$i + 1] -ne 10) { $loneCr++ }
+        }
+        Assert-Equal 0 $loneCr "$(Split-Path $f -Leaf): no carriage return outside a CRLF pair"
+    }
 }
 finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue

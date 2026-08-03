@@ -205,7 +205,8 @@ if ($installedFoldersArray.Count -eq 0) {
     # bootstrap.ps1 print [ok] over the exact failure mode this script exists
     # to prevent.
     $installIncomplete = $true
-} else {    $folder = $installedFoldersArray[0]
+} else {
+    $folder = $installedFoldersArray[0]
     [xml]$m = Get-Content (Join-Path $folder.FullName 'extension.vsixmanifest')
     Write-Host ("Installed v{0} at {1}" -f $m.PackageManifest.Metadata.Identity.Version, $folder.FullName)
 }

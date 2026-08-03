@@ -35,6 +35,13 @@ red.
 | drop the trailing `exit 0` from `bootstrap.ps1` | 2 fail |
 | drop the `$global:LASTEXITCODE = 0` reset | 1 fail |
 | drift the `TESTING.md` exit table (`3` → `4`) | 1 fail |
+| re-inject a mid-line `CR` into `Reinstall-Vsix.ps1` | 1 fail |
+
+That last row earns its place: a bare `LF` inserted into a `CRLF` file leaves a
+mid-line carriage return that merges the next statement onto the brace line. It
+is still valid PowerShell, so it survived the parse check *and* all fifty
+behavioural assertions, and is near-invisible in a diff. It reached `main`'s
+review queue once; now it cannot.
 
 Two known limits, recorded rather than papered over:
 
@@ -75,6 +82,13 @@ on `windows-latest`, triggered by changes to `bootstrap.ps1`, the two
 third consumer of the exit-code contract), or anything under this directory.
 
 The tests spawn real processes and kill them by pid. They are safe to run on a
-developer machine: the fake is named `reactor-fake-devenv`, nothing is ever
-matched by the name `devenv` or `pwsh`, and the suite tears its own processes
-down in a `finally` block.
+developer machine, and safe to run concurrently with each other: the fake is
+named `reactor-fake-devenv-<pid>`, so each run only ever sees its own
+processes, nothing is matched by the name `devenv` or `pwsh`, and the suite
+tears its own processes down in a `finally` block.
+
+The pid namespacing is not cosmetic. `Get-Process -Name` is machine-wide, so a
+shared fake name lets two overlapping runs kill each other's fixtures — which
+reproduces as "the process died early" failures that look like product bugs and
+are not. That is the same attribution mistake the product fix above corrects, so
+the harness is held to it too.

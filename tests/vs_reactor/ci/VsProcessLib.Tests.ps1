@@ -34,7 +34,8 @@
 
     A distinctly-named fake also keeps the sweep tests safe — nothing here is
     ever pointed at `pwsh`, so an attribution regression cannot take out the
-    test host.
+    test host. The name is further namespaced with the host pid so two
+    concurrent runs cannot kill each other's fixtures; see the harness comment.
 
     Run locally:  pwsh tests/vs_reactor/ci/VsProcessLib.Tests.ps1
                   powershell -File tests/vs_reactor/ci/VsProcessLib.Tests.ps1
@@ -90,7 +91,14 @@ foreach ($p in @($libPath, (Join-Path $vsReactor 'Reinstall-Vsix.ps1'))) {
 . $libPath
 
 # -- Fake-process harness. --
-$fakeName = 'reactor-fake-devenv'
+# The name is namespaced per run. Every helper below finds and kills fakes by
+# process *name*, and Get-Process is machine-wide — so a shared name means two
+# concurrent runs of this file (or a leftover from an aborted one) silently
+# destroy each other's fixtures. Verified: two overlapping runs under a shared
+# name produce spurious "process died early" failures and an Access-denied on
+# Process.Start. That is the same attribution mistake this suite exists to catch
+# in the product, so the harness does not get to make it either.
+$fakeName = "reactor-fake-devenv-$PID"
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("vsprocesslib-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $fakeExe = Join-Path $tmp "$fakeName.exe"
