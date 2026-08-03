@@ -14,6 +14,8 @@ class AnimatedIconPage : Component
     // States all three sources below ship markers for.
     static readonly string[] States = ["Normal", "PointerOver", "Pressed"];
 
+    static readonly string[] CellNames = ["Settings", "Find", "Nav"];
+
     public override Element Render()
     {
         // AnimatedIcon.Source is reference-compared: a source built inline would be a new
@@ -21,16 +23,22 @@ class AnimatedIconPage : Component
         var settings = UseMemo(() => new AnimatedSettingsVisualSource());
         var find = UseMemo(() => new AnimatedFindVisualSource());
         var nav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
-        var picker = UseMemo(() => new AnimatedSettingsVisualSource());
+        // A different glyph from the gear above, so the two cards are never confused for
+        // each other: this one responds only to the picker, those only to the pointer.
+        var picker = UseMemo(() => new AnimatedFindVisualSource());
         var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 
         // Tracked per cell (-1 = none) so hovering one icon doesn't animate its neighbours.
         var (hoverIdx, setHoverIdx) = UseState(-1);
         var (pressIdx, setPressIdx) = UseState(-1);
 
-        // Pointer-driven only. Mixing in a second driver -- an explicit "resting state" picker,
-        // say -- makes hover a no-op whenever the two agree on a value, because writing State the
-        // value it already holds plays no segment. That card is separate for exactly that reason.
+        // Pointer- and focus-driven only. Mixing in a second driver -- an explicit "resting
+        // state" picker, say -- makes hover a no-op whenever the two agree on a value, because
+        // writing State the value it already holds plays no segment. That card is separate.
+        //
+        // A Button rather than a bare Border: it is unambiguously hit-testable, it looks
+        // interactive, and it is reachable by Tab. Hover is a mouse-only affordance, so the
+        // focus arms below are what make this demo work for keyboard users at all.
         Element Cell(int index, string label, object source)
         {
             var cellState = pressIdx == index ? "Pressed"
@@ -38,16 +46,16 @@ class AnimatedIconPage : Component
                 : "Normal";
 
             return VStack(6,
-                // The Background is load-bearing: a null-background element is hit-test
-                // invisible, so the pointer events below would never fire.
-                Border(AnimatedIcon(source).Size(32, 32)
-                        .Set(icon => XamlAnimatedIcon.SetState(icon, cellState))
-                        .Center())
-                    .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6)
+                Button(AnimatedIcon(source).Size(32, 32)
+                            .Set(icon => XamlAnimatedIcon.SetState(icon, cellState)),
+                        () => { })
+                    .Size(72, 56)
                     .OnPointerEntered((_, _) => setHoverIdx(index))
                     .OnPointerExited((_, _) => { setHoverIdx(-1); setPressIdx(-1); })
                     .OnPointerPressed((_, _) => setPressIdx(index))
-                    .OnPointerReleased((_, _) => setPressIdx(-1)),
+                    .OnPointerReleased((_, _) => setPressIdx(-1))
+                    .OnGotFocus((_, _) => setHoverIdx(index))
+                    .OnLostFocus((_, _) => { setHoverIdx(-1); setPressIdx(-1); }),
                 Caption(label).Foreground(Theme.SecondaryText).Center());
         }
 
@@ -85,9 +93,10 @@ class AnimatedIconPage : Component
                         Cell(0, "Settings", settings),
                         Cell(1, "Find", find),
                         Cell(2, "Nav", nav)),
-                    Caption("Each icon owns its own state: Normal → PointerOver on hover, "
-                            + "→ Pressed while held. This is the shape WinUI itself uses to drive "
-                            + "AnimatedIcon inside NavigationViewItem, Expander and AutoSuggestBox.")
+                    Caption(hoverIdx < 0 && pressIdx < 0
+                            ? "All three are resting on Normal — hover or Tab to one to play its transition."
+                            : $"{CellNames[pressIdx >= 0 ? pressIdx : hoverIdx]}: "
+                              + (pressIdx >= 0 ? "Pressed" : "PointerOver"))
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 // `using static Factories` shadows the WinUI type, so SetState needs an alias:
@@ -97,16 +106,18 @@ var (hovering, setHovering) = UseState(false);
 var (pressing, setPressing) = UseState(false);
 var state = pressing ? ""Pressed"" : hovering ? ""PointerOver"" : ""Normal"";
 
-// The Background is load-bearing: a null-background element is hit-test invisible,
-// so the pointer events below would never fire.
-Border(AnimatedIcon(source).Size(32, 32)
-        .Set(icon => XamlAnimatedIcon.SetState(icon, state))
-        .Center())
-    .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6)
+// A Button, not a bare Border: unambiguously hit-testable, and reachable by Tab.
+// Hover is mouse-only, so the focus arms are what make this work from the keyboard.
+Button(AnimatedIcon(source).Size(32, 32)
+            .Set(icon => XamlAnimatedIcon.SetState(icon, state)),
+        () => { })
+    .Size(72, 56)
     .OnPointerEntered((_, _) => setHovering(true))
     .OnPointerExited((_, _) => { setHovering(false); setPressing(false); })
     .OnPointerPressed((_, _) => setPressing(true))
     .OnPointerReleased((_, _) => setPressing(false))
+    .OnGotFocus((_, _) => setHovering(true))
+    .OnLostFocus((_, _) => { setHovering(false); setPressing(false); })
 // Each write of State plays the ""<from>To<to>"" marker segment — that transition IS the
 // animation; there is no Play(). UseMemo the source: Source is reference-compared, so a
 // fresh instance per render cancels the transition.
@@ -121,7 +132,7 @@ Border(AnimatedIcon(source).Size(32, 32)
                     Caption($"State: {state} — pick another value to play the transition into it.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
-var picker = UseMemo(() => new AnimatedSettingsVisualSource());
+var picker = UseMemo(() => new AnimatedFindVisualSource());
 var states = new[] { ""Normal"", ""PointerOver"", ""Pressed"" };
 var (stateIdx, setStateIdx) = UseState(0);
 var state = states[Math.Clamp(stateIdx, 0, states.Length - 1)];
