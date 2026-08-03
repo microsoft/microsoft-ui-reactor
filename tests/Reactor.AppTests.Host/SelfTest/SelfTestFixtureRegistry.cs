@@ -249,6 +249,15 @@ internal static class SelfTestFixtureRegistry
         "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup",
         "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup",
         "OverlayTeardown_Popup_Unmount_RunsChildCleanup",
+        // #1069 — a ContentDialog's content is side-mounted into the WinUI dialog;
+        // it must keep reconciling while the dialog is open (and #948's falling
+        // edge + owner-unmount teardown ride on the same back-reference).
+        "ContentDialogLive_RerendersOpenContent",
+        "ContentDialogLive_SyncsLivePropsWhileOpen",
+        "ContentDialogLive_ClosesOnIsOpenFalse",
+        "ContentDialogLive_CloseUnmountsContent",
+        "ContentDialogLive_ContentTypeSwapReplacesSubtree",
+        "ContentDialogLive_UnmountTearsDownOpenDialog",
         // Flyout placement guard — Reactor must never write FlyoutPlacementMode.Auto
         // onto a WinUI FlyoutBase, because the show-time validator rejects it and
         // fail-fasts the process. The Flyout/ContentFlyout/fresh-create fixtures
@@ -1895,6 +1904,13 @@ internal static class SelfTestFixtureRegistry
         "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsFlyoutContentCleanup(harness),
         "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsPassThroughCleanup(harness),
         "OverlayTeardown_Popup_Unmount_RunsChildCleanup" => new OverlayTeardownFixtures.Popup_Unmount_RunsChildCleanup(harness),
+        // #1069 / #948 — live ContentDialog content, props, close and teardown.
+        "ContentDialogLive_RerendersOpenContent" => new ContentDialogLiveContentFixtures.ContentDialog_RerendersOpenContent(harness),
+        "ContentDialogLive_SyncsLivePropsWhileOpen" => new ContentDialogLiveContentFixtures.ContentDialog_SyncsLivePropsWhileOpen(harness),
+        "ContentDialogLive_ClosesOnIsOpenFalse" => new ContentDialogLiveContentFixtures.ContentDialog_ClosesOnIsOpenFalse(harness),
+        "ContentDialogLive_CloseUnmountsContent" => new ContentDialogLiveContentFixtures.ContentDialog_CloseUnmountsContent(harness),
+        "ContentDialogLive_ContentTypeSwapReplacesSubtree" => new ContentDialogLiveContentFixtures.ContentDialog_ContentTypeSwapReplacesSubtree(harness),
+        "ContentDialogLive_UnmountTearsDownOpenDialog" => new ContentDialogLiveContentFixtures.ContentDialog_UnmountTearsDownOpenDialog(harness),
         // Flyout placement guard — Auto must never reach FlyoutBase.Placement.
         "FlyoutPlacement_Platform_FlyoutBase_PlacementDefault" => new FlyoutPlacementFixtures.Platform_FlyoutBase_PlacementDefault(harness),
         "FlyoutPlacement_Flyout_DefaultPlacement_Opens" => new FlyoutPlacementFixtures.Flyout_DefaultPlacement_Opens(harness),

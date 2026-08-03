@@ -466,47 +466,10 @@ internal static class CoreCoverageFixtures
         Harness h,
         string title,
         int timeoutMs = 2_000)
-    {
-        for (var elapsed = 0; elapsed <= timeoutMs; elapsed += 50)
-        {
-            await Harness.Render(elapsed == 0 ? 0 : 34);
-            var dialog = FindOpenContentDialog(h, title);
-            if (dialog is not null) return dialog;
-        }
-
-        return null;
-    }
+        => await ContentDialogProbe.WaitForOpen(h, title, timeoutMs);
 
     private static Microsoft.UI.Xaml.Controls.ContentDialog? FindOpenContentDialog(Harness h, string title)
-    {
-        var xamlRoot = (h.Window.Content as UIElement)?.XamlRoot
-                       ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
-        if (xamlRoot is null) return null;
-        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot))
-        {
-            // Popup.Child is not enumerated by VisualTreeHelper.GetChildrenCount,
-            // so descend into it explicitly before recursing.
-            if (popup.Child is DependencyObject child)
-            {
-                var found = WalkForContentDialog(child, title);
-                if (found is not null) return found;
-            }
-        }
-        return null;
-    }
-
-    private static Microsoft.UI.Xaml.Controls.ContentDialog? WalkForContentDialog(DependencyObject node, string title)
-    {
-        if (node is Microsoft.UI.Xaml.Controls.ContentDialog cd && cd.Title as string == title)
-            return cd;
-        int count = VisualTreeHelper.GetChildrenCount(node);
-        for (int i = 0; i < count; i++)
-        {
-            var hit = WalkForContentDialog(VisualTreeHelper.GetChild(node, i), title);
-            if (hit is not null) return hit;
-        }
-        return null;
-    }
+        => ContentDialogProbe.FindOpen(h, title);
 
     // ════════════════════════════════════════════════════════════════════════
     //  6. CommandBar — mount + update (primary/secondary commands)

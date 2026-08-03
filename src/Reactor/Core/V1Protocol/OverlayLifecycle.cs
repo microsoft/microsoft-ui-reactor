@@ -35,6 +35,17 @@ internal static class OverlayLifecycle
 {
     // ── ContentDialog ───────────────────────────────────────────────────
 
+    // Back-reference from the collapsed placeholder to the live WinUI dialog.
+    // ContentDialog is side-mounted — dialog.Content is a Reactor subtree owned
+    // by the dialog object, not a visual child of the placeholder — and unlike
+    // Flyout (Reconciler.GetFlyoutOnControl) or Popup (wrapper.Children[0])
+    // there is no slot to read the side object back from. Without this, update
+    // and unmount cannot reach the dialog at all: open content never
+    // re-renders, a declared IsOpen = false never closes it, and an unmounted
+    // owner leaves the dialog on screen with its subtree leaked. Keyed weakly
+    // by the placeholder, so entries die with it.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, WinUI.ContentDialog> s_liveDialogs = new();
+
     public static UIElement MountContentDialog(Reconciler reconciler, ContentDialogElement cdEl, Action requestRerender)
     {
         var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
@@ -45,9 +56,76 @@ internal static class OverlayLifecycle
 
     public static UIElement? UpdateContentDialog(Reconciler reconciler, ContentDialogElement o, ContentDialogElement n, FrameworkElement fe, Action requestRerender)
     {
-        if (n.IsOpen && !o.IsOpen) ShowContentDialog(reconciler, n, fe, requestRerender);
+        // Retag first so the Opened/Closed handlers — and the deferred Loaded
+        // path — resolve this render's closures instead of the mount-time ones.
         Reconciler.SetElementTag(fe, n);
+
+        if (n.IsOpen && !o.IsOpen)
+        {
+            ShowContentDialog(reconciler, n, fe, requestRerender);
+            return null;
+        }
+
+        // No live dialog: never opened, still deferred waiting on XamlRoot, or
+        // already dismissed. A rising edge above is the only way back.
+        if (!s_liveDialogs.TryGetValue(fe, out var dialog)) return null;
+
+        if (!n.IsOpen && o.IsOpen)
+        {
+            // Falling edge — honor the declared IsOpen. Hide() drives ShowAsync's
+            // continuation, which unmounts the content and dispatches OnClosed,
+            // exactly as a user dismissal does (and matching Popup, whose
+            // IsOpen = false likewise raises Closed).
+            dialog.Hide();
+            return null;
+        }
+
+        SyncContentDialogProps(dialog, n);
+
+        // Reconcile the side-mounted content in place so transient state inside
+        // the dialog (focus, scroll, caret) survives the owner's re-renders.
+        if (dialog.Content is UIElement existing && reconciler.CanUpdate(o.Content, n.Content))
+        {
+            var replacement = reconciler.Update(o.Content, n.Content, existing, requestRerender);
+            if (replacement is not null && !ReferenceEquals(dialog.Content, replacement))
+                dialog.Content = replacement;
+        }
+        else
+        {
+            if (dialog.Content is UIElement stale) reconciler.UnmountChild(stale);
+            dialog.Content = reconciler.Mount(n.Content, requestRerender) as UIElement;
+        }
+
+        Reconciler.ApplySetters(n.Setters, dialog);
         return null;
+    }
+
+    private static void SyncContentDialogProps(WinUI.ContentDialog dialog, ContentDialogElement n)
+    {
+        if (dialog.Title as string != n.Title) dialog.Title = n.Title;
+        if (dialog.PrimaryButtonText != n.PrimaryButtonText) dialog.PrimaryButtonText = n.PrimaryButtonText;
+        if (dialog.DefaultButton != n.DefaultButton) dialog.DefaultButton = n.DefaultButton;
+        if (dialog.IsPrimaryButtonEnabled != n.IsPrimaryButtonEnabled) dialog.IsPrimaryButtonEnabled = n.IsPrimaryButtonEnabled;
+        if (dialog.IsSecondaryButtonEnabled != n.IsSecondaryButtonEnabled) dialog.IsSecondaryButtonEnabled = n.IsSecondaryButtonEnabled;
+        // Null means "leave WinUI's default" on the mount path — pushing null
+        // here would blank the button rather than restore the default, so only
+        // ever write a value forward.
+        if (n.SecondaryButtonText is not null && dialog.SecondaryButtonText != n.SecondaryButtonText)
+            dialog.SecondaryButtonText = n.SecondaryButtonText;
+        if (n.CloseButtonText is not null && dialog.CloseButtonText != n.CloseButtonText)
+            dialog.CloseButtonText = n.CloseButtonText;
+    }
+
+    /// <summary>
+    /// Hands the dialog currently showing for <paramref name="anchor"/> to the caller and
+    /// drops the tracking entry, transferring ownership so the <c>ShowAsync</c> continuation's
+    /// own cleanup becomes a no-op. Returns null when no dialog is showing for the placeholder.
+    /// </summary>
+    internal static WinUI.ContentDialog? TryTakeLiveContentDialog(FrameworkElement anchor)
+    {
+        if (!s_liveDialogs.TryGetValue(anchor, out var dialog)) return null;
+        s_liveDialogs.Remove(anchor);
+        return dialog;
     }
 
     private static void ShowContentDialog(Reconciler reconciler, ContentDialogElement cdEl, FrameworkElement anchor, Action requestRerender)
@@ -69,15 +147,15 @@ internal static class OverlayLifecycle
                     return;
                 var deferredRoot = anchor.XamlRoot
                     ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
-                ShowContentDialogCore(reconciler, current, deferredRoot, requestRerender);
+                ShowContentDialogCore(reconciler, current, anchor, deferredRoot, requestRerender);
             }
             anchor.Loaded += OnLoaded;
             return;
         }
-        ShowContentDialogCore(reconciler, cdEl, anchor.XamlRoot, requestRerender);
+        ShowContentDialogCore(reconciler, cdEl, anchor, anchor.XamlRoot, requestRerender);
     }
 
-    private static async void ShowContentDialogCore(Reconciler reconciler, ContentDialogElement cdEl, XamlRoot? xamlRoot, Action requestRerender)
+    private static async void ShowContentDialogCore(Reconciler reconciler, ContentDialogElement cdEl, FrameworkElement anchor, XamlRoot? xamlRoot, Action requestRerender)
     {
         var dialog = new WinUI.ContentDialog
         {
@@ -90,18 +168,29 @@ internal static class OverlayLifecycle
         if (cdEl.CloseButtonText is not null) dialog.CloseButtonText = cdEl.CloseButtonText;
         dialog.Content = reconciler.Mount(cdEl.Content, requestRerender);
         if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;
-        if (cdEl.OnOpened is not null) dialog.Opened += (_, _) => cdEl.OnOpened?.Invoke();
+        // Resolve callbacks through the anchor's live Tag the way Flyout/Popup do,
+        // rather than capturing the mount-time element: the dialog re-renders
+        // while open so those closures go stale, and clearing the tag is how
+        // unmount teardown suppresses an OnClosed it did not mean to raise.
+        dialog.Opened += (_, _) => (Reconciler.GetElementTag(anchor) as ContentDialogElement)?.OnOpened?.Invoke();
         // ApplySetters last so caller .Set(...) wins (including overriding XamlRoot).
         Reconciler.ApplySetters(cdEl.Setters, dialog);
+        // Publish before showing so the very next render can reach the dialog.
+        s_liveDialogs.AddOrUpdate(anchor, dialog);
         var winUiResult = await dialog.ShowAsync();
-        // FOLLOW-UP (PR #455 nit): this captures the mount-time cdEl directly,
-        // whereas Flyout/Popup route their handlers through the live Tag. A
-        // dialog can be re-rendered while open, so a later render's OnClosed
-        // would not be observed here. Relocated, pre-existing behavior (not a
-        // regression) — but this is now the V1-owned home for it, so routing
-        // OnClosed through Reconciler.GetElementTag(anchor) for consistency is
-        // worth a dedicated follow-up.
-        cdEl.OnClosed?.Invoke(winUiResult);
+        // Closed — by the user, by a declared IsOpen = false, or by teardown.
+        // Release the tracking entry unless a re-open already installed a newer
+        // dialog over it, then unmount the content subtree: it was mounted at
+        // open time and nothing else tears it down, so every open/close cycle
+        // would otherwise leak its component cleanups.
+        if (s_liveDialogs.TryGetValue(anchor, out var tracked) && ReferenceEquals(tracked, dialog))
+            s_liveDialogs.Remove(anchor);
+        if (dialog.Content is UIElement content)
+        {
+            dialog.Content = null;
+            reconciler.UnmountChild(content);
+        }
+        (Reconciler.GetElementTag(anchor) as ContentDialogElement)?.OnClosed?.Invoke(winUiResult);
     }
 
     // ── Flyout ──────────────────────────────────────────────────────────

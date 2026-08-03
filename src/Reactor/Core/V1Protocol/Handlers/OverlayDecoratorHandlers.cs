@@ -30,9 +30,10 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 //   • Popup — the wrapper StackPanel hosts a WinUI Popup whose Child is a
 //     Reactor subtree the type switch has no branch for; the handler unmounts
 //     the child and closes the otherwise-orphaned popup.
-// ContentDialog's Content is also side-mounted but has no back-reference from
-// its placeholder to the dialog object — tearing it down needs per-instance
-// tracking and is tracked as known debt.
+//   • ContentDialog — the collapsed placeholder's dialog holds Content as a
+//     Reactor subtree with no visual link back; the handler takes the dialog
+//     from OverlayLifecycle's live-dialog table, unmounts the content, and
+//     hides the otherwise-orphaned dialog.
 //
 // The three target-wrapping decorators (Flyout, MenuFlyout, CommandBarFlyout)
 // return their Target's mounted control; the strategy may return null when the
@@ -51,7 +52,28 @@ internal sealed class ContentDialogHandler : IDecoratorElementHandler<ContentDia
         => OverlayLifecycle.UpdateContentDialog(ctx.Reconciler, oldEl, newEl, (FrameworkElement)control, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, ContentDialogElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        // §4.5: an open dialog's Content is a Reactor subtree hung off the side
+        // WinUI ContentDialog object, NOT a visual child of the placeholder, so
+        // the generic UnmountRecursive recursion never reaches it — and the
+        // dialog itself would stay on screen after its owner left the tree.
+        // Take ownership of the tracked dialog (which makes the ShowAsync
+        // continuation's own cleanup a no-op), then clear the placeholder tag
+        // before hiding so the tag-routed OnClosed does not spuriously fire
+        // during teardown — the same guard PopupHandler uses.
+        if (control is FrameworkElement placeholder
+            && OverlayLifecycle.TryTakeLiveContentDialog(placeholder) is { } dialog)
+        {
+            Reconciler.ClearElementTag(placeholder);
+            if (dialog.Content is UIElement content)
+            {
+                dialog.Content = null;
+                ctx.Reconciler.UnmountChild(content);
+            }
+            dialog.Hide();
+        }
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 }
 
 /// <summary>§4.0.1 — Flyout (target-wrapping decorator).</summary>
