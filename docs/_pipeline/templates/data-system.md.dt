@@ -182,7 +182,9 @@ the unit of work: <kbd>Enter</kbd> (or the Save button, or clicking away) commit
 every pending cell at once, <kbd>Esc</kbd> (or Cancel) discards them all, and
 <kbd>Tab</kbd> cycles keyboard focus through the row's editable cells — read-only
 columns are skipped, and past the last one it wraps back to the first — without
-committing anything. Save and Cancel are not part of that <kbd>Tab</kbd> cycle;
+committing anything. <kbd>Shift</kbd>+<kbd>Tab</kbd> walks the same cycle
+backward, wrapping from the first editable cell to the last, and likewise never
+commits. Save and Cancel are not part of that <kbd>Tab</kbd> cycle;
 <kbd>Enter</kbd> and <kbd>Esc</kbd> are their keyboard equivalents.
 
 Opening an editor moves real keyboard focus into it, so you can start typing
