@@ -810,14 +810,13 @@ public sealed class GallerySampleLintTests
 
         HashSet<string>? states = null;
 
-        foreach (var icon in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
-                     .Where(i => InvokedName(i) == "AnimatedIcon" && MentionsAny(i, names)))
+        foreach (var forIcon in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                     .Where(i => InvokedName(i) == "AnimatedIcon" && MentionsAny(i, names))
+                     .Select(icon => PointerDrivenStatesForIcon(root, icon))
+                     .Where(s => s is not null))
         {
-            var forIcon = PointerDrivenStatesForIcon(root, icon);
-            if (forIcon is null) continue;
-
             states ??= new HashSet<string>(global::System.StringComparer.Ordinal);
-            states.UnionWith(forIcon);
+            states.UnionWith(forIcon!);
         }
 
         return states;
