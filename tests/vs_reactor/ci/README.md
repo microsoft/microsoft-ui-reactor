@@ -37,6 +37,20 @@ red.
 | drift the `TESTING.md` exit table (`3` → `4`) | 1 fail |
 | re-inject a mid-line `CR` into `Reinstall-Vsix.ps1` | 1 fail |
 
+The AST mutations were re-run under **Windows PowerShell 5.1** as well, not just
+`pwsh`, because a 5.1 leg that cannot fail is worse than no 5.1 leg: it reports
+coverage it does not have. Dropping the trailing `exit 0` reddens 2 there and
+neutering the `exit 3` guard reddens 1, both exiting non-zero — so the second
+half of the CI matrix is load-bearing.
+
+That leg only works because both suites read source files with
+`[System.IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)`. These files are
+BOM-less UTF-8 containing em dashes, and 5.1 decodes such files as the system
+ANSI codepage: measured on `bootstrap.ps1`, `ParseFile` and
+`ParseInput(Get-Content -Raw)` both yield **6 parse errors** under 5.1 and 0
+under `pwsh`, while the explicit-UTF8 read yields 0 on both. An AST assertion
+built on that corrupted tree can pass vacuously. Do not "simplify" those reads.
+
 That last row earns its place: a bare `LF` inserted into a `CRLF` file leaves a
 mid-line carriage return that merges the next statement onto the brace line. It
 is still valid PowerShell, so it survived the parse check *and* all fifty
