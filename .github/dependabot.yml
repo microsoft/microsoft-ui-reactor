@@ -9,6 +9,10 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    # Wait 7 days after a release before proposing it, so the community has a
+    # window to detect and report a compromised action release.
+    cooldown:
+      default-days: 7
 
   # NuGet version updates run on Dependabot's Linux hosts, which cannot restore
   # this repo's Windows-only project graph (WinUI / WindowsAppSDK apps, and even
@@ -16,8 +20,6 @@ updates:
   # those projects (e.g. GitHub.Copilot.SDK, YamlDotNet) are therefore backfilled
   # by .github/workflows/windows-nuget-updates.yml on a windows-latest runner.
   # Dependabot still owns every Linux-restorable package.
-    cooldown:
-      default-days: 7
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
