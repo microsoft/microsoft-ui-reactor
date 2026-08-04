@@ -754,20 +754,33 @@ public sealed class GallerySampleLintTests
 
     /// <summary>
     /// The state literals written to an <em>icon</em> — not merely somewhere on its page — that
-    /// takes its state from the pointer; <see langword="null"/> when this source drives no
-    /// pointer-wired icon.
+    /// takes its state from the pointer; <see langword="null"/> when this source reaches no
+    /// pointer-wired icon at all.
     /// </summary>
     /// <remarks>
     /// Page-level was the obvious first cut and it is wrong: the AnimatedIcon page has both
     /// pointer-driven cells and a picker card, so a page-level test flags the picker's source for a
     /// property only the cells need. The question is per-icon, and the enclosing local function is
     /// the right scope because that is the unit a cell is written in.
+    /// <para>
+    /// Two ways a source reaches an icon, and both have to be handled or the gate leaks. A named
+    /// source is followed by name — including the hop through a cell factory's parameter. A source
+    /// constructed <em>inline</em> inside the <c>AnimatedIcon(…)</c> call has no local to follow at
+    /// all; treating that as "drives nothing" would let it skip this check entirely, so it resolves
+    /// to the icon it is written inside.
+    /// </para>
     /// </remarks>
     static HashSet<string>? PointerDrivenStates(SyntaxNode root, ObjectCreationExpressionSyntax creation)
     {
         // Which local does this source get assigned to?
         var declarator = creation.FirstAncestorOrSelf<VariableDeclaratorSyntax>();
-        if (declarator is null) return null;
+        if (declarator is null)
+        {
+            // Inline construction: no name to follow, so use the icon it sits inside.
+            var inlineIcon = creation.Ancestors().OfType<InvocationExpressionSyntax>()
+                .FirstOrDefault(i => InvokedName(i) == "AnimatedIcon");
+            return inlineIcon is null ? null : PointerDrivenStatesForIcon(root, inlineIcon);
+        }
 
         var names = new HashSet<string>(global::System.StringComparer.Ordinal) { declarator.Identifier.Text };
 
@@ -795,39 +808,53 @@ public sealed class GallerySampleLintTests
             }
         }
 
-        var receivers = AnimatedIconReceivers(root);
         HashSet<string>? states = null;
 
         foreach (var icon in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
                      .Where(i => InvokedName(i) == "AnimatedIcon" && MentionsAny(i, names)))
         {
-            // Innermost scope first: a local function is the unit a cell is written in, and
-            // walking past it to the enclosing method would sweep in every other card's pointer
-            // wiring — which is what made the page-level version flag the picker's source.
-            var scope = (SyntaxNode?)icon.FirstAncestorOrSelf<LocalFunctionStatementSyntax>();
-            if (scope is null)
-            {
-                // Not inside a local function: the icon is written inline in the render body, so
-                // the relevant scope is the argument list of the SampleCard it belongs to.
-                scope = icon.Ancestors().OfType<InvocationExpressionSyntax>()
-                    .FirstOrDefault(i => InvokedName(i) == "SampleCard");
-            }
-
-            if (scope is null) continue;
-
-            var pointerWired = scope.DescendantNodes().OfType<InvocationExpressionSyntax>()
-                .Select(InvokedName)
-                .Any(n => n is not null && n.StartsWith("OnPointer", global::System.StringComparison.Ordinal));
-            if (!pointerWired) continue;
+            var forIcon = PointerDrivenStatesForIcon(root, icon);
+            if (forIcon is null) continue;
 
             states ??= new HashSet<string>(global::System.StringComparer.Ordinal);
-            foreach (var write in scope.DescendantNodes().OfType<InvocationExpressionSyntax>()
-                         .Where(i => IsAnimatedIconStateWrite(i, receivers)))
+            states.UnionWith(forIcon);
+        }
+
+        return states;
+    }
+
+    /// <summary>
+    /// The state literals written inside one icon's scope, or <see langword="null"/> when that
+    /// scope wires no pointer handler and so is not pointer-driven.
+    /// </summary>
+    static HashSet<string>? PointerDrivenStatesForIcon(SyntaxNode root, InvocationExpressionSyntax icon)
+    {
+        // Innermost scope first: a local function is the unit a cell is written in, and walking
+        // past it to the enclosing method would sweep in every other card's pointer wiring —
+        // which is what made the page-level version flag the picker's source.
+        //
+        // Not inside a local function means the icon is written inline in the render body, so the
+        // relevant scope is the argument list of the SampleCard it belongs to.
+        var scope = (SyntaxNode?)icon.FirstAncestorOrSelf<LocalFunctionStatementSyntax>()
+            ?? icon.Ancestors().OfType<InvocationExpressionSyntax>()
+                .FirstOrDefault(i => InvokedName(i) == "SampleCard");
+
+        if (scope is null) return null;
+
+        var pointerWired = scope.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Select(InvokedName)
+            .Any(n => n is not null && n.StartsWith("OnPointer", global::System.StringComparison.Ordinal));
+        if (!pointerWired) return null;
+
+        var receivers = AnimatedIconReceivers(root);
+        var states = new HashSet<string>(global::System.StringComparer.Ordinal);
+
+        foreach (var write in scope.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                     .Where(i => IsAnimatedIconStateWrite(i, receivers)))
+        {
+            foreach (var literal in StateLiteralsReaching(root, write.ArgumentList.Arguments[1].Expression))
             {
-                foreach (var literal in StateLiteralsReaching(root, write.ArgumentList.Arguments[1].Expression))
-                {
-                    states.Add(literal);
-                }
+                states.Add(literal);
             }
         }
 

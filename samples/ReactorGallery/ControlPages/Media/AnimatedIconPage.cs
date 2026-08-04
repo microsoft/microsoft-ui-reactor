@@ -23,7 +23,11 @@ class AnimatedIconPage : Component
         var settingsGlyph = UseMemo(() => new AnimatedSettingsVisualSource());
         var findGlyph = UseMemo(() => new AnimatedFindVisualSource());
         var navGlyph = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
-        // A different glyph keeps the picker card from being mistaken for one of the cells above.
+        // The picker card drives state from a ComboBox rather than the pointer, so it is exempt
+        // from the "reach a state outside {Normal, PointerOver}" rule the cells above must meet —
+        // it cycles all three states explicitly. It gets its own instance rather than sharing
+        // findGlyph's: Source is reference-compared, and pointing two icons at one source is not
+        // a shape this page should be teaching.
         var picker = UseMemo(() => new AnimatedFindVisualSource());
         var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 
