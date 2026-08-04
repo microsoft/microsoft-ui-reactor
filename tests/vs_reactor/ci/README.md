@@ -53,6 +53,13 @@ Two known limits, recorded rather than papered over:
 - **The `$LASTEXITCODE` reset in `Stop-ProcessTreeSafely` is not independently
   provable.** Forcing `taskkill`'s already-gone status means racing the
   `HasExited` check. The test asserts the boundary contract instead.
+- **`KilledPids` recording only confirmed kills is not covered either.** The
+  branch it protects needs a kill that *fails*, and every kill in these tests
+  succeeds; reverting to record-before-kill leaves the suite green. Forcing a
+  failed kill means either a protected process or a zero-length wait race, and a
+  flaky assertion is worse than an acknowledged gap. It is kept because a log
+  claiming it reaped a pid that is still running is the same broken-instrument
+  class as the `-425 years` duration.
 
 ## Running locally
 

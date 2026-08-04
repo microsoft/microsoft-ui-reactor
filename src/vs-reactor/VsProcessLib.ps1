@@ -153,8 +153,14 @@ function Stop-ProcessIdsSafely {
         if (-not $p) { continue }
         if ($ExpectedName -and $p.Name -ne $ExpectedName) { continue }
         try { if ($p.StartTime -gt $NotStartedAfter) { continue } } catch { continue }
-        $killed.Add($processId) | Out-Null
-        Stop-ProcessTreeSafely -Process $p -WaitSeconds $WaitSeconds | Out-Null
+        # Record only what was *confirmed* reaped. Adding the pid before the
+        # kill would make the caller's "Reaped leftover devenv PIDs" line claim
+        # a process that is still running — a log that lies about the cleanup is
+        # the same class of broken instrument as #1074's -425-year duration.
+        # Anything that survives is still caught by the drain report.
+        if (Stop-ProcessTreeSafely -Process $p -WaitSeconds $WaitSeconds) {
+            $killed.Add($processId) | Out-Null
+        }
     }
     # Bare array, not `,$array` — see Get-ProcessIdsByName. Callers wrap with @().
     return $killed.ToArray()

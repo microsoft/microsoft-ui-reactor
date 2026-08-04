@@ -216,7 +216,8 @@ if (-not $skipUpdateConfig) {
     Write-Host ""
     Write-Host "Running 'devenv /updateconfiguration' to force the menu/pkgdef merge synchronously."
     Write-Host "Without this step, the first VS launch on VS 2026 sometimes silently skips the merge"
-    Write-Host "and our menu entry never appears. This step blocks until the merge completes (~10-30s)."
+    Write-Host "and our menu entry never appears. This step blocks until the merge completes — 27-99s on"
+    Write-Host "a healthy VS. VS 18.8 never returns (issue #1074), so it is bounded by -UpdateConfigurationTimeoutSec."
     $devenv = Join-Path $installationPath 'Common7\IDE\devenv.exe'
     if (Test-Path -LiteralPath $devenv) {
         $r = Invoke-DevenvUpdateConfiguration -DevenvPath $devenv -TimeoutSeconds $UpdateConfigurationTimeoutSec
