@@ -41,7 +41,25 @@ internal static class ContentDialogProbe
         return FindOpen(h, title) is null;
     }
 
+    /// <summary>Pumps render passes until no ContentDialog at all is showing.</summary>
+    internal static async Task<bool> WaitForNoneOpen(Harness h, int timeoutMs = 2_000)
+    {
+        for (var elapsed = 0; elapsed <= timeoutMs; elapsed += 50)
+        {
+            await Harness.Render(elapsed == 0 ? 0 : 34);
+            if (FindAnyOpen(h) is null) return true;
+        }
+
+        return FindAnyOpen(h) is null;
+    }
+
     internal static WinUI.ContentDialog? FindOpen(Harness h, string title)
+        => FindOpen(h, cd => cd.Title as string == title);
+
+    /// <summary>Any open dialog, regardless of title — for fixtures that retitle a live dialog.</summary>
+    internal static WinUI.ContentDialog? FindAnyOpen(Harness h) => FindOpen(h, static _ => true);
+
+    internal static WinUI.ContentDialog? FindOpen(Harness h, Func<WinUI.ContentDialog, bool> predicate)
     {
         var xamlRoot = (h.Window.Content as UIElement)?.XamlRoot
                        ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
@@ -52,7 +70,7 @@ internal static class ContentDialogProbe
             // so descend into it explicitly before recursing. It is already a
             // UIElement, so the only thing being screened out here is null.
             if (popup.Child is null) continue;
-            var found = Walk<WinUI.ContentDialog>(popup.Child, cd => cd.Title as string == title);
+            var found = Walk(popup.Child, predicate);
             if (found is not null) return found;
         }
         return null;
@@ -78,9 +96,11 @@ internal static class ContentDialogProbe
         => Walk<WinUI.Button>(root, b => b.Content is string s && s == label);
 
     /// <summary>Invokes a button living inside the dialog subtree via its automation peer.</summary>
-    internal static bool ClickButton(DependencyObject root, string label)
+    internal static bool ClickButton(DependencyObject root, string label) => Invoke(FindButton(root, label));
+
+    /// <summary>Invokes an already-located button via its automation peer.</summary>
+    internal static bool Invoke(WinUI.Button? btn)
     {
-        var btn = FindButton(root, label);
         if (btn is null || !btn.IsEnabled) return false;
         var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
         var invoke = (Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
@@ -124,6 +144,7 @@ public static class ContentDialogLiveContentFixtures
 {
     private static int s_cleanupCount;
     private static int s_closedCount;
+    private static int s_staleClosedCount;
 
     /// <summary>Stateful dialog content — the thing #1069 said could never re-render.</summary>
     private sealed class DialogCounter : Component
@@ -211,8 +232,8 @@ public static class ContentDialogLiveContentFixtures
                 var (ready, setReady) = ctx.UseState(false);
                 return VStack(
                     TextBlock("anchor"),
-                    ContentDialog(
-                        "LiveProps",
+                    (ContentDialog(
+                        ready ? "LivePropsReady" : "LiveProps",
                         VStack(
                             TextBlock(ready ? "ready" : "not-ready"),
                             Button("MakeReady", () => setReady(true))
@@ -221,7 +242,12 @@ public static class ContentDialogLiveContentFixtures
                     {
                         IsOpen = true,
                         IsPrimaryButtonEnabled = ready,
-                    }
+                        IsSecondaryButtonEnabled = !ready,
+                        SecondaryButtonText = "Later",
+                        DefaultButton = ready
+                            ? WinUI.ContentDialogButton.Secondary
+                            : WinUI.ContentDialogButton.Primary,
+                    }).Set(d => d.FullSizeDesired = ready)
                 );
             });
 
@@ -233,6 +259,10 @@ public static class ContentDialogLiveContentFixtures
             {
                 H.Check("ContentDialogLive_Props_InitiallyDisabled", !dialog.IsPrimaryButtonEnabled);
                 H.Check("ContentDialogLive_Props_InitialButtonText", dialog.PrimaryButtonText == "OK");
+                H.Check("ContentDialogLive_Props_InitialSecondaryEnabled", dialog.IsSecondaryButtonEnabled);
+                H.Check("ContentDialogLive_Props_InitialDefaultButton",
+                    dialog.DefaultButton == WinUI.ContentDialogButton.Primary);
+                H.Check("ContentDialogLive_Props_InitialSetter", !dialog.FullSizeDesired);
                 await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "not-ready") is not null);
                 H.Check("ContentDialogLive_Props_InitialContent",
                     ContentDialogProbe.FindText(dialog, "not-ready") is not null);
@@ -248,11 +278,23 @@ public static class ContentDialogLiveContentFixtures
                     ContentDialogProbe.FindText(dialog, "ready") is not null);
                 H.Check("ContentDialogLive_Props_EnabledFlipped_#1069", dialog.IsPrimaryButtonEnabled);
                 H.Check("ContentDialogLive_Props_ButtonTextFlipped_#1069", dialog.PrimaryButtonText == "Save");
+                // Every remaining prop SyncContentDialogProps writes, plus the
+                // setter pass, has to track the element too — not just the two
+                // the original repro happened to exercise.
+                H.Check("ContentDialogLive_Props_TitleFlipped", dialog.Title as string == "LivePropsReady");
+                H.Check("ContentDialogLive_Props_SecondaryEnabledFlipped", !dialog.IsSecondaryButtonEnabled);
+                H.Check("ContentDialogLive_Props_DefaultButtonFlipped",
+                    dialog.DefaultButton == WinUI.ContentDialogButton.Secondary);
+                H.Check("ContentDialogLive_Props_SetterReapplied", dialog.FullSizeDesired);
+                // The retitled dialog is the same live object, not a second one
+                // shown over the first.
+                H.Check("ContentDialogLive_Props_SameDialogRetitled",
+                    ReferenceEquals(ContentDialogProbe.FindOpen(H, "LivePropsReady"), dialog));
             }
             finally
             {
                 dialog.Hide();
-                await ContentDialogProbe.WaitForClosed(H, "LiveProps");
+                await ContentDialogProbe.WaitForNoneOpen(H);
             }
         }
     }
@@ -483,15 +525,154 @@ public static class ContentDialogLiveContentFixtures
             H.Check("ContentDialogLive_Teardown_OwnerUnmounted", H.FindText("(gone)") is not null);
             H.Check("ContentDialogLive_Teardown_DialogHidden", closed);
             H.Check("ContentDialogLive_Teardown_ContentCleanupRan", s_cleanupCount == 1);
-            // Teardown is not a dismissal: OnClosed belongs to the user, not the
-            // unmount. The handler clears the placeholder tag before hiding so
-            // the tag-routed callback stays silent.
+            // Teardown is not a dismissal: OnClosed belongs to the app's own
+            // close, not the unmount. Taking the tracking entry makes the
+            // ShowAsync continuation skip its dispatch, and clearing the
+            // placeholder tag closes the same hole from the other side.
             H.Check("ContentDialogLive_Teardown_OnClosedNotRaised", s_closedCount == 0);
 
             // Never leave a dialog up — WinUI allows only one per XamlRoot, so a
             // leak here would fail (or crash) every later dialog fixture.
             ContentDialogProbe.FindOpen(H, "Teardown")?.Hide();
             await ContentDialogProbe.WaitForClosed(H, "Teardown");
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  The dialog re-renders while open, so a callback captured at mount
+    //  time goes stale. OnClosed is resolved through the placeholder's live
+    //  tag, so a later render's closure is the one that fires.
+    // ────────────────────────────────────────────────────────────────────
+    internal class ContentDialog_RoutesClosedToLatestRender(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            s_closedCount = 0;
+            s_staleClosedCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (rearmed, setRearmed) = ctx.UseState(false);
+                return VStack(
+                    TextBlock("anchor"),
+                    ContentDialog(
+                        "CallbackRoute",
+                        VStack(
+                            TextBlock(rearmed ? "rearmed" : "original"),
+                            Button("Rearm", () => setRearmed(true))),
+                        "OK") with
+                    {
+                        IsOpen = true,
+                        // Two distinct closures: only the one belonging to the
+                        // render that is current when the dialog closes may run.
+                        OnClosed = rearmed
+                            ? _ => global::System.Threading.Interlocked.Increment(ref s_closedCount)
+                            : _ => global::System.Threading.Interlocked.Increment(ref s_staleClosedCount),
+                    }
+                );
+            });
+
+            var dialog = await ContentDialogProbe.WaitForOpen(H, "CallbackRoute");
+            H.Check("ContentDialogLive_Callback_Opened", dialog is not null);
+            if (dialog is null) return;
+
+            try
+            {
+                var clicked = await ContentDialogProbe.WaitAndClick(dialog, "Rearm");
+                H.Check("ContentDialogLive_Callback_ClickLanded", clicked);
+                // Proves the replacing render actually reached the dialog, so a
+                // stale-closure dispatch below would be a real product failure
+                // and not just a fixture that never re-rendered.
+                await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "rearmed") is not null);
+                H.Check("ContentDialogLive_Callback_Rearmed",
+                    ContentDialogProbe.FindText(dialog, "rearmed") is not null);
+                H.Check("ContentDialogLive_Callback_NoneRaisedWhileOpen",
+                    s_closedCount == 0 && s_staleClosedCount == 0);
+
+                dialog.Hide();
+                await ContentDialogProbe.WaitForClosed(H, "CallbackRoute");
+                await Harness.WaitFor(() => s_closedCount + s_staleClosedCount > 0);
+
+                H.Check("ContentDialogLive_Callback_LatestClosureRan", s_closedCount == 1);
+                H.Check("ContentDialogLive_Callback_MountTimeClosureSkipped", s_staleClosedCount == 0);
+            }
+            finally
+            {
+                ContentDialogProbe.FindOpen(H, "CallbackRoute")?.Hide();
+                await ContentDialogProbe.WaitForNoneOpen(H);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  A closed dialog can be reopened from the same placeholder: the close
+    //  has to release its tracking entry so the next rising edge is seen,
+    //  and the second dialog has to be just as live as the first.
+    // ────────────────────────────────────────────────────────────────────
+    internal class ContentDialog_ReopensAfterClose(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (open, setOpen) = ctx.UseState(true);
+                return VStack(
+                    TextBlock("anchor"),
+                    Button("Reopen", () => setOpen(true)),
+                    ContentDialog(
+                        "Reopen",
+                        VStack(
+                            Component<CleanupChild>(),
+                            Component<DialogCounter>(),
+                            Button("CloseMe", () => setOpen(false))),
+                        "OK") with { IsOpen = open }
+                );
+            });
+
+            var first = await ContentDialogProbe.WaitForOpen(H, "Reopen");
+            H.Check("ContentDialogLive_Reopen_FirstOpened", first is not null);
+            if (first is null) return;
+
+            try
+            {
+                H.Check("ContentDialogLive_Reopen_ClosedLanded",
+                    await ContentDialogProbe.WaitAndClick(first, "CloseMe"));
+                H.Check("ContentDialogLive_Reopen_FirstClosed",
+                    await ContentDialogProbe.WaitForClosed(H, "Reopen"));
+                await Harness.WaitFor(() => s_cleanupCount == 1);
+                H.Check("ContentDialogLive_Reopen_FirstContentUnmounted", s_cleanupCount == 1);
+
+                // Rising edge again from the same placeholder. Before the close
+                // released its tracking entry this could not be reached at all.
+                H.Check("ContentDialogLive_Reopen_ReopenClickLanded",
+                    ContentDialogProbe.Invoke(H.FindControl<WinUI.Button>(b => b.Content as string == "Reopen")));
+
+                var second = await ContentDialogProbe.WaitForOpen(H, "Reopen");
+                H.Check("ContentDialogLive_Reopen_SecondOpened", second is not null);
+                if (second is null) return;
+
+                // A genuinely new dialog object, not the hidden first one — and
+                // its content is freshly mounted, so the counter starts over.
+                H.Check("ContentDialogLive_Reopen_SecondIsNewDialog", !ReferenceEquals(second, first));
+                await Harness.WaitFor(() => ContentDialogProbe.FindText(second, "dialog-count:0") is not null);
+                H.Check("ContentDialogLive_Reopen_SecondContentMounted",
+                    ContentDialogProbe.FindText(second, "dialog-count:0") is not null);
+
+                // The second dialog reconciles live too — the tracking entry now
+                // points at it, so #1069 stays fixed across an open/close cycle.
+                H.Check("ContentDialogLive_Reopen_SecondBumpLanded",
+                    await ContentDialogProbe.WaitAndClick(second, "Bump"));
+                await Harness.WaitFor(() => ContentDialogProbe.FindText(second, "dialog-count:1") is not null);
+                H.Check("ContentDialogLive_Reopen_SecondRerenders",
+                    ContentDialogProbe.FindText(second, "dialog-count:1") is not null);
+            }
+            finally
+            {
+                ContentDialogProbe.FindAnyOpen(H)?.Hide();
+                await ContentDialogProbe.WaitForNoneOpen(H);
+            }
         }
     }
 }

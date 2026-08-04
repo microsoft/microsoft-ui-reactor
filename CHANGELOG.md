@@ -138,6 +138,28 @@ Conventions for contributors:
 
 ### Fixed
 
+- **`ContentDialog` content now re-renders while the dialog is open
+  (issues #1069, #948).** The dialog is side-mounted — `dialog.Content` is a
+  Reactor subtree owned by the dialog object, not a visual child of the
+  collapsed placeholder that stands in for it in the tree — and unlike `Flyout`
+  and `Popup` there was no back-reference from the placeholder to the live
+  dialog. Update could therefore never reach it, so state changed from inside an
+  open dialog (or from the owner while it was open) was rendered into nothing:
+  the dialog kept whatever it was mounted with until it was dismissed. The
+  placeholder now tracks its live dialog, and update reconciles the content in
+  place — so transient state inside the dialog such as focus, scroll and caret
+  survives the owner's re-renders — and syncs `Title`, the button labels,
+  `DefaultButton` and the enabled flags. Three consequences of the same gap are
+  fixed with it: a declared `IsOpen = false` now closes the dialog instead of
+  being inert (the `ContentDialog` half of #948, and it raises `OnClosed` with
+  `ContentDialogResult.None` exactly as `Popup` raises `Closed`); closing now
+  unmounts the content subtree, so its `UseEffect` cleanups run instead of
+  leaking on every open/close cycle; and unmounting a component while its dialog
+  is open now tears the dialog down instead of leaving it on screen over a
+  torn-down tree. Passing `null` for `SecondaryButtonText`/`CloseButtonText` on
+  a re-render also removes that button now — previously the write was skipped,
+  so an optional button could never be taken away once shown.
+
 - **`DataGrid<T>`'s <kbd>Shift</kbd>+<kbd>Tab</kbd> now moves focus backward
   (issue #987).** The grid's routed `KeyDown` handler captured only the raw
   `VirtualKey` and then deferred dispatch through

@@ -259,6 +259,8 @@ internal static class SelfTestFixtureRegistry
         "ContentDialogLive_CloseUnmountsContent",
         "ContentDialogLive_ContentTypeSwapReplacesSubtree",
         "ContentDialogLive_UnmountTearsDownOpenDialog",
+        "ContentDialogLive_RoutesClosedToLatestRender",
+        "ContentDialogLive_ReopensAfterClose",
         // Flyout placement guard — Reactor must never write FlyoutPlacementMode.Auto
         // onto a WinUI FlyoutBase, because the show-time validator rejects it and
         // fail-fasts the process. The Flyout/ContentFlyout/fresh-create fixtures
@@ -1913,6 +1915,8 @@ internal static class SelfTestFixtureRegistry
         "ContentDialogLive_CloseUnmountsContent" => new ContentDialogLiveContentFixtures.ContentDialog_CloseUnmountsContent(harness),
         "ContentDialogLive_ContentTypeSwapReplacesSubtree" => new ContentDialogLiveContentFixtures.ContentDialog_ContentTypeSwapReplacesSubtree(harness),
         "ContentDialogLive_UnmountTearsDownOpenDialog" => new ContentDialogLiveContentFixtures.ContentDialog_UnmountTearsDownOpenDialog(harness),
+        "ContentDialogLive_RoutesClosedToLatestRender" => new ContentDialogLiveContentFixtures.ContentDialog_RoutesClosedToLatestRender(harness),
+        "ContentDialogLive_ReopensAfterClose" => new ContentDialogLiveContentFixtures.ContentDialog_ReopensAfterClose(harness),
         // Flyout placement guard — Auto must never reach FlyoutBase.Placement.
         "FlyoutPlacement_Platform_FlyoutBase_PlacementDefault" => new FlyoutPlacementFixtures.Platform_FlyoutBase_PlacementDefault(harness),
         "FlyoutPlacement_Flyout_DefaultPlacement_Opens" => new FlyoutPlacementFixtures.Flyout_DefaultPlacement_Opens(harness),

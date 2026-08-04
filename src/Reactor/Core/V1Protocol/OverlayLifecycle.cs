@@ -44,6 +44,14 @@ internal static class OverlayLifecycle
     // re-renders, a declared IsOpen = false never closes it, and an unmounted
     // owner leaves the dialog on screen with its subtree leaked. Keyed weakly
     // by the placeholder, so entries die with it.
+    //
+    // A side table rather than a ReactorState slot, matching how every other
+    // rare, feature-local native association is stored (Reconciler._dndStates,
+    // Reconciler._gestureStates, Reconciler.s_inlineUiExtentPins): ReactorState
+    // is allocated for every native element in the tree, its slots are all
+    // Reactor abstractions rather than concrete WinUI control types, and each
+    // one carries a reset contract in the pool-return / DetachReactorState
+    // paths that a dialog — whose placeholder is never pooled — has no use for.
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, WinUI.ContentDialog> s_liveDialogs = new();
 
     public static UIElement MountContentDialog(Reconciler reconciler, ContentDialogElement cdEl, Action requestRerender)
@@ -180,20 +188,39 @@ internal static class OverlayLifecycle
         Reconciler.ApplySetters(cdEl.Setters, dialog);
         // Publish before showing so the very next render can reach the dialog.
         s_liveDialogs.AddOrUpdate(anchor, dialog);
-        var winUiResult = await dialog.ShowAsync();
-        // Closed — by the user, by a declared IsOpen = false, or by teardown.
-        // Release the tracking entry unless a re-open already installed a newer
-        // dialog over it, then unmount the content subtree: it was mounted at
-        // open time and nothing else tears it down, so every open/close cycle
-        // would otherwise leak its component cleanups.
-        if (s_liveDialogs.TryGetValue(anchor, out var tracked) && ReferenceEquals(tracked, dialog))
-            s_liveDialogs.Remove(anchor);
-        if (dialog.Content is UIElement content)
+        // True when this call still owns the placeholder's tracking entry at
+        // close time. False once unmount teardown has taken it, or once a
+        // re-open has installed a newer dialog over it.
+        bool ownsClose;
+        WinUI.ContentDialogResult winUiResult;
+        try
         {
-            dialog.Content = null;
-            reconciler.UnmountChild(content);
+            winUiResult = await dialog.ShowAsync();
         }
-        (Reconciler.GetElementTag(anchor) as ContentDialogElement)?.OnClosed?.Invoke(winUiResult);
+        finally
+        {
+            // In a finally so it also runs when ShowAsync throws — WinUI rejects
+            // a second dialog on the same XamlRoot — which would otherwise strand
+            // the tracking entry and leak the content subtree mounted above.
+            ownsClose = s_liveDialogs.TryGetValue(anchor, out var tracked) && ReferenceEquals(tracked, dialog);
+            if (ownsClose) s_liveDialogs.Remove(anchor);
+            // Unmount the content: it was mounted at open time and nothing else
+            // tears it down, so every open/close cycle would otherwise leak its
+            // component cleanups. Already null when teardown took ownership.
+            if (dialog.Content is UIElement content)
+            {
+                dialog.Content = null;
+                reconciler.UnmountChild(content);
+            }
+        }
+
+        // Closed by the user or by a declared IsOpen = false. Resolved through
+        // the anchor's live tag so the latest render's closure wins. Gated on
+        // ownership: teardown must not raise a close it deliberately suppressed,
+        // and a dialog that a re-open replaced must not fire its close against
+        // the element now driving the newer dialog.
+        if (ownsClose)
+            (Reconciler.GetElementTag(anchor) as ContentDialogElement)?.OnClosed?.Invoke(winUiResult);
     }
 
     // ── Flyout ──────────────────────────────────────────────────────────

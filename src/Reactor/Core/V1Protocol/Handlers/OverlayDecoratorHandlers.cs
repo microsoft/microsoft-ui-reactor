@@ -57,10 +57,11 @@ internal sealed class ContentDialogHandler : IDecoratorElementHandler<ContentDia
         // WinUI ContentDialog object, NOT a visual child of the placeholder, so
         // the generic UnmountRecursive recursion never reaches it — and the
         // dialog itself would stay on screen after its owner left the tree.
-        // Take ownership of the tracked dialog (which makes the ShowAsync
-        // continuation's own cleanup a no-op), then clear the placeholder tag
-        // before hiding so the tag-routed OnClosed does not spuriously fire
-        // during teardown — the same guard PopupHandler uses.
+        // Taking the tracked dialog transfers ownership: it makes the ShowAsync
+        // continuation's own cleanup a no-op AND, because the entry is gone,
+        // stops that continuation raising OnClosed for a teardown the app never
+        // asked for. Clearing the placeholder tag before hiding closes the same
+        // hole from the other side — the guard PopupHandler uses.
         if (control is FrameworkElement placeholder
             && OverlayLifecycle.TryTakeLiveContentDialog(placeholder) is { } dialog)
         {
