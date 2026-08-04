@@ -16,6 +16,7 @@ internal static class DataGridFixtures
     {
         public int Id { get; set; }
         public string FirstName { get; set; } = "";
+        public string MiddleName { get; set; } = "";
         public string LastName { get; set; } = "";
         public double Salary { get; set; }
     }
@@ -87,4 +88,79 @@ internal static class DataGridFixtures
 
     internal static Element EditableGrid(RenderContext ctx) =>
         Component<EditableGridComponent>();
+
+    // ── Row-mode editable DataGrid (issue #976) ──────────────────
+    //
+    // The cell-mode grid above cannot exercise row-mode Tab: in cell mode Tab commits the cell and
+    // reopens the next one, whereas in row mode Tab has to cycle real keyboard focus among the
+    // row's editors WITHOUT committing.
+
+    internal class RowEditGridComponent : Component
+    {
+        public override Element Render()
+        {
+            var (editLog, appendEdit) = UseReducer("");
+            var dq = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
+            var source = UseMemo(() => new ListDataSource<Employee>(
+                new[]
+                {
+                    new Employee { Id = 1, FirstName = "Alice", MiddleName = "Marie", LastName = "Smith", Salary = 75000 },
+                    new Employee { Id = 2, FirstName = "Bob", MiddleName = "Lee", LastName = "Jones", Salary = 82000 },
+                    new Employee { Id = 3, FirstName = "Carol", MiddleName = "Ann", LastName = "Lee", Salary = 91000 },
+                },
+                e => (RowKey)e.Id));
+
+            // Id is deliberately read-only so row-mode Tab has a column it must SKIP, and Salary is
+            // read-only AFTER the last editable column so the wrap has something to skip on the way
+            // round. THREE editable columns, not two: with only two, "Tab moved forward" and "Tab
+            // moved backward" share a destination, so direction is literally inexpressible at this
+            // tier and a direction-inverting regression cannot be caught. With three, forward from
+            // FirstName lands on MiddleName, backward lands on LastName, and a double-step lands on
+            // LastName too — all distinguishable.
+            //
+            // The editable columns carry an explicit editor for ONE reason: a stable AutomationId.
+            // The built-in editor is an anonymous TextBox, so "which editor has focus" is not
+            // observable over UIA, and the tests would have to type blind and infer focus from the
+            // resulting text — which cannot distinguish "focus moved to the right cell" from
+            // "focus never moved" until after the damage is done. `Uia.GetFocusedAutomationId()`
+            // turns focus into a directly pollable destination oracle. Shape-wise this is the same
+            // control the built-in path produces (TextBox → the `Control.Focus` arm of
+            // TryFocusEditor), so it is not a different code path under test.
+            var columns = new FieldDescriptor[]
+            {
+                Column<Employee>("Id", e => e.Id, width: 60),
+                Column<Employee>("FirstName", e => e.FirstName, editable: true, displayName: "First Name", width: 120)
+                    .WithEditor((v, set) => TextBox(v?.ToString() ?? "", s => set(s)).AutomationId("RowEdit_FirstName")),
+                Column<Employee>("MiddleName", e => e.MiddleName, editable: true, displayName: "Middle Name", width: 120)
+                    .WithEditor((v, set) => TextBox(v?.ToString() ?? "", s => set(s)).AutomationId("RowEdit_MiddleName")),
+                Column<Employee>("LastName", e => e.LastName, editable: true, displayName: "Last Name", width: 120)
+                    .WithEditor((v, set) => TextBox(v?.ToString() ?? "", s => set(s)).AutomationId("RowEdit_LastName")),
+                Column<Employee>("Salary", e => e.Salary, format: "C0", width: 100),
+            };
+
+            return VStack(8,
+                TextBlock($"Edits:{editLog}").AutomationId("RowEditLog"),
+                DataGrid(
+                    source: source,
+                    columns: columns,
+                    editable: true,
+                    editMode: EditMode.Row,
+                    onRowChanged: (key, item) =>
+                    {
+                        dq?.TryEnqueue(() =>
+                        {
+                            appendEdit(prev => prev + $"[{key.Value}:{item.FirstName},{item.MiddleName},{item.LastName}]");
+                        });
+                        return Task.CompletedTask;
+                    },
+                    rowHeight: 36
+                ).AutomationId("RowEditGrid"),
+                Button("blur anchor", () => { }).AutomationId("RowEditBlurAnchor")
+            );
+        }
+    }
+
+    internal static Element RowEditGrid(RenderContext ctx) =>
+        Component<RowEditGridComponent>();
 }

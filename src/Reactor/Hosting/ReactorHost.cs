@@ -306,9 +306,12 @@ public sealed class ReactorHost : IDisposable
         {
             _uiSettings = new global::Windows.UI.ViewManagement.UISettings();
             _isReducedMotion = !_uiSettings.AnimationsEnabled;
-            // ColorValuesChanged fires for high-contrast toggles, palette
-            // changes, and AnimationsEnabled changes — covers all charting signals.
+            // ColorValuesChanged covers high-contrast toggles and palette changes. It does
+            // NOT fire for AnimationsEnabled — that needs AnimationsEnabledChanged, which
+            // requires Windows 10 2004 (19041), above this assembly's minimum.
             _uiSettings.ColorValuesChanged += OnColorValuesChanged;
+            if (UiSettingsCapabilities.HasAnimationsEnabledChanged)
+                _uiSettings.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
         }
         catch { /* headless / unit-test host — no UI settings */ }
 
@@ -826,8 +829,10 @@ public sealed class ReactorHost : IDisposable
     private void OnColorValuesChanged(
         global::Windows.UI.ViewManagement.UISettings sender, object args)
     {
-        // UISettings.ColorValuesChanged fires for palette changes and also when
-        // AnimationsEnabled toggles. Re-read both signals.
+        // ColorValuesChanged does NOT fire for AnimationsEnabled — that arrives on
+        // OnAnimationsEnabledChanged. The re-read stays because it is the only path
+        // available before Windows 10 2004 (19041), where that event does not exist:
+        // there, an animation flip is picked up at the next palette or theme change.
         _isReducedMotion = !sender.AnimationsEnabled;
         // High-contrast palette may also change — re-read to be safe.
         if (_accessibilitySettings is { } a11y)
@@ -838,6 +843,21 @@ public sealed class ReactorHost : IDisposable
         // Issue #660 (#86): a palette / high-contrast change can alter the brush
         // a (key,theme) pair resolves to — drop the cache so it re-resolves.
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
+        RequestRender();
+    }
+
+    private void OnAnimationsEnabledChanged(
+        global::Windows.UI.ViewManagement.UISettings sender, object args)
+    {
+        var value = !sender.AnimationsEnabled;
+        // A coincident palette change re-reads the same field through
+        // OnColorValuesChanged, so bail out when nothing actually moved.
+        if (value == _isReducedMotion) return;
+        _isReducedMotion = value;
+        // No PushChartingState here, matching OnColorValuesChanged: D3Charts' flags are
+        // [ThreadStatic] and this runs on the WinRT notification thread, so a push here
+        // would write a copy the render thread never reads. Render() pushes on the UI
+        // thread every frame, so RequestRender is what actually propagates this.
         RequestRender();
     }
 
@@ -932,7 +952,11 @@ public sealed class ReactorHost : IDisposable
 
         // Accessibility listener cleanup
         if (_uiSettings is not null)
+        {
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
+            if (UiSettingsCapabilities.HasAnimationsEnabledChanged)
+                _uiSettings.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
+        }
 
         _rootComponent?.Context.RunCleanups();
         _funcContext?.RunCleanups();

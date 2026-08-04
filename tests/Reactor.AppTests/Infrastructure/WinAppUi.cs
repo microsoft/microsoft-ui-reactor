@@ -405,6 +405,8 @@ public sealed class WinAppUi
     /// </summary>
     public void SendKeys(string keys, bool viaSendInput = false, string? target = null, long? hwnd = null)
     {
+        RejectUntranslatedKeyConstants(keys);
+
         // send-input routes OS-wide and fails with ACCESS_DENIED off the interactive input desktop, just
         // like the click verb — surface that as Inconclusive (not Failed). post-message posts
         // straight to the window's message queue and needs no interactive desktop, so only guard send-input.
@@ -417,6 +419,56 @@ public sealed class WinAppUi
         var r = Run(15000, Args("send-keys", hwnd ?? HostHwnd, extra.ToArray()));
         if (r.ExitCode != 0)
             throw new WinAppException($"winapp ui send-keys '{keys}' failed: {r.StdErr.Trim()} {r.StdOut.Trim()}");
+    }
+
+    /// <summary>
+    /// The <see cref="Keys"/> private-use code points, mapped to the constant that declares each one.
+    /// Read from <see cref="Keys"/> by reflection rather than re-listed here: a hand-copied set is a
+    /// two-place registration, and the place it would go stale is precisely the case this guard exists
+    /// to catch — a tenth constant added with no arm in <c>TryNamedKey</c>/<c>TryModifierName</c>.
+    /// Grouped rather than keyed directly so an alias (two names, one code point) cannot throw at
+    /// static-init.
+    /// </summary>
+    private static readonly Dictionary<char, string> KeyConstantNames = typeof(Keys)
+        .GetFields(global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static)
+        .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+        .Select(f => (f.Name, Value: f.GetRawConstantValue() as string))
+        .Where(x => x.Value is { Length: 1 })
+        .GroupBy(x => x.Value![0])
+        .ToDictionary(g => g.Key, g => string.Join("/", g.Select(x => x.Name)));
+
+    /// <summary>
+    /// Rejects a <see cref="Keys"/> constant that reached the winapp token grammar untranslated.
+    /// </summary>
+    /// <remarks>
+    /// <para>This verb takes the winapp TOKEN grammar ("tab", "enter", "ctrl+a delete", "text=..."),
+    /// not the private-use constants in <see cref="Keys"/>. Those are a <c>UiElement.SendKeys</c>
+    /// convenience — <c>UiElement.ToSendKeysTokens</c> translates them; this path does not. Passing one
+    /// here used to forward the raw glyph as literal text: the CLI typed an unmapped character, exited
+    /// 0, and nothing moved. A no-op that reports success is the worst possible failure mode for an
+    /// input primitive — an E2E built on it fails much later, somewhere else, claiming the product did
+    /// not respond.</para>
+    /// <para>Scoped to the <see cref="Keys"/> code points rather than the whole private-use area
+    /// (U+E000..U+F8FF), because <c>text=</c> literals are part of the documented grammar and carry
+    /// arbitrary user payload — a private-use character that is not a <see cref="Keys"/> constant is
+    /// ordinary text, and rejecting it would contradict the contract on <see cref="SendKeys"/>.
+    /// Scoping by code point rather than by token position keeps the second failure mode covered:
+    /// a <see cref="Keys"/> constant with no translation arm is emitted by
+    /// <c>ToSendKeysTokens</c> INSIDE a <c>text=</c> token, so a position-based check would let
+    /// exactly that case through.</para>
+    /// </remarks>
+    internal static void RejectUntranslatedKeyConstants(string keys)
+    {
+        foreach (var ch in keys.Where(KeyConstantNames.ContainsKey))
+        {
+            throw new global::System.ArgumentException(
+                $"SendKeys received the private-use key constant U+{(int)ch:X4} (Keys.{KeyConstantNames[ch]}). " +
+                "WinAppUi.SendKeys takes winapp token syntax — pass \"tab\"/\"enter\"/\"esc\" directly, or run " +
+                "the string through UiElement.ToSendKeysTokens first. If it already came from " +
+                "ToSendKeysTokens, that constant has no arm in TryNamedKey/TryModifierName and was emitted " +
+                "as literal text — add one there.",
+                nameof(keys));
+        }
     }
 
     /// <summary>

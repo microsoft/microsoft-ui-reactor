@@ -1135,9 +1135,10 @@ public abstract record Element
     /// (<c>.Background("#color")</c>, <c>.FontFamily("Segoe UI")</c>) allocate
     /// fresh instances on every render even when the underlying values match.
     /// Ignores OnMountAction (fires once at mount, gated on oldM is null, so a later
-    /// change is inert), but compares OnUnmountAction by reference — the latest
-    /// teardown is re-registered on every Update and fires at unmount, so a changed
-    /// teardown closure must decline the skip.
+    /// change is inert), but compares OnUnmountAction and OnUpdateAction by reference —
+    /// both have live update-path semantics (the latest teardown is re-registered on every
+    /// Update, and OnUpdateAction runs on every Update), so a changed closure must decline
+    /// the skip.
     /// </summary>
     internal static bool ModifiersEqual(ElementModifiers? a, ElementModifiers? b)
     {
@@ -1217,6 +1218,15 @@ public abstract record Element
             // plain leaves), a reference-stable teardown still skips, a fresh closure
             // forces Update so the latest teardown is registered.
             && ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction)
+            // Imperative update slot (.OnUpdateAdd), for the same reason as OnUnmountAction
+            // above: it is DEFINED to run on every in-place update, and this skip path is
+            // the one thing that can make that false — a skipped element never reaches
+            // ApplyModifiers, so its OnUpdateAction is silently dropped for that render.
+            // Both-null (virtually every element) compares equal, so the skip rate is
+            // unchanged in the common case, and a reference-stable action (the static
+            // method group chart labels use) still skips. Only an added/removed/changed
+            // action declines — which is exactly when the caller needs the callback.
+            && ReferenceEquals(a.OnUpdateAction, b.OnUpdateAction)
             // Accessibility Tier 2/3. AccessibilityModifiers is a record of
             // scalar/string fields, but every fluent helper (.AccessibilityView,
             // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render

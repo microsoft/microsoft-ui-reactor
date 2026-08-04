@@ -5,7 +5,8 @@
   },
   "animated-icon": {
     "keywords": ["lottie", "vector animation", "state transition", "micro-interaction", "animated glyph"],
-    "relatedControls": ["AnimatedVisualPlayer", "Icons"]
+    "relatedControls": ["AnimatedVisualPlayer", "Icons"],
+    "usings": ["Microsoft.UI.Xaml.Controls.AnimatedVisuals"]
   },
   "animated-visual-player": {
     "keywords": ["lottie", "vector animation", "codegen", "playback", "composition"],

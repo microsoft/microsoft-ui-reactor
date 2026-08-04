@@ -425,6 +425,7 @@ internal static class SelfTestFixtureRegistry
         "ModifierEvent_PoolClearValueTextPadding",
         "ModifierEvent_InlineMarginCarryForward",
         "ModifierEvent_InlineDropRestoresPhysical",
+        "ModifierEvent_AccessibilityClearResets",
         // Rare control mount + update tests
         "RareControl_ColorPicker",
         "RareControl_TeachingTip",
@@ -685,6 +686,10 @@ internal static class SelfTestFixtureRegistry
         "CoreCov2_InfoBarActionButton",
         "CoreCov2_CalendarPipsPagerUpdate",
         "CoreCov2_FrameAnimatedIconUpdate",
+        "AnimatedIcon_BuiltInSourceMarkers",
+        "AnimatedIcon_StateFollowsHookState",
+        "AnimatedIcon_MemoizedSourceSurvivesUpdate",
+        "AnimatedIcon_StateSurvivesInsideButton",
         "FrameNav_CodeOnlyPageRefusedNotFatal",
         "FrameNav_ResolvablePageStillNavigates",
         "FrameNav_NavigatingPrecedesNavigated",
@@ -805,6 +810,12 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_CellTypeFlipPreservesTrailingCells",
         "DataGrid_RowEditTemplatesAndEmptyState",
         "DataGrid_KeyboardAndPrivateRenderPaths",
+        // DataGrid editor real XAML focus (issue #976)
+        "DataGrid_EditorRealFocus",
+        "DataGrid_EditorRealFocusVirtualized",
+        "DataGrid_EditorFocusCustomEditors",
+        "DataGrid_EditorFocusDebtRepaid",
+        "DataGrid_EditorFocusDisconnectedRoot",
         // DataGrid row-detail expansion (issue #919)
         "DataGrid_ExpandRowKeepsRealizedRow",
         "DataGrid_LazyStackRootTypeFlip",
@@ -2055,6 +2066,7 @@ internal static class SelfTestFixtureRegistry
         "ModifierEvent_PoolClearValueTextPadding" => new ModifierEventFixtures.ModifierPoolClearValueTextPadding(harness),
         "ModifierEvent_InlineMarginCarryForward" => new ModifierEventFixtures.ModifierInlineMarginCarryForward(harness),
         "ModifierEvent_InlineDropRestoresPhysical" => new ModifierEventFixtures.ModifierInlineDropRestoresPhysical(harness),
+        "ModifierEvent_AccessibilityClearResets" => new ModifierEventFixtures.AccessibilityModifierClearResets(harness),
         // Rare control tests
         "RareControl_ColorPicker" => new RareControlFixtures.ColorPickerMountUpdate(harness),
         "RareControl_TeachingTip" => new RareControlFixtures.TeachingTipMount(harness),
@@ -2312,6 +2324,10 @@ internal static class SelfTestFixtureRegistry
         "CoreCov2_InfoBarActionButton" => new CoreCoverageFixtures2.InfoBarActionButton(harness),
         "CoreCov2_CalendarPipsPagerUpdate" => new CoreCoverageFixtures2.CalendarPipsPagerUpdate(harness),
         "CoreCov2_FrameAnimatedIconUpdate" => new CoreCoverageFixtures2.FrameAnimatedIconUpdate(harness),
+        "AnimatedIcon_BuiltInSourceMarkers" => new AnimatedIconStateFixtures.BuiltInSourceMarkers(harness),
+        "AnimatedIcon_StateFollowsHookState" => new AnimatedIconStateFixtures.StateFollowsHookState(harness),
+        "AnimatedIcon_MemoizedSourceSurvivesUpdate" => new AnimatedIconStateFixtures.MemoizedSourceSurvivesUpdate(harness),
+        "AnimatedIcon_StateSurvivesInsideButton" => new AnimatedIconStateFixtures.StateSurvivesInsideButton(harness),
         "FrameNav_CodeOnlyPageRefusedNotFatal" => new FrameNavigationFixtures.CodeOnlyPageRefusedNotFatal(harness),
         "FrameNav_ResolvablePageStillNavigates" => new FrameNavigationFixtures.ResolvablePageStillNavigates(harness),
         "FrameNav_NavigatingPrecedesNavigated" => new FrameNavigationFixtures.NavigatingPrecedesNavigated(harness),
@@ -2426,6 +2442,12 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_CellTypeFlipPreservesTrailingCells" => new DataGridEditFixtures.CellTypeFlipPreservesTrailingCells(harness),
         "DataGrid_RowEditTemplatesAndEmptyState" => new DataGridEditFixtures.RowEditTemplatesAndEmptyState(harness),
         "DataGrid_KeyboardAndPrivateRenderPaths" => new DataGridEditFixtures.KeyboardAndPrivateRenderPaths(harness),
+        // DataGrid editor real XAML focus (issue #976)
+        "DataGrid_EditorRealFocus" => new DataGridEditFixtures.EditorRealFocus(harness),
+        "DataGrid_EditorRealFocusVirtualized" => new DataGridEditFixtures.EditorRealFocusVirtualized(harness),
+        "DataGrid_EditorFocusCustomEditors" => new DataGridEditFixtures.EditorFocusCustomEditors(harness),
+        "DataGrid_EditorFocusDebtRepaid" => new DataGridEditFixtures.EditorFocusDebtRepaid(harness),
+        "DataGrid_EditorFocusDisconnectedRoot" => new DataGridEditFixtures.EditorFocusDisconnectedRoot(harness),
         // DataGrid row-detail expansion (issue #919)
         "DataGrid_ExpandRowKeepsRealizedRow" => new DataGridExpandFixtures.ExpandRowKeepsRealizedRow(harness),
         "DataGrid_LazyStackRootTypeFlip" => new DataGridExpandFixtures.LazyStackRootTypeFlip(harness),

@@ -332,6 +332,26 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         if (useHookPaging && state.HookResource?.LoadState is LoadState.Error err)
             loadError = err.Exception;
 
+        // One-shot "this grid is owed focus" debt for the real-XAML-focus seam (#976).
+        //
+        // Non-null means: a blur-commit was suppressed on this grid because an editing Tab
+        // promised to reclaim focus, and that promise has not been settled yet. The LostFocus
+        // handler below opens the debt at the moment it consumes SuppressNextLostFocusCommit;
+        // ScheduleFocus.Apply settles it on the next focus attempt, and pulls focus back to the
+        // grid only if XAML refused the editor.
+        //
+        // It is deliberately NOT "the grid root, always". A plain pointer would make the fallback
+        // fire on any failed editor focus — including a programmatic BeginEdit() from a toolbar
+        // while focus sits outside the grid, where yanking focus to the grid root is an unrequested
+        // focus steal (see CustomEditorFocus_NonFocusableEditorLeavesFocusPut in the selftests,
+        // which asserts that case stays a quiet no-op). Gating on the debt keeps the repair to
+        // exactly the interaction that disarmed the blur-commit net.
+        //
+        // Declared here rather than beside the LostFocus refs below because RenderDataRows (end of
+        // the if/else chain) already needs it; it is unconditional, so hook order is unchanged
+        // every render.
+        var focusDebtRef = UseRef<FrameworkElement?>(null);
+
         Element dataContent;
         if (loadError is not null && itemCount == 0)
         {
@@ -347,7 +367,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         }
         else
         {
-            dataContent = RenderDataRows(state, columns, el, registry);
+            dataContent = RenderDataRows(state, columns, el, registry, focusDebtRef);
         }
         gridChildren.Add(dataContent.Grid(row: gridRow, column: 0));
 
@@ -394,8 +414,19 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         if (state.SuppressNextLostFocusCommit)
                         {
                             state.SuppressNextLostFocusCommit = false;
+                            // The blur-commit net is now disarmed on the strength of a promise:
+                            // the editing Tab said it would move focus to the next editor. Record
+                            // the debt so that, if XAML then refuses that editor, ScheduleFocus can
+                            // pull focus back inside the grid instead of leaving the edit open with
+                            // focus outside and nothing left to commit it (#976).
+                            focusDebtRef.Current = g;
                             return;
                         }
+                        // An un-suppressed blur means the net is armed and will handle this
+                        // focus-out on its own, so no promise is outstanding. Clear any debt a
+                        // previous traversal left behind rather than letting it age into a later
+                        // unrelated focus attempt.
+                        focusDebtRef.Current = null;
                         if (!state.IsEditing && !state.IsRowEditing) return;
                         // Defer the entire check to the next tick. During DOM transitions
                         // (e.g., cell switching from TextBlock to TextBox), the old element
@@ -404,16 +435,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                         {
                             if (!state.IsEditing && !state.IsRowEditing) return;
-                            var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(g.XamlRoot);
-                            if (focused is DependencyObject dep)
-                            {
-                                var parent = dep;
-                                while (parent is not null)
-                                {
-                                    if (ReferenceEquals(parent, g)) return;
-                                    parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent);
-                                }
-                            }
+                            if (IsFocusInside(g)) return;
                             if (state.IsRowEditing)
                             {
                                 var origItem = state.EditingRowKey is not null
@@ -449,53 +471,90 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // navigation and marks the event as handled BEFORE normal KeyDown handlers
         // fire. Without handledEventsToo, Tab never reaches the DataGrid when the
         // user presses Tab inside an editing TextBox.
+        //
+        // OnMount can run more than once for the SAME FrameworkElement: ElementPool recycles
+        // grid roots, so a remount (fixture navigation, a keyed replacement) hands back a
+        // control that still carries the previous mount's handler. AddHandler does not
+        // de-duplicate, so the naive version left N handlers attached after N mounts and every
+        // key was processed N times. That is invisible for the idempotent arms (Escape cancels
+        // an already-cancelled edit) and silently wrong for the stateful ones — row-mode Tab
+        // stepped the cursor once per attached handler, so with two editable columns a single
+        // Tab went first → last → wrapped back to first and focus never appeared to move.
+        // Re-wire rather than skip: a recycled control's stale closure captures the PREVIOUS
+        // grid's state, so keeping it would drive the wrong state machine.
+        //
+        // WireGridKeyDown's bool ("did this displace a stale handler?") exists for the re-wire
+        // tests and is deliberately discarded here — production has nothing to do with it. The
+        // expression lambda still binds to OnMount's Action<FrameworkElement> because a method
+        // invocation is a statement expression, which C# converts to a void-returning delegate.
         grid = grid
             .IsTabStop(true)
-            .OnMount(fe =>
-            {
-                fe.AddHandler(
-                    UIElement.KeyDownEvent,
-                    new Microsoft.UI.Xaml.Input.KeyEventHandler((sender, e) =>
-                    {
-                        var currentEl = elRef.Current;
-                        // Settle the claim FIRST, from a chord with no modifiers. ShouldHandleKey is
-                        // modifier-blind by contract (see its remarks), so the answer is the same either
-                        // way — and deciding it here means the keyboard is probed only for the handful of
-                        // keys the grid owns, never for ordinary typing, which reaches this
-                        // handledEventsToo handler too. That contract is enforced by
-                        // DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind_SoTheCaptureGateCannotDropChords,
-                        // so this gate cannot start silently dropping chords.
-                        if (ShouldHandleKey(state, currentEl, KeyChord.Unmodified(e.Key)))
-                        {
-                            e.Handled = true;
-                            // Snapshot the key AND its modifiers here, before anything else defers — this is
-                            // the only moment the two are known to agree. KeyRoutedEventArgs carries no
-                            // modifier state, so it has to come from the live keyboard, and dispatch below is
-                            // deferred: reading Shift inside HandleKeyDown would sample the keyboard a frame
-                            // or more later and race the user releasing it, making Shift+Tab intermittently
-                            // wrong. (#987)
-                            var chord = KeyChord.Capture(e.Key);
-                            // A cell editing-Tab moves real focus out of the single-tab-stop grid, which fires
-                            // the grid's LostFocus commit. But the editing-Tab path (HandleKeyDown) itself
-                            // commits the current cell and reopens the editor on the next cell, so the LostFocus
-                            // safety-net must NOT also commit — that would tear down the just-reopened editor.
-                            // Claim that one focus-out here, synchronously (before either handler defers), so the
-                            // guard is robust to dispatcher ordering. Cell edit only: in row-edit mode IsEditing
-                            // is also true, but the LostFocus there commits the whole ROW and must not be suppressed.
-                            // Direction-agnostic on purpose: Shift+Tab moves focus backward OUT of the grid just
-                            // as Tab moves it forward out, so the same one-shot claim is owed to both.
-                            if (chord.Key == VirtualKey.Tab && state.IsEditing && !state.IsRowEditing)
-                                state.SuppressNextLostFocusCommit = true;
-                            Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
-                            {
-                                HandleKeyDown(state, currentEl, chord);
-                            });
-                        }
-                    }),
-                    true); // handledEventsToo — receive Tab even after FocusManager handles it
-            });
+            .OnMount(fe => WireGridKeyDown(fe, state, elRef));
 
         return grid;
+    }
+
+    /// <summary>
+    /// Attach the grid root's KeyDown handler, replacing any handler a previous mount of the same
+    /// control left behind. Returns <c>true</c> when a stale handler was displaced.
+    /// </summary>
+    /// <remarks>
+    /// This is the production wiring path — <c>OnMount</c> calls exactly this — so a test that
+    /// drives it is testing the real thing rather than a copy that can drift.
+    /// </remarks>
+    internal static bool WireGridKeyDown(
+        FrameworkElement fe, DataGridState<T> state, Ref<DataGridElement<T>> elRef)
+    {
+        var wiring = DataGridKeyDownWiring.GetOrCreate(fe);
+        var displaced = wiring.Handler is not null;
+        if (wiring.Handler is not null)
+            fe.RemoveHandler(UIElement.KeyDownEvent, wiring.Handler);
+
+        var handler = new Microsoft.UI.Xaml.Input.KeyEventHandler((sender, e) =>
+            {
+                var currentEl = elRef.Current;
+                // Settle the claim FIRST, from a chord with no modifiers. ShouldHandleKey is
+                // modifier-blind by contract (see its remarks), so the answer is the same either
+                // way — and deciding it here means the keyboard is probed only for the handful of
+                // keys the grid owns, never for ordinary typing, which reaches this
+                // handledEventsToo handler too. That contract is enforced by
+                // DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind_SoTheCaptureGateCannotDropChords,
+                // so this gate cannot start silently dropping chords.
+                if (ShouldHandleKey(state, currentEl, KeyChord.Unmodified(e.Key)))
+                {
+                    e.Handled = true;
+                    // Snapshot the key AND its modifiers here, before anything else defers — this is
+                    // the only moment the two are known to agree. KeyRoutedEventArgs carries no
+                    // modifier state, so it has to come from the live keyboard, and dispatch below is
+                    // deferred: reading Shift inside HandleKeyDown would sample the keyboard a frame
+                    // or more later and race the user releasing it, making Shift+Tab intermittently
+                    // wrong. (#987)
+                    var chord = KeyChord.Capture(e.Key);
+                    // Claim the one focus-out that an editing Tab causes, synchronously, before either
+                    // handler defers. ShouldClaimNextLostFocus owns the predicate — and note it is
+                    // deliberately BROADER than the cell-only guard #987 shipped inline here: row edit
+                    // now moves real focus between editors within the row (#976), so that focus-out is
+                    // owed the same claim whenever the row has a focus target. Direction-agnostic on
+                    // purpose for row edit: Shift+Tab moves focus backward out of the grid just as
+                    // Tab moves it forward out, so the same one-shot claim is owed to both. Cell
+                    // edit uses the captured direction to claim only landings that can reopen an
+                    // editor and therefore settle the claim.
+                    if (ShouldClaimNextLostFocus(state, chord))
+                        state.SuppressNextLostFocusCommit = true;
+                    Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
+                    {
+                        HandleKeyDown(state, currentEl, chord);
+                    });
+                }
+            });
+
+        wiring.Handler = handler;
+        fe.AddHandler(
+            UIElement.KeyDownEvent,
+            handler,
+            true); // handledEventsToo — receive Tab even after FocusManager handles it
+
+        return displaced;
     }
 
     // ── Data rows ────────────────────────────────────────────────────
@@ -536,7 +595,8 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         DataGridState<T> state,
         IReadOnlyList<FieldDescriptor> columns,
         DataGridElement<T> el,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        Ref<FrameworkElement?>? focusDebtRef = null)
     {
         var totalItems = state.ItemCount;
         var selectable = el.SelectionMode != SelectionMode.None;
@@ -562,7 +622,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             itemCount: totalItems,
             renderItem: index =>
             {
-                return RenderRow(index, state, columns, el, registry, colWidths, gridDef);
+                return RenderRow(index, state, columns, el, registry, colWidths, gridDef, focusDebtRef);
             },
             itemHeight: hasExpandedRow ? null : el.RowHeight,
             estimatedItemHeight: hasExpandedRow
@@ -608,7 +668,8 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         DataGridElement<T> el,
         TypeRegistry registry,
         double[] colWidths,
-        GridDefinition gridDef)
+        GridDefinition gridDef,
+        Ref<FrameworkElement?>? focusDebtRef = null)
     {
         var item = state.GetItemAt(index);
         var keyStr = state.GetRowKeyAt(index);
@@ -667,11 +728,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             Element cellContent;
             if (isCellEditing)
             {
-                cellContent = RenderEditingCell(col, state, registry);
+                cellContent = WithEditorFocusRequest(
+                    RenderEditingCell(col, state, registry), state, rowKey, col.Name, focusDebtRef);
             }
             else if (isColInRowEdit)
             {
-                cellContent = RenderRowEditingCell(col, state, registry);
+                cellContent = WithEditorFocusRequest(
+                    RenderRowEditingCell(col, state, registry), state, rowKey, col.Name, focusDebtRef);
             }
             else if (!isPlaceholder && el.CellTemplate is not null)
             {
@@ -952,6 +1015,296 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             return editor(currentValue!, v => state.UpdateRowEditValue(colName, v)).Padding(2);
 
         return TextBox(currentValue?.ToString() ?? "", s => state.UpdateRowEditValue(colName, s)).Padding(2);
+    }
+
+    // ── Editor focus (#976) ─────────────────────────────────────────
+
+    /// <summary>
+    /// Whether this key press is about to move focus off an editor in a way the grid's
+    /// <c>LostFocus</c> safety-net would misread as "the user left, commit" — i.e. whether the
+    /// KeyDown handler should claim that one focus-out via
+    /// <see cref="DataGridState{T}.SuppressNextLostFocusCommit"/>.
+    /// </summary>
+    /// <remarks>
+    /// Called SYNCHRONOUSLY from the KeyDown handler, before either handler defers, so the guard
+    /// is robust to dispatcher ordering.
+    ///
+    /// <para><b>Cell edit</b> — Tab moves real focus out of the single-tab-stop grid. When the
+    /// editing-Tab path (<c>HandleKeyDown</c>) can reopen an editor on the landing cell, a second
+    /// commit from LostFocus would tear that editor straight back down. When it lands on a read-only,
+    /// hidden, or boundary cell, no editor-focus request will run, so there is no claim to suppress:
+    /// the ordinary deferred LostFocus net is allowed to observe that the edit ended.</para>
+    ///
+    /// <para><b>Row edit (#976)</b> — same claim, different reason. Native Tab has already walked
+    /// focus onto Save/Cancel or out of the grid, and LostFocus enqueues its "is focus still inside
+    /// the grid?" check BEFORE our focus request is enqueued, so it would see focus outside and
+    /// commit the whole row — exactly the symptom #976 fixes. Gated on
+    /// <see cref="DataGridState{T}.HasRowEditFocusTarget"/> so we only claim a focus-out when there
+    /// is an editor to pull focus back to; claiming one otherwise leaves the one-shot flag armed to
+    /// swallow a later legitimate blur-commit (the bug class
+    /// <c>Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit</c> covers).</para>
+    ///
+    /// <para><b>Where the guarantee actually completes.</b> This gate is LOGICAL — it asks whether a
+    /// visible editable column exists, which is all that is knowable synchronously in KeyDown. It
+    /// cannot promise the PHYSICAL outcome: two dispatcher ticks later a custom
+    /// <c>col.Editor</c> whose whole subtree refuses focus makes <c>TryFocusEditor</c> return false,
+    /// and by then this claim has already been consumed by the routed LostFocus (which returned
+    /// early, scheduling no "is focus still inside?" check). The gap is closed by a one-shot
+    /// <i>focus debt</i>: the LostFocus handler records the grid root it disarmed itself on, and
+    /// <see cref="ScheduleFocus"/> repays that debt by pulling focus back to the root when — and
+    /// only when — its own focus attempt fails. That re-arms the blur-commit net. So the invariant
+    /// "a claimed focus-out is always cancelled out" is carried by the two together, never by this
+    /// predicate alone — do not read the gate as a guarantee on its own.</para>
+    /// </remarks>
+    internal static bool ShouldClaimNextLostFocus(DataGridState<T> state, VirtualKey key)
+        => ShouldClaimNextLostFocus(state, KeyChord.Unmodified(key));
+
+    internal static bool ShouldClaimNextLostFocus(DataGridState<T> state, KeyChord chord)
+    {
+        if (chord.Key != VirtualKey.Tab || !state.IsEditing) return false;
+        if (state.IsRowEditing) return state.HasRowEditFocusTarget();
+
+        return state.HasCellEditFocusTarget(chord.Shift ? -1 : +1);
+    }
+
+    /// <summary>
+    /// Attach a real-XAML-focus request to an editor cell, if the state has one armed for
+    /// exactly this cell. Cells with no pending request are returned untouched, so they keep
+    /// byte-identical modifiers and stay on the reconciler's shallow-skip path.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not <c>ElementRef</c> + <c>FocusManager.Focus</c>. One ref shared across the
+    /// row and rebound from cell A to cell B is reconcile-ORDER dependent: the reconciler clears
+    /// the old cell's ref and sets the new cell's ref in child order, so moving focus *backward*
+    /// sets B then clears A and the ref ends up null. A hook attached to the specific cell that
+    /// should receive focus has no such ordering hazard.
+    ///
+    /// Both hooks are needed because the reconciler runs exactly one of them per reconcile:
+    /// OnMount only when <c>oldM is null</c> (cell-mode edit — the cell flips TextBlock → editor),
+    /// OnUpdate only when it isn't (row-mode Tab between two already-mounted editors).
+    /// </remarks>
+    private static Element WithEditorFocusRequest(
+        Element editor,
+        DataGridState<T> state,
+        RowKey rowKey,
+        string columnName,
+        Ref<FrameworkElement?>? focusDebtRef = null)
+    {
+        if (!state.HasEditorFocusRequest(rowKey, columnName)) return editor;
+
+        void Arm(FrameworkElement fe)
+        {
+            // One-shot: the first hook to run claims it, so a later re-render of the same
+            // still-armed tree can't yank focus back out from under the user.
+            if (!state.TryConsumeEditorFocusRequest(rowKey, columnName)) return;
+
+            // Stamp the generation the claim belongs to. The actual Focus() is deferred, and
+            // between now and then the edit can end or a newer request can supersede this one;
+            // ScheduleFocus re-checks both against this stamp before touching XAML.
+            ScheduleFocus(fe, state, rowKey, columnName, state.FocusRequestVersion, focusDebtRef);
+        }
+
+        return editor.OnMountAdd(Arm).OnUpdateAdd(Arm);
+    }
+
+    /// <summary>
+    /// Whether a claimed-but-not-yet-applied focus request is still the one the grid wants
+    /// honoured. Pure state predicate, so it is testable without a live control.
+    /// </summary>
+    /// <remarks>
+    /// Guards the window between claiming a request and the deferred <c>Focus()</c> landing:
+    ///   • A newer request superseded this one (row-mode Tab pressed again before the tick ran).
+    ///     Focusing the older cell would fight the newer one and land on whichever tick is last.
+    ///   • The edit that armed the request already ended — commit, cancel, or a blur-commit.
+    ///     Focusing now would yank the caret back onto a control the user has moved away from,
+    ///     and <c>ElementPool</c> may already have recycled that control into a different row.
+    /// </remarks>
+    internal static bool IsFocusRequestStillCurrent(
+        DataGridState<T> state, RowKey rowKey, string columnName, int version)
+    {
+        if (state.FocusRequestVersion != version) return false;
+        if (state.EditingRowKey is not { } editingKey || !editingKey.Equals(rowKey)) return false;
+
+        // Row mode keeps every editable cell of the row open, so the row key is the whole
+        // identity. Cell mode has exactly one open editor, so the column must match too.
+        return state.IsRowEditing
+               || (state.IsEditing
+                   && string.Equals(state.EditingColumnName, columnName, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Drop an unpaid focus debt once no edit remains that could ever settle it.
+    /// </summary>
+    /// <remarks>
+    /// Called from the not-current arm of <c>Apply</c> — the only path that returns before the
+    /// unconditional settlement below it, and therefore the only path that can strand a debt.
+    ///
+    /// The clear is conditional because that arm covers two situations and only one is terminal:
+    ///   • Superseded while the edit is STILL OPEN — request v1 loses the version check to v2.
+    ///     v2's own <c>Apply</c> settles the debt, so leave it; clearing here would drop a live one
+    ///     and the suppressed blur-commit would never be repaid.
+    ///   • The edit ENDED — commit, cancel, or blur-commit — before this tick ran. Nothing will
+    ///     arm another request for it, so the pointer would survive to be honoured by some later,
+    ///     unrelated failed focus move, yanking the caret back onto an old grid root.
+    /// </remarks>
+    internal static void SettleStaleFocusDebt(
+        DataGridState<T> state, Ref<FrameworkElement?>? focusDebtRef)
+    {
+        if (focusDebtRef is null) return;
+        if (state.IsEditing || state.IsRowEditing) return;
+
+        focusDebtRef.Current = null;
+    }
+
+    /// <summary>
+    /// Focus <paramref name="fe"/> once it can actually take focus.
+    /// </summary>
+    /// <remarks>
+    /// Two deferrals, for two different reasons:
+    ///   • <c>Loaded</c> — on mount, ApplyModifiers runs BEFORE the control is parented, and
+    ///     Focus on an unparented control fails. Also covers a virtualized row realized on a
+    ///     later dispatcher wave. The handler removes itself so a recycled control can't
+    ///     re-focus on a later Loaded.
+    ///   • dispatcher — even once loaded, the focus move has to land after WinUI's own Tab
+    ///     focus navigation, which has already run by the time our handledEventsToo KeyDown
+    ///     handler fires.
+    ///
+    /// Both deferrals re-check <see cref="IsFocusRequestStillCurrent"/> at the moment they run,
+    /// because either one can outlive the edit that armed the request.
+    ///
+    /// <paramref name="focusDebtRef"/> carries the grid root of a blur-commit that was suppressed
+    /// and not yet repaid — see the fallback inside <c>Apply</c>. A request that loses the
+    /// staleness re-check returns before that fallback, so it hands the debt to
+    /// <see cref="SettleStaleFocusDebt"/> rather than stranding it.
+    /// </remarks>
+    private static void ScheduleFocus(
+        FrameworkElement fe,
+        DataGridState<T> state,
+        RowKey rowKey,
+        string columnName,
+        int version,
+        Ref<FrameworkElement?>? focusDebtRef = null)
+    {
+        if (fe.IsLoaded)
+        {
+            Enqueue();
+            return;
+        }
+
+        void OnLoaded(object s, RoutedEventArgs e)
+        {
+            fe.Loaded -= OnLoaded;
+            Enqueue();
+        }
+
+        fe.Loaded += OnLoaded;
+
+        void Enqueue()
+        {
+            void Apply()
+            {
+                if (!IsFocusRequestStillCurrent(state, rowKey, columnName, version))
+                {
+                    SettleStaleFocusDebt(state, focusDebtRef);
+                    return;
+                }
+
+                // Settle any outstanding focus debt on this attempt, whatever the outcome. The
+                // debt is one-shot for the same reason SuppressNextLostFocusCommit is: a pointer
+                // that survives its own repayment would pull focus on some later, unrelated
+                // failed focus move.
+                var owed = focusDebtRef?.Current;
+                if (focusDebtRef is not null) focusDebtRef.Current = null;
+
+                if (TryFocusEditor(fe)) return;
+
+                // XAML refused the focus move. That only needs repairing when a blur-commit was
+                // actually suppressed on the strength of this traversal: the routed LostFocus
+                // consumed SuppressNextLostFocusCommit and returned WITHOUT scheduling the "is
+                // focus still inside the grid?" check, and no further LostFocus fires while focus
+                // is already outside. Nothing re-arms the blur-commit net until the next grid
+                // focus round-trip, so the row edit can sit open with focus outside the grid.
+                //
+                // Pulling focus back to the grid root re-arms it: the root is the element the
+                // LostFocus handler is wired to, so the next blur runs the deferred check and
+                // commits.
+                //
+                // Gated on an actually-suppressed blur rather than on any failed focus, which is
+                // what keeps a programmatic BeginEdit from stealing focus away from wherever the
+                // user was (a toolbar button, say) just because the editor refused it. With no
+                // debt there is nothing to repay and this is a quiet no-op.
+                if (owed is not null && !IsFocusInside(owed))
+                    owed.Focus(FocusState.Programmatic);
+            }
+
+            // Two ways the deferral can be unavailable, and both must fall back rather than drop:
+            // no dispatcher at all (headless harnesses), and TryEnqueue refusing (queue shutting
+            // down). Dropping either would silently lose the focus request — which is precisely
+            // the "editor never got focus" symptom this whole seam exists to fix, reappearing in
+            // the one configuration nobody watches. Running inline is the weaker option (the
+            // control may not be parented yet, so Focus can fail) but it is strictly better than
+            // not asking at all, and IsFocusRequestStillCurrent still gates it. Mirrors
+            // ElementFactory.ScheduleReRealize, which handles both arms the same way.
+            var queue = fe.DispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            if (queue is null || !queue.TryEnqueue(Apply))
+                Apply();
+        }
+    }
+
+    /// <summary>
+    /// Move real keyboard focus into an editor. Returns whether focus was taken, so the
+    /// selftests can tell "we asked and XAML refused" from "we never asked".
+    /// </summary>
+    internal static bool TryFocusEditor(FrameworkElement fe)
+    {
+        // UIElement.Focus, not Control.Focus: a custom col.Editor may hand back a focusable
+        // non-Control root (a RichTextBlock with text selection on, or any UIElement with
+        // IsTabStop set), which a Control-typed check would silently decline to focus.
+        if (fe.Focus(FocusState.Programmatic))
+            return true;
+
+        // A composite editor (a Grid wrapping a TextBox + a glyph) has a non-focusable ROOT,
+        // so reach for the first focusable thing inside it — again without narrowing to Control.
+        if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(fe) is Microsoft.UI.Xaml.UIElement inner)
+            return inner.Focus(FocusState.Programmatic);
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether real keyboard focus currently sits on <paramref name="root"/> or anywhere in its
+    /// visual subtree.
+    /// </summary>
+    /// <remarks>
+    /// Shared by the LostFocus safety net (which must NOT commit while focus is still inside the
+    /// grid) and by <see cref="ScheduleFocus"/>'s fallback (which must NOT yank focus to the grid
+    /// root when it is already inside). Deliberately one implementation: the two callers ask the
+    /// same question, so a mutation that breaks one has to break both.
+    ///
+    /// A null focused element, or one that is not a <c>DependencyObject</c>, reports false — focus
+    /// that cannot be located is treated as outside, which is the safe direction for both callers.
+    ///
+    /// A null <c>XamlRoot</c> reports false for the same reason: the element is disconnected, so
+    /// focus cannot be inside it. That guard is load-bearing rather than cosmetic —
+    /// <c>FocusManager.GetFocusedElement(null)</c> throws <c>ArgumentException</c> (measured, not
+    /// assumed), and a disconnected element's <c>XamlRoot</c> really is null. <see cref="ScheduleFocus"/>
+    /// reaches here on a later dispatcher tick, so the grid captured at LostFocus can have been
+    /// unmounted in the interval.
+    /// </remarks>
+    private static bool IsFocusInside(FrameworkElement root)
+    {
+        if (root.XamlRoot is null) return false;
+
+        if (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root.XamlRoot) is not DependencyObject focused)
+            return false;
+
+        for (DependencyObject? parent = focused; parent is not null;
+             parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+        {
+            if (ReferenceEquals(parent, root)) return true;
+        }
+
+        return false;
     }
 
     // ── Header rendering ────────────────────────────────────────────
@@ -1411,10 +1764,16 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                 case VirtualKey.Tab:
                     // Tab keeps the grid's own cell cursor inside the row's editable columns and
                     // leaves the row in edit mode — a row commits only on Enter, Save, or
-                    // click-away (spec 017 §6.7/§6.8). Real keyboard focus is WinUI's FocusManager
-                    // tab order, which already ran before this handledEventsToo handler; this only
-                    // syncs the logical index, exactly as the cell path's FocusNextCell does.
-                    // Shift+Tab walks the same ring backward, with the same never-commit guarantee.
+                    // click-away (spec 017 §6.7/§6.8). Shift+Tab walks the same ring backward,
+                    // with the same never-commit guarantee.
+                    //
+                    // #976: this moves REAL keyboard focus too, not just the logical index. Native
+                    // tab order alone is not enough — it walks on into Save/Cancel and then out of
+                    // the grid, which trips the LostFocus blur-commit. Both directions arm a
+                    // one-shot focus request (they share MoveRowEditFocus) that the renderer honours
+                    // on the cell it lands on, so focus cycles among the row's editors. The move is
+                    // dispatcher-deferred (it has to land after WinUI's own tab navigation), so it is
+                    // NOT complete when this returns.
                     if (chord.Shift)
                         state.FocusPrevRowEditColumn();
                     else
@@ -1507,6 +1866,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// </summary>
     internal static void HandleKeyDownForTests(DataGridState<T> state, DataGridElement<T> el, KeyChord chord)
         => HandleKeyDown(state, el, chord);
+
+    /// <summary>
+    /// Test seam (issue #976). Exposes the private focus-location helper so a selftest can pin the
+    /// disconnected-root guard against a live <c>XamlRoot</c>. Headless tests cannot reach this —
+    /// every arm needs a real WinUI element — so the caller is a selftest fixture, not an xUnit test.
+    /// </summary>
+    internal static bool IsFocusInsideForTests(FrameworkElement root) => IsFocusInside(root);
 
     /// <summary>
     /// Default placeholder cell: a rounded gray bar that mimics a text shimmer.
@@ -1637,4 +2003,28 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             }
         });
     }
+}
+
+/// <summary>
+/// Grid-root KeyDown wiring registry, keyed by the WinUI control instance.
+/// </summary>
+/// <remarks>
+/// Deliberately <b>non-generic</b>. <see cref="DataGridComponent{T}"/> is generic, so a static
+/// field declared on it would give every closed instantiation its own table. <c>ElementPool</c>
+/// recycles by CLR type (<c>Microsoft.UI.Xaml.Controls.Grid</c> is on its poolable list), so the
+/// same pooled grid root can be remounted under a <i>different</i> <c>DataGridComponent&lt;TOther&gt;</c>.
+/// A per-instantiation table would not see the handler the previous instantiation attached, so
+/// handlers would keep accumulating and a stale closure would keep driving the previous grid's
+/// state — the exact defect the wiring guard exists to prevent. One shared table closes that.
+/// </remarks>
+internal static class DataGridKeyDownWiring
+{
+    internal sealed class Entry
+    {
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? Handler;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, Entry> s_entries = new();
+
+    internal static Entry GetOrCreate(FrameworkElement fe) => s_entries.GetOrCreateValue(fe);
 }

@@ -84,9 +84,48 @@ VSIX silently into the highest-version VS instance reported by `vswhere`. Pass
 `-VsInstanceId <id>` to target a specific install. Skip `-SkipBuild` if the
 VSIX is already current.
 
+It exits with:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | VSIX installed and `devenv /updateconfiguration` completed. |
+| `1` | Needs developer action — build, `vswhere`, or `VSIXInstaller` failure; VS already running; or duplicate installs detected (VS silently disables all of them, so this is *not* a success). |
+| `3` | VSIX installed, but `devenv /updateconfiguration` did not complete — it timed out and was terminated, or `devenv.exe` was not found. The extension is usable; the menu merge needs one manual VS launch. |
+
+`bootstrap.ps1` and `mur upgrade` both treat `3` as a warning and carry on, and
+neither prints `[ok]` for it. `0` therefore really does mean "installed and
+merged". `tests/vs_reactor/ci/BootstrapExitCode.Tests.ps1` fails if this table
+and the script's exit statements ever disagree.
+
 After it completes, launch VS once with `devenv /updateconfiguration` if the
 menu still does not appear — that forces a synchronous pkgdef merge before the
 shell starts.
+
+### `devenv /updateconfiguration` hangs on Visual Studio 18.8
+
+On VS **18.8** (`18.8.12023.21` and later in that band), `devenv /updateconfiguration`
+never returns — it does the work but does not exit. VS 18.7 completes the same
+call in 27–99 s. `Reinstall-Vsix.ps1` therefore treats the timeout as an expected
+outcome on 18.8: it waits `-UpdateConfigurationTimeoutSec` (default 120), then
+terminates the whole `devenv` process tree, sweeps any leftover process it
+recorded as belonging to *that* tree, reports whether the name is clear, and
+exits `3`.
+
+That sweep matters. `Process.Kill()` with no argument kills only the top process
+and returns without waiting, so the second `devenv` that `/updateconfiguration`
+spawns used to survive and make every later run of this script fail its
+"Visual Studio is running" guard (issue #1074). The sweep is **attributed, not
+name-matched**: it acts only on processes it recorded as descendants of the
+`devenv` it started, so an IDE you opened during the wait is never touched. A
+`devenv` it cannot attribute is *reported* — that is what the "still running
+after the sweep" warning is. The logic lives in `VsProcessLib.ps1` and is
+covered by `tests/vs_reactor/ci/VsProcessLib.Tests.ps1` (run by the *VS
+extension script tests* workflow, under both PowerShell 7 and Windows
+PowerShell 5.1).
+
+If you see `Visual Studio is running (PIDs: ...)` on a machine where you have no
+IDE open, check the reported start times: a process seconds old is a leftover
+from a hung `/updateconfiguration`, and killing it is safe.
 
 ### `NoApplicableSKUsException` on VS 2026
 

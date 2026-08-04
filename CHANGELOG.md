@@ -191,6 +191,35 @@ Conventions for contributors:
   Custom subclasses (`class MyButton : Button`) report `REACTOR_MOD_002` too,
   matching the pool, which does not recycle them either.
 
+- **Accessibility environment hooks now report the real system value on the
+  first render (issue #983).** `UseReducedMotion()`, `UseHighContrast()` and
+  `UseHighContrastScheme()` seeded their state inside `UseEffect`, which does
+  not run until after the first render commits. Every caller therefore rendered
+  its first frame against the default — `false` / `null` — and a component that
+  never re-renders kept that value for its whole lifetime. All three failed in
+  the one direction an accessibility hook must not: the first paint reports
+  "no accommodation needed", so it animates for exactly the users who asked it
+  not to. Each hook now reads its value during render (guarded so the WinRT
+  settings objects are still constructed once per component) and keeps the
+  effect for change notifications, plus a re-read after subscribing so a
+  preference flipped in the window between the two is not missed. Matches the
+  seed-then-subscribe shape the other environment hooks in `RenderContext`
+  already use.
+
+- **Reduced motion now updates while the app is running (issue #983).**
+  `UseReducedMotion()` and the charting host both listened on
+  `UISettings.ColorValuesChanged`, which does not fire when Windows'
+  "Animation effects" toggle changes — measured with a live subscription to both
+  events, it fired zero times in either direction while
+  `AnimationsEnabledChanged` fired on both. Because `UISettings.AnimationsEnabled`
+  still *reads back* the new value, the wrong subscription was invisible to any
+  static reading: the value was correct on first render and then frozen for the
+  life of the process, so a user turning animations off had to restart the app to
+  be taken at their word. Both listeners now subscribe to
+  `AnimationsEnabledChanged`, gated behind an `ApiInformation` probe because that
+  event needs Windows 10 2004 (19041) and Reactor's minimum is 17763; on older
+  builds the existing `ColorValuesChanged` re-read remains as the fallback.
+
 - **`DataGrid<T>`'s <kbd>Shift</kbd>+<kbd>Tab</kbd> now moves focus backward
   (issue #987).** The grid's routed `KeyDown` handler captured only the raw
   `VirtualKey` and then deferred dispatch through
@@ -220,6 +249,31 @@ Conventions for contributors:
   The gallery's "TeachingTip (Title Only)" card, which declared a tip with no
   `IsOpen` and no trigger and so could never appear, now uses the state-driven shape
   its sibling card already used.
+
+- **DataGrid cell and row editors now take real keyboard focus (issue #976,
+  spec 017 §6.7–§6.8).** Every focus API on `DataGridState<T>` moved a purely
+  *logical* cell cursor and raised `StateChanged`; nothing ever called XAML
+  `Focus(...)`. So opening an editor — Enter, F2, click-to-edit, or a row's Edit
+  button — left the caret wherever it already was, and the user had to click or
+  Tab into the editor before typing. In `EditMode.Row` it was worse: Tab moved
+  the logical cursor while native focus kept walking on into the row's
+  Save/Cancel buttons and then out of the grid entirely, and leaving the grid
+  fires the deferred blur-commit — so Tab silently committed the row instead of
+  cycling its editors. `BeginEdit`, `BeginRowEdit`, and the row-edit Tab
+  traversal now arm a one-shot focus request keyed by `(RowKey, columnName)`,
+  which the renderer honours by moving real focus into that editor once it is
+  loaded. **Behaviour change:** in `EditMode.Row`, Tab now wraps from the last
+  editor back to the first rather than reaching Save/Cancel; those stay
+  reachable by pointer, and <kbd>Enter</kbd> / <kbd>Esc</kbd> are their keyboard
+  equivalents.
+
+- **Reconciler no longer swallows an element's `OnUpdateAction` (issue #976).**
+  `Element.ModifiersEqual` — the shallow-skip gate — did not compare
+  `OnUpdateAction`, and `ShallowEquals` does not compare callbacks, so an
+  element whose only change was *gaining* an update hook compared equal to its
+  predecessor, took the skip path, and the hook never ran. Both-null still
+  compares equal and a cached delegate still compares equal by reference, so the
+  skip rate is unchanged for everything else.
 
 - **Unsetting a common modifier no longer permanently overrides the control's
   style (issue #952).** `Reconciler.ApplyModifiers` reset a dropped modifier by
