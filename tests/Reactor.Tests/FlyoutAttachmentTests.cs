@@ -438,4 +438,53 @@ public class FlyoutAttachmentTests
         Assert.False(OverlayLifecycle.IsStillRequestingOpen(
             Flyout(Button("t", null), TextBlock("content")) with { IsOpen = true }));
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  ContentDialog deferred-open guard
+    //  (OverlayLifecycle.ShouldStartDeferredDialog)
+    //
+    //  Same shape as the flyout guard above, plus an already-showing term:
+    //  a placeholder tracks exactly one live dialog, and WinUI permits only
+    //  one dialog per XamlRoot, so a second show would throw out of an
+    //  async void after overwriting the tracking entry.
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void DeferredDialog_Honoured_While_Element_Still_Wants_Open()
+    {
+        Assert.True(OverlayLifecycle.ShouldStartDeferredDialog(
+            ContentDialog("t", TextBlock("body")) with { IsOpen = true }, alreadyShowing: false));
+    }
+
+    [Fact]
+    public void DeferredDialog_Dropped_When_Element_Rerendered_Closed()
+    {
+        Assert.False(OverlayLifecycle.ShouldStartDeferredDialog(
+            ContentDialog("t", TextBlock("body")) with { IsOpen = false }, alreadyShowing: false));
+    }
+
+    [Fact]
+    public void DeferredDialog_Dropped_When_Anchor_Untagged()
+    {
+        // Unmount clears the tag, so a pending Loaded reports no element.
+        Assert.False(OverlayLifecycle.ShouldStartDeferredDialog(null, alreadyShowing: false));
+    }
+
+    [Fact]
+    public void DeferredDialog_Dropped_When_Anchor_Now_Hosts_A_Different_Element()
+    {
+        // PopupElement.IsOpen is a different feature on a different element type.
+        Assert.False(OverlayLifecycle.ShouldStartDeferredDialog(
+            Popup(TextBlock("content")) with { IsOpen = true }, alreadyShowing: false));
+    }
+
+    [Fact]
+    public void DeferredDialog_Dropped_When_A_Dialog_Is_Already_Showing()
+    {
+        // A rising edge that lands after the anchor gains a XamlRoot shows
+        // directly while this deferral is still pending; the pending one must
+        // not show a second dialog over it.
+        Assert.False(OverlayLifecycle.ShouldStartDeferredDialog(
+            ContentDialog("t", TextBlock("body")) with { IsOpen = true }, alreadyShowing: true));
+    }
 }

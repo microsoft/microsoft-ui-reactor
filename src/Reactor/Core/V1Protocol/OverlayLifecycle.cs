@@ -155,17 +155,53 @@ internal static class OverlayLifecycle
                 // Re-read the current element from the anchor's Tag in case
                 // IsOpen was toggled back to false (or the element was
                 // replaced) before Loaded fired.
-                if (Reconciler.GetElementTag(anchor) is not ContentDialogElement current || !current.IsOpen)
+                //
+                // The second term is defensive: a dialog may already be showing
+                // for this placeholder by the time this fires. A rising edge that
+                // lands once the anchor has picked up a XamlRoot takes the direct
+                // path below while this handler is still pending, and one that
+                // lands before then arms a second deferred open — either way two
+                // shows would race for a placeholder that tracks exactly one
+                // dialog. The loser's ShowAsync throws (WinUI permits one dialog
+                // per XamlRoot) out of an async void, after it has already
+                // overwritten the tracking entry and stranded the winner's content
+                // subtree. Whoever published first owns the placeholder:
+                // ShowContentDialogCore publishes before its first await, so this
+                // sees the winner even within one dispatcher tick.
+                var tag = Reconciler.GetElementTag(anchor);
+                var alreadyShowing = s_liveDialogs.TryGetValue(anchor, out var live) && live is not null;
+                if (!ShouldStartDeferredDialog(tag, alreadyShowing))
                     return;
                 var deferredRoot = anchor.XamlRoot
                     ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
-                ShowContentDialogCore(reconciler, current, anchor, deferredRoot, requestRerender);
+                ShowContentDialogCore(reconciler, (ContentDialogElement)tag!, anchor, deferredRoot, requestRerender);
             }
             anchor.Loaded += OnLoaded;
             return;
         }
         ShowContentDialogCore(reconciler, cdEl, anchor, anchor.XamlRoot, requestRerender);
     }
+
+    /// <summary>
+    /// Whether a deferred <c>Loaded</c> open should still start a dialog.
+    /// </summary>
+    /// <param name="tag">
+    /// The anchor's element tag, re-read at <c>Loaded</c> time. Between arming the
+    /// deferral and this callback the element can be re-rendered with
+    /// <c>IsOpen=false</c>, replaced by a different element, or unmounted (which
+    /// clears the tag), so a stale request must not pop a dialog.
+    /// </param>
+    /// <param name="alreadyShowing">
+    /// Whether the anchor already tracks a live dialog. A placeholder tracks exactly
+    /// one, so a second show would throw out of an <c>async void</c> and strand the
+    /// first dialog's content subtree.
+    /// </param>
+    /// <remarks>
+    /// The ContentDialog counterpart to <see cref="IsStillRequestingOpen"/>, split out
+    /// so the decision is unit-testable without a live WinUI tree.
+    /// </remarks>
+    internal static bool ShouldStartDeferredDialog(Element? tag, bool alreadyShowing)
+        => !alreadyShowing && tag is ContentDialogElement { IsOpen: true };
 
     private static async void ShowContentDialogCore(Reconciler reconciler, ContentDialogElement cdEl, FrameworkElement anchor, XamlRoot? xamlRoot, Action requestRerender)
     {
