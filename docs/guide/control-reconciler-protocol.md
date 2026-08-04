@@ -299,6 +299,15 @@ public TControl Mount(MountContext ctx, TElement el)
 {
     var ctrl = ctx.RentControl(_descriptor.PoolPolicy, _descriptor.Factory);
 
+    // A descriptor that declares teardown must actually receive it. The engine's unmount
+    // dispatch is tag-gated (Reconciler.UnmountRecursive only reaches the V1 handler when
+    // GetElementTag returns an element), and SetElementTagIfNeeded allocates ReactorState
+    // only for elements that carry callbacks, a key, extensions, or reference modifiers.
+    // Without this, OnUnmount would fire for some elements of a type and silently not for
+    // others — the callback-free ones — which is not a contract an author can reason about.
+    if (_descriptor.OnUnmount is not null)
+        Reconciler.GetOrCreateReactorState(ctrl);
+
     // §14 Phase 3-final: when the descriptor declares an ItemsHost,
     // populate the items collection BEFORE the prop loop. Initial writes
     // for selection-tracking props (SelectedIndex/SelectedItem) need the

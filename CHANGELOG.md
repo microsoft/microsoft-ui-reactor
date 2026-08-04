@@ -28,6 +28,20 @@ Conventions for contributors:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.0-preview.13] — 2026-08-04
+
+### Added
+
 - **`TabView.FillContentArea` — opt-in full-height tab body (issue #914).**
   WinUI's `DefaultTabViewStyle` sets `VerticalAlignment="Top"` on the `TabView`
   control itself, so the `*` content row in its template never receives leftover
@@ -118,6 +132,28 @@ Conventions for contributors:
   fire for callback-bearing elements of a type and silently not for callback-free
   ones.
 
+- **`IsHitTestVisible(bool)` common element modifier (issue #809).** Fills the
+  last gap among the sibling boolean visual-state modifiers (`IsEnabled`,
+  `IsTabStop`, `IsVisible`, `Opacity`). Opting an element out of pointer
+  hit-testing — an overlay that should not swallow input, a decorative adorner —
+  no longer needs the imperative `.Set(c => c.IsHitTestVisible = false)` escape
+  hatch, so the write participates in the property diff and is unwound on
+  removal.
+
+- **`ReactorBinding.ShouldSuppressEcho(UIElement)` — public read-side echo
+  primitive (spec 062, issue #163).** The read-side counterpart of the existing
+  `WriteSuppressed` write primitive. External wrapper authors — and the
+  `[WrapControlled]` source generator, which now emits this instead of the
+  internal `ChangeEchoSuppressor.ShouldSuppress` — can ask whether a change
+  notification is Reactor's own echo and skip it, closing the one place the
+  generator emitted an internal Reactor symbol into externally generated code.
+
+- **`REACTOR_ITEMS_002` — `ItemsView` viewBuilder must return an `ItemContainer`
+  root (spec 060).** A `viewBuilder` that returns a bare `Border(...)` (or any
+  non-`ItemContainer` root) trips a framework guard at runtime and renders an
+  error banner instead of the list. The analyzer now catches that shape at build
+  time and points at `ItemContainer(...)`.
+
 ### Changed
 
 - **`WithNavigation` gained an optional `settingsRoute` argument (binary-breaking,
@@ -131,6 +167,38 @@ Conventions for contributors:
   was added: the project is pre-1.0 and explicitly reserves the right to change
   the public surface between releases, and a permanent duplicate overload is a
   worse public shape than one optional argument.
+
+- **Charting, docking, markdown and the data grid moved into
+  `Microsoft.UI.Reactor.Advanced` (breaking; spec 062 §7, issue #163).** Four
+  heavy subsystems — charting (and its D3 layer), docking, markdown, and
+  `DataGrid<T>` — no longer ship in the core `Microsoft.UI.Reactor` package. The
+  dependency direction is one-way (`Reactor.Advanced → Reactor`, enforced by a
+  new architecture test), and core `Reactor.dll` drops **~0.9 MB (≈28%)** — ~3.2
+  MB to ~2.3 MB in Release — so apps that don't use these subsystems ship a
+  smaller core. **Apps that do use them must reference
+  `Microsoft.UI.Reactor.Advanced`**, which is versioned in lock-step with the
+  framework and already referenced by the scaffolded template. Namespaces are
+  preserved (`Microsoft.UI.Reactor.Charting[.D3]`, `.Docking`, `.Controls`,
+  `.Markdown`) and the relocated event fluents stayed in their element's own
+  namespace, so type references and `using`s are unchanged. The factory entry
+  points `DataGrid`, `Column`, `AutoColumns` and `Markdown` now live in
+  `Microsoft.UI.Reactor.Advanced.Factories`.
+
+- **The OS now picks the default window size.** `WindowSpec.Width` / `Height` and
+  the `ReactorApp.Run(width, height)` parameters defaulted to a hardcoded
+  1024x768 inherited from the pre-spec-036 `Run` signature — never a design
+  decision (spec 036 only ever discussed the units, never the value). Every app
+  that did not care about window size was still overriding the size Windows
+  would have picked. Those defaults are now unset, so the OS chooses; passing an
+  explicit width/height behaves exactly as before.
+
+- **Icon fonts now fall back through `Segoe Fluent Icons, Segoe MDL2 Assets`.**
+  The legacy Windows 10-era `"Segoe MDL2 Assets"` font is no longer used on its
+  own, and the `FontIcon` / `FontIconSource` fallbacks — which previously
+  hardcoded a bare `"Segoe Fluent Icons"` with no Windows 10 tail — now share one
+  `IconResolver.SymbolFontFallback` stack with the rest of the framework. Font
+  allocations on that path also route through `WinRTCache` instead of crossing
+  the managed/WinRT boundary on every render.
 
 ### Deprecated
 
@@ -410,6 +478,50 @@ Conventions for contributors:
   body qualified — exact rather than conservative, since the fix is already
   all-or-nothing over the whole body. Predates the attached-property work above,
   where the same shape would have emitted a call that does not compile.
+
+- **A `Frame` navigating to a code-only `Page` no longer kills the process.**
+  Navigating to a page with no XAML backing terminated the
+  process instantly with an access violation (`0xC0000005`). Because it is a
+  native WinUI AV rather than a managed exception,
+  `Application.UnhandledException` never fired — the process simply vanished with
+  no error, no dialog and no log. `Frame.Navigate` resolves a custom navigation
+  target through the XAML application object, which is a path a code-only page
+  cannot satisfy; Reactor now resolves those targets itself instead of handing
+  them to the framework.
+
+- **`CommandBarFlyout(...)` now opens from its target.** The flyout was installed
+  as attached-flyout *metadata* only (`FlyoutBase.SetAttachedFlyout`), which
+  associates it with the element but never shows it — so a
+  `CommandBarFlyout(Button("Show Commands"), primaryCommands: …)` rendered a
+  button that did nothing at all. It is now wired to actually open from its
+  target, which also brings it under the default-placement guard described above.
+
+- **Keyed `ListView` / `GridView` rows no longer announce Reactor's internal row
+  identity (issue #951).** Items of a keyed or data-driven list announced the
+  internal row identity — `Row[0]=<key>`, degenerating to a raw GUID when the key
+  selector produced one — instead of their content, so screen-reader users heard
+  bookkeeping rather than the item. The keyed path no longer projects that
+  identity onto the container's automation name.
+
+- **Expanding a `DataGrid<T>` row no longer throws `InvalidCastException` (issue
+  #919).** The row's root element record type flipped on expand — collapsed,
+  `RenderRow` returned a bare `GridElement`; expanded, it wrapped the row in
+  `FlexColumn(row, detail)`, a `FlexElement` — so the reconciler tried to reuse
+  the realized `Grid` as a `FlexPanel` and threw
+  `Unable to cast 'Microsoft.UI.Xaml.Controls.Grid' to
+  'Microsoft.UI.Reactor.Layout.FlexPanel'`. The row root is now a stable type
+  across both states.
+
+- **Docking's accessibility focus hand-off actually moves focus.**
+  The hand-off ran but left real keyboard focus where it was, so the announced
+  target and the focused element disagreed after a dock operation.
+
+- **Unpackaged launches no longer raise a first-chance WinRT exception.** Every
+  unpackaged app start probed for package identity in a way that threw
+  `InvalidOperationException` (`HRESULT 0x80073D54 — The process has no package
+  identity`) before anything useful happened — harmless but noisy under a
+  debugger and a false lead when diagnosing real startup failures. Identity is
+  now detected without throwing.
 
 ### Security
 

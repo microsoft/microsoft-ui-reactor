@@ -157,37 +157,51 @@ public UIElement GetElement(ElementFactoryGetArgs args)
     var element = BuildOrCache(key, item, index, keyed);
 
     UIElement? control;
-    if (_recyclePool.Count > 0)
+    if (TryTakeCompatibleFromPool(element, out var reused, out var oldElement, out var parkedVisibility))
     {
         // Reuse a previously-recycled container. The framework still has
         // it parented to the ItemsRepeater, so the ViewManager.cpp:866
         // Append-skip kicks in and the visual tree stays stable.
-        var reused = _recyclePool.Pop();
-        if (_lastElementByControl.TryGetValue(reused, out var oldElement))
+        //
+        // Undo the parking collapse from RecycleElement BEFORE reconciling.
+        // Restore the exact pre-park value source rather than forcing
+        // Visible: an in-place diff whose Visibility modifier is unchanged
+        // writes nothing, so forcing Visible would silently un-collapse a
+        // row the author asked to hide.
+        RestoreParkedVisibility(reused, parkedVisibility);
+        var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
+        if (replacement is not null && !ReferenceEquals(replacement, reused))
         {
-            var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
-            if (replacement is not null && !ReferenceEquals(replacement, reused))
+            // Pass-2 reuse: the row's key changed, so Reconcile unmounted the old
+            // component (effect cleanups ran) and built a fresh wrapper. Move that
+            // subtree back into the container we already have — returning the
+            // replacement instead would strand `reused`, which cannot be un-parented
+            // from an ItemsRepeater (see DetachFromParent). (Issues #326, #919.)
+            //
+            // A pass-1 selection can land here too: CanUpdate was true, but a
+            // decorator-style handler substituted a different instance. Re-check
+            // CanSafelyAdopt so only wrappers whose entire state lives in the
+            // component subtree are adopted; everything else takes the fresh
+            // replacement and parks the container.
+            if (CanSafelyAdopt(reused, oldElement, element)
+                && _reconciler.TryAdoptRealizedReplacement(reused, replacement))
             {
-                // Heterogeneous-row case: Reconcile decided the root
-                // element type changed and built a fresh control.
-                // `reused` is now unmounted but still parented to the
-                // ItemsRepeater — detach so it doesn't sit there as
-                // an orphan (the original leak shape we're fixing).
-                // (PR #324 review)
-                DetachFromParent(reused);
-                _lastElementByControl.Remove(reused);
-                control = replacement;
+                control = reused;
             }
             else
             {
-                control = reused;
+                // Nothing can install `replacement` into `reused`. Retire `reused`
+                // — park it collapsed with its Reactor state detached — rather than
+                // leaving a live ghost row painted over the list. Do NOT return it to
+                // the pool: it was unmounted inside Reconcile, so its tracked Element
+                // no longer describes it.
+                RetireAlreadyUnmounted(reused);
+                control = replacement;
             }
         }
         else
         {
-            // Defensive: pool entry without a tracked oldElement should
-            // not happen — fall back to re-mounting on top of it.
-            control = _reconciler.Mount(element, _requestRerender);
+            control = reused;
         }
     }
     else
@@ -200,6 +214,7 @@ public UIElement GetElement(ElementFactoryGetArgs args)
     {
         _keyByControl[control] = key;
         _lastElementByControl[control] = element;
+        if (_keyByControl.Count > _maxRealized) _maxRealized = _keyByControl.Count;
 
         // Issue #383: arm the multi-select checkmark flicker guard on the
         // realized container. Idempotent per container instance.
