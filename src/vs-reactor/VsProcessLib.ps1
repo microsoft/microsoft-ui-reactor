@@ -162,6 +162,14 @@ function Stop-ProcessTreeSafely {
 # time we sweep, a recorded pid may belong to something else entirely. A pid
 # that no longer carries the expected name, or that started after we recorded
 # it, is somebody else's and is left alone.
+#
+# Why the pair is close to airtight, and where it still isn't: every pid the
+# caller records was alive during the walk, so it started at or before the
+# timestamp taken immediately after it. A replacement that grabbed the same pid
+# would have to start later — and so fails the timestamp test — unless it landed
+# inside the microseconds between the walk ending and the timestamp being taken,
+# *and* happened to be named devenv. That residue is not zero, so this is a
+# narrowing, not a guarantee; the drain report is what covers the remainder.
 function Stop-ProcessIdsSafely {
     param(
         [int[]]$ProcessIds = @(),
