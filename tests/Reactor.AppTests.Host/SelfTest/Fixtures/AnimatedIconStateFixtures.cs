@@ -73,8 +73,10 @@ internal static class AnimatedIconStateFixtures
     //     idle control reading 0 on the same region. This fixture was green throughout.
     //
     //     So: this checks that a segment EXISTS and has duration. Whether it renders a
-    //     visible difference is a pixel question no marker map can answer, and the gallery
-    //     page is pinned to sources whose hover step is observed to render (see
+    //     visible difference is a pixel question no marker map can answer. Normal<->PointerOver
+    //     is measured invisible on ALL THREE built-in sources the gallery page uses, so that
+    //     page is pinned to reaching a state outside {Normal, PointerOver} wherever an icon is
+    //     pointer-driven (see
     //     GallerySampleLintTests.AnimatedIcons_UseSourcesAndStatesTheSelfTestProves).
     // ════════════════════════════════════════════════════════════════════════
 

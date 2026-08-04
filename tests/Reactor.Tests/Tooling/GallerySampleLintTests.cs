@@ -725,47 +725,49 @@ public sealed class GallerySampleLintTests
     };
 
     /// <summary>
-    /// Sources whose <c>Normal</c>&#8596;<c>PointerOver</c> step is <em>observed to render a
-    /// visible difference</em> — a strictly stronger property than being in
+    /// States whose transition to/from <c>Normal</c> is <em>observed to render a visible
+    /// difference</em> on the built-in visual sources — a strictly stronger property than being in
     /// <see cref="ProvenAnimatingSources"/>, which only means the marker segment has duration.
     /// </summary>
     /// <remarks>
-    /// The distinction is the whole of issue #983's second round. <c>AnimatedSettings</c> is in
-    /// the set above — its <c>NormalToPointerOver</c> segment measures 0.075 and every marker
-    /// test passed — and it renders <em>nothing</em> on hover: driving a Settings icon from
-    /// <c>Normal</c> to <c>PointerOver</c> with no pointer involved produced 0 changed pixels
-    /// across 298 frame-pairs, against an idle control reading 0 on the same region moments
-    /// earlier at ~60fps. Its artwork differs on <c>Pressed</c>, which is why it looks alive
-    /// when clicked and dead when hovered. A page demonstrating <em>hover</em> with it shows a
-    /// motionless icon while every test stays green.
+    /// The distinction is the whole of issue #983's second round. <c>NormalToPointerOver</c> has
+    /// real duration on every source this page uses — 0.075 on <c>AnimatedSettings</c>, 0.1125 on
+    /// <c>AnimatedFind</c> and <c>AnimatedGlobalNavigationButton</c> — so every marker test passes,
+    /// and the artwork is identical at both ends. Driving a Settings icon <c>Normal</c>-&gt;
+    /// <c>PointerOver</c> changed 0 pixels across 298 frame-pairs at ~60fps, against an idle
+    /// control reading 0 on the same region. A page demonstrating hover with it shows a motionless
+    /// icon while every test stays green — which is exactly the bug this PR exists to fix, walking
+    /// back in through the door the first fix left open.
     /// <para>
-    /// Membership here is a claim about pixels, so it can only be established by looking at
-    /// them — no marker map, <c>GetState()</c> readback, or headless parse can decide it. Add a
-    /// source only after measuring it: capture the icon's rectangle across a
-    /// <c>Normal</c>-&gt;<c>PointerOver</c> write and require a run of differing frames, with an
-    /// idle control on the same region to prove the sampler is not blind.
+    /// So a pointer-driven icon has to reach at least one state <em>outside</em> this set.
+    /// <c>Pressed</c> is where these glyphs' artwork actually differs. Membership is a claim about
+    /// pixels and can only be settled by looking at them: capture the icon's rectangle across the
+    /// write and require a run of differing frames, with an idle control on the same region to
+    /// prove the sampler is not blind.
     /// </para>
     /// </remarks>
-    static readonly HashSet<string> VisibleOnHoverSources = new(global::System.StringComparer.Ordinal)
+    static readonly HashSet<string> StatesThatRenderNoVisibleChange = new(global::System.StringComparer.Ordinal)
     {
-        // Observed: its hover transition visibly morphs, and back again on exit.
-        "AnimatedGlobalNavigationButtonVisualSource",
+        "Normal",
+        "PointerOver",
     };
 
     /// <summary>
-    /// True when this <em>icon</em> — not merely its page — takes its state from the pointer.
+    /// The state literals written to an <em>icon</em> — not merely somewhere on its page — that
+    /// takes its state from the pointer; <see langword="null"/> when this source drives no
+    /// pointer-wired icon.
     /// </summary>
     /// <remarks>
-    /// Page-level was the obvious first cut and it is wrong: the AnimatedIcon page has both a
-    /// hover card and a picker card, so a page-level test flags the picker's source for a
-    /// property only the hover cards need. The question is per-icon, and the enclosing method or
-    /// local function is the right scope because that is the unit a cell is written in.
+    /// Page-level was the obvious first cut and it is wrong: the AnimatedIcon page has both
+    /// pointer-driven cells and a picker card, so a page-level test flags the picker's source for a
+    /// property only the cells need. The question is per-icon, and the enclosing local function is
+    /// the right scope because that is the unit a cell is written in.
     /// </remarks>
-    static bool IsHoverDriven(SyntaxNode root, ObjectCreationExpressionSyntax creation)
+    static HashSet<string>? PointerDrivenStates(SyntaxNode root, ObjectCreationExpressionSyntax creation)
     {
         // Which local does this source get assigned to?
         var declarator = creation.FirstAncestorOrSelf<VariableDeclaratorSyntax>();
-        if (declarator is null) return false;
+        if (declarator is null) return null;
 
         var names = new HashSet<string>(global::System.StringComparer.Ordinal) { declarator.Identifier.Text };
 
@@ -793,8 +795,9 @@ public sealed class GallerySampleLintTests
             }
         }
 
-        // An icon is hover-driven when some AnimatedIcon(<thisSource>) chain sits inside a scope
-        // that also wires OnPointerEntered.
+        var receivers = AnimatedIconReceivers(root);
+        HashSet<string>? states = null;
+
         foreach (var icon in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
                      .Where(i => InvokedName(i) == "AnimatedIcon"))
         {
@@ -814,14 +817,23 @@ public sealed class GallerySampleLintTests
 
             if (scope is null) continue;
 
-            if (scope.DescendantNodes().OfType<InvocationExpressionSyntax>()
-                .Any(i => InvokedName(i) == "OnPointerEntered"))
+            var pointerWired = scope.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Select(InvokedName)
+                .Any(n => n is not null && n.StartsWith("OnPointer", global::System.StringComparison.Ordinal));
+            if (!pointerWired) continue;
+
+            states ??= new HashSet<string>(global::System.StringComparer.Ordinal);
+            foreach (var write in scope.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                         .Where(i => IsAnimatedIconStateWrite(i, receivers)))
             {
-                return true;
+                foreach (var literal in StateLiteralsReaching(root, write.ArgumentList.Arguments[1].Expression))
+                {
+                    states.Add(literal);
+                }
             }
         }
 
-        return false;
+        return states;
     }
 
     static readonly HashSet<string> ProvenStates = new(global::System.StringComparer.Ordinal)
@@ -836,7 +848,7 @@ public sealed class GallerySampleLintTests
         var offenders = new List<string>();
         var inspectedSources = 0;
         var inspectedStates = 0;
-        var inspectedHoverSources = 0;
+        var inspectedPointerDrivenIcons = 0;
 
         foreach (var (path, root) in Pages())
         {
@@ -862,20 +874,25 @@ public sealed class GallerySampleLintTests
                                   $"fixture in {Fixture} and to ProvenAnimatingSources here — a source with a zero-length " +
                                   "segment renders a still frame and no test would notice.");
                 }
-                else if (IsHoverDriven(root, creation) && !VisibleOnHoverSources.Contains(typeName))
+                else
                 {
-                    inspectedHoverSources++;
-                    offenders.Add($"{Where(path, creation)}: {typeName} has a non-degenerate marker segment but its " +
-                                  "Normal<->PointerOver step is not in VisibleOnHoverSources, and this page drives " +
-                                  "state from the pointer. A segment can have duration and still render no visible " +
-                                  "difference — AnimatedSettings measures 0.075 and changed 0 pixels over 298 frames " +
-                                  "— so hovering it demonstrates nothing while every marker test stays green " +
-                                  "(issue #983). Use a source whose hover step is observed to render, or drive this " +
-                                  "icon from a picker/click instead of hover.");
-                }
-                else if (IsHoverDriven(root, creation))
-                {
-                    inspectedHoverSources++;
+                    var pointerStates = PointerDrivenStates(root, creation);
+                    if (pointerStates is not null)
+                    {
+                        inspectedPointerDrivenIcons++;
+
+                        if (!pointerStates.Except(StatesThatRenderNoVisibleChange).Any())
+                        {
+                            offenders.Add($"{Where(path, creation)}: {typeName} drives an icon from the pointer but only " +
+                                          $"ever reaches {string.Join("/", pointerStates.OrderBy(s => s, global::System.StringComparer.Ordinal))}, " +
+                                          "all of which render no visible difference on the built-in glyphs. Those marker " +
+                                          "segments have real duration — 0.075 on AnimatedSettings, 0.1125 on AnimatedFind " +
+                                          "and AnimatedGlobalNavigationButton — so every marker test passes while the icon " +
+                                          "sits still: a Settings icon driven Normal->PointerOver changed 0 pixels across " +
+                                          "298 frame-pairs against an idle control reading 0 (issue #983). Reach a state " +
+                                          "the artwork actually draws, such as Pressed.");
+                        }
+                    }
                 }
             }
 
@@ -898,11 +915,11 @@ public sealed class GallerySampleLintTests
 
         Assert.True(inspectedSources > 0, "no *VisualSource constructions were inspected — the lint would pass vacuously.");
         Assert.True(inspectedStates > 0, "no state literals were traced to a SetState call — the lint would pass vacuously.");
-        // The hover arm is the one that would have caught #983's second round, so it gets its own
+        // The pointer arm is the one that would have caught #983's second round, so it gets its own
         // floor: if no page is seen driving an icon from the pointer, that arm inspected nothing
         // and cannot fail, and the check above would not notice because the other arms still ran.
-        Assert.True(inspectedHoverSources > 0,
-            "no hover-driven AnimatedIcon source was inspected — the VisibleOnHoverSources arm would pass vacuously.");
+        Assert.True(inspectedPointerDrivenIcons > 0,
+            "no pointer-driven AnimatedIcon source was inspected — the visible-transition arm would pass vacuously.");
         Assert.True(offenders.Count == 0, string.Join("\n", offenders));
     }
 

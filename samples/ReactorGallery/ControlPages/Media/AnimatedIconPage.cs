@@ -14,67 +14,68 @@ class AnimatedIconPage : Component
     // States all three sources below ship markers for.
     static readonly string[] States = ["Normal", "PointerOver", "Pressed"];
 
-    static readonly string[] CellNames = ["Menu", "Navigate", "Expand"];
+    static readonly string[] CellNames = ["Settings", "Find", "Menu"];
 
     public override Element Render()
     {
         // AnimatedIcon.Source is reference-compared: a source built inline would be a new
         // instance every render and would cancel the transition it is meant to play.
-        //
-        // All three hover cells use GlobalNavigationButton deliberately. A marker segment can be
-        // present and non-zero in the timeline and still render no visible difference, and
-        // AnimatedSettings' NormalToPointerOver is exactly that: driving a Settings icon from
-        // Normal to PointerOver with the pointer nowhere near it produced 0 changed pixels across
-        // 298 frame-pairs, against an idle control that read 0 on the same region moments before.
-        // It only looks alive on press, because Pressed is where its artwork differs. Hovering it
-        // in a demo about hovering therefore shows nothing, which is issue #983 all over again.
-        // GlobalNavigationButton is the source whose hover transition is observed to render.
-        var menuGlyph = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
+        var settingsGlyph = UseMemo(() => new AnimatedSettingsVisualSource());
+        var findGlyph = UseMemo(() => new AnimatedFindVisualSource());
         var navGlyph = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
-        var expandGlyph = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
-        // The picker card cycles every state including Pressed, so a source whose hover step is
-        // subtle is fine there -- and a different glyph keeps the two cards from being confused.
+        // A different glyph keeps the picker card from being mistaken for one of the cells above.
         var picker = UseMemo(() => new AnimatedFindVisualSource());
         var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 
-        // Tracked per cell (-1 = none) so hovering one icon doesn't animate its neighbours.
-        var (hoverIdx, setHoverIdx) = UseState(-1);
+        // Tracked per cell (-1 = none) so pressing one icon doesn't animate its neighbours.
         var (pressIdx, setPressIdx) = UseState(-1);
 
-        // Pointer-driven only. Mixing in a second driver -- an explicit "resting state" picker,
-        // say -- makes hover a no-op whenever the two agree on a value, because writing State
-        // the value it already holds plays no segment. That card is separate for that reason.
+        // Press-driven, hosted in a Border. Both are load-bearing, and both were measured on this
+        // page rather than reasoned about — an earlier revision of this sample did the opposite of
+        // each and demonstrated nothing, which is issue #983 all over again:
         //
-        // Shape matters, and this one is copied from the menu sample below rather than invented:
-        // an icon nested in a layout panel inside a Button is the only arrangement observed to
-        // play its hover transition. The same source and the same Normal->PointerOver write did
-        // not animate as a Button's direct content, nor inside a Border with .Center() on the
-        // icon -- in both of those the state changed, pointer enter/exit counts stayed balanced,
-        // the control was not remounted and the mount write landed, and it still sat still.
+        //   Normal<->PointerOver renders no visible change on any of these built-in glyphs. The
+        //   marker segment exists and has real duration (0.075 for Settings, 0.1125 for Find and
+        //   GlobalNavigationButton), so a test that inspects the timeline passes — and the artwork
+        //   is identical at both ends. Driving a Settings icon Normal->PointerOver changed 0 pixels
+        //   across 298 frame-pairs, against an idle control reading 0 on the same region.
+        //   Normal<->Pressed is the transition these glyphs actually draw.
+        //
+        //   Hosting the icon in a Button made the same Normal->Pressed write animate only
+        //   intermittently, where a Border animated it every time — a Button runs its own
+        //   Normal/PointerOver/Pressed visual states over the same content, and racing them is not
+        //   worth it in a sample whose whole job is to show a transition. The Border's Background
+        //   is load-bearing too: a null-background element is hit-test invisible, so the pointer
+        //   handlers below would never fire.
+        //
+        // One driver only. Adding a second -- an explicit "resting state" picker, say -- makes the
+        // press a silent no-op whenever the two agree on a value, because writing State the value
+        // it already holds plays no segment. That picker is a separate card for exactly that reason.
         Element Cell(int index, string label, object source)
         {
-            var cellState = pressIdx == index ? "Pressed"
-                : hoverIdx == index ? "PointerOver"
-                : "Normal";
+            var cellState = pressIdx == index ? "Pressed" : "Normal";
 
-            return Button(
-                    HStack(8,
-                        AnimatedIcon(source).Size(20, 20)
-                            .Set(icon => XamlAnimatedIcon.SetState(icon, cellState)),
-                        TextBlock(label)),
-                    () => { })
-                .OnPointerEntered((_, _) => setHoverIdx(index))
-                .OnPointerExited((_, _) => { setHoverIdx(-1); setPressIdx(-1); })
-                .OnPointerPressed((_, _) => setPressIdx(index))
-                .OnPointerReleased((_, _) => setPressIdx(-1));
+            return VStack(6,
+                Border(HStack(AnimatedIcon(source).Size(32, 32)
+                        .Set(icon =>
+                        {
+                            // Writing the value it already holds plays no segment, so don't.
+                            if (XamlAnimatedIcon.GetState(icon) != cellState)
+                            {
+                                XamlAnimatedIcon.SetState(icon, cellState);
+                            }
+                        })))
+                    .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6)
+                    .OnPointerPressed((_, _) => setPressIdx(index))
+                    .OnPointerReleased((_, _) => setPressIdx(-1))
+                    .OnPointerExited((_, _) => setPressIdx(-1)),
+                Caption(label).Foreground(Theme.SecondaryText).Center());
         }
 
         var (stateIdx, setStateIdx) = UseState(0);
         var state = States[Math.Clamp(stateIdx, 0, States.Length - 1)];
-
-        var (hovering, setHovering) = UseState(false);
         var (open, setOpen) = UseReducer(false);
-        var menuState = open ? "Pressed" : hovering ? "PointerOver" : "Normal";
+        var menuState = open ? "Pressed" : "Normal";
 
         // With animations off the samples still change State, but AnimatedIcon hard-cuts
         // to each segment's end frame — say so rather than appear broken (#983).
@@ -97,41 +98,46 @@ class AnimatedIconPage : Component
                     .IsClosable(false)
                 : null,
 
-            SampleCard("Hover or press an icon",
+            SampleCard("Press an icon",
                 VStack(12,
                     HStack(20,
-                        Cell(0, "Menu", menuGlyph),
-                        Cell(1, "Navigate", navGlyph),
-                        Cell(2, "Expand", expandGlyph)),
-                    Caption((hoverIdx < 0 && pressIdx < 0
-                            ? "All three are resting on Normal — hover one to play its transition."
-                            : $"{CellNames[pressIdx >= 0 ? pressIdx : hoverIdx]}: "
-                              + (pressIdx >= 0 ? "Pressed" : "PointerOver")))
+                        Cell(0, "Settings", settingsGlyph),
+                        Cell(1, "Find", findGlyph),
+                        Cell(2, "Menu", navGlyph)),
+                    Caption(pressIdx < 0
+                            ? "All three are resting on Normal — press and hold one to play its transition."
+                            : $"{CellNames[pressIdx]}: Pressed")
+                        .Foreground(Theme.SecondaryText),
+                    Caption("Normal↔Pressed is used rather than Normal↔PointerOver because these "
+                            + "built-in glyphs draw the same artwork at both ends of their hover "
+                            + "segment: the marker has duration, so it reads as a real animation to "
+                            + "any code that inspects it, and nothing moves on screen.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 // `using static Factories` shadows the WinUI type, so SetState needs an alias:
 //   using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
-var source = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
-var (hovering, setHovering) = UseState(false);
+var source = UseMemo(() => new AnimatedSettingsVisualSource());
 var (pressing, setPressing) = UseState(false);
-var state = pressing ? ""Pressed"" : hovering ? ""PointerOver"" : ""Normal"";
+var state = pressing ? ""Pressed"" : ""Normal"";
 
-// Nest the icon in a layout panel inside the Button. As a Button's direct content, or
-// inside a Border with .Center() on the icon, the same Normal->PointerOver write did not
-// play its transition -- the state changed and the icon sat still.
-Button(
-        HStack(8,
-            AnimatedIcon(source).Size(20, 20)
-                .Set(icon => XamlAnimatedIcon.SetState(icon, state)),
-            TextBlock(""Settings"")),
-        () => { })
-    .OnPointerEntered((_, _) => setHovering(true))
-    .OnPointerExited((_, _) => { setHovering(false); setPressing(false); })
+// A Border, not a Button: hosting the icon in a Button made the same write animate only
+// intermittently, because the Button runs its own Normal/PointerOver/Pressed visual states
+// over the same content. Background is load-bearing too -- a null-background element is
+// hit-test invisible, so the pointer events below would never fire.
+Border(HStack(AnimatedIcon(source).Size(32, 32)
+        .Set(icon =>
+        {
+            // Writing the value it already holds plays no segment, so don't.
+            if (XamlAnimatedIcon.GetState(icon) != state)
+                XamlAnimatedIcon.SetState(icon, state);
+        })))
+    .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6)
     .OnPointerPressed((_, _) => setPressing(true))
     .OnPointerReleased((_, _) => setPressing(false))
+    .OnPointerExited((_, _) => setPressing(false))
 // Each write of State plays the ""<from>To<to>"" marker segment — that transition IS the
-// animation; there is no Play(). UseMemo the source: Source is reference-compared, so a
-// fresh instance per render cancels the transition.
+// animation; there is no Play(). Pick a transition the artwork actually draws: the built-in
+// glyphs render nothing between Normal and PointerOver even though that segment has duration.
 "),
 
             SampleCard("Set the state directly",
@@ -157,18 +163,23 @@ AnimatedIcon(picker).Size(32, 32)
                     TextBlock("State"),
                     ComboBox(States, stateIdx, setStateIdx))),
 
-            SampleCard("Hover or click a button",
+            SampleCard("Click a button",
                 VStack(12,
                     Button(
                         HStack(8,
                             AnimatedIcon(menuNav).Size(20, 20)
                                 .IsHitTestVisible(false)
-                                .Set(icon => XamlAnimatedIcon.SetState(icon, menuState)),
+                                .Set(icon =>
+                                {
+                                    if (XamlAnimatedIcon.GetState(icon) != menuState)
+                                    {
+                                        XamlAnimatedIcon.SetState(icon, menuState);
+                                    }
+                                }),
                             TextBlock(open ? "Close" : "Menu")),
-                        () => setOpen(o => !o))
-                        .OnPointerEntered((_, _) => setHovering(true))
-                        .OnPointerExited((_, _) => setHovering(false)),
-                    Caption($"Icon state: {menuState}").Foreground(Theme.SecondaryText),
+                        () => setOpen(o => !o)),
+                    Caption($"Icon state: {menuState} — driven by the menu being open, not by the pointer.")
+                        .Foreground(Theme.SecondaryText),
                     open
                         ? Border(VStack(4,
                                 TextBlock("New file"),
@@ -180,11 +191,10 @@ AnimatedIcon(picker).Size(32, 32)
                             .Background(Theme.SubtleFill).CornerRadius(6).Padding(12).Width(180)),
                 sourceCode: @"
 var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
-var (hovering, setHovering) = UseState(false);
 // UseReducer's functional updater reads the live value, so two clicks coalesced into
 // one render can't drop a toggle.
 var (open, setOpen) = UseReducer(false);
-var menuState = open ? ""Pressed"" : hovering ? ""PointerOver"" : ""Normal"";
+var menuState = open ? ""Pressed"" : ""Normal"";
 
 Button(
     HStack(8,
@@ -192,8 +202,6 @@ Button(
             .Set(icon => XamlAnimatedIcon.SetState(icon, menuState)),
         TextBlock(open ? ""Close"" : ""Menu"")),
     () => setOpen(o => !o))
-    .OnPointerEntered((_, _) => setHovering(true))
-    .OnPointerExited((_, _) => setHovering(false))
 // Button marks PointerPressed handled to drive its own Click, so the click handler —
 // not OnPointerPressed — owns the ""Pressed"" state.
 ")
