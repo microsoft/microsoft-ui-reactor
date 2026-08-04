@@ -191,7 +191,9 @@ function Wait-ProcessNameCleared {
       ExitCode        [int?]  exit code, or $null if it could not be read
       DurationSeconds [double] wall-clock time, measured with a Stopwatch
       KilledPids      [int[]] ids reaped by the post-timeout sweep
-      Drained         [bool]  no $ProcessName process is left on the machine
+      Drained         [bool]  no $ProcessName process is left on the machine.
+                              Computed on every path — polled while draining
+                              after a timeout, point-checked otherwise.
 
 .NOTES
     DurationSeconds is deliberately measured with a Stopwatch rather than
@@ -222,7 +224,6 @@ function Invoke-DevenvUpdateConfiguration {
     $exited = $proc.WaitForExit($TimeoutSeconds * 1000)
 
     $killed = @()
-    $drained = $true
     if (-not $exited) {
         # Record the tree BEFORE killing anything: `taskkill /T` resolves
         # descendants at kill time, so a child whose own parent dies during the
@@ -244,7 +245,15 @@ function Invoke-DevenvUpdateConfiguration {
 
         Stop-ProcessTreeSafely -Process $proc -WaitSeconds $DrainTimeoutSeconds | Out-Null
         $killed = @(Stop-ProcessIdsSafely -ProcessIds $tree -ExpectedName $ProcessName -NotStartedAfter $recordedAt -WaitSeconds $DrainTimeoutSeconds)
+        # We are actively draining here, so wait for it.
         $drained = Wait-ProcessNameCleared -Name $ProcessName -TimeoutSeconds $DrainTimeoutSeconds
+    }
+    else {
+        # Measured, not assumed: a clean exit does not prove nothing was left
+        # behind — /updateconfiguration spawns a second devenv, and hardcoding
+        # $true here would report the one thing this field exists to deny. No
+        # poll, because there is nothing to wait for on this path.
+        $drained = (@(Get-ProcessIdsByName -Name $ProcessName).Count -eq 0)
     }
     $sw.Stop()
 

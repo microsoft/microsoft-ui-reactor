@@ -205,6 +205,22 @@ try {
     Assert-Equal 0 $r.ExitCode 'happy path: real exit code is surfaced'
     Assert-Equal 0 $r.KilledPids.Count 'happy path: nothing is killed'
     Assert-InRange $r.DurationSeconds 0 30 'happy path: DurationSeconds is non-negative and bounded'
+    Assert-True $r.Drained 'happy path: Drained is true when the name really is clear'
+    Remove-AllFakes
+
+    # -- 5b. Drained is measured on the happy path, not assumed. --
+    # A clean exit does not prove nothing was left behind: /updateconfiguration
+    # spawns a second devenv, so "it exited, therefore the machine is clear" is
+    # exactly the inference that must not be hardcoded. With a same-named
+    # process running, a truthful Drained is false.
+    $bystander = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 1 | Out-Null
+    $r = Invoke-DevenvUpdateConfiguration -DevenvPath $fakeExe -Arguments $quickArgs `
+        -TimeoutSeconds 30 -ProcessName $fakeName -DrainTimeoutSeconds 10
+    Assert-Equal $false $r.TimedOut 'happy path: still a non-timeout run with a bystander present'
+    Assert-Equal $false $r.Drained 'happy path: Drained is false while another same-named process runs'
+    $bystander.Refresh()
+    Assert-Equal $false $bystander.HasExited 'happy path: the bystander is reported on, not killed'
     Remove-AllFakes
 
     # -- 6. The timeout sweep is attributed, not name-matched. --
