@@ -134,10 +134,24 @@ function Wait-ForFakeCount {
 }
 
 function Remove-AllFakes {
+    # Kill the *tree*, not just the roots. The fake spawns ping.exe, and
+    # Process.Kill() orphans it for the full 600-second ping — which is #1074's
+    # defect committed in the harness of the suite that exists to catch it.
+    #
+    # taskkill is invoked directly rather than through Stop-ProcessTreeSafely,
+    # and the drain below polls locally rather than through
+    # Wait-ProcessNameCleared, so teardown stays independent of the code under
+    # test: a broken lib must redden an assertion, not silently poison the next
+    # case's fixture.
     foreach ($p in @(Get-Process -Name $fakeName -ErrorAction SilentlyContinue)) {
-        try { $p.Kill() } catch { }
+        try { & "$env:SystemRoot\System32\taskkill.exe" '/PID' $p.Id '/T' '/F' 2>&1 | Out-Null } catch { }
     }
-    Wait-ProcessNameCleared -Name $fakeName -TimeoutSeconds 20 | Out-Null
+    # taskkill reports non-zero for a pid already reaped by an earlier /T.
+    $global:LASTEXITCODE = 0
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    while ((Get-FakeCount) -gt 0 -and [DateTime]::UtcNow -lt $deadline) {
+        Start-Sleep -Milliseconds 200
+    }
 }
 
 try {
