@@ -265,6 +265,22 @@ try {
     Assert-True ($kidsAgain -notcontains $unrelated.Id) "descendants: an unrelated same-named process is not claimed as a descendant (pid $($unrelated.Id))"
     Remove-AllFakes
 
+    # -- 7b. A root that has left the process table claims nothing. --
+    # Kill only the root and its child survives still naming that pid as its
+    # parent. Windows reuses pids, so once the root is gone those edges prove
+    # nothing — and with no creation time for the parent the stale-edge check
+    # cannot run either. Attributing them would sweep a process on the strength
+    # of a recycled number.
+    $orphanRoot = Start-Fake -Arguments $hangArgs
+    Wait-ForFakeCount -AtLeast 2 | Out-Null
+    $orphanRootPid = $orphanRoot.Id
+    $orphanRoot.Kill()
+    $orphanRoot.WaitForExit(10000) | Out-Null
+    Start-Sleep -Milliseconds 500
+    $claimed = @(Get-ProcessDescendantIds -RootPid $orphanRootPid)
+    Assert-Equal 0 $claimed.Count "descendants: a root absent from the process table claims nothing (got: $($claimed -join ', '))"
+    Remove-AllFakes
+
     # -- 8. Wait-ProcessNameCleared reports failure rather than lying. --
     # Without a truthful negative, a false "drained" would let the next run trip
     # the guard with no explanation.

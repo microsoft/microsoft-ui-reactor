@@ -83,6 +83,16 @@ function Get-ProcessDescendantIds {
     $queue = New-Object System.Collections.Generic.Queue[int]
     $queue.Enqueue($RootPid)
 
+    # If the root is not in the snapshot it has already exited, and its pid is
+    # therefore eligible for reuse. Every edge pointing at it is unverifiable —
+    # the stale-edge check below needs the parent's creation time, and there
+    # isn't one — so a process that merely inherited the number would be
+    # attributed to us and swept. Claim nothing rather than guess.
+    if (-not $createdAt.ContainsKey($RootPid)) {
+        if ($IncludeRoot) { return @($RootPid) }
+        return @()
+    }
+
     while ($queue.Count -gt 0) {
         $current = $queue.Dequeue()
         if (-not $childrenOf.ContainsKey($current)) { continue }
