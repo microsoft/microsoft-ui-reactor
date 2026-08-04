@@ -103,7 +103,9 @@ reconciles the dialog the same way it reconciles the rest of the tree:
 - **Content is unmounted on close.** Effect cleanups and
   [`UseEffect`](effects.md) teardowns inside the dialog run when it
   closes — including when the component that owns the dialog element
-  unmounts while the dialog is still showing.
+  unmounts while the dialog is still showing. That teardown path is
+  silent: `OnClosed` reports dismissals, not the owner going away, so a
+  handler that writes back into already-unmounted state never runs.
 
 ### Three-button dialogs
 

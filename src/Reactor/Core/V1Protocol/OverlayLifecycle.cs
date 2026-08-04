@@ -48,10 +48,11 @@ internal static class OverlayLifecycle
     // A side table rather than a ReactorState slot, matching how every other
     // rare, feature-local native association is stored (Reconciler._dndStates,
     // Reconciler._gestureStates, Reconciler.s_inlineUiExtentPins): ReactorState
-    // is allocated for every native element in the tree, its slots are all
-    // Reactor abstractions rather than concrete WinUI control types, and each
-    // one carries a reset contract in the pool-return / DetachReactorState
-    // paths that a dialog — whose placeholder is never pooled — has no use for.
+    // is allocated for every native element in the tree, and its slots are all
+    // Reactor abstractions rather than concrete WinUI control types. StackPanel
+    // is poolable, so the placeholder can be recycled into an unrelated element
+    // — ContentDialogHandler.Unmount takes the entry back out during the V1
+    // unmount dispatch, which runs before the control reaches the pool.
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, WinUI.ContentDialog> s_liveDialogs = new();
 
     public static UIElement MountContentDialog(Reconciler reconciler, ContentDialogElement cdEl, Action requestRerender)
