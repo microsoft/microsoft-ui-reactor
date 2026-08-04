@@ -766,14 +766,39 @@ public sealed class GallerySampleLintTests
         // Which local does this source get assigned to?
         var declarator = creation.FirstAncestorOrSelf<VariableDeclaratorSyntax>();
         if (declarator is null) return false;
-        var sourceName = declarator.Identifier.Text;
+
+        var names = new HashSet<string>(global::System.StringComparer.Ordinal) { declarator.Identifier.Text };
+
+        // A cell factory takes its source as a parameter, so inside the local function the icon
+        // names the parameter and not this local. Follow that hop: for every local function the
+        // source is passed to, add the corresponding parameter name. Without this the name match
+        // below never fires and the whole gate passes vacuously — which it did, and only the
+        // mutation trial caught it.
+        foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            var callee = InvokedName(call);
+            if (callee is null) continue;
+
+            var target = root.DescendantNodes().OfType<LocalFunctionStatementSyntax>()
+                .FirstOrDefault(fn => fn.Identifier.Text == callee);
+            if (target is null) continue;
+
+            var args = call.ArgumentList.Arguments;
+            for (var i = 0; i < args.Count && i < target.ParameterList.Parameters.Count; i++)
+            {
+                if (args[i].Expression is IdentifierNameSyntax id && names.Contains(id.Identifier.Text))
+                {
+                    names.Add(target.ParameterList.Parameters[i].Identifier.Text);
+                }
+            }
+        }
 
         // An icon is hover-driven when some AnimatedIcon(<thisSource>) chain sits inside a scope
         // that also wires OnPointerEntered.
         foreach (var icon in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
                      .Where(i => InvokedName(i) == "AnimatedIcon"))
         {
-            if (!MentionsAny(icon, new HashSet<string>(global::System.StringComparer.Ordinal) { sourceName })) continue;
+            if (!MentionsAny(icon, names)) continue;
 
             // Innermost scope first: a local function is the unit a cell is written in, and
             // walking past it to the enclosing method would sweep in every other card's pointer
