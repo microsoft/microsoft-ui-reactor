@@ -84,6 +84,33 @@ public class ElementModifiersCoverageTests
         Assert.False(Element.ModifiersEqual(a, b));
     }
 
+    [Fact]
+    public void ModifiersEqual_DistinguishesOnUpdateAction()
+    {
+        // Regression (#976): ModifiersEqual is the reconciler's skip gate, and ShallowEquals does
+        // not compare callbacks. Before the fix an element whose only change was GAINING an
+        // OnUpdateAction compared equal to its predecessor, took the skip path, and the hook never
+        // ran — silently breaking every "run something on each reconcile" modifier.
+        var hook = (FrameworkElement fe) => { };
+        var other = (FrameworkElement fe) => { };
+
+        var none = new ElementModifiers();
+        var withHook = new ElementModifiers { OnUpdateAction = hook };
+
+        Assert.False(Element.ModifiersEqual(none, withHook));   // gaining a hook
+        Assert.False(Element.ModifiersEqual(withHook, none));   // losing one
+        Assert.False(Element.ModifiersEqual(
+            withHook, new ElementModifiers { OnUpdateAction = other })); // swapping identity
+
+        // Both-null must still compare equal, or the skip fast-path collapses for every element
+        // in the tree and the reconciler stops skipping anything.
+        Assert.True(Element.ModifiersEqual(none, new ElementModifiers()));
+
+        // Same delegate instance stays skippable — a cached static method group must not force
+        // a re-apply on every frame.
+        Assert.True(Element.ModifiersEqual(withHook, new ElementModifiers { OnUpdateAction = hook }));
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  Accessibility Tier 2 — on AccessibilityModifiers
     // ════════════════════════════════════════════════════════════════

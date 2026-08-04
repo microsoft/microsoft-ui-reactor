@@ -1483,8 +1483,9 @@ Full keyboard grid navigation following ARIA grid patterns:
 | Key | Action |
 |-----|--------|
 | Arrow keys | Move focus between cells |
-| Tab / Shift+Tab | Move to next/prev editable cell |
-| Enter | Start editing focused cell (or commit edit and move down) |
+| Tab | `EditMode.Cell`: commit the open editor and move to the next editable cell. `EditMode.Row`: cycle real keyboard focus among the row's open editors, wrapping past the last back to the first — see below |
+| Shift+Tab | The same traversal in reverse |
+| Enter | Start editing focused cell (or commit edit and move down). In `EditMode.Row`, commits the whole row |
 | Escape | Cancel editing |
 | F2 | Start editing (alternative to Enter) |
 | Space | Toggle selection on focused row |
@@ -1492,6 +1493,17 @@ Full keyboard grid navigation following ARIA grid patterns:
 | Page Up/Down | Scroll by viewport height |
 | Home/End | Move to first/last column |
 | Ctrl+Home/End | Move to first/last row |
+
+Arrow-key navigation moves a *logical* cursor and paints a roving focus ring; the grid itself
+is the single tab stop. **Editors are the exception** — opening a cell or row editor moves real
+XAML focus into it, so the user can type immediately without clicking first.
+
+In `EditMode.Row` every editable cell of the row is open at once, and Tab cycles among those
+editors only: it skips the read-only columns (which have no editor) and wraps past the last
+editor back to the first rather than continuing on to the row's Save/Cancel buttons and out of
+the grid. Leaving the grid mid-edit blur-commits the row, so wrapping is what makes Tab
+non-destructive. Save and Cancel remain reachable by pointer, and <kbd>Enter</kbd> /
+<kbd>Esc</kbd> are their keyboard equivalents.
 
 The grid uses `role="grid"`, `role="row"`, `role="gridcell"` with `aria-rowindex` and
 `aria-colindex` for accessibility with virtualized rows.

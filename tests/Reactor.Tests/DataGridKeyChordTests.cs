@@ -34,7 +34,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class DataGridKeyChordTests
 {
-    private record TestItem(int Id, string Name, double Score);
+    private record TestItem(int Id, string Name, double Score, string Note);
 
     private sealed class TestDataSource : IDataSource<TestItem>
     {
@@ -42,9 +42,9 @@ public class DataGridKeyChordTests
         public TestDataSource()
             => _items =
             [
-                new TestItem(1, "Alice", 95),
-                new TestItem(2, "Bob", 87),
-                new TestItem(3, "Carol", 92),
+                new TestItem(1, "Alice", 95, "a"),
+                new TestItem(2, "Bob", 87, "b"),
+                new TestItem(3, "Carol", 92, "c"),
             ];
 
         public Task<DataPage<TestItem>> GetPageAsync(DataRequest request, CancellationToken ct = default)
@@ -54,28 +54,29 @@ public class DataGridKeyChordTests
         public DataSourceCapabilities Capabilities => DataSourceCapabilities.None;
     }
 
-    // Column 0 is READ-ONLY, and that is what makes the row-edit direction tests below able to
-    // fail. Only two editable columns exist (Name, Score), so within the editable ring backward
-    // and forward are the SAME cell from every position: from Name both land on Score, from Score
-    // both land on Name. A direction test that starts on Name or Score therefore passes whether
-    // Shift+Tab walks backward or forward -- it cannot detect #987, which is precisely a
-    // wrong-direction bug.
+    // Column 0 is READ-ONLY, and the editable ring is {Name, Score, Note} — size THREE, which is
+    // what makes every row-edit direction test below able to fail from ANY origin.
     //
-    // Exactly two start positions discriminate, and the tests below use both:
+    // It was size two (Name, Score) when #987 shipped, and at that width backward and forward are
+    // the same cell from every position inside the ring: from Name both land on Score, from Score
+    // both land on Name. Only two origins discriminated — the -1 no-prior-focus sentinel and the
+    // read-only IdCol — and #976 then made BOTH unreachable, because BeginRowEdit now parks the
+    // cursor on the first editable column it gives real XAML focus to. A read-only column is never
+    // in the row-edit pending set, so no preserve-the-cursor rule can rescue that origin either.
     //
-    //     origin -1 (row edit begun from the Edit button, no prior cell focus)  back Score / fwd Name
-    //     origin  0 (IdCol, read-only -- holds focus but is not an edit target) back Score / fwd Name
-    //     origin  1 (NameCol)                                                  back Score / fwd Score
-    //     origin  2 (ScoreCol)                                                  back Name  / fwd Name
+    // Widening the ring is the repair the #987 comment prescribed for exactly this case, and it is
+    // strictly stronger than the origins it replaces: with an ODD ring every origin discriminates,
+    // so a direction test can no longer be silently defused by moving where the edit begins.
     //
-    // Verified by mutation: negating the direction in MoveRowEditFocus fails 5 of these tests,
-    // every one reporting ScoreCol vs NameCol. THREE of those five start from the -1 sentinel, so
-    // the no-prior-focus tests are not a redundant variation of the read-only-column ones -- they
-    // carry the majority of the direction-detecting power. If you add a row-edit direction test,
-    // start it at IdCol or at -1; starting anywhere else yields a test that cannot fail.
+    //     origin 1 (NameCol, where BeginRowEdit parks)   back Note  / fwd Score
+    //     origin 2 (ScoreCol)                            back Name  / fwd Note
+    //     origin 3 (NoteCol)                             back Score / fwd Name
+    //
+    // An even ring cannot be rescued by any choice of constants; an odd one needs no rescuing.
     private const int IdCol = 0;
     private const int NameCol = 1;
     private const int ScoreCol = 2;
+    private const int NoteCol = 3;
 
     private static readonly FieldDescriptor[] Columns =
     [
@@ -99,6 +100,13 @@ public class DataGridKeyChordTests
             FieldType = typeof(double),
             GetValue = obj => ((TestItem)obj).Score,
             SetValue = (obj, val) => ((TestItem)obj) with { Score = (double)(val ?? 0.0) },
+        },
+        new FieldDescriptor
+        {
+            Name = "Note",
+            FieldType = typeof(string),
+            GetValue = obj => ((TestItem)obj).Note,
+            SetValue = (obj, val) => ((TestItem)obj) with { Note = (string)(val ?? "") },
         },
     ];
 
@@ -183,7 +191,8 @@ public class DataGridKeyChordTests
         forward.SetFocus(1, IdCol);
         Tab(forward, el, shift: false);
 
-        Assert.Equal((0, ScoreCol), Focus(back));
+        // NoteCol is the last column of the fixture, so it is where the backward wrap lands.
+        Assert.Equal((0, NoteCol), Focus(back));
         Assert.Equal((1, NameCol), Focus(forward));
         Assert.NotEqual(Focus(forward), Focus(back));
     }
@@ -215,91 +224,79 @@ public class DataGridKeyChordTests
     {
         var el = Grid(EditMode.Cell);
 
-        // Score (last column) is the divergent start: backward stays in row 0 on Name, forward
-        // wraps to row 1's read-only Id — different row AND different editability.
+        // The LAST column is the divergent start: backward stays in row 0 on the previous editable
+        // column, forward wraps to row 1's read-only Id — different row AND different editability.
+        // That is Note now that the fixture's editable ring was widened to three; starting on Score
+        // would leave both directions inside row 0 and cost this test its row-divergence, which is
+        // the property that lets it fail. The start moved with the fixture, not with an expectation.
         var back = await LoadedState();
-        back.SetFocus(0, ScoreCol);
-        Assert.True(back.BeginEdit(0, ScoreCol));
-        back.UpdateEditingValue(41.0);
+        back.SetFocus(0, NoteCol);
+        Assert.True(back.BeginEdit(0, NoteCol));
+        back.UpdateEditingValue("edited");
         Tab(back, el, shift: true);
 
         var forward = await LoadedState();
-        forward.SetFocus(0, ScoreCol);
-        Assert.True(forward.BeginEdit(0, ScoreCol));
-        forward.UpdateEditingValue(41.0);
+        forward.SetFocus(0, NoteCol);
+        Assert.True(forward.BeginEdit(0, NoteCol));
+        forward.UpdateEditingValue("edited");
         Tab(forward, el, shift: false);
 
         // Shift+Tab must commit exactly what Tab commits — the direction changes only where the
         // cursor lands. Asserted on the persisted item, which CommitEdit writes synchronously.
-        Assert.Equal(41.0, back.GetItemAt(0)!.Score);
-        Assert.Equal(41.0, forward.GetItemAt(0)!.Score);
+        Assert.Equal("edited", back.GetItemAt(0)!.Note);
+        Assert.Equal("edited", forward.GetItemAt(0)!.Note);
 
-        Assert.Equal((0, NameCol), Focus(back));
+        Assert.Equal((0, ScoreCol), Focus(back));
         Assert.Equal((1, IdCol), Focus(forward));
         Assert.NotEqual(Focus(forward), Focus(back));
 
         // Backward landed on an editable column, so the editor reopens there; forward landed on
         // read-only Id, where BeginEdit() no-ops. Pins the reopen, not just the cursor move.
         Assert.True(back.IsEditing);
-        Assert.Equal("Name", back.EditingColumnName);
+        Assert.Equal("Score", back.EditingColumnName);
         Assert.False(forward.IsEditing);
     }
 
     // ── Row-edit mode ────────────────────────────────────────────────
 
     [Fact]
-    public async Task RowEditShiftTab_FromTheReadOnlyColumn_WalksBackwardWithoutCommitting()
+    public async Task RowEditShiftTab_FromWhereTheRowEditParks_WalksBackwardWithoutCommitting()
     {
         var el = Grid(EditMode.Row);
 
-        // Starting on read-only Id is the ONLY interior start where the two directions differ:
-        // backward skips it to Score, forward to Name. From Name or Score the two-editor ring
-        // wraps to the same place either way, and a Shift-blind implementation would pass.
+        // RENAMED, and the premise below rewritten, per the instruction the #987 version of this
+        // comment left for exactly this change: it used to start on read-only Id, because with a
+        // two-editor ring that was one of only two origins where the directions differed. #976 made
+        // that origin unreachable — BeginRowEdit now parks the cursor on the first editable column
+        // it gives real XAML focus to, and a read-only column is never in the row-edit pending set,
+        // so no preserve-the-cursor rule could have kept it. A test still NAMED for the read-only
+        // origin would be found by someone grepping for that case, seen green, and believed.
         //
-        // So the origin is a PRECONDITION of this test, not incidental setup, and it is asserted
-        // rather than assumed: BeginRowEdit is entitled to move the cursor, and if it ever parks
-        // the row edit on the first editable column instead, the two directions below collapse
-        // onto Score and the destination constants stop discriminating. That must fail HERE,
-        // naming the origin, rather than downstream on an expectation constant — a failure on the
-        // constant invites the reader to update it, which is precisely the edit that yields a
-        // green, direction-blind test. (Not redundant with any later assertion: nothing else in
-        // this test pins where the row edit began.)
+        // The repair is the structural one that comment prescribed and called correct: the editable
+        // ring is now {Name, Score, Note}, size THREE. Moving the destination constants is therefore
+        // legitimate here — the discrimination is RESTORED rather than absorbed. With an odd ring
+        // every origin discriminates, so this test no longer depends on starting anywhere special,
+        // which is strictly stronger than what it replaced.
         //
-        // Whether editing those destination constants is legitimate depends on WHY they moved, and
-        // the two cases look identical at the diff. Moving them to absorb a collapse REMOVES the
-        // discrimination and is the failure this test exists to catch. Moving them after a
-        // structural change that RESTORES it — widening the editable ring past two, so the two
-        // directions diverge again from any origin — is correct, and an even ring cannot be
-        // rescued by any choice of constants. The invariant defended here is that the directions
-        // DIFFER, carried by the cross-arm NotEqual below, the only assertion in this test that
-        // compares two measured values; the specific indices are consequences of the fixture's
-        // column set and may legitimately change with it.
-        //
-        // One consequence of that legitimate edit, because it falsifies the paragraph above: if a
-        // structural change moves where BeginRowEdit parks, the origin assertions below move with
-        // the constants — and then this test's NAME and this comment's opening premise both become
-        // false in the same commit. Neither can describe a start on read-only Id once the row edit
-        // no longer begins there, and a preserve-the-cursor rule cannot rescue it either, because
-        // read-only columns are excluded from the row-edit pending set (DataGridState.BeginRowEdit)
-        // and so are never a cursor the rule is allowed to preserve. Rename the test and rewrite
-        // that premise in the same change. A stale name is worse here than a missing one: a reader
-        // grepping for the read-only-origin case FINDS this test, sees it green, and stops looking.
+        // The origin is still asserted rather than assumed, and still fails HERE naming the origin
+        // rather than downstream on a destination constant: a failure on the constant invites the
+        // reader to update it, which is the edit that yields a green, direction-blind test.
         var back = await LoadedState();
-        back.SetFocus(0, IdCol);
         Assert.True(back.BeginRowEdit(0));
-        Assert.Equal(IdCol, back.FocusedColIndex);
+        Assert.Equal(NameCol, back.FocusedColIndex);
         back.UpdateRowEditValue("Name", "Edited");
         Tab(back, el, shift: true);
 
         var forward = await LoadedState();
-        forward.SetFocus(0, IdCol);
         Assert.True(forward.BeginRowEdit(0));
-        Assert.Equal(IdCol, forward.FocusedColIndex);
+        Assert.Equal(NameCol, forward.FocusedColIndex);
         forward.UpdateRowEditValue("Name", "Edited");
         Tab(forward, el, shift: false);
 
-        Assert.Equal(ScoreCol, back.FocusedColIndex);
-        Assert.Equal(NameCol, forward.FocusedColIndex);
+        // Backward off the FIRST editable column wraps to the LAST; forward steps to the next.
+        // These are different columns only because the ring is odd — that is the whole point.
+        Assert.Equal(NoteCol, back.FocusedColIndex);
+        Assert.Equal(ScoreCol, forward.FocusedColIndex);
         Assert.NotEqual(forward.FocusedColIndex, back.FocusedColIndex);
         Assert.Equal(0, back.FocusedRowIndex);
 
@@ -311,36 +308,60 @@ public class DataGridKeyChordTests
     }
 
     [Fact]
-    public async Task RowEditShiftTab_WithNoPriorCellFocus_WrapsToTheLastEditableColumn()
+    public async Task RowEditShiftTab_FromTheNoFocusSentinel_WrapsToTheLastEditableColumn()
     {
         var el = Grid(EditMode.Row);
 
-        // A row edit started from the Edit button leaves FocusedColIndex at -1. Backward has to
-        // treat that as one PAST the end and land on the last editable column; a naive
-        // (-1 - 1) walk would start at Name and never reach Score.
+        // RENAMED and re-routed, per the instruction the #987 version of this comment left. It used
+        // to reach the -1 sentinel by simply beginning a row edit, which #976 made impossible:
+        // BeginRowEdit now parks the cursor on the first VISIBLE editable column, so "no prior cell
+        // focus" no longer describes anything this test could set up. Repairing the constant alone
+        // would have left a test named for a state it never enters.
         //
-        // The two -1 assertions below are guards, not setup: nothing else here records where the
-        // row edit began. If BeginRowEdit ever parks the cursor on the first editable column, -1
-        // becomes Name and this test's NAME becomes false in the same commit — there IS prior cell
-        // focus at that point. Rename it then; do not merely repair the constant. The read-only-
-        // origin sibling above carries the fuller treatment and fails for the same structural
-        // reason. If both origins are repaired anyway, the backstop is the cross-arm NotEqual
-        // below: parking collapses both directions onto Score, and NotEqual(Score, Score) cannot
-        // be made green by any choice of origin constant.
+        // The sentinel is still reachable, by the route DataGridState.MoveRowEditFocus documents as
+        // deliberate: begin the row edit with every editable column HIDDEN — the pending values
+        // exist, so the edit begins, but there is nothing visible to park on and the cursor keeps
+        // its initial -1 — then reveal the columns, which HideColumn/ShowColumn permit mid-edit
+        // because they do not guard on _isRowEditing. That makes the traversal meaningful again with
+        // the cursor genuinely at -1, which is the state under test here.
+        //
+        // What the -1 case pins that no other origin does: backward must treat "no focus" as one
+        // position PAST the end and land on the LAST editable column. A naive (-1 - 1) walk starts
+        // at Name and never reaches Note.
         var back = await LoadedState();
+        HideEditableColumns(back);
         Assert.True(back.BeginRowEdit(0));
         Assert.Equal(-1, back.FocusedColIndex);
+        ShowEditableColumns(back);
+        Assert.Equal(-1, back.FocusedColIndex); // revealing columns must not itself move the cursor
         Tab(back, el, shift: true);
 
         var forward = await LoadedState();
+        HideEditableColumns(forward);
         Assert.True(forward.BeginRowEdit(0));
+        Assert.Equal(-1, forward.FocusedColIndex);
+        ShowEditableColumns(forward);
         Assert.Equal(-1, forward.FocusedColIndex);
         Tab(forward, el, shift: false);
 
-        Assert.Equal(ScoreCol, back.FocusedColIndex);
+        Assert.Equal(NoteCol, back.FocusedColIndex);
         Assert.Equal(NameCol, forward.FocusedColIndex);
         Assert.NotEqual(forward.FocusedColIndex, back.FocusedColIndex);
         Assert.True(back.IsRowEditing);
+    }
+
+    private static void HideEditableColumns(DataGridState<TestItem> state)
+    {
+        state.HideColumn("Name");
+        state.HideColumn("Score");
+        state.HideColumn("Note");
+    }
+
+    private static void ShowEditableColumns(DataGridState<TestItem> state)
+    {
+        state.ShowColumn("Name");
+        state.ShowColumn("Score");
+        state.ShowColumn("Note");
     }
 
     // ── The claim gate ───────────────────────────────────────────────

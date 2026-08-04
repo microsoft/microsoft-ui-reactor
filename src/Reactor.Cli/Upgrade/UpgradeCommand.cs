@@ -165,6 +165,12 @@ public static class UpgradeCommand
         };
         probe.ArgumentList.Add("-all");
         probe.ArgumentList.Add("-prerelease");
+        // -latest so the instance we probe for is the instance we install into.
+        // Without it this call only answered "does *some* VS have the workload?"
+        // while Reinstall-Vsix.ps1 went on to pick the highest-version instance
+        // from an unfiltered list — which can be a different, workload-less VS,
+        // failing the build for a reason the probe was meant to rule out.
+        probe.ArgumentList.Add("-latest");
         probe.ArgumentList.Add("-requires");
         probe.ArgumentList.Add("Microsoft.VisualStudio.Workload.VisualStudioExtension");
         probe.ArgumentList.Add("-property");
@@ -213,8 +219,12 @@ public static class UpgradeCommand
         psi.ArgumentList.Add("Bypass");
         psi.ArgumentList.Add("-File");
         psi.ArgumentList.Add(reinstall);
-        // Pick the highest-version instance the script finds (matches the
-        // default behavior of Reinstall-Vsix.ps1 when no -VsInstanceId is set).
+        // Pin the install to the instance we just verified has the workload.
+        // bootstrap.ps1 already does this; leaving it off here let the script
+        // fall back to "highest version found", which is chosen from an
+        // unfiltered vswhere list and need not be the one we probed.
+        psi.ArgumentList.Add("-VsInstanceId");
+        psi.ArgumentList.Add(instanceLines[0]);
 
         try
         {
@@ -225,7 +235,17 @@ public static class UpgradeCommand
                 return;
             }
             proc.WaitForExit();
-            if (proc.ExitCode != 0)
+            // Reinstall-Vsix.ps1's exit-code contract (see its .OUTPUTS): 3 means
+            // the VSIX installed but `devenv /updateconfiguration` did not complete
+            // (it timed out and was terminated, or devenv.exe was missing). That's
+            // a partial success, not a failure — report it on stdout so it doesn't
+            // read as a broken upgrade.
+            if (proc.ExitCode == 3)
+            {
+                Console.WriteLine("  VS extension installed, but `devenv /updateconfiguration` did not complete.");
+                Console.WriteLine("  Launch Visual Studio once to finish the menu merge.");
+            }
+            else if (proc.ExitCode != 0)
             {
                 Console.Error.WriteLine($"  VS extension reinstall exited with code {proc.ExitCode}; the rest of the upgrade completed.");
             }

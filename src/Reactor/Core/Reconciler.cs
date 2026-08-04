@@ -412,6 +412,18 @@ public sealed partial class Reconciler : IDisposable
         // (pool return / ClearCurrentEventHandlers / DetachReactorState) so a
         // stale arm can't suppress the first real event of a later lifecycle.
         public Func<object?, bool>? PendingEchoMatch;
+        // Issue #986 — the AutomationId a deferred LabeledBy resolution is still
+        // waiting to bind. ApplyAccessibilityModifiers can only resolve LabeledBy
+        // once the element is in the visual tree, so an unresolved request parks a
+        // Loaded handler. That handler outlives the render that created it, so it
+        // must not write blindly: by the time Loaded fires the modifier may have
+        // been dropped (reset arm) or retargeted at a different id, and a blind
+        // write would stomp the reset and re-pin the stale label forever. The
+        // handler therefore compares its captured id against this slot and no-ops
+        // on a mismatch. Cleared on resolve, on unset, and everywhere the echo
+        // state is cleared (pool return / ClearCurrentEventHandlers /
+        // DetachReactorState) so a stale arm can't fire into a later lifecycle.
+        public string? PendingLabeledBy;
         // Spec 042 Phase 1 — keyed-list reconciliation state. Set when the
         // host element is a templated items control (ListView/GridView/
         // ItemsRepeater). The internal ObservableCollection<ReactorRow> in
@@ -714,6 +726,7 @@ public sealed partial class Reconciler : IDisposable
             state.EchoSuppressCount = 0;
             state.EchoSuppressScopeDepth = 0;
             state.PendingEchoMatch = null;
+            state.PendingLabeledBy = null;
         }
     }
 
@@ -741,6 +754,7 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressCount = 0;
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
+        state.PendingLabeledBy = null;
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -1022,6 +1036,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.EchoSuppressCount = 0;
                 rs.EchoSuppressScopeDepth = 0;
                 rs.PendingEchoMatch = null;
+                rs.PendingLabeledBy = null;
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
@@ -3804,6 +3819,14 @@ public sealed partial class Reconciler : IDisposable
             // clearing the XAML DP does not cancel it — neither did the previous
             // `fe.Opacity = 1.0`, so this is not a regression.
             fe.ClearValue(UIElement.OpacityProperty);
+        // Transform family — Scale / Rotation / Translation / CenterPoint deliberately have
+        // NO unset arm yet (issue #1001). These are XAML facade properties whose live value
+        // lives on the element's composition visual: when a curve is ambient the set path
+        // above calls visual.StartAnimation, which outranks the DP and leaves no local value
+        // for ClearValue to release. Undoing that needs a StopAnimation companion and a
+        // selftest that exercises the animated path, so it is tracked separately rather than
+        // given the mechanical arm the plain-DP modifiers below get.
+        // ModifierUnsetClearValueTests.MissingUnsetArmExceptions records the same four names.
         if (m.Scale.HasValue && m.Scale != oldM?.Scale)
             AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value);
         if (m.Rotation.HasValue && m.Rotation != oldM?.Rotation)
@@ -3963,15 +3986,26 @@ public sealed partial class Reconciler : IDisposable
             fe.ClearValue(WinUI.TitleBar.IsDragRegionProperty);
 
         // ElementSoundMode (on Control, not FrameworkElement)
+        // The reset arm re-tests `fe is Control` under its own pattern variable rather than
+        // reusing `ctrl`: reaching the `else` only proves the whole set condition was false,
+        // which a non-Control satisfies while still having the modifier set. Without the
+        // re-test a Border that carries `.SoundMode(...)` would take the reset branch and
+        // clear a property it never had. Same shape as IsEnabled above (issue #986).
         if (m.ElementSoundMode.HasValue && m.ElementSoundMode != oldM?.ElementSoundMode && fe is WinUI.Control ctrl)
             ctrl.ElementSoundMode = m.ElementSoundMode.Value;
+        else if (!m.ElementSoundMode.HasValue && oldM?.ElementSoundMode.HasValue == true && fe is WinUI.Control ctrlSnd)
+            ctrlSnd.ClearValue(WinUI.Control.ElementSoundModeProperty);
 
         // ── Accessibility — Tier 1 (inline properties) ──────────────
         if (m.HeadingLevel.HasValue && m.HeadingLevel != oldM?.HeadingLevel)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(fe, m.HeadingLevel.Value);
+        else if (!m.HeadingLevel.HasValue && oldM?.HeadingLevel.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HeadingLevelProperty);
 
         if (m.IsTabStop.HasValue && m.IsTabStop != oldM?.IsTabStop)
             fe.IsTabStop = m.IsTabStop.Value;
+        else if (!m.IsTabStop.HasValue && oldM?.IsTabStop.HasValue == true)
+            fe.ClearValue(UIElement.IsTabStopProperty);
 
         if (m.IsHitTestVisible.HasValue && m.IsHitTestVisible != oldM?.IsHitTestVisible)
             fe.IsHitTestVisible = m.IsHitTestVisible.Value;
@@ -3980,6 +4014,8 @@ public sealed partial class Reconciler : IDisposable
 
         if (m.TabIndex.HasValue && m.TabIndex != oldM?.TabIndex && fe is WinUI.Control tabIdxCtrl)
             tabIdxCtrl.TabIndex = m.TabIndex.Value;
+        else if (!m.TabIndex.HasValue && oldM?.TabIndex.HasValue == true && fe is WinUI.Control tabIdxCtrl2)
+            tabIdxCtrl2.ClearValue(WinUI.Control.TabIndexProperty);
 
         if (m.AccessKey is not null && m.AccessKey != oldM?.AccessKey)
             fe.AccessKey = m.AccessKey;
@@ -3988,6 +4024,8 @@ public sealed partial class Reconciler : IDisposable
 
         if (m.XYFocusKeyboardNavigation.HasValue && m.XYFocusKeyboardNavigation != oldM?.XYFocusKeyboardNavigation)
             fe.XYFocusKeyboardNavigation = m.XYFocusKeyboardNavigation.Value;
+        else if (!m.XYFocusKeyboardNavigation.HasValue && oldM?.XYFocusKeyboardNavigation.HasValue == true)
+            fe.ClearValue(UIElement.XYFocusKeyboardNavigationProperty);
 
         // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
         var a11y = m.Accessibility;
@@ -4223,60 +4261,116 @@ public sealed partial class Reconciler : IDisposable
     //  Accessibility modifiers (Tier 2/3 sub-record)
     // ════════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// Applies the Tier 2/3 accessibility sub-record.
+    /// </summary>
+    /// <remarks>
+    /// Called whenever <em>either</em> bag is non-null, which includes the case where the whole
+    /// sub-record was dropped this render (<paramref name="a"/> null, <paramref name="oldA"/>
+    /// not). That is why there is no <c>a is null</c> early return any more: it swallowed
+    /// exactly the transition it needed to handle, so dropping <c>.HelpText(...)</c> — or the
+    /// entire accessibility bag — left every automation property pinned on the control forever
+    /// (issue #986). Every property is therefore null-tolerant on <paramref name="a"/> — set
+    /// arms guard with <c>a is not null &amp;&amp; a.X…</c>, reset arms read <c>a?.X</c> — so the
+    /// dropped-bag case takes the same reset path as dropping one modifier from a surviving bag.
+    /// <para>
+    /// Resets go through <c>ClearValue</c>, never through writing the property's default: a
+    /// local value outranks every <c>Style</c> setter in WinUI's precedence order, so the
+    /// assignment would pin the default rather than hand the property back (issue #952).
+    /// </para>
+    /// </remarks>
     private static void ApplyAccessibilityModifiers(FrameworkElement fe, AccessibilityModifiers? oldA, AccessibilityModifiers? a)
     {
-        if (a is null) return;
+        if (a is null && oldA is null) return;
 
-        if (a.HelpText is not null && a.HelpText != oldA?.HelpText)
+        if (a is not null && a.HelpText is not null && a.HelpText != oldA?.HelpText)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(fe, a.HelpText);
+        else if (a?.HelpText is null && oldA?.HelpText is not null)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HelpTextProperty);
 
-        if (a.FullDescription is not null && a.FullDescription != oldA?.FullDescription)
+        if (a is not null && a.FullDescription is not null && a.FullDescription != oldA?.FullDescription)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetFullDescription(fe, a.FullDescription);
+        else if (a?.FullDescription is null && oldA?.FullDescription is not null)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.FullDescriptionProperty);
 
-        if (a.LandmarkType.HasValue && a.LandmarkType != oldA?.LandmarkType)
+        if (a is not null && a.LandmarkType.HasValue && a.LandmarkType != oldA?.LandmarkType)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetLandmarkType(fe, a.LandmarkType.Value);
+        else if (a?.LandmarkType.HasValue != true && oldA?.LandmarkType.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LandmarkTypeProperty);
 
-        if (a.AccessibilityView.HasValue && a.AccessibilityView != oldA?.AccessibilityView)
+        if (a is not null && a.AccessibilityView.HasValue && a.AccessibilityView != oldA?.AccessibilityView)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(fe, a.AccessibilityView.Value);
+        else if (a?.AccessibilityView.HasValue != true && oldA?.AccessibilityView.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.AccessibilityViewProperty);
 
-        if (a.IsRequiredForForm.HasValue && a.IsRequiredForForm != oldA?.IsRequiredForForm)
+        if (a is not null && a.IsRequiredForForm.HasValue && a.IsRequiredForForm != oldA?.IsRequiredForForm)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetIsRequiredForForm(fe, a.IsRequiredForForm.Value);
+        else if (a?.IsRequiredForForm.HasValue != true && oldA?.IsRequiredForForm.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.IsRequiredForFormProperty);
 
-        if (a.LiveSetting.HasValue && a.LiveSetting != oldA?.LiveSetting)
+        if (a is not null && a.LiveSetting.HasValue && a.LiveSetting != oldA?.LiveSetting)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(fe, a.LiveSetting.Value);
+        else if (a?.LiveSetting.HasValue != true && oldA?.LiveSetting.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LiveSettingProperty);
 
-        if (a.PositionInSet.HasValue && a.PositionInSet != oldA?.PositionInSet)
+        if (a is not null && a.PositionInSet.HasValue && a.PositionInSet != oldA?.PositionInSet)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetPositionInSet(fe, a.PositionInSet.Value);
+        else if (a?.PositionInSet.HasValue != true && oldA?.PositionInSet.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.PositionInSetProperty);
 
-        if (a.SizeOfSet.HasValue && a.SizeOfSet != oldA?.SizeOfSet)
+        if (a is not null && a.SizeOfSet.HasValue && a.SizeOfSet != oldA?.SizeOfSet)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetSizeOfSet(fe, a.SizeOfSet.Value);
+        else if (a?.SizeOfSet.HasValue != true && oldA?.SizeOfSet.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.SizeOfSetProperty);
 
-        if (a.Level.HasValue && a.Level != oldA?.Level)
+        if (a is not null && a.Level.HasValue && a.Level != oldA?.Level)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetLevel(fe, a.Level.Value);
+        else if (a?.Level.HasValue != true && oldA?.Level.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LevelProperty);
 
-        if (a.ItemStatus is not null && a.ItemStatus != oldA?.ItemStatus)
+        if (a is not null && a.ItemStatus is not null && a.ItemStatus != oldA?.ItemStatus)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(fe, a.ItemStatus);
+        else if (a?.ItemStatus is null && oldA?.ItemStatus is not null)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.ItemStatusProperty);
 
-        if (a.TabFocusNavigation.HasValue && a.TabFocusNavigation != oldA?.TabFocusNavigation)
+        if (a is not null && a.TabFocusNavigation.HasValue && a.TabFocusNavigation != oldA?.TabFocusNavigation)
             fe.TabFocusNavigation = a.TabFocusNavigation.Value;
+        else if (a?.TabFocusNavigation.HasValue != true && oldA?.TabFocusNavigation.HasValue == true)
+            fe.ClearValue(UIElement.TabFocusNavigationProperty);
 
         // LabeledBy — resolve AutomationId string to the target element in the visual tree.
         // During mount the element may not be in the visual tree yet (XamlRoot is null),
         // so defer resolution to the Loaded event if needed.
-        if (a.LabeledBy is not null && a.LabeledBy != oldA?.LabeledBy)
+        if (a is not null && a.LabeledBy is not null && a.LabeledBy != oldA?.LabeledBy)
         {
             var target = FindByAutomationId(fe, a.LabeledBy);
             if (target is not null)
             {
+                // Resolved synchronously — retire any deferred request from an
+                // earlier render so its parked handler can't overwrite this one.
+                // TryGet, not GetOrCreate: with no state there is no parked handler
+                // and nothing to retire, and this is the common path — allocating and
+                // attaching a ReactorState here would cost one per element that ever
+                // resolves a LabeledBy synchronously.
+                if (TryGetReactorState(fe, out var resolvedState))
+                    resolvedState.PendingLabeledBy = null;
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(fe, target);
             }
             else
             {
-                // Element not yet in visual tree — defer until Loaded.
+                // Element not yet in visual tree — defer until Loaded. The handler
+                // outlives this render, so publish the request first and have the
+                // handler re-check it: if LabeledBy is dropped or retargeted before
+                // Loaded fires, the stale handler must no-op rather than stomp the
+                // reset arm below (issue #986).
                 var labelId = a.LabeledBy;
+                GetOrCreateReactorState(fe).PendingLabeledBy = labelId;
                 void OnLoaded(object sender, RoutedEventArgs _)
                 {
                     fe.Loaded -= OnLoaded;
+                    if (!TryGetReactorState(fe, out var pending) || pending.PendingLabeledBy != labelId)
+                        return;
+                    pending.PendingLabeledBy = null;
                     var deferred = FindByAutomationId(fe, labelId);
                     if (deferred is not null)
                         Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(fe, deferred);
@@ -4284,8 +4378,12 @@ public sealed partial class Reconciler : IDisposable
                 fe.Loaded += OnLoaded;
             }
         }
-        else if (a.LabeledBy is null && oldA?.LabeledBy is not null)
+        else if (a?.LabeledBy is null && oldA?.LabeledBy is not null)
         {
+            // Cancel a still-parked deferred resolution before clearing, or it would
+            // re-apply the dropped label the moment the element loads.
+            if (TryGetReactorState(fe, out var pendingState))
+                pendingState.PendingLabeledBy = null;
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LabeledByProperty);
         }
     }

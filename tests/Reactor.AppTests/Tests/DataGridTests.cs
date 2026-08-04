@@ -190,11 +190,19 @@ public class DataGridTests : AppTestBase
 
     /// <summary>
     /// Regression for the SuppressNextLostFocusCommit guard's one-shot lifetime: an editing-Tab into a
-    /// NON-editable next cell reopens no editor (IsEditing ends false), so the guard must still be
-    /// consumed — otherwise it lingers on the persistent state and silently suppresses the NEXT
+    /// NON-editable next cell reopens no editor (IsEditing ends false), so the guard must not be left
+    /// standing — otherwise it lingers on the persistent state and silently suppresses the NEXT
     /// legitimate focus-out commit, losing that edit. Here: edit row-1 LastName (its next tab-order
     /// cell, Salary, is read-only), press Tab, then edit a different row's cell and move focus off the
     /// grid (click the anchor button). That second edit must commit.
+    ///
+    /// <para>Deliberately asserted on the OUTCOME rather than on the mechanism, because the mechanism
+    /// has already changed once. It originally armed the guard unconditionally on the Tab key and
+    /// relied on the Tab's own LostFocus to consume it; the claim gate is now narrowed to landings
+    /// that can actually reopen an editor, so on this read-only landing the guard is never armed in
+    /// the first place. Both satisfy this test, and that is the point — the invariant it defends is
+    /// "the next legitimate commit still lands", which outlives either implementation. A version
+    /// written against the consume-it path would have had to be rewritten rather than merely re-run.</para>
     /// </summary>
     [E2eRetry(3)]
     [TestMethod]
@@ -222,13 +230,215 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
+    /// Issue #976: in ROW edit mode, Tab must cycle real keyboard focus among the row's editors —
+    /// wrapping from the last one back to the first — instead of walking out of the grid and
+    /// tripping the LostFocus blur-commit.
+    ///
+    /// <para>Two independent oracles. First, a DIRECT one: each editable column carries a stable
+    /// AutomationId, so <see cref="WaitForFocus"/> asserts the destination of every Tab against
+    /// live UIA focus rather than inferring it after the fact. Three editable columns make
+    /// direction expressible — forward from FirstName is MiddleName, backward is LastName, and a
+    /// double-step is LastName — so a direction-inverting or double-firing regression fails here.
+    /// The wrap itself (Tab from LastName → FirstName) cannot be produced by native tab order,
+    /// which walks on to Save, so that check is specific to #976's focus seam.</para>
+    ///
+    /// <para>Second, a BEHAVIORAL one that survives even if focus reporting were broken: type
+    /// "Smythe" into LastName and "Alicia" into FirstName after the wrap, then Enter. Only a
+    /// correct wrap produces <c>[1:Alicia,Marie,Smythe]</c> — MiddleName is never typed into, so
+    /// it must still read its seed value, and if Tab had left the grid the blur-commit would land
+    /// an earlier entry first.</para>
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_RowEditTab_WrapsToFirstEditorWithoutCommitting()
+    {
+        NavigateToFixtureFresh("DataGrid_RowEditGrid");
+        WaitForText("RowEditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
+
+        BeginRowEditOnFirstRow();
+
+        // Focus starts in FirstName. Step forward through every editable column, asserting the
+        // DESTINATION of each move. Three editable columns make direction expressible: forward
+        // from FirstName is MiddleName, backward is LastName, and a double-step is LastName too.
+        WaitForFocus("RowEdit_FirstName", "row edit start");
+        App.SendKeys("tab", viaSendInput: true);
+        WaitForFocus("RowEdit_MiddleName", "Tab from FirstName");
+        App.SendKeys("tab", viaSendInput: true);
+        WaitForFocus("RowEdit_LastName", "Tab from MiddleName");
+        ReplaceFocusedEditorText("Smythe");
+
+        // Tab again. LastName is the LAST editable column, so this is the wrap: focus must return
+        // to the FirstName editor rather than continuing on to Save/Cancel and out of the grid.
+        // Native tab order cannot produce this — it walks on to Save — so this check is the one
+        // that is specific to #976's focus seam.
+        App.SendKeys("tab", viaSendInput: true);
+        WaitForFocus("RowEdit_FirstName", "Tab from LastName (the wrap)");
+        ReplaceFocusedEditorText("Alicia");
+
+        // Nothing may have committed yet — the wrap must not have tripped a blur-commit.
+        var logSoFar = FindById("RowEditLog").Text ?? "";
+        Assert.IsFalse(logSoFar.Contains('['),
+            $"Row-mode Tab must not commit the row; RowEditLog was '{logSoFar}'.");
+
+        App.SendKeys("enter", viaSendInput: true);
+
+        WaitForTextContaining("RowEditLog", "[1:Alicia,Marie,Smythe]", timeoutMs: 5000);
+    }
+
+    /// <summary>
+    /// Issue #976, companion to the wrap test: the row-mode Tab arms
+    /// <c>SuppressNextLostFocusCommit</c> so the wrap's focus-out doesn't blur-commit the row. That
+    /// flag is one-shot, so it must be consumed by the Tab's own LostFocus — if it leaks it
+    /// silently swallows the NEXT legitimate blur-commit and the edit is lost. Same bug class as
+    /// <see cref="Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit"/>.
+    ///
+    /// <para>The oracle has to have teeth in BOTH directions, which is why the value typed after
+    /// the Tab matters. Asserting only on the FirstName edit would pass with suppression removed
+    /// entirely: that Tab would blur-commit <c>[1:Alicia,Marie,Smith]</c> on the spot and the final
+    /// assertion would happily match it. Editing MiddleName after the Tab can only happen if the
+    /// row is STILL in edit mode, so <c>[1:Alicia,Quinn,Smith]</c> proves the Tab did not commit —
+    /// and its arrival at all proves the flag did not leak and swallow the anchor's
+    /// blur-commit.</para>
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_RowEditTab_DoesNotSuppressNextCommit()
+    {
+        NavigateToFixtureFresh("DataGrid_RowEditGrid");
+        WaitForText("RowEditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
+
+        BeginRowEditOnFirstRow();
+
+        // Type into FirstName, Tab (arms the guard), then type into MiddleName — only reachable if
+        // the Tab moved focus without committing.
+        WaitForFocus("RowEdit_FirstName", "row edit start");
+        ReplaceFocusedEditorText("Alicia");
+        App.SendKeys("tab", viaSendInput: true);
+        WaitForFocus("RowEdit_MiddleName", "Tab from FirstName");
+        ReplaceFocusedEditorText("Quinn");
+
+        // Nothing may have committed yet.
+        var logSoFar = FindById("RowEditLog").Text ?? "";
+        Assert.IsFalse(logSoFar.Contains('['),
+            $"Row-mode Tab must not commit the row; RowEditLog was '{logSoFar}'.");
+
+        // Now leave the grid entirely. The row must still commit through the LostFocus path — the
+        // one-shot flag was consumed by the Tab's own LostFocus and must not still be armed.
+        Element("RowEditBlurAnchor").Click();
+
+        WaitForTextContaining("RowEditLog", "[1:Alicia,Quinn,Smith]", timeoutMs: 5000);
+
+        // Exactly one commit: a leaked-and-then-recovered flag, or a Tab that committed and then
+        // re-committed on blur, both show up as a second entry.
+        var log = FindById("RowEditLog").Text ?? "";
+        Assert.AreEqual(1, log.Count(c => c == '['),
+            $"Expected exactly one row commit; RowEditLog was '{log}'.");
+    }
+
+    /// <summary>
+    /// Block until real keyboard focus is on the editor with <paramref name="expectedAutomationId"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Two jobs, and both matter.</para>
+    ///
+    /// <para><b>Synchronization.</b> The grid's focus move is deliberately deferred through
+    /// <c>DispatcherQueue.TryEnqueue</c> (it has to land after WinUI's own Tab navigation), so it is
+    /// NOT complete when <c>SendKeys(Tab)</c> returns. Typing straight after the Tab races that
+    /// dispatcher tick and lands the text in whichever editor still had focus — which is exactly how
+    /// this test previously "failed": it typed both values into FirstName and reported the product
+    /// broken. A real user's Tab-then-type has orders of magnitude more slack than a test harness.</para>
+    ///
+    /// <para><b>Oracle.</b> It asserts the DESTINATION of the focus move, not merely that focus
+    /// moved. "Focus left FirstName" is satisfied by landing on Save, on Cancel, or outside the grid
+    /// entirely, so a test phrased that way cannot fail when the direction inverts — the exact
+    /// vacuity trap called out in AGENTS.md § "Checks that actually prove something".</para>
+    ///
+    /// <para>Times out loudly with the observed AutomationId. <see cref="IUiaPropertyReader.GetFocusedAutomationId"/>
+    /// returns <c>""</c> when focus is unreadable or on an element with no id, so a broken instrument
+    /// surfaces as a failure naming what it saw, never as a silent pass.</para>
+    /// </remarks>
+    private static void WaitForFocus(string expectedAutomationId, string step, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        string actual;
+        do
+        {
+            actual = Uia.GetFocusedAutomationId();
+            if (actual == expectedAutomationId) return;
+            Thread.Sleep(50);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        Assert.Fail(
+            $"After '{step}', keyboard focus should be on '{expectedAutomationId}' but was " +
+            $"'{(actual.Length == 0 ? "<none/unreadable>" : actual)}' after {timeoutMs}ms.");
+    }
+
+    /// <summary>
+    /// Click the first row's "Edit" button to enter row-edit mode and wait until its editors are
+    /// realized. Row mode has one Edit button per row and they share a name, so take the topmost.
+    /// </summary>
+    private void BeginRowEditOnFirstRow()
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(5000);
+        while (DateTime.UtcNow < deadline)
+        {
+            var buttons = App.Search("Edit").Where(m => m.Name == "Edit").ToList();
+            if (buttons.Count > 0)
+            {
+                var first = buttons[0];
+                // Normalize a missing AutomationId to null rather than "": UiElement.GetAttribute
+                // branches on `AutomationId != null`, so an empty-but-non-null id would send it
+                // down the read-by-automation-id path with an empty id.
+                var id = string.IsNullOrEmpty(first.AutomationId) ? null : first.AutomationId;
+                Element(id ?? first.Selector, id).Click();
+                // Save/Cancel only exist while the row is being edited, so their arrival is proof
+                // the row edit actually started before we start pressing Tab.
+                Assert.IsNotNull(WaitForName("Save"), "Row edit did not start — no 'Save' button appeared.");
+                _ = WaitForEditor();
+                return;
+            }
+            Thread.Sleep(100);
+        }
+
+        Assert.Fail("Row-mode 'Edit' button never appeared.");
+    }
+
+    /// <summary>
+    /// Replace the contents of whatever editor currently holds real keyboard focus, WITHOUT
+    /// locating it first. Row mode keeps every editable cell open at once, so
+    /// <see cref="WaitForEditor"/>'s "first Edit control" would always resolve to the same editor
+    /// and silently defeat the point of the test — the whole question is where focus is. Select-all
+    /// + delete then typing goes to the focused control, whichever it is.
+    ///
+    /// <para>Both payloads are in winapp's send-keys token grammar (<c>ctrl+a</c>, <c>delete</c>,
+    /// <c>text=</c>), NOT the Win32 <c>SendKeys.SendWait</c> <c>^a</c> shorthand — the CLI rejects
+    /// the latter. <c>ctrl+a delete</c> mirrors <see cref="UiElement.Clear"/>, and the literal is
+    /// escaped through <see cref="UiElement.ToSendKeysTokens"/> so the tokenizer keeps it intact.</para>
+    /// </summary>
+    private void ReplaceFocusedEditorText(string value)
+    {
+        App.SendKeys("ctrl+a delete", viaSendInput: true);
+        App.SendKeys(UiElement.ToSendKeysTokens(value), viaSendInput: true);
+        Thread.Sleep(150); // let TextChanged propagate into the pending row values before the next key
+    }
+
+    /// <summary>
     /// The backward twin of <see cref="Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit"/>.
-    /// The <c>SuppressNextLostFocusCommit</c> guard is armed on the Tab KEY, deliberately without
-    /// looking at the direction (#987), so Shift+Tab arms it exactly like Tab — and must therefore
-    /// consume it exactly like Tab when the cell it lands on has no editor. Here: edit row-1
-    /// FirstName (its PREVIOUS tab-order cell, Id, is read-only), press Shift+Tab, then edit a
-    /// different row's cell and move focus off the grid. That second edit must commit — if the
-    /// guard leaked, it silently swallows the focus-out commit and 'Bobby' is lost.
+    /// Here: edit row-1 FirstName (its PREVIOUS tab-order cell, Id, is read-only), press Shift+Tab,
+    /// then edit a different row's cell and move focus off the grid. That second edit must commit —
+    /// if the guard were left standing, it silently swallows the focus-out commit and 'Bobby' is lost.
+    ///
+    /// <para>The claim gate reads the captured chord, so the direction is what decides which cell is
+    /// examined: backward from FirstName is read-only Id, forward is editable LastName. That makes
+    /// this test a direction oracle as well as a lifetime one — see the AssertNoEditorSettles call
+    /// below, which is the half that fails if the modifier is dropped between the routed handler and
+    /// the deferred dispatch (#987). The lifetime half is asserted on the OUTCOME, not the mechanism:
+    /// the guard was originally armed on the Tab key regardless of landing and relied on being
+    /// consumed, and is now not armed at all when the landing cell can reopen no editor. Both satisfy
+    /// this test, which is why it survived that change without an edit.</para>
     /// </summary>
     [E2eRetry(3)]
     [TestMethod]

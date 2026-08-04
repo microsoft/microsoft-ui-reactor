@@ -139,6 +139,71 @@ public class DataGridState<T>
     /// </summary>
     internal bool SuppressNextLostFocusCommit { get; set; }
 
+    // ── Editor focus requests (#976) ─────────────────────────────
+    //
+    // The focus APIs above move a purely LOGICAL cell cursor. This is the seam that turns an
+    // edit into real XAML focus: the state records which editor should receive keyboard focus,
+    // and DataGridComponent's cell renderer consumes the request on that cell's mount/update.
+    //
+    // Keyed by (RowKey, column NAME), deliberately not by (rowIndex, colIndex):
+    //   • Row keys survive sort/filter/mutation; row indices don't.
+    //   • RenderRow walks the VISIBLE column projection while _focusedColIndex indexes the FULL
+    //     _columns list, so a column index means different things on the two sides of the seam.
+    private RowKey? _focusRequestRow;
+    private string? _focusRequestColumn;
+    private int _focusRequestVersion;
+
+    /// <summary>
+    /// Monotonically increasing count of editor-focus requests. Never reset — a consumed or
+    /// cleared request leaves it where it was, so tests can distinguish "re-armed at the same
+    /// cell" from "nothing happened".
+    /// </summary>
+    internal int FocusRequestVersion => _focusRequestVersion;
+
+    /// <summary>
+    /// Ask the renderer to move real XAML focus to the editor of <paramref name="columnName"/>
+    /// on <paramref name="rowKey"/>. Overwrites any earlier unconsumed request — only the most
+    /// recent one is meaningful. Does not raise <c>StateChanged</c>: every caller is already in
+    /// the middle of an edit transition that raises it.
+    /// </summary>
+    internal void RequestEditorFocus(RowKey rowKey, string columnName)
+    {
+        _focusRequestRow = rowKey;
+        _focusRequestColumn = columnName;
+        _focusRequestVersion++;
+    }
+
+    /// <summary>
+    /// Whether a focus request is pending for exactly this cell. Non-consuming — the renderer
+    /// uses it as a cheap gate so cells with no pending request keep byte-identical modifiers
+    /// and stay on the reconciler's skip path.
+    /// </summary>
+    internal bool HasEditorFocusRequest(RowKey rowKey, string columnName)
+        => _focusRequestColumn is not null
+           && _focusRequestRow is { } requested && requested.Equals(rowKey)
+           && string.Equals(_focusRequestColumn, columnName, StringComparison.Ordinal);
+
+    /// <summary>
+    /// One-shot consume. Returns true (and clears the request) only for the cell the request
+    /// targets; any other cell leaves it armed for its real target.
+    /// </summary>
+    internal bool TryConsumeEditorFocusRequest(RowKey rowKey, string columnName)
+    {
+        if (!HasEditorFocusRequest(rowKey, columnName)) return false;
+        ClearEditorFocusRequest();
+        return true;
+    }
+
+    /// <summary>
+    /// Drop any pending request. Called from every commit/cancel path so a request whose edit
+    /// already ended can't steal focus from whatever the user moved to afterwards.
+    /// </summary>
+    internal void ClearEditorFocusRequest()
+    {
+        _focusRequestRow = null;
+        _focusRequestColumn = null;
+    }
+
     /// <summary>Gets the pending row-edit value for a specific column, or null if not in row edit.</summary>
     public object? GetRowEditValue(string columnName)
         => _rowEditValues?.TryGetValue(columnName, out var v) == true ? v : null;
@@ -1389,10 +1454,11 @@ public class DataGridState<T>
     /// Returns false when no row edit is active, or when no visible column in the row has an editor.
     /// </summary>
     /// <remarks>
-    /// Like every other focus API on this type (<see cref="FocusNextCell"/>, <see cref="MoveFocus"/>,
-    /// …) this moves the grid's own <see cref="FocusedColIndex"/> bookkeeping only; it does not call
-    /// XAML <c>Focus</c>. Real keyboard focus between the row's editors is WinUI's FocusManager tab
-    /// order, which runs before the grid's <c>handledEventsToo</c> KeyDown handler.
+    /// This moves the grid's own <see cref="FocusedColIndex"/> bookkeeping AND arms an editor-focus
+    /// request, so the renderer pulls real XAML keyboard focus onto the target editor once it is
+    /// mounted (#976). WinUI's FocusManager has already moved native focus by the time the grid's
+    /// <c>handledEventsToo</c> KeyDown handler runs — the request overrides where it landed, which
+    /// is what keeps Tab cycling inside the row's editors instead of walking out of the grid.
     /// </remarks>
     public bool FocusNextRowEditColumn() => MoveRowEditFocus(+1);
 
@@ -1403,12 +1469,69 @@ public class DataGridState<T>
     /// when no row edit is active, or when no visible column in the row has an editor.
     /// </summary>
     /// <remarks>
-    /// This is what the grid's own KeyDown handler runs for Shift+Tab during a row edit (#987). It
+    /// This is what the grid's own KeyDown handler runs for Shift+Tab during a row edit (#987) — the
+    /// modifier now survives dispatch, so the backward direction is reachable from the keyboard. It
     /// is also public for the same reason <see cref="FocusPrevCell"/> is: app authors driving custom
-    /// keyboard handling need both directions. The logical-cursor caveat on
-    /// <see cref="FocusNextRowEditColumn"/> applies here too.
+    /// keyboard handling need both directions. It arms the same editor-focus request as
+    /// <see cref="FocusNextRowEditColumn"/> — they share <c>MoveRowEditFocus</c> — so backward Tab
+    /// moves real XAML focus exactly as forward Tab does (#976), rather than only the logical cursor.
     /// </remarks>
     public bool FocusPrevRowEditColumn() => MoveRowEditFocus(-1);
+
+    /// <summary>
+    /// Whether the active row edit has at least one visible column with an editor — i.e. whether
+    /// <see cref="FocusNextRowEditColumn"/> / <see cref="FocusPrevRowEditColumn"/> would find a
+    /// target. Non-mutating: it neither moves the cursor nor arms a focus request.
+    /// </summary>
+    /// <remarks>
+    /// The grid's KeyDown handler needs this answer SYNCHRONOUSLY (it decides whether to arm
+    /// <see cref="SuppressNextLostFocusCommit"/> before the deferred <c>HandleKeyDown</c> runs),
+    /// which is why it can't just look at the bool the traversal returns.
+    /// </remarks>
+    internal bool HasRowEditFocusTarget()
+    {
+        if (!_isRowEditing || _rowEditValues is null) return false;
+
+        var values = _rowEditValues;
+        return _columns.Any(col => values.ContainsKey(col.Name) && IsColumnVisible(col.Name));
+    }
+
+    /// <summary>
+    /// Whether a cell-mode Tab/Shift+Tab would land on a visible editable cell whose editor can
+    /// render and therefore settle a suppressed <c>LostFocus</c> claim.
+    /// </summary>
+    /// <param name="direction">+1 for Tab, -1 for Shift+Tab.</param>
+    internal bool HasCellEditFocusTarget(int direction)
+    {
+        if (!IsEditing || _isRowEditing) return false;
+        if (ItemCount == 0 || _columns.Count == 0) return false;
+        if (_focusedRowIndex < 0 || _focusedColIndex < 0) return false;
+
+        var row = _focusedRowIndex;
+        var col = _focusedColIndex + direction;
+
+        if (col >= _columns.Count)
+        {
+            row++;
+            col = 0;
+        }
+        else if (col < 0)
+        {
+            row--;
+            col = _columns.Count - 1;
+        }
+
+        if (row < 0 || row >= ItemCount) return false;
+        if (col < 0 || col >= _columns.Count) return false;
+
+        var descriptor = _columns[col];
+        if (descriptor.IsReadOnly || descriptor.SetValue is null) return false;
+        if (!IsColumnVisible(descriptor.Name)) return false;
+        if (GetItemAt(row) is null) return false;
+        if (GetRowKeyAt(row) is null) return false;
+
+        return true;
+    }
 
     /// <summary>
     /// Shared traversal for <see cref="FocusNextRowEditColumn"/> / <see cref="FocusPrevRowEditColumn"/>.
@@ -1427,11 +1550,22 @@ public class DataGridState<T>
         // in there without a rendered editor — skip those too. Indices are into the full _columns
         // list, matching FocusNextCell and every other focus API.
         //
-        // _focusedColIndex is -1 when the row edit began from the Edit button with no prior cell
-        // focus. Walking forward from -1 naturally lands on column 0; walking backward has to
-        // mirror that and land on the LAST column, so treat "no focus" as one position PAST the
-        // end in that direction. Without this, backward from -1 would start at colCount - 2 and
-        // never reach the last column at all.
+        // _focusedColIndex is -1 only while it still holds its initial value: every other write to
+        // it is clamped or guarded non-negative, and since #976 BeginRowEdit parks the cursor on
+        // whatever editor it focused. So reaching here at -1 means BeginRowEdit found NO visible
+        // editable column and left the cursor alone — it still returns true, because the row's
+        // pending values exist even when none of their editors is rendered.
+        //
+        // That state is not frozen: HideColumn/ShowColumn/ToggleColumnVisibility are public and do
+        // not guard on _isRowEditing, so a column can become visible partway through a row edit and
+        // make this traversal meaningful again.
+        //
+        // Walking forward from -1 naturally lands on column 0; walking backward has to mirror that
+        // and land on the LAST column, so treat "no focus" as one position PAST the end in that
+        // direction. The offset does not change WHICH columns get visited — both forms sweep all
+        // colCount of them — it changes where the sweep STARTS, and so which visible editable
+        // column it stops on first. Without it, backward from -1 starts at colCount - 2 and settles
+        // on the second-to-last candidate instead of the last.
         var origin = _focusedColIndex < 0 && direction < 0 ? colCount : _focusedColIndex;
 
         for (int step = 1; step <= colCount; step++)
@@ -1440,12 +1574,27 @@ public class DataGridState<T>
             var name = _columns[idx].Name;
             if (_rowEditValues.ContainsKey(name) && IsColumnVisible(name))
             {
-                // A row with only one visible editable column wraps straight back to where we
-                // started. SetFocus always raises StateChanged, so calling it here would re-render
-                // the whole grid for a move that didn't move. Still report success — there IS a
-                // valid target column, Tab just had nowhere else to go.
+                // Arm BEFORE any notification. StateChanged can re-render synchronously, and the
+                // render is what runs the hook that honours the request — arming afterwards would
+                // let that render go by with nothing pending and the focus move would be lost.
+                if (_editingRowKey is { } editingKey)
+                    RequestEditorFocus(editingKey, name);
+
                 if (idx != _focusedColIndex)
-                    SetFocus(_focusedRowIndex, idx);
+                {
+                    SetFocus(_focusedRowIndex, idx); // raises StateChanged
+                }
+                else
+                {
+                    // A row with only one visible editable column wraps straight back to where we
+                    // started, so there is no logical move for SetFocus to make. The render is
+                    // still required: native Tab has ALREADY pushed keyboard focus off this editor
+                    // onto Save/Cancel (or out of the grid), and RequestEditorFocus deliberately
+                    // doesn't notify, so without this the request would sit armed forever and Tab
+                    // would silently escape the row. (#976)
+                    StateChanged?.Invoke();
+                }
+
                 return true;
             }
         }
@@ -1550,6 +1699,11 @@ public class DataGridState<T>
         _focusedColIndex = colIndex;
         FocusedKey = rowKey;
 
+        // Opening an editor must move real keyboard focus into it, not just the logical cursor —
+        // otherwise Enter/F2/click-to-edit leaves the user having to click the editor before
+        // typing. The renderer consumes this when the editor mounts. (#976)
+        RequestEditorFocus(rowKey, col.Name);
+
         // Set up cell-level validation
         _editValidation = new ValidationContext();
         _editValidation.RegisterField(col.Name);
@@ -1635,6 +1789,7 @@ public class DataGridState<T>
         _editingColumnName = null;
         _editingValue = null;
         _editValidation = null;
+        ClearEditorFocusRequest();
         _editingVersion++;
         StateChanged?.Invoke();
 
@@ -1651,6 +1806,7 @@ public class DataGridState<T>
         _editingColumnName = null;
         _editingValue = null;
         _editValidation = null;
+        ClearEditorFocusRequest();
         _editingVersion++;
         StateChanged?.Invoke();
     }
@@ -1713,6 +1869,49 @@ public class DataGridState<T>
         _isRowEditing = true;
         _focusedRowIndex = rowIndex;
         FocusedKey = rowKey;
+
+        // Focus a real editor in the row, so a row edit started from the Edit button lands the
+        // caret in the row rather than leaving it on the button. (#976)
+        //
+        // Prefer the column the roving cursor is already on when that column has a rendered editor:
+        // a row edit started from a cell should keep the caret in THAT cell rather than jumping
+        // back to the first one. Otherwise fall back to the row's first visible editor — walking
+        // _columns, not `values`, whose Dictionary order is not the column order, and skipping
+        // hidden columns, which are in `values` without a rendered editor.
+        //
+        // The cursor is then parked on whatever column actually got focus, so the logical cursor
+        // and real focus always agree once a row edit starts. That invariant is what makes the
+        // first Tab do something: MoveRowEditFocus traverses from _focusedColIndex, so any
+        // disagreement makes the first keystroke merely close the gap and visibly do nothing.
+        // Before #976 the cursor was left at -1 (or on a read-only/hidden column) and focus was
+        // logical-only, so the dead keystroke was invisible; now it is not.
+        var focusTarget = -1;
+        if (_focusedColIndex >= 0 && _focusedColIndex < _columns.Count)
+        {
+            var current = _columns[_focusedColIndex];
+            if (values.ContainsKey(current.Name) && IsColumnVisible(current.Name))
+                focusTarget = _focusedColIndex;
+        }
+
+        if (focusTarget < 0)
+        {
+            for (var i = 0; i < _columns.Count; i++)
+            {
+                var col = _columns[i];
+                if (values.ContainsKey(col.Name) && IsColumnVisible(col.Name))
+                {
+                    focusTarget = i;
+                    break;
+                }
+            }
+        }
+
+        // No visible editor in the row: arm nothing and leave the cursor where the caller put it.
+        if (focusTarget >= 0)
+        {
+            _focusedColIndex = focusTarget;
+            RequestEditorFocus(rowKey, _columns[focusTarget].Name);
+        }
 
         // Set up row-level validation
         _editValidation = new ValidationContext();
@@ -1785,6 +1984,7 @@ public class DataGridState<T>
         _editingValue = null;
         _rowEditValues = null;
         _isRowEditing = false;
+        ClearEditorFocusRequest();
         _editingVersion++;
         StateChanged?.Invoke();
 
@@ -1802,6 +2002,7 @@ public class DataGridState<T>
         _rowEditValues = null;
         _isRowEditing = false;
         _editValidation = null;
+        ClearEditorFocusRequest();
         _editingVersion++;
         StateChanged?.Invoke();
     }

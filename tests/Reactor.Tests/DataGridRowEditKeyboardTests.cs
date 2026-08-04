@@ -179,19 +179,21 @@ public class DataGridRowEditKeyboardTests
     }
 
     [Fact]
-    public async Task RowEditTab_WithNoPriorColumnFocus_LandsOnFirstEditableColumn()
+    public async Task RowEditTab_WithNoPriorColumnFocus_LandsOnTheColumnAfterTheFirstEditable()
     {
         var state = await LoadedState();
         var el = Grid(EditMode.Row);
 
-        // BeginRowEdit sets only the focused ROW, so the column index is still -1 here — the
-        // shape you get when the row edit starts from the row's Edit button.
+        // Started from the row's Edit button — no prior column focus. Since #976 BeginRowEdit puts
+        // REAL focus on the row's first visible editor, so it parks the logical cursor there too;
+        // leaving it at -1 would make this first Tab move the cursor onto the column focus is
+        // already on and the keystroke would visibly do nothing.
         Assert.True(state.BeginRowEdit(1));
-        Assert.Equal(-1, state.FocusedColIndex);
+        Assert.Equal(NameCol, state.FocusedColIndex);
 
         Key(state, el, VirtualKey.Tab);
 
-        Assert.Equal(NameCol, state.FocusedColIndex);
+        Assert.Equal(ScoreCol, state.FocusedColIndex);
         Assert.Equal(1, state.FocusedRowIndex);
     }
 
@@ -215,9 +217,13 @@ public class DataGridRowEditKeyboardTests
         // column lands in _rowEditValues even though the row renders no editor for it. Tab must
         // not park focus on a cell the user cannot see.
         state.HideColumn("Name");
-        state.SetFocus(0, IdCol);
         Assert.True(state.BeginRowEdit(0));
         Assert.True(state.GetRowEditValue("Name") is not null);
+
+        // Park the cursor on the read-only Id column AFTER BeginRowEdit: since #976 BeginRowEdit
+        // moves the cursor to whichever column it gives real focus to (here Score, the only visible
+        // editor), and starting the traversal there would make "landed on Score" vacuously true.
+        state.SetFocus(0, IdCol);
 
         Key(state, el, VirtualKey.Tab);
 
@@ -260,29 +266,33 @@ public class DataGridRowEditKeyboardTests
 
         // Start on the read-only Id column. With only Name and Score editable the ring has size 2,
         // so exactly TWO origins make forward and backward disagree: IdCol, and the -1 no-prior-focus
-        // sentinel used by the test further down this file that begins a row edit without setting
-        // column focus first. From either editable column both directions land on the same place, so
-        // a test started there passes even if this method walks forward.
+        // sentinel used by the test further down this file. From either editable column both
+        // directions land on the same place, so a test started there passes even if this method
+        // walks forward.
         //
-        // The origin assertion below is load-bearing, and was added after measuring what happens
-        // without it. #976 parks the row edit on the first editable column, silently rewriting this
-        // origin from Id(0) to Name(1). Measured, in order:
+        // ORDERING IS LOAD-BEARING, and it changed with #976. BeginRowEdit now parks the cursor on
+        // the first editable column it gives real focus to, so a SetFocus(IdCol) placed BEFORE it is
+        // silently rewritten from Id(0) to Name(1) — collapsing the one origin that can tell the two
+        // directions apart. #987 measured what that costs, in order:
         //   1. only the FORWARD destination constant fails (Expected 1 / Actual 2), which invites the
         //      reader to update that one number;
-        //   2. after that repair the file is fully green with backward == forward == ScoreCol — i.e.
-        //      direction-blind — and this file carries no cross-arm Assert.NotEqual to catch it;
-        //   3. inverting MoveRowEditFocus then leaves this test PASSING: it drops out of that mutant's
-        //      killer set entirely (5 killers become 4).
-        // With the origin asserted, the same change fails at Expected 0 / Actual 1 — on its CAUSE
-        // rather than on a destination constant, pointing the reader at the parking behaviour instead
-        // of at a number to edit.
-        state.SetFocus(0, IdCol);
+        //   2. after that repair the file is green with backward == forward == ScoreCol — direction-
+        //      blind;
+        //   3. inverting MoveRowEditFocus then leaves this test PASSING (5 killers become 4).
+        // Parking AFTER BeginRowEdit keeps the discriminating origin. The origin assertion below is
+        // kept from #987, but note it is weaker in this position: it now checks that SetFocus honours
+        // a read-only column rather than that BeginRowEdit left the cursor alone. The direction claim
+        // itself is carried by the step-matched cross-arm NotEqual at the end of this test.
         Assert.True(state.BeginRowEdit(0));
+        state.SetFocus(0, IdCol);
         Assert.Equal(IdCol, state.FocusedColIndex);
 
-        // Backward off column 0 wraps to the LAST editable column, not the first.
+        // Backward off column 0 wraps to the LAST editable column, not the first. This is the
+        // step that carries the direction claim — one step from a shared origin, so it is the
+        // half of the differential below that can actually disagree with forward traversal.
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(ScoreCol, state.FocusedColIndex);
+        var backAfterOneStep = state.FocusedColIndex;
 
         // Landing on Name rather than Id is itself the proof that the read-only column is skipped
         // going backward, just as it was going forward.
@@ -291,19 +301,40 @@ public class DataGridRowEditKeyboardTests
         Assert.Equal(0, state.FocusedRowIndex);
         Assert.True(state.IsRowEditing);
 
-        // Differential isolation: same grid, same start, only the direction differs. The origin is
-        // asserted on this arm too: if a future change moves the start column, both arms must fail on
-        // the origin, not just whichever one the runner happens to reach first.
+        // Differential isolation — same grid, same origin, only the direction differs. The pairing
+        // has to be step-matched to mean anything: backward's SECOND step also lands on NameCol, so
+        // comparing the two arms' end states (NameCol both) discriminates nothing — with a 2-editable
+        // ring the directions converge once the step counts diverge. The oracle is one step against
+        // one step, i.e. backAfterOneStep (Score) against forward's first step (Name). The origin is
+        // parked and asserted on this arm too, so a future change that moves the start column fails
+        // both arms rather than whichever the runner reaches first.
         var forward = await LoadedState();
-        forward.SetFocus(0, IdCol);
         Assert.True(forward.BeginRowEdit(0));
+        forward.SetFocus(0, IdCol);
         Assert.Equal(IdCol, forward.FocusedColIndex);
         Assert.True(forward.FocusNextRowEditColumn());
         Assert.Equal(NameCol, forward.FocusedColIndex);
+
+        // Cross-arm, and deliberately kept even though the two Equal()s above already entail it
+        // while they hold distinct literals. Its job is not logical independence but EDIT
+        // robustness: it is the only line here that still fails when a future edit "repairs" both
+        // Equal()s to whatever a regressed tree reports, which is precisely how a direction test
+        // goes permanently green. The two NotEqual()s this replaces were single-arm — each
+        // compared against a distinct literal already pinned one line above, so no edit that
+        // broke the Equal could ever trip them, and no value of the field could satisfy one and
+        // fail the other (#1022).
+        Assert.NotEqual(backAfterOneStep, forward.FocusedColIndex);
     }
 
+    /// <summary>
+    /// Issue #976. A row with only ONE visible editable column wraps Tab straight back to the
+    /// column it started on, so there is no logical cursor move — but the render is still
+    /// mandatory. By the time this runs, native Tab has already pushed real keyboard focus off the
+    /// editor onto Save/Cancel, and only a render runs the hook that pulls it back. Skipping the
+    /// notification as a "redundant re-render" optimisation makes Tab silently escape the row.
+    /// </summary>
     [Fact]
-    public async Task RowEditTab_OnSingleEditableColumn_DoesNotRaiseARedundantStateChanged()
+    public async Task RowEditTab_OnSingleEditableColumn_StillArmsAndNotifiesSoFocusIsReclaimed()
     {
         var state = await LoadedState();
 
@@ -314,41 +345,60 @@ public class DataGridRowEditKeyboardTests
 
         var renders = 0;
         state.StateChanged += () => renders++;
+        var versionBefore = state.FocusRequestVersion;
 
-        // Tab has a valid target (Name), it just happens to be the current one — report success
-        // without asking the grid to re-render for a move that didn't move.
         Assert.True(state.FocusNextRowEditColumn());
+
+        // The cursor genuinely did NOT move — this really is the no-move path, so the render below
+        // cannot be attributed to SetFocus.
         Assert.Equal(NameCol, state.FocusedColIndex);
-        Assert.Equal(0, renders);
 
-        // Differential isolation: give it somewhere to go and the notification comes back.
-        state.ShowColumn("Score");
-        renders = 0;
-        Assert.True(state.FocusNextRowEditColumn());
-        Assert.Equal(ScoreCol, state.FocusedColIndex);
+        // A fresh request was armed for the column Tab landed on...
+        Assert.True(state.FocusRequestVersion > versionBefore);
+        Assert.True(state.TryConsumeEditorFocusRequest(new RowKey("1"), "Name"));
+
+        // ...and a render was raised to consume it.
         Assert.Equal(1, renders);
     }
 
+    /// <summary>
+    /// Companion to the test above: when the cursor DOES move, the notification must come from
+    /// <c>SetFocus</c> exactly once — not once from SetFocus plus a second explicit one.
+    /// </summary>
     [Fact]
-    public async Task FocusPrevRowEditColumn_WithNoPriorColumnFocus_LandsOnLastEditableColumn()
+    public async Task RowEditTab_AcrossTwoEditableColumns_NotifiesExactlyOnce()
     {
         var state = await LoadedState();
 
-        // BeginRowEdit from the Edit button leaves FocusedColIndex at -1. Forward from there lands
-        // on the FIRST editable column, so backward has to land on the LAST one. A traversal that
-        // just plugs -1 into the modulo starts at colCount - 2 and can never reach the last column.
+        state.SetFocus(0, NameCol);
         Assert.True(state.BeginRowEdit(0));
-        Assert.Equal(-1, state.FocusedColIndex);
+
+        var renders = 0;
+        state.StateChanged += () => renders++;
+
+        Assert.True(state.FocusNextRowEditColumn());
+        Assert.Equal(ScoreCol, state.FocusedColIndex);
+        Assert.Equal(1, renders);
+        Assert.True(state.TryConsumeEditorFocusRequest(new RowKey("1"), "Score"));
+    }
+
+    [Fact]
+    public async Task FocusPrevRowEditColumn_FromTheFirstEditableColumn_WrapsToTheLastEditableColumn()
+    {
+        var state = await LoadedState();
+
+        // Started from the Edit button — no prior column focus. Since #976 BeginRowEdit focuses the
+        // row's first visible editor and parks the cursor there, so this is backward-off-the-first
+        // -editable-column. It must wrap to the LAST editable column rather than stalling on Name
+        // or walking onto the read-only Id column.
+        Assert.True(state.BeginRowEdit(0));
+        Assert.Equal(NameCol, state.FocusedColIndex);
 
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(ScoreCol, state.FocusedColIndex);
-
-        // Differential isolation against the forward direction from the same -1 start.
-        var forward = await LoadedState();
-        Assert.True(forward.BeginRowEdit(0));
-        Assert.Equal(-1, forward.FocusedColIndex);
-        Assert.True(forward.FocusNextRowEditColumn());
-        Assert.Equal(NameCol, forward.FocusedColIndex);
+        Assert.NotEqual(NameCol, state.FocusedColIndex);
+        Assert.NotEqual(IdCol, state.FocusedColIndex);
+        Assert.Equal(0, state.FocusedRowIndex);
     }
 
     [Fact]
