@@ -11,9 +11,11 @@
     powershell.exe), so nothing here may use PowerShell 6+ syntax such as the
     $IsWindows automatic variable. Exits non-zero on any failed assertion.
 
-    The fake "devenv" is a copy of cmd.exe renamed to reactor-fake-devenv.exe,
-    launched as `/c "<fake>" /c ping -n 600 127.0.0.1`. That produces a real
-    two-level, same-named, genuinely-hanging process tree — which is what makes
+    The fake "devenv" is a copy of cmd.exe renamed to
+    reactor-fake-devenv-<pid>.exe (see the harness comment for why the pid is
+    part of the name), launched as `/c "<fake>" /c ping -n 600 127.0.0.1`. That
+    produces a real two-level, same-named, genuinely-hanging process tree —
+    which is what makes
     the orphan assertions non-vacuous: mutation-checked against the shipped
     pre-fix implementation (`$proc.Kill()`, no argument, no wait) the inner
     reactor-fake-devenv.exe survives and case 3 and case 6 redden.

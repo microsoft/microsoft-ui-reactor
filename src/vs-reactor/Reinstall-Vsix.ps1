@@ -19,9 +19,13 @@
          it timed out and was terminated, or devenv.exe was not found. The
          extension is usable; the menu merge needs one manual VS launch.
 
-    Every path that skips or abandons `/updateconfiguration` exits 3, and every
-    path that leaves work for the developer exits 1 — so `0` really does mean
-    "installed and merged", which is what bootstrap.ps1 prints [ok] for.
+    Which code wins when a path qualifies for both: `1` outranks `3`. The
+    duplicate-install branch skips `/updateconfiguration` *and* needs a human,
+    so it exits 1 — "you must act" is more useful to the caller than "the merge
+    didn't run". `3` is therefore the code for paths that skip or abandon the
+    merge but leave nothing for the developer to fix beyond launching VS. `0` is
+    reached only when the merge actually completed, which is the sole case
+    bootstrap.ps1 prints [ok] for.
 #>
 [CmdletBinding()]
 param(

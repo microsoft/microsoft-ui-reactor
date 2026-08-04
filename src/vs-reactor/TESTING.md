@@ -107,8 +107,9 @@ On VS **18.8** (`18.8.12023.21` and later in that band), `devenv /updateconfigur
 never returns — it does the work but does not exit. VS 18.7 completes the same
 call in 27–99 s. `Reinstall-Vsix.ps1` therefore treats the timeout as an expected
 outcome on 18.8: it waits `-UpdateConfigurationTimeoutSec` (default 120), then
-terminates the whole `devenv` process tree, sweeps any `devenv` that appeared
-during its window, waits for the name to clear, and exits `3`.
+terminates the whole `devenv` process tree, sweeps any leftover process it
+recorded as belonging to *that* tree, reports whether the name is clear, and
+exits `3`.
 
 That sweep matters. `Process.Kill()` with no argument kills only the top process
 and returns without waiting, so the second `devenv` that `/updateconfiguration`
