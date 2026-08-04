@@ -215,7 +215,12 @@ if ($installedFoldersArray.Count -eq 0) {
     Write-Host ("Installed v{0} at {1}" -f $m.PackageManifest.Metadata.Identity.Version, $folder.FullName)
 }
 
-$updateConfigTimedOut = $false
+# True when the pkgdef merge did not run to completion, whatever the reason —
+# the 18.8 hang and a missing devenv.exe both land here, because they are
+# indistinguishable to the caller: the VSIX is installed and one manual VS
+# launch finishes the job. Deliberately not named after the timeout; a future
+# edit reading this as timeout-only would drop the devenv-missing path.
+$updateConfigIncomplete = $false
 if (-not $skipUpdateConfig) {
     Write-Host ""
     Write-Host "Running 'devenv /updateconfiguration' to force the menu/pkgdef merge synchronously."
@@ -226,7 +231,7 @@ if (-not $skipUpdateConfig) {
     if (Test-Path -LiteralPath $devenv) {
         $r = Invoke-DevenvUpdateConfiguration -DevenvPath $devenv -TimeoutSeconds $UpdateConfigurationTimeoutSec
         if ($r.TimedOut) {
-            $updateConfigTimedOut = $true
+            $updateConfigIncomplete = $true
             Write-Warning ("/updateconfiguration timed out after {0}s and was terminated (tree kill). This is the known Visual Studio 18.8 hang - see issue #1074." -f $UpdateConfigurationTimeoutSec)
             if ($r.KilledPids.Count -gt 0) {
                 Write-Warning ("  Reaped leftover devenv PIDs: {0}" -f ($r.KilledPids -join ', '))
@@ -242,7 +247,7 @@ if (-not $skipUpdateConfig) {
     } else {
         Write-Warning "devenv.exe not found at $devenv. Run /updateconfiguration manually before launching VS."
         # Same observable outcome as a timeout: installed, not merged.
-        $updateConfigTimedOut = $true
+        $updateConfigIncomplete = $true
     }
     Write-Host ""
     Write-Host "Next steps:"
@@ -255,5 +260,5 @@ if (-not $skipUpdateConfig) {
 #   3 — installed, but the pkgdef merge didn't finish; one VS launch fixes it.
 # Callers warn on both instead of printing [ok], and neither fails the build.
 if ($installIncomplete) { exit 1 }
-if ($updateConfigTimedOut) { exit 3 }
+if ($updateConfigIncomplete) { exit 3 }
 exit 0

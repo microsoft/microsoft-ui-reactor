@@ -212,16 +212,16 @@ try {
     # -- 5. Reinstall-Vsix.ps1's exit codes are bound to their guards. --
     # Presence alone would be satisfied by dead code; these fail if the guard is
     # neutered (verified by mutating each condition to `$false`).
-    Assert-True (Test-GuardedExit $reinstallAst '$updateConfigTimedOut' '3') `
-        'Reinstall-Vsix.ps1: `exit 3` is guarded by $updateConfigTimedOut'
+    Assert-True (Test-GuardedExit $reinstallAst '$updateConfigIncomplete' '3') `
+        'Reinstall-Vsix.ps1: `exit 3` is guarded by $updateConfigIncomplete'
     Assert-True (Test-GuardedExit $reinstallAst '$installIncomplete' '1') `
         'Reinstall-Vsix.ps1: `exit 1` is guarded by $installIncomplete'
 
     # ...and the guards are actually raised. A guard nothing sets is the same as
-    # no exit path at all. $updateConfigTimedOut has two producers — the timeout
+    # no exit path at all. $updateConfigIncomplete has two producers — the timeout
     # itself and the missing-devenv branch — and both mean "installed, not merged".
-    Assert-True ((Get-TrueAssignmentCount $reinstallAst '$updateConfigTimedOut') -ge 2) `
-        'Reinstall-Vsix.ps1: both /updateconfiguration skip paths set $updateConfigTimedOut'
+    Assert-True ((Get-TrueAssignmentCount $reinstallAst '$updateConfigIncomplete') -ge 2) `
+        'Reinstall-Vsix.ps1: both /updateconfiguration skip paths set $updateConfigIncomplete'
     Assert-True ((Get-TrueAssignmentCount $reinstallAst '$installIncomplete') -ge 1) `
         'Reinstall-Vsix.ps1: the duplicate-install branch sets $installIncomplete'
 
