@@ -12,12 +12,14 @@ internal sealed class ModifierInfo
         string modifier,
         bool poolReset = false,
         string[]? controlGate = null,
-        string[]? elementTypes = null)
+        string[]? elementTypes = null,
+        string[]? poolResetGate = null)
     {
         Modifier = modifier;
         PoolReset = poolReset;
         ControlGate = controlGate;
         ElementTypes = elementTypes;
+        PoolResetGate = poolResetGate;
     }
 
     /// <summary>Name of the fluent modifier method to suggest.</summary>
@@ -28,6 +30,11 @@ internal sealed class ModifierInfo
     /// <c>.Set</c> write is silently lost on pool reuse. Selects the higher-severity
     /// <c>REACTOR_POOL_001</c>; everything else reports <c>REACTOR_MOD_002</c>.
     /// </summary>
+    /// <remarks>
+    /// Property-level. Where the reset only applies to some of the gated receivers,
+    /// <see cref="PoolResetGate"/> narrows it — see that member for why the distinction is
+    /// load-bearing rather than cosmetic.
+    /// </remarks>
     public bool PoolReset { get; }
 
     /// <summary>
@@ -58,6 +65,34 @@ internal sealed class ModifierInfo
     /// </para>
     /// </summary>
     public string[]? ElementTypes { get; }
+
+    /// <summary>
+    /// The subset of <see cref="ControlGate"/> the pool actually resets, or <c>null</c> when
+    /// every gated receiver is reset.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="PoolReset"/> is per-property, but poolability is per-receiver, and the two
+    /// do not coincide: <c>ApplyModifiers</c> writes <c>Padding</c> to <c>RelativePanel</c>,
+    /// yet <c>RelativePanel</c> is absent from <c>ElementPool.PoolableTypes</c>, so nothing
+    /// is ever recycled and no write is ever unwound. Reporting <c>REACTOR_POOL_001</c> there
+    /// states something false — and at Warning severity, which becomes a build break for
+    /// consumers using <c>TreatWarningsAsErrors</c>. Narrowing to this list reports
+    /// <c>REACTOR_MOD_002</c> instead, which keeps the modifier suggestion and drops only the
+    /// pool-return claim: the write lands and is <i>never</i> unwound, so what it costs is the
+    /// element's structural skip (<c>Element.SettersEqual</c>), not the value.
+    /// </para>
+    /// <para>
+    /// This is a name-level mirror of <c>ControlGate ∩ ElementPool.PoolableTypes</c>, kept
+    /// here because the analyzer targets <c>netstandard2.0</c> and cannot reference
+    /// <c>src/Reactor</c>. It is not maintained by hand:
+    /// <c>ModifierUnsetClearValueTests.Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement</c>
+    /// derives the same intersection from both real sources, and
+    /// <c>Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection</c> fails if this list
+    /// drifts from it in either direction.
+    /// </para>
+    /// </remarks>
+    public string[]? PoolResetGate { get; }
 }
 
 /// <summary>
@@ -75,11 +110,22 @@ internal sealed class ModifierInfo
 /// <c>FlexPanel.SetMinWidth</c> writes <c>FlexMinWidthProperty</c>.
 /// </para>
 /// <para>
-/// Every entry is pool-reset by construction: <see cref="ModifierTable.AttachedProperties"/>
-/// only lists properties <c>ElementPool.CleanElement</c> clears, so they all report
-/// <c>REACTOR_POOL_001</c>. There is deliberately no attached equivalent of the Info tier
-/// (<c>REACTOR_MOD_002</c>) — the value is concentrated in "your write is silently
-/// discarded".
+/// Every entry is pool-reset <em>as a property</em> by construction:
+/// <see cref="ModifierTable.AttachedProperties"/> only lists properties
+/// <c>ElementPool.CleanElement</c> clears, so there is no per-entry <c>poolReset</c> flag
+/// and no attached analogue of <see cref="ModifierInfo.PoolResetGate"/>.
+/// </para>
+/// <para>
+/// That is not the same as "every attached write reports <c>REACTOR_POOL_001</c>".
+/// <c>CleanElement</c> only runs on a control the pool recycles, so
+/// <c>PoolResetSetAnalyzer</c> also requires the <c>.Set</c> lambda parameter's exact type
+/// to be in <see cref="ModifierTable.PoolableTypeNames"/>; on anything else the same write reports
+/// <c>REACTOR_MOD_002</c>: the modifier still exists, but the pool-return claim does not — the
+/// write lands and is never unwound, so what it costs is the element's structural skip
+/// (<c>Element.SettersEqual</c>), not the value. The instance and attached
+/// halves resolve that one fact the same way and once per <c>.Set</c> body, so a body
+/// mixing both shapes on one receiver cannot report two different ids. See
+/// <c>Attached_Setter_Reports_ModifierAvailable_On_An_Unpooled_Receiver</c>.
 /// </para>
 /// </remarks>
 internal sealed class AttachedModifierInfo
@@ -232,6 +278,54 @@ internal static class ModifierTable
     private static readonly string[] RichTextBlockOnly = { "RichTextBlockElement" };
     private static readonly string[] TextOrRichTextBlock = { "TextBlockElement", "RichTextBlockElement" };
 
+    // The two groups above minus RelativePanel, which ApplyModifiers writes to but
+    // ElementPool never recycles. Used as poolResetGate, never as controlGate.
+    private static readonly string[] ControlBorderGridStackText = { "Control", "Border", "Grid", "StackPanel", "TextBlock" };
+    private static readonly string[] ControlBorderGridStack = { "Control", "Border", "Grid", "StackPanel" };
+
+    /// <summary>
+    /// The exact WinUI control type names <c>ElementPool</c> recycles — a mirror of
+    /// <c>ElementPool.PoolableTypes</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pool tests membership with <c>PoolableTypes.Contains(element.GetType())</c>: an
+    /// exact-type lookup, not an assignability walk. This mirror is matched the same way, and
+    /// that distinction is the whole reason it exists. A control gate names the base type an
+    /// <c>ApplyModifiers</c> arm dispatches on, so <c>Control</c> admits every WinUI control and
+    /// <c>Panel</c> admits every panel, while the pool recycles these fifteen types and nothing
+    /// else. Selecting <c>REACTOR_POOL_001</c> from a gate alone therefore asserts "reset on pool
+    /// return" for receivers such as <c>CheckBox</c> and <c>RelativePanel</c> that are never
+    /// pooled — at Warning severity, which is a build break for a consumer using
+    /// <c>TreatWarningsAsErrors</c>. Those receivers fall to <c>REACTOR_MOD_002</c>, which drops
+    /// only the pool-return claim: the write lands and is <i>never</i> unwound, and the cost is
+    /// the element's structural skip (<c>Element.SettersEqual</c>) rather than the value.
+    /// </para>
+    /// <para>
+    /// Matching the receiver's own type rather than its base chain costs no signal here, because
+    /// every <c>.Set</c> overload in the DSL is declared per element type over the concrete
+    /// control (<c>ButtonElement</c> takes <c>Action&lt;Button&gt;</c>), so the receiver the
+    /// analyzer sees is the type the pool would key on.
+    /// </para>
+    /// <para>
+    /// Not hand-maintained: <c>ModifierUnsetClearValueTests</c> reads
+    /// <c>ElementPool.PoolableTypes</c> by reflection and fails if the two sets drift.
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<string> PoolableTypeNameSet =
+        new HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "TextBlock", "RichTextBlock", "StackPanel", "Grid", "Border", "ScrollViewer",
+            "Canvas", "Viewbox", "ProgressBar", "ProgressRing", "Image", "InfoBadge",
+            "Button", "TextBox", "ToggleSwitch",
+        };
+
+    /// <summary>The mirrored poolable type names, for the parity test that keeps them honest.</summary>
+    public static IEnumerable<string> PoolableTypeNames => PoolableTypeNameSet;
+
+    /// <summary>True when <c>ElementPool</c> recycles exactly this type.</summary>
+    public static bool IsPoolableTypeName(string name) => PoolableTypeNameSet.Contains(name);
+
     /// <summary>
     /// Property name → modifier mapping. Keyed by the WinUI property name as written inside
     /// the <c>.Set</c> lambda.
@@ -254,22 +348,54 @@ internal static class ModifierTable
             { "AccessKey",           new ModifierInfo("AccessKey",           poolReset: true) },
             { "IsTabStop",           new ModifierInfo("IsTabStop",           poolReset: true) },
 
+            // Pool-reset but only on some receivers (issue #985). CleanElement clears these
+            // through a Control | Border | Panel/Grid/StackPanel | TextBlock chain that mirrors
+            // the receivers ApplyModifiers writes them to, so the control gates below still
+            // apply: the gate decides whether the modifier reaches the control at all,
+            // poolReset decides which rule id reports it.
+            //
+            // poolReset is per-property but poolability is per-receiver, so POOL_001 needs two
+            // independent facts about the receiver and neither implies the other:
+            //
+            //   1. the pool recycles it at all      -> PoolableTypeNames, matched on the exact
+            //                                          type, exactly as the pool matches it
+            //   2. CleanElement clears THIS property -> poolResetGate, matched on the base chain,
+            //      once it is recycled                 exactly as CleanElement's `is` arms match
+            //
+            // RelativePanel fails (1) for every property: it is gated for Padding, CornerRadius
+            // and Background but never recycled. CheckBox fails (1) too — Control is in three of
+            // these gates and admits every WinUI control, while the pool holds seven. Both
+            // reported POOL_001 before issue #1051, asserting "reset on pool return" of a
+            // receiver that is never pooled, at Warning severity — a build break for a consumer
+            // using TreatWarningsAsErrors. They fall to MOD_002 instead, which keeps the modifier
+            // suggestion and drops only the pool-return claim: the write lands and is never
+            // unwound, costing the element's structural skip rather than the value.
+            //
+            // Nothing here is hand-maintained. ModifierUnsetClearValueTests reads
+            // ElementPool.PoolableTypes for (1) and derives the gated-receiver intersection for
+            // (2), and fails if either drifts. Closes issue #1051.
+            //
+            // WinUI declares most of these on Panel subclasses too, and the allow-lists
+            // genuinely differ: Panel itself declares only Background; Grid, StackPanel, and
+            // RelativePanel each declare their own border-box properties, and TextBlock takes
+            // Padding but not CornerRadius. IsEnabled needs no gate — WinUI declares it on
+            // Control, so if the .Set lambda compiles the receiver already qualifies. The three
+            // rows without a poolResetGate need none: CleanElement clears Background for every
+            // Panel and both Border* for the whole Control and Border arms, so once (1) holds
+            // there is no gated receiver left for (2) to exclude.
+            { "IsEnabled",       new ModifierInfo("IsEnabled",       poolReset: true) },
+            { "Padding",         new ModifierInfo("Padding",         poolReset: true, controlGate: ControlBorderGridStackRelativeText, poolResetGate: ControlBorderGridStackText) },
+            { "CornerRadius",    new ModifierInfo("CornerRadius",    poolReset: true, controlGate: ControlBorderGridStackRelative,     poolResetGate: ControlBorderGridStack) },
+            { "BorderThickness", new ModifierInfo("BorderThickness", poolReset: true, controlGate: ControlBorder) },
+            { "BorderBrush",     new ModifierInfo("BorderBrush",     poolReset: true, controlGate: ControlBorder) },
+            { "Background",      new ModifierInfo("Background",      poolReset: true, controlGate: PanelControlBorder) },
+
             // ── Generic modifier, no runtime gate (REACTOR_MOD_002, Info) ────────────
-            // IsEnabled and the content-alignment pair ARE Control-gated in ApplyModifiers,
-            // but WinUI declares those DPs only on Control — if the .Set lambda compiles the
-            // receiver already qualifies, so no predicate is needed.
-            { "IsEnabled",                  new ModifierInfo("IsEnabled") },
+            // The content-alignment pair IS Control-gated in ApplyModifiers, but WinUI
+            // declares those DPs only on Control — if the .Set lambda compiles the receiver
+            // already qualifies, so no predicate is needed.
             { "HorizontalContentAlignment", new ModifierInfo("HorizontalContentAlignment") },
             { "VerticalContentAlignment",   new ModifierInfo("VerticalContentAlignment") },
-
-            // ── Generic modifier, control-gated (REACTOR_MOD_002, Info) ──────────────
-            // The allow-lists genuinely differ. Panel itself declares only Background; Grid,
-            // StackPanel, and RelativePanel each declare their own border-box properties.
-            { "Padding",         new ModifierInfo("Padding",         controlGate: ControlBorderGridStackRelativeText) },
-            { "CornerRadius",    new ModifierInfo("CornerRadius",    controlGate: ControlBorderGridStackRelative) },
-            { "BorderThickness", new ModifierInfo("BorderThickness", controlGate: ControlBorder) },
-            { "BorderBrush",     new ModifierInfo("BorderBrush",     controlGate: ControlBorder) },
-            { "Background",      new ModifierInfo("Background",      controlGate: PanelControlBorder) },
 
             // Fonts have BOTH a generic modifier and type-specific overloads, and the two
             // cover different receivers — so the gates are OR'd (see ModifierInfo.ElementTypes).
@@ -360,7 +486,9 @@ internal static class ModifierTable
     /// <para>
     /// A null <see cref="ModifierInfo.ControlGate"/> is ambiguous between "the reconciler applies
     /// this unconditionally" and "the reconciler gates it, but this rule's direction cannot reach a
-    /// non-qualifying receiver anyway". <c>REACTOR_MOD_002</c> reads <c>.Set(x =&gt; x.IsEnabled = v)</c>,
+    /// non-qualifying receiver anyway". <see cref="PoolResetSetAnalyzer"/> reads
+    /// <c>.Set(x =&gt; x.IsEnabled = v)</c> (as <c>REACTOR_POOL_001</c> since issue #985 made the
+    /// pool clear it; <c>REACTOR_MOD_002</c> before that),
     /// where the lambda parameter is already a <c>Control</c> because WinUI declares the dependency
     /// property only there — so no predicate is needed. <see cref="NoOpModifierAnalyzer"/> reads
     /// <c>.IsEnabled(v)</c>, a generic modifier callable on <em>any</em> element, where the same
@@ -565,6 +693,17 @@ internal static class ModifierTable
     /// <see cref="AttachedProperties"/>, with the reason. <c>PoolResetSetConsistencyTests</c>
     /// requires every attached reset with a same-named modifier to appear in one of the two.
     /// </summary>
+    /// <remarks>
+    /// Every entry must be a genuine attached property that the <c>Owner.SetPROP(x, v)</c> rule
+    /// cannot match. It is not a place to silence a property the attached scan claimed by
+    /// mistake: <c>Grid.Padding</c> and <c>Grid.CornerRadius</c> sat here after the #1003 union
+    /// with reasons that said, in as many words, "instance dependency property on Grid, not an
+    /// attached property" — which is a misclassification to fix at the source, not to record.
+    /// They are now declared instance properties via <c>InstancePropertyOwners</c>, so the scan
+    /// never claims them and nothing needs excluding. Suppressing that kind of entry here is
+    /// actively harmful, because a genuinely attached <c>Grid.*</c> reset added later would land
+    /// in the same bucket and read as already-triaged.
+    /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> DeliberatelyExcludedAttached =
         new Dictionary<string, string>(System.StringComparer.Ordinal)
         {
@@ -577,9 +716,6 @@ internal static class ModifierTable
             ["AutomationProperties.DescribedBy"] = "No static setter — WinUI exposes GetDescribedBy(...) returning a mutable IList<DependencyObject>.",
             ["AutomationProperties.FlowsTo"] = "No static setter — WinUI exposes GetFlowsTo(...) returning a mutable IList<DependencyObject>.",
             ["AutomationProperties.FlowsFrom"] = "No static setter — WinUI exposes GetFlowsFrom(...) returning a mutable IList<DependencyObject>.",
-            ["Grid.Padding"] = "Instance dependency property on Grid, not an attached property with a static setter.",
-            ["Grid.CornerRadius"] = "Instance dependency property on Grid, not an attached property with a static setter.",
-            ["StackPanel.CornerRadius"] = "Instance dependency property on StackPanel, not an attached property with a static setter.",
         };
 
     private static IReadOnlyDictionary<string, AttachedModifierInfo> BuildAttached(

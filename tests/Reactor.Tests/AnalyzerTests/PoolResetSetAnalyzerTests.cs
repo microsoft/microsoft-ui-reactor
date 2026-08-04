@@ -33,11 +33,15 @@ namespace Microsoft.UI.Xaml
     }
 }
 
-namespace Microsoft.UI.Reactor
+namespace Microsoft.UI.Xaml.Controls
 {
 using Microsoft.UI.Xaml;
 
-public class FakeElement
+// The .Set receiver is a Button, not a synthetic type, because REACTOR_POOL_001 claims the
+// write is unwound on pool return — true only of a control ElementPool actually recycles.
+// Button is in PoolableTypes; anything outside it reports REACTOR_MOD_002 instead. Every
+// real .Set overload takes a concrete WinUI control for the same reason.
+public class Button
 {
     public double MaxHeight;
     public double MinHeight;
@@ -53,9 +57,18 @@ public class FakeElement
 
     // Unrelated property — should never trigger.
     public string Text = string.Empty;
+}
+}
 
-    public FakeElement Set(Action<FakeElement> configure) { configure(this); return this; }
-    public FakeElement Apply(Action<FakeElement> configure) { configure(this); return this; }
+namespace Microsoft.UI.Reactor
+{
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+
+public class FakeElement
+{
+    public FakeElement Set(Action<Button> configure) { configure(new Button()); return this; }
+    public FakeElement Apply(Action<Button> configure) { configure(new Button()); return this; }
 }
 
 public static class FakeElementExtensions
@@ -238,10 +251,12 @@ class C
     {
         // The trapped property is set on a *captured* object, not the .Set lambda
         // parameter, so the pooled-control modifier rewrite would not apply — must not fire.
+        // 'other' is deliberately the same poolable control type as the lambda parameter, so
+        // being-the-wrong-receiver is the only reason left for the analyzer to stay silent.
         var source = Stubs + @"
 class C
 {
-    void M(FakeElement other)
+    void M(Microsoft.UI.Xaml.Controls.Button other)
     {
         var el = new FakeElement();
         el.Set(fe => other.MaxHeight = 260);
@@ -527,6 +542,20 @@ namespace Microsoft.UI.Xaml.Controls
         public static void SetVerticalScrollBarVisibility(object target, int value) { }
         public static void SetVerticalScrollMode(object target, int value) { }
     }
+
+    // The .Set receiver, for the same reason as the instance-property stubs: POOL_001 only
+    // claims a pool round-trip for a control ElementPool recycles, and Button is one.
+    public class Button
+    {
+        public double Width;
+        public string Label = string.Empty;
+        public Button Child = null!;
+    }
+
+    // Not in ElementPool.PoolableTypes — the counterpart receiver for the de-escalation.
+    public class CheckBox
+    {
+    }
 }
 
 namespace Microsoft.UI.Reactor.Layout
@@ -553,10 +582,18 @@ namespace Microsoft.UI.Reactor
 {
     public class FakeElement
     {
-        public double Width;
-        public string Label = string.Empty;
-        public FakeElement Child = null!;
-        public FakeElement Set(Action<FakeElement> configure) { configure(this); return this; }
+        public FakeElement Set(Action<Microsoft.UI.Xaml.Controls.Button> configure) { configure(new Microsoft.UI.Xaml.Controls.Button()); return this; }
+    }
+
+    // Same DSL shape, but its control is not pooled.
+    public class UnpooledElement
+    {
+        public UnpooledElement Set(Action<Microsoft.UI.Xaml.Controls.CheckBox> configure) { configure(new Microsoft.UI.Xaml.Controls.CheckBox()); return this; }
+    }
+
+    public static class UnpooledElementExtensions
+    {
+        public static UnpooledElement AutomationName(this UnpooledElement el, string v) => el;
     }
 
     public static class FakeElementExtensions
@@ -594,6 +631,33 @@ class C
         {{|REACTOR_POOL_001:el.Set(fe => {call})|}};
     }}
 }}";
+
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Attached_Setter_Reports_ModifierAvailable_On_An_Unpooled_Receiver()
+    {
+        // REACTOR_POOL_001's claim is "CleanElement clears this on pool return", so it needs a
+        // receiver the pool recycles. CheckBox is not in ElementPool.PoolableTypes, so the
+        // attached write falls to REACTOR_MOD_002 — same advice, without the false claim. The
+        // FakeElement line is the positive control: both receivers, one id each, in one body,
+        // so a regression that collapses the distinction fails whichever way it collapses.
+        var source = AttachedStubs + @"
+class C
+{
+    void M()
+    {
+        var pooled = new FakeElement();
+        {|REACTOR_POOL_001:pooled.Set(fe => Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, ""Save""))|};
+
+        var unpooled = new UnpooledElement();
+        {|REACTOR_MOD_002:unpooled.Set(cb => Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(cb, ""Save""))|};
+    }
+}";
 
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -970,6 +1034,96 @@ class C
         {
             TestCode = code,
             FixedCode = code,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // ── Contravariance and the .Set lambda ────────────────────────────────────────────
+    //
+    // A review of this PR raised REACTOR_POOL_001 misclassifying a *contravariant* `.Set`
+    // lambda: because `Action<T>` is contravariant, the argument would ostensibly be free to
+    // declare a BASE type (an `Action<Control>` lambda passed to a `Set(Action<Button>)`
+    // overload), <see cref="PoolResetSetAnalyzer"/>'s receiver check would read `Control` off
+    // that parameter, and a genuinely pooled receiver would be downgraded to
+    // `REACTOR_MOD_002`.
+    //
+    // The premise does not hold, and the two tests below are the measurement rather than the
+    // argument. Variance governs *delegate conversions*, not *anonymous-function*
+    // conversions: C# requires an explicitly typed lambda's parameter types to match the
+    // delegate's exactly, so the claimed call site does not compile at all. The one argument
+    // shape that does convert contravariantly — a delegate-typed value — carries no lambda
+    // syntax, so `SetLambdaHelpers.GetSingleLambdaParameter` returns null and the analyzer
+    // returns before it classifies anything. Neither route reaches the receiver check with a
+    // base type, so neither can produce the downgrade.
+    //
+    // Both tests are written so the refutation can fail: if a future C# relaxed the parameter
+    // match, the first would report the expected compiler errors as absent rather than
+    // quietly pass.
+
+    [Fact]
+    public async Task Contravariance_Does_Not_Permit_A_Base_Typed_Set_Lambda()
+    {
+        // `object` is the strongest available vehicle for the claim — it is a base of every
+        // receiver type, so if variance did reach lambdas, this is the case that would
+        // succeed most readily.
+        var source = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+
+        // The claimed call site. CS1678 (""declared as type 'object' but should be
+        // 'Button'"") and CS1661 (""the parameter types do not match the delegate parameter
+        // types"") are the compiler refusing it: there is no base-typed .Set lambda for the
+        // receiver check to misread.
+        el.Set((object {|CS1678:fe|}) {|CS1661:=>|} { });
+
+        // Positive control, same overload, same compilation: the contravariant conversion IS
+        // available here. Action<object> converts to Action<Button> and this raises nothing.
+        // So the line above is rejected for being a lambda, not for lacking the conversion —
+        // without this control the CS errors above would be equally consistent with variance
+        // simply being unavailable on FakeElement.Set.
+        Action<object> handler = o => { };
+        el.Set(handler);
+    }
+}";
+
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Set_With_A_Delegate_Value_Is_Not_Classified_At_All()
+    {
+        // The delegate-typed value is the only argument shape a contravariant conversion can
+        // take. It is not lambda syntax, so GetSingleLambdaParameter returns null and the
+        // analyzer returns at the top of the .Set handler — before the receiver check, and
+        // before either REACTOR_POOL_001 or the REACTOR_MOD_002 downgrade is chosen. The
+        // claimed misclassification has no site at which to occur.
+        //
+        // The silent half is non-vacuous only because of the second .Set: the identical
+        // write, as a lambda, in the SAME compilation, still fires. Neuter the analyzer and
+        // that marker fails — so the silence above is a measured property of the
+        // delegate-value shape and not of an inert analyzer.
+        var source = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+
+        Action<Microsoft.UI.Xaml.Controls.Button> handler = fe => fe.MaxHeight = 260;
+        el.Set(handler);
+
+        {|REACTOR_POOL_001:el.Set(fe => fe.MaxHeight = 260)|};
+    }
+}";
+
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 }

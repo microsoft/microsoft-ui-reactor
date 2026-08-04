@@ -269,11 +269,14 @@ was structurally invisible to the whole family:
 .Set(fe => AutomationProperties.SetName(fe, "Save"))
 ```
 
-`ElementPool.CleanElement` clears far more attached properties than
-instance ones, so this was the larger half of `REACTOR_POOL_001`'s
+`ElementPool.CleanElement` used to clear far more attached properties
+than instance ones, so this was the larger half of `REACTOR_POOL_001`'s
 subject matter — all of it in the "your write is silently discarded"
-class. The failure is identical either way, so both shapes report the
-*same* diagnostic id rather than a new one; only the matching differs.
+class. Issue #985 has since closed the gap from the other side (the
+receiver-gated `Padding` / `CornerRadius` / `Border*` / `Background` /
+`IsEnabled` chain), so the two halves are now comparable in size. The
+failure is identical either way, so both shapes report the *same*
+diagnostic id rather than a new one; only the matching differs.
 
 **Keyed by owner, not by property name.** The instance table,
 `ModifierTable.Properties`, is keyed by the bare property name, and

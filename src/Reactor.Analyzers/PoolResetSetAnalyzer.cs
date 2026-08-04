@@ -224,6 +224,13 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             return;
         var paramName = lambdaParam.Identifier.Text;
 
+        // Both write paths — instance assignment and attached setter call — are gated to the
+        // lambda parameter itself, so whether the pool recycles the receiver is one fact about
+        // the whole body. Computing it once here keeps the two halves of REACTOR_POOL_001 from
+        // disagreeing about the same control: a mixed body on an unpooled receiver used to
+        // report an instance write as MOD_002 and an attached write as POOL_001.
+        var receiverIsPooled = IsPooledReceiver(context, lambdaParam);
+
         // Detection considers every write in the body, not just a lone one: a modifier-backed
         // write is no less wrong for sharing a block with other statements. This is
         // deliberately wider than the fix, which converts a body only when EVERY statement is
@@ -290,7 +297,10 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             {
                 reportable.Add((
                     assignment.SpanStart, hit.PropName, hit.PropName,
-                    "." + hit.Info.Modifier + "(...)", hit.Info.PoolReset));
+                    "." + hit.Info.Modifier + "(...)",
+                    hit.Info.PoolReset
+                        && receiverIsPooled
+                        && PassesPoolResetGate(context, hit.Info, leftAccess)));
             }
             else
             {
@@ -322,7 +332,7 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             if (!fixable)
                 unfixableIds.Add(id);
 
-            reportable.Add((attachedCall.SpanStart, id, info.Key, info.ModifierUsage, PoolReset: true));
+            reportable.Add((attachedCall.SpanStart, id, info.Key, info.ModifierUsage, PoolReset: receiverIsPooled));
         }
 
         if (reportable.Count == 0)
@@ -460,6 +470,78 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             return null;
 
         return (propName, info);
+    }
+
+    /// <summary>
+    /// True when <c>ElementPool</c> recycles the receiver's own type, so it can carry a stale
+    /// local value into its next renter at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the first of the two facts <c>REACTOR_POOL_001</c> needs, and it is the one a
+    /// control gate cannot supply. A gate names the base type an <c>ApplyModifiers</c> arm
+    /// dispatches on and is matched down the base chain, so <c>Control</c> admits <c>CheckBox</c>
+    /// and <c>Panel</c> admits <c>RelativePanel</c> — neither of which the pool recycles. The
+    /// pool keys on <c>element.GetType()</c>, so this matches the receiver's own type and not its
+    /// base chain, deliberately: it is a mirror of the pool's own membership test, and a
+    /// subclass of a poolable type is no more poolable than an unrelated one.
+    /// </para>
+    /// <para>
+    /// An unresolved receiver falls to <c>REACTOR_MOD_002</c>. That is the safe direction — the
+    /// modifier suggestion stays, only the claim about pool return is dropped.
+    /// </para>
+    /// <para>
+    /// Resolved from the lambda parameter's declared type rather than from each write's
+    /// receiver expression: both write paths are already gated to that parameter, so this is
+    /// one fact per <c>.Set</c> body and the instance and attached halves cannot disagree.
+    /// </para>
+    /// </remarks>
+    private static bool IsPooledReceiver(
+        SyntaxNodeAnalysisContext context,
+        ParameterSyntax lambdaParam)
+    {
+        var controlType = context.SemanticModel
+            .GetDeclaredSymbol(lambdaParam, context.CancellationToken)?.Type;
+
+        return controlType is not null
+            && ModifierTable.IsPoolableTypeName(controlType.Name)
+            && controlType.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Xaml.Controls";
+    }
+
+    /// <summary>
+    /// True when <c>CleanElement</c> clears this particular property on this receiver, once
+    /// <see cref="IsPooledReceiver"/> has established the receiver is recycled at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the second of <c>REACTOR_POOL_001</c>'s two facts, and it is independent of the
+    /// first: being recycled does not mean every gated property is cleared for you.
+    /// <c>CleanElement</c>'s <c>Panel</c> arm clears only <c>Background</c>; <c>Padding</c> and
+    /// <c>CornerRadius</c> are cleared for <c>Grid</c> and <c>StackPanel</c> specifically,
+    /// because <c>Panel</c> declares neither. A poolable panel added to one of those gates
+    /// without a matching arm would be recycled and still not cleared — so this is matched down
+    /// the base chain, mirroring how <c>CleanElement</c> dispatches with <c>is</c>.
+    /// </para>
+    /// <para>
+    /// No gate means no receiver restriction — the reset applies wherever the property is
+    /// written — so the absence of a list is a pass here, unlike
+    /// <see cref="PassesControlGate"/> where absence means "not applicable" and must fail.
+    /// The two read alike and mean opposite things, which is why they are separate methods.
+    /// </para>
+    /// </remarks>
+    private static bool PassesPoolResetGate(
+        SyntaxNodeAnalysisContext context,
+        ModifierInfo info,
+        MemberAccessExpressionSyntax leftAccess)
+    {
+        if (info.PoolResetGate is not { } gate)
+            return true;
+
+        var controlType = context.SemanticModel
+            .GetTypeInfo(leftAccess.Expression, context.CancellationToken).Type;
+
+        return gate.Any(allowed =>
+            SetLambdaHelpers.InheritsFrom(controlType, allowed, "Microsoft.UI.Xaml.Controls"));
     }
 
     /// <summary>

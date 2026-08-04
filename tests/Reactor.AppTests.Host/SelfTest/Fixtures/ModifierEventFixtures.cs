@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using static Microsoft.UI.Reactor.Factories;
+using WinUI = Microsoft.UI.Xaml.Controls;
 using AP = Microsoft.UI.Xaml.Automation.AutomationProperties;
 using APeers = Microsoft.UI.Xaml.Automation.Peers;
 
@@ -1105,6 +1106,8 @@ internal static class ModifierEventFixtures
                             .Padding(21)
                             .CornerRadius(13)
                             .BorderThickness(7)
+                            .BorderBrush("#FF66AA33")
+                            .Background("#FF113355")
                             .WithContextFlyout(MenuItems(MenuItem("PoolCtrlMenu"))),
                         1 => Empty(),
                         // Remounted with no modifiers at all.
@@ -1119,11 +1122,19 @@ internal static class ModifierEventFixtures
             H.Check("PoolCtrl_Phase0_LocalValuesWritten",
                 first is not null
                 && first.ReadLocalValue(Microsoft.UI.Xaml.Controls.Border.PaddingProperty) != DependencyProperty.UnsetValue
+                && first.ReadLocalValue(Microsoft.UI.Xaml.Controls.Border.BorderBrushProperty) != DependencyProperty.UnsetValue
+                && first.ReadLocalValue(Microsoft.UI.Xaml.Controls.Border.BackgroundProperty) != DependencyProperty.UnsetValue
                 && first.ReadLocalValue(UIElement.ContextFlyoutProperty) != DependencyProperty.UnsetValue);
 
             H.ClickButton("DropPoolCtrl");
             await Harness.Render();
-
+            // Load-bearing premise, not a status report: it is the *drop* that forces the
+            // pool round-trip. Without it the reconciler could update the Border in place,
+            // and every "cleared" check below would be testing ApplyModifiers' unset arm
+            // instead of CleanElement — passing for entirely the wrong reason.
+            H.Check("PoolCtrl_Phase1_Returned",
+                H.FindControl<Microsoft.UI.Xaml.Controls.Border>(b =>
+                    b.Child is TextBlock tb && tb.Text == "pool-ctrl-carrier") is null);
             H.ClickButton("RemountPoolCtrl");
             await Harness.Render();
             var second = H.FindControl<Microsoft.UI.Xaml.Controls.Border>(b =>
@@ -1144,6 +1155,294 @@ internal static class ModifierEventFixtures
                 second.ReadLocalValue(Microsoft.UI.Xaml.Controls.Border.CornerRadiusProperty) == DependencyProperty.UnsetValue);
             H.Check("PoolCtrl_Phase2_BorderThicknessCleared",
                 second.ReadLocalValue(Microsoft.UI.Xaml.Controls.Border.BorderThicknessProperty) == DependencyProperty.UnsetValue);
+            // Issue #985 moved Border's five clears into CleanElement's FE-common chain.
+            // BorderBrush and Background were the two that no live fixture exercised —
+            // only the source-scanning invariants pinned them, and a scanner cannot tell
+            // whether the line it found actually runs for a Border receiver.
+            H.Check("PoolCtrl_Phase2_BorderBrushCleared",
+                second.ReadLocalValue(Microsoft.UI.Xaml.Controls.Border.BorderBrushProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCtrl_Phase2_BackgroundCleared",
+                second.ReadLocalValue(Microsoft.UI.Xaml.Controls.Border.BackgroundProperty) == DependencyProperty.UnsetValue);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Issue #985 — the Control and Panel halves of the same contract.
+    //  ApplyModifiers writes Padding / CornerRadius / BorderThickness /
+    //  BorderBrush / Background / IsEnabled onto a *Control* receiver and
+    //  Background onto a *Panel*, but CleanElement only ever reset the Border
+    //  arm. A recycled ScrollViewer or Grid was therefore handed to its next
+    //  renter still carrying the previous renter's LOCAL values — and a local
+    //  value outranks every Style setter in WinUI's precedence order, so the
+    //  new renter could never show its styled padding/background again.
+    //
+    //  ScrollViewer is the Control carrier precisely because ScrollViewerElement
+    //  declares none of the six properties: any local value that survives the
+    //  recycle came from ApplyModifiers, not from the descriptor re-writing it
+    //  on the second mount. A Button would be vacuous for IsEnabled —
+    //  ButtonElement writes EffectiveIsEnabled unconditionally on every mount,
+    //  so `IsEnabled` would read as a local value whether or not the pool
+    //  cleared it. Grid is the Panel carrier for the same reason.
+    //
+    //  Both carriers are remounted with NO modifiers at all, so ApplyModifiers'
+    //  unset arms cannot run on them: CleanElement is the only thing that could
+    //  have released these values. One check per property, so deleting a single
+    //  ClearValue turns exactly one check red.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class ModifierPoolClearValueControlPanel(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                return VStack(
+                    Button("DropPoolCp", () => set(1)),
+                    Button("RemountPoolCp", () => set(2)),
+                    phase switch
+                    {
+                        0 => Factories.ScrollViewer(Factories.TextBlock("pool-cp-control"))
+                            .Padding(23)
+                            .CornerRadius(11)
+                            .BorderThickness(6)
+                            .BorderBrush("#FF3366CC")
+                            .Background("#FF224466")
+                            .IsEnabled(false),
+                        1 => Empty(),
+                        // Remounted with no modifiers at all.
+                        _ => Factories.ScrollViewer(Factories.TextBlock("pool-cp-control-2")),
+                    },
+                    phase switch
+                    {
+                        // Padding and CornerRadius are declared by Grid, not by Panel, so they
+                        // exercise the nested arm inside CleanElement's Panel branch. Without
+                        // them the Grid carrier reaches only Panel.Background and the two
+                        // Grid-specific clears are covered by the raw source scan alone —
+                        // which cannot tell a live clear from a commented-out one.
+                        0 => Factories.Grid([GridSize.Star()], [GridSize.Star()],
+                                Factories.TextBlock("pool-cp-panel"))
+                            .Background("#FF884422")
+                            .Padding(19)
+                            .CornerRadius(7),
+                        1 => Empty(),
+                        _ => Factories.Grid([GridSize.Star()], [GridSize.Star()],
+                                Factories.TextBlock("pool-cp-panel-2")),
+                    });
+            });
+
+            await Harness.Render();
+            var firstControl = H.FindControl<ScrollViewer>(sv =>
+                sv.Content is TextBlock tb && tb.Text == "pool-cp-control");
+            var firstPanel = H.FindControl<Grid>(g =>
+                g.Children.Count > 0 && g.Children[0] is TextBlock tb && tb.Text == "pool-cp-panel");
+            H.Check("PoolCp_Phase0_Present", firstControl is not null && firstPanel is not null);
+
+            // Establishes that the modifiers really wrote LOCAL values, which is what makes
+            // every "cleared" assertion below able to come out the other way.
+            H.Check("PoolCp_Phase0_ControlLocalValuesWritten",
+                firstControl is not null
+                && firstControl.ReadLocalValue(Control.PaddingProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.CornerRadiusProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.BorderThicknessProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.BorderBrushProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.BackgroundProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.IsEnabledProperty) != DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase0_PanelLocalValuesWritten",
+                firstPanel is not null
+                && firstPanel.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue
+                && firstPanel.ReadLocalValue(WinUI.Grid.PaddingProperty) != DependencyProperty.UnsetValue
+                && firstPanel.ReadLocalValue(WinUI.Grid.CornerRadiusProperty) != DependencyProperty.UnsetValue);
+
+            H.ClickButton("DropPoolCp");
+            await Harness.Render();
+            // Load-bearing premise, one per carrier. Without the drop the reconciler could
+            // update in place, and the cleared checks below would be exercising
+            // ApplyModifiers' unset arm rather than CleanElement — passing for the wrong
+            // reason. The ReferenceEquals guards further down do not cover this: an in-place
+            // update reuses the instance too, so instance identity cannot tell a pool
+            // round-trip from an update. Both carriers need their own check, or the half
+            // that lacks one can silently go vacuous.
+            H.Check("PoolCp_Phase1_Returned",
+                H.FindControl<ScrollViewer>(sv =>
+                    sv.Content is TextBlock tb && tb.Text == "pool-cp-control") is null);
+            H.Check("PoolCp_Phase1_PanelReturned",
+                H.FindControl<Grid>(g =>
+                    g.Children.Count > 0 && g.Children[0] is TextBlock tb
+                    && tb.Text == "pool-cp-panel") is null);
+
+            H.ClickButton("RemountPoolCp");
+            await Harness.Render();
+            var secondControl = H.FindControl<ScrollViewer>(sv =>
+                sv.Content is TextBlock tb && tb.Text == "pool-cp-control-2");
+            var secondPanel = H.FindControl<Grid>(g =>
+                g.Children.Count > 0 && g.Children[0] is TextBlock tb && tb.Text == "pool-cp-panel-2");
+
+            // Load-bearing: without instance reuse every check below passes trivially,
+            // because a freshly constructed control has no local values to begin with.
+            H.Check("PoolCp_Phase2_ReusedControlInstance",
+                firstControl is not null && ReferenceEquals(firstControl, secondControl));
+            H.Check("PoolCp_Phase2_ReusedPanelInstance",
+                firstPanel is not null && ReferenceEquals(firstPanel, secondPanel));
+            if (secondControl is null || secondPanel is null) return;
+
+            // Cleared, not "reset to the default value" — ReadLocalValue is the only oracle
+            // that tells those two apart, and that difference is the whole of the bug.
+            H.Check("PoolCp_Phase2_ControlPaddingCleared",
+                secondControl.ReadLocalValue(Control.PaddingProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_ControlCornerRadiusCleared",
+                secondControl.ReadLocalValue(Control.CornerRadiusProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_ControlBorderThicknessCleared",
+                secondControl.ReadLocalValue(Control.BorderThicknessProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_ControlBorderBrushCleared",
+                secondControl.ReadLocalValue(Control.BorderBrushProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_ControlBackgroundCleared",
+                secondControl.ReadLocalValue(Control.BackgroundProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_ControlIsEnabledCleared",
+                secondControl.ReadLocalValue(Control.IsEnabledProperty) == DependencyProperty.UnsetValue
+                && secondControl.IsEnabled);
+            H.Check("PoolCp_Phase2_PanelBackgroundCleared",
+                secondPanel.ReadLocalValue(Panel.BackgroundProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_PanelPaddingCleared",
+                secondPanel.ReadLocalValue(WinUI.Grid.PaddingProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_PanelCornerRadiusCleared",
+                secondPanel.ReadLocalValue(WinUI.Grid.CornerRadiusProperty) == DependencyProperty.UnsetValue);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Issue #985, StackPanel half — StackPanel is a Panel, not a Control, so
+    //  its Padding and CornerRadius need their own clears inside the Panel
+    //  arm. It gets its own fixture because the Grid above cannot reach those
+    //  lines: CleanElement's Grid and StackPanel arms are mutually exclusive
+    //  `else if` branches under the same Panel receiver, so a Grid takes the
+    //  first arm and never executes the StackPanel one. (Both types do carry
+    //  the properties — #1003 widened the gates to Grid — which is exactly why
+    //  the exclusivity, not the property set, is what splits the fixtures.)
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class ModifierPoolClearValueStackPadding(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                return VStack(
+                    Button("DropPoolStack", () => set(1)),
+                    Button("RemountPoolStack", () => set(2)),
+                    phase switch
+                    {
+                        0 => VStack(Factories.TextBlock("pool-stack-carrier"))
+                            .Padding(17)
+                            .CornerRadius(9)
+                            .Background("#FF335577"),
+                        1 => Empty(),
+                        // Remounted with no modifiers at all.
+                        _ => VStack(Factories.TextBlock("pool-stack-carrier-2")),
+                    });
+            });
+
+            await Harness.Render();
+            var first = H.FindControl<StackPanel>(sp =>
+                sp.Children.Count > 0 && sp.Children[0] is TextBlock tb && tb.Text == "pool-stack-carrier");
+            H.Check("PoolStack_Phase0_Present", first is not null);
+            H.Check("PoolStack_Phase0_LocalValuesWritten",
+                first is not null
+                && first.ReadLocalValue(StackPanel.PaddingProperty) != DependencyProperty.UnsetValue
+                && first.ReadLocalValue(StackPanel.CornerRadiusProperty) != DependencyProperty.UnsetValue
+                && first.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue);
+
+            H.ClickButton("DropPoolStack");
+            await Harness.Render();
+            // Load-bearing premise, not a status report — see PoolCtrl_Phase1_Returned.
+            // Without the drop the reconciler could update the StackPanel in place, and the
+            // cleared checks below would be exercising ApplyModifiers' unset arm rather
+            // than CleanElement.
+            H.Check("PoolStack_Phase1_Returned",
+                H.FindControl<StackPanel>(sp =>
+                    sp.Children.Count > 0 && sp.Children[0] is TextBlock tb
+                    && tb.Text == "pool-stack-carrier") is null);
+            H.ClickButton("RemountPoolStack");
+            await Harness.Render();
+            var second = H.FindControl<StackPanel>(sp =>
+                sp.Children.Count > 0 && sp.Children[0] is TextBlock tb && tb.Text == "pool-stack-carrier-2");
+            // Load-bearing: without instance reuse every check below passes trivially.
+            H.Check("PoolStack_Phase2_ReusedInstance",
+                first is not null && ReferenceEquals(first, second));
+            if (second is null) return;
+
+            H.Check("PoolStack_Phase2_PaddingCleared",
+                second.ReadLocalValue(StackPanel.PaddingProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolStack_Phase2_CornerRadiusCleared",
+                second.ReadLocalValue(StackPanel.CornerRadiusProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolStack_Phase2_BackgroundCleared",
+                second.ReadLocalValue(Panel.BackgroundProperty) == DependencyProperty.UnsetValue);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Issue #985, TextBlock half — TextBlock is the fourth Padding receiver
+    //  ApplyModifiers writes to, and it is neither a Control, a Border nor a
+    //  Panel, so it needs its own arm. The clear itself predates #985 (it
+    //  arrived with #950) but lived in CleanElement's TextBlock case arm,
+    //  past the point every source-scanning invariant stops reading — so the
+    //  one receiver in Padding's control gate that no scanner and no fixture
+    //  covered was the one that had shipped longest. #985 moved the line into
+    //  the FE-common chain; this fixture is the live half of that.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class ModifierPoolClearValueTextPadding(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                return VStack(
+                    Button("DropPoolText", () => set(1)),
+                    Button("RemountPoolText", () => set(2)),
+                    phase switch
+                    {
+                        0 => Factories.TextBlock("pool-text-carrier").Padding(23),
+                        1 => Empty(),
+                        // Remounted with no modifiers at all.
+                        _ => Factories.TextBlock("pool-text-carrier-2"),
+                    });
+            });
+
+            await Harness.Render();
+            var first = H.FindControl<TextBlock>(tb => tb.Text == "pool-text-carrier");
+            H.Check("PoolText_Phase0_Present", first is not null);
+            H.Check("PoolText_Phase0_LocalValueWritten",
+                first is not null
+                && first.ReadLocalValue(Microsoft.UI.Xaml.Controls.TextBlock.PaddingProperty) != DependencyProperty.UnsetValue);
+
+            H.ClickButton("DropPoolText");
+            await Harness.Render();
+            // Load-bearing premise, not a status report — see PoolCtrl_Phase1_Returned.
+            // Without the drop the reconciler could update the TextBlock in place, and the
+            // cleared check below would be exercising ApplyModifiers' unset arm rather
+            // than CleanElement.
+            H.Check("PoolText_Phase1_Returned",
+                H.FindControl<TextBlock>(tb => tb.Text == "pool-text-carrier") is null);
+
+            H.ClickButton("RemountPoolText");
+            await Harness.Render();
+            var second = H.FindControl<TextBlock>(tb => tb.Text == "pool-text-carrier-2");
+            // Load-bearing: without instance reuse the check below passes trivially.
+            H.Check("PoolText_Phase2_ReusedInstance",
+                first is not null && ReferenceEquals(first, second));
+            if (second is null) return;
+
+            H.Check("PoolText_Phase2_PaddingCleared",
+                second.ReadLocalValue(Microsoft.UI.Xaml.Controls.TextBlock.PaddingProperty) == DependencyProperty.UnsetValue);
         }
     }
 

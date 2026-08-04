@@ -160,6 +160,59 @@ Conventions for contributors:
   a re-render also removes that button now — previously the write was skipped,
   so an optional button could never be taken away once shown.
 
+- **A pooled control no longer hands its previous renter's padding, background,
+  border or enabled state to the next one (issue #985).**
+  `Reconciler.ApplyModifiers` writes `Padding`, `CornerRadius`,
+  `BorderThickness`, `BorderBrush`, `Background` and `IsEnabled` onto `Control`,
+  `Border`, `Panel` and `StackPanel` receivers, but `ElementPool.CleanElement`
+  only ever reset the `Border` arm. On mount there is no previous element, so no
+  unset arm runs — a recycled `Button`, `ScrollViewer`, `Grid` or `VStack`
+  therefore started life carrying the *local* values the last renter had set, and
+  a local value outranks every `Style` setter in WinUI's dependency-property
+  precedence order. `Panel.Background` was the widest hole, since `VStack` /
+  `HStack` / `Grid` are all poolable. `CleanElement` now clears all six, in the
+  `FrameworkElement`-common region so the pool ⇄ analyzer consistency invariants
+  can see them. This is the pooling half of #952, whose fix corrected the *shape*
+  of the reset (`ClearValue` instead of assigning a default) but not its absence.
+  `TextBlock.Padding` — reset since #950, but from a case arm past the point the
+  scanners stop reading — moved into the same region, so all four of the
+  receivers `ApplyModifiers` writes `Padding` to are now covered by one chain and
+  verified by the same invariants.
+
+  User-visible fallout: those six properties are now marked `poolReset` in the
+  analyzer's modifier table, so `.Set(c => c.Padding = …)` and friends report
+  **`REACTOR_POOL_001` (Warning)** where they previously reported
+  `REACTOR_MOD_002` (Info) — but only on a receiver `ElementPool` actually
+  recycles (see the receiver-aware selection entry below); a `CheckBox` or
+  `RelativePanel` keeps reporting `REACTOR_MOD_002`. The suggested fix is
+  unchanged — use the fluent modifier (`.Padding(…)`) — and the provided code fix
+  still applies it automatically. Projects building with `TreatWarningsAsErrors`
+  may need to convert those call sites (or suppress the id) when upgrading.
+
+- **`REACTOR_POOL_001` is no longer reported for receivers the pool does not
+  recycle (issue #1051).** Rule selection was `poolReset ? POOL_001 : MOD_002`,
+  decided per *property* and blind to the receiver, while the control gates it
+  reports through name inheritance roots — `Control` admits every WinUI control,
+  `Panel` admits every panel. `ElementPool` matches on the *exact* runtime type
+  (`PoolableTypes.Contains(element.GetType())`), so the two sets never agreed:
+  `.Set(cb => cb.IsEnabled = false)` on a `CheckBox`, or
+  `.Set(rp => rp.Background = brush)` on a `RelativePanel`, claimed *"is reset on
+  pool return"* for a control that is never pooled. `PoolResetSetAnalyzer` now
+  mirrors `ElementPool.PoolableTypes` exactly and falls back to
+  `REACTOR_MOD_002` (Info) outside it — the hazard those receivers really do
+  have, with the same advice and the same code fix. A parity test fails the build
+  if the mirror and `PoolableTypes` ever diverge in either direction. The change
+  is strictly de-escalating, and it also covers the twelve properties
+  (`Margin`, `Width`, `Height`, `Min`/`Max` sizes, alignments, `Opacity`,
+  `AccessKey`, `IsTabStop`) that had the same over-breadth before this release,
+  and the attached-property half of the rule
+  (`.Set(cb => AutomationProperties.SetName(cb, "Save"))`), which reported
+  `REACTOR_POOL_001` unconditionally. Both halves now resolve poolability once
+  from the `.Set` lambda parameter, so a body mixing an instance write with an
+  attached one cannot report two different ids for the same receiver.
+  Custom subclasses (`class MyButton : Button`) report `REACTOR_MOD_002` too,
+  matching the pool, which does not recycle them either.
+
 - **Accessibility environment hooks now report the real system value on the
   first render (issue #983).** `UseReducedMotion()`, `UseHighContrast()` and
   `UseHighContrastScheme()` seeded their state inside `UseEffect`, which does
@@ -188,6 +241,7 @@ Conventions for contributors:
   `AnimationsEnabledChanged`, gated behind an `ApiInformation` probe because that
   event needs Windows 10 2004 (19041) and Reactor's minimum is 17763; on older
   builds the existing `ColorValuesChanged` re-read remains as the fallback.
+
 - **`DataGrid<T>`'s <kbd>Shift</kbd>+<kbd>Tab</kbd> now moves focus backward
   (issue #987).** The grid's routed `KeyDown` handler captured only the raw
   `VirtualKey` and then deferred dispatch through

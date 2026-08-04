@@ -97,6 +97,10 @@ namespace Microsoft.UI.Xaml.Controls
     }
 
     public class Button : Control { }
+
+    // Not in ElementPool.PoolableTypes, unlike Button. Same base, so every control gate that
+    // names Control admits both — which is precisely why poolability cannot be read off a gate.
+    public class CheckBox : Control { }
 }
 
 namespace Microsoft.UI.Reactor
@@ -106,6 +110,7 @@ namespace Microsoft.UI.Reactor
     using Microsoft.UI.Xaml.Controls;
 
     public record ButtonElement;
+    public record CheckBoxElement;
     public record GridElement;
     public record StackElement;
     public record RelativePanelElement;
@@ -115,6 +120,7 @@ namespace Microsoft.UI.Reactor
     public static class Ext
     {
         public static ButtonElement Set(this ButtonElement el, Action<Button> configure) => el;
+        public static CheckBoxElement Set(this CheckBoxElement el, Action<CheckBox> configure) => el;
         public static GridElement Set(this GridElement el, Action<Grid> configure) => el;
         public static StackElement Set(this StackElement el, Action<StackPanel> configure) => el;
         public static RelativePanelElement Set(this RelativePanelElement el, Action<RelativePanel> configure) => el;
@@ -141,7 +147,7 @@ namespace Microsoft.UI.Reactor
         var source = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c => c.IsEnabled = false)|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => c.IsEnabled = false)|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -156,7 +162,7 @@ class C
         var source = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c => { c.IsEnabled = false; c.Padding = new Thickness(4); })|}|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c => { c.IsEnabled = false; c.Padding = new Thickness(4); })|}|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -172,7 +178,7 @@ class C
         var source = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c => c.Padding = new Thickness(8))|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => c.Padding = new Thickness(8))|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -183,11 +189,53 @@ class C
     [Fact]
     public async Task Fires_For_Padding_On_Grid_And_RelativePanel()
     {
+        // Grid is pooled and RelativePanel is not, so the same gated write reports under two
+        // different ids. That pairing is the point: it pins rule selection to the receiver
+        // rather than to the property, which a same-id pair could not distinguish.
         var source = Stubs + @"
 class C
 {
-    GridElement G(GridElement g) => {|REACTOR_MOD_002:g.Set(x => x.Padding = new Thickness(8))|};
+    GridElement G(GridElement g) => {|REACTOR_POOL_001:g.Set(x => x.Padding = new Thickness(8))|};
     RelativePanelElement R(RelativePanelElement r) => {|REACTOR_MOD_002:r.Set(x => x.Padding = new Thickness(8))|};
+}";
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_For_IsEnabled_On_Button_But_Not_On_Unpooled_CheckBox()
+    {
+        // IsEnabled declares no control gate at all, so nothing about the gates distinguishes
+        // these two receivers — both are Controls and both are written by ApplyModifiers. Only
+        // ElementPool.PoolableTypes separates them: Button is recycled, CheckBox is not. Without
+        // the poolable mirror both report POOL_001, and the Warning on CheckBox asserts that the
+        // write is unwound on pool return for a control the pool never touches.
+        var source = Stubs + @"
+class C
+{
+    ButtonElement B(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => c.IsEnabled = false)|};
+    CheckBoxElement K(CheckBoxElement k) => {|REACTOR_MOD_002:k.Set(c => c.IsEnabled = false)|};
+}";
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_For_Background_On_Grid_But_Not_On_Unpooled_RelativePanel()
+    {
+        // Background's gate names Panel, and CleanElement really does clear Background for every
+        // Panel — so the arm-coverage gate cannot separate these two, and a poolResetGate listing
+        // base names could not either without misdescribing what the Panel arm does. RelativePanel
+        // is excluded because it is never recycled, which is a fact about the receiver's own type.
+        var source = Stubs + @"
+class C
+{
+    GridElement G(GridElement g, Microsoft.UI.Xaml.Media.Brush br) => {|REACTOR_POOL_001:g.Set(x => x.Background = br)|};
+    RelativePanelElement R(RelativePanelElement r, Microsoft.UI.Xaml.Media.Brush br) => {|REACTOR_MOD_002:r.Set(x => x.Background = br)|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -205,7 +253,7 @@ class C
         var source = Stubs + @"
 class C
 {
-    TextBlockElement M(TextBlockElement t) => {|REACTOR_MOD_002:t.Set(x => x.Padding = new Thickness(8))|};
+    TextBlockElement M(TextBlockElement t) => {|REACTOR_POOL_001:t.Set(x => x.Padding = new Thickness(8))|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -237,7 +285,7 @@ class C
 class C
 {
     GridElement M(GridElement g, Microsoft.UI.Xaml.Media.Brush brush)
-        => {|REACTOR_MOD_002:g.Set(x => x.Background = brush)|};
+        => {|REACTOR_POOL_001:g.Set(x => x.Background = brush)|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -248,12 +296,15 @@ class C
     [Fact]
     public async Task Fires_For_Padding_And_CornerRadius_On_Concrete_Panels()
     {
+        // RelativePanel still fires — the gate admits it, so the modifier really does reach the
+        // control — but as REACTOR_MOD_002, because ElementPool never recycles a RelativePanel
+        // and POOL_001's "unwound on pool return" clause would be false for it.
         var source = Stubs + @"
 class C
 {
-    StackElement A(StackElement s) => {|REACTOR_MOD_002:s.Set(x => x.Padding = new Thickness(4))|};
-    StackElement B(StackElement s) => {|REACTOR_MOD_002:s.Set(x => x.CornerRadius = new CornerRadius(4))|};
-    GridElement G(GridElement g) => {|REACTOR_MOD_002:g.Set(x => x.CornerRadius = new CornerRadius(4))|};
+    StackElement A(StackElement s) => {|REACTOR_POOL_001:s.Set(x => x.Padding = new Thickness(4))|};
+    StackElement B(StackElement s) => {|REACTOR_POOL_001:s.Set(x => x.CornerRadius = new CornerRadius(4))|};
+    GridElement G(GridElement g) => {|REACTOR_POOL_001:g.Set(x => x.CornerRadius = new CornerRadius(4))|};
     RelativePanelElement R(RelativePanelElement r) => {|REACTOR_MOD_002:r.Set(x => x.CornerRadius = new CornerRadius(4))|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
@@ -288,12 +339,15 @@ class C
     public async Task Fires_For_ContentAlignment_And_Background_On_Control()
     {
         // Guards that the map lookup is by exact property name and that a Control
-        // receiver satisfies both the ungated and the gated arms.
+        // receiver satisfies both the ungated and the gated arms. The two writes also
+        // report under different ids since issue #985 — Background is pool-reset
+        // (REACTOR_POOL_001), the content-alignment pair is not (REACTOR_MOD_002) — which
+        // pins the severity split to the property rather than to the receiver.
         var source = Stubs + @"
 class C
 {
     ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c => c.HorizontalContentAlignment = HorizontalAlignment.Left)|};
-    ButtonElement N(ButtonElement b, Microsoft.UI.Xaml.Media.Brush brush) => {|REACTOR_MOD_002:b.Set(c => c.Background = brush)|};
+    ButtonElement N(ButtonElement b, Microsoft.UI.Xaml.Media.Brush brush) => {|REACTOR_POOL_001:b.Set(c => c.Background = brush)|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -377,7 +431,9 @@ class C
     // PoolResetSetCodeFix declares both REACTOR_POOL_001 and REACTOR_MOD_002 as fixable.
     // These prove the MOD_002 half actually rewrites, which was previously wired but never
     // exercised — the fix looked up the shared ModifierTable, so a mistake there would have
-    // surfaced only in a consumer's IDE.
+    // surfaced only in a consumer's IDE. Several of them moved to REACTOR_POOL_001 with
+    // issue #985; the fixer path is identical for both ids, and
+    // CodeFix_Chains_Across_Both_Rule_Ids_In_One_Body still holds the mixed-id case.
 
     [Fact]
     public async Task CodeFix_Rewrites_Ungated_Property()
@@ -385,7 +441,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c => c.IsEnabled = false)|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => c.IsEnabled = false)|};
 }";
         var after = Stubs + @"
 class C
@@ -408,7 +464,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c => c.Padding = new Thickness(8))|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => c.Padding = new Thickness(8))|};
 }";
         var after = Stubs + @"
 class C
@@ -437,7 +493,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c => { c.IsEnabled = false; c.Padding = new Thickness(4); })|}|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c => { c.IsEnabled = false; c.Padding = new Thickness(4); })|}|};
 }";
         var after = Stubs + @"
 class C
@@ -460,7 +516,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c => { c.Padding = new Thickness(4); c.IsEnabled = false; })|}|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c => { c.Padding = new Thickness(4); c.IsEnabled = false; })|}|};
 }";
         var after = Stubs + @"
 class C
@@ -481,6 +537,12 @@ class C
         // with a modifier-available one (REACTOR_MOD_002). One invocation, two rule IDs, and
         // the harness hands the fixer each diagnostic separately — so this is the case that
         // proves each diagnostic carries the complete reported set rather than just its own.
+        //
+        // The MOD_002 half is HorizontalContentAlignment, not IsEnabled: issue #985 moved
+        // IsEnabled (and Padding / CornerRadius / Border* / Background) to POOL_001, which
+        // would have quietly turned this into a same-id test that no longer exercises the
+        // cross-id path it is named for. The content-alignment pair is the remaining ungated,
+        // non-pool-reset entry in ModifierTable.
         var stubs = Stubs
             .Replace(
                 "public class FrameworkElement : UIElement { }",
@@ -491,12 +553,12 @@ class C
         var before = stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_MOD_002:b.Set(c => { c.MaxHeight = 260; c.IsEnabled = false; })|}|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_MOD_002:b.Set(c => { c.MaxHeight = 260; c.HorizontalContentAlignment = HorizontalAlignment.Left; })|}|};
 }";
         var after = stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => b.MaxHeight(260).IsEnabled(false);
+    ButtonElement M(ButtonElement b) => b.MaxHeight(260).HorizontalContentAlignment(HorizontalAlignment.Left);
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -521,7 +583,7 @@ class C
 class C
 {
     ButtonElement M(ButtonElement b)
-        => {|REACTOR_VIS_001:{|REACTOR_MOD_002:b.Set(c => { c.Visibility = Visibility.Collapsed; c.IsEnabled = false; })|}|};
+        => {|REACTOR_VIS_001:{|REACTOR_POOL_001:b.Set(c => { c.Visibility = Visibility.Collapsed; c.IsEnabled = false; })|}|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -540,7 +602,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c => { c.Padding = new Thickness(4); c.Padding = new Thickness(8); })|}|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c => { c.Padding = new Thickness(4); c.Padding = new Thickness(8); })|}|};
 }";
         var after = Stubs + @"
 class C
@@ -701,7 +763,7 @@ namespace Other
             "public class UIElement { public bool IsHitTestVisible { get; set; } public double Opacity { get; set; } }") + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c => c.IsEnabled = c.Opacity > 0)|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => c.IsEnabled = c.Opacity > 0)|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -721,7 +783,7 @@ class C
         var source = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.IsEnabled(true).Set(c => c.IsEnabled = false)|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.IsEnabled(true).Set(c => c.IsEnabled = false)|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -739,7 +801,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Padding(8).Set(c => c.IsEnabled = false)|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Padding(8).Set(c => c.IsEnabled = false)|};
 }";
         var after = Stubs + @"
 class C
@@ -783,7 +845,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c => { c.CornerRadius = new CornerRadius(6); c.BorderThickness = new Thickness(2); })|}|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c => { c.CornerRadius = new CornerRadius(6); c.BorderThickness = new Thickness(2); })|}|};
 }";
         var after = Stubs + @"
 class C
@@ -806,7 +868,7 @@ class C
         var source = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b, CornerRadius radius) => {|REACTOR_MOD_002:b.Set(c => c.CornerRadius = radius)|};
+    ButtonElement M(ButtonElement b, CornerRadius radius) => {|REACTOR_POOL_001:b.Set(c => c.CornerRadius = radius)|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -825,7 +887,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c =>
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c =>
     {
         // theme spec says disabled until loaded
         c.IsEnabled = false;
@@ -861,7 +923,7 @@ class C
         var before = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c =>
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c =>
     {
         c.IsEnabled = false; // only until the theme loads
         c.Padding = new Thickness(4);
@@ -892,7 +954,7 @@ class C
         var source = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c =>
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c =>
     {
         c.IsEnabled = false;
         c.Padding = new Thickness(4); // matches the design token
@@ -912,7 +974,7 @@ class C
         var source = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:{|REACTOR_MOD_002:b.Set(c =>
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:{|REACTOR_POOL_001:b.Set(c =>
     {
         c.IsEnabled = false;
         c.Padding = new Thickness(4);
@@ -937,7 +999,7 @@ class C
         var source = Stubs + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c =>
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c =>
     {
 #if DEBUG
         c.IsEnabled = false;
@@ -963,7 +1025,7 @@ class C
             "public bool IsEnabled { get; set; } public void Focus() { }") + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c => { c.IsEnabled = false; c.Focus(); })|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => { c.IsEnabled = false; c.Focus(); })|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -983,7 +1045,7 @@ class C
 class C
 {
     ButtonElement M(ButtonElement b, Microsoft.UI.Xaml.Controls.Button other)
-        => {|REACTOR_MOD_002:b.Set(c => { c.IsEnabled = false; other.IsEnabled = true; })|};
+        => {|REACTOR_POOL_001:b.Set(c => { c.IsEnabled = false; other.IsEnabled = true; })|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -1004,7 +1066,7 @@ class C
             "public class Button : Control { public string Name { get; set; } }") + @"
 class C
 {
-    ButtonElement M(ButtonElement b) => {|REACTOR_MOD_002:b.Set(c => { c.IsEnabled = false; c.Name = ""x""; })|};
+    ButtonElement M(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => { c.IsEnabled = false; c.Name = ""x""; })|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -1026,7 +1088,7 @@ class C
 class C
 {
     GridElement M(GridElement g, Microsoft.UI.Xaml.Media.Brush brush)
-        => {|REACTOR_MOD_002:g.Set(x => { x.Background = brush; x.BorderThickness = new Thickness(4); })|};
+        => {|REACTOR_POOL_001:g.Set(x => { x.Background = brush; x.BorderThickness = new Thickness(4); })|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {

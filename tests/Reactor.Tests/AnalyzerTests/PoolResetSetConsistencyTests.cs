@@ -357,11 +357,18 @@ using Microsoft.UI.Reactor;
 
 #nullable enable
 
+namespace Microsoft.UI.Xaml.Controls
+{{
+    // The .Set receiver has to be a control ElementPool actually recycles: REACTOR_POOL_001
+    // claims the attached write is cleared on pool return, which is only true of one.
+    public class Button {{ }}
+}}
+
 namespace Microsoft.UI.Reactor
 {{
     public class FakeElement
     {{
-        public FakeElement Set(Action<FakeElement> configure) {{ configure(this); return this; }}
+        public FakeElement Set(Action<Microsoft.UI.Xaml.Controls.Button> configure) {{ configure(new Microsoft.UI.Xaml.Controls.Button()); return this; }}
     }}
 }}
 {declarations}
@@ -393,13 +400,13 @@ namespace Microsoft.UI.Reactor
         // the captured param) because some resets run on a narrowed cast — e.g.
         // `if (fe is Control c) c.ClearValue(Control.IsTabStopProperty)` (issue #162).
         // The owner is restricted to the DependencyObject base types that actually
-        // back FrameworkElement instance properties (FrameworkElement / UIElement /
-        // Control); attached-property owners are captured separately by
+        // back FrameworkElement instance properties (see InstancePropertyOwners, which
+        // this alternation is derived from so the two scans can't drift);
+        // attached-property owners are captured separately by
         // ReadResetAttachedProperties, owner-qualified, because their bare names
         // collide with instance properties (AutomationProperties.Name vs
         // FrameworkElement.Name).
-        var clearValueProps = Regex.Matches(commonBlock,
-                @"\b\w+\.ClearValue\(\s*(?:FrameworkElement|UIElement|Control)\.(\w+)Property\s*\)")
+        var clearValueProps = Regex.Matches(commonBlock, InstanceClearValuePattern)
             .Cast<Match>()
             .Select(m => m.Groups[1].Value);
 
@@ -433,7 +440,54 @@ namespace Microsoft.UI.Reactor
     }
 
     private static readonly HashSet<string> InstancePropertyOwners =
-        new(StringComparer.Ordinal) { "FrameworkElement", "UIElement", "Control" };
+        new(StringComparer.Ordinal)
+        {
+            "FrameworkElement",
+            "UIElement",
+            "Control",
+            // Issue #985: CleanElement's FE-common block now clears the Padding /
+            // CornerRadius / BorderThickness / BorderBrush / Background family through a
+            // Control | Border | Panel/Grid/StackPanel | TextBlock chain that mirrors
+            // ApplyModifiers' receivers. Border.PaddingProperty and friends are ordinary
+            // instance properties; without them here the attached scan would claim them and
+            // Every_Reset_Attached_Property_Is_Classified would fail on owners that have
+            // no business being in the attached table.
+            "Border",
+            "Panel",
+            "StackPanel",
+            // Grid arrived with #1003, which widened the Padding / CornerRadius gates to the
+            // concrete panels and added `resetGrid.ClearValue(WinUI.Grid.PaddingProperty)` one
+            // line above StackPanel's. It belongs here for exactly the reason Border and
+            // StackPanel do — Grid.PaddingProperty is an ordinary instance DP, not an attached
+            // one — but neither branch alone had both halves: #985 wrote this list, #1003 wrote
+            // those clears, and the union inherited the clears without the owner. Left out, the
+            // attached scan claims `Grid.Padding` / `Grid.CornerRadius` and they have to be
+            // silenced in DeliberatelyExcludedAttached, which is a suppression list, not a
+            // classification — so a genuinely attached `Grid.*` reset added later would land in
+            // the same bucket as these two and read as already-triaged.
+            "Grid",
+            // TextBlock joins them because #985 also moved TextBlock.Padding (added by
+            // #950) into the scanned block. Without it here, TextBlock.PaddingProperty
+            // would be read as an *attached* property named TextBlock.Padding.
+            "TextBlock",
+        };
+
+    /// <summary>
+    /// Matches <c>RECEIVER.ClearValue(OWNER.PROPProperty)</c> for the instance-property
+    /// owners in <see cref="InstancePropertyOwners"/>, capturing the bare property name.
+    /// </summary>
+    /// <remarks>
+    /// The owner alternation is built from <see cref="InstancePropertyOwners"/> rather than
+    /// hardcoded so the instance and attached scans stay two views of one list — a new owner
+    /// added to only one of them would silently reclassify a property. The optional
+    /// <c>[\w.]+.</c> prefix matches <see cref="ReadResetAttachedProperties"/> so the
+    /// alias-qualified spelling <c>WinUI.Border.PaddingProperty</c> used throughout
+    /// <c>ElementPool.cs</c> is recognized as an instance reset.
+    /// </remarks>
+    private static readonly string InstanceClearValuePattern =
+        @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(?:"
+        + string.Join("|", InstancePropertyOwners.OrderBy(o => o, StringComparer.Ordinal))
+        + @")\.(\w+)Property\s*\)";
 
     /// <summary>
     /// The FE-common block of <c>ElementPool.CleanElement</c> — from the method's opening
@@ -467,8 +521,23 @@ namespace Microsoft.UI.Reactor
         Assert.True(braceStart > sigMatch.Index, "CleanElement opening brace not found");
 
         // The FE-common block runs from the opening brace up to the first
-        // `switch (<param>)` that starts the type-specific cleanup.
-        var switchRegex = new Regex($@"\bswitch\s*\(\s*{Regex.Escape(paramName)}\s*\)");
+        // `switch (<param>)` that starts the type-specific cleanup. Anchored to the start
+        // of a line (Multiline) so a `//` comment mentioning the dispatch cannot masquerade
+        // as the boundary — an unanchored match truncated the scanned region at a doc comment
+        // once, which silently shrank every invariant built on this block.
+        //
+        // The anchor closes the `//` case, not every case: a block comment whose inner line
+        // BEGINS with the dispatch text still matches `^\s*switch` and truncates the region
+        // (MEASURED: 12922 -> 7335 chars). Truncation cannot fail an absence-shaped assertion
+        // — a smaller region holds fewer offenders — so the detectors are the presence-shaped
+        // ones: Every_TrappedProperty_Is_Reset_In_CleanElement,
+        // Every_TrappedAttachedProperty_Is_Reset_In_CleanElement and
+        // Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names in this file all redden on that
+        // mutation (54/0 -> 54/3), as does
+        // ModifierUnsetClearValueTests.CleanElement_Releases_Every_Modifier_Backed_Dependency_Property.
+        // They are load-bearing for this helper's correctness, not just for their own subject.
+        var switchRegex = new Regex(
+            $@"^\s*switch\s*\(\s*{Regex.Escape(paramName)}\s*\)", RegexOptions.Multiline);
         var switchMatch = switchRegex.Match(source, braceStart);
         Assert.True(switchMatch.Success,
             $"CleanElement layout changed — could not find 'switch ({paramName})' boundary after the opening brace.");
@@ -503,6 +572,18 @@ namespace Microsoft.UI.Reactor
     /// fields with <c>default!</c> assignment — analyzer matches on syntax,
     /// not types, so this is sufficient.
     /// </summary>
+    /// <remarks>
+    /// One exception to "syntax, not types": a trapped property that also declares a
+    /// <c>ControlGate</c> (Padding / CornerRadius / BorderThickness / BorderBrush /
+    /// Background, since issue #985) is only reported when the <c>.Set</c> lambda
+    /// parameter's type inherits from one of the gate's control types in
+    /// <c>Microsoft.UI.Xaml.Controls</c>. <c>FakeElement</c> therefore derives from a stub
+    /// <c>Control</c>, which satisfies every gate currently declared on a pool-reset row.
+    /// Without it the analyzer would stop firing for those rows and
+    /// <c>Analyzer_Fires_For_Every_TrappedProperty</c> would fail loudly, because it asserts
+    /// the diagnostic is <em>present</em> — that positive shape is what keeps a lost gate
+    /// from reading as a pass. Keep the marker, keep the base type.
+    /// </remarks>
     private static string BuildStubs()
     {
         var fields = string.Join(
@@ -513,15 +594,28 @@ namespace Microsoft.UI.Reactor
         return $@"
 using System;
 using Microsoft.UI.Reactor;
+using Microsoft.UI.Xaml.Controls;
 
 #nullable enable
+
+namespace Microsoft.UI.Xaml.Controls
+{{
+    public class Control {{ }}
+
+    // The .Set receiver has to be a control ElementPool actually recycles, because that is
+    // exactly what REACTOR_POOL_001 asserts. Button is in PoolableTypes and derives Control,
+    // so it also satisfies every control gate these trapped properties declare.
+    public class Button : Control
+    {{
+        {fields}
+    }}
+}}
 
 namespace Microsoft.UI.Reactor
 {{
     public class FakeElement
     {{
-        {fields}
-        public FakeElement Set(Action<FakeElement> configure) {{ configure(this); return this; }}
+        public FakeElement Set(Action<Button> configure) {{ configure(new Button()); return this; }}
     }}
 }}
 ";
