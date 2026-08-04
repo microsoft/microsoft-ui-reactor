@@ -14,17 +14,26 @@ class AnimatedIconPage : Component
     // States all three sources below ship markers for.
     static readonly string[] States = ["Normal", "PointerOver", "Pressed"];
 
-    static readonly string[] CellNames = ["Settings", "Find", "Nav"];
+    static readonly string[] CellNames = ["Menu", "Navigate", "Expand"];
 
     public override Element Render()
     {
         // AnimatedIcon.Source is reference-compared: a source built inline would be a new
         // instance every render and would cancel the transition it is meant to play.
-        var settings = UseMemo(() => new AnimatedSettingsVisualSource());
-        var find = UseMemo(() => new AnimatedFindVisualSource());
-        var nav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
-        // A different glyph from the gear above, so the two cards are never confused for
-        // each other: this one responds only to the picker, those only to the pointer.
+        //
+        // All three hover cells use GlobalNavigationButton deliberately. A marker segment can be
+        // present and non-zero in the timeline and still render no visible difference, and
+        // AnimatedSettings' NormalToPointerOver is exactly that: driving a Settings icon from
+        // Normal to PointerOver with the pointer nowhere near it produced 0 changed pixels across
+        // 298 frame-pairs, against an idle control that read 0 on the same region moments before.
+        // It only looks alive on press, because Pressed is where its artwork differs. Hovering it
+        // in a demo about hovering therefore shows nothing, which is issue #983 all over again.
+        // GlobalNavigationButton is the source whose hover transition is observed to render.
+        var menuGlyph = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
+        var navGlyph = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
+        var expandGlyph = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
+        // The picker card cycles every state including Pressed, so a source whose hover step is
+        // subtle is fine there -- and a different glyph keeps the two cards from being confused.
         var picker = UseMemo(() => new AnimatedFindVisualSource());
         var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 
@@ -91,9 +100,9 @@ class AnimatedIconPage : Component
             SampleCard("Hover or press an icon",
                 VStack(12,
                     HStack(20,
-                        Cell(0, "Settings", settings),
-                        Cell(1, "Find", find),
-                        Cell(2, "Nav", nav)),
+                        Cell(0, "Menu", menuGlyph),
+                        Cell(1, "Navigate", navGlyph),
+                        Cell(2, "Expand", expandGlyph)),
                     Caption((hoverIdx < 0 && pressIdx < 0
                             ? "All three are resting on Normal — hover one to play its transition."
                             : $"{CellNames[pressIdx >= 0 ? pressIdx : hoverIdx]}: "
@@ -102,7 +111,7 @@ class AnimatedIconPage : Component
                 sourceCode: @"
 // `using static Factories` shadows the WinUI type, so SetState needs an alias:
 //   using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
-var source = UseMemo(() => new AnimatedSettingsVisualSource());
+var source = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 var (hovering, setHovering) = UseState(false);
 var (pressing, setPressing) = UseState(false);
 var state = pressing ? ""Pressed"" : hovering ? ""PointerOver"" : ""Normal"";

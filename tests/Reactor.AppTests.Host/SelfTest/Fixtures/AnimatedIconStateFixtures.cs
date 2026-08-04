@@ -62,8 +62,20 @@ internal static class AnimatedIconStateFixtures
     // ════════════════════════════════════════════════════════════════════════
     //  1. Marker oracle — the state strings the page writes must name real transitions
     //     on the built-in sources it uses, *and* those transitions must span a non-zero
-    //     slice of the timeline. A present-but-zero-length segment plays nothing, which
-    //     leaves the page a static decoration — exactly the issue #983 complaint.
+    //     slice of the timeline.
+    //
+    //     Scope, learned the hard way (issue #983, second round): a non-zero segment is
+    //     NECESSARY for an animation and is NOT SUFFICIENT for a visible one. This oracle
+    //     originally claimed that passing it meant the page was not "a static decoration".
+    //     That claim was false and it is withdrawn. AnimatedSettings' NormalToPointerOver
+    //     measures 0.075 here and renders ZERO changed pixels on screen — driving a Settings
+    //     icon Normal -> PointerOver produced 0 changed frame-pairs out of 298, against an
+    //     idle control reading 0 on the same region. This fixture was green throughout.
+    //
+    //     So: this checks that a segment EXISTS and has duration. Whether it renders a
+    //     visible difference is a pixel question no marker map can answer, and the gallery
+    //     page is pinned to sources whose hover step is observed to render (see
+    //     GallerySampleLintTests.AnimatedIcons_UseSourcesAndStatesTheSelfTestProves).
     // ════════════════════════════════════════════════════════════════════════
 
     internal class BuiltInSourceMarkers(Harness h) : SelfTestFixtureBase(h)
