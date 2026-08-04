@@ -108,7 +108,17 @@ function Stop-ProcessTreeSafely {
         [int]$WaitSeconds = 30
     )
 
-    try { if ($Process.HasExited) { return $true } } catch { return $true }
+    # Report only what is known. An exception in here means the state is
+    # *unknown*, which is not the same as good: HasExited can throw for a live
+    # process we lack rights to inspect, and answering $true there would let
+    # Stop-ProcessIdsSafely record a still-running pid as reaped — reporting a
+    # cleanup that never happened, which is the failure mode this module exists
+    # to remove. So unknown falls through to the kill attempt, and an unknown
+    # wait answers $false, leaving the verdict to the drain poll, which observes
+    # the machine instead of a handle.
+    $processId = 0
+    try { $processId = $Process.Id } catch { return $false }
+    try { if ($Process.HasExited) { return $true } } catch { }
 
     # `taskkill /T` walks the tree on every supported Windows and on both
     # PowerShell hosts. Process.Kill($true) would do the same but needs .NET 5+,
@@ -116,7 +126,7 @@ function Stop-ProcessTreeSafely {
     # Kill() is the exact call that caused #1074. One path, tested everywhere,
     # beats a host-dependent pair where only one half runs in CI.
     try {
-        & "$env:SystemRoot\System32\taskkill.exe" '/PID' $Process.Id '/T' '/F' 2>&1 | Out-Null
+        & "$env:SystemRoot\System32\taskkill.exe" '/PID' $processId '/T' '/F' 2>&1 | Out-Null
     } catch {
         # Raced with a natural exit, or access denied on a process owned by
         # another user. Fall through to the wait, which reports the truth.
@@ -126,7 +136,7 @@ function Stop-ProcessTreeSafely {
     # whichever script dot-sourced us — #1074's third defect, in miniature.
     $global:LASTEXITCODE = 0
 
-    try { return $Process.WaitForExit($WaitSeconds * 1000) } catch { return $true }
+    try { return $Process.WaitForExit($WaitSeconds * 1000) } catch { return $false }
 }
 
 # Kill the given pids (tree and all) and return the ones that were still alive.
