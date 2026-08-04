@@ -114,8 +114,10 @@ class AnimatedIconPage : Component
                             + "any code that inspects it, and nothing moves on screen.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
-// `using static Factories` shadows the WinUI type, so SetState needs an alias:
-//   using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
+// `using static Factories` imports an AnimatedIcon() method that wins simple-name lookup,
+// so reaching the WinUI type's static SetState needs an alias:
+using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
+
 var source = UseMemo(() => new AnimatedSettingsVisualSource());
 var (pressing, setPressing) = UseState(false);
 var state = pressing ? ""Pressed"" : ""Normal"";
@@ -148,6 +150,10 @@ Border(HStack(AnimatedIcon(source).Size(32, 32)
                     Caption($"State: {state} — pick another value to play the transition into it.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
+// `using static Factories` imports an AnimatedIcon() method that wins simple-name lookup,
+// so reaching the WinUI type's static SetState needs an alias:
+using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
+
 var picker = UseMemo(() => new AnimatedFindVisualSource());
 var states = new[] { ""Normal"", ""PointerOver"", ""Pressed"" };
 var (stateIdx, setStateIdx) = UseState(0);
@@ -190,6 +196,10 @@ AnimatedIcon(picker).Size(32, 32)
                                 .Foreground(Theme.SecondaryText))
                             .Background(Theme.SubtleFill).CornerRadius(6).Padding(12).Width(180)),
                 sourceCode: @"
+// `using static Factories` imports an AnimatedIcon() method that wins simple-name lookup,
+// so reaching the WinUI type's static SetState needs an alias:
+using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
+
 var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 // UseReducer's functional updater reads the live value, so two clicks coalesced into
 // one render can't drop a toggle.
@@ -199,11 +209,15 @@ var menuState = open ? ""Pressed"" : ""Normal"";
 Button(
     HStack(8,
         AnimatedIcon(menuNav).Size(20, 20)
-            .Set(icon => XamlAnimatedIcon.SetState(icon, menuState)),
+            .Set(icon =>
+            {
+                if (XamlAnimatedIcon.GetState(icon) != menuState)
+                    XamlAnimatedIcon.SetState(icon, menuState);
+            }),
         TextBlock(open ? ""Close"" : ""Menu"")),
     () => setOpen(o => !o))
-// Button marks PointerPressed handled to drive its own Click, so the click handler —
-// not OnPointerPressed — owns the ""Pressed"" state.
+// Driven by the menu being open, not by the pointer: Normal<->PointerOver renders no
+// visible change on this glyph, and a Button's own visual states race the icon's.
 ")
         ).Margin(36, 24, 36, 36));
     }
