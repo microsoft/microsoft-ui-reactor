@@ -1,13 +1,49 @@
+<#
+.SYNOPSIS
+    Clean rebuild + reinstall of the Reactor Preview VSIX into a local Visual
+    Studio instance.
+
+.PARAMETER UpdateConfigurationTimeoutSec
+    How long to wait for `devenv /updateconfiguration` before terminating it
+    and its children. Healthy runs take 27-99s; the default leaves headroom.
+    Visual Studio 18.8 never returns from this call (issue #1074), so the
+    timeout is the normal path there, not an error.
+
+.OUTPUTS
+    Exit codes:
+      0  VSIX installed and `devenv /updateconfiguration` completed.
+      1  The script did not reach a good state and needs developer action —
+         build / vswhere / VSIXInstaller failure, VS already running, or
+         duplicate installs detected (VS silently disables all of them).
+      3  VSIX installed, but `devenv /updateconfiguration` did not complete:
+         it timed out and was terminated, or devenv.exe was not found. The
+         extension is usable; the menu merge needs one manual VS launch.
+
+    Which code wins when a path qualifies for both: `1` outranks `3`. The
+    duplicate-install branch skips `/updateconfiguration` *and* needs a human,
+    so it exits 1 — "you must act" is more useful to the caller than "the merge
+    didn't run". `3` is therefore the code for paths that skip or abandon the
+    merge but leave nothing for the developer to fix beyond launching VS. `0` is
+    reached only when the merge actually completed, which is the sole case
+    bootstrap.ps1 prints [ok] for.
+#>
 [CmdletBinding()]
 param(
     [switch]$SkipBuild,
     [switch]$NoRestore,
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
-    [string]$VsInstanceId
+    [string]$VsInstanceId,
+    # Upper bound is a sanity rail, not a policy: anything past an hour is a
+    # typo. 0 or negative would make the very first WaitForExit time out and
+    # kill devenv instantly.
+    [ValidateRange(1, 3600)]
+    [int]$UpdateConfigurationTimeoutSec = 120
 )
 
 $ErrorActionPreference = 'Stop'
+
+. (Join-Path $PSScriptRoot 'VsProcessLib.ps1')
 
 # 1. Build the VSIX unless caller asks us to skip it.
 if (-not $SkipBuild) {
@@ -64,9 +100,17 @@ Write-Host "Target VS: $($target.displayName) ($instanceHash, $instanceVersion)"
 Write-Host "Per-user extension root: $extRoot"
 
 # 3. Make sure VS is closed (a running devenv locks the extension DLL).
-$vsRunning = Get-Process devenv -ErrorAction SilentlyContinue
+$vsRunning = @(Get-Process devenv -ErrorAction SilentlyContinue)
 if ($vsRunning) {
-    Write-Error "Visual Studio is running (PIDs: $($vsRunning.Id -join ', ')). Close it and re-run."
+    # Report start times too: a devenv that started seconds ago is almost
+    # always a leftover from a previous /updateconfiguration on this machine
+    # (issue #1074), not a developer's open IDE. Knowing which it is turns a
+    # confusing CI failure into a one-line diagnosis.
+    $detail = ($vsRunning | ForEach-Object {
+        $started = try { $_.StartTime.ToString('u') } catch { 'unknown start time' }
+        "$($_.Id) (started $started)"
+    }) -join ', '
+    Write-Error "Visual Studio is running (PIDs: $detail). Close it and re-run."
     exit 1
 }
 
@@ -152,6 +196,7 @@ Write-Host ""
 Write-Host "=== Result ==="
 $installedFoldersArray = @($installedFolders)
 $skipUpdateConfig = $false
+$installIncomplete = $false
 if ($installedFoldersArray.Count -eq 0) {
     Write-Warning "Install reported success (VSIXInstaller exit 0) but no Reactor.VsExtension folder appeared within 30s. Proceeding with /updateconfiguration anyway. If VS still doesn't show the menus, inspect %TEMP%\dd_VSIXInstaller_*.log."
 } elseif ($installedFoldersArray.Count -gt 1) {
@@ -159,31 +204,61 @@ if ($installedFoldersArray.Count -eq 0) {
     $installedFoldersArray | ForEach-Object { Write-Warning "  $($_.FullName)" }
     Write-Warning "Skipping /updateconfiguration; clean up duplicates and re-run."
     $skipUpdateConfig = $true
+    # Not a success: the extension is installed but very likely disabled, and
+    # only a human can resolve which copy to keep. Exiting 0 here would make
+    # bootstrap.ps1 print [ok] over the exact failure mode this script exists
+    # to prevent.
+    $installIncomplete = $true
 } else {
     $folder = $installedFoldersArray[0]
     [xml]$m = Get-Content (Join-Path $folder.FullName 'extension.vsixmanifest')
     Write-Host ("Installed v{0} at {1}" -f $m.PackageManifest.Metadata.Identity.Version, $folder.FullName)
 }
 
+# True when the pkgdef merge did not run to completion, whatever the reason —
+# the 18.8 hang and a missing devenv.exe both land here, because they are
+# indistinguishable to the caller: the VSIX is installed and one manual VS
+# launch finishes the job. Deliberately not named after the timeout; a future
+# edit reading this as timeout-only would drop the devenv-missing path.
+$updateConfigIncomplete = $false
 if (-not $skipUpdateConfig) {
     Write-Host ""
     Write-Host "Running 'devenv /updateconfiguration' to force the menu/pkgdef merge synchronously."
     Write-Host "Without this step, the first VS launch on VS 2026 sometimes silently skips the merge"
-    Write-Host "and our menu entry never appears. This step blocks until the merge completes (~10-30s)."
+    Write-Host "and our menu entry never appears. This step blocks until the merge completes — 27-99s on"
+    Write-Host "a healthy VS. VS 18.8 never returns (issue #1074), so it is bounded by -UpdateConfigurationTimeoutSec."
     $devenv = Join-Path $installationPath 'Common7\IDE\devenv.exe'
     if (Test-Path -LiteralPath $devenv) {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = $devenv
-        $psi.Arguments = '/updateconfiguration'
-        $psi.UseShellExecute = $false
-        $proc = [System.Diagnostics.Process]::Start($psi)
-        if (-not $proc.WaitForExit(120000)) { $proc.Kill(); Write-Warning "/updateconfiguration timed out after 2 min." }
-        Write-Host ("  /updateconfiguration exit code: {0} ({1:0.0}s)" -f $proc.ExitCode, ($proc.ExitTime - $proc.StartTime).TotalSeconds)
+        $r = Invoke-DevenvUpdateConfiguration -DevenvPath $devenv -TimeoutSeconds $UpdateConfigurationTimeoutSec
+        if ($r.TimedOut) {
+            $updateConfigIncomplete = $true
+            Write-Warning ("/updateconfiguration timed out after {0}s and was terminated (tree kill). This is the known Visual Studio 18.8 hang - see issue #1074." -f $UpdateConfigurationTimeoutSec)
+            if ($r.KilledPids.Count -gt 0) {
+                Write-Warning ("  Reaped leftover devenv PIDs: {0}" -f ($r.KilledPids -join ', '))
+            }
+            if (-not $r.Drained) {
+                # The next invocation's "Visual Studio is running" guard will
+                # fail. Say so here rather than letting it look like a fresh bug.
+                Write-Warning "  A devenv process is still running after the sweep. Close it before re-running this script."
+            }
+        }
+        $exitText = if ($null -ne $r.ExitCode) { $r.ExitCode } else { 'unknown' }
+        Write-Host ("  /updateconfiguration exit code: {0} ({1:0.0}s)" -f $exitText, $r.DurationSeconds)
     } else {
         Write-Warning "devenv.exe not found at $devenv. Run /updateconfiguration manually before launching VS."
+        # Same observable outcome as a timeout: installed, not merged.
+        $updateConfigIncomplete = $true
     }
     Write-Host ""
     Write-Host "Next steps:"
     Write-Host "  1. Launch Visual Studio (no special flags needed)."
     Write-Host "  2. View -> Other Windows -> Reactor Preview."
 }
+
+# See .OUTPUTS in the header for the exit-code contract.
+#   1 — the developer has to do something before this can work.
+#   3 — installed, but the pkgdef merge didn't finish; one VS launch fixes it.
+# Callers warn on both instead of printing [ok], and neither fails the build.
+if ($installIncomplete) { exit 1 }
+if ($updateConfigIncomplete) { exit 3 }
+exit 0
