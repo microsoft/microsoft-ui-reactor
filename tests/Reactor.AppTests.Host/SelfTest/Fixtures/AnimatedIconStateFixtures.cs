@@ -409,12 +409,17 @@ internal static class AnimatedIconStateFixtures
             // first-ever State set, which AnimatedIcon renders as a hard cut.
             H.Check("AnimIconInButton_NestedMountWroteState", nestedMountState == "Normal");
             H.Check("AnimIconInButton_DirectMountWroteState", () =>
-                directMountState == "Normal"
-                    ? true
-                    : throw new global::System.InvalidOperationException(
+            {
+                if (directMountState != "Normal")
+                {
+                    throw new global::System.InvalidOperationException(
                         $"direct Button content mounted with State='{directMountState ?? "<null>"}', "
-                        + "expected 'Normal' — the mount setter did not run, so the first hover "
-                        + "becomes the icon's first State write and hard-cuts instead of animating"));
+                        + "expected 'Normal' — the mount setter did not run, so the first press "
+                        + "becomes the icon's first State write and hard-cuts instead of animating");
+                }
+
+                return true;
+            });
         }
     }
 }

@@ -799,10 +799,8 @@ public sealed class GallerySampleLintTests
         HashSet<string>? states = null;
 
         foreach (var icon in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
-                     .Where(i => InvokedName(i) == "AnimatedIcon"))
+                     .Where(i => InvokedName(i) == "AnimatedIcon" && MentionsAny(i, names)))
         {
-            if (!MentionsAny(icon, names)) continue;
-
             // Innermost scope first: a local function is the unit a cell is written in, and
             // walking past it to the enclosing method would sweep in every other card's pointer
             // wiring — which is what made the page-level version flag the picker's source.
