@@ -279,6 +279,11 @@ try {
     Start-Sleep -Milliseconds 500
     $claimed = @(Get-ProcessDescendantIds -RootPid $orphanRootPid)
     Assert-Equal 0 $claimed.Count "descendants: a root absent from the process table claims nothing (got: $($claimed -join ', '))"
+    # ...and -IncludeRoot must not smuggle the recycled pid back in. The caller
+    # feeds this straight to the sweep, so returning the number here would kill
+    # whatever inherited it.
+    $claimedWithRoot = @(Get-ProcessDescendantIds -RootPid $orphanRootPid -IncludeRoot)
+    Assert-Equal 0 $claimedWithRoot.Count "descendants: -IncludeRoot returns nothing for an absent root (got: $($claimedWithRoot -join ', '))"
     Remove-AllFakes
 
     # -- 8. Wait-ProcessNameCleared reports failure rather than lying. --

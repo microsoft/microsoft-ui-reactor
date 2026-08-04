@@ -45,7 +45,9 @@ function Get-ProcessIdsByName {
 }
 
 # Every descendant pid of $RootPid, breadth-first, via the Win32_Process
-# parent links. Add -IncludeRoot to get the root back in the result.
+# parent links. Add -IncludeRoot to get the root back in the result — but only
+# when the root can actually be verified; see the two degraded branches below,
+# which claim nothing at all.
 #
 # Windows recycles pids, and a process keeps its ParentProcessId after that
 # parent exits — so a stale ppid can point at an unrelated recycled process.
@@ -59,9 +61,10 @@ function Get-ProcessDescendantIds {
 
     $all = @(Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId, CreationDate -ErrorAction SilentlyContinue)
     if ($all.Count -eq 0) {
-        # CIM unavailable. Report only what we know for certain rather than
-        # guessing by name; the caller's drain poll still tells the truth.
-        if ($IncludeRoot) { return @($RootPid) }
+        # CIM unavailable: nothing can be verified, including the root itself.
+        # Returning the root pid here would hand the caller a number to kill on
+        # no evidence. The caller holds a live Process handle for the root and
+        # kills it through that; the drain poll still reports the truth.
         return @()
     }
 
@@ -87,11 +90,11 @@ function Get-ProcessDescendantIds {
     # therefore eligible for reuse. Every edge pointing at it is unverifiable —
     # the stale-edge check below needs the parent's creation time, and there
     # isn't one — so a process that merely inherited the number would be
-    # attributed to us and swept. Claim nothing rather than guess.
-    if (-not $createdAt.ContainsKey($RootPid)) {
-        if ($IncludeRoot) { return @($RootPid) }
-        return @()
-    }
+    # attributed to us and swept. Claim nothing rather than guess, and that
+    # includes the root: -IncludeRoot must not hand back the recycled pid this
+    # branch exists to distrust. The caller kills the root through its live
+    # Process handle, not by number.
+    if (-not $createdAt.ContainsKey($RootPid)) { return @() }
 
     while ($queue.Count -gt 0) {
         $current = $queue.Dequeue()
