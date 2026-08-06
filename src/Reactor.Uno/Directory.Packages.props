@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Nearest Directory.Packages.props wins, so this shadows the repo-root one and
+    keeps Central Package Management OFF for the Uno port. Uno.Sdk supplies the
+    versions of its implicit (UnoFeatures) packages from the SDK version pinned
+    in global.json; the few extra packages we add carry inline versions.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

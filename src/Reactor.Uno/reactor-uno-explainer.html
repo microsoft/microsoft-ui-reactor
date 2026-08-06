@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Microsoft.UI.Reactor → Uno Platform (Skia)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2a3340;
+    --txt:#e6edf3; --dim:#8b949e; --accent:#58a6ff; --accent2:#7ee787;
+    --warn:#f0b72f; --kw:#ff7b72; --str:#a5d6ff; --cmt:#8b949e; --type:#79c0ff;
+    --mono:'Cascadia Code','Consolas',ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+  header{padding:22px 28px 14px;border-bottom:1px solid var(--border)}
+  header h1{margin:0;font-size:20px;font-weight:650;letter-spacing:.2px}
+  header h1 .arrow{color:var(--accent)}
+  header p{margin:6px 0 0;color:var(--dim);font-size:13px}
+  .wrap{display:grid;grid-template-columns:300px 1fr;gap:0;min-height:calc(100vh - 150px)}
+  .controls{padding:20px 22px;border-right:1px solid var(--border);background:var(--panel)}
+  .preview{padding:22px 26px;overflow:auto}
+  .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);margin:0 0 10px}
+  .targets{display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
+  .target{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--border);
+    border-radius:9px;cursor:pointer;background:var(--panel2);transition:.15s;font-size:14px}
+  .target:hover{border-color:#3d4a5c}
+  .target.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;background:#162132}
+  .target .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .target .meta{margin-left:auto;font-size:11px;color:var(--dim)}
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+  .badge.runs{background:rgba(126,231,135,.15);color:var(--accent2);border:1px solid rgba(126,231,135,.35)}
+  .badge.compiles{background:rgba(240,183,47,.13);color:var(--warn);border:1px solid rgba(240,183,47,.35)}
+  .badge.native{background:rgba(88,166,255,.13);color:var(--accent);border:1px solid rgba(88,166,255,.35)}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:11px;margin-bottom:18px;overflow:hidden}
+  .card .head{display:flex;align-items:center;gap:10px;padding:11px 15px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;background:var(--panel2)}
+  .card .head .tag{margin-left:auto;font-weight:500;font-size:11px;color:var(--dim)}
+  pre{margin:0;padding:15px;overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.62;tab-size:2}
+  .cmt{color:var(--cmt)} .kw{color:var(--kw)} .str{color:var(--str)} .type{color:var(--type)}
+  .dir{color:var(--accent2)} .prop{color:var(--type)}
+  .run{font-family:var(--mono);font-size:12.5px;background:#0a0e14;border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--accent2)}
+  .run::before{content:"$ ";color:var(--dim)}
+  .note{font-size:12.5px;color:var(--dim);padding:0 2px;margin:8px 0 0}
+  .same{display:inline-block;margin-left:8px;font-size:11px;color:var(--accent2);font-weight:600}
+  .arch{display:grid;grid-template-columns:1fr;gap:10px}
+  .layer{border:1px solid var(--border);border-radius:9px;padding:12px 14px;background:var(--panel2)}
+  .layer h4{margin:0 0 7px;font-size:13px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:6px;background:#0a0e14;border:1px solid var(--border);color:var(--txt)}
+  .chip.host{border-color:rgba(88,166,255,.4);color:var(--accent)}
+  .chip.excl{border-color:rgba(255,123,114,.4);color:var(--kw);text-decoration:line-through;opacity:.8}
+  .flowarrow{text-align:center;color:var(--dim);font-size:16px;margin:-4px 0}
+  .copybar{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;padding:13px 28px;border-top:1px solid var(--border);background:rgba(13,17,23,.92);backdrop-filter:blur(6px)}
+  .copybar button{font:inherit;font-size:13px;font-weight:600;padding:9px 18px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#04101f;cursor:pointer}
+  .copybar button:hover{filter:brightness(1.08)}
+  .copybar .hint{color:var(--dim);font-size:12.5px}
+  .legend{display:flex;gap:14px;margin-top:6px;flex-wrap:wrap;font-size:11px;color:var(--dim)}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .sw{width:9px;height:9px;border-radius:2px;display:inline-block}
+</style>
+</head>
+<body>
+<header>
+  <h1>Microsoft.UI.Reactor <span class="arrow">→</span> Uno Platform (Skia)</h1>
+  <p>The same Reactor C# — reconciler, hooks, DSL — recompiled against Uno's <code>Microsoft.UI.Xaml</code>. Pick a target to see what changes (spoiler: only the directives &amp; host).</p>
+</header>
+
+<div class="wrap">
+  <aside class="controls">
+    <p class="lbl">Target</p>
+    <div class="targets" id="targets"></div>
+    <p class="lbl">What stays the same</p>
+    <div class="card" style="margin:0">
+      <div class="head">Your Reactor component <span class="same" id="sameBadge">identical ✓</span></div>
+      <pre id="component"></pre>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--accent2)"></i>shared verbatim</span>
+      <span><i class="sw" style="background:var(--accent)"></i>Uno hosting</span>
+      <span><i class="sw" style="background:var(--kw)"></i>excluded</span>
+    </div>
+  </aside>
+
+  <main class="preview">
+    <div class="card">
+      <div class="head">
+        <span id="tname">—</span>
+        <span class="tag" id="tdesc"></span>
+      </div>
+      <div style="padding:14px 15px 4px"><span class="badge" id="tbadge"></span> <span class="note" id="tstatus" style="margin:0"></span></div>
+      <pre id="directives"></pre>
+    </div>
+
+    <p class="lbl">Run it</p>
+    <div class="run" id="runcmd" style="margin-bottom:18px"></div>
+
+    <p class="lbl">How the port is wired</p>
+    <div class="arch">
+      <div class="layer">
+        <h4>① Shared source — <code>src/Reactor/**</code> <span style="color:var(--accent2)">(compiled verbatim, 0 edits except 3 #if guards)</span></h4>
+        <div class="chips">
+          <span class="chip">Core / reconciler</span><span class="chip">Hooks</span><span class="chip">Elements (DSL)</span>
+          <span class="chip">Yoga</span><span class="chip">Flex</span><span class="chip">Animation</span><span class="chip">Input</span>
+          <span class="chip">Accessibility</span><span class="chip">Data / DataGrid</span><span class="chip">Controls</span>
+          <span class="chip">Markdown</span><span class="chip">Charting (D3)</span><span class="chip">Diagnostics</span>
+        </div>
+      </div>
+      <div class="flowarrow">▼ recompiled against ▼</div>
+      <div class="layer" style="border-color:rgba(88,166,255,.35)">
+        <h4>② Uno's <code>Microsoft.UI.Xaml</code> (Skia renderer)</h4>
+        <div class="note" style="margin:0">Same API surface Reactor already targets — Button, TextBox, NavigationView, … now drawn by Skia on every head.</div>
+      </div>
+      <div class="flowarrow">▼ hosted by ▼</div>
+      <div class="layer" style="border-color:rgba(88,166,255,.35)">
+        <h4>③ Slim Uno hosting layer <span style="color:var(--accent)">(replaces Windows windowing/shell/DWM P/Invoke)</span></h4>
+        <div class="chips">
+          <span class="chip host">ReactorApp.Run / RunAsync</span><span class="chip host">UnoBootstrap → UnoPlatformHostBuilder</span>
+          <span class="chip host">ReactorHost (render loop)</span><span class="chip host">Windowing (ReactorWindow)</span>
+        </div>
+      </div>
+      <div class="layer" style="border-color:rgba(255,123,114,.3);margin-top:2px">
+        <h4 style="color:var(--kw)">Excluded on Skia</h4>
+        <div class="chips">
+          <span class="chip excl">Docking (native tear-off)</span><span class="chip excl">Shell (tray/jumplist/taskbar)</span>
+          <span class="chip excl">Window persistence</span><span class="chip excl">Devtools menu</span>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="copybar">
+  <button id="copyBtn">Copy file for this target</button>
+  <span class="hint" id="copyHint">copies the <code>#:</code> directives + the component as one runnable .cs file</span>
+</div>
+
+<script>
+const COMPONENT = [
+  ['cmt','// Identical on every target — this is the whole point.'],
+  ['kw','class '],['type','CounterApp'],['','  : '],['type','Component'],['','\n{'],
+  ['','\n    '],['kw','public override '],['type','Element'],['',' '],['type','Render'],['','()'],
+  ['','\n    {'],
+  ['','\n        '],['kw','var'],['',' (name, setName) = '],['type','UseState'],['','('],['str','"Uno"'],['',');'],
+  ['','\n        '],['kw','var'],['',' (count, setCount) = '],['type','UseState'],['','('],['str','0'],['',');'],
+  ['','\n        '],['kw','return'],['',' '],['type','VStack'],['','('],['str','12'],['',','],
+  ['','\n            '],['type','Heading'],['','('],['str','$"Hello, {name}!"'],['','),'],
+  ['','\n            '],['type','TextBox'],['','(name, setName),'],
+  ['','\n            '],['type','Heading'],['','('],['str','$"Count: {count}"'],['','),'],
+  ['','\n            '],['type','HStack'],['','('],['str','8'],['',','],
+  ['','\n                '],['type','Button'],['','('],['str','"-"'],['',', () => setCount(count - '],['str','1'],['','))'],['',','],
+  ['','\n                '],['type','Button'],['','('],['str','"+"'],['',', () => setCount(count + '],['str','1'],['','))'],
+  ['','\n            )'],
+  ['','\n        ).'],['type','Padding'],['','('],['str','24'],['','); '],
+  ['','\n    }\n}'],
+];
+const COMPONENT_RAW = `class CounterApp : Component
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState("Uno");
+        var (count, setCount) = UseState(0);
+        return VStack(12,
+            Heading($"Hello, {name}!"),
+            TextBox(name, setName),
+            Heading($"Count: {count}"),
+            HStack(8,
+                Button("-", () => setCount(count - 1)),
+                Button("+", () => setCount(count + 1))
+            )
+        ).Padding(24);
+    }
+}`;
+
+const TARGETS = {
+  winui: {
+    name:'Windows · WinUI 3', color:'#4cc2ff', desc:'the original (Windows App SDK)',
+    badge:'runs', badgeClass:'runs', status:'Runs natively on Windows — the upstream framework.',
+    run:'dotnet run App.cs -a x64',
+    entry:'ReactorApp.Run<CounterApp>("Counter", width: 520, height: 400);',
+    directives:[
+      ['dir','#:property '],['prop','TargetFramework'],['','=net10.0-windows10.0.22621.0'],
+      ['dir','\n#:property '],['prop','WindowsAppSDKSelfContained'],['','=true'],
+      ['dir','\n#:package '],['','Microsoft.UI.Reactor@0.1.0-*'],
+    ],
+    raw:`#:property TargetFramework=net10.0-windows10.0.22621.0
+#:property WindowsAppSDKSelfContained=true
+#:package Microsoft.UI.Reactor@0.1.0-*`
+  },
+  desktop: {
+    name:'Uno · Desktop (Skia)', color:'#7ee787', desc:'Win32 / X11 / macOS / Framebuffer',
+    badge:'runs ✓ verified', badgeClass:'runs', status:'Built & run interactively — counter + two-way TextBox confirmed on screen.',
+    run:'dotnet run Counter.cs',
+    entry:'ReactorApp.Run<CounterApp>("Counter", width: 520, height: 400);',
+    directives:[
+      ['dir','#:sdk '],['','Uno.Sdk@6.7.0-dev.93'],
+      ['dir','\n#:project '],['','../../../src/Reactor.Uno/Reactor.Uno.csproj'],
+      ['dir','\n#:property '],['prop','TargetFramework'],['','=net10.0-desktop'],
+      ['dir','\n#:property '],['prop','OutputType'],['','=Exe'],
+      ['dir','\n#:property '],['prop','UnoSingleProject'],['','=true'],
+      ['dir','\n#:property '],['prop','UnoFeatures'],['','=SkiaRenderer'],
+      ['dir','\n#:property '],['prop','PublishAot'],['','=false'],
+      ['dir','\n#:property '],['prop','PackAsTool'],['','=false'],
+    ],
+    raw:`#:sdk Uno.Sdk@6.7.0-dev.93
+#:project ../../../src/Reactor.Uno/Reactor.Uno.csproj
+#:property TargetFramework=net10.0-desktop
+#:property OutputType=Exe
+#:property UnoSingleProject=true
+#:property UnoFeatures=SkiaRenderer
+#:property PublishAot=false
+#:property PackAsTool=false`
+  },
+  wasm: {
+    name:'Uno · WebAssembly', color:'#58a6ff', desc:'Skia → HTML canvas',
+    badge:'runs ✓ verified', badgeClass:'runs', status:'Built & rendered in the browser. Note the async entry — the browser thread can’t block.',
+    run:'dotnet run -f net10.0-browserwasm   # opens a localhost URL',
+    entry:'await ReactorApp.RunAsync<CounterApp>("Counter", 520, 400);',
+    directives:[
+      ['dir','#:sdk '],['','Uno.Sdk@6.7.0-dev.93'],
+      ['dir','\n#:project '],['','../../../src/Reactor.Uno/Reactor.Uno.csproj'],
+      ['dir','\n#:property '],['prop','TargetFramework'],['','=net10.0-browserwasm'],
+      ['dir','\n#:property '],['prop','OutputType'],['','=Exe'],
+      ['dir','\n#:property '],['prop','UnoSingleProject'],['','=true'],
+      ['dir','\n#:property '],['prop','UnoFeatures'],['','=SkiaRenderer'],
+      ['cmt','\n// entry uses await ReactorApp.RunAsync<...> (see #if __WASM__)'],
+    ],
+    raw:`#:sdk Uno.Sdk@6.7.0-dev.93
+#:project ../../../src/Reactor.Uno/Reactor.Uno.csproj
+#:property TargetFramework=net10.0-browserwasm
+#:property OutputType=Exe
+#:property UnoSingleProject=true
+#:property UnoFeatures=SkiaRenderer
+// WASM can't block the UI thread — use the async entry:
+// await ReactorApp.RunAsync<CounterApp>("Counter", 520, 400);`
+  },
+  android: {
+    name:'Uno · Android', color:'#f0b72f', desc:'theoretical mobile',
+    badge:'compiles ✓', badgeClass:'compiles', status:'Library compiles for net10.0-android. Deploying needs a thin mobile head (Activity) that mounts a ReactorHost — no framework changes expected.',
+    run:'# add a mobile head (Activity) that references Reactor.Uno, then deploy',
+    entry:'// mounted from MainActivity via a ReactorHost',
+    directives:[
+      ['cmt','// Mobile deploys from a project head, not a single .cs file.'],
+      ['cmt','// Reactor.Uno already targets net10.0-android:'],
+      ['dir','\n<TargetFrameworks>'],['','net10.0-desktop;net10.0-browserwasm;net10.0-android'],['dir','</TargetFrameworks>'],
+    ],
+    raw:`<!-- Mobile deploys from a project head (Activity), not a single .cs file. -->
+<!-- Reactor.Uno already multi-targets Android: -->
+<TargetFrameworks>net10.0-desktop;net10.0-browserwasm;net10.0-android</TargetFrameworks>`
+  },
+};
+
+const state = { target:'desktop' };
+
+function paint(spans, el){
+  el.innerHTML='';
+  for(const [cls,txt] of spans){
+    const s=document.createElement('span');
+    if(cls) s.className=cls;
+    s.textContent=txt;
+    el.appendChild(s);
+  }
+}
+
+function renderTargets(){
+  const c=document.getElementById('targets'); c.innerHTML='';
+  for(const [k,t] of Object.entries(TARGETS)){
+    const d=document.createElement('div');
+    d.className='target'+(k===state.target?' sel':'');
+    d.innerHTML=`<span class="dot" style="background:${t.color}"></span><span>${t.name}</span><span class="meta">${t.badge.split(' ')[0]}</span>`;
+    d.onclick=()=>{state.target=k;updateAll();};
+    c.appendChild(d);
+  }
+}
+
+function updateAll(){
+  renderTargets();
+  const t=TARGETS[state.target];
+  document.getElementById('tname').textContent=t.name;
+  document.getElementById('tdesc').textContent=t.desc;
+  const b=document.getElementById('tbadge');
+  b.textContent=t.badge; b.className='badge '+t.badgeClass;
+  document.getElementById('tstatus').textContent=t.status;
+  paint(t.directives, document.getElementById('directives'));
+  document.getElementById('runcmd').textContent=t.run;
+  paint(COMPONENT, document.getElementById('component'));
+}
+
+document.getElementById('copyBtn').onclick=()=>{
+  const t=TARGETS[state.target];
+  const text=`${t.raw}\n\n${t.entry}\n\n${COMPONENT_RAW}\n`;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=document.getElementById('copyBtn'); const o=btn.textContent;
+    btn.textContent='Copied! ✓'; setTimeout(()=>btn.textContent=o,1400);
+  });
+};
+
+updateAll();
+</script>
+</body>
+</html>

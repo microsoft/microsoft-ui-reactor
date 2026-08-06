@@ -1,0 +1,225 @@
+<Project Sdk="Uno.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-desktop;net10.0-browserwasm;net10.0-android;net10.0-ios</TargetFrameworks>
+
+    <UnoSingleProject>true</UnoSingleProject>
+    <OutputType>Library</OutputType>
+    <GenerateLibraryLayout>true</GenerateLibraryLayout>
+
+    <!-- Match the Windows framework's identity so consumer `using
+         Microsoft.UI.Reactor;` and assembly name line up. -->
+    <AssemblyName>Reactor</AssemblyName>
+    <RootNamespace>Microsoft.UI.Reactor</RootNamespace>
+
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Source-shared files guard Windows-only code paths with this symbol. -->
+    <DefineConstants>$(DefineConstants);REACTOR_UNO</DefineConstants>
+
+
+    <!-- The shared source carries AOT/trim annotations; we don't promote them
+         to errors in the Uno port. -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+
+    <UnoFeatures>
+      SkiaRenderer;
+    </UnoFeatures>
+  </PropertyGroup>
+
+  <!-- ── Shared source from the Windows framework ──
+       Portable subsystems, source-shared verbatim from BOTH src/Reactor (core)
+       and src/Reactor.Advanced (the charting / markdown / data-grid subsystems,
+       moved out of core by spec 062 Track B). Windows-only Docking, Win2D, and
+       most of Hosting (windowing/shell/persistence/devtools) are excluded and
+       replaced by this project's Uno hosting layer; a few portable Hosting
+       files are pulled in explicitly below.
+
+       NOTE: an <Compile Include> glob that matches ZERO files is silent in
+       MSBuild — that is exactly how Track B dropped 74 files out of this port
+       with a green build. The VerifySharedSourceRoots target at the bottom of
+       this file turns that failure mode into a build error. -->
+  <!-- Hosting/ is cherry-picked file-by-file rather than globbed, so a NEW file
+       upstream is invisible here until something fails to compile (that is how
+       FrameNavigation.cs broke the port). Both lists below are checked against
+       the real folder by VerifyHostingTriage, so any new Hosting file forces an
+       explicit include-or-exclude decision. -->
+  <ItemGroup>
+    <!-- Portable: compiled into the port. -->
+    <SharedHostingFile Include="..\Reactor\Hosting\IChartingHostBridge.cs" />
+    <SharedHostingFile Include="..\Reactor\Hosting\ChartingActivation.cs" />
+    <SharedHostingFile Include="..\Reactor\Hosting\RenderStats.cs" />
+    <SharedHostingFile Include="..\Reactor\Hosting\RenderPriorityPolicy.cs" />
+    <SharedHostingFile Include="..\Reactor\Hosting\XamlInterop.cs" />
+    <SharedHostingFile Include="..\Reactor\Hosting\HotReloadService.cs" />
+    <SharedHostingFile Include="..\Reactor\Hosting\ReactorHotReloadCopier.cs" />
+    <SharedHostingFile Include="..\Reactor\Hosting\FrameNavigation.cs" />
+
+    <!-- Windows-only or replaced by this project's Uno hosting layer. Listed so
+         the triage check can tell "deliberately excluded" from "not yet seen". -->
+    <ExcludedHostingFile Include="..\Reactor\Hosting\BackdropApplier.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\DwmInterop.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\EmbedHostWatchdog.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\OverlayHostWiring.cs" />
+    <!-- Depends on the excluded ReactorHostControl. -->
+    <ExcludedHostingFile Include="..\Reactor\Hosting\PageHelper.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorApp.BuiltIns.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorApp.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorAppContext.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorCoreXamlMetadataProvider.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorDisplay.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorFeatures.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorHost.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorHostControl.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReactorWindow.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ReconcileHighlightOverlay.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\ThreadAffinity.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\UIThreadOnlyAttribute.cs" />
+    <!-- Declares WindowState, which this project's Hosting/Windowing.cs owns. -->
+    <ExcludedHostingFile Include="..\Reactor\Hosting\WindowEnums.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\WindowEvents.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\WindowIcon.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\WindowKey.cs" />
+    <ExcludedHostingFile Include="..\Reactor\Hosting\WindowSpec.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Reactor\Core\**\*.cs" />
+    <Compile Include="..\Reactor\Hooks\**\*.cs" />
+    <Compile Include="..\Reactor\Elements\**\*.cs" />
+    <Compile Include="..\Reactor\Input\**\*.cs" />
+    <Compile Include="..\Reactor\Accessibility\**\*.cs" />
+    <Compile Include="..\Reactor\Animation\**\*.cs" />
+    <Compile Include="..\Reactor\Yoga\**\*.cs" />
+    <Compile Include="..\Reactor\Data\**\*.cs" />
+    <Compile Include="..\Reactor\Controls\**\*.cs" />
+
+    <!-- Reactor.Advanced subsystems that are portable to Skia. Verified free of
+         Win2D and Docking coupling, so they do NOT drag in the Win2D
+         PackageReference that Reactor.Advanced itself carries. Docking/ and
+         Win2D/ stay excluded (Win32 / D2D interop). -->
+    <Compile Include="..\Reactor.Advanced\Markdown\**\*.cs" />
+    <Compile Include="..\Reactor.Advanced\Charting\**\*.cs" />
+    <Compile Include="..\Reactor.Advanced\Controls\DataGrid\**\*.cs" />
+    <!-- The Markdown() factories, which live at the root of Reactor.Advanced
+         alongside the Win2D ones. Factories.cs itself is deliberately NOT shared:
+         it is entirely Win2D (CanvasControl et al), which Uno has no equivalent for. -->
+    <Compile Include="..\Reactor.Advanced\Factories.Markdown.cs" />
+
+    <!-- Top-level diagnostics (EventSource-based tracing; portable). -->
+    <Compile Include="..\Reactor\Diagnostics\**\*.cs" />
+
+    <!-- Portable Hosting files the shared core depends on. The rest of Hosting
+         (windowing/shell/persistence/devtools) is replaced by this project's
+         Uno hosting layer. Declared as an item so VerifyHostingTriage below can
+         diff it against the folder. -->
+    <Compile Include="@(SharedHostingFile)" />
+
+    <!-- Wrapper authoring attributes ([GenerateReactorDescriptor], …). Single
+         file; compiled in directly (no separate assembly, so no CS0436). -->
+    <Compile Include="..\Reactor.Wrappers.Abstractions\WrapperAttributes.cs" />
+  </ItemGroup>
+
+  <!-- Excludes (must follow the Include globs above to take effect). -->
+  <ItemGroup>
+    <!-- Devtools menu shim depends on Microsoft.UI.Reactor.Hosting.Devtools,
+         which is not part of the Uno port. -->
+    <Compile Remove="..\Reactor\Elements\DevtoolsMenuShim.cs" />
+  </ItemGroup>
+
+  <!-- The wrapper source generator emits ControlDescriptor partials from the
+       [GenerateReactorDescriptor] annotations on the shared Element records. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Reactor.Wrappers.Generator\Reactor.Wrappers.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+    <PackageReference Include="MessageFormat" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- Skia host-builder providers (UseX11/UseWin32/UseMacOS/UseLinuxFrameBuffer,
+       UseWebAssembly). These ship in the per-platform Skia runtime packages that
+       Uno.Sdk normally injects only into EXE heads; the Reactor.Uno library owns
+       the host bootstrap (ReactorApp.Run), so it references them directly and they
+       flow transitively to the consuming app head. $(UnoVersion) is supplied by
+       Uno.Sdk, so these track the SDK pinned in global.json automatically — never
+       hardcode a version here (it would drift and trip NU1605). -->
+  <!-- Desktop Skia host providers: UseX11/UseWin32/UseMacOS/UseLinuxFrameBuffer. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <PackageReference Include="Uno.WinUI.Runtime.Skia" Version="$(UnoVersion)" />
+    <PackageReference Include="Uno.WinUI.Runtime.Skia.X11" Version="$(UnoVersion)" />
+    <PackageReference Include="Uno.WinUI.Runtime.Skia.Win32" Version="$(UnoVersion)" />
+    <PackageReference Include="Uno.WinUI.Runtime.Skia.MacOS" Version="$(UnoVersion)" />
+    <PackageReference Include="Uno.WinUI.Runtime.Skia.Linux.FrameBuffer" Version="$(UnoVersion)" />
+  </ItemGroup>
+
+  <!-- WebAssembly Skia host provider: UseWebAssembly. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <PackageReference Include="Uno.WinUI.Runtime.Skia.WebAssembly.Browser" Version="$(UnoVersion)" />
+  </ItemGroup>
+
+  <!-- Android Skia runtime. The head supplies the Activity entry point and
+       calls ReactorApp.CreateApplication<TRoot>(). -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
+    <PackageReference Include="Uno.WinUI.Runtime.Skia.Android" Version="$(UnoVersion)" />
+  </ItemGroup>
+
+  <!-- Apple (UIKit) Skia runtime: UseAppleUIKit. Unlike Android, the Apple heads
+       start from a real Main and take the same UnoPlatformHostBuilder shape as
+       desktop, so ReactorApp.Run works there unchanged. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
+    <PackageReference Include="Uno.WinUI.Runtime.Skia.AppleUIKit" Version="$(UnoVersion)" />
+  </ItemGroup>
+
+  <!-- Source-share drift guard.
+       This project consumes the Windows framework by globbing folders out of
+       sibling projects. When upstream MOVES one of those folders, the glob
+       quietly matches nothing and the subsystem disappears from the port with a
+       perfectly green build. That is not hypothetical: spec 062 Track B moved
+       Charting/, Markdown/ and the DataGrid into Reactor.Advanced and this port
+       silently lost 74 files.
+
+       Asserting the roots exist converts that into an immediate, legible build
+       error. Keep this list in sync with the Compile globs above. -->
+  <Target Name="VerifySharedSourceRoots" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <SharedSourceRoot Include="..\Reactor\Core" />
+      <SharedSourceRoot Include="..\Reactor\Hooks" />
+      <SharedSourceRoot Include="..\Reactor\Elements" />
+      <SharedSourceRoot Include="..\Reactor\Input" />
+      <SharedSourceRoot Include="..\Reactor\Accessibility" />
+      <SharedSourceRoot Include="..\Reactor\Animation" />
+      <SharedSourceRoot Include="..\Reactor\Yoga" />
+      <SharedSourceRoot Include="..\Reactor\Data" />
+      <SharedSourceRoot Include="..\Reactor\Controls" />
+      <SharedSourceRoot Include="..\Reactor\Diagnostics" />
+      <SharedSourceRoot Include="..\Reactor.Advanced\Markdown" />
+      <SharedSourceRoot Include="..\Reactor.Advanced\Charting" />
+      <SharedSourceRoot Include="..\Reactor.Advanced\Controls\DataGrid" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(SharedSourceRoot.Identity)')"
+           Text="Source-share root '%(SharedSourceRoot.Identity)' no longer exists. Upstream moved or renamed it, so the matching &lt;Compile Include&gt; glob is now matching zero files and that subsystem has silently dropped out of the Uno port. Re-point the glob (and this list) at the new location." />
+  </Target>
+
+  <!-- Companion guard for the cherry-picked Hosting/ folder.
+       The glob-based check above cannot help there: Hosting/ is picked
+       file-by-file, so a NEW upstream file is simply absent from the port until
+       some unrelated file fails to compile against it. Diff the folder against
+       the two declared lists and make the decision explicit instead. -->
+  <Target Name="VerifyHostingTriage" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <_AllHostingFiles Include="..\Reactor\Hosting\*.cs" />
+      <_TriagedHostingFiles Include="@(SharedHostingFile);@(ExcludedHostingFile)" />
+      <_UntriagedHostingFiles Include="@(_AllHostingFiles)" Exclude="@(_TriagedHostingFiles)" />
+    </ItemGroup>
+    <Error Condition="'@(_UntriagedHostingFiles)' != ''"
+           Text="New file(s) in src/Reactor/Hosting/ that the Uno port has not triaged: @(_UntriagedHostingFiles->'%(Filename)%(Extension)', ', '). Decide whether each is portable — add it to SharedHostingFile to compile it into the port, or to ExcludedHostingFile if it is Windows-only / replaced by the Uno hosting layer." />
+  </Target>
+
+</Project>
