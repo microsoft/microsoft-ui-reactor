@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<resources>
+	<!-- Deliberately minimal: no Theme.SplashScreen entry, so this head does not
+	     depend on the Uno.Resizetizer-generated splash colour/drawable. -->
+	<style name="AppTheme" parent="Theme.MaterialComponents.Light">
+		<item name="windowActionBar">false</item>
+		<item name="android:windowActionBar">false</item>
+		<item name="windowNoTitle">true</item>
+		<item name="android:windowNoTitle">true</item>
+	</style>
+</resources>

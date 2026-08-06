@@ -1,0 +1,31 @@
+<Project Sdk="Uno.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-desktop;net10.0-browserwasm;net10.0-android;net10.0-ios</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <UnoSingleProject>true</UnoSingleProject>
+
+    <ApplicationTitle>Reactor Showcase (Uno)</ApplicationTitle>
+    <ApplicationId>dev.reactor.unoshowcase</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <Nullable>enable</Nullable>
+
+    <!-- Reactor apps have no XAML, so there is no ApplicationDefinition for Uno's
+         iOS Hot Restart helper generator to read (Uno0005). Opt out; this only
+         disables VS's iOS *Hot Restart* deploy helper, not Hot Reload. -->
+    <UnoDisableHotRestartHelperGeneration>true</UnoDisableHotRestartHelperGeneration>
+
+    <!-- NOTE: there is no "HotReload" UnoFeature. The Uno dev-server client
+         (Uno.WinUI.DevServer / Uno.UI.RemoteControl) is referenced automatically
+         for Debug builds, and the Dev Server itself is started by the IDE. -->
+    <UnoFeatures>
+      SkiaRenderer;
+    </UnoFeatures>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor.Uno\Reactor.Uno.csproj" />
+  </ItemGroup>
+
+</Project>
