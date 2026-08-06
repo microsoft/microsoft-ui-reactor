@@ -1,0 +1,90 @@
+<Project Sdk="Uno.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-desktop;net10.0-browserwasm;net10.0-android;net10.0-ios</TargetFrameworks>
+
+    <OutputType>Exe</OutputType>
+    <UnoSingleProject>true</UnoSingleProject>
+
+    <ApplicationTitle>Reactor Gallery (Uno)</ApplicationTitle>
+    <ApplicationId>dev.reactor.gallery</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+
+    <!-- The gallery source is written against the Windows gallery's root namespace. -->
+    <RootNamespace>WinUIGalleryReactor</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Reactor apps have no XAML, so there is no ApplicationDefinition for Uno's
+         iOS Hot Restart helper generator to read (Uno0005). Opt out; this only
+         disables VS's iOS *Hot Restart* deploy helper, not Hot Reload. -->
+    <UnoDisableHotRestartHelperGeneration>true</UnoDisableHotRestartHelperGeneration>
+
+    <UnoFeatures>
+      SkiaRenderer;
+    </UnoFeatures>
+  </PropertyGroup>
+
+  <!-- ── Shared gallery source ──────────────────────────────────────────────
+       The gallery is ~10k lines of pure Reactor C# and is source-shared verbatim
+       from samples/ReactorGallery rather than forked, so the two galleries can
+       never drift. Only the handful of files that reach for Windows App SDK or
+       Win32 are excluded, and each has an Uno-side counterpart in Shims/ that
+       keeps the shared source compiling untouched. -->
+  <ItemGroup>
+    <Compile Include="..\..\ReactorGallery\ControlPages\**\*.cs" />
+    <Compile Include="..\..\ReactorGallery\Pages\**\*.cs" />
+    <Compile Include="..\..\ReactorGallery\UserControls\**\*.cs" />
+    <Compile Include="..\..\ReactorGallery\ControlRegistry.cs" />
+    <Compile Include="..\..\ReactorGallery\GalleryShell.cs" />
+    <Compile Include="..\..\ReactorGallery\PageRouter.cs" />
+    <Compile Include="..\..\ReactorGallery\SamplePageHost.cs" />
+
+    <!-- Portable halves of the deep-link subsystem: pure routing/tag helpers. -->
+    <Compile Include="..\..\ReactorGallery\DeepLink\GalleryRoutes.cs" />
+    <Compile Include="..\..\ReactorGallery\DeepLink\GalleryActivationRouting.cs" />
+  </ItemGroup>
+
+  <!-- Excludes (must follow the Include globs above to take effect). -->
+  <ItemGroup>
+    <!-- Docking is Win32 tear-off / floating windows and is excluded from the
+         Reactor.Uno port entirely. PageRouter still routes "docking", so Shims/
+         supplies a DockingPage that explains the gap instead. -->
+    <Compile Remove="..\..\ReactorGallery\ControlPages\Layout\DockingPage.cs" />
+
+    <!-- On Uno, `WebView2` resolves to a NAMESPACE that shadows Reactor's
+         WebView2(...) element factory, so the shared page cannot compile here
+         (CS0118) and no alias can fix a namespace-vs-method-group shadow.
+         Shims/ supplies a stand-in page. -->
+    <Compile Remove="..\..\ReactorGallery\ControlPages\Media\WebView2Page.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor.Uno\Reactor.Uno.csproj" />
+  </ItemGroup>
+
+  <!-- Gallery assets, linked so they land in the output with their folder layout. -->
+  <ItemGroup>
+    <Content Include="..\..\ReactorGallery\Assets\ControlImages\**"
+             Link="Assets\ControlImages\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\ReactorGallery\Assets\SampleImages\**"
+             Link="Assets\SampleImages\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Source-share drift guard: a <Compile Include> glob matching zero files is
+       silent in MSBuild, so assert the gallery roots still exist. -->
+  <Target Name="VerifyGallerySourceRoots" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <GallerySourceRoot Include="..\..\ReactorGallery\ControlPages" />
+      <GallerySourceRoot Include="..\..\ReactorGallery\Pages" />
+      <GallerySourceRoot Include="..\..\ReactorGallery\UserControls" />
+      <GallerySourceRoot Include="..\..\ReactorGallery\DeepLink" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(GallerySourceRoot.Identity)')"
+           Text="Gallery source root '%(GallerySourceRoot.Identity)' no longer exists — the Windows gallery moved or renamed it, so this Uno head is silently missing pages. Re-point the Compile globs." />
+  </Target>
+
+</Project>

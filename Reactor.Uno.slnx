@@ -23,5 +23,6 @@
   <Folder Name="/samples/">
     <Project Path="samples/Uno/ReactorUnoCounter/ReactorUnoCounter.csproj" />
     <Project Path="samples/Uno/ReactorUnoShowcase/ReactorUnoShowcase.csproj" />
+    <Project Path="samples/Uno/ReactorGalleryUno/ReactorGalleryUno.csproj" />
   </Folder>
 </Solution>

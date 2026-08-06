@@ -23,6 +23,8 @@ on:
       # Reactor.Advanced (spec 062 Track B moved them out of core), so changes
       # there can break the Uno build exactly like changes to src/Reactor.
       - 'src/Reactor.Advanced/**'
+      # The Uno gallery source-shares ~10k lines from the Windows gallery.
+      - 'samples/ReactorGallery/**'
       - 'Reactor.Uno.slnx'
       - 'global.json'
       - '.github/workflows/ci-uno.yml'
@@ -36,6 +38,8 @@ on:
       # Reactor.Advanced (spec 062 Track B moved them out of core), so changes
       # there can break the Uno build exactly like changes to src/Reactor.
       - 'src/Reactor.Advanced/**'
+      # The Uno gallery source-shares ~10k lines from the Windows gallery.
+      - 'samples/ReactorGallery/**'
       - 'Reactor.Uno.slnx'
       - 'global.json'
       - '.github/workflows/ci-uno.yml'
