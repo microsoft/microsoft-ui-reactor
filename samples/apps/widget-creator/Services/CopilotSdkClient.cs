@@ -24,13 +24,18 @@ public sealed class AuthExpiredException(string message) : Exception(message);
 /// </summary>
 public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
 {
-    const string DefaultModel = "claude-sonnet-4.5";
+    const string DefaultModel = "claude-sonnet-4.6";
 
     readonly string _model;
     readonly SemaphoreSlim _initLock = new(1, 1);
     CopilotClient? _client;
 
-    public CopilotSdkClient(string? model = null) => _model = model ?? DefaultModel;
+    public CopilotSdkClient(string? model = null)
+    {
+        var configured = Environment.GetEnvironmentVariable("WIDGET_CREATOR_MODEL");
+        _model = model
+            ?? (string.IsNullOrWhiteSpace(configured) ? DefaultModel : configured.Trim());
+    }
 
     public string ModelId => _model;
 

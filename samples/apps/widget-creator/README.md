@@ -54,6 +54,11 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
 1. **Copilot auth** — install the [GitHub CLI](https://cli.github.com/) and run
    `gh auth login --web` with a Copilot-enabled account (`gh auth status` to
    confirm). The bundled Copilot CLI rides that account.
+
+   The model defaults to `claude-sonnet-4.6`. Override it with
+   `WIDGET_CREATOR_MODEL` (e.g. `gpt-5.4`) if that model is retired or you want
+   a different one — `session.create` fails with *Model "…" is not available*
+   when the id is no longer served.
 2. **MXC** — a build of `wxc-exec.exe`. By default the app uses the **pinned,
    vendored** copy shipped next to it (`…\mxc\<rid>\wxc-exec.exe`), which is known
    to auto-fall back off BaseContainer. Override with:
