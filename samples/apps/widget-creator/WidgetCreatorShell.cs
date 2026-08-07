@@ -104,10 +104,17 @@ public sealed class WidgetCreatorShell : Component
             _ = Task.Run(() =>
             {
                 var info = WindowsAppRuntimeCheck.Detect();
+                // Safe after the cleanup below disposes the source:
+                // IsCancellationRequested has no disposed-check, so this read
+                // cannot race Dispose() into an ObjectDisposedException.
                 if (!cts.IsCancellationRequested)
                     setRuntime(info);
             });
-            return () => cts.Cancel();
+            return () =>
+            {
+                cts.Cancel();
+                cts.Dispose();
+            };
         }, runtimeChecks);
 
         UseEffect(() =>
