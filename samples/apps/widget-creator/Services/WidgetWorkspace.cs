@@ -77,7 +77,19 @@ public sealed class WidgetWorkspace
 
         await File.WriteAllTextAsync(csFile, source).ConfigureAwait(false);
         if (NeedsCsprojRewrite(csprojFile))
+        {
             await File.WriteAllTextAsync(csprojFile, CsprojTemplate()).ConfigureAwait(false);
+            // The csproj declares RestorePackagesWithLockFile, so a widget scaffolded
+            // by an older Widget Creator has a packages.lock.json pinned to the
+            // previous package set. Drop it when the project changes so restore
+            // re-evaluates the graph instead of resolving against a stale lock.
+            var lockFile = Path.Combine(dir, "packages.lock.json");
+            if (File.Exists(lockFile))
+            {
+                try { File.Delete(lockFile); }
+                catch (IOException ex) { SessionLog.Write($"[Workspace] could not delete stale lock file: {ex.Message}"); }
+            }
+        }
         if (NeedsNugetRewrite(nugetFile))
             await File.WriteAllTextAsync(nugetFile, NugetConfigTemplate(LocalNupkgsFeed)).ConfigureAwait(false);
 
@@ -87,21 +99,16 @@ public sealed class WidgetWorkspace
 
     static bool NeedsCsprojRewrite(string csprojFile)
     {
+        // Content comparison rather than a growing list of "does it contain X?"
+        // probes: the csproj is entirely generated (the model only ever writes
+        // widget.cs), so any drift from the current template — a stale Windows App
+        // SDK pin, a missing hardening property — should simply be overwritten.
+        // A list of feature probes has to be extended for every template change and
+        // silently leaves old widgets on a broken csproj when someone forgets.
         if (!File.Exists(csprojFile))
             return true;
 
-        var text = File.ReadAllText(csprojFile);
-        return text.Contains("<Compile Remove=\"**\\*.cs\" />", StringComparison.Ordinal) ||
-            !text.Contains("<Platforms>x64;ARM64;X86</Platforms>", StringComparison.Ordinal) ||
-            text.Contains("<RuntimeIdentifier>win-", StringComparison.Ordinal) ||
-            !text.Contains("<TargetPlatformMinVersion>", StringComparison.Ordinal) ||
-            !text.Contains("<SupportedOSPlatformVersion>", StringComparison.Ordinal) ||
-            !text.Contains("Microsoft.UI.Reactor.Advanced", StringComparison.Ordinal) ||
-            // Framework-dependent switch: force a rewrite so existing widgets stop
-            // bundling the full Windows App SDK runtime (~220 MB per widget).
-            text.Contains("<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>", StringComparison.Ordinal) ||
-            // H-1: force a rewrite so existing widgets pick up the build-lockdown props.
-            !text.Contains("RestorePackagesWithLockFile", StringComparison.Ordinal);
+        return !string.Equals(File.ReadAllText(csprojFile), CsprojTemplate(), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -154,7 +161,17 @@ public sealed class WidgetWorkspace
           <ItemGroup>
             <PackageReference Include="Microsoft.UI.Reactor" Version="0.0.0-local" />
             <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.0.0-local" />
-            <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
+            <!-- Windows App SDK 2.0 split the metapackage into independently-versioned
+                 sub-packages. A framework-dependent WinUI *executable* takes the lean
+                 WinUI slice plus Runtime (Microsoft.WindowsAppSDK.Base.targets rejects a
+                 framework-dependent app that references neither Runtime nor
+                 WindowsAppSDKSelfContained) — mirroring the injection rule in this repo's
+                 Directory.Build.targets. The versions are generated from
+                 Directory.Build.props so they always match the Microsoft.UI.Reactor
+                 0.0.0-local package the widget links against; a mismatch fails the build
+                 in Microsoft.WindowsAppSDK.ComponentReference.targets. -->
+            <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="{WidgetSdkVersions.WindowsAppSdkWinUI}" />
+            <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="{WidgetSdkVersions.WindowsAppSdk}" />
           </ItemGroup>
 
         </Project>

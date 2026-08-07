@@ -14,6 +14,16 @@
     <WindowsPackageType>None</WindowsPackageType>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
 
+    <!-- Compile the Windows App SDK's own generated WindowsAppSDK-VersionInfo.cs
+         (Microsoft.WindowsAppSDK.Runtime\include\) into the app. It carries the
+         authoritative Windows App *Runtime* identity for the SDK version we build
+         against — framework package family name and minimum DotQuad version —
+         which WindowsAppRuntimeCheck uses to tell whether the machine-wide runtime
+         a generated widget needs is actually installed. Using the SDK's own
+         constants means the check tracks WindowsAppSDKVersion automatically
+         instead of hardcoding a version that silently rots. -->
+    <WindowsAppSdkIncludeVersionInfo>true</WindowsAppSdkIncludeVersionInfo>
+
     <!-- AOT: this sample IS trim/AOT-analyzed (no ReactorSkipAotAnalysis opt-out).
          Directory.Build.targets turns on IsAotCompatible=true + promotes the IL2*/IL3*
          trim/AOT warnings to errors for net10+, so any un-annotated reflection is caught
@@ -82,6 +92,59 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\SystemPrompt.txt" />
   </ItemGroup>
+
+  <!--
+    Flow the repo-central Windows App SDK package versions (Directory.Build.props)
+    into the app as compile-time constants so WidgetWorkspace can pin them in every
+    generated widget.csproj.
+
+    Why this matters: a generated widget references Microsoft.UI.Reactor 0.0.0-local,
+    which was packed from THIS repo and therefore drags in the Windows App SDK
+    component packages at $(WindowsAppSDKVersion). If the widget's own
+    Microsoft.WindowsAppSDK.Runtime reference is pinned to a different (older)
+    literal, Microsoft.WindowsAppSDK.ComponentReference.targets fails the widget
+    build with "One or more referenced Windows App SDK components are newer than the
+    versions expected by the Microsoft.WindowsAppSDK.Runtime package". Generating the
+    versions here keeps Directory.Build.props the single source of truth — a
+    hardcoded literal in WidgetWorkspace.cs is a second one that drifts on every
+    SDK bump and breaks widget builds (with the model then burning repair attempts
+    on a failure its source code did not cause).
+  -->
+  <PropertyGroup>
+    <!-- Note: IntermediateOutputPath is NOT set while the csproj body is evaluated
+         (the SDK's implicit .targets import comes after), so this must be resolved
+         inside the target below or the file lands in the project directory and gets
+         swept up by the default **/*.cs glob. -->
+    <_WidgetSdkVersionsFileName>WidgetSdkVersions.g.cs</_WidgetSdkVersionsFileName>
+  </PropertyGroup>
+
+  <Target Name="_GenerateWidgetSdkVersions" BeforeTargets="BeforeCompile">
+    <Error Condition="'$(WindowsAppSDKVersion)' == ''" Text="WindowsAppSDKVersion is not set; expected it from Directory.Build.props." />
+    <Error Condition="'$(WindowsAppSDKWinUIVersion)' == ''" Text="WindowsAppSDKWinUIVersion is not set; expected it from Directory.Build.props." />
+    <PropertyGroup>
+      <_WidgetSdkVersionsFile>$(IntermediateOutputPath)$(_WidgetSdkVersionsFileName)</_WidgetSdkVersionsFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <!-- ';' is escaped as %3B so MSBuild does not split each C# statement into
+           separate items. -->
+      <_WidgetSdkVersionsLines Include="// &lt;auto-generated /&gt; Written by the _GenerateWidgetSdkVersions target in widget-creator.csproj." />
+      <_WidgetSdkVersionsLines Include="// Source of truth: WindowsAppSDKVersion / WindowsAppSDKWinUIVersion in Directory.Build.props. Do not edit." />
+      <_WidgetSdkVersionsLines Include="namespace WidgetCreator.Services%3B" />
+      <_WidgetSdkVersionsLines Include="/// &lt;summary&gt;Windows App SDK package versions this build of Widget Creator was compiled against.&lt;/summary&gt;" />
+      <_WidgetSdkVersionsLines Include="internal static class WidgetSdkVersions" />
+      <_WidgetSdkVersionsLines Include="{" />
+      <_WidgetSdkVersionsLines Include="    /// &lt;summary&gt;Version for Microsoft.WindowsAppSDK.Runtime (the aggregate SDK version).&lt;/summary&gt;" />
+      <_WidgetSdkVersionsLines Include="    internal const string WindowsAppSdk = &quot;$(WindowsAppSDKVersion)&quot;%3B" />
+      <_WidgetSdkVersionsLines Include="    /// &lt;summary&gt;Version for Microsoft.WindowsAppSDK.WinUI, which tracks its own version.&lt;/summary&gt;" />
+      <_WidgetSdkVersionsLines Include="    internal const string WindowsAppSdkWinUI = &quot;$(WindowsAppSDKWinUIVersion)&quot;%3B" />
+      <_WidgetSdkVersionsLines Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_WidgetSdkVersionsFile)" Lines="@(_WidgetSdkVersionsLines)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(_WidgetSdkVersionsFile)" />
+      <FileWrites Include="$(_WidgetSdkVersionsFile)" />
+    </ItemGroup>
+  </Target>
 
   <!-- Vendored MXC sandbox runtime (no NuGet exists for it). These prebuilt
        wxc-exec binaries + helpers are copied next to the app under mxc/<rid>/ so

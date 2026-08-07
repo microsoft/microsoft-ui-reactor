@@ -90,6 +90,26 @@ public sealed class WidgetCreatorShell : Component
         var (policyJson, setPolicyJson) = UseState("", threadSafe: true);
         var (policyAdvanced, setPolicyAdvanced) = UseState(false, threadSafe: true);
 
+        // Machine-wide Windows App Runtime probe. Generated widgets are
+        // framework-dependent, so without it they build fine and then die at
+        // startup inside the sandbox. Probed off the UI thread (package
+        // enumeration is not instant) and re-runnable, so the banner clears once
+        // the user has installed it.
+        var (runtime, setRuntime) = UseState<WindowsAppRuntimeInfo?>(null, threadSafe: true);
+        var (runtimeChecks, setRuntimeChecks) = UseState(0, threadSafe: true);
+
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            _ = Task.Run(() =>
+            {
+                var info = WindowsAppRuntimeCheck.Detect();
+                if (!cts.IsCancellationRequested)
+                    setRuntime(info);
+            });
+            return () => cts.Cancel();
+        }, runtimeChecks);
+
         UseEffect(() =>
         {
             void OnTurnStart() => ReplaceSource("", setSource);
@@ -168,6 +188,20 @@ public sealed class WidgetCreatorShell : Component
             {
                 SessionLog.Write($"[Shell] reveal failed: {ex}");
                 setBanner($"Reveal failed: {ex.Message}");
+            }
+        }
+
+        void OpenUrl(string url)
+        {
+            try
+            {
+                SessionLog.Write($"[Shell] opening browser: {url}");
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                SessionLog.Write($"[Shell] open url failed: {ex}");
+                setBanner($"Could not open {url}: {ex.Message}");
             }
         }
 
@@ -704,6 +738,7 @@ public sealed class WidgetCreatorShell : Component
             (FlexColumn(
                 titleBar,
                 (FlexColumn(
+                    runtime is null || runtime.IsSatisfied ? Empty() : RuntimeBanner(runtime),
                     banner is null ? Empty() : Banner(banner),
                     dock)
                     with { RowGap = 12 })
@@ -711,6 +746,46 @@ public sealed class WidgetCreatorShell : Component
                 .Flex(grow: 1, basis: 0))),
             permApp is null ? null : PermissionsOverlay(permApp))
             .Backdrop(BackdropKind.Mica);
+
+        // Windows App Runtime prompt. Generated widgets are framework-dependent, so
+        // a missing/older machine-wide runtime means every widget builds and then
+        // fails to launch. Offer the two install routes plus a re-check that clears
+        // the banner without restarting Widget Creator.
+        Element RuntimeBanner(WindowsAppRuntimeInfo info)
+        {
+            var missing = info.Status == WindowsAppRuntimeStatus.Missing;
+            var accent = missing ? Theme.SystemCritical : Theme.SystemCaution;
+            var background = missing ? Theme.SystemCriticalBackground : Theme.SystemCautionBackground;
+
+            return Border(
+                FlexColumn(
+                    TextBlock(missing ? "Windows App Runtime not installed" : "Windows App Runtime is out of date")
+                        .Bold()
+                        .Foreground(Theme.PrimaryText)
+                        .TextWrapping(TextWrapping.Wrap),
+                    Caption(info.Message)
+                        .Foreground(Theme.SecondaryText)
+                        .TextWrapping(TextWrapping.Wrap),
+                    Caption($"Need {info.PackageFamilyName} >= {info.RequiredVersion} ({info.Architecture}). "
+                        + $"Or install from a terminal:  {info.WingetCommand}")
+                        .FontFamily("Cascadia Mono")
+                        .Foreground(Theme.TertiaryText)
+                        .TextWrapping(TextWrapping.Wrap),
+                    HStack(8,
+                        Button("Download the runtime", () => OpenUrl(info.InstallerUrl))
+                            .AccentButton()
+                            .AutomationName("Download the Windows App Runtime installer"),
+                        Button("All downloads", () => OpenUrl(info.DownloadsUrl))
+                            .AutomationName("Open the Windows App SDK downloads page"),
+                        Button("Check again", () => setRuntimeChecks(runtimeChecks + 1))
+                            .SubtleButton()
+                            .AutomationName("Re-check for the Windows App Runtime")))
+                    with { RowGap = 8 })
+            .Background(background)
+            .WithBorder(accent)
+            .CornerRadius(8)
+            .Padding(horizontal: 12, vertical: 10);
+        }
 
         // Inline modal overlay (rendered in the root Grid so it reconciles on
         // every render — unlike Reactor's ContentDialog, whose content is a

@@ -59,7 +59,34 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
    `WIDGET_CREATOR_MODEL` (e.g. `gpt-5.4`) if that model is retired or you want
    a different one — `session.create` fails with *Model "…" is not available*
    when the id is no longer served.
-2. **MXC** — a build of `wxc-exec.exe`. By default the app uses the **pinned,
+2. **Windows App Runtime** — generated widgets are *framework-dependent*
+   (`WindowsAppSDKSelfContained=false`), so they bind the machine-wide
+   Windows App Runtime at launch instead of carrying a ~220 MB copy each.
+   Widget Creator probes for it on startup and, if it is missing or older than
+   the version widgets are built against, shows a banner with buttons that open
+   the [direct installer](https://aka.ms/windowsappsdk) or the
+   [downloads page](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
+   in your browser. You can also install it up front:
+
+   ```pwsh
+   winget install Microsoft.WindowsAppRuntime.2.1
+   ```
+
+   To check without opening the window:
+
+   ```pwsh
+   WidgetCreator.exe --check-runtime   # exit 0 = satisfied, 1 = missing/outdated
+   ```
+
+   The required package family and minimum version are not hardcoded — they come
+   from the Windows App SDK's own generated `WindowsAppSDK-VersionInfo.cs`
+   (compiled in via `WindowsAppSdkIncludeVersionInfo`), so the check tracks
+   `WindowsAppSDKVersion` in `Directory.Build.props` automatically. Two env
+   overrides exist to exercise the failure paths on a healthy machine:
+   `WIDGET_CREATOR_MIN_WINAPPRUNTIME` (minimum version) and
+   `WIDGET_CREATOR_WINAPPRUNTIME_FAMILY` (package family).
+
+3. **MXC** — a build of `wxc-exec.exe`. By default the app uses the **pinned,
    vendored** copy shipped next to it (`…\mxc\<rid>\wxc-exec.exe`), which is known
    to auto-fall back off BaseContainer. Override with:
    - `WIDGET_CREATOR_WXC_EXEC` — full path to `wxc-exec.exe`,
@@ -69,10 +96,15 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
      vendored copy, for developers iterating on the MXC CLI itself, or
    - `WIDGET_CREATOR_MXC_ROOT` — the MXC checkout root used by the opt-in above
      (default `%USERPROFILE%\Code\mxc`).
-3. **Local Reactor package** — generated widgets reference
+
+4. **Local Reactor package** — generated widgets reference
    `Microsoft.UI.Reactor 0.0.0-local`, resolved from this repo's `local-nupkgs`
    feed. Run `mur pack-local` if it's missing. Override the feed path with
-   `WIDGET_CREATOR_NUPKGS`.
+   `WIDGET_CREATOR_NUPKGS`. The widget's Windows App SDK references
+   (`Microsoft.WindowsAppSDK.WinUI` + `.Runtime`) are pinned to the same versions
+   this repo builds with — they are generated into the app from
+   `Directory.Build.props`, because a widget that pins a different version fails
+   its build in `Microsoft.WindowsAppSDK.ComponentReference.targets`.
 
 Type a prompt, click **Generate & Run**. The generated source streams into the
 right panel; the build + `wxc-exec` log streams below it. The widget window opens
@@ -152,6 +184,7 @@ samples/apps/widget-creator/
     WidgetWorkspace.cs       ← scaffolds widget.cs + widget.csproj + nuget.config
     WidgetBuilder.cs         ← dotnet publish (no ACL edits — MXC grants the app dir)
     MxcSandbox.cs            ← builds the ContainerConfig + runs wxc-exec
+    WindowsAppRuntimeCheck.cs ← probes the machine-wide Windows App Runtime
     SessionLog.cs
   Resources/SystemPrompt.txt ← instructs the model to emit one single-file Reactor app
 ```
