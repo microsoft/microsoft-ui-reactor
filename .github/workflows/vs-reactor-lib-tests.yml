@@ -23,6 +23,7 @@ on:
   push:
     paths:
       - 'bootstrap.ps1'
+      - 'tools/BootstrapFeedResolver.ps1'
       - 'src/vs-reactor/VsProcessLib.ps1'
       - 'src/vs-reactor/Reinstall-Vsix.ps1'
       - 'src/vs-reactor/TESTING.md'
@@ -32,6 +33,7 @@ on:
   pull_request:
     paths:
       - 'bootstrap.ps1'
+      - 'tools/BootstrapFeedResolver.ps1'
       - 'src/vs-reactor/VsProcessLib.ps1'
       - 'src/vs-reactor/Reinstall-Vsix.ps1'
       - 'src/vs-reactor/TESTING.md'
@@ -63,6 +65,10 @@ jobs:
         shell: pwsh
         run: ./tests/vs_reactor/ci/BootstrapExitCode.Tests.ps1
 
+      - name: Run bootstrap feed resolver tests (PowerShell 7)
+        shell: pwsh
+        run: ./tests/vs_reactor/ci/BootstrapFeedResolver.Tests.ps1
+
       # `shell: powershell` is Windows PowerShell 5.1 — the host `mur upgrade`
       # falls back to. Its Process type has no Kill(bool) and it has no
       # $IsWindows, so this step is what keeps the shipped scripts 5.1-clean.
@@ -73,3 +79,7 @@ jobs:
       - name: Run bootstrap exit-code tests (Windows PowerShell 5.1)
         shell: powershell
         run: ./tests/vs_reactor/ci/BootstrapExitCode.Tests.ps1
+
+      - name: Run bootstrap feed resolver tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./tests/vs_reactor/ci/BootstrapFeedResolver.Tests.ps1

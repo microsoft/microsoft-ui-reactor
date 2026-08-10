@@ -49,6 +49,18 @@
     suite or manage the CLI yourself. The install is best-effort either way —
     a missing winget only warns, it never fails the bootstrap.
 
+.PARAMETER NpmRegistry
+    Override the npm registry used by GitHub.Copilot.SDK to acquire its native
+    CLI. When omitted, bootstrap uses a packagefeedproxy.microsoft.io registry
+    already configured in NPM_CONFIG_REGISTRY or ~/.npmrc; otherwise the SDK's
+    public registry default is unchanged.
+
+.PARAMETER NuGetConfig
+    Use an explicit NuGet.Config for bootstrap restores. When omitted, bootstrap
+    uses a packagefeedproxy.microsoft.io source already present in the user's
+    NuGet.Config if it is reachable; otherwise the repo's public config remains
+    in effect.
+
 .PARAMETER Verbose
     Common parameter (enabled by [CmdletBinding]). Surfaces extra
     diagnostic output at every decision point: detected SDK list,
@@ -83,7 +95,9 @@ param(
     [string]$Configuration = 'Release',
     [switch]$InstallWinAppSdk,
     [switch]$NoWinAppSdk,
-    [switch]$SkipWinAppCli
+    [switch]$SkipWinAppCli,
+    [string]$NpmRegistry,
+    [string]$NuGetConfig
 )
 
 if ($InstallWinAppSdk -and $NoWinAppSdk) {
@@ -95,6 +109,13 @@ if ($InstallWinAppSdk -and $NoWinAppSdk) {
 $ErrorActionPreference = 'Stop'
 $repoRoot = $PSScriptRoot
 Set-Location $repoRoot
+
+$feedResolver = Join-Path $repoRoot 'tools\BootstrapFeedResolver.ps1'
+if (-not (Test-Path -LiteralPath $feedResolver -PathType Leaf)) {
+    Write-Host "ERROR: Missing bootstrap feed resolver: $feedResolver" -ForegroundColor Red
+    exit 1
+}
+. $feedResolver
 
 # -Verbose is a common parameter (CmdletBinding); $VerbosePreference flips to
 # 'Continue' automatically when the caller passes it. We expose a tiny helper
@@ -179,6 +200,43 @@ if (-not (Test-DotnetSdk10)) {
     }
 }
 Write-Ok ".NET SDK present"
+
+$npmSelection = Resolve-ReactorNpmRegistry -ExplicitRegistry $NpmRegistry
+if ($npmSelection -and -not $npmSelection.Explicit -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+    Write-Dbg "Testing npm registry access: $($npmSelection.Registry)"
+    & npm view '@github/copilot-win32-x64' version "--registry=$($npmSelection.Registry)" --silent 2>$null | Out-Null
+    $npmProbeExit = $LASTEXITCODE
+    $global:LASTEXITCODE = 0
+    if ($npmProbeExit -ne 0) {
+        Write-Host "    [warn] Configured npm proxy is not reachable; falling back to GitHub.Copilot.SDK's public registry." -ForegroundColor Yellow
+        $npmSelection = $null
+    }
+}
+if ($npmSelection) {
+    Write-Ok "npm registry selected from user configuration: $($npmSelection.Registry)"
+} else {
+    Write-Dbg 'No reachable configured npm proxy detected; GitHub.Copilot.SDK will use its public registry default'
+}
+
+$nugetSelection = Resolve-ReactorNuGetFeed -ExplicitConfig $NuGetConfig
+if ($nugetSelection -and -not $nugetSelection.Explicit) {
+    Write-Dbg "Testing NuGet source access: $($nugetSelection.Source)"
+    $nugetProbeOutput = & dotnet package search GitHub.Copilot.SDK --source $nugetSelection.Source --take 1 --format json 2>$null | Out-String
+    $nugetProbeExit = $LASTEXITCODE
+    $global:LASTEXITCODE = 0
+    if ($nugetProbeExit -ne 0 -or $nugetProbeOutput -notmatch '"id"\s*:\s*"GitHub\.Copilot\.SDK"') {
+        Write-Host "    [warn] Configured NuGet proxy cannot provide GitHub.Copilot.SDK; falling back to the repo's public NuGet config." -ForegroundColor Yellow
+        $nugetSelection = $null
+    } else {
+        $nugetSelection.ConfigPath = New-ReactorBootstrapNuGetConfig -Source $nugetSelection.Source
+    }
+}
+$effectiveNuGetConfig = if ($nugetSelection) { $nugetSelection.ConfigPath } else { $null }
+if ($effectiveNuGetConfig) {
+    Write-Ok "NuGet config selected from user configuration: $effectiveNuGetConfig"
+} else {
+    Write-Dbg 'No reachable configured NuGet proxy detected; using the repo nuget.config'
+}
 
 function Get-ResolvedDotnetSdkVersion {
     $sdkVersion = (& dotnet --version 2>$null | Select-Object -First 1)
@@ -338,13 +396,30 @@ Write-Dbg "Local nupkg feed: $feed"
 $hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
 Write-Dbg "Host arch resolved to: $hostArch"
 
-Write-Dbg "dotnet pack src\Reactor.Cli\Reactor.Cli.csproj -c $Configuration -p:Platform=$hostArch -o $feed"
-& dotnet pack (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj') `
-    -c $Configuration `
-    "-p:Platform=$hostArch" `
-    -o $feed `
-    --nologo -v:m
-if ($LASTEXITCODE -ne 0) { Fail 'dotnet pack failed for Reactor.Cli' }
+$cliPackArgs = @(
+    'pack',
+    (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj'),
+    '-c', $Configuration,
+    "-p:Platform=$hostArch",
+    '-o', $feed,
+    '--nologo', '-v:m'
+)
+if ($effectiveNuGetConfig) {
+    $cliPackArgs += "-p:RestoreConfigFile=$effectiveNuGetConfig"
+}
+if ($npmSelection) {
+    $cliPackArgs += "-p:CopilotNpmRegistryUrl=$($npmSelection.Registry)"
+}
+Write-Dbg "dotnet $($cliPackArgs -join ' ')"
+$previousRestoreConfig = $env:RestoreConfigFile
+try {
+    if ($effectiveNuGetConfig) { $env:RestoreConfigFile = $effectiveNuGetConfig }
+    & dotnet @cliPackArgs
+    $cliPackExit = $LASTEXITCODE
+} finally {
+    $env:RestoreConfigFile = $previousRestoreConfig
+}
+if ($cliPackExit -ne 0) { Fail 'dotnet pack failed for Reactor.Cli' }
 Write-Ok "Packed Microsoft.UI.Reactor.Cli -> $feed"
 
 # ---------------------------------------------------------------------------
@@ -357,12 +432,16 @@ if ($SkipMurInstall) {
     Write-Step 'Installing mur as a dotnet global tool'
 
     $existing = & dotnet tool list -g 2>$null | Select-String -SimpleMatch 'microsoft.ui.reactor.cli'
+    $toolArgs = @('-g', '--add-source', $feed, 'Microsoft.UI.Reactor.Cli', '--no-cache', '--ignore-failed-sources')
+    if ($effectiveNuGetConfig) {
+        $toolArgs += @('--configfile', $effectiveNuGetConfig)
+    }
     if ($existing) {
         Write-Dbg "Existing global tool detected ($($existing.Line.Trim())); using 'dotnet tool update'"
-        & dotnet tool update -g --add-source $feed Microsoft.UI.Reactor.Cli --no-cache --ignore-failed-sources
+        & dotnet tool update @toolArgs
     } else {
         Write-Dbg "No existing global tool; using 'dotnet tool install'"
-        & dotnet tool install -g --add-source $feed Microsoft.UI.Reactor.Cli --no-cache --ignore-failed-sources
+        & dotnet tool install @toolArgs
     }
     if ($LASTEXITCODE -ne 0) { Fail '`dotnet tool install/update` failed for Microsoft.UI.Reactor.Cli' }
 
@@ -396,19 +475,36 @@ Write-Step 'Packing local Microsoft.UI.Reactor + ProjectTemplates (`mur pack-loc
 # hand-maintained default. Best-effort: if NuGet is unreachable it falls back to
 # the template's built-in default. Pass `--MSUIReactorVersion 0.0.0-local` to a
 # scaffold to consume this local source build instead.
-$murResolved = Get-Command mur -ErrorAction SilentlyContinue
-if ($murResolved) {
-    Write-Dbg "Using installed mur at $($murResolved.Source)"
-    & mur pack-local --framework-version latest
-} else {
-    Write-Dbg "mur not on PATH; falling back to 'dotnet run' against Reactor.Cli source"
-    & dotnet run --project (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj') `
-        -c $Configuration `
-        "-p:Platform=$hostArch" `
-        --nologo `
-        -- pack-local --framework-version latest
+$previousRestoreConfig = $env:RestoreConfigFile
+try {
+    if ($effectiveNuGetConfig) { $env:RestoreConfigFile = $effectiveNuGetConfig }
+    $murResolved = Get-Command mur -ErrorAction SilentlyContinue
+    if ($murResolved) {
+        Write-Dbg "Using installed mur at $($murResolved.Source)"
+        & mur pack-local --framework-version latest
+    } else {
+        Write-Dbg "mur not on PATH; falling back to 'dotnet run' against Reactor.Cli source"
+        $murRunArgs = @(
+            'run',
+            '--project', (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj'),
+            '-c', $Configuration,
+            "-p:Platform=$hostArch",
+            '--nologo'
+        )
+        if ($effectiveNuGetConfig) {
+            $murRunArgs += "-p:RestoreConfigFile=$effectiveNuGetConfig"
+        }
+        if ($npmSelection) {
+            $murRunArgs += "-p:CopilotNpmRegistryUrl=$($npmSelection.Registry)"
+        }
+        $murRunArgs += @('--', 'pack-local', '--framework-version', 'latest')
+        & dotnet @murRunArgs
+    }
+    $packLocalExit = $LASTEXITCODE
+} finally {
+    $env:RestoreConfigFile = $previousRestoreConfig
 }
-if ($LASTEXITCODE -ne 0) { Fail 'mur pack-local failed' }
+if ($packLocalExit -ne 0) { Fail 'mur pack-local failed' }
 
 # ---------------------------------------------------------------------------
 # 5. Install the `dotnet new reactorapp` template

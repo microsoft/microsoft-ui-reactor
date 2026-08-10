@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - 'bootstrap.ps1'
+      - 'tools/BootstrapFeedResolver.ps1'
       - 'src/Reactor.Cli/**'
       - 'tools/Templates/**'
       - 'Directory.Build.props'
@@ -21,6 +22,7 @@ on:
     branches: [main]
     paths:
       - 'bootstrap.ps1'
+      - 'tools/BootstrapFeedResolver.ps1'
       - 'src/Reactor.Cli/**'
       - 'tools/Templates/**'
       - 'Directory.Build.props'

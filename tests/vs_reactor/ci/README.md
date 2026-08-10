@@ -16,6 +16,7 @@ pins down.
 |---|---|
 | `VsProcessLib.Tests.ps1` | Behavioural tests for `src/vs-reactor/VsProcessLib.ps1` against a real, genuinely-hanging, two-level process tree: tree kill, attributed sweep, drain poll, pid-reuse guards, `$LASTEXITCODE` hygiene. |
 | `BootstrapExitCode.Tests.ps1` | Contract tests for the `bootstrap.ps1` ↔ `Reinstall-Vsix.ps1` exit-code handshake: the `$LASTEXITCODE` leak, the guarded `exit 1` / `exit 3` paths, and agreement between the code and both documented exit tables. |
+| `BootstrapFeedResolver.Tests.ps1` | Behavioural tests for user-scoped Microsoft npm/NuGet proxy discovery, public-default preservation, explicit overrides, and generated internal-only NuGet config. |
 
 The library under test lives in `src/vs-reactor/`, not here, because
 `Reinstall-Vsix.ps1` dot-sources it at runtime — it ships with the script rather
