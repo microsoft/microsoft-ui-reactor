@@ -485,19 +485,17 @@ Invoke-ReactorWithRestoreEnvironment `
         & mur pack-local --framework-version latest
     } else {
         Write-Dbg "mur not on PATH; falling back to 'dotnet run' against Reactor.Cli source"
-        $murRunArgs = @(
-            'run',
-            '--project', (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj'),
-            '-c', $Configuration,
-            "-p:Platform=$hostArch",
-            '--nologo'
-        )
-        $murRunArgs += Get-ReactorRestoreArguments `
+        $murRestoreArgs = Get-ReactorRestoreArguments `
             -NuGetConfig $effectiveNuGetConfig `
             -NuGetSource $effectiveNuGetSource `
             -NpmRegistry $(if ($npmSelection) { $npmSelection.Registry } else { $null })
-        $murRunArgs += @('--', 'pack-local', '--framework-version', 'latest')
-        & dotnet @murRunArgs
+        & dotnet run `
+            --project (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj') `
+            -c $Configuration `
+            "-p:Platform=$hostArch" `
+            --nologo `
+            @murRestoreArgs `
+            -- pack-local --framework-version latest
     }
 }
 if ($packLocalExit -ne 0) { Fail 'mur pack-local failed' }
