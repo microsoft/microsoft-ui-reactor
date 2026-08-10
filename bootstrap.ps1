@@ -201,19 +201,20 @@ if (-not (Test-DotnetSdk10)) {
 }
 Write-Ok ".NET SDK present"
 
+$hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+$copilotPlatform = if ($hostArch -eq 'ARM64') { 'win32-arm64' } else { 'win32-x64' }
+
 $npmSelection = Resolve-ReactorNpmRegistry -ExplicitRegistry $NpmRegistry
-if ($npmSelection -and -not $npmSelection.Explicit -and (Get-Command npm -ErrorAction SilentlyContinue)) {
-    Write-Dbg "Testing npm registry access: $($npmSelection.Registry)"
-    & npm view '@github/copilot-win32-x64' version "--registry=$($npmSelection.Registry)" --silent 2>$null | Out-Null
-    $npmProbeExit = $LASTEXITCODE
-    $global:LASTEXITCODE = 0
-    if ($npmProbeExit -ne 0) {
+if ($npmSelection -and -not $npmSelection.Explicit) {
+    Write-Dbg "Testing unauthenticated npm tarball access: $($npmSelection.Registry) ($copilotPlatform)"
+    if (-not (Test-ReactorNpmRegistryAccess -Registry $npmSelection.Registry -Platform $copilotPlatform)) {
         Write-Host "    [warn] Configured npm proxy is not reachable; falling back to GitHub.Copilot.SDK's public registry." -ForegroundColor Yellow
         $npmSelection = $null
     }
 }
 if ($npmSelection) {
-    Write-Ok "npm registry selected from user configuration: $($npmSelection.Registry)"
+    $npmSelectionKind = if ($npmSelection.Explicit) { 'explicit override' } else { 'user configuration' }
+    Write-Ok "npm registry selected from ${npmSelectionKind}: $($npmSelection.Registry)"
 } else {
     Write-Dbg 'No reachable configured npm proxy detected; GitHub.Copilot.SDK will use its public registry default'
 }
@@ -221,19 +222,19 @@ if ($npmSelection) {
 $nugetSelection = Resolve-ReactorNuGetFeed -ExplicitConfig $NuGetConfig
 if ($nugetSelection -and -not $nugetSelection.Explicit) {
     Write-Dbg "Testing NuGet source access: $($nugetSelection.Source)"
-    $nugetProbeOutput = & dotnet package search GitHub.Copilot.SDK --source $nugetSelection.Source --take 1 --format json 2>$null | Out-String
-    $nugetProbeExit = $LASTEXITCODE
-    $global:LASTEXITCODE = 0
-    if ($nugetProbeExit -ne 0 -or $nugetProbeOutput -notmatch '"id"\s*:\s*"GitHub\.Copilot\.SDK"') {
+    if (-not (Test-ReactorNuGetSourceAccess -Source $nugetSelection.Source)) {
         Write-Host "    [warn] Configured NuGet proxy cannot provide GitHub.Copilot.SDK; falling back to the repo's public NuGet config." -ForegroundColor Yellow
         $nugetSelection = $null
-    } else {
-        $nugetSelection.ConfigPath = New-ReactorBootstrapNuGetConfig -Source $nugetSelection.Source
     }
 }
-$effectiveNuGetConfig = if ($nugetSelection) { $nugetSelection.ConfigPath } else { $null }
-if ($effectiveNuGetConfig) {
-    Write-Ok "NuGet config selected from user configuration: $effectiveNuGetConfig"
+$effectiveNuGetConfig = if ($nugetSelection -and $nugetSelection.Explicit) { $nugetSelection.ConfigPath } else { $null }
+$effectiveNuGetSource = if ($nugetSelection -and -not $nugetSelection.Explicit) { $nugetSelection.Source } else { $null }
+if ($nugetSelection) {
+    if ($nugetSelection.Explicit) {
+        Write-Ok "NuGet config selected by explicit override: $effectiveNuGetConfig"
+    } else {
+        Write-Ok "NuGet proxy selected from user configuration: $effectiveNuGetSource"
+    }
 } else {
     Write-Dbg 'No reachable configured NuGet proxy detected; using the repo nuget.config'
 }
@@ -393,7 +394,6 @@ Write-Dbg "Local nupkg feed: $feed"
 
 # Match host arch so the embed-resource step (which runs the SignaturesGen
 # apphost) succeeds. The packed IL itself is platform-portable.
-$hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
 Write-Dbg "Host arch resolved to: $hostArch"
 
 $cliPackArgs = @(
@@ -404,20 +404,18 @@ $cliPackArgs = @(
     '-o', $feed,
     '--nologo', '-v:m'
 )
-if ($effectiveNuGetConfig) {
-    $cliPackArgs += "-p:RestoreConfigFile=$effectiveNuGetConfig"
-}
-if ($npmSelection) {
-    $cliPackArgs += "-p:CopilotNpmRegistryUrl=$($npmSelection.Registry)"
-}
+$cliPackArgs += Get-ReactorRestoreArguments `
+    -NuGetConfig $effectiveNuGetConfig `
+    -NuGetSource $effectiveNuGetSource `
+    -NpmRegistry $(if ($npmSelection) { $npmSelection.Registry } else { $null })
 Write-Dbg "dotnet $($cliPackArgs -join ' ')"
-$previousRestoreConfig = $env:RestoreConfigFile
-try {
-    if ($effectiveNuGetConfig) { $env:RestoreConfigFile = $effectiveNuGetConfig }
+$cliPackExit = 0
+Invoke-ReactorWithRestoreEnvironment `
+    -NuGetConfig $effectiveNuGetConfig `
+    -NuGetSource $effectiveNuGetSource `
+    -ExitCode ([ref]$cliPackExit) `
+    -Action {
     & dotnet @cliPackArgs
-    $cliPackExit = $LASTEXITCODE
-} finally {
-    $env:RestoreConfigFile = $previousRestoreConfig
 }
 if ($cliPackExit -ne 0) { Fail 'dotnet pack failed for Reactor.Cli' }
 Write-Ok "Packed Microsoft.UI.Reactor.Cli -> $feed"
@@ -432,10 +430,10 @@ if ($SkipMurInstall) {
     Write-Step 'Installing mur as a dotnet global tool'
 
     $existing = & dotnet tool list -g 2>$null | Select-String -SimpleMatch 'microsoft.ui.reactor.cli'
-    $toolArgs = @('-g', '--add-source', $feed, 'Microsoft.UI.Reactor.Cli', '--no-cache', '--ignore-failed-sources')
-    if ($effectiveNuGetConfig) {
-        $toolArgs += @('--configfile', $effectiveNuGetConfig)
-    }
+    $toolArgs = Get-ReactorToolArguments `
+        -Feed $feed `
+        -NuGetConfig $effectiveNuGetConfig `
+        -NuGetSource $effectiveNuGetSource
     if ($existing) {
         Write-Dbg "Existing global tool detected ($($existing.Line.Trim())); using 'dotnet tool update'"
         & dotnet tool update @toolArgs
@@ -475,9 +473,12 @@ Write-Step 'Packing local Microsoft.UI.Reactor + ProjectTemplates (`mur pack-loc
 # hand-maintained default. Best-effort: if NuGet is unreachable it falls back to
 # the template's built-in default. Pass `--MSUIReactorVersion 0.0.0-local` to a
 # scaffold to consume this local source build instead.
-$previousRestoreConfig = $env:RestoreConfigFile
-try {
-    if ($effectiveNuGetConfig) { $env:RestoreConfigFile = $effectiveNuGetConfig }
+$packLocalExit = 0
+Invoke-ReactorWithRestoreEnvironment `
+    -NuGetConfig $effectiveNuGetConfig `
+    -NuGetSource $effectiveNuGetSource `
+    -ExitCode ([ref]$packLocalExit) `
+    -Action {
     $murResolved = Get-Command mur -ErrorAction SilentlyContinue
     if ($murResolved) {
         Write-Dbg "Using installed mur at $($murResolved.Source)"
@@ -491,18 +492,13 @@ try {
             "-p:Platform=$hostArch",
             '--nologo'
         )
-        if ($effectiveNuGetConfig) {
-            $murRunArgs += "-p:RestoreConfigFile=$effectiveNuGetConfig"
-        }
-        if ($npmSelection) {
-            $murRunArgs += "-p:CopilotNpmRegistryUrl=$($npmSelection.Registry)"
-        }
+        $murRunArgs += Get-ReactorRestoreArguments `
+            -NuGetConfig $effectiveNuGetConfig `
+            -NuGetSource $effectiveNuGetSource `
+            -NpmRegistry $(if ($npmSelection) { $npmSelection.Registry } else { $null })
         $murRunArgs += @('--', 'pack-local', '--framework-version', 'latest')
         & dotnet @murRunArgs
     }
-    $packLocalExit = $LASTEXITCODE
-} finally {
-    $env:RestoreConfigFile = $previousRestoreConfig
 }
 if ($packLocalExit -ne 0) { Fail 'mur pack-local failed' }
 

@@ -28,6 +28,17 @@ function Assert-True {
     else { $script:Fail++; $script:Failures.Add($Message) }
 }
 
+function Assert-Throws {
+    param([scriptblock]$Action, [string]$Message)
+    try {
+        & $Action
+        $script:Fail++
+        $script:Failures.Add($Message)
+    } catch {
+        $script:Pass++
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 . (Join-Path $repoRoot 'tools\BootstrapFeedResolver.ps1')
 
@@ -35,6 +46,8 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) ("bootstrap-feeds-" + [Guid]::NewGui
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $originalRegistry = $env:NPM_CONFIG_REGISTRY
 $originalUserConfig = $env:NPM_CONFIG_USERCONFIG
+$originalRestoreConfig = $env:RestoreConfigFile
+$originalRestoreSources = $env:RestoreSources
 
 try {
     $env:NPM_CONFIG_REGISTRY = $null
@@ -51,6 +64,12 @@ try {
     Assert-Equal 'https://packagefeedproxy.microsoft.io/npm' $npm.Registry `
         'automatic npm selection honors the Microsoft proxy in the user .npmrc'
     Assert-Equal $false $npm.Explicit 'automatic npm selection is marked non-explicit'
+
+    $env:NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io/npm/env/'
+    $npm = Resolve-ReactorNpmRegistry -UserProfile $profile
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm/env' $npm.Registry `
+        'NPM_CONFIG_REGISTRY takes precedence over npmrc files'
+    $env:NPM_CONFIG_REGISTRY = $null
 
     Set-Content (Join-Path $profile '.npmrc') 'registry=https://registry.npmjs.org/'
     Assert-Equal $null (Resolve-ReactorNpmRegistry -UserProfile $profile) `
@@ -69,6 +88,47 @@ try {
         'explicit npm mirror supports non-Microsoft registries'
     Assert-Equal $true $explicitNpm.Explicit 'explicit npm selection is marked explicit'
 
+    Assert-Throws { Resolve-ReactorNpmRegistry -ExplicitRegistry 'http://mirror.example.test/npm' } `
+        'remote plaintext HTTP npm registry is rejected'
+    Assert-Throws { Resolve-ReactorNpmRegistry -ExplicitRegistry 'https://user:secret@mirror.example.test/npm' } `
+        'credential-bearing npm registry is rejected'
+    Assert-Throws { Resolve-ReactorNpmRegistry -ExplicitRegistry 'https://mirror.example.test/npm?token=secret' } `
+        'query-bearing npm registry is rejected'
+    $loopbackNpm = Resolve-ReactorNpmRegistry -ExplicitRegistry 'http://localhost:4873/npm/'
+    Assert-Equal 'http://localhost:4873/npm' $loopbackNpm.Registry `
+        'loopback HTTP npm registry remains available for local development'
+
+    $script:ObservedMetadataUrl = $null
+    $script:ObservedTarballUrl = $null
+    $metadataRequest = {
+        param($Url)
+        $script:ObservedMetadataUrl = $Url
+        return [pscustomobject]@{
+            'dist-tags' = [pscustomobject]@{ latest = '1.2.3' }
+        }
+    }
+    $tarballRequest = {
+        param($Url)
+        $script:ObservedTarballUrl = $Url
+        return $true
+    }
+    Assert-True (Test-ReactorNpmRegistryAccess `
+            -Registry 'https://packagefeedproxy.microsoft.io/npm' `
+            -Platform 'win32-arm64' `
+            -MetadataRequest $metadataRequest `
+            -TarballRequest $tarballRequest) `
+        'npm proxy probe succeeds only after metadata and tarball access succeed'
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm/@github%2Fcopilot-win32-arm64' `
+        $script:ObservedMetadataUrl 'npm probe requests architecture-specific package metadata'
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm/@github/copilot-win32-arm64/-/copilot-win32-arm64-1.2.3.tgz' `
+        $script:ObservedTarballUrl 'npm probe requests the architecture-specific tarball without npm authentication'
+    Assert-Equal $false (Test-ReactorNpmRegistryAccess `
+            -Registry 'https://packagefeedproxy.microsoft.io/npm' `
+            -Platform 'win32-x64' `
+            -MetadataRequest $metadataRequest `
+            -TarballRequest { return $false }) `
+        'npm proxy probe fails when unauthenticated tarball access fails'
+
     $appData = Join-Path $tmp 'appdata'
     $nugetDir = Join-Path $appData 'NuGet'
     New-Item -ItemType Directory -Path $nugetDir | Out-Null
@@ -85,15 +145,62 @@ try {
     $nuget = Resolve-ReactorNuGetFeed -AppData $appData -UserProfile $profile
     Assert-Equal 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' $nuget.Source `
         'automatic NuGet selection finds the Microsoft proxy in user configuration'
+    Assert-Equal 'azure-default' $nuget.SourceKey 'automatic NuGet selection retains the source key'
+    Assert-Equal (Join-Path $nugetDir 'NuGet.Config') $nuget.ConfigPath `
+        'automatic NuGet selection retains the originating config path'
     Assert-Equal $false $nuget.Explicit 'automatic NuGet selection is marked non-explicit'
 
-    $generated = New-ReactorBootstrapNuGetConfig -Source $nuget.Source -BasePath $tmp
-    Assert-True (Test-Path -LiteralPath $generated) 'bootstrap writes a temporary internal-only NuGet config'
-    [xml]$generatedXml = Get-Content -LiteralPath $generated -Raw
-    $generatedSources = @($generatedXml.SelectNodes('//packageSources/add'))
-    Assert-Equal 1 $generatedSources.Count 'generated NuGet config contains exactly one package source'
-    Assert-Equal $nuget.Source ([string]$generatedSources[0].value) `
-        'generated NuGet config contains the selected proxy'
+    $profileNugetDir = Join-Path $profile '.nuget\NuGet'
+    New-Item -ItemType Directory -Path $profileNugetDir -Force | Out-Null
+    Set-Content (Join-Path $profileNugetDir 'NuGet.Config') @'
+<configuration>
+  <packageSources>
+    <add key="profile-proxy" value="https://packagefeedproxy.microsoft.io/nuget/profile/v3/index.json" />
+  </packageSources>
+</configuration>
+'@
+    Set-Content (Join-Path $nugetDir 'NuGet.Config') @'
+<configuration>
+  <packageSources>
+    <add key="disabled-proxy" value="https://packagefeedproxy.microsoft.io/nuget/disabled/v3/index.json" />
+  </packageSources>
+  <disabledPackageSources>
+    <add key="disabled-proxy" value="true" />
+  </disabledPackageSources>
+</configuration>
+'@
+    $nuget = Resolve-ReactorNuGetFeed -AppData $appData -UserProfile $profile
+    Assert-Equal 'profile-proxy' $nuget.SourceKey `
+        'disabled Microsoft proxy is skipped in favor of an enabled secondary config'
+
+    Set-Content (Join-Path $nugetDir 'NuGet.Config') '<configuration><broken>'
+    $nuget = Resolve-ReactorNuGetFeed -AppData $appData -UserProfile $profile
+    Assert-Equal 'profile-proxy' $nuget.SourceKey `
+        'malformed NuGet config is skipped in favor of a valid secondary config'
+
+    $nugetSearchSuccess = {
+        param($Source)
+        return [pscustomobject]@{
+            ExitCode = 0
+            Output = '{"searchResult":[{"packages":[{"id":"GitHub.Copilot.SDK"}]}]}'
+        }
+    }
+    Assert-True (Test-ReactorNuGetSourceAccess `
+            -Source 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
+            -SearchRequest $nugetSearchSuccess) `
+        'NuGet proxy probe succeeds only when the required SDK package is present'
+    Assert-Equal $false (Test-ReactorNuGetSourceAccess `
+            -Source 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
+            -SearchRequest {
+                return [pscustomobject]@{ ExitCode = 0; Output = '{"searchResult":[]}' }
+            }) `
+        'NuGet proxy probe rejects successful searches that omit the required SDK package'
+    Assert-Equal $false (Test-ReactorNuGetSourceAccess `
+            -Source 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
+            -SearchRequest {
+                return [pscustomobject]@{ ExitCode = 1; Output = '{"id":"GitHub.Copilot.SDK"}' }
+            }) `
+        'NuGet proxy probe rejects failed package searches even when output contains the package ID'
 
     $explicitConfig = Join-Path $tmp 'explicit.config'
     Set-Content $explicitConfig '<configuration />'
@@ -101,10 +208,54 @@ try {
     Assert-Equal (Resolve-Path $explicitConfig).Path $explicitNuget.ConfigPath `
         'explicit NuGet config resolves to an absolute path'
     Assert-Equal $true $explicitNuget.Explicit 'explicit NuGet selection is marked explicit'
+    Assert-Throws { Resolve-ReactorNuGetFeed -ExplicitConfig (Join-Path $tmp 'missing.config') } `
+        'missing explicit NuGet config is rejected'
+
+    $restoreArgs = Get-ReactorRestoreArguments `
+        -NuGetSource 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
+        -NpmRegistry 'https://packagefeedproxy.microsoft.io/npm'
+    Assert-Equal '-p:RestoreSources=https://packagefeedproxy.microsoft.io/nuget/v3/index.json|-p:CopilotNpmRegistryUrl=https://packagefeedproxy.microsoft.io/npm' `
+        ($restoreArgs -join '|') 'automatic feed arguments propagate NuGet and npm proxies to MSBuild'
+
+    $restoreArgs = Get-ReactorRestoreArguments `
+        -NuGetConfig $explicitConfig `
+        -NuGetSource 'https://ignored.example.test/nuget' `
+        -NpmRegistry 'https://mirror.example.test/npm'
+    Assert-Equal "-p:RestoreConfigFile=$explicitConfig|-p:CopilotNpmRegistryUrl=https://mirror.example.test/npm" `
+        ($restoreArgs -join '|') 'explicit NuGet config takes precedence in MSBuild arguments'
+
+    $toolArgs = Get-ReactorToolArguments `
+        -Feed 'C:\repo\local-nupkgs' `
+        -NuGetSource 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json'
+    Assert-Equal '-g|--add-source|C:\repo\local-nupkgs|--add-source|https://packagefeedproxy.microsoft.io/nuget/v3/index.json|Microsoft.UI.Reactor.Cli|--no-cache|--ignore-failed-sources' `
+        ($toolArgs -join '|') 'tool arguments include both local and automatic proxy sources'
+
+    $env:RestoreConfigFile = 'before.config'
+    $env:RestoreSources = 'before-source'
+    $script:ObservedRestoreConfig = 'not-run'
+    $script:ObservedRestoreSources = 'not-run'
+    $nativeExit = 0
+    Invoke-ReactorWithRestoreEnvironment `
+        -NuGetSource 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
+        -ExitCode ([ref]$nativeExit) `
+        -Action {
+            $script:ObservedRestoreConfig = $env:RestoreConfigFile
+            $script:ObservedRestoreSources = $env:RestoreSources
+            & $env:ComSpec /d /c 'exit 7'
+        }
+    Assert-True ([string]::IsNullOrEmpty($script:ObservedRestoreConfig)) `
+        'automatic source clears an ambient explicit restore config during the command'
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' $script:ObservedRestoreSources `
+        'automatic source is visible to nested restore commands'
+    Assert-Equal 7 $nativeExit 'native command exit code is captured through the restore environment wrapper'
+    Assert-Equal 'before.config' $env:RestoreConfigFile 'restore config environment is restored after the command'
+    Assert-Equal 'before-source' $env:RestoreSources 'restore sources environment is restored after the command'
 }
 finally {
     $env:NPM_CONFIG_REGISTRY = $originalRegistry
     $env:NPM_CONFIG_USERCONFIG = $originalUserConfig
+    $env:RestoreConfigFile = $originalRestoreConfig
+    $env:RestoreSources = $originalRestoreSources
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
