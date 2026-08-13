@@ -1528,6 +1528,16 @@ internal static class SelfTestFixtureRegistry
         "Issue495_ListView_SameLengthContentChange_RefreshesContainers",
         "Issue495_GridView_SameLengthContentChange_RefreshesContainers",
 
+        // Issue #1090 — ItemsSource rebuild strands a speculative echo-suppress
+        // token when the selection survives the swap, swallowing the user's next
+        // genuine SelectionChanged. Shared oracle for the fix bake-off.
+        "Issue1090_Probe_ItemsSourceSwapBehavior",
+        "Issue1090_ListView_SelectionSurvivesRebuild_NextSelectionFires",
+        "Issue1090_GridView_SelectionSurvivesRebuild_NextSelectionFires",
+        "Issue1090_ListView_SelectAndDeselectAcrossRebuild_BothFire",
+        "Issue1090_ListView_SelectionDroppedByRebuild_NoEchoLeak",
+        "Issue1090_Repro_GrowSourceThenSelectNewItem",
+
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
         // Reactor.External.TestControl, references Reactor as a regular
@@ -3162,6 +3172,14 @@ internal static class SelfTestFixtureRegistry
         "Issue495_TypedGridViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.TypedGridView_StateBound_NoLoopAfterSelection(harness),
         "Issue495_ListView_SameLengthContentChange_RefreshesContainers" => new ListViewLoopReproFixtures.ListView_SameLengthContentChange_RefreshesContainers(harness),
         "Issue495_GridView_SameLengthContentChange_RefreshesContainers" => new ListViewLoopReproFixtures.GridView_SameLengthContentChange_RefreshesContainers(harness),
+
+        // Issue #1090 — echo-suppress token stranding on ItemsSource rebuild.
+        "Issue1090_Probe_ItemsSourceSwapBehavior" => new Issue1090SelectionStrandFixtures.Probe_ItemsSourceSwapBehavior(harness),
+        "Issue1090_ListView_SelectionSurvivesRebuild_NextSelectionFires" => new Issue1090SelectionStrandFixtures.ListView_SelectionSurvivesRebuild_NextSelectionFires(harness),
+        "Issue1090_GridView_SelectionSurvivesRebuild_NextSelectionFires" => new Issue1090SelectionStrandFixtures.GridView_SelectionSurvivesRebuild_NextSelectionFires(harness),
+        "Issue1090_ListView_SelectAndDeselectAcrossRebuild_BothFire" => new Issue1090SelectionStrandFixtures.ListView_SelectAndDeselectAcrossRebuild_BothFire(harness),
+        "Issue1090_ListView_SelectionDroppedByRebuild_NoEchoLeak" => new Issue1090SelectionStrandFixtures.ListView_SelectionDroppedByRebuild_NoEchoLeak(harness),
+        "Issue1090_Repro_GrowSourceThenSelectNewItem" => new Issue1090SelectionStrandFixtures.Repro_GrowSourceThenSelectNewItem(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

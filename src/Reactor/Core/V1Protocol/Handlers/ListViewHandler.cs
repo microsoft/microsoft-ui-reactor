@@ -159,20 +159,42 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // would silently freeze visible items when only their content changes
         // (see Issue495_ListView_SameLengthContentChange_RefreshesContainers).
         //
-        // WinUI synchronously drops SelectedIndex to -1 on ItemsSource
-        // reassignment when there's an active selection, and fires
-        // SelectionChanged(-1). Arm BeginSuppress immediately before the
-        // swap so that transient event is consumed by the trampoline's
-        // ShouldSuppress gate instead of looping back through
-        // OnSelectedIndexChanged → setState → re-render → swap → … (the
-        // 50+-render storm reported in #495). Only arm when there's actually
-        // a selection to clear — otherwise the token strands and swallows
-        // the next real user input.
+        // WinUI's behavior on ItemsSource reassignment is VERSION-DEPENDENT, and
+        // the suppression must not depend on which way it goes:
+        //
+        //   * The runtime bundled with Windows App SDK 2.1.x resets
+        //     SelectedIndex to -1 synchronously inside the assignment and fires
+        //     SelectionChanged(-1) — measured by the Issue1090_Probe_* selftest.
+        //     Something must consume that echo or it loops back through
+        //     OnSelectedIndexChanged → setState → re-render → swap → … (the
+        //     50+-render storm reported in #495).
+        //   * Newer runtimes can PRESERVE a still-valid selection and raise
+        //     nothing at all (issue #1090, reported against installed runtime
+        //     2.3.1). A token armed unconditionally on the older assumption is
+        //     then never consumed, and ShouldSuppress eats the user's next
+        //     genuine SelectionChanged instead.
+        //
+        // Arming unconditionally breaks on the second; not arming breaks on the
+        // first. So arm, then OBSERVE: SelectedIndex reads back its post-swap
+        // value synchronously with the assignment even when the event itself is
+        // queued (also pinned by the probe fixture), so an unchanged index
+        // proves no drop happened and the token can be handed back. A deferred
+        // drop still shows the changed index, so its token is correctly kept
+        // until the queued event arrives.
+        //
+        // CancelIfUnconsumed is baseline-guarded and therefore safe to call even
+        // in the branch where the echo already fired and consumed the token.
         if (!ReferenceEquals(o.Items, n.Items))
         {
-            if (lv.SelectedIndex >= 0)
-                ChangeEchoSuppressor.BeginSuppress(lv);
+            int selectionBeforeSwap = lv.SelectedIndex;
+            var arm = selectionBeforeSwap >= 0
+                ? ChangeEchoSuppressor.BeginSuppressCancelable(lv)
+                : default;
+
             lv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
+
+            if (lv.SelectedIndex == selectionBeforeSwap)
+                arm.CancelIfUnconsumed();
         }
 
         Reconciler.SetElementTag(lv, n);

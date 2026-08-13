@@ -146,17 +146,28 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         // when only their content changes
         // (see Issue495_GridView_SameLengthContentChange_RefreshesContainers).
         //
-        // WinUI drops SelectedIndex to -1 on ItemsSource reassignment when
-        // there's an active selection, firing SelectionChanged(-1). Arm
-        // BeginSuppress immediately before the swap so the trampoline's
-        // ShouldSuppress gate consumes that transient event. Only arm when
-        // there's a selection to clear — else the token strands and
-        // swallows the next real user input. Matches the ListView fix.
+        // Issue #1090 — arm-then-observe rather than arming on an assumption
+        // about WinUI's reassignment behavior, which is version-dependent: WASDK
+        // 2.1.x resets SelectedIndex to -1 synchronously and fires, while newer
+        // runtimes can preserve a still-valid selection and raise nothing. An
+        // unconditional arm strands its token on the second behavior and eats
+        // the user's next genuine selection; not arming reopens the #495 echo
+        // storm on the first. SelectedIndex reads back its post-swap value
+        // synchronously with the assignment even when the event is queued, so an
+        // unchanged index proves no drop occurred and the token can be handed
+        // back. CancelIfUnconsumed is baseline-guarded, so it is a safe no-op in
+        // the branch where the echo already fired. Mirrors ListViewHandler.
         if (!ReferenceEquals(o.Items, n.Items))
         {
-            if (gv.SelectedIndex >= 0)
-                ChangeEchoSuppressor.BeginSuppress(gv);
+            int selectionBeforeSwap = gv.SelectedIndex;
+            var arm = selectionBeforeSwap >= 0
+                ? ChangeEchoSuppressor.BeginSuppressCancelable(gv)
+                : default;
+
             gv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
+
+            if (gv.SelectedIndex == selectionBeforeSwap)
+                arm.CancelIfUnconsumed();
         }
 
         Reconciler.SetElementTag(gv, n);
