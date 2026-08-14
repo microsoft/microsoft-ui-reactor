@@ -125,8 +125,19 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // "deselect", so write it through the same drift gate. Optional<int>.Unset
         // (HasValue == false) means "control owns the selection" and falls
         // through without a write.
+        //
+        // Issue #1090 — the drift gate is not sufficient on its own. A write of
+        // an index that does not exist in the CURRENT ItemsSource (very common
+        // on mount: the list is still empty while its data loads) cannot be
+        // honored by WinUI. The control stays at -1, no SelectionChanged is
+        // raised, and the token armed by WriteSuppressed strands — later
+        // swallowing the user's first real selection. Only write when the index
+        // is actually reachable; when it is not, the subsequent Update that
+        // brings the items in performs the write instead, at which point it
+        // lands and echoes normally.
         if (lv.SelectedIndex is { HasValue: true } mountIndex
-            && listView.SelectedIndex != mountIndex.Value)
+            && listView.SelectedIndex != mountIndex.Value
+            && IsReachable(mountIndex.Value, lv.Items.Length))
         {
             ReactorBinding.WriteSuppressed(listView, () => listView.SelectedIndex = mountIndex.Value);
         }
@@ -212,13 +223,39 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // OnSelectedIndexChanged. Only arm on real drift (see Mount comment
         // above and the GridView analog wired for issue #464). Spec 050: -1
         // is the explicit force-clear sentinel; Unset means "control owns it".
+        //
+        // Issue #1090 — same reachability guard as Mount: a write WinUI cannot
+        // honor (index past the end of the current source) raises no event, so
+        // arming for it strands a token that later eats a real selection.
         if (n.SelectedIndex is { HasValue: true } updateIndex
-            && lv.SelectedIndex != updateIndex.Value)
+            && lv.SelectedIndex != updateIndex.Value
+            && IsReachable(updateIndex.Value, n.Items.Length))
         {
             ReactorBinding.WriteSuppressed(lv, () => lv.SelectedIndex = updateIndex.Value);
         }
         Reconciler.ApplySetters(n.Setters, lv);
     }
+
+    /// <summary>
+    /// Issue #1090 — can a controlled <c>SelectedIndex</c> write of
+    /// <paramref name="index"/> actually land on a source of
+    /// <paramref name="itemCount"/> items?
+    ///
+    /// <para>WinUI will not honor a selection past the end of its
+    /// <c>ItemsSource</c> — the property stays where it was (and the set can even
+    /// throw) so no <c>SelectionChanged</c> is raised. Suppression is armed per
+    /// <em>expected event</em>, so arming for a write that cannot land leaves a
+    /// token behind that swallows the user's next genuine selection. The common
+    /// trigger is an items list that is still empty on mount while its data
+    /// loads.</para>
+    ///
+    /// <para><c>-1</c> is always reachable: it is the explicit force-clear
+    /// sentinel (spec 050), and clearing a selection is meaningful on any source.
+    /// The caller's drift gate has already established the control is not
+    /// already at -1, so the write will land and echo.</para>
+    /// </summary>
+    private static bool IsReachable(int index, int itemCount)
+        => index < 0 || index < itemCount;
 
     public ChildrenStrategy<ListViewElement, WinUI.ListView>? Children => null;
 }

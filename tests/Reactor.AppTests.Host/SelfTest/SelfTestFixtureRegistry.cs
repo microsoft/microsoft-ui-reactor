@@ -1537,6 +1537,9 @@ internal static class SelfTestFixtureRegistry
         "Issue1090_ListView_SelectAndDeselectAcrossRebuild_BothFire",
         "Issue1090_ListView_SelectionDroppedByRebuild_NoEchoLeak",
         "Issue1090_Repro_GrowSourceThenSelectNewItem",
+        "Issue1090_ListView_EmptyMountThenItemsArrive_FirstRealSelectionFires",
+        "Issue1090_GridView_EmptyMountThenItemsArrive_FirstRealSelectionFires",
+        "Issue1090_ListView_IndexPastEndOfShortSource_FirstRealSelectionFires",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -3180,6 +3183,9 @@ internal static class SelfTestFixtureRegistry
         "Issue1090_ListView_SelectAndDeselectAcrossRebuild_BothFire" => new Issue1090SelectionStrandFixtures.ListView_SelectAndDeselectAcrossRebuild_BothFire(harness),
         "Issue1090_ListView_SelectionDroppedByRebuild_NoEchoLeak" => new Issue1090SelectionStrandFixtures.ListView_SelectionDroppedByRebuild_NoEchoLeak(harness),
         "Issue1090_Repro_GrowSourceThenSelectNewItem" => new Issue1090SelectionStrandFixtures.Repro_GrowSourceThenSelectNewItem(harness),
+        "Issue1090_ListView_EmptyMountThenItemsArrive_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.ListView_EmptyMountThenItemsArrive_FirstRealSelectionFires(harness),
+        "Issue1090_GridView_EmptyMountThenItemsArrive_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.GridView_EmptyMountThenItemsArrive_FirstRealSelectionFires(harness),
+        "Issue1090_ListView_IndexPastEndOfShortSource_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.ListView_IndexPastEndOfShortSource_FirstRealSelectionFires(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

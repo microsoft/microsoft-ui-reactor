@@ -14,43 +14,57 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Issue #1090 — <c>ListView</c>/<c>GridView</c> swallow the first genuine
-/// <c>SelectionChanged</c> after an <c>ItemsSource</c> rebuild when the
-/// selection survives the reassignment.
+/// Issue #1090 — <c>ListView</c>/<c>GridView</c> swallow the user's first
+/// genuine <c>SelectionChanged</c> after mounting with an <b>empty</b> items
+/// list.
 ///
-/// <para><b>Mechanism.</b> <c>ListViewHandler.Update</c> arms
-/// <c>ChangeEchoSuppressor.BeginSuppress</c> <em>speculatively</em> — before the
-/// swap, on the premise that WinUI always drops <c>SelectedIndex</c> to -1 and
-/// fires a <c>SelectionChanged(-1)</c> echo that consumes the token. When the
-/// old index is still valid in the new source WinUI keeps the selection and
-/// raises nothing, so the token strands. The subsequent drift-gated
-/// <c>WriteSuppressed</c> selection write is also skipped (control already at
-/// the requested index), so nothing else consumes it either. The next real user
-/// selection is then eaten by the trampoline's <c>ShouldSuppress</c> gate.</para>
+/// <para><b>Mechanism (confirmed by instrumented ledger against a live
+/// framework-dependent app).</b> Echo suppression arms one token per
+/// <em>expected</em> change event. A controlled <c>SelectedIndex</c> write is
+/// gated on drift (<c>control != requested</c>), which is not sufficient: WinUI
+/// silently <b>clamps</b> a selection past the end of its <c>ItemsSource</c>.
+/// The property stays put, no <c>SelectionChanged</c> is raised, and the token
+/// armed for that write strands.</para>
 ///
-/// <para><b>This file is the shared oracle for the #1090 fix bake-off.</b> Every
-/// candidate mechanism is judged against these fixtures unmodified. A candidate
-/// that requires an assertion here to be relaxed has failed, not passed — the
-/// point of freezing the harness before the fix is that the instrument cannot be
-/// bent to fit the result.</para>
+/// <para>The common trigger is an items array that is still empty on mount while
+/// its data loads — idiomatic for <c>UseState&lt;T[]&gt;([])</c> plus a fetch.
+/// Mount writes <c>SelectedIndex = 0</c> against an empty source (clamped,
+/// token #1), an intermediate render writes it again while still empty (clamped,
+/// token #2), then the items arrive and WinUI materializes the selection with a
+/// single coalesced event that consumes only <em>one</em> token. The leftover
+/// swallows the user's first real click. Observed ledger on the unfixed code:</para>
+/// <code>
+/// MOUNT  write: itemsCount=0 current=-1 -> 0
+/// BEGIN  count=1
+/// MOUNT  write done: readback=-1        // clamped — no event
+/// UPDATE write: itemsCount=0 current=-1 -> 0
+/// BEGIN  count=2
+/// UPDATE write done: readback=-1        // clamped — no event
+/// SHOULD consumed -> count=1            // items arrive: ONE coalesced event
+/// ...                                   // counter never returns to 0
+/// SHOULD consumed -> count=0            // the user's real click, swallowed
+/// </code>
 ///
-/// <para><b>The two failure modes every candidate trades off.</b>
+/// <para><b>The fix</b> is a reachability guard: only write (and therefore only
+/// arm) when the requested index actually exists in the current source. A write
+/// that can only clamp is skipped; the later update that brings the items in
+/// performs it instead, where it lands and echoes normally.</para>
+///
+/// <para><b>The two failure modes any fix here trades off.</b>
 /// <list type="bullet">
 /// <item><description><b>Strand</b> — a token outlives the write it was armed
-/// for and swallows the user's next genuine selection. That is #1090, covered by
-/// <c>SelectionSurvivesRebuild_NextSelectionFires</c> and
-/// <c>DeselectAfterSurvivingRebuild_Fires</c>.</description></item>
+/// for and swallows a genuine selection. That is #1090.</description></item>
 /// <item><description><b>Leak</b> — an engine-synthesized event reaches the user
-/// callback, which calls <c>setIndex</c>, which re-renders, which swaps
-/// <c>ItemsSource</c> again: the #495 render storm. Covered by
-/// <c>SelectionDroppedByRebuild_NoEchoLeak</c> and by the six existing
+/// callback, which calls <c>setIndex</c>, which re-renders and rebuilds
+/// <c>ItemsSource</c> again: the #495 render storm. Guarded by
+/// <c>SelectionDroppedByRebuild_NoEchoLeak</c> here and by the six existing
 /// <c>Issue495_*</c> fixtures, which must stay green.</description></item>
 /// </list>
 /// Fixing one by reintroducing the other is not a fix.</para>
 ///
 /// <para><b>Positive controls.</b> Every fixture that asserts "the callback did
-/// NOT fire" first drives an interaction that proves the callback path is live
-/// on this control instance. A zero from a correctly-suppressed echo and a zero
+/// NOT fire" first drives an interaction proving the callback path is live on
+/// that control instance. A zero from a correctly-suppressed echo and a zero
 /// from a callback that was never wired look identical in the log.</para>
 /// </summary>
 internal static class Issue1090SelectionStrandFixtures
@@ -560,6 +574,194 @@ internal static class Issue1090SelectionStrandFixtures
                 ReproComponent.CallbackCount - callbacksBeforeClick >= 1);
             H.Check("Issue1090_Repro_StateFollowedSelection", ReproComponent.StateIndex == 2);
             H.Check("Issue1090_Repro_ControlAtSelection", lv.SelectedIndex == 2);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  6. The confirmed #1090 mechanism: clamped writes against an empty
+    //     (or too-short) source strand tokens.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Issue #1090 — mount with an EMPTY items array while
+    /// <c>SelectedIndex</c> is controlled at 0, then let the items arrive. The
+    /// mount write is clamped by WinUI, so it must not arm a suppression token;
+    /// otherwise that token swallows the user's first real selection.
+    ///
+    /// <para>This is the reporter's confirmed scenario, reduced to the reconciler
+    /// level. Two writes land against the empty source (mount + an intermediate
+    /// update, mirroring a component that re-renders before its data loads);
+    /// unfixed, both arm, and only one is ever consumed.</para></summary>
+    internal class ListView_EmptyMountThenItemsArrive_FirstRealSelectionFires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastIdx = -99;
+
+            // Mount EMPTY with a controlled selection — the write can only clamp.
+            var el0 = new ListViewElement([])
+            {
+                SelectedIndex = 0,
+                OnSelectedIndexChanged = i => { fireCount++; lastIdx = i; },
+            };
+
+            if (rec.Mount(el0, _noOp) is not WinUI.ListView lv)
+            {
+                H.Check("Issue1090_EmptyMount_Mounted", false);
+                return;
+            }
+
+            parent.Children.Add(lv);
+            await Harness.Render();
+            H.Check("Issue1090_EmptyMount_ClampedToMinusOne", lv.SelectedIndex == -1);
+
+            // Intermediate render, still empty (fresh array => a real update).
+            var el1 = el0 with { Items = [] };
+            rec.UpdateChild(el0, el1, lv, _noOp);
+            await Harness.Render();
+
+            // Items arrive.
+            var el2 = el1 with { Items = MakeItems(3, "lv1090e") };
+            rec.UpdateChild(el1, el2, lv, _noOp);
+            await Harness.Render();
+
+            Console.WriteLine(
+                $"# Issue1090 EmptyMount diag: afterItemsArrive index={lv.SelectedIndex} fires={fireCount}");
+
+            H.Check("Issue1090_EmptyMount_SelectionMaterialized", lv.SelectedIndex == 0);
+            // Materializing the controlled selection is engine work, not user
+            // intent — it must not reach the callback.
+            H.Check("Issue1090_EmptyMount_NoEchoLeak", fireCount == 0);
+
+            fireCount = 0;
+            lastIdx = -99;
+
+            // THE BUG: the user's first genuine selection. Unfixed, a token left
+            // over from the clamped write(s) eats this.
+            lv.SelectedIndex = 2;
+            await Harness.Render();
+            H.Check("Issue1090_EmptyMount_FirstRealSelectionFires", fireCount == 1 && lastIdx == 2);
+
+            // And the one after it, proving no second token is lurking.
+            fireCount = 0;
+            lv.SelectedIndex = 1;
+            await Harness.Render();
+            H.Check("Issue1090_EmptyMount_SecondRealSelectionFires", fireCount == 1 && lastIdx == 1);
+
+            rec.UnmountChild(lv);
+            parent.Children.Clear();
+        }
+    }
+
+    /// <summary>Issue #1090 — the GridView sibling carries the same clamped-write
+    /// shape and therefore the same defect.</summary>
+    internal class GridView_EmptyMountThenItemsArrive_FirstRealSelectionFires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastIdx = -99;
+            var el0 = new GridViewElement([])
+            {
+                SelectedIndex = 0,
+                OnSelectedIndexChanged = i => { fireCount++; lastIdx = i; },
+            };
+
+            if (rec.Mount(el0, _noOp) is not WinUI.GridView gv)
+            {
+                H.Check("Issue1090_GVEmptyMount_Mounted", false);
+                return;
+            }
+
+            parent.Children.Add(gv);
+            await Harness.Render();
+            H.Check("Issue1090_GVEmptyMount_ClampedToMinusOne", gv.SelectedIndex == -1);
+
+            var el1 = el0 with { Items = [] };
+            rec.UpdateChild(el0, el1, gv, _noOp);
+            await Harness.Render();
+
+            var el2 = el1 with { Items = MakeItems(3, "gv1090e") };
+            rec.UpdateChild(el1, el2, gv, _noOp);
+            await Harness.Render();
+
+            Console.WriteLine(
+                $"# Issue1090 GVEmptyMount diag: afterItemsArrive index={gv.SelectedIndex} fires={fireCount}");
+
+            H.Check("Issue1090_GVEmptyMount_SelectionMaterialized", gv.SelectedIndex == 0);
+            H.Check("Issue1090_GVEmptyMount_NoEchoLeak", fireCount == 0);
+
+            fireCount = 0;
+            lastIdx = -99;
+
+            gv.SelectedIndex = 2;
+            await Harness.Render();
+            H.Check("Issue1090_GVEmptyMount_FirstRealSelectionFires", fireCount == 1 && lastIdx == 2);
+
+            rec.UnmountChild(gv);
+            parent.Children.Clear();
+        }
+    }
+
+    /// <summary>Issue #1090 — the general form: a controlled index past the end
+    /// of a NON-empty source is clamped too, so it must not arm either.
+    ///
+    /// <para>Empty is just the common case. This pins the actual invariant —
+    /// "only arm for a write that can land" — rather than a special-case
+    /// <c>Items.Length == 0</c> check, which would leave this variant broken.</para></summary>
+    internal class ListView_IndexPastEndOfShortSource_FirstRealSelectionFires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastIdx = -99;
+
+            // Two items, but the controlled selection asks for index 5.
+            var el0 = new ListViewElement(MakeItems(2, "lv1090f"))
+            {
+                SelectedIndex = 5,
+                OnSelectedIndexChanged = i => { fireCount++; lastIdx = i; },
+            };
+
+            if (rec.Mount(el0, _noOp) is not WinUI.ListView lv)
+            {
+                H.Check("Issue1090_PastEnd_Mounted", false);
+                return;
+            }
+
+            parent.Children.Add(lv);
+            await Harness.Render();
+
+            Console.WriteLine(
+                $"# Issue1090 PastEnd diag: afterMount index={lv.SelectedIndex} fires={fireCount}");
+
+            // WinUI cannot honor index 5 against 2 items.
+            H.Check("Issue1090_PastEnd_Clamped", lv.SelectedIndex == -1);
+            H.Check("Issue1090_PastEnd_NoEchoLeak", fireCount == 0);
+
+            fireCount = 0;
+            lastIdx = -99;
+
+            // A genuine selection must not be swallowed by a token armed for the
+            // write that could never land.
+            lv.SelectedIndex = 1;
+            await Harness.Render();
+            H.Check("Issue1090_PastEnd_FirstRealSelectionFires", fireCount == 1 && lastIdx == 1);
+
+            rec.UnmountChild(lv);
+            parent.Children.Clear();
         }
     }
 }
