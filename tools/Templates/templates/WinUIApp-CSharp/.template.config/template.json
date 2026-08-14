@@ -84,6 +84,16 @@
   ],
   "defaultName": "WinUIApp1",
   "postActions": [
+     {
+      "actionId": "B17581D1-C5C9-4489-8F0A-004BE667B814",
+      "continueOnError": true,
+      "description": "Update Microsoft.WindowsAppSDK to the latest stable version.",
+      "args": {
+        "referenceType": "package",
+        "reference": "Microsoft.WindowsAppSDK"
+      },
+      "manualInstructions": [ { "text": "Run 'dotnet add package Microsoft.WindowsAppSDK'" } ]
+    },
     {
       "id": "restore",
       "condition": "(!skipRestore)",
