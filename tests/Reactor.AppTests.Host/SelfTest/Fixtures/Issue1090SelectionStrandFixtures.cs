@@ -392,12 +392,12 @@ internal static class Issue1090SelectionStrandFixtures
     /// behavior the handler's suppression strategy is built on. No Reactor code
     /// is involved: this is the platform premise, isolated.
     ///
-    /// <para><b>What it must NOT assert.</b> Whether a swap that keeps the index
-    /// valid preserves the selection is <em>version-dependent</em> — that is the
-    /// whole of issue #1090. The runtime bundled with WASDK 2.1.x (which this
-    /// self-contained host binds) resets the selection and fires; the reporter's
-    /// newer runtime preserves it and raises nothing. Asserting either one pins
-    /// this suite to one WinUI build.</para>
+    /// <para><b>What it must NOT assert.</b> Every runtime measured so far
+    /// (WASDK 2.1 and 2.3.1) resets the selection and fires on reassignment, for
+    /// grow, shrink, and same-length alike. That is a measurement of two
+    /// runtimes, not a guarantee, so this probe deliberately does not hard-code
+    /// it — asserting it would pin the suite to the WinUI this self-contained
+    /// host happens to bundle.</para>
     ///
     /// <para><b>What it does assert</b> — the two properties the arm-then-observe
     /// fix actually relies on, both of which hold on either behavior:</para>
@@ -757,6 +757,245 @@ internal static class Issue1090SelectionStrandFixtures
             lv.SelectedIndex = 1;
             await Harness.Render();
             H.Check("Issue1090_PastEnd_FirstRealSelectionFires", fireCount == 1 && lastIdx == 1);
+
+            rec.UnmountChild(lv);
+            parent.Children.Clear();
+        }
+    }
+
+    /// <summary>Issue #1090 — GridView counterpart of the past-end case. GridView
+    /// carries its own guard call, so it needs its own coverage: a mutation that
+    /// only removes the GridView guard must redden something.</summary>
+    internal class GridView_IndexPastEndOfShortSource_FirstRealSelectionFires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastIdx = -99;
+            var el0 = new GridViewElement(MakeItems(2, "gv1090f"))
+            {
+                SelectedIndex = 5,
+                OnSelectedIndexChanged = i => { fireCount++; lastIdx = i; },
+            };
+
+            if (rec.Mount(el0, _noOp) is not WinUI.GridView gv)
+            {
+                H.Check("Issue1090_GVPastEnd_Mounted", false);
+                return;
+            }
+
+            parent.Children.Add(gv);
+            await Harness.Render();
+
+            Console.WriteLine(
+                $"# Issue1090 GVPastEnd diag: afterMount index={gv.SelectedIndex} fires={fireCount}");
+
+            H.Check("Issue1090_GVPastEnd_NotHonored", gv.SelectedIndex == -1);
+            H.Check("Issue1090_GVPastEnd_NoEchoLeak", fireCount == 0);
+
+            fireCount = 0;
+            lastIdx = -99;
+
+            gv.SelectedIndex = 1;
+            await Harness.Render();
+            H.Check("Issue1090_GVPastEnd_FirstRealSelectionFires", fireCount == 1 && lastIdx == 1);
+
+            rec.UnmountChild(gv);
+            parent.Children.Clear();
+        }
+    }
+
+    /// <summary>Issue #1090 — the <b>Update</b>-side guard in isolation.
+    ///
+    /// <para>The other fixtures mount with an unreachable index, so they exercise
+    /// the Mount-side guard; a mutation that removes only the Update-side call
+    /// would leave them green. Here the mount is entirely reachable and the
+    /// element only later asks for an index the shrunken source cannot hold, so
+    /// this fixture fails if and only if the Update guard is missing.</para></summary>
+    internal class ListView_ControlledIndexUnreachableAfterShrink_FirstRealSelectionFires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastIdx = -99;
+
+            // Mount fully reachable — the Mount-side guard is satisfied here, so
+            // it cannot be what this fixture is measuring.
+            var el0 = new ListViewElement(MakeItems(4, "lv1090g"))
+            {
+                SelectedIndex = 0,
+                OnSelectedIndexChanged = i => { fireCount++; lastIdx = i; },
+            };
+
+            if (rec.Mount(el0, _noOp) is not WinUI.ListView lv)
+            {
+                H.Check("Issue1090_Shrink_Mounted", false);
+                return;
+            }
+
+            parent.Children.Add(lv);
+            await Harness.Render();
+            H.Check("Issue1090_Shrink_MountValue", lv.SelectedIndex == 0);
+
+            fireCount = 0;
+            lastIdx = -99;
+
+            // Shrink to 2 items while the element keeps asking for index 3 —
+            // an Update-path write WinUI cannot honor.
+            var el1 = el0 with { Items = MakeItems(2, "lv1090g"), SelectedIndex = 3 };
+            rec.UpdateChild(el0, el1, lv, _noOp);
+            await Harness.Render();
+
+            Console.WriteLine(
+                $"# Issue1090 Shrink diag: afterShrink index={lv.SelectedIndex} fires={fireCount}");
+
+            H.Check("Issue1090_Shrink_UnreachableIndexNotHonored", lv.SelectedIndex != 3);
+            H.Check("Issue1090_Shrink_NoEchoLeak", fireCount == 0);
+
+            fireCount = 0;
+            lastIdx = -99;
+
+            // The user's next genuine selection must survive.
+            lv.SelectedIndex = 1;
+            await Harness.Render();
+            H.Check("Issue1090_Shrink_FirstRealSelectionFires", fireCount == 1 && lastIdx == 1);
+
+            rec.UnmountChild(lv);
+            parent.Children.Clear();
+        }
+    }
+
+    /// <summary>Issue #1090 — empty mount in a multi-select mode, asserted through
+    /// <c>OnSelectionChanged</c> (the multi-select snapshot callback) rather than
+    /// <c>OnSelectedIndexChanged</c>.
+    ///
+    /// <para>Both callbacks dispatch from the same trampoline behind the same
+    /// <c>ShouldSuppress</c> gate, so a stranded token swallows the snapshot
+    /// callback too — but nothing pinned that until now.</para></summary>
+    internal class ListView_MultiSelectEmptyMount_FirstRealSelectionFires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int snapshotCalls = 0;
+            IReadOnlyList<int> lastSnapshot = [];
+
+            var el0 = new ListViewElement([])
+            {
+                SelectionMode = ListViewSelectionMode.Multiple,
+                SelectedIndex = 0,
+                OnSelectionChanged = s => { snapshotCalls++; lastSnapshot = s; },
+            };
+
+            if (rec.Mount(el0, _noOp) is not WinUI.ListView lv)
+            {
+                H.Check("Issue1090_MultiEmpty_Mounted", false);
+                return;
+            }
+
+            parent.Children.Add(lv);
+            await Harness.Render();
+
+            // Items arrive.
+            var el1 = el0 with { Items = MakeItems(3, "lv1090h") };
+            rec.UpdateChild(el0, el1, lv, _noOp);
+            await Harness.Render();
+
+            Console.WriteLine(
+                $"# Issue1090 MultiEmpty diag: afterItemsArrive index={lv.SelectedIndex} " +
+                $"snapshotCalls={snapshotCalls}");
+
+            snapshotCalls = 0;
+            lastSnapshot = [];
+
+            // A genuine multi-select interaction must reach the snapshot callback.
+            lv.SelectedIndex = 2;
+            await Harness.Render();
+            H.Check("Issue1090_MultiEmpty_FirstRealSelectionFires",
+                snapshotCalls >= 1 && lastSnapshot.Contains(2));
+
+            rec.UnmountChild(lv);
+            parent.Children.Clear();
+        }
+    }
+
+    /// <summary>Issue #1090 — the TYPED <c>ListView&lt;T&gt;</c> path.
+    ///
+    /// <para>The typed peers go through <c>TemplatedListLifecycle</c>, which owns
+    /// its own suppressed <c>SelectedIndex</c> writes and therefore its own copy
+    /// of the reachability rule. The untyped fixtures above cannot cover it: they
+    /// exercise <c>ListViewHandler</c>, a completely separate code path. Without
+    /// this fixture the typed guards would be untested.</para>
+    ///
+    /// <para>Mount is fully reachable, so this isolates the typed <b>Update</b>
+    /// write: the rows shrink while the element keeps requesting an index the
+    /// new source cannot hold.</para></summary>
+    private record Row(int Id, string Label) : IReactorKeyed
+    {
+        string IReactorKeyed.Key => Id.ToString();
+    }
+
+    internal class TypedListView_ControlledIndexUnreachableAfterShrink_FirstRealSelectionFires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastIdx = -99;
+
+            var four = new[] { new Row(0, "r0"), new Row(1, "r1"), new Row(2, "r2"), new Row(3, "r3") };
+            var el0 = ListView<Row>(four, (r, _) => TextBlock(r.Label)) with
+            {
+                SelectedIndex = 0,
+                OnSelectedIndexChanged = i => { fireCount++; lastIdx = i; },
+            };
+
+            if (rec.Mount(el0, _noOp) is not WinUI.ListView lv)
+            {
+                H.Check("Issue1090_TypedShrink_Mounted", false);
+                return;
+            }
+
+            parent.Children.Add(lv);
+            await Harness.Render();
+            H.Check("Issue1090_TypedShrink_MountValue", lv.SelectedIndex == 0);
+
+            fireCount = 0;
+            lastIdx = -99;
+
+            // Shrink to 2 rows while still requesting index 3.
+            var two = new[] { new Row(0, "r0"), new Row(1, "r1") };
+            var el1 = el0 with { Items = two, SelectedIndex = 3 };
+            rec.UpdateChild(el0, el1, lv, _noOp);
+            await Harness.Render();
+
+            Console.WriteLine(
+                $"# Issue1090 TypedShrink diag: afterShrink index={lv.SelectedIndex} fires={fireCount}");
+
+            H.Check("Issue1090_TypedShrink_UnreachableIndexNotHonored", lv.SelectedIndex != 3);
+            H.Check("Issue1090_TypedShrink_NoEchoLeak", fireCount == 0);
+
+            fireCount = 0;
+            lastIdx = -99;
+
+            // The user's next genuine selection must survive.
+            lv.SelectedIndex = 1;
+            await Harness.Render();
+            H.Check("Issue1090_TypedShrink_FirstRealSelectionFires", fireCount == 1 && lastIdx == 1);
 
             rec.UnmountChild(lv);
             parent.Children.Clear();

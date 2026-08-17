@@ -112,7 +112,8 @@ internal static class TemplatedListLifecycle
         // Issue #495 — wrap initial SelectedIndex write so the deferred
         // SelectionChanged (after container realization) is suppressed.
         // Drift check avoids stranding a token for a no-op write.
-        if (selectedIndex >= 0 && listView.SelectedIndex != selectedIndex)
+        if (selectedIndex >= 0 && listView.SelectedIndex != selectedIndex
+            && SelectionWriteGuard.CanLand(selectedIndex, el.ItemCount))
         {
             ChangeEchoSuppressor.BeginSuppress(listView);
             listView.SelectedIndex = selectedIndex;
@@ -175,7 +176,8 @@ internal static class TemplatedListLifecycle
 
         var selectedIndex = el.GetSelectedIndex();
         // Issue #495 — see MountListView.
-        if (selectedIndex >= 0 && gridView.SelectedIndex != selectedIndex)
+        if (selectedIndex >= 0 && gridView.SelectedIndex != selectedIndex
+            && SelectionWriteGuard.CanLand(selectedIndex, el.ItemCount))
         {
             ChangeEchoSuppressor.BeginSuppress(gridView);
             gridView.SelectedIndex = selectedIndex;
@@ -210,7 +212,8 @@ internal static class TemplatedListLifecycle
 
         var selectedIndex = el.GetSelectedIndex();
         // Issue #495 — see MountListView.
-        if (selectedIndex >= 0 && flipView.SelectedIndex != selectedIndex)
+        if (selectedIndex >= 0 && flipView.SelectedIndex != selectedIndex
+            && SelectionWriteGuard.CanLand(selectedIndex, el.ItemCount))
         {
             ChangeEchoSuppressor.BeginSuppress(flipView);
             flipView.SelectedIndex = selectedIndex;
@@ -243,7 +246,8 @@ internal static class TemplatedListLifecycle
         // Issue #495 — wrap SelectedIndex write so the deferred
         // SelectionChanged doesn't echo into the user callback. Drift check
         // avoids stranding a token on a no-op write.
-        if (selectedIndex >= 0 && lv.SelectedIndex != selectedIndex)
+        if (selectedIndex >= 0 && lv.SelectedIndex != selectedIndex
+            && SelectionWriteGuard.CanLand(selectedIndex, n.ItemCount))
         {
             ChangeEchoSuppressor.BeginSuppress(lv);
             lv.SelectedIndex = selectedIndex;
@@ -265,7 +269,8 @@ internal static class TemplatedListLifecycle
 
         var selectedIndex = n.GetSelectedIndex();
         // Issue #495 — see UpdateListView.
-        if (selectedIndex >= 0 && gv.SelectedIndex != selectedIndex)
+        if (selectedIndex >= 0 && gv.SelectedIndex != selectedIndex
+            && SelectionWriteGuard.CanLand(selectedIndex, n.ItemCount))
         {
             ChangeEchoSuppressor.BeginSuppress(gv);
             gv.SelectedIndex = selectedIndex;
@@ -390,7 +395,8 @@ internal static class TemplatedListLifecycle
         // unconditional write usually matched, but a `with { SelectedIndex = -1 }`
         // would clear silently).
         var fvSelectedIndex = n.GetSelectedIndex();
-        if (fv.SelectedIndex != fvSelectedIndex)
+        if (fv.SelectedIndex != fvSelectedIndex
+            && SelectionWriteGuard.CanLand(fvSelectedIndex, n.ItemCount))
         {
             ChangeEchoSuppressor.BeginSuppress(fv);
             fv.SelectedIndex = fvSelectedIndex;

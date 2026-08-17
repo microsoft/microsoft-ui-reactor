@@ -53,10 +53,18 @@ internal static class TemplatedListViewDescriptor
         // SelectedIndex runs AFTER the binder (DescriptorHandler.Mount inlines
         // ItemsSource binding before the prop loop for templated-items
         // strategies — same ordering rationale as ItemsHost).
+        //
+        // Issue #1090 — gate on reachability as well as sign. WinUI will not
+        // honor a SelectedIndex past the end of its ItemsSource: the write
+        // raises no SelectionChanged (so a suppression token armed for it would
+        // strand and later eat a real user selection) and the setter throws
+        // ArgumentException outright. Skipping the write is correct — the
+        // update that brings the items in performs it, where it lands.
         .OneWayConditional(
             get:         static el => el.GetSelectedIndex(),
             set:         static (ctrl, v) => { if (v >= 0) ctrl.SelectedIndex = v; },
-            shouldWrite: static el => el.GetSelectedIndex() >= 0);
+            shouldWrite: static el => el.GetSelectedIndex() >= 0
+                                      && SelectionWriteGuard.CanLand(el.GetSelectedIndex(), el.ItemCount));
 }
 
 /// <summary>
@@ -88,8 +96,10 @@ internal static class TemplatedGridViewDescriptor
             get:         static el => el.GetHeader(),
             set:         static (ctrl, v) => { if (v is not null) ctrl.Header = v; },
             shouldWrite: static el => el.GetHeader() is not null)
+        // Issue #1090 — see the ListView twin: reachability guard, not just sign.
         .OneWayConditional(
             get:         static el => el.GetSelectedIndex(),
             set:         static (ctrl, v) => { if (v >= 0) ctrl.SelectedIndex = v; },
-            shouldWrite: static el => el.GetSelectedIndex() >= 0);
+            shouldWrite: static el => el.GetSelectedIndex() >= 0
+                                      && SelectionWriteGuard.CanLand(el.GetSelectedIndex(), el.ItemCount));
 }

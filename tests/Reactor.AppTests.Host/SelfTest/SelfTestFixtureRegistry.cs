@@ -1540,6 +1540,10 @@ internal static class SelfTestFixtureRegistry
         "Issue1090_ListView_EmptyMountThenItemsArrive_FirstRealSelectionFires",
         "Issue1090_GridView_EmptyMountThenItemsArrive_FirstRealSelectionFires",
         "Issue1090_ListView_IndexPastEndOfShortSource_FirstRealSelectionFires",
+        "Issue1090_GridView_IndexPastEndOfShortSource_FirstRealSelectionFires",
+        "Issue1090_ListView_ControlledIndexUnreachableAfterShrink_FirstRealSelectionFires",
+        "Issue1090_ListView_MultiSelectEmptyMount_FirstRealSelectionFires",
+        "Issue1090_TypedListView_ControlledIndexUnreachableAfterShrink_FirstRealSelectionFires",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -3186,6 +3190,10 @@ internal static class SelfTestFixtureRegistry
         "Issue1090_ListView_EmptyMountThenItemsArrive_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.ListView_EmptyMountThenItemsArrive_FirstRealSelectionFires(harness),
         "Issue1090_GridView_EmptyMountThenItemsArrive_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.GridView_EmptyMountThenItemsArrive_FirstRealSelectionFires(harness),
         "Issue1090_ListView_IndexPastEndOfShortSource_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.ListView_IndexPastEndOfShortSource_FirstRealSelectionFires(harness),
+        "Issue1090_GridView_IndexPastEndOfShortSource_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.GridView_IndexPastEndOfShortSource_FirstRealSelectionFires(harness),
+        "Issue1090_ListView_ControlledIndexUnreachableAfterShrink_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.ListView_ControlledIndexUnreachableAfterShrink_FirstRealSelectionFires(harness),
+        "Issue1090_ListView_MultiSelectEmptyMount_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.ListView_MultiSelectEmptyMount_FirstRealSelectionFires(harness),
+        "Issue1090_TypedListView_ControlledIndexUnreachableAfterShrink_FirstRealSelectionFires" => new Issue1090SelectionStrandFixtures.TypedListView_ControlledIndexUnreachableAfterShrink_FirstRealSelectionFires(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

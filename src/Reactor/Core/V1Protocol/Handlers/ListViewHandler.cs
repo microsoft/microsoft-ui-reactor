@@ -137,7 +137,7 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // lands and echoes normally.
         if (lv.SelectedIndex is { HasValue: true } mountIndex
             && listView.SelectedIndex != mountIndex.Value
-            && IsReachable(mountIndex.Value, lv.Items.Length))
+            && SelectionWriteGuard.CanLand(mountIndex.Value, lv.Items.Length))
         {
             ReactorBinding.WriteSuppressed(listView, () => listView.SelectedIndex = mountIndex.Value);
         }
@@ -170,42 +170,23 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // would silently freeze visible items when only their content changes
         // (see Issue495_ListView_SameLengthContentChange_RefreshesContainers).
         //
-        // WinUI's behavior on ItemsSource reassignment is VERSION-DEPENDENT, and
-        // the suppression must not depend on which way it goes:
+        // WinUI resets SelectedIndex to -1 synchronously inside the assignment
+        // when there is an active selection, and fires SelectionChanged(-1).
+        // Arm BeginSuppress immediately before the swap so that transient event
+        // is consumed by the trampoline's ShouldSuppress gate instead of looping
+        // back through OnSelectedIndexChanged → setState → re-render → swap → …
+        // (the 50+-render storm reported in #495). Only arm when there is
+        // actually a selection to clear — otherwise the token strands and
+        // swallows the next real user input.
         //
-        //   * The runtime bundled with Windows App SDK 2.1.x resets
-        //     SelectedIndex to -1 synchronously inside the assignment and fires
-        //     SelectionChanged(-1) — measured by the Issue1090_Probe_* selftest.
-        //     Something must consume that echo or it loops back through
-        //     OnSelectedIndexChanged → setState → re-render → swap → … (the
-        //     50+-render storm reported in #495).
-        //   * Newer runtimes can PRESERVE a still-valid selection and raise
-        //     nothing at all (issue #1090, reported against installed runtime
-        //     2.3.1). A token armed unconditionally on the older assumption is
-        //     then never consumed, and ShouldSuppress eats the user's next
-        //     genuine SelectionChanged instead.
-        //
-        // Arming unconditionally breaks on the second; not arming breaks on the
-        // first. So arm, then OBSERVE: SelectedIndex reads back its post-swap
-        // value synchronously with the assignment even when the event itself is
-        // queued (also pinned by the probe fixture), so an unchanged index
-        // proves no drop happened and the token can be handed back. A deferred
-        // drop still shows the changed index, so its token is correctly kept
-        // until the queued event arrives.
-        //
-        // CancelIfUnconsumed is baseline-guarded and therefore safe to call even
-        // in the branch where the echo already fired and consumed the token.
+        // Measured on both WASDK 2.1 and 2.3.1 (Issue1090_Probe_ItemsSourceSwapBehavior
+        // logs the branch this host takes): the reset happens for grow, shrink,
+        // and same-length reassignment alike, so the token is always consumed.
         if (!ReferenceEquals(o.Items, n.Items))
         {
-            int selectionBeforeSwap = lv.SelectedIndex;
-            var arm = selectionBeforeSwap >= 0
-                ? ChangeEchoSuppressor.BeginSuppressCancelable(lv)
-                : default;
-
+            if (lv.SelectedIndex >= 0)
+                ChangeEchoSuppressor.BeginSuppress(lv);
             lv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
-
-            if (lv.SelectedIndex == selectionBeforeSwap)
-                arm.CancelIfUnconsumed();
         }
 
         Reconciler.SetElementTag(lv, n);
@@ -229,33 +210,12 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // arming for it strands a token that later eats a real selection.
         if (n.SelectedIndex is { HasValue: true } updateIndex
             && lv.SelectedIndex != updateIndex.Value
-            && IsReachable(updateIndex.Value, n.Items.Length))
+            && SelectionWriteGuard.CanLand(updateIndex.Value, n.Items.Length))
         {
             ReactorBinding.WriteSuppressed(lv, () => lv.SelectedIndex = updateIndex.Value);
         }
         Reconciler.ApplySetters(n.Setters, lv);
     }
-
-    /// <summary>
-    /// Issue #1090 — can a controlled <c>SelectedIndex</c> write of
-    /// <paramref name="index"/> actually land on a source of
-    /// <paramref name="itemCount"/> items?
-    ///
-    /// <para>WinUI will not honor a selection past the end of its
-    /// <c>ItemsSource</c> — the property stays where it was (and the set can even
-    /// throw) so no <c>SelectionChanged</c> is raised. Suppression is armed per
-    /// <em>expected event</em>, so arming for a write that cannot land leaves a
-    /// token behind that swallows the user's next genuine selection. The common
-    /// trigger is an items list that is still empty on mount while its data
-    /// loads.</para>
-    ///
-    /// <para><c>-1</c> is always reachable: it is the explicit force-clear
-    /// sentinel (spec 050), and clearing a selection is meaningful on any source.
-    /// The caller's drift gate has already established the control is not
-    /// already at -1, so the write will land and echo.</para>
-    /// </summary>
-    private static bool IsReachable(int index, int itemCount)
-        => index < 0 || index < itemCount;
 
     public ChildrenStrategy<ListViewElement, WinUI.ListView>? Children => null;
 }

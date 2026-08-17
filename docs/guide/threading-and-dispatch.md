@@ -219,18 +219,16 @@ than a `ConditionalWeakTable` because [WinRT projection](reactor-vs-xaml.md)
 can hand the same native object back as different managed wrappers,
 and only the attached DP survives that round-trip.
 
-An equality guard only works when the caller can decide up front
-whether an event is coming. A few writes are genuinely
-unpredictable — reassigning `ItemsSource` drops the selection and
-raises `SelectionChanged` on some WinUI versions but preserves it
-silently on others — and there the counter has no way to notice that
-the promised event never arrived. The token simply waits, and the
-next *real* user interaction is consumed instead (issue #1090). For
-those, arm with `BeginSuppressCancelable`, perform the write, then
-observe the control and call `CancelIfUnconsumed()` when the value
-provably did not move. The retraction is baseline-guarded, so it is a
-safe no-op on the branch where the event did fire — which is what
-lets one code path stay correct under both behaviours.
+An equality guard is necessary but not sufficient: it proves the write
+isn't a no-op, not that the control will *accept* it. A write the
+control refuses raises no event either, and the counter cannot tell
+the difference — the token simply waits, and the next *real* user
+interaction is consumed instead (issue #1090). Selection is the case
+where this bites: WinUI will not honour a `SelectedIndex` past the end
+of its `ItemsSource`, which happens routinely while a list's items are
+still loading. So gate on reachability as well as drift, and skip the
+write entirely when it cannot land — never write without arming, or
+the control's own event leaks back into the user callback.
 
 ## Tips
 
