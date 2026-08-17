@@ -58,13 +58,22 @@ internal static class TemplatedListViewDescriptor
         // honor a SelectedIndex past the end of its ItemsSource: the write
         // raises no SelectionChanged (so a suppression token armed for it would
         // strand and later eat a real user selection) and the setter throws
-        // ArgumentException outright. Skipping the write is correct — the
-        // update that brings the items in performs it, where it lands.
+        // ArgumentException outright.
+        //
+        // Applied here for CONSISTENCY, not because a fixture reaches it: these
+        // descriptor ports are "retained for isolated selftests" (see
+        // TemplatedListHandler.cs) and are not registered on the production
+        // path, which goes through the TemplatedListHandler decorator instead.
+        // They carry the identical write shape, so guarding them keeps the
+        // family from drifting if they are ever re-registered.
         .OneWayConditional(
             get:         static el => el.GetSelectedIndex(),
             set:         static (ctrl, v) => { if (v >= 0) ctrl.SelectedIndex = v; },
-            shouldWrite: static el => el.GetSelectedIndex() >= 0
-                                      && SelectionWriteGuard.CanLand(el.GetSelectedIndex(), el.ItemCount));
+            shouldWrite: static el =>
+            {
+                int index = el.GetSelectedIndex();
+                return index >= 0 && SelectionWriteGuard.CanLand(index, el.ItemCount);
+            });
 }
 
 /// <summary>
@@ -96,10 +105,14 @@ internal static class TemplatedGridViewDescriptor
             get:         static el => el.GetHeader(),
             set:         static (ctrl, v) => { if (v is not null) ctrl.Header = v; },
             shouldWrite: static el => el.GetHeader() is not null)
-        // Issue #1090 — see the ListView twin: reachability guard, not just sign.
+        // Issue #1090 — see the ListView twin: reachability guard, not just sign,
+        // applied for consistency (this port is selftest-only, not registered).
         .OneWayConditional(
             get:         static el => el.GetSelectedIndex(),
             set:         static (ctrl, v) => { if (v >= 0) ctrl.SelectedIndex = v; },
-            shouldWrite: static el => el.GetSelectedIndex() >= 0
-                                      && SelectionWriteGuard.CanLand(el.GetSelectedIndex(), el.ItemCount));
+            shouldWrite: static el =>
+            {
+                int index = el.GetSelectedIndex();
+                return index >= 0 && SelectionWriteGuard.CanLand(index, el.ItemCount);
+            });
 }
