@@ -490,21 +490,19 @@ internal static class Issue1090SelectionStrandFixtures
     /// <summary>Issue #1090 — the reporter's scenario, driven end to end through
     /// <c>Component</c> + <c>UseState</c>: grow the bound item array while the
     /// selected index stays valid, then make a genuine selection of the new item.
-    /// The state must follow.</summary>
+    /// The state must follow.
+    ///
+    /// <para>Observable state is held in <em>instance</em> fields rather than the
+    /// static counters used by the older repro fixtures in this folder: the
+    /// fixture constructs the component itself, so it can simply keep the
+    /// reference. That removes the shared mutable state (and its <c>Reset()</c>
+    /// ceremony), so a fixture cannot be contaminated by a previous run.</para></summary>
     private class ReproComponent : Component
     {
-        public static int CallbackCount;
-        public static int RenderCount;
-        public static int StateIndex = -99;
-        public static Action<int>? SwitchSource;
-
-        public static void Reset()
-        {
-            CallbackCount = 0;
-            RenderCount = 0;
-            StateIndex = -99;
-            SwitchSource = null;
-        }
+        public int CallbackCount;
+        public int RenderCount;
+        public int StateIndex = -99;
+        public Action<int>? SwitchSource;
 
         public override Element Render()
         {
@@ -532,34 +530,34 @@ internal static class Issue1090SelectionStrandFixtures
     {
         public override async Task RunAsync()
         {
-            ReproComponent.Reset();
+            var component = new ReproComponent();
 
             var host = H.CreateHost();
-            host.Mount(new ReproComponent());
+            host.Mount(component);
             await Harness.Render();
 
             var lv = H.FindControl<ListView>(l => l.Name == "lv1090repro");
             H.Check("Issue1090_Repro_Mounted", lv is not null);
             if (lv is null) return;
 
-            H.Check("Issue1090_Repro_InitialSelection", lv.SelectedIndex == 0 && ReproComponent.StateIndex == 0);
+            H.Check("Issue1090_Repro_InitialSelection", lv.SelectedIndex == 0 && component.StateIndex == 0);
 
             // Step 2 of the repro: switch the combo to L2 — items become a,b,c
             // and the selection (0) is still valid in the new source.
-            ReproComponent.SwitchSource!(1);
+            component.SwitchSource!(1);
             await Harness.Render();
 
             Console.WriteLine(
-                $"# Issue1090 Repro after-grow: controlIndex={lv.SelectedIndex} stateIndex={ReproComponent.StateIndex} " +
+                $"# Issue1090 Repro after-grow: controlIndex={lv.SelectedIndex} stateIndex={component.StateIndex} " +
                 $"itemCount={(lv.ItemsSource as global::System.Collections.ICollection)?.Count} " +
-                $"callbacks={ReproComponent.CallbackCount} renders={ReproComponent.RenderCount}");
+                $"callbacks={component.CallbackCount} renders={component.RenderCount}");
 
             H.Check("Issue1090_Repro_GrewToThreeItems",
                 (lv.ItemsSource as global::System.Collections.ICollection)?.Count == 3);
             H.Check("Issue1090_Repro_SelectionStillZeroAfterGrow",
-                lv.SelectedIndex == 0 && ReproComponent.StateIndex == 0);
+                lv.SelectedIndex == 0 && component.StateIndex == 0);
 
-            int callbacksBeforeClick = ReproComponent.CallbackCount;
+            int callbacksBeforeClick = component.CallbackCount;
 
             // Step 3: click `c`. THE BUG — the control highlights it but the
             // callback never runs, so the state stays stale at 0.
@@ -567,12 +565,12 @@ internal static class Issue1090SelectionStrandFixtures
             await Harness.Render();
 
             Console.WriteLine(
-                $"# Issue1090 Repro after-click: controlIndex={lv.SelectedIndex} stateIndex={ReproComponent.StateIndex} " +
-                $"callbacks+={ReproComponent.CallbackCount - callbacksBeforeClick}");
+                $"# Issue1090 Repro after-click: controlIndex={lv.SelectedIndex} stateIndex={component.StateIndex} " +
+                $"callbacks+={component.CallbackCount - callbacksBeforeClick}");
 
             H.Check("Issue1090_Repro_ClickFiredCallback",
-                ReproComponent.CallbackCount - callbacksBeforeClick >= 1);
-            H.Check("Issue1090_Repro_StateFollowedSelection", ReproComponent.StateIndex == 2);
+                component.CallbackCount - callbacksBeforeClick >= 1);
+            H.Check("Issue1090_Repro_StateFollowedSelection", component.StateIndex == 2);
             H.Check("Issue1090_Repro_ControlAtSelection", lv.SelectedIndex == 2);
         }
     }
