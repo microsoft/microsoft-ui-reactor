@@ -411,22 +411,31 @@ and
 > An *element_initializer* invokes an `Add` method on the object being initialized.
 
 `StackElement` is an immutable record with an `init`-only `Element[] Children`. It implements no `IEnumerable`
-and has no `Add`, and cannot gain a meaningful one. Both halves of the failure are demonstrable on today's
-rules, which `#10185` preserves verbatim for element initializers:
+and has no `Add`, and cannot gain a meaningful one.
 
-```
-// new StackElement(Orientation.Vertical, []) { Spacing = 4, new TextElement("child") }
-error CS0747: Invalid initializer member declarator          // the shape #10185 legalises
+**This was verified against the implementation, not inferred from the spec.** The head of dotnet/roslyn
+[#83751](https://github.com/dotnet/roslyn/pull/83751) (`mixed-init-binding`, `e6f9127b5`) was built locally
+and run:
 
-// new StackElement(Orientation.Vertical, []) { new TextElement("child") }
-error CS1922: Cannot initialize type 'StackElement' with a collection initializer
-              because it does not implement 'System.Collections.IEnumerable'   // the rule it keeps
-```
+| | Result |
+|---|---|
+| Positive control — `new Form { Title = "Hello", "a", "b" }` on an `IEnumerable` + `Add` type | **compiles** — the feature is live |
+| Reactor's `StackElement`, mixed shape `{ Spacing = 4, new TextElement("child") }` | **CS1922** |
+| Same record, pure element list `{ new TextElement("child") }` | **CS1922** |
+| Same mixed shape on a shipping compiler | CS0747 |
 
-`#10185` removes the first error. It does not remove the second, so the feature lands and Reactor still cannot
-use it. Adopting it would require every container to implement `IEnumerable` **and** expose a mutating `Add` —
-which is precisely spec 019 §8.2's "internal mutable builder, freeze on read" and "accept the internal
-mutability", the two approaches that section rejected.
+The positive control is load-bearing: without it, "it errors" would be indistinguishable from failing to
+enable the feature. The gate is `LanguageVersion.Preview`, not a `/features:` flag.
+
+So the grammar change lands and the mixed shape becomes well-formed — and is then rejected by the
+`IEnumerable` rule. The error moves from `CS0747` to `CS1922`; the outcome for an immutable tree does not
+change. Their binder agrees: in `BindObjectInitializerExpression`, the first non-member-shape child calls
+`CollectionInitializerTypeImplementsIEnumerable` and reports `ERR_CollectionInitRequiresIEnumerable` when it
+is false.
+
+Adopting `#10185` would therefore require every container to implement `IEnumerable` **and** expose a
+mutating `Add` — which is precisely spec 019 §8.2's "internal mutable builder, freeze on read" and "accept
+the internal mutability", the two approaches that section rejected.
 
 Routing content to an `init` collection member removes the problem outright, and is the same mechanism
 Option A′ already uses — just with the property name elided. Notably, it also makes `[CollectionBuilder]`
