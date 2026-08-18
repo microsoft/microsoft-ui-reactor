@@ -42,9 +42,10 @@ Conventions for contributors:
   to catch a fixture that asserted nothing. A fixture whose *only* TAP output was a skip
   therefore reported green, indistinguishable from one that ran and passed. Selftests now carry
   a genuine third verdict on both sides of the TAP boundary: the Host counts checks and skips,
-  paints a fully-skipped fixture amber, and emits `# Skipped fixture:` plus a
-  `# Total skipped fixtures: N` trailer (after `# Total failures:`, so the #978/#988 abort
-  discriminator is unchanged) for raw-TAP consumers such as the NativeAOT job; the MSTest
+  paints a fully-skipped fixture amber, and emits `# Fully skipped fixture:` plus a
+  `# Total skipped fixtures: N` trailer and a `# Skipped fixture list:` roll-up (all after
+  `# Total failures:`, so the #978/#988 abort discriminator is unchanged) for raw-TAP consumers
+  such as the NativeAOT job; the MSTest
   wrapper parses the `# SKIP` directive and reports such fixtures as **Skipped**
   (`Assert.Inconclusive`) with their reasons, publishing the full skipped-check inventory —
   including partial skips — to the job summary. Simply not setting the flag would have been

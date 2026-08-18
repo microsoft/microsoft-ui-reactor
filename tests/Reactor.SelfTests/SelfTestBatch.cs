@@ -1103,7 +1103,7 @@ public class SelfTestBatch
         var inventory = BuildSkipInventory(byFixture);
 
         var icon = inventory.FullySkippedFixtures.Count > 0 ? "⚠️" : "ℹ️";
-        var body = new System.Text.StringBuilder()
+        var body = new global::System.Text.StringBuilder()
             .Append($"### {icon} Selftest skipped checks\n\n")
             .Append(inventory.Text)
             .Append("\n\n");
@@ -1119,7 +1119,7 @@ public class SelfTestBatch
         var markdown = body.ToString();
         return new SkipReport(inventory, markdown, TryAppendSummary(summaryPath, markdown));
 
-        static void AppendList(System.Text.StringBuilder sb, string heading, IReadOnlyList<string> entries)
+        static void AppendList(global::System.Text.StringBuilder sb, string heading, IReadOnlyList<string> entries)
         {
             if (entries.Count == 0) return;
             sb.Append($"**{heading}:**\n\n");
