@@ -394,10 +394,43 @@ It does not apply here: content elements are gathered into one collection expres
 is no per-element observable interleaving with the member assignments to preserve. Trailing-only is therefore
 free in this design and, per §6.1, better to read.
 
-The immutability divergence is the load-bearing one. `#10185` as specced **cannot** express Reactor's tree,
-because `StackElement` is an immutable record with no `Add`. Spec 019 §8.2 enumerated five workarounds for
-exactly this and disliked all five. Routing content to an `init` collection member removes the problem
-outright, and is the same mechanism Option A′ already uses — just with the property name elided.
+The immutability divergence is the load-bearing one, and it is sharper than "a difference of approach": the
+proposal's stated motivation is **this exact scenario** —
+
+> …where a parent control both has configurable properties and a list of children (Avalonia, MAUI, Windows
+> Forms, HTML-builder libraries, etc.)
+
+— but the mechanism it specifies rules out the immutable half of that space. The normative text is explicit:
+
+> **When the enclosing *initializer_element_list* contains at least one *element_initializer*, the object being
+> initialized** shall be of a type that implements `System.Collections.IEnumerable` or a compile-time error
+> occurs.
+
+and
+
+> An *element_initializer* invokes an `Add` method on the object being initialized.
+
+`StackElement` is an immutable record with an `init`-only `Element[] Children`. It implements no `IEnumerable`
+and has no `Add`, and cannot gain a meaningful one. Both halves of the failure are demonstrable on today's
+rules, which `#10185` preserves verbatim for element initializers:
+
+```
+// new StackElement(Orientation.Vertical, []) { Spacing = 4, new TextElement("child") }
+error CS0747: Invalid initializer member declarator          // the shape #10185 legalises
+
+// new StackElement(Orientation.Vertical, []) { new TextElement("child") }
+error CS1922: Cannot initialize type 'StackElement' with a collection initializer
+              because it does not implement 'System.Collections.IEnumerable'   // the rule it keeps
+```
+
+`#10185` removes the first error. It does not remove the second, so the feature lands and Reactor still cannot
+use it. Adopting it would require every container to implement `IEnumerable` **and** expose a mutating `Add` —
+which is precisely spec 019 §8.2's "internal mutable builder, freeze on read" and "accept the internal
+mutability", the two approaches that section rejected.
+
+Routing content to an `init` collection member removes the problem outright, and is the same mechanism
+Option A′ already uses — just with the property name elided. Notably, it also makes `[CollectionBuilder]`
+types, `ImmutableArray<T>` and spans reachable as content properties, none of which `Add` can serve.
 
 ---
 
