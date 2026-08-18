@@ -302,7 +302,9 @@ class C
 
     /// <summary>
     /// No <c>DeliberatelyExcludedAttached</c> row may name an owner that
-    /// <see cref="InstancePropertyOwnerProbes"/> classifies per property.
+    /// <see cref="InstancePropertyOwnerProbes"/> classifies per property — and every key must stay
+    /// in the <c>Owner.Property</c> form both that check and the owner split in
+    /// <see cref="Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names"/> read it as.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -339,6 +341,35 @@ class C
     [Fact]
     public void Excluded_Attached_Rows_Never_Name_An_Instance_Owner()
     {
+        // Guard the join key before trusting a zero below. Both this check and the owner split in
+        // Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names recover the owner as the text before
+        // the first '.', so a table re-keyed with qualified owners resolves every row to
+        // "Microsoft" and the membership assertion below reports zero offenders for all of them at
+        // once — including any a merge restored.
+        //
+        // MEASURED, re-keying one row to
+        // "Microsoft.UI.Xaml.Automation.AutomationProperties.DescribedBy": that is not silent
+        // overall — Every_Reset_Attached_Property_Is_Classified reports DescribedBy as being in
+        // neither table, and the scan test reports a missing owner "Microsoft" — but neither names
+        // the key shape, and the one check that would have caught a restored Grid.* row is exactly
+        // the one that goes quiet. So pin the spelling rather than let a green offender count stand
+        // in for a check that is no longer running.
+        var misshapen = ModifierTable.DeliberatelyExcludedAttached.Keys
+            .Where(key => key.Split('.').Length != 2
+                || key.StartsWith(".", StringComparison.Ordinal)
+                || key.EndsWith(".", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(
+            misshapen.Count == 0,
+            "These ModifierTable.DeliberatelyExcludedAttached keys are not in 'Owner.Property' " +
+            $"form: [{string.Join(", ", misshapen)}]. The owner is recovered as the text before " +
+            "the first '.', so 'Microsoft.UI.Xaml.Automation.AutomationProperties.DescribedBy' " +
+            "resolves to owner 'Microsoft', matches no probe, and empties the offender list below " +
+            "for every row at once — including any a merge restored. Re-key the table in short " +
+            "form, or update this test and Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names' " +
+            "owner splits together.");
+
         var offenders = ExclusionRowsOnInstanceOwners(ModifierTable.DeliberatelyExcludedAttached.Keys);
 
         Assert.True(
@@ -365,23 +396,32 @@ class C
     // which would wave both rows through.
     [InlineData("Grid.Row", true)]
     [InlineData("Control.IsTemplateFocusTarget", true)]
-    // …and the shape the list exists for, live in it today: an attached property whose owner is not
-    // an instance owner at all.
+    // Non-offenders, because none of these owners is classified per property at all.
+    // AutomationProperties.DescribedBy is a live DeliberatelyExcludedAttached row;
+    // ToolTipService.ToolTip and FlexPanel.Grow are mapped in AttachedProperties instead. Both
+    // sides of the attached split have to answer "false", since the predicate is owner membership
+    // and being attached is not what makes a row an offender.
     [InlineData("AutomationProperties.DescribedBy", false)]
     [InlineData("ToolTipService.ToolTip", false)]
     [InlineData("FlexPanel.Grow", false)]
+    // The spelling the key-shape assertion in the [Fact] above exists to reject, pinned here as a
+    // measurement rather than left as a claim in a comment: a qualified owner resolves to
+    // "Microsoft", matches no probe, and so the detector answers "not an offender" for a row that
+    // plainly is one. This row and that assertion are one guard in two halves — teaching the
+    // detector to split qualified names correctly should fail here, and should retire both.
+    [InlineData("Microsoft.UI.Xaml.Controls.Grid.Row", false)]
     public void Instance_Owner_Exclusion_Detector_Distinguishes_Offenders_From_Legitimate_Rows(
         string key, bool expectedOffender)
     {
         // The instrument check for the [Fact] above, which is absence-shaped over a three-row table
         // whose owners are currently disjoint from the probed ones — so it reports zero today and
-        // would report zero just as calmly if the join key stopped working. That is not
-        // hypothetical: the owner is recovered by splitting on the first '.', so re-keying
-        // DeliberatelyExcludedAttached with a qualified owner
-        // ("Microsoft.UI.Xaml.Automation.AutomationProperties.DescribedBy") yields "Microsoft",
-        // which matches no probe, and the invariant is silently switched off for every row at once.
-        // Driving the same detector with keys that must and must not match proves it can still
-        // answer both ways in the spelling the real table uses.
+        // would report zero just as calmly if the detector stopped discriminating. Driving that same
+        // detector with keys that must and must not match proves it can still answer both ways.
+        //
+        // This does NOT by itself make the [Fact] non-vacuous, and the division of labour matters:
+        // these keys are literals, so a re-keyed real table leaves every row here green. Detecting
+        // that is the [Fact]'s own 'Owner.Property' key-shape assertion; the qualified InlineData
+        // row above is what establishes that the spelling it rejects really does mis-answer.
         Assert.Equal(
             expectedOffender,
             ExclusionRowsOnInstanceOwners(new[] { key }).Count == 1);
