@@ -423,7 +423,7 @@ internal sealed class Harness
                 $"{nameof(ToggleCheckBox)}(\"{OneLine(label)}\"): no CheckBox with that Content is in the " +
                 $"visual tree. {DescribeContent<CheckBox>("CheckBox")}");
 
-        cb.IsChecked = cb.IsChecked != true;
+        cb.IsChecked = cb.IsChecked is not true;
     }
 
     private Button RequireButton(string caller, string label)
