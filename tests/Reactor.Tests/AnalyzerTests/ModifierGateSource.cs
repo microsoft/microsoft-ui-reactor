@@ -17,6 +17,14 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 internal readonly record struct ModifierGateSlot(string Property, string Slot, string Identifier);
 
 /// <summary>
+/// One identifier-valued argument of a <c>ModifierTable.Properties</c> entry — the argument name
+/// (<c>null</c> when positional) and the group identifier it references. Unlike
+/// <see cref="ModifierGateSlot"/> this includes non-gate arguments such as <c>elementTypes</c>,
+/// because a slot-blind text matcher sees those too.
+/// </summary>
+internal readonly record struct ModifierGateArgument(string? Slot, string Identifier);
+
+/// <summary>
 /// Reads gate facts out of <c>src/Reactor.Analyzers/ModifierTable.cs</c> <em>as text</em>, and
 /// supplies the one matcher that is safe to do it with.
 /// </summary>
@@ -33,9 +41,18 @@ internal readonly record struct ModifierGateSlot(string Property, string Slot, s
 /// <b>Prefer the typed property.</b> <see cref="ModifierInfo.ControlGate"/> is the authority and
 /// comparing its <em>contents</em> is immune to the naming structure — that is what
 /// <see cref="ModifierTableIntegrityTests"/> does, and why those 20 facts were never exposed.
-/// Reach for this reader only when the artifact really is text (a <c>mur check</c> rule, a docs or
-/// prose-parity gate, a review script), and then match with
+/// Reach for this reader only when the artifact really is text, and then match with
 /// <see cref="AnchoredPattern(string, string)"/>, never a bare <c>Contains</c>.
+/// </para>
+/// <para>
+/// <b>This is a test-only reference implementation, not a shared utility.</b> It lives in
+/// <c>tests/Reactor.Tests</c>, depends on xUnit assertions, and is <c>internal</c> — production
+/// code cannot call it. <c>mur check</c> rules live in <c>src/Reactor.Cli/Check/Rules/</c> and
+/// <c>src/Reactor.Analyzers</c> targets <c>netstandard2.0</c> and cannot reference the CLI, so a
+/// rule that needs this matching must <b>copy the pattern and add a parity test</b> — the same
+/// convention the repo already uses for analyzer/CLI shared logic. What is reusable here is the
+/// <em>shape</em> of <see cref="AnchoredPattern(string, string)"/>, verified by
+/// <see cref="ModifierGateIdentifierTests"/>.
 /// </para>
 /// <para>
 /// Roslyn supplies the entry boundaries rather than a line scan: an entry's extent is a brace-depth
@@ -59,22 +76,39 @@ internal static class ModifierGateSource
 
     /// <summary>
     /// Every <c>private static readonly string[] NAME = { … }</c> group in the table, mapped to the
-    /// type names it declares. Includes groups used only as <c>elementTypes</c>.
+    /// type names it declares. Includes groups used only as <c>elementTypes</c>. The lists are
+    /// read-only views: the model is a process-wide cache, so handing out the live arrays would let
+    /// one fact corrupt every later one.
     /// </summary>
-    public static IReadOnlyDictionary<string, string[]> DeclaredGroups => Model.Value.Groups;
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>> DeclaredGroups => Model.Value.Groups;
 
     /// <summary>Every gate argument in the table, read off the syntax tree.</summary>
     public static IReadOnlyList<ModifierGateSlot> GateSlots => Model.Value.Slots;
 
+    /// <summary>
+    /// Every identifier-valued argument in each entry, keyed by property — including
+    /// <c>elementTypes</c>, which the gate slots deliberately exclude. This is the syntax-model
+    /// prediction <see cref="ModifierGateIdentifierTests"/> measures <see cref="Hazard"/> against,
+    /// so that a hazard matcher which has stopped discriminating cannot pass for the right reason.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<ModifierGateArgument>> EntryArguments =>
+        Model.Value.Arguments;
+
     /// <summary>Property name → the exact source text of that entry in <c>Properties</c>.</summary>
-    public static IReadOnlyDictionary<string, string> EntryText => Model.Value.Entries;
+    /// <remarks>
+    /// Deliberately private. Raw entry text plus a hand-rolled <c>Contains</c> is exactly the
+    /// defect this type exists to prevent, so the raw text is not offered as a public surface —
+    /// go through <see cref="MatchAnchored"/>.
+    /// </remarks>
+    private static IReadOnlyDictionary<string, string> EntryText => Model.Value.Entries;
 
     /// <summary>
     /// The safe matcher: the gate identifier bounded by the delimiters the C# syntax already
     /// guarantees, so a superset name cannot satisfy a subset's pattern.
     /// </summary>
     /// <param name="slot">
-    /// <see cref="ControlGate"/>, <see cref="PoolResetGate"/>, or <see cref="AnySlot"/>.
+    /// <see cref="ControlGate"/>, <see cref="PoolResetGate"/>, or <see cref="AnySlot"/>. Spliced
+    /// into the pattern unescaped, because <see cref="AnySlot"/> is itself a regex alternation.
     /// </param>
     public static string AnchoredPattern(string slot, string identifier) =>
         slot + @":\s*" + Regex.Escape(identifier) + @"\s*[,)]";
@@ -82,29 +116,42 @@ internal static class ModifierGateSource
     /// <summary>Properties whose entry carries <paramref name="identifier"/> in that slot.</summary>
     public static ISet<string> MatchAnchored(string slot, string identifier)
     {
+        // AnchoredPattern splices `slot` in unescaped so AnySlot can be an alternation, which means
+        // an unrecognized slot yields a silently wrong answer rather than an error. Fail loudly.
+        Assert.True(
+            slot == ControlGate || slot == PoolResetGate || slot == AnySlot,
+            $"Unknown gate slot '{slot}'. MatchAnchored accepts ControlGate, PoolResetGate, or " +
+            "AnySlot; anything else is spliced into the regex verbatim and would match nothing.");
+
         var pattern = AnchoredPattern(slot, identifier);
         return Select(text => Regex.IsMatch(text, pattern));
     }
 
     /// <summary>
-    /// The charitable naive matcher — slot-aware, but with no closing delimiter. Used only to
-    /// demonstrate the hazard in <see cref="ModifierGateIdentifierTests"/>; never to assert a fact
-    /// about the table.
+    /// The unsafe matchers, kept only so <see cref="ModifierGateIdentifierTests"/> can demonstrate
+    /// the hazard differentially. Never assert a fact about the table with these — that is the bug.
     /// </summary>
-    public static ISet<string> MatchNaive(string slot, string identifier)
+    public static class Hazard
     {
-        Assert.Contains(slot, SlotNames);
-        var needle = slot + ": " + identifier;
-        return Select(text => text.Contains(needle, StringComparison.Ordinal));
-    }
+        /// <summary>
+        /// The charitable naive matcher — slot-aware, but with no closing delimiter, so it accepts
+        /// every gate name that <em>starts with</em> the identifier.
+        /// </summary>
+        public static ISet<string> SlotPrefixed(string slot, string identifier)
+        {
+            Assert.Contains(slot, SlotNames);
+            var needle = slot + ": " + identifier;
+            return Select(text => text.Contains(needle, StringComparison.Ordinal));
+        }
 
-    /// <summary>
-    /// The bare <c>Contains</c> the issue reports on — slot-blind, so it also accepts a name that
-    /// merely <em>contains</em> the identifier without starting with it
-    /// (<c>PanelControlBorder</c> ⊃ <c>ControlBorder</c>).
-    /// </summary>
-    public static ISet<string> MatchNaiveBare(string identifier) =>
-        Select(text => text.Contains(identifier, StringComparison.Ordinal));
+        /// <summary>
+        /// The bare <c>Contains</c> the issue reports on — slot-blind, so it also accepts a name
+        /// that merely <em>contains</em> the identifier without starting with it
+        /// (<c>PanelControlBorder</c> ⊃ <c>ControlBorder</c>).
+        /// </summary>
+        public static ISet<string> Bare(string identifier) =>
+            Select(text => text.Contains(identifier, StringComparison.Ordinal));
+    }
 
     private static ISet<string> Select(Func<string, bool> predicate) =>
         new HashSet<string>(
@@ -112,9 +159,10 @@ internal static class ModifierGateSource
             StringComparer.Ordinal);
 
     private sealed record TableModel(
-        IReadOnlyDictionary<string, string[]> Groups,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> Groups,
         IReadOnlyList<ModifierGateSlot> Slots,
-        IReadOnlyDictionary<string, string> Entries);
+        IReadOnlyDictionary<string, string> Entries,
+        IReadOnlyDictionary<string, IReadOnlyList<ModifierGateArgument>> Arguments);
 
     private static TableModel Load()
     {
@@ -131,7 +179,7 @@ internal static class ModifierGateSource
 
         Assert.True(table is not null, $"No 'ModifierTable' class declaration found in {file}");
 
-        var groups = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var groups = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         foreach (var field in table!.Members.OfType<FieldDeclarationSyntax>())
         {
             if (field.Declaration.Type is not ArrayTypeSyntax { ElementType: PredefinedTypeSyntax element }
@@ -151,7 +199,7 @@ internal static class ModifierGateSource
                     .ToArray();
 
                 if (types.Length > 0)
-                    groups[variable.Identifier.Text] = types;
+                    groups[variable.Identifier.Text] = Array.AsReadOnly(types);
             }
         }
 
@@ -170,6 +218,7 @@ internal static class ModifierGateSource
 
         var entries = new Dictionary<string, string>(StringComparer.Ordinal);
         var slots = new List<ModifierGateSlot>();
+        var arguments = new Dictionary<string, IReadOnlyList<ModifierGateArgument>>(StringComparer.Ordinal);
 
         foreach (var entry in entriesSyntax.Expressions.OfType<InitializerExpressionSyntax>())
         {
@@ -181,21 +230,30 @@ internal static class ModifierGateSource
 
             var property = key.Token.ValueText;
             entries[property] = entry.ToString();
+            arguments[property] = Array.Empty<ModifierGateArgument>();
 
             if (entry.Expressions[1] is not ObjectCreationExpressionSyntax { ArgumentList: not null } info)
                 continue;
 
+            var referenced = new List<ModifierGateArgument>();
+
             foreach (var argument in info.ArgumentList.Arguments)
             {
-                var slot = argument.NameColon?.Name.Identifier.Text;
-                if (slot is not (ControlGate or PoolResetGate))
+                // Only identifier-valued arguments matter: a group referenced by name is what a
+                // text matcher can see. Inline `new[] { "..." }` element lists have no identifier.
+                if (argument.Expression is not IdentifierNameSyntax identifier)
                     continue;
 
-                if (argument.Expression is IdentifierNameSyntax identifier)
+                var slot = argument.NameColon?.Name.Identifier.Text;
+                referenced.Add(new ModifierGateArgument(slot, identifier.Identifier.Text));
+
+                if (slot is ControlGate or PoolResetGate)
                     slots.Add(new ModifierGateSlot(property, slot, identifier.Identifier.Text));
             }
+
+            arguments[property] = referenced;
         }
 
-        return new TableModel(groups, slots, entries);
+        return new TableModel(groups, slots, entries, arguments);
     }
 }

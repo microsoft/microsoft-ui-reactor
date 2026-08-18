@@ -188,7 +188,9 @@ public class ModifierGateIdentifierTests
     /// <remarks>
     /// Relax <c>ModifierGateSource.AnchoredPattern</c> to a substring and the first assertion
     /// reddens — that is what makes it a guard rather than a restatement. The two floors under it
-    /// keep the guard from passing vacuously once the naming stops colliding.
+    /// keep the guard from passing vacuously once the naming stops colliding, and
+    /// <see cref="Hazard_Matchers_Select_Exactly_What_The_Syntax_Model_Predicts"/> keeps the
+    /// matchers those floors are measured with honest.
     /// </remarks>
     [Fact]
     public void Substring_Matching_Accepts_A_Wider_Gate_Where_Boundary_Matching_Does_Not()
@@ -232,8 +234,8 @@ public class ModifierGateIdentifierTests
                         continue;
 
                     var anchored = ModifierGateSource.MatchAnchored(slot, narrow);
-                    var naive = ModifierGateSource.MatchNaive(slot, narrow);
-                    var bare = ModifierGateSource.MatchNaiveBare(narrow);
+                    var naive = ModifierGateSource.Hazard.SlotPrefixed(slot, narrow);
+                    var bare = ModifierGateSource.Hazard.Bare(narrow);
 
                     foreach (var property in exposed)
                     {
@@ -273,6 +275,92 @@ public class ModifierGateIdentifierTests
             "dropping this floor.");
     }
 
+    /// <summary>
+    /// Positive control for the hazard matchers themselves: they must select exactly what the
+    /// syntax model predicts, not merely "at least the properties fact C looks at".
+    /// </summary>
+    /// <remarks>
+    /// Fact C only inspects the sites where a false accept is expected, so a hazard matcher that
+    /// stopped discriminating — <c>Select(_ =&gt; true)</c> is the degenerate case — would satisfy
+    /// its floors while proving nothing. A broken instrument is trusted by default, so pin it:
+    /// the expectation here is computed from the Roslyn argument list, independently of the text
+    /// matching under test.
+    /// </remarks>
+    [Fact]
+    public void Hazard_Matchers_Select_Exactly_What_The_Syntax_Model_Predicts()
+    {
+        var identifiers = ModifierGateSource.GateSlots
+            .Select(slot => slot.Identifier)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        var problems = new List<string>();
+
+        foreach (var identifier in identifiers)
+        {
+            foreach (var slot in ModifierGateSource.SlotNames)
+            {
+                // The needle is `slot + ": " + id`, so it accepts any gate name in that slot that
+                // STARTS WITH the identifier — that is precisely the hazard, stated positively.
+                var predicted = PropertiesWhere(argument =>
+                    argument.Slot == slot
+                    && argument.Identifier.StartsWith(identifier, StringComparison.Ordinal));
+
+                var actual = ModifierGateSource.Hazard.SlotPrefixed(slot, identifier);
+
+                if (!actual.SetEquals(predicted))
+                {
+                    problems.Add(
+                        $"Hazard.SlotPrefixed({slot}, '{identifier}') selected [{Join(actual)}] but the " +
+                        $"argument list predicts [{Join(predicted)}]");
+                }
+            }
+
+            // Slot-blind: any referenced group name that contains the identifier anywhere, in any
+            // argument — including elementTypes, which the gate slots exclude.
+            var predictedBare = PropertiesWhere(argument =>
+                argument.Identifier.Contains(identifier, StringComparison.Ordinal));
+
+            var actualBare = ModifierGateSource.Hazard.Bare(identifier);
+
+            if (!actualBare.SetEquals(predictedBare))
+            {
+                problems.Add(
+                    $"Hazard.Bare('{identifier}') selected [{Join(actualBare)}] but the argument list " +
+                    $"predicts [{Join(predictedBare)}]");
+            }
+        }
+
+        Assert.True(
+            problems.Count == 0,
+            "A hazard matcher no longer selects what ModifierTable's argument list predicts, so the " +
+            "non-vacuity floors in " +
+            nameof(Substring_Matching_Accepts_A_Wider_Gate_Where_Boundary_Matching_Does_Not) +
+            " are not measuring the hazard they claim to. Either a matcher is broken, or the table's " +
+            "formatting changed so the naive needle ('slot: Name', exactly one space) no longer " +
+            "reflects how the gates are written:\n  " + string.Join("\n  ", problems));
+
+        // Negative control: an identifier that appears nowhere must select nothing in all three
+        // matchers. Without this, a matcher that returns everything could still agree above if the
+        // prediction were equally broken.
+        const string Absent = "NoSuchGateIdentifier1062";
+        Assert.Empty(ModifierGateSource.Hazard.Bare(Absent));
+        foreach (var slot in ModifierGateSource.SlotNames)
+        {
+            Assert.Empty(ModifierGateSource.Hazard.SlotPrefixed(slot, Absent));
+            Assert.Empty(ModifierGateSource.MatchAnchored(slot, Absent));
+        }
+    }
+
+    /// <summary>Properties with at least one entry argument satisfying <paramref name="predicate"/>.</summary>
+    private static ISet<string> PropertiesWhere(Func<ModifierGateArgument, bool> predicate) =>
+        new HashSet<string>(
+            ModifierGateSource.EntryArguments
+                .Where(entry => entry.Value.Any(predicate))
+                .Select(entry => entry.Key),
+            StringComparer.Ordinal);
+
     private static string TypedMemberName(string slot) =>
         slot == ModifierGateSource.ControlGate ? nameof(ModifierInfo.ControlGate) : nameof(ModifierInfo.PoolResetGate);
 
@@ -282,14 +370,14 @@ public class ModifierGateIdentifierTests
             : info.PoolResetGate;
 
     /// <summary>Properties whose typed gate in <paramref name="slot"/> is exactly these types.</summary>
-    private static ISet<string> PropertiesCarrying(string slot, string[] types) =>
+    private static ISet<string> PropertiesCarrying(string slot, IReadOnlyList<string> types) =>
         new HashSet<string>(
             ModifierTable.Properties
                 .Where(entry => TypedGate(entry.Key, slot) is { } gate && SameSet(gate, types))
                 .Select(entry => entry.Key),
             StringComparer.Ordinal);
 
-    private static bool SameSet(string[] left, string[] right) =>
+    private static bool SameSet(IEnumerable<string> left, IEnumerable<string> right) =>
         new HashSet<string>(left, StringComparer.Ordinal).SetEquals(right);
 
     private static string Join(IEnumerable<string> values) =>

@@ -278,13 +278,17 @@ internal static class ModifierTable
     //
     // So: compare what a gate CONTAINS, not what it is CALLED. Read ModifierInfo.ControlGate /
     // ModifierInfo.PoolResetGate and compare the type sets — that is what every check in
-    // ModifierTableIntegrityTests does, and it is why none of them can be fooled here.
+    // ModifierTableIntegrityTests does, and it is why none of them can be fooled here. It is also
+    // what ModifierGateProseParityTests does for the REACTOR_MOD_003 gate list in the shipped
+    // reactor-build-and-check skill: prose names receiver TYPES, so it compares sets too.
     //
-    // Only when the artifact genuinely is text — a prose-parity gate over a doc or skill file, where
-    // no typed property is reachable — match with a boundary-anchored pattern, `SLOT:\s*NAME\s*[,)]`.
+    // Only when the artifact genuinely leaves no typed property reachable should you match this
+    // file as text, and then anchor on the delimiters the C# syntax guarantees: `SLOT:\s*NAME\s*[,)]`.
     // A bare Contains(NAME) selects every wider gate as well, silently passing the very assertion
-    // meant to catch a mis-widened gate. tests/Reactor.Tests/AnalyzerTests/ModifierGateSource.cs owns
-    // the vetted matcher and ModifierGateIdentifierTests pins it to this table. Issue #1062.
+    // meant to catch a mis-widened gate. tests/Reactor.Tests/AnalyzerTests/ModifierGateSource.cs is
+    // the test-only reference implementation of that matcher — it is internal to Reactor.Tests, so
+    // CLI and analyzer code must copy the pattern and add a parity test rather than call it —
+    // and ModifierGateIdentifierTests pins it to this table. Issue #1062.
     private static readonly string[] ControlBorderGridStackRelativeText = { "Control", "Border", "Grid", "StackPanel", "RelativePanel", "TextBlock" };
     private static readonly string[] ControlBorderGridStackRelative = { "Control", "Border", "Grid", "StackPanel", "RelativePanel" };
     private static readonly string[] ControlBorder = { "Control", "Border" };

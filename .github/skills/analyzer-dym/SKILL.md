@@ -40,11 +40,15 @@ directly).
   names in `ModifierTable.cs` are their receiver lists concatenated, so a wider gate
   *necessarily* has a name containing the narrower one (`ControlBorder` ⊏
   `ControlBorderGridStack` ⊏ …). Read `ModifierInfo.ControlGate` / `PoolResetGate` and
-  compare type **sets**. Only if your artifact really is text (a prose-parity gate over a
-  doc or skill file) match with the boundary-anchored form `SLOT:\s*NAME\s*[,)]` —
-  `tests/Reactor.Tests/AnalyzerTests/ModifierGateSource.cs` already owns that matcher. A
-  bare `Contains(NAME)` passes on every wider gate, i.e. it silently green-lights exactly
-  the mis-widening you were checking for.
+  compare type **sets** — prose gates name receiver *types*, so a doc-parity check compares
+  sets too (see `ModifierGateProseParityTests`). Only when no typed property is reachable
+  should you match the table as text, and then anchor it: `SLOT:\s*NAME\s*[,)]`. A bare
+  `Contains(NAME)` passes on every wider gate, i.e. it silently green-lights exactly the
+  mis-widening you were checking for.
+  `tests/Reactor.Tests/AnalyzerTests/ModifierGateSource.cs` is the **test-only** reference
+  implementation of that matcher — it is `internal` to `Reactor.Tests`, so a `mur check`
+  rule cannot call it; copy the pattern and add a parity test, as with other analyzer/CLI
+  shared logic.
 
 ## Workflow
 
