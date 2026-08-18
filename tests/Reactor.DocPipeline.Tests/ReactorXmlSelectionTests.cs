@@ -50,7 +50,16 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 ///     <description><see cref="Source_at_the_same_instant_is_not_stale"/>.</description></item>
 ///   <item><term>Segment match → prefix match for build output</term>
 ///     <description><see cref="A_source_directory_whose_name_merely_starts_with_bin_still_counts"/>.</description></item>
+///   <item><term>Drop the <c>ReparsePoint</c> skip on the candidate walk</term>
+///     <description><see cref="A_junction_nested_in_bin_is_not_followed_out_of_the_tree"/>.
+///     Added after that mutation came back green — the hardening had shipped
+///     with nothing pinning it.</description></item>
 /// </list>
+/// <para>
+/// These all drive the helpers directly. What they cannot show is that Phase
+/// 5.7 still calls them — see <see cref="ReferenceStalenessWiringTests"/>, which
+/// runs the real command.
+/// </para>
 /// </remarks>
 public class ReactorXmlSelectionTests
 {
@@ -196,6 +205,58 @@ public class ReactorXmlSelectionTests
         Assert.Equal(newest, choice!.Value.Path);
         Assert.Equal(Base.AddMinutes(9), choice.Value.WriteUtc);
         Assert.Equal(3, choice.Value.CandidateCount);
+    }
+
+    /// <summary>
+    /// A junction nested inside <c>bin</c> must not be descended into: a file
+    /// reached through one is not this build's output, and a junction that
+    /// points back at an ancestor has no cycle detection in the runtime's
+    /// walker.
+    /// </summary>
+    /// <remarks>
+    /// The first two assertions are the positive control and they are what make
+    /// the third a measurement. A junction that silently failed to be created
+    /// would leave the "not a candidate" assertion passing for the wrong reason,
+    /// so the test first proves the target really is reachable through the link
+    /// — i.e. that the default walk *would* have found it.
+    /// </remarks>
+    [Fact]
+    public void A_junction_nested_in_bin_is_not_followed_out_of_the_tree()
+    {
+        using var fx = new RepoFixture();
+        var real = fx.Xml("x64/Debug/net10.0-windows10.0.22621.0", Base);
+
+        // Newer than the real candidate, so following the link would change the
+        // answer rather than merely add a tie.
+        var outside = fx.OutsideXml("elsewhere", Base.AddMinutes(45));
+        var linked = fx.JunctionInsideBin("linked", Path.GetDirectoryName(outside)!);
+
+        Assert.True(File.Exists(Path.Combine(linked, "Reactor.xml")),
+            "fixture: the junction must resolve, or the exclusion below proves nothing");
+        Assert.Equal(Base.AddMinutes(45), File.GetLastWriteTimeUtc(Path.Combine(linked, "Reactor.xml")));
+
+        var candidates = CompileCommand.EnumerateReactorXmlCandidates(fx.Root).ToList();
+
+        Assert.Equal(new[] { real }, candidates);
+        Assert.Equal(real, CompileCommand.FindReactorXml(fx.Root)?.Path);
+    }
+
+    /// <summary>
+    /// Skipping reparse points must not disqualify the enumeration root itself
+    /// — redirecting <c>bin</c> to another volume is a normal thing to do, and
+    /// it would be a poor trade to break it while hardening against nested
+    /// links.
+    /// </summary>
+    [Fact]
+    public void A_bin_directory_that_is_itself_a_junction_still_enumerates()
+    {
+        using var fx = new RepoFixture();
+        var expected = fx.XmlBehindJunctionedBin("x64/Release/net10.0-windows10.0.22621.0", Base);
+
+        var candidates = CompileCommand.EnumerateReactorXmlCandidates(fx.Root).ToList();
+
+        Assert.Single(candidates);
+        Assert.Equal(expected, CompileCommand.FindReactorXml(fx.Root)?.Path);
     }
 
     /// <summary>
@@ -406,9 +467,112 @@ public class ReactorXmlSelectionTests
             return path;
         }
 
+        /// <summary>
+        /// Writes a <c>Reactor.xml</c> outside the repo root entirely — the
+        /// thing a junction inside <c>bin</c> could otherwise drag in.
+        /// </summary>
+        public string OutsideXml(string dirName, DateTime writeUtc)
+        {
+            var dir = Path.Combine(Root + "-outside", dirName);
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "Reactor.xml");
+            File.WriteAllText(path, "// fixture\n");
+            File.SetLastWriteTimeUtc(path, writeUtc);
+            return path;
+        }
+
+        private readonly List<string> _junctions = new();
+
+        /// <summary>
+        /// Creates <c>src/Reactor/bin/&lt;name&gt;</c> as a junction to
+        /// <paramref name="target"/> and returns the link path.
+        /// </summary>
+        public string JunctionInsideBin(string name, string target)
+        {
+            var link = Path.Combine(Root, "src", "Reactor", "bin", name);
+            Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+            CreateJunction(link, target);
+            return link;
+        }
+
+        /// <summary>
+        /// Makes <c>src/Reactor/bin</c> itself a junction to a real directory
+        /// holding the given layout, and returns the candidate's path as seen
+        /// through the link.
+        /// </summary>
+        public string XmlBehindJunctionedBin(string layout, DateTime writeUtc)
+        {
+            var realBin = Path.Combine(Root + "-realbin");
+            var dir = Path.Combine(realBin, Native(layout));
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "Reactor.xml");
+            File.WriteAllText(path, "// fixture\n");
+            File.SetLastWriteTimeUtc(path, writeUtc);
+
+            var link = Path.Combine(Root, "src", "Reactor", "bin");
+            Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+            CreateJunction(link, realBin);
+            return Path.Combine(link, Native(layout), "Reactor.xml");
+        }
+
+        /// <summary>
+        /// Junctions rather than symlinks: <c>mklink /J</c> needs no elevation
+        /// or Developer Mode, so this works for an ordinary user and on the CI
+        /// runner. Throws rather than skipping — a test that quietly opts out
+        /// when its fixture fails is a test that cannot fail.
+        /// </summary>
+        private void CreateJunction(string link, string target)
+        {
+            using var p = global::System.Diagnostics.Process.Start(
+                new global::System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    ArgumentList = { "/c", "mklink", "/J", link, target },
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                })!;
+            p.WaitForExit();
+            if (p.ExitCode != 0 || !Directory.Exists(link))
+            {
+                throw new InvalidOperationException(
+                    $"could not create junction {link} -> {target}: " +
+                    $"exit {p.ExitCode}, {p.StandardError.ReadToEnd().Trim()}");
+            }
+            _junctions.Add(link);
+        }
+
         private static string Native(string path) =>
             path.Replace('/', Path.DirectorySeparatorChar);
 
-        public void Dispose() => FixtureCleanup.DeleteTree(Root);
+        /// <summary>
+        /// The junction fixtures put their targets in sibling directories so a
+        /// link can point genuinely outside the repo root; tear those down too,
+        /// or each run leaks two trees into TEMP.
+        /// </summary>
+        /// <remarks>
+        /// Junctions are removed first, as links. Measured, not assumed:
+        /// <c>Directory.Delete(root, recursive: true)</c> over a tree
+        /// containing one throws <c>UnauthorizedAccessException</c> ("Access to
+        /// the path 'linked' is denied") — which
+        /// <see cref="FixtureCleanup.DeleteTree"/> swallows by design, so the
+        /// whole tree leaks silently. It did, twelve directories' worth, before
+        /// this loop existed. Deleting the junction non-recursively removes the
+        /// link and leaves its target intact.
+        /// </remarks>
+        public void Dispose()
+        {
+            foreach (var link in _junctions)
+            {
+                try { Directory.Delete(link, recursive: false); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+
+            FixtureCleanup.DeleteTree(Root);
+            FixtureCleanup.DeleteTree(Root + "-outside");
+            FixtureCleanup.DeleteTree(Root + "-realbin");
+        }
     }
 }

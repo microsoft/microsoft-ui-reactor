@@ -995,6 +995,13 @@ internal static partial class CompileCommand
             .FirstOrDefault();
 
     /// <summary>
+    /// What <see cref="EnumerationOptions"/> skips by default. Named so the two
+    /// recursive walks below can add <see cref="FileAttributes.ReparsePoint"/>
+    /// to it without silently dropping the default.
+    /// </summary>
+    private const FileAttributes DefaultSkip = FileAttributes.Hidden | FileAttributes.System;
+
+    /// <summary>
     /// Every <c>Reactor.xml</c> under <c>src/Reactor/bin</c>, at any depth.
     /// </summary>
     /// <remarks>
@@ -1026,6 +1033,14 @@ internal static partial class CompileCommand
             // A locked or permission-denied subtree is not this command's
             // business; skipping it beats aborting reference generation.
             IgnoreInaccessible = true,
+            // Don't descend through junctions/symlinks. Two reasons: a nested
+            // reparse point can point anywhere, so a candidate found through
+            // one isn't this build's output at all; and a loop (bin/x -> bin)
+            // has no cycle detection in the runtime's walker, so it recurses
+            // until the path length gives out. Skipping applies to entries the
+            // walk discovers, not to the root — a `bin` that is itself a
+            // junction still enumerates normally.
+            AttributesToSkip = DefaultSkip | FileAttributes.ReparsePoint,
         });
     }
 
@@ -1046,9 +1061,19 @@ internal static partial class CompileCommand
     /// <para>
     /// Warning severity, deliberately. The pages this produces are internally
     /// consistent with the build they came from — the claim is "your input may
-    /// predate your source", which an author can act on and CI cannot. The CI
-    /// docs job compiles on a clean checkout with no <c>src/Reactor</c> build
-    /// at all, so selection returns <c>null</c> there and this never runs.
+    /// predate your source", which an author can act on and CI cannot.
+    /// </para>
+    /// <para>
+    /// It stays quiet in CI, but not for the reason it might appear: the docs
+    /// job does build <c>src/Reactor</c>. It runs
+    /// <c>docs compile --no-screenshots --ci</c> without <c>--no-build</c>
+    /// (<c>.github/workflows/ci.yml</c>, <c>docs-build</c>), so Phase 2 builds
+    /// every doc app, and each one <c>ProjectReference</c>s
+    /// <c>src/Reactor/Reactor.csproj</c> — which sets
+    /// <c>GenerateDocumentationFile</c>. Phase 5.7 therefore finds a real
+    /// <c>Reactor.xml</c> and generates pages. What makes the warning quiet is
+    /// the ordering: <c>actions/checkout</c> writes the sources before that
+    /// build runs, so the emitted XML always postdates every <c>.cs</c>.
     /// </para>
     /// <para>
     /// Strict comparison, no grace window: a build writes its XML after
@@ -1096,6 +1121,9 @@ internal static partial class CompileCommand
         {
             RecurseSubdirectories = true,
             IgnoreInaccessible = true,
+            // Same reasoning as the candidate walk: don't follow nested
+            // junctions/symlinks out of the tree, and don't risk a cycle.
+            AttributesToSkip = DefaultSkip | FileAttributes.ReparsePoint,
         }))
         {
             if (IsUnderBuildOutput(srcDir, file)) continue;
