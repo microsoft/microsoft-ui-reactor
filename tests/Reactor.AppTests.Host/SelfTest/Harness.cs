@@ -373,7 +373,7 @@ internal sealed class Harness
     /// to "silently did nothing" at the call site (issue #1063).</para>
     ///
     /// <para>To assert that a disabled button ignores clicks, use
-    /// <see cref="ClickButtonIfEnabled"/> — it still throws when the label is wrong, so the
+    /// <see cref="RequireButtonDisabled"/> — it too throws when the label is wrong, so the
     /// assertion cannot pass for the wrong reason.</para>
     /// </summary>
     /// <exception cref="InvalidOperationException">No such button, or the button is disabled.</exception>
@@ -382,28 +382,33 @@ internal sealed class Harness
         var btn = RequireButton(nameof(ClickButton), label);
         if (!btn.IsEnabled)
             throw new InvalidOperationException(
-                $"{nameof(ClickButton)}(\"{label}\"): the Button is disabled, so the click was NOT " +
+                $"{nameof(ClickButton)}(\"{OneLine(label)}\"): the Button is disabled, so the click was NOT " +
                 $"delivered. If the fixture means to prove that a disabled button ignores clicks, " +
-                $"call {nameof(ClickButtonIfEnabled)} and assert it returns false.");
+                $"call {nameof(RequireButtonDisabled)} instead.");
 
         InvokeButton(btn);
     }
 
     /// <summary>
-    /// Invokes the button only if it is enabled, and reports which happened: true when the
-    /// click was delivered, false when the button was found but disabled.
+    /// Asserts that the button carrying <paramref name="label"/> is present but disabled —
+    /// and therefore that no click can land on it. Deliberately does NOT click.
     ///
-    /// <para>Still throws when no button carries <paramref name="label"/> — that is always a
-    /// broken fixture, and it keeps a <c>false</c> result meaning "the button is disabled"
-    /// rather than the ambiguous "disabled, or I typo'd the label".</para>
+    /// <para>This is the sanctioned way to prove "a disabled button ignores clicks". It
+    /// throws in BOTH failure directions: a wrong label and an unexpectedly ENABLED button
+    /// are each a broken fixture. That is why it returns <c>void</c> rather than a
+    /// <c>bool</c> — a returned flag can be dropped at the call site, and a silently
+    /// ignorable signal is precisely the defect this guard exists to prevent (issue #1063).
+    /// Reintroducing one here would rebuild the bug inside its own fix.</para>
     /// </summary>
-    /// <exception cref="InvalidOperationException">No button carries <paramref name="label"/>.</exception>
-    public bool ClickButtonIfEnabled(string label)
+    /// <exception cref="InvalidOperationException">No such button, or the button is enabled.</exception>
+    public void RequireButtonDisabled(string label)
     {
-        var btn = RequireButton(nameof(ClickButtonIfEnabled), label);
-        if (!btn.IsEnabled) return false;
-        InvokeButton(btn);
-        return true;
+        var btn = RequireButton(nameof(RequireButtonDisabled), label);
+        if (btn.IsEnabled)
+            throw new InvalidOperationException(
+                $"{nameof(RequireButtonDisabled)}(\"{OneLine(label)}\"): the Button is ENABLED, but the " +
+                $"fixture expected it to be disabled. A real click would land here, so whatever the " +
+                $"fixture asserts next about nothing having happened would be measuring the wrong thing.");
     }
 
     /// <summary>
@@ -415,7 +420,7 @@ internal sealed class Harness
     {
         var cb = FindControl<CheckBox>(c => c.Content is string s && s == label)
             ?? throw new InvalidOperationException(
-                $"{nameof(ToggleCheckBox)}(\"{label}\"): no CheckBox with that Content is in the " +
+                $"{nameof(ToggleCheckBox)}(\"{OneLine(label)}\"): no CheckBox with that Content is in the " +
                 $"visual tree. {DescribeContent<CheckBox>("CheckBox")}");
 
         cb.IsChecked = cb.IsChecked != true;
@@ -424,7 +429,7 @@ internal sealed class Harness
     private Button RequireButton(string caller, string label)
         => FindButton(label)
            ?? throw new InvalidOperationException(
-               $"{caller}(\"{label}\"): no Button with that Content is in the visual tree. " +
+               $"{caller}(\"{OneLine(label)}\"): no Button with that Content is in the visual tree. " +
                DescribeContent<Button>("Button"));
 
     private static void InvokeButton(Button btn)
@@ -445,12 +450,24 @@ internal sealed class Harness
         if (all.Count == 0) return $"No {kind} is mounted at all.";
 
         var labels = all
-            .Select(c => c.Content is string s ? $"\"{s}\"" : $"<{c.Content?.GetType().Name ?? "null"}>")
+            .Select(c => c.Content is string s ? $"\"{OneLine(s)}\"" : $"<{c.Content?.GetType().Name ?? "null"}>")
             .Take(20)
             .ToList();
-        var more = all.Count > labels.Count ? $", … (+{all.Count - labels.Count} more)" : "";
+        var more = all.Count > labels.Count ? $", \u2026 (+{all.Count - labels.Count} more)" : "";
         return $"{all.Count} {kind}(s) present: {string.Join(", ", labels)}{more}.";
     }
+
+    /// <summary>
+    /// Escapes the characters that would break the single-line TAP record this text ends up
+    /// in. A throw from here surfaces as <c>not ok &lt;n&gt; &lt;fixture&gt;_CRASH - &lt;msg&gt;</c>
+    /// (SelfTestRunner.cs), and SelfTestBatch.ParseTap reads that stream line by line — so a
+    /// raw newline inside a control label would split one failure into two records and the
+    /// tail could be re-read as a forged <c>ok</c> / <c># Total failures:</c> line.
+    /// </summary>
+    private static string OneLine(string s)
+        => s.Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("\t", "\\t", StringComparison.Ordinal);
 
     // -- Tree walking ----------------------------------------------------
 

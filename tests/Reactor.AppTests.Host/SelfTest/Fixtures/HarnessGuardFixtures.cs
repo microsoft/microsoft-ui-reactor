@@ -14,10 +14,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// "X was restored" / "X is still within tolerance" check passes on that state.</para>
 ///
 /// <para>This fixture is the guard's own guard. Every check here fails if the throw is
-/// removed from <see cref="Harness.ClickButton"/> / <see cref="Harness.ToggleCheckBox"/>:
-/// the "threw" checks flip to false directly, and the two behavioural checks
-/// (<c>ClickButtonIfEnabled</c> returning true/false) fail because the fail-open bodies
-/// return <c>void</c> and cannot compile a caller that reads a result.</para>
+/// removed from <see cref="Harness.ClickButton"/> / <see cref="Harness.ToggleCheckBox"/> /
+/// <see cref="Harness.RequireButtonDisabled"/>.</para>
 /// </summary>
 internal static class HarnessGuardFixtures
 {
@@ -37,8 +35,9 @@ internal static class HarnessGuardFixtures
         {
             await MissingButtonThrows();
             await DisabledButtonThrows();
-            await IfEnabledReportsInsteadOfThrowing();
+            await RequireButtonDisabledAssertsBothWays();
             await ToggleCheckBoxThrowsWhenMissing();
+            await LabelsAreFlattenedForTap();
         }
 
         // A label that is nowhere in the tree must abort the fixture, and the message must
@@ -61,10 +60,10 @@ internal static class HarnessGuardFixtures
             H.Check("HarnessGuard_Missing_MessageListsCandidates",
                 message?.Contains("HarnessGuard_Present", StringComparison.Ordinal) == true);
 
-            // Same rule for the opt-in variant: a wrong label is always a broken fixture, so
-            // `false` keeps meaning "disabled" rather than "disabled, or I typo'd it".
-            H.Check("HarnessGuard_Missing_IfEnabledThrowsToo",
-                MessageIfThrows(() => H.ClickButtonIfEnabled(MissingLabel)) is not null);
+            // Same rule for the assertion variant: a wrong label is always a broken fixture,
+            // and must never be mistaken for "the button was disabled, as expected".
+            H.Check("HarnessGuard_Missing_RequireDisabledThrowsToo",
+                MessageIfThrows(() => H.RequireButtonDisabled(MissingLabel)) is not null);
         }
 
         // The disabled case is the one that used to look most like success: the button is
@@ -89,9 +88,9 @@ internal static class HarnessGuardFixtures
             H.Check("HarnessGuard_Disabled_HandlerNotRun", clicks == 0);
         }
 
-        // ClickButtonIfEnabled is the escape hatch for fixtures that mean to prove a disabled
-        // button ignores clicks. It must distinguish the two outcomes by return value.
-        private async Task IfEnabledReportsInsteadOfThrowing()
+        // RequireButtonDisabled is the sanctioned way to prove a disabled button ignores
+        // clicks. It must be loud in BOTH directions and must not click anything itself.
+        private async Task RequireButtonDisabledAssertsBothWays()
         {
             int enabledClicks = 0, disabledClicks = 0;
             using var host = H.CreateHost();
@@ -100,16 +99,25 @@ internal static class HarnessGuardFixtures
                 Button("HarnessGuard_Inert", () => disabledClicks++).IsEnabled(false)));
             await Harness.Render();
 
-            H.Check("HarnessGuard_IfEnabled_FalseOnDisabled",
-                !H.ClickButtonIfEnabled("HarnessGuard_Inert"));
-            H.Check("HarnessGuard_IfEnabled_DisabledHandlerNotRun", disabledClicks == 0);
+            // Expected case: present and disabled — passes quietly.
+            H.Check("HarnessGuard_RequireDisabled_PassesOnDisabled",
+                MessageIfThrows(() => H.RequireButtonDisabled("HarnessGuard_Inert")) is null);
+            H.Check("HarnessGuard_RequireDisabled_DisabledHandlerNotRun", disabledClicks == 0);
 
-            H.Check("HarnessGuard_IfEnabled_TrueOnEnabled",
-                H.ClickButtonIfEnabled("HarnessGuard_Live"));
+            // The direction a bool-returning variant could not enforce: a button the fixture
+            // believed was disabled is actually live, so the next "nothing happened" assertion
+            // would have been measuring the wrong thing. That must be loud, not a dropped flag.
+            H.Check("HarnessGuard_RequireDisabled_ThrowsOnEnabled",
+                MessageIfThrows(() => H.RequireButtonDisabled("HarnessGuard_Live")) is not null);
             await Harness.Render();
-            // A `true` that did not actually invoke anything would be the same lie in a new
-            // shape, so pin the side effect too.
-            H.Check("HarnessGuard_IfEnabled_EnabledHandlerRan", enabledClicks == 1);
+            // It asserts; it must never deliver a click as a side effect.
+            H.Check("HarnessGuard_RequireDisabled_DidNotClickEnabled", enabledClicks == 0);
+
+            // Control: the enabled button really is clickable, so the check above failed for
+            // the stated reason (it is enabled) rather than because nothing works here.
+            H.ClickButton("HarnessGuard_Live");
+            await Harness.Render();
+            H.Check("HarnessGuard_RequireDisabled_EnabledStillClickable", enabledClicks == 1);
         }
 
         // ToggleCheckBox had the same fail-open shape (silent when the CheckBox is absent).
@@ -132,6 +140,26 @@ internal static class HarnessGuardFixtures
             H.ToggleCheckBox("HarnessGuard_Box");
             await Harness.Render();
             H.Check("HarnessGuard_Toggle_PresentStillToggles", cb?.IsChecked == true);
+        }
+
+        // The message ends up inside a single-line TAP record
+        // (`not ok <n> <fixture>_CRASH - <msg>`, SelfTestRunner.cs), and SelfTestBatch.ParseTap
+        // reads that stream line by line. A raw newline inside a control label would therefore
+        // split one failure into two records, and the tail could be re-read as a forged `ok` or
+        // `# Total failures:` line — turning a diagnostic into a corrupted run report.
+        private async Task LabelsAreFlattenedForTap()
+        {
+            using var host = H.CreateHost();
+            host.Mount(_ => VStack(Button("HarnessGuard_Two\nLines", () => { })));
+            await Harness.Render();
+
+            var message = MessageIfThrows(() => H.ClickButton(MissingLabel));
+            H.Check("HarnessGuard_Tap_Throws", message is not null);
+            H.Check("HarnessGuard_Tap_NoRawNewlineInMessage",
+                message is not null && !message.Contains('\n') && !message.Contains('\r'));
+            // Escaped rather than dropped, so the label is still identifiable in the report.
+            H.Check("HarnessGuard_Tap_NewlineEscapedNotDropped",
+                message?.Contains("HarnessGuard_Two\\nLines", StringComparison.Ordinal) == true);
         }
     }
 }
