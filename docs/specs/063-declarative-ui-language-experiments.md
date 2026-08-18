@@ -5,6 +5,26 @@
 **Experimental results** — 2026-08-18. Input to the working group formed by
 [LDM 2026-07-15](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-07-15.md).
 
+> **Update — [LDM 2026-08-05](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-08-05.md)
+> (13 days after that meeting, found while fact-checking this spec).** In the C# 16 feature-focus
+> discussion the LDM wrote:
+>
+> > We remain interested in improving C# for declarative UI construction… This area is still exploratory.
+> > We do not yet know which programming model will ultimately be pursued or which language features would
+> > best support it. We should continue collaborating on the exploration and use it to inform future
+> > language design, but **we do not consider declarative UI work a C# 16 delivery commitment.**
+>
+> So the exploration is explicitly wanted and explicitly uncommitted. Two consequences for this document:
+> the value of these experiments is in *informing* the design rather than in shipping against it, and
+> §10's urgency argument narrows — it applies to the in-flight `#10185` lowering (§8), which is being
+> implemented now, not to a declarative-UI feature on a schedule.
+
+**Lineage — this work did not originate the initializer proposals.** The chain `#10185` sits on traces to
+[LDM 2026-04-27](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-04-27.md), which took
+up `compound-assignment-in-initializer-and-with` motivated by *events* in declarative UI frameworks
+(`new Button { OnClick += this.ClickHandler }`) — three months before the Reactor meeting and not about
+Reactor. LDM 2026-07-15 was convened to review Reactor's exploration; that is the extent of the connection.
+
 This spec reports on a **working Roslyn fork** built to answer the questions the LDM left open. It supersedes
 the speculation in [spec 019 Part 6B](019-collection-initializer-api-exploration.md#part-6b-option-f--factory-initializers-prototype-of-csharplang-6602),
 which described a `dotnet/roslyn` branch `features/reactor-extensions` that **does not exist** — the branch
