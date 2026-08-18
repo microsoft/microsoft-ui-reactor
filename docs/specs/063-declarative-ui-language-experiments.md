@@ -432,6 +432,40 @@ Routing content to an `init` collection member removes the problem outright, and
 Option A′ already uses — just with the property name elided. Notably, it also makes `[CollectionBuilder]`
 types, `ImmutableArray<T>` and spans reachable as content properties, none of which `Add` can serve.
 
+### 8.1 This is not a critique — it is the mechanism that was built
+
+The alternative was implemented first (Stage 3, §3); the comparison above is why it is necessary rather than
+redundant. On the **same** type declaration that produces `CS1922`, plus two attribute applications and
+nothing else:
+
+```csharp
+[FactoryInitializable]                              // +1 line
+public abstract record Element;
+
+[ContentProperty(nameof(Children))]                 // +1 line
+public record StackElement(Orientation Orientation, Element[] Children) : Element
+{
+    public double Spacing { get; init; } = 8;
+}
+
+var tree = VStack {
+    Spacing = 4,
+    new TextElement("a"),
+    new TextElement("b"),
+    ..extra.Select(s => new TextElement(s)),
+};
+```
+
+```
+Spacing  = 4
+Children = [a, b, c, d]
+implements IEnumerable = False   has Add = False
+OK: immutable record initialized with properties + bare children + spread, no Add, no IEnumerable.
+```
+
+The `IEnumerable`/`Add` state is asserted at runtime, so the run fails if the type ever acquires either.
+Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
+
 ---
 
 ## 9. Known gaps and residual risk
