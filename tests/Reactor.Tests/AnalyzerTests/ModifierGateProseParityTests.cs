@@ -53,13 +53,14 @@ public class ModifierGateProseParityTests
 
         var relativeSkillPath = SkillPath.Replace('/', Path.DirectorySeparatorChar);
 
-        // Path.Combine silently discards repoRoot if the second argument is rooted, which would
-        // make this fact read some other machine's file — or nothing — instead of failing.
+        // Path.Join, not Path.Combine: Combine silently discards repoRoot if the second argument is
+        // rooted, which would make this fact read some unrelated file instead of failing. Join has
+        // no such behavior. The assertion keeps the intent explicit either way.
         Assert.False(
             Path.IsPathRooted(relativeSkillPath),
-            $"SkillPath must stay repo-relative; '{relativeSkillPath}' is rooted and would discard the repo root.");
+            $"SkillPath must stay repo-relative; '{relativeSkillPath}' is rooted.");
 
-        var file = Path.Combine(repoRoot!, relativeSkillPath);
+        var file = Path.Join(repoRoot!, relativeSkillPath);
         Assert.True(File.Exists(file), $"{SkillPath} not found at {file}");
 
         var text = File.ReadAllText(file);
@@ -76,12 +77,11 @@ public class ModifierGateProseParityTests
         var stated = new Dictionary<string, ISet<string>>(StringComparer.Ordinal);
         var arrows = clause.Groups["body"].Value
             .Split(';')
-            .Select(segment => segment.Split('→'));
+            .Select(segment => segment.Split('→'))
+            .Where(arrow => arrow.Length == 2);
 
         foreach (var arrow in arrows)
         {
-            if (arrow.Length != 2)
-                continue;
 
             var types = new HashSet<string>(
                 arrow[1].Split('/').Select(t => t.Trim()).Where(t => t.Length > 0),

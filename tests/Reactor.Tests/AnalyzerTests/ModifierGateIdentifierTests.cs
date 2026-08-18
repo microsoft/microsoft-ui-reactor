@@ -104,14 +104,13 @@ public class ModifierGateIdentifierTests
         // The other direction: a gate the typed table carries but the reader did not see.
         foreach (var property in ModifierTable.Properties.Keys)
         {
-            var typedSlots = ModifierGateSource.SlotNames
-                .Where(slotName => TypedGate(property, slotName) is not null);
+            var unreadSlots = ModifierGateSource.SlotNames
+                .Where(slotName => TypedGate(property, slotName) is not null)
+                .Where(slotName => !slots.Any(
+                    slot => slot.Property == property && slot.Slot == slotName));
 
-            foreach (var slotName in typedSlots)
+            foreach (var slotName in unreadSlots)
             {
-                if (slots.Any(slot => slot.Property == property && slot.Slot == slotName))
-                    continue;
-
                 problems.Add(
                     $"{property}: the typed ModifierInfo.{TypedMemberName(slotName)} is set, but the " +
                     $"reader found no '{slotName}:' argument for it — the entry is probably written " +
