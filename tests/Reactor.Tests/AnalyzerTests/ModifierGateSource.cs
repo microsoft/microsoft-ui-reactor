@@ -121,7 +121,9 @@ internal static class ModifierGateSource
         Assert.True(
             slot == ControlGate || slot == PoolResetGate || slot == AnySlot,
             $"Unknown gate slot '{slot}'. MatchAnchored accepts ControlGate, PoolResetGate, or " +
-            "AnySlot; anything else is spliced into the regex verbatim and would match nothing.");
+            "AnySlot; anything else is spliced into the pattern verbatim, so — depending on whether " +
+            "it carries regex metacharacters — it matches either nothing or some unintended text. " +
+            "Either way the result would not be the slot you asked about.");
 
         var pattern = AnchoredPattern(slot, identifier);
         return Select(text => Regex.IsMatch(text, pattern));
