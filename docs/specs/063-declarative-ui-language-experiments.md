@@ -539,8 +539,14 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
    `EmptyElement.Instance` singleton. Adopt the synthesis in §5.2: permission at the type, proof inferred at
    the member, explicit `[Factory]` retained as an assertion.
 3. **Require content elements to be trailing.** Cheap, well-precedented, and it retires a standing objection.
-4. **Stop attributing the allocation win to construction syntax.** It comes from property placement and Reactor
-   can have it today.
+4. **Stop attributing the allocation win to construction syntax.** It comes from setting modifiers **once at
+   construction** instead of merging one copy per fluent call, and it is available today.
+   **It is not an argument for promoting `ElementModifiers` fields onto the element records** — that was
+   considered and rejected. The buckets exist deliberately (spec 034 §A) so an unstyled node pays a single
+   null pointer; inlining ~87 fields onto `Element` would make every node in the tree carry them, which is
+   plausibly a worse regression than the allocation win. Note also that §4's variant 5 measured
+   construct-once vs. merge-repeatedly on a flat mini-model with no buckets — it does **not** measure
+   promotion, and should not be cited as evidence for it.
 5. **Prototype target-typed content control flow next** (§6.4), then nested member paths (§6.5). These attack
    the patterns that every current variant handles badly. Note that #9003 (nested paths) currently says
    "Specification: None yet" and is marked *Needs More Work*, so a prototype there is defining the design,
