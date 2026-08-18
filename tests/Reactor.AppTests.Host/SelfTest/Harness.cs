@@ -16,6 +16,8 @@ internal sealed class Harness
 {
     private readonly Window _window;
     private int _failures;
+    private int _checks;
+    private int _skips;
 
     // Persistent title bar with visual test-result segments
     private TextBlock? _subtitleText;
@@ -31,6 +33,17 @@ internal sealed class Harness
     public Window Window => _window;
     public int Failures => _failures;
     public void RecordFailure() => _failures++;
+
+    /// <summary>
+    /// Assertions attempted, passing or failing. Snapshotted around each fixture by
+    /// <see cref="SelfTestRunner"/> so a fixture that emitted <i>only</i> skips can be told apart
+    /// from one that actually asserted something (issue #1061). Counts the throwing overloads too:
+    /// an exception is an assertion attempt, not an absence of one.
+    /// </summary>
+    public int Checks => _checks;
+
+    /// <summary>Skip directives emitted — see <see cref="Skip"/>.</summary>
+    public int Skips => _skips;
 
     // -- TitleBar setup ---------------------------------------------------
 
@@ -179,6 +192,7 @@ internal sealed class Harness
 
     public void Check(string name, bool result)
     {
+        _checks++;
         if (result)
             Console.WriteLine($"ok {name}");
         else
@@ -193,9 +207,27 @@ internal sealed class Harness
     /// without counting it as a pass OR a failure. Use for documented
     /// gaps that have a tracking item — the assertion is explicit in
     /// the log instead of being silently dropped.
+    ///
+    /// <para><b>A skip is not an assertion, and the reporting layer now says so.</b> The
+    /// directive below is a TAP payload, and <c>SelfTestBatch</c> used to discard it: any line
+    /// starting <c>ok </c> satisfied the parser's <c>sawChecksForCurrent</c> guard — the flag whose
+    /// whole purpose is to catch a fixture that asserted nothing. So a fixture whose only output
+    /// was a skip reported <b>PASSED</b>, indistinguishable from one that ran and passed
+    /// (issue #1061). It is now reported <b>SKIPPED</b>: amber in the title bar, counted in the
+    /// Host's <c># Total skipped fixtures:</c> trailer, and surfaced as an MSTest skip rather than
+    /// a green tick. It is deliberately still not a failure — the fixtures that skip do so because
+    /// a precondition is <i>undeterminable</i>, not because the product is broken, and failing
+    /// them would recreate the regression the skip was introduced to fix.</para>
+    ///
+    /// <para><b>Prefer an observable precondition over a bare skip.</b> When the precondition
+    /// <i>can</i> be asserted, assert it first and skip only the leg that genuinely cannot be
+    /// observed — see <c>NativeDockingA11yFixture.cs</c>, which does
+    /// <c>H.Check(focusStartsOutside)</c> before its <c>H.Skip</c> + <c>return</c>. That shape
+    /// keeps a real red available for the case where the harness itself broke.</para>
     /// </summary>
     public void Skip(string name, string reason)
     {
+        _skips++;
         Console.WriteLine($"ok {name} # SKIP {reason}");
     }
 
@@ -204,6 +236,7 @@ internal sealed class Harness
         try { Check(name, test()); }
         catch (Exception ex)
         {
+            _checks++;
             Console.WriteLine($"not ok {name} - {ex.GetType().Name}: {ex.Message}");
             _failures++;
         }
@@ -214,6 +247,7 @@ internal sealed class Harness
         try { Check(name, await test()); }
         catch (Exception ex)
         {
+            _checks++;
             Console.WriteLine($"not ok {name} - {ex.GetType().Name}: {ex.Message}");
             _failures++;
         }

@@ -179,6 +179,15 @@ when the WinUI control's measured size affects the component's
 behavior, or when an automation peer's role depends on the
 materialized XAML control class.
 
+A fixture asserts with `H.Check(name, condition)`. When the machine
+genuinely cannot run a check — a locked desktop, an OS version without
+the API — use `H.Skip(name, reason)` instead of quietly returning. A
+fixture that skipped every check and asserted nothing is reported as
+**Skipped**, not Passed, so "this machine could not test it" stays
+distinguishable from "this machine tested it and it worked". Prefer
+asserting the environment probe itself and skipping only the part that
+depends on it, so the fixture still proves something everywhere.
+
 ## Tips
 
 **Don't drive the unit fixture from `Task.Delay`.** If an effect

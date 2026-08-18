@@ -36,6 +36,23 @@ Conventions for contributors:
 
 ### Fixed
 
+- **A fully-skipped selftest fixture is no longer reported as PASSED (issue #1061).**
+  `Harness.Skip` emits `ok <name> # SKIP <reason>`, and `SelfTestBatch.ParseTap` treated any
+  `ok ` line as proof the fixture had asserted something — satisfying the very flag that exists
+  to catch a fixture that asserted nothing. A fixture whose *only* TAP output was a skip
+  therefore reported green, indistinguishable from one that ran and passed. Selftests now carry
+  a genuine third verdict on both sides of the TAP boundary: the Host counts checks and skips,
+  paints a fully-skipped fixture amber, and emits `# Skipped fixture:` plus a
+  `# Total skipped fixtures: N` trailer (after `# Total failures:`, so the #978/#988 abort
+  discriminator is unchanged) for raw-TAP consumers such as the NativeAOT job; the MSTest
+  wrapper parses the `# SKIP` directive and reports such fixtures as **Skipped**
+  (`Assert.Inconclusive`) with their reasons, publishing the full skipped-check inventory —
+  including partial skips — to the job summary. Simply not setting the flag would have been
+  wrong: it turns `CenterOnCurrent_UsesCursorMonitor` and `CornerStyle_Apply` red on exactly the
+  non-interactive and Windows 10 machines their skips were added to accommodate. No fixture
+  changed; those two change *verdict* (PASSED → SKIPPED) on the affected machines, which is the
+  evidence the fix landed in the right layer.
+
 ### Security
 
 ## [0.1.0-preview.13] — 2026-08-04

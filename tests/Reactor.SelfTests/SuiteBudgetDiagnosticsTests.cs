@@ -625,7 +625,7 @@ public class SuiteBudgetDiagnosticsTests
     [TestMethod]
     public void ApplyAbortOutcome_BudgetKill_StampsTheVictimAndSuppressesTheEarlyAbortScan()
     {
-        var map = new Dictionary<string, (bool Passed, string Detail)>();
+        var map = new Dictionary<string, SelfTestBatch.FixtureOutcome>();
 
         var outcome = SelfTestBatch.ClassifyAbort(
             timedOut: true, hangFixture: null, lastRunningFixture: "VictimFixture",
@@ -637,7 +637,9 @@ public class SuiteBudgetDiagnosticsTests
         Assert.IsTrue(map.TryGetValue("VictimFixture", out var victim),
             "The attribution has to land in the map the Fixture test method reads, or the run " +
             "reports every fixture as simply 'not reported'.");
-        Assert.IsFalse(victim.Passed);
+        Assert.AreEqual(SelfTestBatch.FixtureStatus.Failed, victim.Status,
+            "A budget kill stamps a FAILURE. The three-state outcome added for issue #1061 must " +
+            "not have quietly turned an abort attribution into a skip, which reads as benign.");
         Assert.IsTrue(victim.Detail.Contains("NOT PROVEN", StringComparison.Ordinal),
             victim.Detail);
 
@@ -651,7 +653,7 @@ public class SuiteBudgetDiagnosticsTests
     [TestMethod]
     public void ApplyAbortOutcome_TimeoutWithNothingToBlame_FallsThroughToAnInitError()
     {
-        var map = new Dictionary<string, (bool Passed, string Detail)>();
+        var map = new Dictionary<string, SelfTestBatch.FixtureOutcome>();
 
         var outcome = SelfTestBatch.ClassifyAbort(
             timedOut: true, hangFixture: null, lastRunningFixture: null,
@@ -675,7 +677,7 @@ public class SuiteBudgetDiagnosticsTests
     [TestMethod]
     public void ApplyAbortOutcome_CleanRun_TouchesNothingAndLetsTheEarlyAbortScanRun()
     {
-        var map = new Dictionary<string, (bool Passed, string Detail)>();
+        var map = new Dictionary<string, SelfTestBatch.FixtureOutcome>();
 
         var disposition = SelfTestBatch.ApplyAbortOutcome(
             outcome: null, timedOut: false, budgetMs: 900_000, fullOutput: "OUT", byFixture: map);
@@ -691,7 +693,7 @@ public class SuiteBudgetDiagnosticsTests
     [TestMethod]
     public void ApplyAbortOutcome_HangThatKilledItself_StillAllowsTheEarlyAbortScan()
     {
-        var map = new Dictionary<string, (bool Passed, string Detail)>();
+        var map = new Dictionary<string, SelfTestBatch.FixtureOutcome>();
 
         var outcome = SelfTestBatch.ClassifyAbort(
             timedOut: false, hangFixture: "HangingFixture", lastRunningFixture: null,
@@ -703,7 +705,8 @@ public class SuiteBudgetDiagnosticsTests
         Assert.IsTrue(map.TryGetValue("HangingFixture", out var stamped),
             "A hang names its culprit causally, so that name must reach the map even though the " +
             "wrapper's own budget never fired.");
-        Assert.IsFalse(stamped.Passed);
+        Assert.AreEqual(SelfTestBatch.FixtureStatus.Failed, stamped.Status,
+            "A hang is a failure, not a skip.");
         Assert.IsTrue(stamped.Detail.Contains("HangingFixture", StringComparison.Ordinal),
             "Unlike a budget kill this attribution IS causal, so the detail has to name the " +
             "fixture rather than hedge about position.\n" + stamped.Detail);
