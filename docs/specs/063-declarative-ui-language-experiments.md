@@ -254,6 +254,42 @@ serves single- and multi-child containers.
 
 Both opt-ins are implemented and both are supported simultaneously; they are not mutually exclusive.
 
+### 5.0 Probe matrix — what each opt-in actually reaches
+
+Run across a real assembly boundary: `LibA.dll` declares the attributes and an opted-in base record and is
+compiled by a **plain** compiler with **no feature flags**; a separate consumer assembly is compiled with
+`/features:FactoryInitializers`.
+
+| # | Case | Result |
+|---|---|---|
+| 1 | Library factory, no `[Factory]` anywhere, return type opted in at the base | ✅ |
+| 2 | **Consumer-written helper** returning a library type opted in at the base | ✅ |
+| 3 | Consumer-defined derived record, via a local function | ✅ |
+| 4 | `[Factory]` on a library method whose return type is *not* opted in | ✅ |
+| 5 | Opt-in on an **interface** the returned record implements | ✅ *(after a fix — see below)* |
+| 6 | Generic factory `T Make<T>() where T : Element` | ✅ |
+| 7 | A **property** (not a call) whose type is opted in | ❌ `CS1955` |
+| 8 | A method handing out a **shared instance** of an opted-in type | ⚠️ **accepted** — the §5.1 hazard, and it crosses the assembly boundary |
+| 9 | Extension method returning an opted-in type | ✅ |
+| 10 | A local variable of an opted-in type (not a call) | ❌ `CS9701` — correct |
+
+Four things this establishes that were previously assumed:
+
+- **The composability claim holds across assemblies** (#2). The library never saw the consumer's helper, was
+  compiled without the feature, and the call site still works. Plain attributes survive metadata with no
+  special encoding — no modreq, no embedded attribute.
+- **Generic and extension factories work** (#6, #9) without any extra rule.
+- **The singleton hazard is worse cross-assembly** (#8). Same-assembly, a reviewer could at least see that
+  `Empty()` returns a field; a consumer of `Reactor.dll` cannot. This strengthens §5.2.
+- **Interfaces needed an explicit fix.** Attribute inheritance does not flow across an implements edge and
+  the base-type walk never reaches interfaces, so `IsFactoryInitializerTarget` now also scans
+  `AllInterfacesNoUseSiteDiagnostics`. This matters for any framework whose node types share an interface
+  rather than a base class.
+
+#7 is an open design question rather than a bug: a property is exactly as (un)safe as a method here, but the
+parens-omitted form binds the name as a method group, so a property produces `CS1955` instead of a message
+about factories. If properties are ever allowed, the diagnostic needs work.
+
 ### 5.1 Counter-evidence: type-level opt-in is unsound on its own
 
 The championed proposal pairs `[Factory]` with a **body restriction** — a factory's `return` expression must be a
