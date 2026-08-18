@@ -64,7 +64,7 @@ named but did not turn into a feature:
 | **4. Composability** *(cross-cutting)* | Can a subtree or a style be extracted into a method **without changing call sites**? | *(no candidate proposed)* |
 
 Axis 4 is the one that decides whether a design survives real code, and it is the axis on which the reference
-design for axis 1 **fails**. See §5.
+design for axis 1 **fails** — and the obvious fix for it turns out to be unsound, which §5 works through.
 
 ---
 
@@ -185,7 +185,7 @@ with no language change. It should not be counted as a benefit of any proposal o
 
 ---
 
-## 5. Composability: the reference opt-in design fails the LDM's own test
+## 5. Composability vs. safety: neither opt-in design is right as specified
 
 The LDM was explicit:
 
@@ -233,6 +233,67 @@ properties (a lone content element assigned to `Element? Child`) so the same `Fa
 serves single- and multi-child containers.
 
 Both opt-ins are implemented and both are supported simultaneously; they are not mutually exclusive.
+
+### 5.1 Counter-evidence: type-level opt-in is unsound on its own
+
+The championed proposal pairs `[Factory]` with a **body restriction** — a factory's `return` expression must be a
+`new` expression, a `with` expression, a call to another `[Factory]` member, a struct value, or `null`
+(`factory-methods.md`). Assigning to a local and returning it is rejected. That restriction is what makes it safe to
+run `init` setters on the result: the value is known to be freshly allocated and uniquely owned.
+
+**Type-level opt-in has no such guarantee, and Reactor contains a live counterexample.** Auditing all
+**198** public static methods on `Factories` (syntax-only classification against the proposal's rule):
+
+| Verdict | Count | |
+|---|---:|---|
+| Returns `new` / `with` / `default` / `null` — legal | 180 | 90.9 % |
+| Returns an invocation — legal **only if that callee is also `[Factory]`** | 12 | 6.1 % |
+| **Rejected outright** | **6** | **3.0 %** |
+
+The six rejects are `Empty`, `When`, `If`, `Expr`, `DevtoolsMenu` and `AcrylicBrush`. Four of them return
+`EmptyElement.Instance` — a `static readonly` **shared singleton**
+(`src/Reactor/Core/Element.cs:1447`, `src/Reactor/Elements/Dsl.cs:1351`).
+
+With `[FactoryInitializable]` on `Element` and no body restriction, this compiles — and corrupts process-wide
+state. Demonstrated, not hypothesised:
+
+```
+before           : Instance.Margin = 0
+after Empty(){4} : Instance.Margin = 4
+unrelated Empty(): Margin = 4   <-- should be 0
+HAZARD CONFIRMED: the shared singleton was mutated through the trailing initializer.
+```
+
+The 12 invocation-returning factories are a second, quieter cost. `Card` is
+`Border(child).Background(…).WithBorder(…)`; `Title` is `TextBlock(content).ApplyStyle(…)`. Their return
+expressions are calls to **fluent modifier extension methods**, so under member-level opt-in those extensions
+would each need `[Factory]` too — pushing the annotation out of the 203 factories and into the 473 extension
+methods. The "203 edits" figure in the table above is therefore a **lower** bound for the member-level design.
+
+### 5.2 Proposed synthesis: infer factory-ness for opted-in types
+
+Neither pure design is right. Member-level opt-in is safe but fails the LDM's composability requirement and
+under-counts its own churn; type-level opt-in is composable and cheap but unsound.
+
+The resolution is to keep the *permission* at the type and the *proof* at the member, and stop making authors
+write either:
+
+> When a method returns a type marked `[FactoryInitializable]`, the compiler checks its return expressions
+> against the `factory-methods.md` restriction. If they satisfy it, the compiler emits `[Factory]`
+> automatically. If they do not, it does not, and a trailing initializer on that call is an error.
+> An explicit `[Factory]` remains available to *assert* the intent and move the diagnostic to the declaration.
+
+This gets both properties at once. Extract a subtree into a helper whose body is a `new` expression or another
+factory call and callers keep working with no annotation anywhere — the composability test passes. `Empty()`
+returns a field, is never inferred as a factory, and `Empty() { Margin = 4 }` is rejected — the safety test
+passes. Reactor's opt-in cost becomes **one attribute**, with the 6 unsafe factories rejected at their call
+sites rather than silently corrupting a singleton.
+
+The known risk is that factory-ness becomes an inferred, and therefore silently breakable, part of a method's
+contract: adding a statement to a helper body would break its callers with no diagnostic at the declaration.
+That is why the explicit `[Factory]` opt-in must remain, and why an analyzer suggesting it on inferred
+factories is probably part of the design. **This is not implemented** — it is the recommendation this
+experiment produces, and the next thing worth prototyping alongside §6.4.
 
 ---
 
@@ -375,8 +436,12 @@ outright, and is the same mechanism Option A′ already uses — just with the p
 
 1. **Do not ship factory initializers as a standalone narrow feature.** Measured on non-golden-path code it is
    a 17 % regression against the API this framework ships today. Bundle it with content elements or drop it.
-2. **Adopt type-level opt-in.** Member-level opt-in fails the LDM's own composability requirement; the fix is
-   one attribute instead of 203 and it is already implemented.
+2. **Do not adopt either opt-in as specified.** Member-level `[Factory]` fails the LDM's composability
+   requirement and its churn is larger than it looks (§5.1: the annotation spreads from 203 factories into
+   the 473 fluent extension methods). Type-level `[FactoryInitializable]` is composable and costs one
+   attribute, but is **unsound without the body restriction** — demonstrated by corrupting Reactor's
+   `EmptyElement.Instance` singleton. Adopt the synthesis in §5.2: permission at the type, proof inferred at
+   the member, explicit `[Factory]` retained as an assertion.
 3. **Require content elements to be trailing.** Cheap, well-precedented, and it retires a standing objection.
 4. **Stop attributing the allocation win to construction syntax.** It comes from property placement and Reactor
    can have it today.
