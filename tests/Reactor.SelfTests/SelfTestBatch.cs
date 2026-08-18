@@ -760,10 +760,13 @@ public class SelfTestBatch
         $"so this run establishes nothing about it either way.\n" +
         $"  {string.Join("\n  ", skipped)}\n" +
         $"This is reported as skipped rather than passed because a `# SKIP` directive is a fixture " +
-        $"saying it could not observe its precondition (issue #1061). It is deliberately NOT a " +
-        $"failure: the preconditions involved — a non-interactive desktop where GetCursorPos " +
-        $"returns ACCESS_DENIED, or a Windows 10 box where the DWM corner attribute is not " +
-        $"round-trippable — are undeterminable, not broken. If you need coverage here, give the " +
+        $"saying it did not make its assertion (issue #1061). It is deliberately NOT a failure, " +
+        $"because a skip is usually a question this machine cannot answer — a non-interactive " +
+        $"desktop where GetCursorPos returns ACCESS_DENIED, a Windows 10 box where the DWM corner " +
+        $"attribute is not round-trippable — and failing those would redden the suite on exactly " +
+        $"the machines the skips accommodate. Read the reasons above before concluding anything: " +
+        $"some skips instead defer to the E2E tier, and some mark a tracked product gap with an " +
+        $"issue number, where the product really is broken. If you need coverage here, give the " +
         $"fixture an observable precondition to assert before it skips (see " +
         $"NativeDockingA11yFixture), rather than turning the skip into a red.";
 
@@ -773,27 +776,41 @@ public class SelfTestBatch
     /// that way; the Host emits upper case today, and a parser that only accepts what the current
     /// emitter happens to produce is one rename away from silently reporting every skip as a pass
     /// again.
+    ///
+    /// <para><b>Every</b> <c>#</c> is a directive candidate, not just the first. Check names embed
+    /// a tracking number by convention — <c>ContentDialogLive_Rerender_TextAdvanced_#1069</c>,
+    /// <c>..._#948</c>, <c>..._#246</c> — so on those lines the first <c>#</c> belongs to the
+    /// <i>name</i>. Anchoring on it leaves <c>1069 # SKIP …</c> as the candidate directive, which
+    /// fails the match and drops the line into the ordinary-pass arm: issue #1061 restored in full,
+    /// and precisely for the checks most likely to carry an issue number, because those are the
+    /// ones already known to be problematic. The scan makes the name's own hashes inert.</para>
     /// </summary>
     internal static bool TryParseSkipDirective(string afterOk, out string name, out string reason)
     {
         name = "";
         reason = "";
 
-        var hash = afterOk.IndexOf('#');
-        if (hash < 0) return false;
+        for (var hash = afterOk.IndexOf('#'); hash >= 0; hash = afterOk.IndexOf('#', hash + 1))
+        {
+            var directive = afterOk[(hash + 1)..].TrimStart();
+            if (!directive.StartsWith("SKIP", StringComparison.OrdinalIgnoreCase)) continue;
 
-        var directive = afterOk[(hash + 1)..].TrimStart();
-        if (!directive.StartsWith("SKIP", StringComparison.OrdinalIgnoreCase)) return false;
+            // Guard against a name that merely starts with "skip..." — the directive is the bare
+            // word. `continue` rather than `return false`: a later hash may still be the real
+            // directive, e.g. `Foo_#SKIPPABLE # SKIP reason`.
+            var afterWord = directive[4..];
+            if (afterWord.Length > 0 && !char.IsWhiteSpace(afterWord[0]) && afterWord[0] != ':')
+                continue;
 
-        // Guard against a name that merely starts with "skip..." — the directive is the bare word.
-        var afterWord = directive[4..];
-        if (afterWord.Length > 0 && !char.IsWhiteSpace(afterWord[0]) && afterWord[0] != ':')
-            return false;
+            name = afterOk[..hash].Trim();
+            if (name.Length == 0) continue;
 
-        name = afterOk[..hash].Trim();
-        reason = afterWord.TrimStart(' ', ':', '\t');
-        if (reason.Length == 0) reason = "(no reason given)";
-        return name.Length > 0;
+            reason = afterWord.TrimStart(' ', ':', '\t');
+            if (reason.Length == 0) reason = "(no reason given)";
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1118,12 +1135,17 @@ public class SelfTestBatch
     /// Publishes the run's skip inventory, and reports a fixture that established nothing as a
     /// skip rather than letting it pass unremarked.
     ///
-    /// <para>Deliberately <c>Inconclusive</c> and not <c>Fail</c>. The fixtures that reach here do
-    /// so because a precondition is <i>undeterminable</i> on this machine — <c>GetCursorPos</c>
-    /// returning <c>ACCESS_DENIED</c> on a non-interactive desktop, or a Windows 10 box where the
-    /// DWM corner attribute is not round-trippable. Failing them would make the suite red on
-    /// exactly the machines those skips were introduced to accommodate, which is the regression
-    /// the skips fixed.</para>
+    /// <para>Deliberately <c>Inconclusive</c> and not <c>Fail</c>, because most skips mark a
+    /// question this machine cannot answer — <c>GetCursorPos</c> returning <c>ACCESS_DENIED</c> on
+    /// a non-interactive desktop, or a Windows 10 box where the DWM corner attribute is not
+    /// round-trippable. Failing those would make the suite red on exactly the machines the skips
+    /// were introduced to accommodate, which is the regression the skips fixed.</para>
+    ///
+    /// <para>But <b>not every skip is benign</b>: some mark a tracked product gap (see
+    /// <c>Harness.Skip</c> — e.g. <c>"issue #942 - decorator retags the target"</c>), where the
+    /// product really is broken and the skip is a referenced deferral. That is why the reasons are
+    /// reproduced verbatim below rather than summarised into a count: a reader has to be able to
+    /// tell the two apart, and only the reason string can tell them.</para>
     /// </summary>
     [TestMethod]
     public void SkippedFixtures_AreReported()
@@ -1147,15 +1169,87 @@ public class SelfTestBatch
         foreach (var entry in report.Inventory.FullySkippedFixtures)
             Console.WriteLine($"  fully skipped: {entry}");
 
-        if (report.Inventory.FullySkippedFixtures.Count > 0)
+        // Same reasoning as the delivery check in SuiteDuration_WithinBudget, and the same failure
+        // mode: under `dotnet test` the Inconclusive message below never reaches the log, because
+        // the testhost's stdout is not forwarded. The step summary is therefore the ONLY channel
+        // that renders this inventory, so a dead channel leaves the skip report silently
+        // undelivered while everything else stays green — the suite passes, the report is composed,
+        // and nobody learns which fixtures asserted nothing.
+        var summaryPath = Environment.GetEnvironmentVariable(StepSummaryEnvVar);
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        {
+            Assert.IsFalse(string.IsNullOrWhiteSpace(summaryPath),
+                $"{StepSummaryEnvVar} is unset on a GitHub Actions runner, so the skip inventory " +
+                $"had nowhere to go and the delivery check below silently skipped. Without this " +
+                $"the check cannot come out the other way, and a check that cannot fail is the " +
+                $"instrument bug issue #1061 was.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(summaryPath))
+        {
+            Assert.IsTrue(report.Delivered,
+                $"The skip inventory could not be written to {StepSummaryEnvVar} " +
+                $"('{summaryPath}'). This is a fault in the reporting channel, not in the suite: " +
+                $"the run itself is fine, but the only surface that names the skipped fixtures is " +
+                $"now silent.");
+        }
+
+        // The positive control. Everything else in this file feeds ParseTap a fabricated string,
+        // which proves the parser but not the Host: the decision "this fixture asserted nothing"
+        // is made in SelfTestRunner, in a project no test can reference
+        // (ReferenceOutputAssembly=false), so a fabricated stream cannot reach it. This fixture
+        // exists to be fully skipped, so its presence here is the one end-to-end proof that the
+        // Host still classifies, the `# SKIP` literal still matches across the duplicated
+        // boundary, and the wrapper still reports SKIPPED instead of green.
+        //
+        // It fails rather than warns because the regression it guards is silent by construction:
+        // if the chain breaks, this fixture goes GREEN, the suite stays green, and issue #1061 is
+        // back with nothing to show for it. Without this assertion the whole skip pipeline could
+        // rot while every test above it stayed passing — a check that cannot come out the other
+        // way, which is the exact instrument bug this work is about.
+        var controlSeen = report.Inventory.FullySkippedFixtures
+            .Any(e => e.Contains(SkipVerdictControlFixture, StringComparison.Ordinal));
+
+        Assert.IsTrue(controlSeen,
+            $"The positive control '{SkipVerdictControlFixture}' was not reported as a fully " +
+            $"skipped fixture. It asserts nothing on purpose, so it must land here on every run. " +
+            $"Something in the chain is broken, and the failure is silent everywhere else:\n" +
+            $"  (a) The fixture was deleted, renamed, or given a real H.Check — restore it; its " +
+            $"amber IS the healthy result (see SkipVerdictPositiveControlFixture.cs).\n" +
+            $"  (b) SelfTestRunner stopped classifying a zero-assertion fixture as skipped, so " +
+            $"fully-skipped fixtures are reported PASSED again — that is issue #1061 exactly.\n" +
+            $"  (c) The '# SKIP' literal drifted between Harness.Skip and TryParseSkipDirective. " +
+            $"The Host is referenced with ReferenceOutputAssembly=false, so it is duplicated, not " +
+            $"shared, and nothing but this assertion compares the two.\n" +
+            $"Fixtures reported fully skipped this run: " +
+            $"{(report.Inventory.FullySkippedFixtures.Count == 0 ? "(none)" : string.Join(", ", report.Inventory.FullySkippedFixtures))}");
+
+        // Report only the *unexpected* skips. The control is always here, so folding it in would
+        // make this permanently Inconclusive and drown the signal it exists to protect.
+        var unexpected = report.Inventory.FullySkippedFixtures
+            .Where(e => !e.Contains(SkipVerdictControlFixture, StringComparison.Ordinal))
+            .ToArray();
+
+        if (unexpected.Length > 0)
         {
             Assert.Inconclusive(
                 $"{report.Inventory.Text}\n" +
-                $"Fully skipped:\n  {string.Join("\n  ", report.Inventory.FullySkippedFixtures)}\n" +
-                $"Each of those is reported Skipped individually too. They are NOT failures — see " +
-                $"the per-fixture message for why the precondition could not be observed.");
+                $"Fully skipped (excluding the '{SkipVerdictControlFixture}' control):\n  " +
+                $"{string.Join("\n  ", unexpected)}\n" +
+                $"Each of those is reported Skipped individually too. They are NOT automatically " +
+                $"failures — but they are not passes either: read the per-fixture reason, because " +
+                $"a skip can mean an undeterminable precondition, coverage owned by the E2E tier, " +
+                $"or a tracked product gap where the product really is broken.");
         }
     }
+
+    /// <summary>
+    /// Name of the fixture that exists purely to be fully skipped, so the SKIPPED verdict has an
+    /// end-to-end positive control. Duplicated from
+    /// <c>SkipVerdictPositiveControl.FixtureName</c> in the Host, which cannot be referenced from
+    /// here; <see cref="SkippedFixtures_AreReported"/> is what catches the two drifting apart.
+    /// </summary>
+    internal const string SkipVerdictControlFixture = "SelfTestVerdict_OnlySkips_PositiveControl";
 
     /// <summary>
     /// The one assertion that observes the <b>real</b> Host's real skip output, and the only thing
@@ -1170,12 +1264,11 @@ public class SelfTestBatch
     /// green suite. The same reasoning, and the same shape, as the
     /// <c>'# Suite elapsed: '</c> guard in <see cref="SuiteDuration_WithinBudget"/>.</para>
     ///
-    /// <para>Non-vacuous today because <c>Spec047EventStateSplitFixtures</c> skips
-    /// <b>unconditionally</b> (<c>EventStateSplit_RawHatch_HandledChildParentStillFires</c>: live
-    /// KeyDown cannot be synthesized headlessly), so every run of the full suite emits at least one
-    /// directive regardless of the machine. If that ever stops being true the failure message says
-    /// so and says what to do about it — the guard has no value once the suite has no skips to
-    /// observe.</para>
+    /// <para>Non-vacuous by design, not by luck: <c>SelfTestVerdict_OnlySkips_PositiveControl</c>
+    /// exists to be fully skipped, so every full run emits at least one directive regardless of
+    /// the machine. It previously leaned on <c>Spec047EventStateSplitFixtures</c> skipping
+    /// unconditionally, which was true but incidental — that fixture's skip could be closed at any
+    /// time by work that had no idea this guard depended on it.</para>
     /// </summary>
     [TestMethod]
     public void SkipDirectives_SurviveIntoTheReport()
@@ -1197,17 +1290,16 @@ public class SelfTestBatch
         var inventory = BuildSkipInventory(_byFixture);
 
         Assert.IsTrue(inventory.TotalSkippedChecks > 0,
-            "The Host completed its run but the parser saw ZERO '# SKIP' directives. Two " +
-            "explanations, and they need different fixes:\n" +
+            "The Host completed its run but the parser saw ZERO '# SKIP' directives. That should " +
+            "be impossible: " + SkipVerdictControlFixture + " exists to emit one on every run. " +
+            "Two explanations, and they need different fixes:\n" +
             "  (a) DRIFT — Harness.Skip stopped emitting 'ok <name> # SKIP <reason>', or " +
             "SelfTestBatch.TryParseSkipDirective stopped recognising it. Every fully-skipped " +
             "fixture is now silently reported PASSED again, which is issue #1061 exactly. Check " +
             "the literal on BOTH sides: the Host is referenced with ReferenceOutputAssembly=false, " +
             "so it is duplicated, not shared.\n" +
-            "  (b) The suite genuinely has no H.Skip sites left. That is a fine state to be in — " +
-            "and it makes this guard worthless, so delete it rather than adding a fixture to keep " +
-            "it fed. It was non-vacuous when written because " +
-            "Spec047EventStateSplitFixtures skips unconditionally.");
+            "  (b) The positive-control fixture was deleted or de-registered. Restore it rather " +
+            "than deleting this guard — it is the only thing keeping the check falsifiable.");
     }
 
     /// <summary>

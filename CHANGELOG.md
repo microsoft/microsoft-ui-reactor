@@ -51,7 +51,10 @@ Conventions for contributors:
   wrong: it turns `CenterOnCurrent_UsesCursorMonitor` and `CornerStyle_Apply` red on exactly the
   non-interactive and Windows 10 machines their skips were added to accommodate. No fixture
   changed; those two change *verdict* (PASSED → SKIPPED) on the affected machines, which is the
-  evidence the fix landed in the right layer.
+  evidence the fix landed in the right layer. A dedicated fixture,
+  `SelfTestVerdict_OnlySkips_PositiveControl`, asserts nothing on purpose so the SKIPPED verdict
+  has an end-to-end positive control on every run — the Host half of the mechanism lives in a
+  project no test can reference, so a fabricated TAP stream cannot reach it.
 
 ### Security
 

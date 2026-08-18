@@ -224,6 +224,71 @@ public class SkipReportingTests
         Assert.AreEqual("(no reason given)", reason);
     }
 
+    /// <summary>
+    /// A check name that embeds a tracking number — the repo spells these
+    /// <c>ContentDialogLive_Rerender_TextAdvanced_#1069</c>, <c>..._#948</c>, <c>..._#246</c> —
+    /// puts a <c>#</c> in the name itself. A parser anchored on the FIRST <c>#</c> reads the
+    /// directive as <c>1069 # SKIP …</c>, fails to match, and files the line as an ordinary pass:
+    /// issue #1061 restored, for exactly the checks whose names say they are already known to be
+    /// trouble.
+    ///
+    /// <para>Differential, so it cannot pass vacuously: the same fixture, the same skip, the same
+    /// wrapping — only the check NAME differs between the two arms. A parser that ignores names
+    /// makes both arms Skipped and this test cannot fail; a parser that anchors on the first hash
+    /// splits them, which is the defect.</para>
+    /// </summary>
+    [TestMethod]
+    public void SkippedCheckWhoseNameEmbedsAnIssueNumber_IsStillASkip()
+    {
+        const string Reason = "decorator retags the target";
+
+        var plain = Outcome($"# Running: F\nok F_Check # SKIP {Reason}\n", "F");
+        var hashed = Outcome($"# Running: F\nok F_Check_#1069 # SKIP {Reason}\n", "F");
+
+        Assert.AreEqual(SelfTestBatch.FixtureStatus.Skipped, plain.Status,
+            "Control arm: a skip with an ordinary check name must be Skipped.");
+        Assert.AreEqual(plain.Status, hashed.Status,
+            "A '#' in the CHECK NAME must not change the verdict. Anchoring on the first '#' " +
+            "makes this Passed — a fixture that asserted nothing reported green, which is #1061.");
+
+        Assert.IsTrue(SelfTestBatch.TryParseSkipDirective($"F_Check_#1069 # SKIP {Reason}",
+            out var name, out var parsedReason));
+        Assert.AreEqual("F_Check_#1069", name, "The name must keep its own hash.");
+        Assert.AreEqual(Reason, parsedReason, "The reason must not absorb the name's hash.");
+    }
+
+    /// <summary>
+    /// The scan must not stop at a hash whose word merely starts with "skip": a later hash can
+    /// still carry the real directive. This is the interaction between the multi-hash scan and the
+    /// bare-word guard, which a single-hash parser never had to resolve.
+    /// </summary>
+    [TestMethod]
+    public void NameContainingSkippableWord_DoesNotSwallowTheRealDirective()
+    {
+        Assert.IsTrue(
+            SelfTestBatch.TryParseSkipDirective("F_#SKIPPABLE # SKIP the real reason",
+                out var name, out var reason),
+            "A 'SKIPPABLE' token in the name must not consume the scan.");
+        Assert.AreEqual("F_#SKIPPABLE", name);
+        Assert.AreEqual("the real reason", reason);
+    }
+
+    /// <summary>
+    /// The other direction of the same change: a PASSING check whose name embeds a tracking number
+    /// must not be mistaken for a skip. Without this, widening the scan could turn every
+    /// <c>#</c>-bearing pass into a phantom skip and mark healthy fixtures Skipped.
+    /// </summary>
+    [TestMethod]
+    public void PassingCheckWhoseNameEmbedsAnIssueNumber_IsStillAPass()
+    {
+        Assert.IsFalse(
+            SelfTestBatch.TryParseSkipDirective("F_Check_#1069", out _, out _),
+            "A bare name with a tracking number carries no directive.");
+
+        var outcome = Outcome("# Running: F\nok F_Check_#1069\n", "F");
+        Assert.AreEqual(SelfTestBatch.FixtureStatus.Passed, outcome.Status);
+    }
+
     [TestMethod]
     public void OrdinaryOkLine_IsNotASkip()
     {

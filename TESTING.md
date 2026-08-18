@@ -182,15 +182,32 @@ if (!ok) { H.Skip("Thing_Behaves", "probe unavailable on this desktop"); return;
 H.Check("Thing_Behaves", value == expected);
 ```
 
-Reach for a bare `H.Skip` only when the *probe itself* is what's unavailable — a locked desktop,
-an OS version without the API. If you find yourself skipping to silence a flake, fix the flake:
-a Skipped fixture establishes nothing about the code either way, which is the point of making it
-visible rather than green.
+Three reasons to skip are legitimate, and they are **not** interchangeable when you read a result:
+
+| reason | example | what a Skipped result means |
+|---|---|---|
+| Undeterminable precondition | `GetCursorPos` on a non-interactive desktop; DWM corners on Windows 10 | this machine cannot answer the question |
+| Coverage owned by another tier | `EventStateSplit_RawHatch_HandledChildParentStillFires` — live KeyDown, asserted by E2E | covered, just not here |
+| A tracked product gap | `"issue #942 - decorator retags the target"` | the product **is** broken; the skip is a referenced deferral |
+
+Because the third row exists, **never read a skip as evidence the product works** — only that this
+run did not establish otherwise. That is exactly why reporting one as PASSED was worth fixing, and
+why SKIPPED is not just a politer green. Always put an issue number in the reason when there is
+one; the reason string is all a reader of the skip report gets. And if you are reaching for a skip
+to silence a flake, fix the flake instead — a skip makes the flake invisible rather than absent.
 
 For raw-TAP consumers (the AOT job pipes `--self-test` straight to a `.tap` artifact and greps
 `^not ok `), the Host emits a `# Total skipped fixtures: N` trailer — placed *after*
 `# Total failures:` so the abort discriminator below is unaffected — followed by
-`# Skipped fixtures: <names>` when non-zero.
+`# Skipped fixture list: <names>` when non-zero. Each fully-skipped fixture also gets its own
+`# Fully skipped fixture: <name> - N check(s) skipped, 0 assertions ran` line as it happens. The
+three prefixes are deliberately distinct so a grep for one does not match the others.
+
+One fixture, `SelfTestVerdict_OnlySkips_PositiveControl`, is **expected** to be Skipped on every
+run. It asserts nothing on purpose: it is the positive control that proves the SKIPPED verdict
+still works end to end, since the Host half of the mechanism lives in a project no test can
+reference. Its amber is the healthy result — don't "fix" it, and don't copy it as a template.
+`SkippedFixtures_AreReported` fails if it ever stops being reported as fully skipped.
 
 ### Selftest waiting patterns — `Render` vs `WaitFor` vs `WaitForIdleAsync`
 

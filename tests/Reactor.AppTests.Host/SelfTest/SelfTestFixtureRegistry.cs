@@ -1700,6 +1700,10 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_UnmountDetachesFlyout",
         "CmdBarFlyout_KeyedReorderKeepsSiblingFlyouts",
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks",
+
+        // Positive control for the three-state verdict (issue #1061). Asserts nothing on purpose;
+        // its SKIPPED result is what SelfTestBatch.SkippedFixtures_AreReported checks for.
+        SkipVerdictPositiveControl.FixtureName,
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -3327,6 +3331,8 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_UnmountDetachesFlyout" => new CommandBarFlyoutWiringFixtures.UnmountDetachesFlyout(harness),
         "CmdBarFlyout_KeyedReorderKeepsSiblingFlyouts" => new CommandBarFlyoutWiringFixtures.KeyedReorderKeepsSiblingFlyouts(harness),
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks" => new CommandBarFlyoutWiringFixtures.TargetKeepsItsOwnCallbacks(harness),
+
+        SkipVerdictPositiveControl.FixtureName => new SkipVerdictPositiveControl(harness),
 
         _ => null,
     };

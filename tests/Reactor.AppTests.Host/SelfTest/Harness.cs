@@ -203,10 +203,8 @@ internal sealed class Harness
     }
 
     /// <summary>
-    /// Emits a TAP "skipped" line for a known-failing or deferred check
-    /// without counting it as a pass OR a failure. Use for documented
-    /// gaps that have a tracking item — the assertion is explicit in
-    /// the log instead of being silently dropped.
+    /// Emits a TAP "skipped" line for a check this run cannot make, without counting it as a pass
+    /// OR a failure. The assertion stays explicit in the log instead of being silently dropped.
     ///
     /// <para><b>A skip is not an assertion, and the reporting layer now says so.</b> The
     /// directive below is a TAP payload, and <c>SelfTestBatch</c> used to discard it: any line
@@ -215,9 +213,29 @@ internal sealed class Harness
     /// was a skip reported <b>PASSED</b>, indistinguishable from one that ran and passed
     /// (issue #1061). It is now reported <b>SKIPPED</b>: amber in the title bar, counted in the
     /// Host's <c># Total skipped fixtures:</c> trailer, and surfaced as an MSTest skip rather than
-    /// a green tick. It is deliberately still not a failure — the fixtures that skip do so because
-    /// a precondition is <i>undeterminable</i>, not because the product is broken, and failing
-    /// them would recreate the regression the skip was introduced to fix.</para>
+    /// a green tick.</para>
+    ///
+    /// <para><b>Three legitimate reasons to skip</b>, all in use today, and the reason a skip is
+    /// reported rather than failed differs for each:
+    /// <list type="bullet">
+    ///   <item><description><i>Undeterminable precondition.</i> The machine cannot answer the
+    ///     question — <c>GetCursorPos</c> on a non-interactive desktop, DWM corner attributes on
+    ///     Windows 10, focus on a headless harness. Failing these would redden the suite on
+    ///     exactly the machines the skip was introduced to accommodate.</description></item>
+    ///   <item><description><i>Coverage owned by another tier.</i> Live input cannot be
+    ///     synthesized in-process, so the leg is asserted by the E2E suite instead — e.g.
+    ///     <c>EventStateSplit_RawHatch_HandledChildParentStillFires</c>. The behaviour <i>is</i>
+    ///     covered; not here.</description></item>
+    ///   <item><description><i>A tracked product gap.</i> A real defect with an issue number, e.g.
+    ///     <c>"issue #942 - decorator retags the target"</c>. Here the product genuinely is broken
+    ///     — the skip is a deliberate, referenced deferral, not a claim of health.</description>
+    ///   </item>
+    /// </list>
+    /// Because the third case exists, <b>a skipped fixture must never be read as evidence the
+    /// product works</b> — only that this run did not establish otherwise. That is precisely why
+    /// reporting it as PASSED was a bug worth fixing, and why SKIPPED is not simply a nicer green.
+    /// Put the reason in <paramref name="reason"/>, with an issue number when there is one; it is
+    /// the only thing a reader of the skip report gets.</para>
     ///
     /// <para><b>Prefer an observable precondition over a bare skip.</b> When the precondition
     /// <i>can</i> be asserted, assert it first and skip only the leg that genuinely cannot be

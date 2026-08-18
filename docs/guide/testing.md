@@ -209,7 +209,10 @@ fixture that skipped every check and asserted nothing is reported as
 **Skipped**, not Passed, so "this machine could not test it" stays
 distinguishable from "this machine tested it and it worked". Prefer
 asserting the environment probe itself and skipping only the part that
-depends on it, so the fixture still proves something everywhere.
+depends on it, so the fixture still proves something everywhere. Put an
+issue number in the reason when the skip marks a real product gap: a
+skip is never evidence the product works, only that this run did not
+establish otherwise.
 
 ## Tips
 

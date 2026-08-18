@@ -415,8 +415,8 @@ internal static class SelfTestRunner
                         {
                             int skipped = harness.Skips - skipsBefore;
                             Console.WriteLine(
-                                $"# Skipped fixture: {fixtureName} - {skipped} check(s) skipped, " +
-                                $"0 assertions ran");
+                                $"# Fully skipped fixture: {fixtureName} - {skipped} check(s) " +
+                                $"skipped, 0 assertions ran");
                             skippedFixtures.Add(fixtureName);
                             harness.MarkFixtureSkipped(testIndex - 1);
                         }
@@ -445,7 +445,7 @@ internal static class SelfTestRunner
                     // the answer to "`# Total failures: 0` — but did anything actually assert?".
                     Console.WriteLine($"# Total skipped fixtures: {skippedFixtures.Count}");
                     if (skippedFixtures.Count > 0)
-                        Console.WriteLine($"# Skipped fixtures: {string.Join(", ", skippedFixtures)}");
+                        Console.WriteLine($"# Skipped fixture list: {string.Join(", ", skippedFixtures)}");
                     Console.WriteLine(SuiteElapsedMarker +
                         Stopwatch.GetElapsedTime(suiteStart).TotalSeconds
                             .ToString("F1", global::System.Globalization.CultureInfo.InvariantCulture));
