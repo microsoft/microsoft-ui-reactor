@@ -699,10 +699,12 @@ internal static class ModifierTable
     /// mistake: <c>Grid.Padding</c> and <c>Grid.CornerRadius</c> sat here after the #1003 union
     /// with reasons that said, in as many words, "instance dependency property on Grid, not an
     /// attached property" — which is a misclassification to fix at the source, not to record.
-    /// They are now declared instance properties via <c>InstancePropertyOwners</c>, so the scan
-    /// never claims them and nothing needs excluding. Suppressing that kind of entry here is
-    /// actively harmful, because a genuinely attached <c>Grid.*</c> reset added later would land
-    /// in the same bucket and read as already-triaged.
+    /// The scan now classifies per <em>property</em> rather than per owner (#1067): it asks
+    /// whether the owner declares the static <c>Owner.SetPROP(DependencyObject, value)</c> this
+    /// rule matches, so <c>Grid.Padding</c> is instance while <c>Grid.Row</c> is attached, and
+    /// neither needs an entry here. Suppressing that kind of entry would be actively harmful,
+    /// because a genuinely attached <c>Grid.*</c> reset added later would land in the same bucket
+    /// and read as already-triaged.
     /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> DeliberatelyExcludedAttached =
         new Dictionary<string, string>(System.StringComparer.Ordinal)

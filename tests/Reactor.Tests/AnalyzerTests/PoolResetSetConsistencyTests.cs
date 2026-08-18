@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CSharp.Testing;
@@ -216,13 +218,86 @@ class C
             .OrderBy(key => key, StringComparer.Ordinal)
             .ToList();
 
+        // Name the mixed-owner case explicitly. A `Grid.Row` reset reaching this list is the
+        // #1067 shape, and the surrounding evidence points the wrong way: Grid is in
+        // InstancePropertyOwnerProbes, and two other Grid.* clears one line above are instance
+        // properties nothing complains about. Without this sentence the obvious "fix" is to
+        // declare the owner instance-only again, which is what silenced the failure in the
+        // first place.
+        var mixedOwner = missing
+            .Where(key => InstancePropertyOwnerProbes.ContainsKey(key.Substring(0, key.IndexOf('.'))))
+            .ToList();
+
         Assert.True(
             missing.Count == 0,
             "These attached properties are cleared in ElementPool.CleanElement but are in " +
             "neither ModifierTable.AttachedProperties nor DeliberatelyExcludedAttached: " +
             $"[{string.Join(", ", missing)}]. " +
             "Either map them (so REACTOR_POOL_001 fires on '.Set(fe => Owner.SetPROP(fe, ...))'), " +
-            "or exclude them with a documented reason.");
+            "or exclude them with a documented reason." +
+            (mixedOwner.Count == 0
+                ? string.Empty
+                : $" Note: [{string.Join(", ", mixedOwner)}] — each sits on a MIXED owner, one whose " +
+                  "other clears really are instance properties (Grid.Padding), which is why the " +
+                  "owner is in InstancePropertyOwnerProbes. That is not a reason to reclassify " +
+                  "them: they declare the static Owner.SetPROP setter, so they are attached and " +
+                  "belong in one of the two tables above."));
+    }
+
+    [Theory]
+    // Grid is THE mixed owner: these four are attached, and are already cleared for pooled
+    // reuse by PanelAttachedHooks.ApplyGridAttached — one of them moving into CleanElement is
+    // the change #1067 says must not pass silently.
+    [InlineData("Grid", "Row", true)]
+    [InlineData("Grid", "Column", true)]
+    [InlineData("Grid", "RowSpan", true)]
+    [InlineData("Grid", "ColumnSpan", true)]
+    // …and the same owner's instance DPs, which CleanElement clears today and which must stay
+    // out of the attached bucket.
+    [InlineData("Grid", "Padding", false)]
+    [InlineData("Grid", "CornerRadius", false)]
+    // Control is mixed too — proof the probe generalizes past the owner that motivated it.
+    [InlineData("Control", "IsTemplateFocusTarget", true)]
+    [InlineData("Control", "IsEnabled", false)]
+    [InlineData("Control", "Padding", false)]
+    [InlineData("FrameworkElement", "Margin", false)]
+    [InlineData("Panel", "Background", false)]
+    [InlineData("TextBlock", "Padding", false)]
+    public void Attached_Setter_Probe_Separates_Attached_From_Instance_On_The_Same_Owner(
+        string owner, string property, bool expectedAttached)
+    {
+        // The instrument check for IsAttachedReset. Every other assertion in this file trusts
+        // the probe, and a dead probe — wrong BindingFlags, a projection that stops surfacing
+        // the static setters — fails silently in the one direction that matters: it answers
+        // "not attached" for everything, which is exactly today's owner-keyed behaviour with
+        // every test still green. So assert both directions on the same owner, where the only
+        // thing that differs between the rows is the property.
+        Assert.True(InstancePropertyOwnerProbes.ContainsKey(owner),
+            $"'{owner}' is not in InstancePropertyOwnerProbes, so this row proves nothing about " +
+            "the probe — IsAttachedReset short-circuits to 'attached' for unknown owners.");
+
+        Assert.Equal(expectedAttached, IsAttachedReset(owner, property));
+    }
+
+    [Fact]
+    public void Every_Instance_Owner_Key_Names_Its_Own_Type()
+    {
+        // The keys are how ElementPool.cs spells an owner; the typeof is what the probe reads.
+        // Nothing else ties the two together, and a mismatched pair
+        // (["Grid"] = typeof(StackPanel)) would probe a type with no Grid.SetRow and answer
+        // "instance" for every attached Grid property — the original bug, restored.
+        var mismatched = InstancePropertyOwnerProbes
+            .Where(entry => !string.Equals(entry.Key, entry.Value.OwnerType.Name, StringComparison.Ordinal))
+            .Select(entry => $"'{entry.Key}' -> {entry.Value.OwnerType.FullName}")
+            .OrderBy(text => text, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            mismatched.Count == 0,
+            "These InstancePropertyOwnerProbes entries are keyed by a name their typeof does not " +
+            $"have: [{string.Join(", ", mismatched)}]. The key must be the type's simple name — " +
+            "that is the spelling the CleanElement scan captures, and the probe is only meaningful " +
+            "when it interrogates the type that owns the property being classified.");
     }
 
     [Fact]
@@ -378,11 +453,12 @@ namespace Microsoft.UI.Reactor
     // ── Source-scanning helpers ─────────────────────────────────────────
 
     /// <summary>
-    /// Extract the set of property names reset in the FE-common block of
+    /// Extract the set of <em>instance</em> property names reset in the FE-common block of
     /// <c>ElementPool.CleanElement</c> — from the method's opening brace up
     /// to (but not including) the <c>switch (fe)</c> that begins type-specific
-    /// cleanup. Captures both <c>fe.PROP = ...</c> direct sets and
-    /// <c>RECEIVER.ClearValue((FrameworkElement|UIElement|Control).PROPProperty)</c> calls.
+    /// cleanup. Captures both <c>fe.PROP = ...</c> direct sets and every
+    /// <c>RECEIVER.ClearValue(OWNER.PROPProperty)</c> that <see cref="IsAttachedReset"/>
+    /// classifies as an instance property.
     /// </summary>
     private static HashSet<string> ReadResetProperties()
     {
@@ -399,16 +475,14 @@ namespace Microsoft.UI.Reactor
         // ClearValue(OWNER.PROPProperty) resets. Receiver is `\w+` (not pinned to
         // the captured param) because some resets run on a narrowed cast — e.g.
         // `if (fe is Control c) c.ClearValue(Control.IsTabStopProperty)` (issue #162).
-        // The owner is restricted to the DependencyObject base types that actually
-        // back FrameworkElement instance properties (see InstancePropertyOwners, which
-        // this alternation is derived from so the two scans can't drift);
-        // attached-property owners are captured separately by
-        // ReadResetAttachedProperties, owner-qualified, because their bare names
-        // collide with instance properties (AutomationProperties.Name vs
+        // Only the clears IsAttachedReset says are instance properties: attached owners
+        // are captured separately by ReadResetAttachedProperties, owner-qualified, because
+        // their bare names collide with instance properties (AutomationProperties.Name vs
         // FrameworkElement.Name).
-        var clearValueProps = Regex.Matches(commonBlock, InstanceClearValuePattern)
+        var clearValueProps = Regex.Matches(commonBlock, ClearValuePattern)
             .Cast<Match>()
-            .Select(m => m.Groups[1].Value);
+            .Where(m => !IsAttachedReset(m.Groups[1].Value, m.Groups[2].Value))
+            .Select(m => m.Groups[2].Value);
 
         return new HashSet<string>(directAssignments.Concat(clearValueProps), StringComparer.Ordinal);
     }
@@ -416,8 +490,9 @@ namespace Microsoft.UI.Reactor
     /// <summary>
     /// Extract the <c>Owner.Property</c> names of the <em>attached</em> properties reset in
     /// the FE-common block of <c>ElementPool.CleanElement</c> — every
-    /// <c>RECEIVER.ClearValue(...OWNER.PROPProperty)</c> whose owner is not one of the
-    /// instance-property base types handled by <see cref="ReadResetProperties"/>.
+    /// <c>RECEIVER.ClearValue(...OWNER.PROPProperty)</c> that <see cref="IsAttachedReset"/>
+    /// classifies as attached; the exact complement of <see cref="ReadResetProperties"/>'
+    /// <c>ClearValue</c> half, over the same matches.
     /// </summary>
     /// <remarks>
     /// The owner may be written with any amount of qualification in the source
@@ -430,64 +505,172 @@ namespace Microsoft.UI.Reactor
     {
         var commonBlock = ReadCleanElementCommonBlock(out _);
 
-        var attached = Regex.Matches(commonBlock,
-                @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(\w+)\.(\w+)Property\s*\)")
+        var attached = Regex.Matches(commonBlock, ClearValuePattern)
             .Cast<Match>()
-            .Where(m => !InstancePropertyOwners.Contains(m.Groups[1].Value))
+            .Where(m => IsAttachedReset(m.Groups[1].Value, m.Groups[2].Value))
             .Select(m => m.Groups[1].Value + "." + m.Groups[2].Value);
 
         return new HashSet<string>(attached, StringComparer.Ordinal);
     }
 
-    private static readonly HashSet<string> InstancePropertyOwners =
-        new(StringComparer.Ordinal)
-        {
-            "FrameworkElement",
-            "UIElement",
-            "Control",
-            // Issue #985: CleanElement's FE-common block now clears the Padding /
-            // CornerRadius / BorderThickness / BorderBrush / Background family through a
-            // Control | Border | Panel/Grid/StackPanel | TextBlock chain that mirrors
-            // ApplyModifiers' receivers. Border.PaddingProperty and friends are ordinary
-            // instance properties; without them here the attached scan would claim them and
-            // Every_Reset_Attached_Property_Is_Classified would fail on owners that have
-            // no business being in the attached table.
-            "Border",
-            "Panel",
-            "StackPanel",
-            // Grid arrived with #1003, which widened the Padding / CornerRadius gates to the
-            // concrete panels and added `resetGrid.ClearValue(WinUI.Grid.PaddingProperty)` one
-            // line above StackPanel's. It belongs here for exactly the reason Border and
-            // StackPanel do — Grid.PaddingProperty is an ordinary instance DP, not an attached
-            // one — but neither branch alone had both halves: #985 wrote this list, #1003 wrote
-            // those clears, and the union inherited the clears without the owner. Left out, the
-            // attached scan claims `Grid.Padding` / `Grid.CornerRadius` and they have to be
-            // silenced in DeliberatelyExcludedAttached, which is a suppression list, not a
-            // classification — so a genuinely attached `Grid.*` reset added later would land in
-            // the same bucket as these two and read as already-triaged.
-            "Grid",
-            // TextBlock joins them because #985 also moved TextBlock.Padding (added by
-            // #950) into the scanned block. Without it here, TextBlock.PaddingProperty
-            // would be read as an *attached* property named TextBlock.Padding.
-            "TextBlock",
-        };
-
     /// <summary>
-    /// Matches <c>RECEIVER.ClearValue(OWNER.PROPProperty)</c> for the instance-property
-    /// owners in <see cref="InstancePropertyOwners"/>, capturing the bare property name.
+    /// Matches <c>RECEIVER.ClearValue(OWNER.PROPProperty)</c>, capturing the owner's rightmost
+    /// segment and the bare property name. The single shape both reset scans read, so that
+    /// instance ∪ attached is every recognized clear by construction and
+    /// <see cref="IsAttachedReset"/> is the only thing that decides which half a clear lands in.
     /// </summary>
     /// <remarks>
-    /// The owner alternation is built from <see cref="InstancePropertyOwners"/> rather than
-    /// hardcoded so the instance and attached scans stay two views of one list — a new owner
-    /// added to only one of them would silently reclassify a property. The optional
-    /// <c>[\w.]+.</c> prefix matches <see cref="ReadResetAttachedProperties"/> so the
-    /// alias-qualified spelling <c>WinUI.Border.PaddingProperty</c> used throughout
-    /// <c>ElementPool.cs</c> is recognized as an instance reset.
+    /// The optional <c>[\w.]+.</c> prefix absorbs whatever qualification the source uses
+    /// (<c>Microsoft.UI.Xaml.Automation.AutomationProperties</c>, <c>WinUI.Border</c>,
+    /// <c>Layout.FlexPanel</c>) — the rightmost segment is how
+    /// <c>ModifierTable.AttachedProperties</c> is keyed and how the analyzer sees the owner at a
+    /// call site. <c>Every_ClearValue_In_CleanElement_Is_Recognized_By_The_Reset_Scan</c> pins
+    /// that every clear in the block really is written in this shape.
     /// </remarks>
-    private static readonly string InstanceClearValuePattern =
-        @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(?:"
-        + string.Join("|", InstancePropertyOwners.OrderBy(o => o, StringComparer.Ordinal))
-        + @")\.(\w+)Property\s*\)";
+    private const string ClearValuePattern =
+        @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(\w+)\.(\w+)Property\s*\)";
+
+    /// <summary>
+    /// Whether <c>OWNER.PROPProperty</c> names an <em>attached</em> dependency property —
+    /// the one discriminator that splits the reset scan in two.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Owner membership alone cannot answer this, which is issue #1067: <c>Grid</c> is a
+    /// <em>mixed</em> owner. <c>Grid.Padding</c> / <c>Grid.CornerRadius</c> are ordinary instance
+    /// DPs (which is why <c>Grid</c> is in <see cref="InstancePropertyOwnerProbes"/>) while
+    /// <c>Grid.Row</c> / <c>Column</c> / <c>RowSpan</c> / <c>ColumnSpan</c> are genuinely attached.
+    /// Keyed by owner, a <c>Grid.Row</c> clear was absorbed by the instance bucket and
+    /// <c>Every_Reset_Attached_Property_Is_Classified</c> never saw it — no failure, so no triage
+    /// moment to get wrong. That is not hypothetical: <c>PanelAttachedHooks.ApplyGridAttached</c>
+    /// already clears all four for pooled reuse, just outside the scanned region.
+    /// </para>
+    /// <para>
+    /// So ask the property, not the owner, and ask it the same question the analyzer asks: an
+    /// attached property is one whose owner declares the static
+    /// <c>Owner.SetPROP(DependencyObject, value)</c> that <c>PoolResetSetAnalyzer</c> matches
+    /// inside a <c>.Set(...)</c> lambda. <c>Grid.SetRow</c> exists, so <c>Grid.Row</c> is attached;
+    /// there is no <c>Grid.SetPadding</c>, so <c>Grid.Padding</c> stays instance. A future mixed
+    /// owner needs no edit here.
+    /// </para>
+    /// <para>
+    /// Both error directions are not equal, and the bias is deliberate. Calling an instance
+    /// property attached fails <c>Every_Reset_Attached_Property_Is_Classified</c> loudly and
+    /// someone triages it; calling an attached property instance is silent — the whole bug. So
+    /// anything unresolvable resolves to attached: an owner absent from the probe table is
+    /// attached by default.
+    /// </para>
+    /// </remarks>
+    private static bool IsAttachedReset(string owner, string property) =>
+        !InstancePropertyOwnerProbes.TryGetValue(owner, out var probe)
+        || probe.DeclaresAttachedSetter(property);
+
+    /// <summary>
+    /// The <c>DependencyObject</c> base types that back <em>FrameworkElement instance</em>
+    /// properties in <c>CleanElement</c>'s FE-common block, each paired with a metadata probe
+    /// over the real type so <see cref="IsAttachedReset"/> can carve the attached DPs back out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Issue #985: CleanElement's FE-common block clears the Padding / CornerRadius /
+    /// BorderThickness / BorderBrush / Background family through a Control | Border |
+    /// Panel/Grid/StackPanel | TextBlock chain that mirrors ApplyModifiers' receivers.
+    /// <c>Border.PaddingProperty</c> and friends are ordinary instance properties; without them
+    /// here the attached scan would claim them and
+    /// <c>Every_Reset_Attached_Property_Is_Classified</c> would fail on owners that have no
+    /// business being in the attached table. <c>Grid</c> arrived with #1003, which widened those
+    /// gates to the concrete panels; <c>TextBlock</c> because #985 moved TextBlock.Padding (added
+    /// by #950) into the scanned block.
+    /// </para>
+    /// <para>
+    /// Two hazards live here and this list only ever closed the first. Route the family through
+    /// <c>DeliberatelyExcludedAttached</c> instead and a future attached <c>Grid.*</c> reset does
+    /// fail the classification test — but the two existing <c>Grid.*</c> suppression rows sitting
+    /// right there invite the wrong triage ("add another row"). Route it through owner membership,
+    /// as this list does, and that same future reset produces <em>no failure at all</em>, because
+    /// bare-owner membership cannot express that <c>Grid</c> owns instance <em>and</em> attached
+    /// DPs (#1067). Naming the owners is therefore necessary but not sufficient:
+    /// <see cref="IsAttachedReset"/> asks per property, and this list supplies the type it asks.
+    /// </para>
+    /// <para>
+    /// Hand-listed as <c>typeof(...)</c> literals rather than resolved from a name via
+    /// <c>Type.GetType</c>, so the probes stay statically analyzable (IL2057/IL2072) and adding an
+    /// owner is a deliberate edit — the same rationale as <c>ModifierTableIntegrityTests</c>'
+    /// <c>KnownAttachedOwners</c>. The key must equal the type's simple name, which is exactly how
+    /// the scan spells an owner; <c>Every_Instance_Owner_Key_Names_Its_Own_Type</c> pins that.
+    /// Reflection reads metadata only — no WinUI object is constructed, which this headless suite
+    /// cannot do.
+    /// </para>
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<string, (Type OwnerType, Func<string, bool> DeclaresAttachedSetter)>
+        InstancePropertyOwnerProbes =
+            new Dictionary<string, (Type, Func<string, bool>)>(StringComparer.Ordinal)
+            {
+                ["FrameworkElement"] = (
+                    typeof(Microsoft.UI.Xaml.FrameworkElement),
+                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.FrameworkElement), prop)),
+                ["UIElement"] = (
+                    typeof(Microsoft.UI.Xaml.UIElement),
+                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.UIElement), prop)),
+                ["Control"] = (
+                    typeof(Microsoft.UI.Xaml.Controls.Control),
+                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.Control), prop)),
+                ["Border"] = (
+                    typeof(Microsoft.UI.Xaml.Controls.Border),
+                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.Border), prop)),
+                ["Panel"] = (
+                    typeof(Microsoft.UI.Xaml.Controls.Panel),
+                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.Panel), prop)),
+                ["StackPanel"] = (
+                    typeof(Microsoft.UI.Xaml.Controls.StackPanel),
+                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.StackPanel), prop)),
+                ["Grid"] = (
+                    typeof(Microsoft.UI.Xaml.Controls.Grid),
+                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.Grid), prop)),
+                ["TextBlock"] = (
+                    typeof(Microsoft.UI.Xaml.Controls.TextBlock),
+                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.TextBlock), prop)),
+            };
+
+    /// <summary>
+    /// Whether <paramref name="type"/> declares the <c>public static void SetPROP(target, value)</c>
+    /// that makes <c>PROP</c> an attached property at a call site — the shape
+    /// <c>PoolResetSetAnalyzer</c> matches, so this is the rule's own criterion rather than an
+    /// approximation of it.
+    /// </summary>
+    /// <remarks>
+    /// <c>FlattenHierarchy</c> is deliberate: an attached setter inherited from a base is still an
+    /// attached setter, and the direction it can err in (instance read as attached) is the loud
+    /// one. The one shape this misses is an attached property with <em>no</em> static setter — the
+    /// <c>AutomationProperties.DescribedBy</c> collection form, which WinUI exposes as
+    /// <c>GetXxx(...)</c> returning a mutable list. None of the owners above has one, and it is
+    /// precisely the shape the <c>Owner.SetPROP(x, v)</c> rule cannot match either, which is why
+    /// those three live in <c>ModifierTable.DeliberatelyExcludedAttached</c>.
+    /// </remarks>
+    private static bool DeclaresAttachedSetter(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type type,
+        string propertyName)
+    {
+        const BindingFlags Flags =
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+
+        foreach (var method in type.GetMethods(Flags))
+        {
+            if (!string.Equals(method.Name, "Set" + propertyName, StringComparison.Ordinal))
+                continue;
+            if (method.ReturnType != typeof(void))
+                continue;
+
+            var parameters = method.GetParameters();
+            if (parameters.Length == 2
+                && typeof(Microsoft.UI.Xaml.DependencyObject).IsAssignableFrom(parameters[0].ParameterType))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// The FE-common block of <c>ElementPool.CleanElement</c> — from the method's opening
