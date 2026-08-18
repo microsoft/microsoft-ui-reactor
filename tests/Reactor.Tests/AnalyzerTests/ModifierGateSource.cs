@@ -70,7 +70,8 @@ internal static class ModifierGateSource
     public const string AnySlot = "(?:" + ControlGate + "|" + PoolResetGate + ")";
 
     /// <summary>The two real slot names, for tests that sweep both.</summary>
-    public static IReadOnlyList<string> SlotNames { get; } = new[] { ControlGate, PoolResetGate };
+    public static IReadOnlyList<string> SlotNames { get; } =
+        Array.AsReadOnly(new[] { ControlGate, PoolResetGate });
 
     private static readonly Lazy<TableModel> Model = new(Load);
 
@@ -90,6 +91,7 @@ internal static class ModifierGateSource
     /// <c>elementTypes</c>, which the gate slots deliberately exclude. This is the syntax-model
     /// prediction <see cref="ModifierGateIdentifierTests"/> measures <see cref="Hazard"/> against,
     /// so that a hazard matcher which has stopped discriminating cannot pass for the right reason.
+    /// Read-only views, for the same cache-integrity reason as <see cref="DeclaredGroups"/>.
     /// </summary>
     public static IReadOnlyDictionary<string, IReadOnlyList<ModifierGateArgument>> EntryArguments =>
         Model.Value.Arguments;
@@ -258,9 +260,9 @@ internal static class ModifierGateSource
                     slots.Add(new ModifierGateSlot(property, slot, identifier));
             }
 
-            arguments[property] = referenced;
+            arguments[property] = referenced.AsReadOnly();
         }
 
-        return new TableModel(groups, slots, entries, arguments);
+        return new TableModel(groups, slots.AsReadOnly(), entries, arguments);
     }
 }
