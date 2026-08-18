@@ -4,6 +4,28 @@
 
 **Exploration / RFC** — 2026-04-15.
 
+> **⚠️ Superseded in part — read this first (2026-08-18).**
+>
+> **Part 6B's premise is false.** It describes a working compiler prototype on `dotnet/roslyn` branch
+> `features/reactor-extensions`. **That branch does not exist** — the ref 404s and no matching branch or PR
+> is present in `dotnet/roslyn`. Part 9's advice to "feed Reactor's preference for bare-children into the
+> `features/reactor-extensions` LDM discussion while v1 scope is still open" therefore points at nothing.
+>
+> The real upstream state: the championed proposal is
+> [csharplang#10292 `factory-methods.md`](https://github.com/dotnet/csharplang/blob/main/proposals/factory-methods.md)
+> (opt-in via a `[Factory]` **attribute**, not a `factory` modifier), and
+> [csharplang#10185](https://github.com/dotnet/csharplang/issues/10185) is being implemented now in
+> `dotnet/roslyn` PRs #83750–#83761.
+>
+> [LDM 2026-07-15](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-07-15.md) reviewed
+> this document and **selected no feature**; [LDM 2026-08-05](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-08-05.md)
+> confirmed declarative UI is "still exploratory" and **not a C# 16 delivery commitment**.
+>
+> [Spec 063](063-declarative-ui-language-experiments.md) has the measurements, from a compiler actually
+> built for the purpose. Its headline contradicts Part 6B: factory initializers **without** bare children
+> cost **+17 % tokens** against the API Reactor ships today. Parts 1–5, 7 and 8 of this document remain
+> useful; treat Part 6B and Part 9's "Long Term" section as void.
+
 ---
 
 ## Motivation
@@ -884,6 +906,12 @@ help with properties. They create a split between child specification (`[ ]`) an
 ## Part 6B: Option F — Factory Initializers (prototype of csharplang #6602)
 
 ### Status
+
+> **⚠️ This entire section is based on a branch that does not exist.** See the banner at the top of this
+> document. Kept for the design discussion it contains; do not act on its claims about an existing
+> prototype, its "honor-system v1" characterisation (the championed proposal *does* restrict factory
+> bodies), or its `factory` modifier spelling (the championed proposal uses a `[Factory]` attribute).
+> Measurements are in [spec 063](063-declarative-ui-language-experiments.md).
 
 **Working compiler prototype** on `dotnet/roslyn` branch
 [`features/reactor-extensions`](https://github.com/dotnet/roslyn/tree/features/reactor-extensions),
