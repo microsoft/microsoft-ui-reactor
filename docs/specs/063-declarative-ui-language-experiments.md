@@ -554,7 +554,161 @@ Artifacts: `roslyn-factory-initializers.patch`, `Compare.cs`, `MeasureSource.cs`
 > still *enables* the feature. Omit the flag entirely to disable it. The "flags off" verification in §3 was run
 > by omitting the flags, not by setting them to `false`.
 
-## Appendix B — The shape, end to end
+## Appendix B — Before and after, per experiment
+
+Every "after" below compiles. Where it compiles against the **real** `Reactor.dll` that is stated; where it
+was validated on the faithful mini-model instead, that is stated too, with the reason.
+
+### B.1 Stage 1 — factory initializers
+
+Configuration moves out of `.Set()` callbacks and fluent chains into one brace-delimited block on the
+element it configures.
+
+```csharp
+// before
+Text("todos").FontSize(36)
+    .Set(t => t.FontWeight = FontWeights.Light)
+    .Foreground(AccentText)
+    .HAlign(HorizontalAlignment.Center)
+
+// after
+Text("todos") { FontSize = 36, Weight = FontWeights.Light,
+                Foreground = AccentText, HAlign = HorizontalAlignment.Center }
+```
+
+Because the initializer binds at primary-expression precedence, a fluent chain still attaches on either side
+with no parentheses — unlike `with`, which forces the chain to go first:
+
+```csharp
+Text("hi").Bold() { FontSize = 14 }          // chain before
+Text("hi") { FontSize = 14 }.Flex(grow: 1)   // chain after — no parens needed
+```
+
+Parens may be omitted when an overload resolves with zero arguments. Against real Reactor this works for
+`VStack`/`HStack` (`params Element?[]`) but **not** for single-child factories:
+
+```
+Border { child }
+  -> error CS7036: no argument given for required parameter 'child' of Factories.Border(Element?)
+```
+
+Migration requirement: single-child factories need a `= null` default before the parens-omitted form is
+available for them.
+
+### B.2 Stage 2 — type-level opt-in
+
+Nothing changes at the call site. The whole delta is at the library:
+
+```csharp
+// after — the member-level design, applied to every factory
+[Factory] public static StackElement VStack(params Element?[] children) => …   // ×203
+[Factory] public static TextBlockElement TextBlock(string content) => …
+[Factory] public static ButtonElement Button(string label, Action? onClick = null) => …
+
+// after — the type-level design
+[FactoryInitializable]                       // ×1
+public abstract record Element { … }
+```
+
+What this buys is composability. Extract a subtree into a helper and, under type-level opt-in, callers are
+unaffected:
+
+```csharp
+static Panel TodoRow(TodoItem item) => new Panel { … };   // no annotation anywhere
+var row = TodoRow(item) { Margin = 4 };                   // still compiles
+```
+
+Under member-level opt-in the same extraction fails until the helper's author remembers the attribute
+(`CS9700`). See §5.1 for why type-level opt-in is nonetheless unsound on its own, and §5.2 for the synthesis.
+
+### B.3 Stage 3 — content elements
+
+```csharp
+// before
+VStack(0,
+    Text("todos").FontSize(36),
+    HStack(8,
+        TextField(state.NewItemText, setText),
+        Button(addCmd)
+    ).Padding(16, 8, 16, 8),
+    ScrollViewer(
+        VStack(0, filtered.Select(item => TodoRow(item, dispatch)).ToArray())
+    )
+)
+
+// after
+VStack {
+    Spacing = 0,
+    Text("todos") { FontSize = 36 },
+    HStack {
+        Spacing = 8,
+        TextField(state.NewItemText, setText),
+        Button(addCmd),
+    }.Padding(16, 8, 16, 8),
+    ScrollViewer(
+        VStack { Spacing = 0, ..filtered.Select(item => TodoRow(item, dispatch)) }
+    ),
+}
+```
+
+Note what did **not** appear: no `new`, no `Children = [ … ]`, and `.ToArray()` is gone because the spread
+consumes the `IEnumerable<Element>` directly.
+
+Verified against the real `Reactor.dll`: `VStack { Spacing = 12, … }`, `HStack { Spacing = 8, Key = …, … }`
+and `..Items.Select(…)` in content position all compile against Reactor's actual `StackElement`,
+`TextBlockElement` and `ButtonElement`. Runtime comparison of the two trees is **not** possible headlessly —
+`TextBlockElement`'s generated static constructor touches `TextBlock.FontFamilyProperty` and throws
+`REGDB_E_CLASSNOTREG` outside a WinUI-initialised process, which is exactly why this repo has a selftest
+tier. The runtime equality oracle therefore runs on the mini-model (§4), and a real-Reactor version belongs
+in `tests/Reactor.AppTests.Host` as a selftest fixture.
+
+### B.4 The measured comparison (§4)
+
+```csharp
+// Option A' — ships today, no language change
+new StackElement(Orientation.Vertical, [
+    new TextElement("Folders") { Modifiers = new ElementModifiers { Margin = 8 } },
+]) { Spacing = 0 }
+
+// Factory initializers v1 — the LDM reference design
+VStack { Spacing = 0, Children = [ Text("Folders").Margin(8) ] }
+
+// Factory initializers + content elements
+VStack { Spacing = 0, Text("Folders").Margin(8) }
+```
+
+### B.5 The singleton hazard (§5.1)
+
+```csharp
+// before — a real Reactor factory, src/Reactor/Elements/Dsl.cs:1351
+public static Element Empty() => EmptyElement.Instance;   // static readonly singleton
+
+// after — with type-level opt-in and no body restriction, this compiles:
+var spacer = Empty() { Margin = 4 };
+```
+
+```
+before           : Instance.Margin = 0
+after Empty(){4} : Instance.Margin = 4
+unrelated Empty(): Margin = 4   <-- should be 0
+```
+
+6 of Reactor's 198 factories have this shape. The fix is §5.2, not "be careful".
+
+### B.6 `#10185`'s mechanism vs. this one (§8)
+
+```csharp
+// #10185's mechanism, applied to Reactor's StackElement
+new StackElement(Orientation.Vertical, []) { Spacing = 4, new TextElement("child") }
+  -> error CS1922: Cannot initialize type 'StackElement' with a collection initializer
+                   because it does not implement 'System.Collections.IEnumerable'
+
+// this prototype's mechanism, same type, +2 attributes
+VStack { Spacing = 4, new TextElement("child"), ..extra.Select(s => new TextElement(s)) }
+  -> Children = [child, c, d];  implements IEnumerable = False;  has Add = False
+```
+
+### B.7 Everything together
 
 ```csharp
 return VStack {
@@ -586,4 +740,5 @@ return VStack {
 ```
 
 No `new`. No `Children = [ … ]`. No `.Set()`. Spread, `switch`, conditional `null` children and fluent
-modifiers all compose. This compiles and runs on the prototype compiler today.
+modifiers all compose. This compiles and runs on the prototype compiler today (mini-model; see B.3 for the
+real-`Reactor.dll` compile result and why the runtime half needs a selftest).
