@@ -639,6 +639,7 @@ namespace Microsoft.UI.Reactor
     /// approximation of it.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>FlattenHierarchy</c> is deliberate: an attached setter inherited from a base is still an
     /// attached setter, and the direction it can err in (instance read as attached) is the loud
     /// one. The one shape this misses is an attached property with <em>no</em> static setter — the
@@ -646,6 +647,18 @@ namespace Microsoft.UI.Reactor
     /// <c>GetXxx(...)</c> returning a mutable list. None of the owners above has one, and it is
     /// precisely the shape the <c>Owner.SetPROP(x, v)</c> rule cannot match either, which is why
     /// those three live in <c>ModifierTable.DeliberatelyExcludedAttached</c>.
+    /// </para>
+    /// <para>
+    /// Deliberately <em>not</em> shared with <c>ModifierTableIntegrityTests.HasStaticTwoArgMethod</c>,
+    /// which looks similar but asks a weaker question: it omits <c>FlattenHierarchy</c> and checks
+    /// neither the <c>void</c> return nor that the first parameter is a <c>DependencyObject</c> —
+    /// enough for the pure attached-property holders it runs against (<c>AutomationProperties</c>,
+    /// <c>ToolTipService</c>, <c>TitleBar</c>, <c>FlexPanel</c>), where no instance member can
+    /// collide. This probe runs against <em>mixed</em> owners, where a loose match silently
+    /// reclassifies a property, so the extra constraints are the point. Reusing the looser helper
+    /// here would reintroduce #1067 by a different route; unifying them would have to tighten it
+    /// for callers that do not need it.
+    /// </para>
     /// </remarks>
     private static bool DeclaresAttachedSetter(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type type,
