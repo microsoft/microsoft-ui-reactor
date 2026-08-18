@@ -209,9 +209,10 @@ public class ReactorXmlSelectionTests
         var choice = CompileCommand.FindReactorXml(fx.Root);
 
         Assert.NotNull(choice);
-        Assert.Equal(newest, choice!.Value.Path);
-        Assert.Equal(Base.AddMinutes(9), choice.Value.WriteUtc);
-        Assert.Equal(3, choice.Value.CandidateCount);
+        var selected = choice!.Value;
+        Assert.Equal(newest, selected.Path);
+        Assert.Equal(Base.AddMinutes(9), selected.WriteUtc);
+        Assert.Equal(3, selected.CandidateCount);
     }
 
     /// <summary>
@@ -238,9 +239,9 @@ public class ReactorXmlSelectionTests
         var outside = fx.OutsideXml("elsewhere", Base.AddMinutes(45));
         var linked = fx.JunctionInsideBin("linked", Path.GetDirectoryName(outside)!);
 
-        Assert.True(File.Exists(Path.Combine(linked, "Reactor.xml")),
+        Assert.True(File.Exists(Path.Join(linked, "Reactor.xml")),
             "fixture: the junction must resolve, or the exclusion below proves nothing");
-        Assert.Equal(Base.AddMinutes(45), File.GetLastWriteTimeUtc(Path.Combine(linked, "Reactor.xml")));
+        Assert.Equal(Base.AddMinutes(45), File.GetLastWriteTimeUtc(Path.Join(linked, "Reactor.xml")));
 
         var candidates = CompileCommand.EnumerateReactorXmlCandidates(fx.Root).ToList();
 
@@ -522,7 +523,11 @@ public class ReactorXmlSelectionTests
     /// </summary>
     private sealed class RepoFixture : IDisposable
     {
-        public string Root { get; } = Path.Combine(
+        // Path.Join rather than Path.Combine throughout this fixture: the tail
+        // segments are test inputs (layout, relativePath), and Combine resets
+        // to the last rooted segment while Join always appends. Matches the
+        // sibling fixture in CompileCaptureSkipTests.
+        public string Root { get; } = Path.Join(
             Path.GetTempPath(), "reactor-xml-selection-" + Guid.NewGuid().ToString("N"));
 
         public RepoFixture() => Directory.CreateDirectory(Root);
@@ -532,7 +537,7 @@ public class ReactorXmlSelectionTests
             BinFile(layout, "Reactor.xml", writeUtc);
 
         public string BinFile(string layout, string fileName, DateTime writeUtc) =>
-            Write(Path.Combine("src", "Reactor", "bin", Native(layout)), fileName, writeUtc);
+            Write(Path.Join("src", "Reactor", "bin", Native(layout)), fileName, writeUtc);
 
         /// <summary>Writes a C# file at <c>src/Reactor/&lt;relativePath&gt;</c>.</summary>
         public string Source(string relativePath, DateTime writeUtc)
@@ -540,16 +545,16 @@ public class ReactorXmlSelectionTests
             var native = Native(relativePath);
             var dir = Path.GetDirectoryName(native);
             return Write(
-                Path.Combine("src", "Reactor", dir ?? string.Empty),
+                Path.Join("src", "Reactor", dir ?? string.Empty),
                 Path.GetFileName(native),
                 writeUtc);
         }
 
         private string Write(string relativeDir, string fileName, DateTime writeUtc)
         {
-            var dir = Path.Combine(Root, relativeDir);
+            var dir = Path.Join(Root, relativeDir);
             Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, fileName);
+            var path = Path.Join(dir, fileName);
             File.WriteAllText(path, "// fixture\n");
             // Set after the write: writing stamps the file with "now".
             File.SetLastWriteTimeUtc(path, writeUtc);
@@ -562,9 +567,9 @@ public class ReactorXmlSelectionTests
         /// </summary>
         public string OutsideXml(string dirName, DateTime writeUtc)
         {
-            var dir = Path.Combine(Root + "-outside", dirName);
+            var dir = Path.Join(Root + "-outside", dirName);
             Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, "Reactor.xml");
+            var path = Path.Join(dir, "Reactor.xml");
             File.WriteAllText(path, "// fixture\n");
             File.SetLastWriteTimeUtc(path, writeUtc);
             return path;
@@ -578,7 +583,7 @@ public class ReactorXmlSelectionTests
         /// </summary>
         public string JunctionInsideBin(string name, string target)
         {
-            var link = Path.Combine(Root, "src", "Reactor", "bin", name);
+            var link = Path.Join(Root, "src", "Reactor", "bin", name);
             Directory.CreateDirectory(Path.GetDirectoryName(link)!);
             CreateJunction(link, target);
             return link;
@@ -591,17 +596,17 @@ public class ReactorXmlSelectionTests
         /// </summary>
         public string XmlBehindJunctionedBin(string layout, DateTime writeUtc)
         {
-            var realBin = Path.Combine(Root + "-realbin");
-            var dir = Path.Combine(realBin, Native(layout));
+            var realBin = Root + "-realbin";
+            var dir = Path.Join(realBin, Native(layout));
             Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, "Reactor.xml");
+            var path = Path.Join(dir, "Reactor.xml");
             File.WriteAllText(path, "// fixture\n");
             File.SetLastWriteTimeUtc(path, writeUtc);
 
-            var link = Path.Combine(Root, "src", "Reactor", "bin");
+            var link = Path.Join(Root, "src", "Reactor", "bin");
             Directory.CreateDirectory(Path.GetDirectoryName(link)!);
             CreateJunction(link, realBin);
-            return Path.Combine(link, Native(layout), "Reactor.xml");
+            return Path.Join(link, Native(layout), "Reactor.xml");
         }
 
         /// <summary>
@@ -672,8 +677,16 @@ public class ReactorXmlSelectionTests
             foreach (var link in _junctions)
             {
                 try { Directory.Delete(link, recursive: false); }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
+                catch (IOException)
+                {
+                    // Already gone, or a handle is open on it — either way the
+                    // tree delete below is the thing that matters, and neither
+                    // is something this suite asserts.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Read-only entry, or AV/indexer holding it — likewise.
+                }
             }
 
             FixtureCleanup.DeleteTree(Root);
