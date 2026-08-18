@@ -11,11 +11,21 @@ which described a `dotnet/roslyn` branch `features/reactor-extensions` that **do
 404s, and no PR or branch in `dotnet/roslyn` matches. Everything below was implemented from scratch against
 `dotnet/roslyn` `main` @ `582bdfd5`.
 
-The three csharplang references the LDM cited were verified to exist:
-[discussions/10207 "[Proposal] Factory Initializers"](https://github.com/dotnet/csharplang/discussions/10207),
-[issues/10185 "[Proposal]: Mixed object and collection initializers"](https://github.com/dotnet/csharplang/issues/10185) (open),
-and [issues/9003 "[Proposal]: Nested members in `with` and object creation"](https://github.com/dotnet/csharplang/issues/9003) (open).
-Only the compiler prototype was fictional.
+The three csharplang references the LDM cited were verified, and their **current** status matters:
+
+| LDM reference | Actual state |
+|---|---|
+| [discussions/10207 "[Proposal] Factory Initializers"](https://github.com/dotnet/csharplang/discussions/10207) | **Closed as a duplicate.** Redirects to [#6602](https://github.com/dotnet/csharplang/discussions/6602) and to the formal champion issue [**#10292**](https://github.com/dotnet/csharplang/issues/10292), specced at [`proposals/factory-methods.md`](https://github.com/dotnet/csharplang/blob/main/proposals/factory-methods.md). **The championed design uses a `[Factory]` attribute, not a `factory` modifier.** |
+| [issues/10185 "Mixed object and collection initializers"](https://github.com/dotnet/csharplang/issues/10185) | Open, *Proposal champion*, specced at [`proposals/mixed-object-and-collection-initializers.md`](https://github.com/dotnet/csharplang/blob/main/proposals/mixed-object-and-collection-initializers.md). **Being implemented right now** — see §8. |
+| [issues/9003 "Nested members in `with` and object creation"](https://github.com/dotnet/csharplang/issues/9003) | Open, *Proposal champion*, assigned **Needs More Work**, and states **"Specification: None yet."** No defined lowering exists. |
+
+Only the compiler prototype in spec 019 was fictional; the proposals are real.
+
+Two consequences for this experiment. First, the prototype's attribute-based opt-in is **not** a shortcut around a
+`factory` modifier — it is the spelling the championed proposal actually uses. Second, spec 019's claim that v1 is
+"honor-system" (no verification that a factory returns a fresh instance) is **out of date**: `factory-methods.md`
+restricts factory returns to construction-like expressions, requires matching annotation across overrides and
+interface implementations, and proposes an `IsFactory` modreq for virtual members.
 
 ---
 
@@ -105,7 +115,7 @@ unlike `with`.
 | Every new diagnostic | Verified to actually fire (§7) |
 
 The parser change is guarded by the experimental flag, so the zero-regression result is a statement about the
-*implementation*, not about eventual breaking-change risk; §8 records the residual risk.
+*implementation*, not about eventual breaking-change risk; §9 records the residual risk.
 
 ---
 
@@ -266,6 +276,12 @@ collection expression. C# can afford the construct at the point where Swift cann
 as `FactoryInitializerContentFlow` and measured against the imperative-`List<Element>` and nested-ternary
 patterns in spec 019 §7B.3 / §7B.4, which are the shapes all five variants above still handle badly.
 
+This is genuinely open ground. There is **no championed csharplang proposal** for `if`/`foreach` inside a
+collection expression: [#9754 "Immediately Enumerated Collection Expressions"](https://github.com/dotnet/csharplang/blob/main/proposals/immediately-enumerated-collection-expressions.md)
+(open, *Proposal champion*) enables `foreach (bool b in [true, false])` and nested targetless spreads, and
+explicitly lists conditional inclusion as future work; #9739 was closed in its favour; the 2021 LDM's interest
+in list comprehensions never produced a proposal; and no Swift-style result-builder proposal exists at all.
+
 ### 6.5 Nullable children are a real migration blocker for Reactor
 
 Reactor's `StackElement.Children` is `Element[]`, with null filtering done inside the `params Element?[]`
@@ -290,12 +306,50 @@ with the neighbouring positive case compiling in the same file:
 
 ---
 
-## 8. Known gaps and residual risk
+## 8. How this relates to the mixed-initializer work already underway
 
-1. **`factory` modifier not implemented.** Opt-in is spelled with attributes. The receiver-shape change is the
-   feature; the spelling is a separable decision, and attributes work across assemblies today without new
-   metadata format work. A real modifier keyword would need `DeclarationModifiers`, modifier parsing and a
-   persistence mechanism.
+`#10185` is not merely a proposal — there is a **live upstream implementation stack** in `dotnet/roslyn`,
+targeting `features/compound-assignment-in-initializer`: PRs **#83750** (`mixed-init-syntax`), **#83751**
+(`mixed-init-binding`), **#83752**, **#83753** (semantic model), **#83754** (IDE, gated by
+`SupportsMixedObjectAndCollectionInitializers`), and #83755–#83761 (analyzer/IDE polish). #83750 notes the
+parser already classifies mixed lists correctly and binding rejects them until the gate opens; #83751 gates
+binder/lowering/flow/emit to `LanguageVersion.Preview`.
+
+That work and this prototype agree on the disambiguation rule and disagree on everything downstream of it.
+The differences are the substance of what this experiment contributes:
+
+| | `#10185` as specced | This prototype |
+|---|---|---|
+| Member vs. element rule | Grammar-based: `X = v` is a member initializer, a bare expression is an element | **Same** — grammar-based, and `(a = b)` parenthesized becomes content |
+| Where elements go | `Add(…)` on the initialized object; requires `IEnumerable` | **A `[ContentProperty]` `init` member**, assigned once via a collection expression |
+| Mutability | Mutating `Add` calls | **No mutation** — this is what makes it usable for immutable records |
+| Spread `..expr` inside `{ }` | **Not added**; spread stays in `[ … ]` | **Supported**, routed through the collection-expression spread binder |
+| Ordering | Arbitrary interleaving, because evaluation order is observable | **Content must be trailing** (§6.1) |
+| `required` members | Bare elements do not satisfy them | Same |
+
+The ordering divergence deserves an explicit LDM decision. `#10185`'s argument for interleaving — evaluation
+order is observable, so do not constrain it — is sound *for `Add`-based initialization of a mutable object*.
+It does not apply here: content elements are gathered into one collection expression assigned once, so there
+is no per-element observable interleaving with the member assignments to preserve. Trailing-only is therefore
+free in this design and, per §6.1, better to read.
+
+The immutability divergence is the load-bearing one. `#10185` as specced **cannot** express Reactor's tree,
+because `StackElement` is an immutable record with no `Add`. Spec 019 §8.2 enumerated five workarounds for
+exactly this and disliked all five. Routing content to an `init` collection member removes the problem
+outright, and is the same mechanism Option A′ already uses — just with the property name elided.
+
+---
+
+## 9. Known gaps and residual risk
+
+1. **No `factory` modifier — and that is now the aligned choice, not a shortcut.** Opt-in is spelled with
+   attributes, which is what the championed proposal
+   ([`factory-methods.md`](https://github.com/dotnet/csharplang/blob/main/proposals/factory-methods.md)) also
+   does. What the prototype does **not** implement from that proposal: the restriction that a factory body
+   must be a construction-like expression (fresh-instance verification), the requirement that the annotation
+   match across overrides and interface implementations, and the `IsFactory` modreq for virtual members.
+   Reactor's factories all satisfy the fresh-instance rule today, so this does not affect the measurements,
+   but a shipping feature needs it.
 2. **Breaking-change surface not fully characterised.** With the flag on, `Foo()` followed by `{` on the next
    line — today a missing-semicolon error — now parses as a factory initializer, degrading that recovery path.
    The pattern parser runs before expression parsing, so `o is Shape { … }` and `o is Shape() { … }` are
@@ -317,7 +371,7 @@ with the neighbouring positive case compiling in the same file:
 
 ---
 
-## 9. Recommendations to the working group
+## 10. Recommendations to the working group
 
 1. **Do not ship factory initializers as a standalone narrow feature.** Measured on non-golden-path code it is
    a 17 % regression against the API this framework ships today. Bundle it with content elements or drop it.
@@ -327,7 +381,13 @@ with the neighbouring positive case compiling in the same file:
 4. **Stop attributing the allocation win to construction syntax.** It comes from property placement and Reactor
    can have it today.
 5. **Prototype target-typed content control flow next** (§6.4), then nested member paths (§6.5). These attack
-   the patterns that every current variant handles badly.
+   the patterns that every current variant handles badly. Note that #9003 (nested paths) currently says
+   "Specification: None yet" and is marked *Needs More Work*, so a prototype there is defining the design,
+   not implementing one.
+6. **Engage the in-flight mixed-initializer stack** (`dotnet/roslyn` #83750–#83761, §8). The disambiguation
+   rule is already settled and agrees with this prototype; the open questions that decide whether the feature
+   is usable for immutable UI trees — `Add` versus a content property, spread inside `{ }`, and trailing-only
+   ordering — are still live and are exactly where this experiment has data.
 
 ---
 
@@ -357,6 +417,10 @@ dotnet build src\Reactor\Reactor.csproj -c Debug -p:SkipSignaturesGen=true `
 
 Artifacts: `roslyn-factory-initializers.patch`, `Compare.cs`, `MeasureSource.cs`, `Stage1.cs`,
 `Stage1Negative.cs`, `Stage3.cs`, `Stage3Negative.cs`, `build.ps1`.
+
+> **Gotcha:** `ParseOptions.HasFeature` only checks that a value is present, so `/features:FactoryInitializers=false`
+> still *enables* the feature. Omit the flag entirely to disable it. The "flags off" verification in §3 was run
+> by omitting the flags, not by setting them to `false`.
 
 ## Appendix B — The shape, end to end
 
