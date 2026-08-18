@@ -608,37 +608,41 @@ namespace Microsoft.UI.Reactor
             {
                 ["FrameworkElement"] = (
                     typeof(Microsoft.UI.Xaml.FrameworkElement),
-                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.FrameworkElement), prop)),
+                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.FrameworkElement))),
                 ["UIElement"] = (
                     typeof(Microsoft.UI.Xaml.UIElement),
-                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.UIElement), prop)),
+                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.UIElement))),
                 ["Control"] = (
                     typeof(Microsoft.UI.Xaml.Controls.Control),
-                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.Control), prop)),
+                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.Control))),
                 ["Border"] = (
                     typeof(Microsoft.UI.Xaml.Controls.Border),
-                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.Border), prop)),
+                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.Border))),
                 ["Panel"] = (
                     typeof(Microsoft.UI.Xaml.Controls.Panel),
-                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.Panel), prop)),
+                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.Panel))),
                 ["StackPanel"] = (
                     typeof(Microsoft.UI.Xaml.Controls.StackPanel),
-                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.StackPanel), prop)),
+                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.StackPanel))),
                 ["Grid"] = (
                     typeof(Microsoft.UI.Xaml.Controls.Grid),
-                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.Grid), prop)),
+                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.Grid))),
                 ["TextBlock"] = (
                     typeof(Microsoft.UI.Xaml.Controls.TextBlock),
-                    prop => DeclaresAttachedSetter(typeof(Microsoft.UI.Xaml.Controls.TextBlock), prop)),
+                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.TextBlock))),
             };
 
     /// <summary>
-    /// Whether <paramref name="type"/> declares the <c>public static void SetPROP(target, value)</c>
-    /// that makes <c>PROP</c> an attached property at a call site — the shape
-    /// <c>PoolResetSetAnalyzer</c> matches, so this is the rule's own criterion rather than an
-    /// approximation of it.
+    /// A probe over <paramref name="type"/>'s <c>public static void SetPROP(target, value)</c>
+    /// declarations — the shape <c>PoolResetSetAnalyzer</c> matches, so this asks the rule's own
+    /// question about a property rather than an approximation of it.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The reflection pass runs once per owner, when this map initializes; the returned probe is
+    /// an ordinal set lookup, so classifying a <c>ClearValue</c> match costs no reflection and the
+    /// per-owner method list is never re-materialized.
+    /// </para>
     /// <para>
     /// <c>FlattenHierarchy</c> is deliberate: an attached setter inherited from a base is still an
     /// attached setter, and the direction it can err in (instance read as attached) is the loud
@@ -660,20 +664,21 @@ namespace Microsoft.UI.Reactor
     /// for callers that do not need it.
     /// </para>
     /// </remarks>
-    private static bool DeclaresAttachedSetter(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type type,
-        string propertyName)
+    private static Func<string, bool> AttachedSetterProbe(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type type)
     {
         const BindingFlags Flags =
             BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
 
-        var setterName = "Set" + propertyName;
+        var setterNames = type.GetMethods(Flags)
+            .Where(method =>
+                method.ReturnType == typeof(void)
+                && method.GetParameters() is { Length: 2 } parameters
+                && typeof(Microsoft.UI.Xaml.DependencyObject).IsAssignableFrom(parameters[0].ParameterType))
+            .Select(method => method.Name)
+            .ToHashSet(StringComparer.Ordinal);
 
-        return type.GetMethods(Flags).Any(method =>
-            string.Equals(method.Name, setterName, StringComparison.Ordinal)
-            && method.ReturnType == typeof(void)
-            && method.GetParameters() is { Length: 2 } parameters
-            && typeof(Microsoft.UI.Xaml.DependencyObject).IsAssignableFrom(parameters[0].ParameterType));
+        return propertyName => setterNames.Contains("Set" + propertyName);
     }
 
     /// <summary>
