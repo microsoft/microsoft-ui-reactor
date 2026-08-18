@@ -54,6 +54,13 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 ///     <description><see cref="A_junction_nested_in_bin_is_not_followed_out_of_the_tree"/>.
 ///     Added after that mutation came back green — the hardening had shipped
 ///     with nothing pinning it.</description></item>
+///   <item><term>Give the source scan its own first-wins max loop again</term>
+///     <description><see cref="Equally_stamped_sources_resolve_to_the_same_one_either_way"/>
+///     — but only with filenames whose enumeration and ordinal orders disagree;
+///     see that test's note.</description></item>
+///   <item><term>Drop the bin/obj filter from source enumeration</term>
+///     <description><see cref="Source_enumeration_omits_build_output"/> and
+///     <see cref="Build_output_under_src_Reactor_does_not_count_as_source"/>.</description></item>
 /// </list>
 /// <para>
 /// These all drive the helpers directly. What they cannot show is that Phase
@@ -423,6 +430,68 @@ public class ReactorXmlSelectionTests
         var xml = fx.Xml("x64/Release/net10.0-windows10.0.22621.0", Base);
 
         Assert.Null(CompileCommand.BuildStaleXmlFinding(fx.Root, xml));
+    }
+
+    /// <summary>
+    /// Ties among source files are the normal case, not the exotic one: a fresh
+    /// clone or <c>actions/checkout</c> stamps everything it writes at
+    /// essentially one instant. The file the warning names must therefore not
+    /// be whichever the directory walk happened to reach first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Driven through <see cref="CompileCommand.SelectNewest"/> in both input
+    /// orders for the same reason the candidate tie-break is
+    /// (<see cref="Equal_timestamps_break_on_the_ordinal_path"/>): a fixture
+    /// cannot choose enumeration order, so going through
+    /// <c>FindNewestReactorSource</c> alone could not tell a deterministic sort
+    /// from a lucky one.
+    /// </para>
+    /// <para>
+    /// The filenames are load-bearing and deliberately ugly. NTFS enumerates
+    /// case-insensitively while <see cref="StringComparer.Ordinal"/> puts
+    /// uppercase first, so <c>aardvark.cs</c> comes out of the directory walk
+    /// first while <c>B.cs</c> is the ordinal-least — the two orders disagree,
+    /// which is exactly what the last assertion needs. Measured: with the
+    /// obvious <c>Alpha.cs</c>/<c>Widget.cs</c> pair the orders coincide, and
+    /// restoring a first-wins max loop left this test green.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Equally_stamped_sources_resolve_to_the_same_one_either_way()
+    {
+        using var fx = new RepoFixture();
+        var lower = fx.Source("Core/aardvark.cs", Base.AddMinutes(5));
+        var upper = fx.Source("Core/B.cs", Base.AddMinutes(5));
+
+        Assert.Equal(File.GetLastWriteTimeUtc(lower), File.GetLastWriteTimeUtc(upper));
+        Assert.True(string.CompareOrdinal(upper, lower) < 0,
+            "fixture: the uppercase name must sort first ordinally, or this proves nothing");
+
+        var expected = upper;
+        Assert.Equal(expected, CompileCommand.SelectNewest(new[] { lower, upper }));
+        Assert.Equal(expected, CompileCommand.SelectNewest(new[] { upper, lower }));
+
+        // And the source scan really does route through that selector, rather
+        // than carrying a max loop of its own that ties would break. This is
+        // the assertion the filename choice above exists for.
+        Assert.Equal(expected, CompileCommand.FindNewestReactorSource(fx.Root)?.Path);
+    }
+
+    /// <summary>
+    /// The exclusion belongs to the enumeration, so assert it there too — the
+    /// staleness tests reach it only through a timestamp comparison, which
+    /// cannot distinguish "filtered out" from "older".
+    /// </summary>
+    [Fact]
+    public void Source_enumeration_omits_build_output()
+    {
+        using var fx = new RepoFixture();
+        var real = fx.Source("Core/Widget.cs", Base);
+        fx.Source("obj/x64/Release/Reactor.GlobalUsings.g.cs", Base);
+        fx.Source("bin/x64/Release/net10.0-windows10.0.22621.0/Embedded.cs", Base);
+
+        Assert.Equal(new[] { real }, CompileCommand.EnumerateReactorSources(fx.Root));
     }
 
     // ── Fixture ──────────────────────────────────────────────────────────────

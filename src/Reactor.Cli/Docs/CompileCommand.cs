@@ -1105,33 +1105,43 @@ internal static partial class CompileCommand
     /// Returns <c>null</c> when the directory is absent or holds no sources.
     /// </summary>
     /// <remarks>
+    /// Shares <see cref="SelectNewest"/> with candidate selection rather than
+    /// carrying its own max loop, so both get the same ordinal tie-break. That
+    /// matters more here than it looks: a fresh <c>git clone</c> or
+    /// <c>actions/checkout</c> stamps every file it writes at essentially the
+    /// same instant, so ties are the normal case rather than the exotic one,
+    /// and a plain "strictly newer wins" scan would let enumeration order pick
+    /// which file <c>REACTOR_DOC_REFGEN_W002</c> names.
+    /// </remarks>
+    internal static (string Path, DateTime WriteUtc)? FindNewestReactorSource(string repoRoot)
+    {
+        var chosen = SelectNewest(EnumerateReactorSources(repoRoot));
+        return chosen is null ? null : (chosen, File.GetLastWriteTimeUtc(chosen));
+    }
+
+    /// <summary>
+    /// Every <c>.cs</c> file under <c>src/Reactor</c> that is actually source.
+    /// </summary>
+    /// <remarks>
     /// <c>bin</c> and <c>obj</c> are excluded because they are *written by* the
     /// build whose age is being questioned: a generated <c>.g.cs</c> under
     /// <c>obj</c> is always newer than the XML emitted moments later in the
     /// same build, so including them would fire the warning after every
     /// successful build and train readers to ignore it.
     /// </remarks>
-    internal static (string Path, DateTime WriteUtc)? FindNewestReactorSource(string repoRoot)
+    internal static IEnumerable<string> EnumerateReactorSources(string repoRoot)
     {
         var srcDir = Path.Combine(repoRoot, "src", "Reactor");
-        if (!Directory.Exists(srcDir)) return null;
+        if (!Directory.Exists(srcDir)) return Array.Empty<string>();
 
-        (string Path, DateTime WriteUtc)? newest = null;
-        foreach (var file in Directory.EnumerateFiles(srcDir, "*.cs", new EnumerationOptions
+        return Directory.EnumerateFiles(srcDir, "*.cs", new EnumerationOptions
         {
             RecurseSubdirectories = true,
             IgnoreInaccessible = true,
             // Same reasoning as the candidate walk: don't follow nested
             // junctions/symlinks out of the tree, and don't risk a cycle.
             AttributesToSkip = DefaultSkip | FileAttributes.ReparsePoint,
-        }))
-        {
-            if (IsUnderBuildOutput(srcDir, file)) continue;
-            var writeUtc = File.GetLastWriteTimeUtc(file);
-            if (newest is null || writeUtc > newest.Value.WriteUtc)
-                newest = (file, writeUtc);
-        }
-        return newest;
+        }).Where(f => !IsUnderBuildOutput(srcDir, f));
     }
 
     /// <summary>
