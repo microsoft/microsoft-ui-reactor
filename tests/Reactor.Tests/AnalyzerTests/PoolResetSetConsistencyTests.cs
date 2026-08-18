@@ -606,31 +606,33 @@ namespace Microsoft.UI.Reactor
         InstancePropertyOwnerProbes =
             new Dictionary<string, (Type, Func<string, bool>)>(StringComparer.Ordinal)
             {
-                ["FrameworkElement"] = (
-                    typeof(Microsoft.UI.Xaml.FrameworkElement),
-                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.FrameworkElement))),
-                ["UIElement"] = (
-                    typeof(Microsoft.UI.Xaml.UIElement),
-                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.UIElement))),
-                ["Control"] = (
-                    typeof(Microsoft.UI.Xaml.Controls.Control),
-                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.Control))),
-                ["Border"] = (
-                    typeof(Microsoft.UI.Xaml.Controls.Border),
-                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.Border))),
-                ["Panel"] = (
-                    typeof(Microsoft.UI.Xaml.Controls.Panel),
-                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.Panel))),
-                ["StackPanel"] = (
-                    typeof(Microsoft.UI.Xaml.Controls.StackPanel),
-                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.StackPanel))),
-                ["Grid"] = (
-                    typeof(Microsoft.UI.Xaml.Controls.Grid),
-                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.Grid))),
-                ["TextBlock"] = (
-                    typeof(Microsoft.UI.Xaml.Controls.TextBlock),
-                    AttachedSetterProbe(typeof(Microsoft.UI.Xaml.Controls.TextBlock))),
+                ["FrameworkElement"] = ProbeFor(typeof(Microsoft.UI.Xaml.FrameworkElement)),
+                ["UIElement"] = ProbeFor(typeof(Microsoft.UI.Xaml.UIElement)),
+                ["Control"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Control)),
+                ["Border"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Border)),
+                ["Panel"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Panel)),
+                ["StackPanel"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.StackPanel)),
+                ["Grid"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Grid)),
+                ["TextBlock"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.TextBlock)),
             };
+
+    /// <summary>
+    /// One entry of <see cref="InstancePropertyOwnerProbes"/>, with the probe derived from the very
+    /// <see cref="Type"/> stored beside it.
+    /// </summary>
+    /// <remarks>
+    /// Naming the owner twice per entry — once for <c>OwnerType</c>, once inside the probe — would
+    /// let the two drift apart, and <c>Every_Instance_Owner_Key_Names_Its_Own_Type</c> would not
+    /// notice: it pins the key to <c>OwnerType</c> and never looks at what the probe reads. A pair
+    /// like <c>(typeof(Grid), AttachedSetterProbe(typeof(StackPanel)))</c> answers "instance" for
+    /// every attached <c>Grid</c> property, which is #1067 restored. For <c>Grid</c> and
+    /// <c>Control</c> the probe theory catches it, but the other six owners carry no
+    /// attached-expecting row, so there the whole class of mistake is silent. Taking the type once
+    /// and deriving both from it makes the mismatch inexpressible rather than merely tested for.
+    /// </remarks>
+    private static (Type OwnerType, Func<string, bool> DeclaresAttachedSetter) ProbeFor(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type type)
+        => (type, AttachedSetterProbe(type));
 
     /// <summary>
     /// A probe over <paramref name="type"/>'s <c>public static void SetPROP(target, value)</c>
