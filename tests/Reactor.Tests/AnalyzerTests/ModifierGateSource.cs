@@ -134,14 +134,16 @@ internal static class ModifierGateSource
     public static class Hazard
     {
         /// <summary>
-        /// The charitable naive matcher — slot-aware, but with no closing delimiter, so it accepts
-        /// every gate name that <em>starts with</em> the identifier.
+        /// The charitable naive matcher — slot-aware and whitespace-tolerant, but with no closing
+        /// delimiter, so it accepts every gate name that <em>starts with</em> the identifier. The
+        /// missing delimiter is the hazard; tolerating whitespace keeps it from also being brittle
+        /// to a benign reformat of the table.
         /// </summary>
         public static ISet<string> SlotPrefixed(string slot, string identifier)
         {
             Assert.Contains(slot, SlotNames);
-            var needle = slot + ": " + identifier;
-            return Select(text => text.Contains(needle, StringComparison.Ordinal));
+            var needle = slot + @":\s*" + Regex.Escape(identifier);
+            return Select(text => Regex.IsMatch(text, needle));
         }
 
         /// <summary>

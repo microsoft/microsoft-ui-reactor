@@ -301,8 +301,10 @@ public class ModifierGateIdentifierTests
         {
             foreach (var slot in ModifierGateSource.SlotNames)
             {
-                // The needle is `slot + ": " + id`, so it accepts any gate name in that slot that
-                // STARTS WITH the identifier — that is precisely the hazard, stated positively.
+                // The needle is the slot and identifier with no closing delimiter, so it accepts any
+                // gate name in that slot that STARTS WITH the identifier — the hazard, stated
+                // positively. Whitespace between the two is tolerated, so this prediction holds
+                // regardless of how the table is formatted.
                 var predicted = PropertiesWhere(argument =>
                     argument.Slot == slot
                     && argument.Identifier.StartsWith(identifier, StringComparison.Ordinal));
@@ -337,9 +339,9 @@ public class ModifierGateIdentifierTests
             "A hazard matcher no longer selects what ModifierTable's argument list predicts, so the " +
             "non-vacuity floors in " +
             nameof(Substring_Matching_Accepts_A_Wider_Gate_Where_Boundary_Matching_Does_Not) +
-            " are not measuring the hazard they claim to. Either a matcher is broken, or the table's " +
-            "formatting changed so the naive needle ('slot: Name', exactly one space) no longer " +
-            "reflects how the gates are written:\n  " + string.Join("\n  ", problems));
+            " are not measuring the hazard they claim to. Both matchers are whitespace-tolerant, so " +
+            "reformatting the table is not an explanation — a matcher is broken:\n  " +
+            string.Join("\n  ", problems));
 
         // Negative control: an identifier that appears nowhere must select nothing in all three
         // matchers. Without this, a matcher that returns everything could still agree above if the
