@@ -20,6 +20,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// Elements are cheap to create and diff — they never touch real controls directly.
 /// </summary>
 // <snippet:element-record>
+[global::System.Runtime.CompilerServices.FactoryInitializable]  // EXPERIMENTAL: LDM 2026-07-15 working group
 public abstract record Element
 {
     /// <summary>
@@ -4206,6 +4207,7 @@ Element[] Children
 }
 
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.StackPanel))]  // spec 058 §15 (P5.4)
+[global::System.Runtime.CompilerServices.ContentProperty(nameof(Children))]  // EXPERIMENTAL: LDM 2026-07-15
 public partial record StackElement(
     Orientation Orientation,
     Element[] Children
@@ -4250,6 +4252,7 @@ Element[] Children
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(Layout.FlexPanel))]
 [global::Microsoft.UI.Reactor.Wrappers.WrapPanelChildren(PerChild = "ApplyFlexChildAttached")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("FlexPadding")]
+[global::System.Runtime.CompilerServices.ContentProperty(nameof(Children))]  // EXPERIMENTAL: LDM 2026-07-15
 public partial record FlexElement(Element[] Children) : Element
 {
     public Layout.FlexDirection Direction { get; init; } = Layout.FlexDirection.Row;
@@ -4367,6 +4370,7 @@ public partial record ScrollViewElement(Element Child) : Element
 [global::Microsoft.UI.Reactor.Wrappers.WrapContent("Child")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapConvert("CornerRadius")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapConvert("BorderThickness")]
+[global::System.Runtime.CompilerServices.ContentProperty(nameof(Child))]  // EXPERIMENTAL: LDM 2026-07-15
 public partial record BorderElement(Element? Child) : Element
 {
     public double? CornerRadius { get; init; }
