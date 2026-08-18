@@ -36,6 +36,15 @@ directly).
   / `GetSymbolInfo` — never off raw syntax text.
 - `mur check` rules are **reflection-discovered** in `RuleRegistry.cs`: add or remove the
   rule *file*, do not hand-edit a registry list.
+- **Compare what a `ModifierTable` gate contains, not what it is called.** The gate group
+  names in `ModifierTable.cs` are their receiver lists concatenated, so a wider gate
+  *necessarily* has a name containing the narrower one (`ControlBorder` ⊏
+  `ControlBorderGridStack` ⊏ …). Read `ModifierInfo.ControlGate` / `PoolResetGate` and
+  compare type **sets**. Only if your artifact really is text (a prose-parity gate over a
+  doc or skill file) match with the boundary-anchored form `SLOT:\s*NAME\s*[,)]` —
+  `tests/Reactor.Tests/AnalyzerTests/ModifierGateSource.cs` already owns that matcher. A
+  bare `Contains(NAME)` passes on every wider gate, i.e. it silently green-lights exactly
+  the mis-widening you were checking for.
 
 ## Workflow
 

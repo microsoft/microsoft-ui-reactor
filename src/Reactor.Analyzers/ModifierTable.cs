@@ -269,7 +269,22 @@ internal sealed class AttachedModifierInfo
 /// </remarks>
 internal static class ModifierTable
 {
-    // Type groups, named once so the intent is legible at each use site.
+    // Type groups, named once so the intent is legible at each use site. Each name is its receiver
+    // list concatenated, which is deliberate — and it makes set inclusion equivalent to string
+    // inclusion. A gate that is a superset of another therefore *necessarily* has a name that
+    // contains the narrower one: ControlBorder is a prefix of ControlBorderGridStack, which is a
+    // prefix of ControlBorderGridStackRelative, which is a prefix of the ...Text form (8 such strict
+    // prefix pairs today), and PanelControlBorder contains ControlBorder without starting with it.
+    //
+    // So: compare what a gate CONTAINS, not what it is CALLED. Read ModifierInfo.ControlGate /
+    // ModifierInfo.PoolResetGate and compare the type sets — that is what every check in
+    // ModifierTableIntegrityTests does, and it is why none of them can be fooled here.
+    //
+    // Only when the artifact genuinely is text — a prose-parity gate over a doc or skill file, where
+    // no typed property is reachable — match with a boundary-anchored pattern, `SLOT:\s*NAME\s*[,)]`.
+    // A bare Contains(NAME) selects every wider gate as well, silently passing the very assertion
+    // meant to catch a mis-widened gate. tests/Reactor.Tests/AnalyzerTests/ModifierGateSource.cs owns
+    // the vetted matcher and ModifierGateIdentifierTests pins it to this table. Issue #1062.
     private static readonly string[] ControlBorderGridStackRelativeText = { "Control", "Border", "Grid", "StackPanel", "RelativePanel", "TextBlock" };
     private static readonly string[] ControlBorderGridStackRelative = { "Control", "Border", "Grid", "StackPanel", "RelativePanel" };
     private static readonly string[] ControlBorder = { "Control", "Border" };
