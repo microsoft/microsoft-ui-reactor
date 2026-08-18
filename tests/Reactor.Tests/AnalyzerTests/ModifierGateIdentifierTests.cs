@@ -104,10 +104,11 @@ public class ModifierGateIdentifierTests
         // The other direction: a gate the typed table carries but the reader did not see.
         foreach (var property in ModifierTable.Properties.Keys)
         {
-            foreach (var slotName in ModifierGateSource.SlotNames)
+            var typedSlots = ModifierGateSource.SlotNames
+                .Where(slotName => TypedGate(property, slotName) is not null);
+
+            foreach (var slotName in typedSlots)
             {
-                if (TypedGate(property, slotName) is null)
-                    continue;
                 if (slots.Any(slot => slot.Property == property && slot.Slot == slotName))
                     continue;
 

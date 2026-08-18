@@ -190,10 +190,12 @@ internal static class ModifierGateSource
                 continue;
             }
 
-            foreach (var variable in field.Declaration.Variables)
+            var initialized = field.Declaration.Variables
+                .Where(variable => variable.Initializer?.Value is InitializerExpressionSyntax);
+
+            foreach (var variable in initialized)
             {
-                if (variable.Initializer?.Value is not InitializerExpressionSyntax initializer)
-                    continue;
+                var initializer = (InitializerExpressionSyntax)variable.Initializer!.Value;
 
                 var types = initializer.Expressions
                     .OfType<LiteralExpressionSyntax>()
@@ -239,18 +241,19 @@ internal static class ModifierGateSource
 
             var referenced = new List<ModifierGateArgument>();
 
-            foreach (var argument in info.ArgumentList.Arguments)
-            {
-                // Only identifier-valued arguments matter: a group referenced by name is what a
-                // text matcher can see. Inline `new[] { "..." }` element lists have no identifier.
-                if (argument.Expression is not IdentifierNameSyntax identifier)
-                    continue;
+            // Only identifier-valued arguments matter: a group referenced by name is what a text
+            // matcher can see. Inline `new[] { "..." }` element lists have no identifier.
+            var namedGroups = info.ArgumentList.Arguments
+                .Where(argument => argument.Expression is IdentifierNameSyntax);
 
+            foreach (var argument in namedGroups)
+            {
+                var identifier = ((IdentifierNameSyntax)argument.Expression).Identifier.Text;
                 var slot = argument.NameColon?.Name.Identifier.Text;
-                referenced.Add(new ModifierGateArgument(slot, identifier.Identifier.Text));
+                referenced.Add(new ModifierGateArgument(slot, identifier));
 
                 if (slot is ControlGate or PoolResetGate)
-                    slots.Add(new ModifierGateSlot(property, slot, identifier.Identifier.Text));
+                    slots.Add(new ModifierGateSlot(property, slot, identifier));
             }
 
             arguments[property] = referenced;

@@ -51,7 +51,15 @@ public class ModifierGateProseParityTests
         var repoRoot = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(repoRoot);
 
-        var file = Path.Combine(repoRoot!, SkillPath.Replace('/', Path.DirectorySeparatorChar));
+        var relativeSkillPath = SkillPath.Replace('/', Path.DirectorySeparatorChar);
+
+        // Path.Combine silently discards repoRoot if the second argument is rooted, which would
+        // make this fact read some other machine's file — or nothing — instead of failing.
+        Assert.False(
+            Path.IsPathRooted(relativeSkillPath),
+            $"SkillPath must stay repo-relative; '{relativeSkillPath}' is rooted and would discard the repo root.");
+
+        var file = Path.Combine(repoRoot!, relativeSkillPath);
         Assert.True(File.Exists(file), $"{SkillPath} not found at {file}");
 
         var text = File.ReadAllText(file);
@@ -66,9 +74,12 @@ public class ModifierGateProseParityTests
 
         // "Background → Panel/Control/Border; Foreground and fonts → Control/TextBlock; …"
         var stated = new Dictionary<string, ISet<string>>(StringComparer.Ordinal);
-        foreach (var segment in clause.Groups["body"].Value.Split(';'))
+        var arrows = clause.Groups["body"].Value
+            .Split(';')
+            .Select(segment => segment.Split('→'));
+
+        foreach (var arrow in arrows)
         {
-            var arrow = segment.Split('→');
             if (arrow.Length != 2)
                 continue;
 
