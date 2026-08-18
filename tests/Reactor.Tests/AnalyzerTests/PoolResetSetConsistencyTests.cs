@@ -654,22 +654,13 @@ namespace Microsoft.UI.Reactor
         const BindingFlags Flags =
             BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
 
-        foreach (var method in type.GetMethods(Flags))
-        {
-            if (!string.Equals(method.Name, "Set" + propertyName, StringComparison.Ordinal))
-                continue;
-            if (method.ReturnType != typeof(void))
-                continue;
+        var setterName = "Set" + propertyName;
 
-            var parameters = method.GetParameters();
-            if (parameters.Length == 2
-                && typeof(Microsoft.UI.Xaml.DependencyObject).IsAssignableFrom(parameters[0].ParameterType))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return type.GetMethods(Flags).Any(method =>
+            string.Equals(method.Name, setterName, StringComparison.Ordinal)
+            && method.ReturnType == typeof(void)
+            && method.GetParameters() is { Length: 2 } parameters
+            && typeof(Microsoft.UI.Xaml.DependencyObject).IsAssignableFrom(parameters[0].ParameterType));
     }
 
     /// <summary>
