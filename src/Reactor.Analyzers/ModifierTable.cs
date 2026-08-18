@@ -705,7 +705,11 @@ internal static class ModifierTable
     /// <c>Grid.Padding</c> is instance while <c>Grid.Row</c> is attached, and neither needs an
     /// entry here. Suppressing that kind of entry would be actively harmful, because a genuinely
     /// attached <c>Grid.*</c> reset added later would land in the same bucket and read as
-    /// already-triaged.
+    /// already-triaged. That is now mechanically enforced rather than merely described:
+    /// <c>PoolResetSetConsistencyTests.Excluded_Attached_Rows_Never_Name_An_Instance_Owner</c>
+    /// rejects any key here whose owner the classification list already covers, so re-adding one of
+    /// those rows — by hand or by a merge that reconciles this list against an older revision's —
+    /// fails the build instead of silently reverting the fix (#1066).
     /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> DeliberatelyExcludedAttached =
         new Dictionary<string, string>(System.StringComparer.Ordinal)
