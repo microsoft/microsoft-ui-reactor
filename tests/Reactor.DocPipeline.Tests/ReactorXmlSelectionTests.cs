@@ -326,6 +326,26 @@ public class ReactorXmlSelectionTests
         Assert.Null(CompileCommand.SelectNewest(Array.Empty<string>()));
     }
 
+    /// <summary>
+    /// The fixture guard above throws rather than skipping, so its message is
+    /// the only thing whoever hits it in CI has to go on. A bare exit code
+    /// would not be enough.
+    /// </summary>
+    [Fact]
+    public void A_failed_junction_reports_why_rather_than_just_a_code()
+    {
+        using var fx = new RepoFixture();
+        var target = Path.GetDirectoryName(fx.OutsideXml("elsewhere", Base))!;
+        fx.JunctionInsideBin("taken", target);
+
+        // The same link path twice: the second attempt must fail.
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => fx.JunctionInsideBin("taken", target));
+
+        Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no output on either stream", ex.Message, StringComparison.Ordinal);
+    }
+
     // ── Staleness (REACTOR_DOC_REFGEN_W002) ──────────────────────────────────
 
     /// <summary>
@@ -602,12 +622,29 @@ public class ReactorXmlSelectionTests
                     UseShellExecute = false,
                     CreateNoWindow = true,
                 })!;
+
+            // Start both reads before waiting. With both streams redirected, a
+            // child that fills a pipe buffer blocks on the write while the
+            // parent blocks in WaitForExit — mklink's output is far too small
+            // to hit that, but the ordering is the bug either way, and reading
+            // one stream to end before the other has the same shape.
+            var stdoutTask = p.StandardOutput.ReadToEndAsync();
+            var stderrTask = p.StandardError.ReadToEndAsync();
             p.WaitForExit();
+
             if (p.ExitCode != 0 || !Directory.Exists(link))
             {
+                // Both streams, because the message is the only thing whoever
+                // hits this in CI will see. Measured on this platform: an
+                // invalid switch, an existing link path and a non-local volume
+                // all report on stderr — but the cost of also carrying stdout
+                // is nothing next to a bare "exit 1".
+                var detail = string.Join(" ", new[] { stderrTask.Result, stdoutTask.Result }
+                    .Select(s => s.Trim())
+                    .Where(s => s.Length > 0));
                 throw new InvalidOperationException(
-                    $"could not create junction {link} -> {target}: " +
-                    $"exit {p.ExitCode}, {p.StandardError.ReadToEnd().Trim()}");
+                    $"could not create junction {link} -> {target}: exit {p.ExitCode}" +
+                    (detail.Length > 0 ? $", {detail}" : " (no output on either stream)"));
             }
             _junctions.Add(link);
         }
