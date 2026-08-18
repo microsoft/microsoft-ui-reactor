@@ -362,23 +362,94 @@ internal sealed class Harness
 
     // -- Interaction helpers ----------------------------------------------
 
+    /// <summary>
+    /// Invokes the <see cref="Button"/> whose Content equals <paramref name="label"/>.
+    ///
+    /// <para>Throws when the button is missing OR disabled. A fixture is a stimulus followed
+    /// by an assertion, so a stimulus that silently does not land leaves the assertion
+    /// measuring the UNSTIMULATED state — and every assertion of the form "X was left
+    /// alone" / "X was restored" / "X is still within tolerance" passes on that state. The
+    /// fixture then goes green having exercised nothing, and "clicked it" is byte-identical
+    /// to "silently did nothing" at the call site (issue #1063).</para>
+    ///
+    /// <para>To assert that a disabled button ignores clicks, use
+    /// <see cref="ClickButtonIfEnabled"/> — it still throws when the label is wrong, so the
+    /// assertion cannot pass for the wrong reason.</para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No such button, or the button is disabled.</exception>
     public void ClickButton(string label)
     {
-        var btn = FindButton(label);
-        if (btn is not null && btn.IsEnabled)
-        {
-            var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
-            var invokeProvider = (Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
-                peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke);
-            invokeProvider.Invoke();
-        }
+        var btn = RequireButton(nameof(ClickButton), label);
+        if (!btn.IsEnabled)
+            throw new InvalidOperationException(
+                $"{nameof(ClickButton)}(\"{label}\"): the Button is disabled, so the click was NOT " +
+                $"delivered. If the fixture means to prove that a disabled button ignores clicks, " +
+                $"call {nameof(ClickButtonIfEnabled)} and assert it returns false.");
+
+        InvokeButton(btn);
     }
 
+    /// <summary>
+    /// Invokes the button only if it is enabled, and reports which happened: true when the
+    /// click was delivered, false when the button was found but disabled.
+    ///
+    /// <para>Still throws when no button carries <paramref name="label"/> — that is always a
+    /// broken fixture, and it keeps a <c>false</c> result meaning "the button is disabled"
+    /// rather than the ambiguous "disabled, or I typo'd the label".</para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No button carries <paramref name="label"/>.</exception>
+    public bool ClickButtonIfEnabled(string label)
+    {
+        var btn = RequireButton(nameof(ClickButtonIfEnabled), label);
+        if (!btn.IsEnabled) return false;
+        InvokeButton(btn);
+        return true;
+    }
+
+    /// <summary>
+    /// Flips the <see cref="CheckBox"/> whose Content equals <paramref name="label"/>.
+    /// Throws when there is no such CheckBox, for the reasons in <see cref="ClickButton"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No CheckBox carries <paramref name="label"/>.</exception>
     public void ToggleCheckBox(string label)
     {
-        var cb = FindControl<CheckBox>(c => c.Content is string s && s == label);
-        if (cb is not null)
-            cb.IsChecked = cb.IsChecked != true;
+        var cb = FindControl<CheckBox>(c => c.Content is string s && s == label)
+            ?? throw new InvalidOperationException(
+                $"{nameof(ToggleCheckBox)}(\"{label}\"): no CheckBox with that Content is in the " +
+                $"visual tree. {DescribeContent<CheckBox>("CheckBox")}");
+
+        cb.IsChecked = cb.IsChecked != true;
+    }
+
+    private Button RequireButton(string caller, string label)
+        => FindButton(label)
+           ?? throw new InvalidOperationException(
+               $"{caller}(\"{label}\"): no Button with that Content is in the visual tree. " +
+               DescribeContent<Button>("Button"));
+
+    private static void InvokeButton(Button btn)
+    {
+        var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
+        var invokeProvider = (Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+            peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke);
+        invokeProvider.Invoke();
+    }
+
+    /// <summary>
+    /// "3 Button(s) present: "Save", "Cancel", "Reset"." — turns a crash line into a fix
+    /// without a debugger attach, the way <c>UiElementResolver.FindByName</c> does for E2E.
+    /// </summary>
+    private string DescribeContent<T>(string kind) where T : ContentControl
+    {
+        var all = FindAllControls<T>(_ => true);
+        if (all.Count == 0) return $"No {kind} is mounted at all.";
+
+        var labels = all
+            .Select(c => c.Content is string s ? $"\"{s}\"" : $"<{c.Content?.GetType().Name ?? "null"}>")
+            .Take(20)
+            .ToList();
+        var more = all.Count > labels.Count ? $", … (+{all.Count - labels.Count} more)" : "";
+        return $"{all.Count} {kind}(s) present: {string.Join(", ", labels)}{more}.";
     }
 
     // -- Tree walking ----------------------------------------------------

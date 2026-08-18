@@ -1700,10 +1700,14 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_UnmountDetachesFlyout",
         "CmdBarFlyout_KeyedReorderKeepsSiblingFlyouts",
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks",
+
+        // The harness's own click stimulus must fail loudly (HarnessGuardFixtures, #1063).
+        "HarnessGuard_ClickButtonFailsLoudly",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
+        "HarnessGuard_ClickButtonFailsLoudly" => new HarnessGuardFixtures.ClickButtonFailsLoudly(harness),
         "ErrorBoundary_CatchesRenderError" => new ErrorBoundaryFixtures.CatchesRenderError(harness),
         "ErrorBoundary_Recovery" => new ErrorBoundaryFixtures.Recovery(harness),
         "Reconciler_MountText" => new ReconcilerFixtures.MountText(harness),

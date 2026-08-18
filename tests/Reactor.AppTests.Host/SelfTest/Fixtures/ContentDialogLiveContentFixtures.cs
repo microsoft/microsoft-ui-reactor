@@ -204,7 +204,8 @@ public static class ContentDialogLiveContentFixtures
                     ContentDialogProbe.FindText(dialog, "dialog-count:0") is null);
 
                 // A second update proves the path stays live, not just first-flush.
-                await ContentDialogProbe.WaitAndClick(dialog, "Bump");
+                var clickedAgain = await ContentDialogProbe.WaitAndClick(dialog, "Bump");
+                H.Check("ContentDialogLive_Rerender_SecondClickLanded", clickedAgain);
                 await Harness.WaitFor(() => ContentDialogProbe.FindText(dialog, "dialog-count:2") is not null);
                 H.Check("ContentDialogLive_Rerender_SecondUpdate_#1069",
                     ContentDialogProbe.FindText(dialog, "dialog-count:2") is not null);
