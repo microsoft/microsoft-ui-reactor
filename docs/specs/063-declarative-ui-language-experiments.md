@@ -355,6 +355,46 @@ experiment produces, and the next thing worth prototyping alongside §6.4.
 
 ## 6. Design decisions worth taking to the LDM
 
+### 6.0 Applying `[Factory]` to the whole framework — measured, not estimated
+
+The prototype now models csharplang#10292 only: `[Factory]` per member, plus its **return-expression
+restriction** (`ERR_FactoryReturnNotConstructionLike`, CS9705) — the return must be an object-creation
+expression, a `with` expression, a call to another `[Factory]` member, a value of a value type, `null`, or
+`default`. Type-level opt-in was removed. A 14-case unit matrix pins the accept/reject boundary.
+
+`[Factory]` was then applied mechanically (Roslyn rewriter) to the real framework and the result compiled
+with the prototype compiler. Iterating to a fixpoint:
+
+| Round | Annotations | CS9705 violations |
+|---|---:|---:|
+| 1 — 198 `Factories` methods | 198 | **15** |
+| 2 — plus 673 public `ElementExtensions` methods | 871 | **145** ⬆ |
+| 3 — plus 5 **private** `Modify*` helpers | 876 | **10** |
+
+Three findings, none of which were visible from the earlier syntax-only audit (which predicted 6):
+
+**1. The cost is ~876, not 203 — a 4.3× underestimate.** Every fluent modifier is
+`=> ModifyLayout(el, …)`, so the moment a factory ends in `.ApplyStyle(…)` or `.Background(…)`, the callee
+needs `[Factory]` too, and so does *its* callee.
+
+**2. The attribute reaches private implementation details.** Round 2 made things *worse* — 15 → 145 —
+because annotating the public extensions exposed that they all delegate to `private static T ModifyLayout<T>`
+and friends. `[Factory]` is a public capability marker; the restriction forces it onto private plumbing that
+is not part of any contract.
+
+**3. Combinator factories can never satisfy the restriction, at any annotation count.** `When`, `If` and
+`Expr` take a `Func<Element>` and return `then()`. A **delegate invocation cannot be annotated** — there is
+no member to put `[Factory]` on. These are not fixable by more annotation, or by rewriting the singleton out;
+they are structurally excluded. Higher-order factories are a routine pattern in declarative UI, so this is
+worth raising on #10292 directly.
+
+After 876 annotations, 10 violations remain: **6 are genuine hazards the restriction correctly catches**
+(`Empty`, `When`, `If`, `Expr`, `DevtoolsMenu`, `AcrylicBrush` — all returning `EmptyElement.Instance` or a
+local), and 4 are further contagion (`Provide`, `SetAttached`). The safety mechanism works. Its blast radius
+is the finding.
+
+The experiment was reverted; the framework is unchanged.
+
 ### 6.1 Content elements must be trailing
 
 `{ Spacing = 0, childA, childB }` is legal; `{ childA, Spacing = 0 }` is an error
