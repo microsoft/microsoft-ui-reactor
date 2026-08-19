@@ -145,6 +145,56 @@ mur docs render-diagrams --topic architecture-overview
 mur docs new-diagram architecture-overview overview
 ```
 
+### Which `Reactor.xml` the reference phase reads
+
+Phase 5.7 generates `docs/guide/reference/**` from the XML doc comments the C#
+compiler emits, so it needs a *built* `src/Reactor`. It reads the **most recently
+written** `Reactor.xml` anywhere under `src/Reactor/bin` — configuration plays no
+part in the choice, and neither does the directory layout, so flat
+`bin/<config>/<tfm>/`, platform-stamped `bin/<arch>/<config>/<tfm>/` and
+RID-nested publish outputs are all candidates. The one thing it won't descend
+into is a junction or symlink *nested* inside `bin`: what's behind one isn't this
+build's output, and a link pointing back at an ancestor would loop. Redirecting
+`bin` itself is fine — the exclusion applies to what the walk finds, not to where
+it starts.
+
+It prints what it picked:
+
+```
+═══ Phase 5.7: Reference ═══
+  XML: src/Reactor/bin/x64/Release/net10.0-windows10.0.22621.0/Reactor.xml (2026-08-01T19:45:14Z, newest of 3 candidate(s))
+```
+
+Read that line if a regenerated reference page disagrees with the source you just
+edited. Until [issue #1068][i1068] this phase took the first hit of a fixed
+`Debug`-then-`Release` sweep, so a months-old Debug build quietly beat a
+just-built Release one and the generator rewrote pages from it — reintroducing a
+sentence the commit had deleted — while exiting 0.
+
+Selecting the newest build does not make the newest build *fresh*. If you edit a
+`<summary>` and don't rebuild, every candidate predates your source and the
+regenerated page is wrong in exactly the same way. That case is caught
+separately: the phase compares the chosen XML against the newest `.cs` under
+`src/Reactor` (ignoring `bin`/`obj`, which the build writes itself) and warns
+with [`REACTOR_DOC_REFGEN_W002`](#6-snippet--image--diagram-error-codes) when the
+source is newer. Run `dotnet build src/Reactor` and compile again.
+
+If no `Reactor.xml` exists at all the phase skips reference generation rather
+than failing, printing:
+
+```
+  (Reactor.xml not found — run `dotnet build src/Reactor` first)
+```
+
+CI does build it. The `docs-build` job runs `docs compile --no-screenshots --ci`
+*without* `--no-build`, so Phase 2 builds every doc app, each of which
+`ProjectReference`s `src/Reactor/Reactor.csproj` — reference generation therefore
+runs for real on every PR. `REACTOR_DOC_REFGEN_W002` still stays quiet there, for
+an ordering reason rather than a missing-build one: `actions/checkout` writes the
+sources before that build runs, so the emitted XML always postdates every `.cs`.
+
+[i1068]: https://github.com/microsoft/microsoft-ui-reactor/issues/1068
+
 ### Screenshots and committed images
 
 Phase 3 (capture) is the **only** phase that writes a screenshot — the only
@@ -385,6 +435,7 @@ reference-generation codes.
 | `REACTOR_DOC_SHOT_002`     | Manifest screenshot id ends in the reserved `-thumb` suffix without `kind: catalog-thumb`. Matched against the whole id, so a dotted id (`widget.v2-thumb`) is caught too |
 | `REACTOR_DOC_REGISTRY_W001`| Registry rule maps to a category with no `guide-pages`     |
 | `REACTOR_DOC_REGISTRY_W002`| Registry-declared guide page has no inbound `<!-- ref:Member -->` marker (doc-coverage gate, spec [041 §5.3](../specs/041-docs-comprehensive-uplift.md)) |
+| `REACTOR_DOC_REFGEN_W002`  | *(warning — does **not** fail `--ci`)* The `Reactor.xml` the reference phase selected is older than the newest `.cs` under `src/Reactor`, so `docs/guide/reference/**` is being generated from a build that predates the source it documents — an edited `<summary>` will not appear and a deleted one comes back. Run `dotnet build src/Reactor` and compile again. Warning, not error, because it reports that the *input* may be stale rather than a defect in the tree. It does not fire in CI: the docs job builds `src/Reactor` (via Phase 2's doc-app builds) *after* checkout has written the sources, so the XML always postdates them. See [§4](#which-reactorxml-the-reference-phase-reads) |
 
 ## 7. Quarterly tier audit (spec 041 §5.4)
 

@@ -414,24 +414,112 @@ internal sealed class Harness
 
     // -- Interaction helpers ----------------------------------------------
 
+    /// <summary>
+    /// Invokes the <see cref="Button"/> whose Content equals <paramref name="label"/>.
+    ///
+    /// <para>Throws when the button is missing OR disabled. A fixture is a stimulus followed
+    /// by an assertion, so a stimulus that silently does not land leaves the assertion
+    /// measuring the UNSTIMULATED state — and every assertion of the form "X was left
+    /// alone" / "X was restored" / "X is still within tolerance" passes on that state. The
+    /// fixture then goes green having exercised nothing, and "clicked it" is byte-identical
+    /// to "silently did nothing" at the call site (issue #1063).</para>
+    ///
+    /// <para>To assert that a disabled button ignores clicks, use
+    /// <see cref="RequireButtonDisabled"/> — it too throws when the label is wrong, so the
+    /// assertion cannot pass for the wrong reason.</para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No such button, or the button is disabled.</exception>
     public void ClickButton(string label)
     {
-        var btn = FindButton(label);
-        if (btn is not null && btn.IsEnabled)
-        {
-            var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
-            var invokeProvider = (Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
-                peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke);
-            invokeProvider.Invoke();
-        }
+        var btn = RequireButton(nameof(ClickButton), label);
+        if (!btn.IsEnabled)
+            throw new InvalidOperationException(
+                $"{nameof(ClickButton)}(\"{OneLine(label)}\"): the Button is disabled, so the click was NOT " +
+                $"delivered. If the fixture means to prove that a disabled button ignores clicks, " +
+                $"call {nameof(RequireButtonDisabled)} instead.");
+
+        InvokeButton(btn);
     }
 
+    /// <summary>
+    /// Asserts that the button carrying <paramref name="label"/> is present but disabled —
+    /// and therefore that no click can land on it. Deliberately does NOT click.
+    ///
+    /// <para>This is the sanctioned way to prove "a disabled button ignores clicks". It
+    /// throws in BOTH failure directions: a wrong label and an unexpectedly ENABLED button
+    /// are each a broken fixture. That is why it returns <c>void</c> rather than a
+    /// <c>bool</c> — a returned flag can be dropped at the call site, and a silently
+    /// ignorable signal is precisely the defect this guard exists to prevent (issue #1063).
+    /// Reintroducing one here would rebuild the bug inside its own fix.</para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No such button, or the button is enabled.</exception>
+    public void RequireButtonDisabled(string label)
+    {
+        var btn = RequireButton(nameof(RequireButtonDisabled), label);
+        if (btn.IsEnabled)
+            throw new InvalidOperationException(
+                $"{nameof(RequireButtonDisabled)}(\"{OneLine(label)}\"): the Button is ENABLED, but the " +
+                $"fixture expected it to be disabled. A real click would land here, so whatever the " +
+                $"fixture asserts next about nothing having happened would be measuring the wrong thing.");
+    }
+
+    /// <summary>
+    /// Flips the <see cref="CheckBox"/> whose Content equals <paramref name="label"/>.
+    /// Throws when there is no such CheckBox, for the reasons in <see cref="ClickButton"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No CheckBox carries <paramref name="label"/>.</exception>
     public void ToggleCheckBox(string label)
     {
-        var cb = FindControl<CheckBox>(c => c.Content is string s && s == label);
-        if (cb is not null)
-            cb.IsChecked = cb.IsChecked != true;
+        var cb = FindControl<CheckBox>(c => c.Content is string s && s == label)
+            ?? throw new InvalidOperationException(
+                $"{nameof(ToggleCheckBox)}(\"{OneLine(label)}\"): no CheckBox with that Content is in the " +
+                $"visual tree. {DescribeContent<CheckBox>("CheckBox")}");
+
+        cb.IsChecked = cb.IsChecked is not true;
     }
+
+    private Button RequireButton(string caller, string label)
+        => FindButton(label)
+           ?? throw new InvalidOperationException(
+               $"{caller}(\"{OneLine(label)}\"): no Button with that Content is in the visual tree. " +
+               DescribeContent<Button>("Button"));
+
+    private static void InvokeButton(Button btn)
+    {
+        var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
+        var invokeProvider = (Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+            peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke);
+        invokeProvider.Invoke();
+    }
+
+    /// <summary>
+    /// "3 Button(s) present: "Save", "Cancel", "Reset"." — turns a crash line into a fix
+    /// without a debugger attach, the way <c>UiElementResolver.FindByName</c> does for E2E.
+    /// </summary>
+    private string DescribeContent<T>(string kind) where T : ContentControl
+    {
+        var all = FindAllControls<T>(_ => true);
+        if (all.Count == 0) return $"No {kind} is mounted at all.";
+
+        var labels = all
+            .Select(c => c.Content is string s ? $"\"{OneLine(s)}\"" : $"<{c.Content?.GetType().Name ?? "null"}>")
+            .Take(20)
+            .ToList();
+        var more = all.Count > labels.Count ? $", \u2026 (+{all.Count - labels.Count} more)" : "";
+        return $"{all.Count} {kind}(s) present: {string.Join(", ", labels)}{more}.";
+    }
+
+    /// <summary>
+    /// Escapes the characters that would break the single-line TAP record this text ends up
+    /// in. A throw from here surfaces as <c>not ok &lt;n&gt; &lt;fixture&gt;_CRASH - &lt;msg&gt;</c>
+    /// (SelfTestRunner.cs), and SelfTestBatch.ParseTap reads that stream line by line — so a
+    /// raw newline inside a control label would split one failure into two records and the
+    /// tail could be re-read as a forged <c>ok</c> / <c># Total failures:</c> line.
+    /// </summary>
+    private static string OneLine(string s)
+        => s.Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("\t", "\\t", StringComparison.Ordinal);
 
     // -- Tree walking ----------------------------------------------------
 

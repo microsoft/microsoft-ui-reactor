@@ -826,10 +826,10 @@ internal static partial class CompileCommand
     }
 
     /// <summary>
-    /// Locate the freshly-built <c>Reactor.xml</c> (preferring Debug, then
-    /// Release) and run the reference generator restricted to the Hooks
-    /// category. Returns <c>null</c> when the XML doc file isn't on disk
-    /// yet — typical on first compile before <c>dotnet build src/Reactor</c>
+    /// Locate the most recently built <c>Reactor.xml</c> (see
+    /// <see cref="FindReactorXml"/>) and run the reference generator restricted
+    /// to the Hooks category. Returns <c>null</c> when the XML doc file isn't on
+    /// disk yet — typical on first compile before <c>dotnet build src/Reactor</c>
     /// has run. The caller can decide whether to surface that as a warning;
     /// for Phase 1B it's silent because the unit tests are the canonical
     /// surface.
@@ -857,12 +857,24 @@ internal static partial class CompileCommand
                     TierLintSeverity.Error) });
         }
 
-        var xmlPath = FindReactorXml(repoRoot);
-        if (xmlPath is null)
+        var choice = FindReactorXml(repoRoot);
+        if (choice is null)
         {
             Console.WriteLine("  (Reactor.xml not found — run `dotnet build src/Reactor` first)");
             return null;
         }
+
+        // Issue #1068: name the input. Selection used to be by configuration
+        // order, so a stale Debug build silently won over a fresh Release one
+        // and the regenerated pages looked like a legitimate diff. Newest-wins
+        // fixes the choice; printing it is what makes a future recurrence
+        // diagnosable instead of invisible.
+        var xmlPath = choice.Value.Path;
+        Console.WriteLine(
+            $"  XML: {Rel(repoRoot, xmlPath)} " +
+            $"({Stamp(choice.Value.WriteUtc)}, newest of {choice.Value.CandidateCount} candidate(s))");
+
+        var staleFinding = BuildStaleXmlFinding(repoRoot, xmlPath);
 
         var generator = new ReferenceGen.ReferenceGenerator();
         var result = generator.Generate(
@@ -906,51 +918,262 @@ internal static partial class CompileCommand
         injectionFindings.AddRange(ReferenceLinkInjector.LintOrphanedGuidePages(
             declaredGuidePages, templateIds, reverseIndex));
 
-        // Merge findings; the injector findings join the generator's.
+        // Merge findings; the injector findings join the generator's, and the
+        // stale-input warning (issue #1068) joins both. It is a warning, so the
+        // caller prints it and `--ci` does not fail on it: it reports that the
+        // input *may* predate source, which is a local-loop hazard rather than
+        // a defect in the emitted pages.
         var combined = new ReferenceGen.ReferenceGenResult(
             injectedPages,
-            result.Findings.Concat(injectionFindings).ToList());
+            result.Findings
+                .Concat(injectionFindings)
+                .Concat(staleFinding is null
+                    ? Array.Empty<ReferenceGen.RefGenFinding>()
+                    : new[] { staleFinding })
+                .ToList());
 
         // Write pages to disk so authors and lints can see the output.
         generator.WriteToDisk(combined, outputDir);
         return combined;
     }
 
-    private static string? FindReactorXml(string repoRoot)
+    /// <summary>
+    /// The <c>Reactor.xml</c> the reference generator reads, together with the
+    /// facts the operator needs to judge it: when it was written, and how many
+    /// candidates it beat. <c>null</c> when <c>bin</c> is absent or holds no
+    /// such file.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Issue #1068. This used to sweep <c>Debug</c> then <c>Release</c> and
+    /// return the first hit. A leftover Debug build therefore shadowed a
+    /// freshly-built Release one, and the generator rewrote
+    /// <c>docs/guide/reference/**</c> from stale input while exiting 0 — the
+    /// observed symptom being a generated page reintroducing a sentence the
+    /// commit had just deleted from source. Configuration order carries no
+    /// information about freshness, so it is not used at all now.
+    /// </para>
+    /// <para>
+    /// Returning the timestamp and count rather than just the path is what lets
+    /// the caller print the choice without walking <c>bin</c> a second time.
+    /// </para>
+    /// </remarks>
+    internal static (string Path, DateTime WriteUtc, int CandidateCount)? FindReactorXml(string repoRoot)
+    {
+        var candidates = EnumerateReactorXmlCandidates(repoRoot).ToList();
+        var chosen = SelectNewest(candidates);
+        return chosen is null
+            ? null
+            : (chosen, File.GetLastWriteTimeUtc(chosen), candidates.Count);
+    }
+
+    /// <summary>
+    /// The freshness rule itself, split from discovery so it can be measured:
+    /// the newest candidate by last-write time, ties broken on the ordinal
+    /// path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ties break on the path so two candidates stamped the same instant still
+    /// resolve to the same file on every run. Last-write ordering alone would
+    /// leave that choice to enumeration order, which the filesystem does not
+    /// promise to keep stable.
+    /// </para>
+    /// <para>
+    /// Taking the sequence as a parameter is what makes that tie-break testable
+    /// at all. Fused with the directory walk it is not: a caller cannot choose
+    /// the enumeration order, so a fixture cannot tell "sorted deterministically"
+    /// apart from "arrived in that order" — a test written that way stayed green
+    /// with the <c>ThenBy</c> deleted. Here both orderings are the caller's to
+    /// pick.
+    /// </para>
+    /// </remarks>
+    internal static string? SelectNewest(IEnumerable<string> candidates) =>
+        candidates
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .ThenBy(p => p, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+    /// <summary>
+    /// What <see cref="EnumerationOptions"/> skips by default. Named so the two
+    /// recursive walks below can add <see cref="FileAttributes.ReparsePoint"/>
+    /// to it without silently dropping the default.
+    /// </summary>
+    private const FileAttributes DefaultSkip = FileAttributes.Hidden | FileAttributes.System;
+
+    /// <summary>
+    /// Every <c>Reactor.xml</c> under <c>src/Reactor/bin</c>, at any depth.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Recursive by design. The previous enumeration hard-coded two shapes
+    /// (<c>bin/&lt;config&gt;/&lt;tfm&gt;/</c> and
+    /// <c>bin/&lt;arch&gt;/&lt;config&gt;/&lt;tfm&gt;/</c>) and an arch
+    /// allow-list of <c>x64</c>/<c>ARM64</c>, so any layout outside that set —
+    /// a RID-nested publish output, a future architecture — was invisible.
+    /// That is the same failure mode as the bug this fixes: an incomplete
+    /// enumeration producing a confident answer.
+    /// </para>
+    /// <para>
+    /// Widening to every depth means a copy inside a publish or packaging
+    /// output is now a candidate. That is safe rather than merely tolerable:
+    /// both MSBuild's <c>Copy</c> task and <see cref="File.Copy(string,string)"/>
+    /// preserve the source's last-write time, so a copy carries its origin
+    /// build's timestamp and can only win when that build would have won.
+    /// </para>
+    /// </remarks>
+    internal static IEnumerable<string> EnumerateReactorXmlCandidates(string repoRoot)
     {
         var binDir = Path.Combine(repoRoot, "src", "Reactor", "bin");
-        if (!Directory.Exists(binDir)) return null;
+        if (!Directory.Exists(binDir)) return Array.Empty<string>();
 
-        foreach (var config in new[] { "Debug", "Release" })
+        return Directory.EnumerateFiles(binDir, "Reactor.xml", new EnumerationOptions
         {
-            // Walk the standard bin layout: bin/<config>/<tfm>/Reactor.xml
-            // and the platform-stamped variants bin/<arch>/<config>/<tfm>/Reactor.xml.
-            foreach (var candidate in EnumerateCandidates(binDir, config))
+            RecurseSubdirectories = true,
+            // A locked or permission-denied subtree is not this command's
+            // business; skipping it beats aborting reference generation.
+            IgnoreInaccessible = true,
+            // Don't descend through junctions/symlinks. Two reasons: a nested
+            // reparse point can point anywhere, so a candidate found through
+            // one isn't this build's output at all; and a loop (bin/x -> bin)
+            // has no cycle detection in the runtime's walker, so it recurses
+            // until the path length gives out. Skipping applies to entries the
+            // walk discovers, not to the root — a `bin` that is itself a
+            // junction still enumerates normally.
+            AttributesToSkip = DefaultSkip | FileAttributes.ReparsePoint,
+        });
+    }
+
+    /// <summary>
+    /// Warn when the selected <c>Reactor.xml</c> predates the newest C# source
+    /// under <c>src/Reactor</c>. Returns <c>null</c> when the XML is at least
+    /// as new as every source file.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Newest-wins fixes the *choice* between builds but not the case where
+    /// every build is stale — source edited, nothing rebuilt — which produces
+    /// exactly the same wrong output: pages regenerated from an XML that no
+    /// longer reflects the summaries in source. Comparing against source is
+    /// what closes that residue; comparing candidates against each other
+    /// cannot, because the winner is the newest candidate by construction.
+    /// </para>
+    /// <para>
+    /// Warning severity, deliberately. The pages this produces are internally
+    /// consistent with the build they came from — the claim is "your input may
+    /// predate your source", which an author can act on and CI cannot.
+    /// </para>
+    /// <para>
+    /// It stays quiet in CI, but not for the reason it might appear: the docs
+    /// job does build <c>src/Reactor</c>. It runs
+    /// <c>docs compile --no-screenshots --ci</c> without <c>--no-build</c>
+    /// (<c>.github/workflows/ci.yml</c>, <c>docs-build</c>), so Phase 2 builds
+    /// every doc app, and each one <c>ProjectReference</c>s
+    /// <c>src/Reactor/Reactor.csproj</c> — which sets
+    /// <c>GenerateDocumentationFile</c>. Phase 5.7 therefore finds a real
+    /// <c>Reactor.xml</c> and generates pages. What makes the warning quiet is
+    /// the ordering: <c>actions/checkout</c> writes the sources before that
+    /// build runs, so the emitted XML always postdates every <c>.cs</c>.
+    /// </para>
+    /// <para>
+    /// Strict comparison, no grace window: a build writes its XML after
+    /// compiling its inputs, so a source file stamped after the XML genuinely
+    /// postdates the build.
+    /// </para>
+    /// </remarks>
+    internal static ReferenceGen.RefGenFinding? BuildStaleXmlFinding(string repoRoot, string xmlPath)
+    {
+        var newest = FindNewestReactorSource(repoRoot);
+        if (newest is null) return null;
+
+        var xmlUtc = File.GetLastWriteTimeUtc(xmlPath);
+        var (sourcePath, sourceUtc) = newest.Value;
+        if (sourceUtc <= xmlUtc) return null;
+
+        return new ReferenceGen.RefGenFinding(
+            "REACTOR_DOC_REFGEN_W002",
+            $"Reactor.xml ({Stamp(xmlUtc)}) predates {Rel(repoRoot, sourcePath)} ({Stamp(sourceUtc)}) — " +
+            "the reference pages under docs/guide/reference/ are being generated from a build that " +
+            "is older than the source it documents, so an edited <summary> will not appear (and a " +
+            "deleted one will come back). Run `dotnet build src/Reactor` and re-run this command.",
+            Rel(repoRoot, xmlPath),
+            TierLintSeverity.Warning);
+    }
+
+    /// <summary>
+    /// The newest C# file under <c>src/Reactor</c>, ignoring build output.
+    /// Returns <c>null</c> when the directory is absent or holds no sources.
+    /// </summary>
+    /// <remarks>
+    /// Shares <see cref="SelectNewest"/> with candidate selection rather than
+    /// carrying its own max loop, so both get the same ordinal tie-break. That
+    /// matters more here than it looks: a fresh <c>git clone</c> or
+    /// <c>actions/checkout</c> stamps every file it writes at essentially the
+    /// same instant, so ties are the normal case rather than the exotic one,
+    /// and a plain "strictly newer wins" scan would let enumeration order pick
+    /// which file <c>REACTOR_DOC_REFGEN_W002</c> names.
+    /// </remarks>
+    internal static (string Path, DateTime WriteUtc)? FindNewestReactorSource(string repoRoot)
+    {
+        var chosen = SelectNewest(EnumerateReactorSources(repoRoot));
+        return chosen is null ? null : (chosen, File.GetLastWriteTimeUtc(chosen));
+    }
+
+    /// <summary>
+    /// Every <c>.cs</c> file under <c>src/Reactor</c> that is actually source.
+    /// </summary>
+    /// <remarks>
+    /// <c>bin</c> and <c>obj</c> are excluded because they are *written by* the
+    /// build whose age is being questioned: a generated <c>.g.cs</c> under
+    /// <c>obj</c> is always newer than the XML emitted moments later in the
+    /// same build, so including them would fire the warning after every
+    /// successful build and train readers to ignore it.
+    /// </remarks>
+    internal static IEnumerable<string> EnumerateReactorSources(string repoRoot)
+    {
+        var srcDir = Path.Combine(repoRoot, "src", "Reactor");
+        if (!Directory.Exists(srcDir)) return Array.Empty<string>();
+
+        return Directory.EnumerateFiles(srcDir, "*.cs", new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            // Same reasoning as the candidate walk: don't follow nested
+            // junctions/symlinks out of the tree, and don't risk a cycle.
+            AttributesToSkip = DefaultSkip | FileAttributes.ReparsePoint,
+        }).Where(f => !IsUnderBuildOutput(srcDir, f));
+    }
+
+    /// <summary>
+    /// True when <paramref name="file"/> sits under a <c>bin</c> or <c>obj</c>
+    /// directory somewhere below <paramref name="root"/>.
+    /// </summary>
+    /// <remarks>
+    /// Matched on path *segments* below the root rather than with a substring
+    /// test, so a source directory whose name merely contains "bin" (or a repo
+    /// checked out under one) is not swept up with the build output.
+    /// </remarks>
+    private static bool IsUnderBuildOutput(string root, string file)
+    {
+        var rel = Path.GetRelativePath(root, file);
+        foreach (var segment in rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+        {
+            if (segment.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("obj", StringComparison.OrdinalIgnoreCase))
             {
-                if (File.Exists(candidate)) return candidate;
+                return true;
             }
         }
-        return null;
+        return false;
     }
 
-    private static IEnumerable<string> EnumerateCandidates(string binDir, string config)
-    {
-        // Flat layout: bin/<config>/<tfm>/Reactor.xml
-        var configRoot = Path.Combine(binDir, config);
-        if (Directory.Exists(configRoot))
-        {
-            foreach (var tfm in Directory.GetDirectories(configRoot))
-                yield return Path.Combine(tfm, "Reactor.xml");
-        }
-        // Platform-stamped: bin/<arch>/<config>/<tfm>/Reactor.xml
-        foreach (var arch in new[] { "x64", "ARM64" })
-        {
-            var archConfigRoot = Path.Combine(binDir, arch, config);
-            if (!Directory.Exists(archConfigRoot)) continue;
-            foreach (var tfm in Directory.GetDirectories(archConfigRoot))
-                yield return Path.Combine(tfm, "Reactor.xml");
-        }
-    }
+    /// <summary>Repo-relative, forward-slashed path for operator-facing output.</summary>
+    private static string Rel(string repoRoot, string path) =>
+        Path.GetRelativePath(repoRoot, path).Replace('\\', '/');
+
+    /// <summary>Fixed-width UTC stamp so two of these can be compared by eye.</summary>
+    private static string Stamp(DateTime utc) =>
+        utc.ToString("yyyy-MM-ddTHH:mm:ssZ", global::System.Globalization.CultureInfo.InvariantCulture);
 
     // Normalize emitted Markdown to the host's native line endings. The
     // assembler concatenates template + snippet text with `\n` regardless of

@@ -300,6 +300,144 @@ class C
             "when it interrogates the type that owns the property being classified.");
     }
 
+    /// <summary>
+    /// No <c>DeliberatelyExcludedAttached</c> row may name an owner that
+    /// <see cref="InstancePropertyOwnerProbes"/> classifies per property — and every key must stay
+    /// in the <c>Owner.Property</c> form both that check and the owner split in
+    /// <see cref="Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names"/> read it as.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The two tables answer different questions and a key in both is wrong in <em>either</em>
+    /// direction, which is why owner membership — not <see cref="IsAttachedReset"/> — is the
+    /// predicate. If the property has a static <c>Owner.SetPROP</c>, the probe calls it attached,
+    /// <c>REACTOR_POOL_001</c> can match a <c>.Set(...)</c> write to it, and it belongs in
+    /// <c>AttachedProperties</c> where the analyzer will use it. If it has none, the probe calls it
+    /// an instance DP, it never reaches the attached scan at all, and the row suppresses nothing.
+    /// </para>
+    /// <para>
+    /// The inert case is the dangerous one, because inert is not harmless: the row is a standing
+    /// allow-list entry for that owner, so a genuinely attached <c>Grid.*</c> reset added later
+    /// lands beside it and reads as already-triaged. <c>Grid.Padding</c>, <c>Grid.CornerRadius</c>
+    /// and <c>StackPanel.CornerRadius</c> sat in that list on <c>main</c> until #1015 removed them
+    /// in favour of classifying the owners (#1048), so this branch's list is a strict
+    /// <em>subset</em> of the older one — and a merge that reconciles the two by taking the other
+    /// side's rows restores all three. Git merges the file cleanly and nothing objects, which is
+    /// #1066.
+    /// </para>
+    /// <para>
+    /// MEASURED at <c>2b4385f7</c>, before this test existed: restoring <c>["Grid.Padding"]</c>
+    /// reddened exactly one test, <c>Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names</c>
+    /// (this class plus <c>ModifierTableIntegrityTests</c> went 87/0 -> 86/1), and its message
+    /// reads "found no ClearValue at all for these owners: [Grid] … or
+    /// <c>ReadResetAttachedProperties</c>' regex no longer matches" — a true statement pointing at
+    /// the wrong repair. That neighbour also only fires while the probed owners happen to be
+    /// disjoint from the owners with attached clears; give <c>Grid</c> one attached clear in the
+    /// scanned block (the #1067 shape) and it goes quiet while the bogus row survives. This test
+    /// depends on neither coincidence, and was measured failing under <c>--filter</c> on its own
+    /// name so its verdict is not borrowed from that neighbour.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Excluded_Attached_Rows_Never_Name_An_Instance_Owner()
+    {
+        // Guard the join key before trusting a zero below. Both this check and the owner split in
+        // Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names recover the owner as the text before
+        // the first '.', so a table re-keyed with qualified owners resolves every row to
+        // "Microsoft" and the membership assertion below reports zero offenders for all of them at
+        // once — including any a merge restored.
+        //
+        // MEASURED, re-keying one row to
+        // "Microsoft.UI.Xaml.Automation.AutomationProperties.DescribedBy": that is not silent
+        // overall — Every_Reset_Attached_Property_Is_Classified reports DescribedBy as being in
+        // neither table, and the scan test reports a missing owner "Microsoft" — but neither names
+        // the key shape, and the one check that would have caught a restored Grid.* row is exactly
+        // the one that goes quiet. So pin the spelling rather than let a green offender count stand
+        // in for a check that is no longer running.
+        var misshapen = ModifierTable.DeliberatelyExcludedAttached.Keys
+            .Where(key => key.Split('.').Length != 2
+                || key.StartsWith(".", StringComparison.Ordinal)
+                || key.EndsWith(".", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(
+            misshapen.Count == 0,
+            "These ModifierTable.DeliberatelyExcludedAttached keys are not in 'Owner.Property' " +
+            $"form: [{string.Join(", ", misshapen)}]. The owner is recovered as the text before " +
+            "the first '.', so 'Microsoft.UI.Xaml.Automation.AutomationProperties.DescribedBy' " +
+            "resolves to owner 'Microsoft', matches no probe, and empties the offender list below " +
+            "for every row at once — including any a merge restored. Re-key the table in short " +
+            "form, or update this test and Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names' " +
+            "owner splits together.");
+
+        var offenders = ExclusionRowsOnInstanceOwners(ModifierTable.DeliberatelyExcludedAttached.Keys);
+
+        Assert.True(
+            offenders.Count == 0,
+            "These ModifierTable.DeliberatelyExcludedAttached rows name an owner that " +
+            $"InstancePropertyOwnerProbes already classifies per property: [{string.Join(", ", offenders)}]. " +
+            "Delete them. That list suppresses genuinely attached properties the " +
+            "'Owner.SetPROP(x, v)' rule cannot match, and neither thing a probed owner's property " +
+            "can be needs suppressing: if it declares the static setter it is matchable, so map it " +
+            "in ModifierTable.AttachedProperties instead; if it does not, it is an ordinary " +
+            "instance dependency property that never reaches the attached scan, so the row " +
+            "suppresses nothing and merely pre-approves the next genuinely attached reset added " +
+            "under the same owner.");
+    }
+
+    [Theory]
+    // The three rows #1015 deleted from main — the exact mutation #1066 reproduces.
+    [InlineData("Grid.Padding", true)]
+    [InlineData("Grid.CornerRadius", true)]
+    [InlineData("StackPanel.CornerRadius", true)]
+    // Attached, on a mixed owner, and still offenders: Grid.SetRow and
+    // Control.SetIsTemplateFocusTarget both exist, so the rule can match them and they belong in
+    // AttachedProperties. Pins that the predicate is owner membership rather than IsAttachedReset,
+    // which would wave both rows through.
+    [InlineData("Grid.Row", true)]
+    [InlineData("Control.IsTemplateFocusTarget", true)]
+    // Non-offenders, because none of these owners is classified per property at all.
+    // AutomationProperties.DescribedBy is a live DeliberatelyExcludedAttached row;
+    // ToolTipService.ToolTip and FlexPanel.Grow are mapped in AttachedProperties instead. Both
+    // sides of the attached split have to answer "false", since the predicate is owner membership
+    // and being attached is not what makes a row an offender.
+    [InlineData("AutomationProperties.DescribedBy", false)]
+    [InlineData("ToolTipService.ToolTip", false)]
+    [InlineData("FlexPanel.Grow", false)]
+    // The spelling the key-shape assertion in the [Fact] above exists to reject, pinned here as a
+    // measurement rather than left as a claim in a comment: a qualified owner resolves to
+    // "Microsoft", matches no probe, and so the detector answers "not an offender" for a row that
+    // plainly is one. This row and that assertion are one guard in two halves — teaching the
+    // detector to split qualified names correctly should fail here, and should retire both.
+    [InlineData("Microsoft.UI.Xaml.Controls.Grid.Row", false)]
+    public void Instance_Owner_Exclusion_Detector_Distinguishes_Offenders_From_Legitimate_Rows(
+        string key, bool expectedOffender)
+    {
+        // The instrument check for the [Fact] above, which is absence-shaped over a three-row table
+        // whose owners are currently disjoint from the probed ones — so it reports zero today and
+        // would report zero just as calmly if the detector stopped discriminating. Driving that same
+        // detector with keys that must and must not match proves it can still answer both ways.
+        //
+        // This does NOT by itself make the [Fact] non-vacuous, and the division of labour matters:
+        // these keys are literals, so a re-keyed real table leaves every row here green. Detecting
+        // that is the [Fact]'s own 'Owner.Property' key-shape assertion; the qualified InlineData
+        // row above is what establishes that the spelling it rejects really does mis-answer.
+        Assert.Equal(
+            expectedOffender,
+            ExclusionRowsOnInstanceOwners(new[] { key }).Count == 1);
+    }
+
+    /// <summary>
+    /// The <paramref name="keys"/> whose owner segment names an entry of
+    /// <see cref="InstancePropertyOwnerProbes"/>, in ordinal order.
+    /// </summary>
+    private static List<string> ExclusionRowsOnInstanceOwners(IEnumerable<string> keys) =>
+        keys.Where(key =>
+                key.IndexOf('.') > 0
+                && InstancePropertyOwnerProbes.ContainsKey(key.Substring(0, key.IndexOf('.'))))
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
     [Fact]
     public void Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names()
     {
@@ -311,8 +449,11 @@ class C
             .Select(key => key.Substring(0, key.IndexOf('.')))
             .ToHashSet(StringComparer.Ordinal);
 
-        var expected = ModifierTable.AttachedProperties.Values
+        var mapped = ModifierTable.AttachedProperties.Values
             .Select(info => info.Owner)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var expected = mapped
             .Concat(ModifierTable.DeliberatelyExcludedAttached.Keys
                 .Select(key => key.Substring(0, key.IndexOf('.'))))
             .Distinct(StringComparer.Ordinal)
@@ -321,12 +462,26 @@ class C
 
         var unseen = expected.Where(owner => !scanned.Contains(owner)).ToList();
 
+        // An owner reaching this list *only* through an exclusion row is a different failure with a
+        // different repair, and the sentence below would send its reader at the regex. That is the
+        // one shape this test is measured to catch before Excluded_Attached_Rows_Never_Name_An_
+        // Instance_Owner existed (see its remarks), so name the alternative rather than let the
+        // scan-drift wording stand as the only reading.
+        var exclusionOnly = unseen.Where(owner => !mapped.Contains(owner)).ToList();
+
         Assert.True(
             unseen.Count == 0,
             "The CleanElement attached-reset scan found no ClearValue at all for these owners: " +
             $"[{string.Join(", ", unseen)}]. Either the resets were removed (drop the table " +
             "entries) or ReadResetAttachedProperties' regex no longer matches how they are " +
-            "written in ElementPool.cs.");
+            "written in ElementPool.cs." +
+            (exclusionOnly.Count == 0
+                ? string.Empty
+                : $" Note: [{string.Join(", ", exclusionOnly)}] are named only by " +
+                  "ModifierTable.DeliberatelyExcludedAttached, never by AttachedProperties. If the " +
+                  "row was added to silence a classification failure rather than to suppress a " +
+                  "genuinely unmatchable attached property, the repair is to delete the row, not " +
+                  "to touch the scan — see Excluded_Attached_Rows_Never_Name_An_Instance_Owner."));
     }
 
     [Fact]

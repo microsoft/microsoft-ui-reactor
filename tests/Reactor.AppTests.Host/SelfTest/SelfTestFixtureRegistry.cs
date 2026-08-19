@@ -1701,6 +1701,9 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_KeyedReorderKeepsSiblingFlyouts",
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks",
 
+        // The harness's own click stimulus must fail loudly (HarnessGuardFixtures, #1063).
+        "HarnessGuard_ClickButtonFailsLoudly",
+
         // Positive control for the three-state verdict (issue #1061). Asserts nothing on purpose;
         // its SKIPPED result is what SelfTestBatch.SkippedFixtures_AreReported checks for.
         SkipVerdictPositiveControl.FixtureName,
@@ -1708,6 +1711,7 @@ internal static class SelfTestFixtureRegistry
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
+        "HarnessGuard_ClickButtonFailsLoudly" => new HarnessGuardFixtures.ClickButtonFailsLoudly(harness),
         "ErrorBoundary_CatchesRenderError" => new ErrorBoundaryFixtures.CatchesRenderError(harness),
         "ErrorBoundary_Recovery" => new ErrorBoundaryFixtures.Recovery(harness),
         "Reconciler_MountText" => new ReconcilerFixtures.MountText(harness),

@@ -645,7 +645,10 @@ internal static class CommandingCoverageFixtures
             var btn = H.FindControl<Button>(b => b.Name == "bareDisBtn");
             H.Check("BareInitDis_Mounted", btn is not null);
             H.Check("BareInitDis_Disabled", btn is not null && !btn.IsEnabled);
-            H.ClickButton("Save"); // ClickButton is gated on IsEnabled — disabled button won't invoke
+            // Throws if "Save" is absent OR unexpectedly enabled, so simply reaching the
+            // Check below already establishes the button is there and refusing clicks —
+            // leaving the Check to prove the one thing left: the handler never ran.
+            H.RequireButtonDisabled("Save");
             H.Check("BareInitDis_NotInvokedWhileDisabled", count == 0);
         }
     }
