@@ -676,7 +676,7 @@ public class SelfTestBatch
         foreach (var raw in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var line = raw.Trim();
-            if (line.StartsWith("# Running: "))
+            if (line.StartsWith("# Running: ", StringComparison.Ordinal))
             {
                 Flush();
                 current = line["# Running: ".Length..].Trim();
@@ -689,7 +689,7 @@ public class SelfTestBatch
             {
                 sawTotalFailures = true;
             }
-            else if (line.StartsWith("ok "))
+            else if (line.StartsWith("ok ", StringComparison.Ordinal))
             {
                 var rest = line[3..].Trim();
                 if (TryParseSkipDirective(rest, out var skipName, out var skipReason))
@@ -724,7 +724,7 @@ public class SelfTestBatch
                     sawChecksForCurrent = true;
                 }
             }
-            else if (line.StartsWith("not ok "))
+            else if (line.StartsWith("not ok ", StringComparison.Ordinal))
             {
                 var rest = line[7..].Trim();
                 if (TryParseRunnerLevelFailure(rest, out var fixtureName, out var detail))
