@@ -349,6 +349,42 @@ public class SkipReportingTests
     }
 
     /// <summary>
+    /// A runner-level skip has no check name to record: the fixture never ran, so no
+    /// <c>H.Skip</c> was reached and the name on the TAP line is the FIXTURE's. Recording it as
+    /// the check name renders as <c>`AotHostile` — AotHostile — reason</c> in the job summary,
+    /// which repeats the fixture and asserts a check by that name was skipped. There is no such
+    /// check, and the inventory is the only place a reader learns what a run did not establish.
+    /// </summary>
+    [TestMethod]
+    public void RunnerLevelSkip_IsLabelled_NotNamedAfterItsFixture()
+    {
+        var map = Parse("ok 42 AotHostile # SKIP crashes/hangs under NativeAOT\n");
+        var entry = Assert.ContainsSingle(map["AotHostile"].SkippedChecks);
+
+        Assert.IsFalse(entry.Contains("AotHostile", StringComparison.Ordinal),
+            $"The fixture name must not be repeated as the check name. Got: {entry}");
+        Assert.IsTrue(entry.StartsWith(SelfTestBatch.RunnerLevelSkipLabel, StringComparison.Ordinal),
+            $"Expected the '{SelfTestBatch.RunnerLevelSkipLabel}' label. Got: {entry}");
+        Assert.IsTrue(entry.Contains("NativeAOT", StringComparison.Ordinal),
+            $"The reason must survive. Got: {entry}");
+
+        // The rendered inventory line is what a reader actually sees, so assert on that too —
+        // the label above is only correct if it composes into a truthful entry.
+        var rendered = SelfTestBatch.BuildSkipInventory(map).FullySkippedFixtures.Single();
+        Assert.AreEqual(1, CountOccurrences(rendered, "AotHostile"),
+            $"The fixture name should appear exactly once in the rendered entry. Got: {rendered}");
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var count = 0;
+        for (var i = haystack.IndexOf(needle, StringComparison.Ordinal); i >= 0;
+             i = haystack.IndexOf(needle, i + needle.Length, StringComparison.Ordinal))
+            count++;
+        return count;
+    }
+
+    /// <summary>
     /// The discriminator is the leading all-digits index, matching
     /// <c>TryParseRunnerLevelFailure</c>. Harness check names are C# identifiers, so this cannot
     /// collide with one — but a check-level skip must still land on the running fixture.

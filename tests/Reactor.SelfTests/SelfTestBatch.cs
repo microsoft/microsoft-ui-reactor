@@ -702,10 +702,16 @@ public class SelfTestBatch
                         // Fixture-level skip (the AOT pattern list). It arrives with no
                         // `# Running:` marker, so attributing it to `current` would credit an
                         // unrelated, already-finished fixture with a skip it never emitted.
+                        //
+                        // The entry is labelled rather than named, because there is no check name
+                        // to give: the fixture never ran, so no `H.Skip` was reached and the TAP
+                        // name here is the FIXTURE's. Reusing it would render as
+                        // "`X` — X — <reason>" in the inventory, which both repeats the fixture
+                        // and asserts a check called X was skipped. No such check exists.
                         byFixture[skippedFixture] = new FixtureOutcome(
                             FixtureStatus.Skipped,
                             $"Fixture '{skippedFixture}' was skipped by the runner before it ran: {skipReason}",
-                            [$"{skippedFixture} — {skipReason}"]);
+                            [$"{RunnerLevelSkipLabel} — {skipReason}"]);
                     }
                     else
                     {
@@ -769,6 +775,13 @@ public class SelfTestBatch
         $"issue number, where the product really is broken. If you need coverage here, give the " +
         $"fixture an observable precondition to assert before it skips (see " +
         $"NativeDockingA11yFixture), rather than turning the skip into a red.";
+
+    /// <summary>
+    /// Stands in for the check name on a runner-level skip, where the fixture never ran and so
+    /// reached no <c>H.Skip</c> call. Reusing the fixture name there would render as
+    /// <c>`X` — X — reason</c> and claim a check named <c>X</c> was skipped.
+    /// </summary>
+    internal const string RunnerLevelSkipLabel = "(whole fixture)";
 
     /// <summary>
     /// Splits a TAP <c>SKIP</c> directive off the payload of an <c>ok </c> line, returning the
