@@ -242,6 +242,16 @@ public class SkipReportingTests
             "A crashed fixture's skip still counts toward the run's skip total.");
         Assert.AreEqual(0, inventory.FullySkippedFixtures.Count,
             "It is Failed, not Skipped, so it must not appear as a fully-skipped fixture.");
+
+        // It therefore lands in the OTHER bucket, which is why that bucket's job-summary heading
+        // must not claim its members passed — this fixture did not.
+        Assert.AreEqual(1, inventory.PartiallySkippedFixtures.Count,
+            "A failed fixture that skipped something still belongs in the partial bucket.");
+
+        var report = SelfTestBatch.PublishSkipReport(map, summaryPath: null);
+        Assert.IsFalse(report.Markdown.Contains("passed on their remaining checks", StringComparison.Ordinal),
+            "The partial-skip heading must not assert that its members passed: a fixture that " +
+            "skipped and then crashed is listed there and did not pass.\n" + report.Markdown);
     }
 
     /// <summary>

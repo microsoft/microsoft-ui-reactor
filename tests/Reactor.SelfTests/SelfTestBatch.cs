@@ -1066,10 +1066,12 @@ public class SelfTestBatch
     ///
     /// <para>Both halves are reported, and they mean different things. A <b>fully</b> skipped
     /// fixture ran no assertions at all, so the run establishes nothing about it — that is issue
-    /// #1061's subject and it changes the fixture's verdict. A <b>partially</b> skipped fixture is
-    /// legitimately green; listing it changes no verdict, but the skipped leg is a real gap the
-    /// TAP stream carried and the consumer used to throw away, and a gap nobody can see is a gap
-    /// nobody closes.</para>
+    /// #1061's subject and it changes the fixture's verdict. The other bucket is everything else
+    /// that skipped at least one check: usually a passing fixture, but a <b>failed</b> one can
+    /// land here too, because a fixture that skips and then crashes keeps its skip. So this half
+    /// deliberately makes no claim about the verdict — listing it changes no verdict either way,
+    /// but the skipped leg is a real gap the TAP stream carried and the consumer used to throw
+    /// away, and a gap nobody can see is a gap nobody closes.</para>
     /// </summary>
     internal static SkipInventory BuildSkipInventory(IReadOnlyDictionary<string, FixtureOutcome> byFixture)
     {
@@ -1123,7 +1125,7 @@ public class SelfTestBatch
 
         AppendList(body, "Fully skipped — these establish nothing either way",
             inventory.FullySkippedFixtures);
-        AppendList(body, "Partially skipped — passed on their remaining checks",
+        AppendList(body, "Partially skipped — these also ran real checks; see each fixture's own verdict",
             inventory.PartiallySkippedFixtures);
 
         body.Append("<sub>A `# SKIP` directive is a fixture reporting that it could not observe " +
