@@ -199,11 +199,10 @@ public class SkipReportingTests
 
         var map = Parse($"# Running: F\nnot ok 7 F - {Detail}\n");
 
-        Assert.IsTrue(map.ContainsKey("F"),
+        Assert.IsTrue(map.TryGetValue("F", out var outcome),
             "The failure must land on 'F', not on a phantom name parsed out of the line.");
 
-        var outcome = map["F"];
-        Assert.AreEqual(SelfTestBatch.FixtureStatus.Failed, outcome.Status);
+        Assert.AreEqual(SelfTestBatch.FixtureStatus.Failed, outcome!.Status);
         Assert.IsTrue(outcome.Detail.Contains(Detail, StringComparison.Ordinal),
             $"The reported detail must say why. Got: {outcome.Detail}");
         Assert.AreEqual(1, map.Count,
