@@ -54,25 +54,31 @@ public partial record GridElement
             },
             comparer: GridDefinitionReferenceComparer.Instance);
 
-    private static WinUI.ColumnDefinition ParseColumnDef(string def) => def switch
+    private static WinUI.ColumnDefinition ParseColumnDef(string def)
     {
-        "*" => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new WinUI.ColumnDefinition { Width = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new WinUI.ColumnDefinition { Width = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new WinUI.ColumnDefinition { Width = new GridLength(stars, GridUnitType.Star) },
-        _ => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-    };
+        var parsed = GridTrackDefinition.TryParse(def, out var track)
+            ? track
+            : new GridTrackDefinition(GridSize.Star(), null, null);
+        return new WinUI.ColumnDefinition
+        {
+            Width = (GridLength)parsed.Size,
+            MinWidth = parsed.Min ?? 0,
+            MaxWidth = parsed.Max ?? double.PositiveInfinity,
+        };
+    }
 
-    private static WinUI.RowDefinition ParseRowDef(string def) => def switch
+    private static WinUI.RowDefinition ParseRowDef(string def)
     {
-        "*" => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new WinUI.RowDefinition { Height = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new WinUI.RowDefinition { Height = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new WinUI.RowDefinition { Height = new GridLength(stars, GridUnitType.Star) },
-        _ => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-    };
+        var parsed = GridTrackDefinition.TryParse(def, out var track)
+            ? track
+            : new GridTrackDefinition(GridSize.Star(), null, null);
+        return new WinUI.RowDefinition
+        {
+            Height = (GridLength)parsed.Size,
+            MinHeight = parsed.Min ?? 0,
+            MaxHeight = parsed.Max ?? double.PositiveInfinity,
+        };
+    }
 
     private sealed class GridDefinitionReferenceComparer : IEqualityComparer<GridDefinition>
     {

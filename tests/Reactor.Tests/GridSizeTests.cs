@@ -175,6 +175,66 @@ public class GridSizeTests
             Assert.Equal(input, GridSize.Parse(input.ToString()));
     }
 
+    [Fact]
+    public void GridTrackDefinition_Preserves_Unconstrained_Track_Strings()
+    {
+        Assert.True(GridTrackDefinition.TryParse("1.5*", out var definition));
+        Assert.Equal(GridSize.Star(1.5), definition.Size);
+        Assert.Null(definition.Min);
+        Assert.Null(definition.Max);
+    }
+
+    [Fact]
+    public void GridTrackDefinition_Parses_Min_And_Max_Constraints()
+    {
+        Assert.True(GridTrackDefinition.TryParse("1*;min=240;max=800", out var definition));
+
+        Assert.Equal(GridSize.Star(), definition.Size);
+        Assert.Equal(240, definition.Min);
+        Assert.Equal(800, definition.Max);
+    }
+
+    [Fact]
+    public void GridTrackDefinition_Parses_Constraints_CaseInsensitively_With_Whitespace()
+    {
+        Assert.True(GridTrackDefinition.TryParse(" Auto ; MIN = 48 ; Max = 120 ", out var definition));
+
+        Assert.Equal(GridSize.Auto, definition.Size);
+        Assert.Equal(48, definition.Min);
+        Assert.Equal(120, definition.Max);
+    }
+
+    [Theory]
+    [InlineData("1*;min=800;max=240")]
+    [InlineData("1*;min=-1")]
+    [InlineData("1*;max=NaN")]
+    [InlineData("1*;minimum=240")]
+    [InlineData("1*;min=240;min=300")]
+    public void GridTrackDefinition_Rejects_Invalid_Constraints(string input)
+    {
+        Assert.False(GridTrackDefinition.TryParse(input, out _));
+    }
+
+    [Fact]
+    public void GridSize_Fluent_Constraints_Serialize_To_Track_String()
+    {
+        var size = GridSize.Star().MinSize(100).MaxSize(400);
+
+        Assert.Equal("*;min=100;max=400", size.ToString());
+        Assert.True(GridTrackDefinition.TryParse(size.ToString(), out var definition));
+        Assert.Equal(GridSize.Star(), definition.Size);
+        Assert.Equal(100, definition.Min);
+        Assert.Equal(400, definition.Max);
+    }
+
+    [Fact]
+    public void GridSize_Fluent_Constraints_Work_For_Auto_And_Pixel_Tracks()
+    {
+        Assert.Equal("Auto;min=48", GridSize.Auto.MinSize(48).ToString());
+        Assert.Equal("200;max=600", GridSize.Px(200).MaxSize(600).ToString());
+    }
+
+
     /// <summary>
     /// Spec 033 §5.9: the typed Grid factory validates its inputs at the
     /// boundary. Null arrays must throw <see cref="ArgumentNullException"/>

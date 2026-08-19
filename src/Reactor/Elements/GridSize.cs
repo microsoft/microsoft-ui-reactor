@@ -27,6 +27,12 @@ namespace Microsoft.UI.Reactor;
 [DebuggerDisplay("{ToString(),nq}")]
 public readonly record struct GridSize(double Value, GridUnitType Type)
 {
+    /// <summary>The minimum size for the track.</summary>
+    public double? Min { get; init; }
+
+    /// <summary>Optional maximum size for the track.</summary>
+    public double? Max { get; init; }
+
     /// <summary>The auto-sized track. Equivalent to the WinUI <c>Auto</c> length.</summary>
     public static GridSize Auto { get; } = new(1, GridUnitType.Auto);
 
@@ -62,14 +68,23 @@ public readonly record struct GridSize(double Value, GridUnitType Type)
     /// <c>"&lt;n&gt;"</c>. Note that <c>Star(1)</c> round-trips to <c>"*"</c> (the implicit
     /// star-weight); explicit weights like 1.5 round-trip to <c>"1.5*"</c>.
     /// </summary>
-    public override string ToString() => Type switch
+    public override string ToString()
     {
-        GridUnitType.Auto => "Auto",
-        GridUnitType.Star when Value == 1 => "*",
-        GridUnitType.Star => Value.ToString("R", CultureInfo.InvariantCulture) + "*",
-        GridUnitType.Pixel => Value.ToString("R", CultureInfo.InvariantCulture),
-        _ => $"GridSize({Value}, {Type})",
-    };
+        var size = Type switch
+        {
+            GridUnitType.Auto => "Auto",
+            GridUnitType.Star when Value == 1 => "*",
+            GridUnitType.Star => Value.ToString("R", CultureInfo.InvariantCulture) + "*",
+            GridUnitType.Pixel => Value.ToString("R", CultureInfo.InvariantCulture),
+            _ => $"GridSize({Value}, {Type})",
+        };
+
+        if (Min is { } min)
+            size += ";min=" + min.ToString("R", CultureInfo.InvariantCulture);
+        if (Max is { } max)
+            size += ";max=" + max.ToString("R", CultureInfo.InvariantCulture);
+        return size;
+    }
 
     /// <summary>
     /// Parses a track string into a <see cref="GridSize"/>. Accepts:
@@ -100,5 +115,59 @@ public readonly record struct GridSize(double Value, GridUnitType Type)
         if (double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out var px) && px >= 0)
             return Px(px);
         throw new FormatException($"Invalid grid track '{s}'.");
+    }
+}
+
+/// <summary>
+/// Parsed grid track information. The string form is the regular track size
+/// followed by optional <c>;min=&lt;value&gt;</c> and <c>;max=&lt;value&gt;</c> clauses.
+/// </summary>
+internal readonly record struct GridTrackDefinition(GridSize Size, double? Min, double? Max)
+{
+    public static bool TryParse(string value, out GridTrackDefinition definition)
+    {
+        definition = default;
+        if (value is null) return false;
+
+        var parts = value.Split(';');
+        if (parts.Length == 0) return false;
+
+        GridSize size;
+        try
+        {
+            size = GridSize.Parse(parts[0]);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        double? min = null;
+        double? max = null;
+        for (var i = 1; i < parts.Length; i++)
+        {
+            var clause = parts[i].Trim();
+            var separator = clause.IndexOf('=');
+            if (separator <= 0 || separator == clause.Length - 1) return false;
+
+            var name = clause[..separator].Trim();
+            var number = clause[(separator + 1)..].Trim();
+            if (!double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ||
+                !double.IsFinite(parsed) || parsed < 0)
+                return false;
+
+            if (string.Equals(name, "min", StringComparison.OrdinalIgnoreCase) && min is null)
+                min = parsed;
+            else if (string.Equals(name, "max", StringComparison.OrdinalIgnoreCase) && max is null)
+                max = parsed;
+            else
+                return false;
+        }
+
+        if (min is { } minimum && max is { } maximum && minimum > maximum)
+            return false;
+
+        definition = new GridTrackDefinition(size, min, max);
+        return true;
     }
 }

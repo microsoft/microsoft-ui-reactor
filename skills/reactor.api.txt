@@ -2772,6 +2772,8 @@ new(double Value, GridUnitType Type)
 GridSize Auto { get; }
 GridUnitType Type { get; init; }
 double Value { get; init; }
+double? Max { get; init; }
+double? Min { get; init; }
 Deconstruct(ref double Value, ref GridUnitType Type) → void
 Equals(GridSize other) → bool
 Equals(object obj) → bool
@@ -2780,6 +2782,10 @@ Parse(string s) → GridSize
 Px(double pixels) → GridSize
 Star(double weight = 1) → GridSize
 ToString() → string
+
+### static class GridSizeExtensions
+GridSize.MaxSize(double maxSize) → GridSize
+GridSize.MinSize(double minSize) → GridSize
 
 ### record GridViewElement
 new(Element[] Items)
