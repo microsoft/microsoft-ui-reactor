@@ -240,10 +240,10 @@ public class SkipReportingTests
     [TestMethod]
     public void SkippedCheckWhoseNameEmbedsAnIssueNumber_IsStillASkip()
     {
-        const string Reason = "decorator retags the target";
+        const string GapReason = "decorator retags the target";
 
-        var plain = Outcome($"# Running: F\nok F_Check # SKIP {Reason}\n", "F");
-        var hashed = Outcome($"# Running: F\nok F_Check_#1069 # SKIP {Reason}\n", "F");
+        var plain = Outcome($"# Running: F\nok F_Check # SKIP {GapReason}\n", "F");
+        var hashed = Outcome($"# Running: F\nok F_Check_#1069 # SKIP {GapReason}\n", "F");
 
         Assert.AreEqual(SelfTestBatch.FixtureStatus.Skipped, plain.Status,
             "Control arm: a skip with an ordinary check name must be Skipped.");
@@ -251,10 +251,10 @@ public class SkipReportingTests
             "A '#' in the CHECK NAME must not change the verdict. Anchoring on the first '#' " +
             "makes this Passed — a fixture that asserted nothing reported green, which is #1061.");
 
-        Assert.IsTrue(SelfTestBatch.TryParseSkipDirective($"F_Check_#1069 # SKIP {Reason}",
+        Assert.IsTrue(SelfTestBatch.TryParseSkipDirective($"F_Check_#1069 # SKIP {GapReason}",
             out var name, out var parsedReason));
         Assert.AreEqual("F_Check_#1069", name, "The name must keep its own hash.");
-        Assert.AreEqual(Reason, parsedReason, "The reason must not absorb the name's hash.");
+        Assert.AreEqual(GapReason, parsedReason, "The reason must not absorb the name's hash.");
     }
 
     /// <summary>
@@ -400,7 +400,7 @@ public class SkipReportingTests
     [TestMethod]
     public void SkipReport_LandsOnTheJobSummaryWhenThereIsOne()
     {
-        var path = global::System.IO.Path.Combine(
+        var path = global::System.IO.Path.Join(
             global::System.IO.Path.GetTempPath(), $"reactor-skip-summary-{Guid.NewGuid():N}.md");
         try
         {
