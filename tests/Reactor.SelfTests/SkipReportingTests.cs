@@ -210,6 +210,41 @@ public class SkipReportingTests
     }
 
     /// <summary>
+    /// A fixture that skips and then crashes must keep its skip in the inventory. The crash
+    /// arrives as a runner-level <c>not ok &lt;n&gt; &lt;fixture&gt;_CRASH</c>, and <c>Flush</c> has
+    /// an early return for a fixture already stamped Failed — so the question is whether the crash
+    /// lands in <c>failuresForCurrent</c> (early return skipped, skips preserved) or stamps the map
+    /// directly (early return taken, skips silently dropped). It is the former, because
+    /// <c>StripRunnerFailureSuffix</c> removes <c>_CRASH</c> and the name then matches the running
+    /// fixture — but that is a two-step inference across two functions, so it is pinned here
+    /// rather than left to be re-derived. Losing the skip would undercount the inventory in the
+    /// one case where a reader most wants both facts: what it gave up on, and what then broke.
+    /// </summary>
+    [TestMethod]
+    public void FixtureThatSkippedThenCrashed_IsFailedButKeepsItsSkip()
+    {
+        var map = Parse(
+            "# Running: F\n" +
+            "ok F_Deferred # SKIP live input not synthesizable headlessly\n" +
+            "not ok 9 F_CRASH - InvalidOperationException: boom\n");
+
+        Assert.IsTrue(map.TryGetValue("F", out var outcome),
+            "The _CRASH suffix must be stripped so the failure lands on 'F'.");
+        Assert.AreEqual(SelfTestBatch.FixtureStatus.Failed, outcome!.Status,
+            "A crash outranks a skip: the fixture is broken, not merely unproven.");
+        Assert.AreEqual(1, outcome.SkippedChecks.Count,
+            $"The skip must survive the crash. Got: {string.Join("; ", outcome.SkippedChecks)}");
+        Assert.IsTrue(outcome.SkippedChecks[0].Contains("F_Deferred", StringComparison.Ordinal),
+            $"The skipped check name must survive. Got: {outcome.SkippedChecks[0]}");
+
+        var inventory = SelfTestBatch.BuildSkipInventory(map);
+        Assert.AreEqual(1, inventory.TotalSkippedChecks,
+            "A crashed fixture's skip still counts toward the run's skip total.");
+        Assert.AreEqual(0, inventory.FullySkippedFixtures.Count,
+            "It is Failed, not Skipped, so it must not appear as a fully-skipped fixture.");
+    }
+
+    /// <summary>
     /// TAP 14 specifies directives case-insensitively. The Host emits upper case today, and a
     /// parser that accepts only what the current emitter happens to produce is one rename away from
     /// silently reporting every skip as a pass again.
