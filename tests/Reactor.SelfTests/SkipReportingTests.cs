@@ -185,6 +185,32 @@ public class SkipReportingTests
     // ------------------------------------------------------------------ directive parsing
 
     /// <summary>
+    /// The Host emits a bare-named runner-level <c>not ok</c> when a fixture completes without a
+    /// single check or skip, so this asserts the wrapper attributes it to that fixture rather than
+    /// inventing a phantom entry. It matters because only <c>_CRASH</c> and <c>_TIMEOUT</c> are
+    /// stripped from runner-level names: any other decoration on the Host's line would land the
+    /// failure on a fixture name that does not exist, and the real fixture would be reported
+    /// against a message that never mentions why.
+    /// </summary>
+    [TestMethod]
+    public void RunnerLevelNoChecksFailure_IsAttributedToTheSilentFixture()
+    {
+        const string Detail = "fixture ran to completion without emitting a single check or skip";
+
+        var map = Parse($"# Running: F\nnot ok 7 F - {Detail}\n");
+
+        Assert.IsTrue(map.ContainsKey("F"),
+            "The failure must land on 'F', not on a phantom name parsed out of the line.");
+
+        var outcome = map["F"];
+        Assert.AreEqual(SelfTestBatch.FixtureStatus.Failed, outcome.Status);
+        Assert.IsTrue(outcome.Detail.Contains(Detail, StringComparison.Ordinal),
+            $"The reported detail must say why. Got: {outcome.Detail}");
+        Assert.AreEqual(1, map.Count,
+            $"Exactly one fixture should be recorded. Got: {string.Join(", ", map.Keys)}");
+    }
+
+    /// <summary>
     /// TAP 14 specifies directives case-insensitively. The Host emits upper case today, and a
     /// parser that accepts only what the current emitter happens to produce is one rename away from
     /// silently reporting every skip as a pass again.

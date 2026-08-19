@@ -409,7 +409,29 @@ internal static class SelfTestRunner
                         // fully-degraded case are not the same green square.
                         bool failed = crashed || harness.Failures != failuresBefore;
                         bool assertedNothing = harness.Checks == checksBefore;
-                        bool onlySkipped = !failed && assertedNothing && harness.Skips > skipsBefore;
+                        bool skippedSomething = harness.Skips > skipsBefore;
+                        bool onlySkipped = !failed && assertedNothing && skippedSomething;
+
+                        // Nothing at all — no check, no skip, no crash. Same defect as above with
+                        // the one mitigating detail removed: a skip at least states a reason, so
+                        // it is reported rather than failed. Silence states nothing, so there is
+                        // no verdict to be generous about, and the wrapper has always called this
+                        // a failure ("fixture emitted no TAP checks"). The Host called it a PASS,
+                        // which meant the two disagreed and the raw-TAP consumers believed the
+                        // Host: the AOT job greps `^not ok `, and a silent fixture emitted no such
+                        // line, so it was invisible exactly where there is no wrapper to correct
+                        // it. Emit the failure here so both sides — and the title bar — agree.
+                        if (!failed && assertedNothing && !skippedSomething)
+                        {
+                            // Deliberately no `_CRASH`/`_TIMEOUT`-style suffix: the wrapper strips
+                            // only those two, so any other decoration would attribute this to a
+                            // fixture name that does not exist instead of to this one.
+                            Console.WriteLine(
+                                $"not ok {testIndex} {fixtureName} - fixture ran to completion " +
+                                $"without emitting a single check or skip");
+                            harness.RecordFailure();
+                            failed = true;
+                        }
 
                         if (onlySkipped)
                         {

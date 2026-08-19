@@ -159,11 +159,17 @@ A selftest fixture has **three** outcomes, not two. `H.Check(name, cond)` assert
 | ≥1 `H.Check`, none failed | green | **Passed** |
 | any failed check | red | **Failed** |
 | ≥1 `H.Skip` and **zero** checks | amber | **Skipped** (`Assert.Inconclusive`) |
-| nothing at all | red | **Failed** — "fixture emitted no TAP checks" |
+| nothing at all | red | **Failed** — the Host emits `not ok <n> <fixture> - fixture ran to completion without emitting a single check or skip` |
 
 A fixture that both checks and skips stays **Passed**; its skipped check names and reasons are
 still listed in the run's skip report so a fixture cannot quietly erode to skipping everything
 it used to assert.
+
+The last row is enforced on **both** sides on purpose. The wrapper has always failed a silent
+fixture, but the Host used to paint it green and emit no `not ok` line at all — so the two
+disagreed, and the raw-TAP consumers had only the Host to go on. Since the AOT job greps
+`^not ok `, a fixture that asserted nothing was invisible precisely where nothing was left to
+correct it.
 
 Until [#1061](https://github.com/microsoft/microsoft-ui-reactor/issues/1061) the third row
 collapsed into the first: `ParseTap` treated any `ok ` line as evidence that the fixture had
