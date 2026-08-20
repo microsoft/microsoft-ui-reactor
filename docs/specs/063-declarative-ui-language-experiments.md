@@ -98,6 +98,7 @@ the flags off the compiler is byte-for-byte the shipping language.
 | 1 | Factory initializers — trailing `{ … }` after a factory call, at **primary-expression precedence**; parens-optional form | `FactoryInitializers` | ✅ working |
 | 2 | **Type-level opt-in** (`[FactoryInitializable]` on the produced type) alongside member-level opt-in (`[Factory]`) | `FactoryInitializers` | ✅ working |
 | 3 | **Content elements** — bare children inside the initializer, with spread, assigned to a `[ContentProperty]` member | `FactoryInitializerContent` | ✅ working |
+| 6 | Statement-form `if` in content position | `FactoryInitializerContent` | ✅ working — see §6.4 |
 | 4 | Nested member paths (`Layout.Padding.Left = v`) | `NestedMemberInitializers` | ✅ working — see §6.5 |
 | 5 | `init` / extension-`init` methods (styles) | — | ⛔ not implemented |
 
@@ -419,18 +420,59 @@ binder recognises that shape in content position and routes it through the *same
 expression uses (hoisted out of `BindCollectionExpression`, so the semantics cannot drift). `{ ..items.Select(…) }`
 required zero parser changes.
 
-### 6.4 A statement-form content block is the next thing worth prototyping
+### 6.4 Statement-form conditionals in content — implemented
 
 The LDM discussed Kotlin-style trailing lambdas with an implicit receiver and worried, correctly, about name
 lookup. The valuable half of that idea for UI code is not the implicit receiver — it is **control flow while
-producing children** (`if`, `foreach`, `switch` as content). That is Swift's `@ViewBuilder`.
+producing children**. That is Swift's `@ViewBuilder`.
 
-Spec 008 §7 rejected result builders largely on Swift's type-checker blowup. That objection **does not
-transfer**, and the reason is structural: Swift infers the builder body's type, whereas here the content
-property's type is known before the elements are bound, so content is **target-typed**, exactly like a
-collection expression. C# can afford the construct at the point where Swift cannot. This should be prototyped
-as `FactoryInitializerContentFlow` and measured against the imperative-`List<Element>` and nested-ternary
-patterns in spec 019 §7B.3 / §7B.4, which are the shapes all five variants above still handle badly.
+Spec 008 §7 rejected result builders largely on Swift's type-checker blowup. **That objection does not
+transfer, and the prototype now demonstrates why.** Swift infers the builder body's type; here the content
+property's type is known *before* any element is bound, so each branch is target-typed exactly like an
+ordinary content element. The type flows inward instead of being solved for. Concretely, the binder reaches
+`BindConditionalContentElement` already knowing the destination, and emits a
+`BoundUnconvertedConditionalOperator` that the existing collection-expression conversion resolves — no
+inference search, no combinatorial overload resolution.
+
+```csharp
+VStack {
+    Spacing = 8,
+    Text("header"),
+
+    if (loading) Text("spinner"),           // no else: contributes zero or one element
+
+    if (error) Text("error")                // else-if chains nest
+    else if (count == 0) Text("empty")
+    else Text($"{count} items"),
+
+    ..items.Select(s => Text(s)),           // composes with spread
+    Text("footer"),
+}
+```
+
+Verified across four input configurations against expected trees:
+
+```
+ok   loading=False error=False count=2  ->  [header,2 items,i0,i1,footer]
+ok   loading=True  error=False count=0  ->  [header,spinner,empty,footer]
+ok   loading=False error=True  count=5  ->  [header,error,i0,i1,i2,i3,i4,footer]
+ok   loading=False error=False count=0  ->  [header,empty,footer]
+```
+
+**Scope decision: `if` only, deliberately.** `foreach` is *not* implemented and should not be: spread already
+covers it (`..items.Select(…)`), and it reads no worse. Nothing today covers a conditional without falling
+back to ternary-plus-`null`, which is why `if` is the half worth adding. Restricting to `if` also avoids the
+hardest part of a general builder — binding an iteration variable into a nested scope — which is where a
+Swift-style design starts accumulating cost.
+
+**Semantics.** `if (c) X else Y` binds as `c ? X : Y`. `if (c) X` with no `else` must contribute one element
+or none, which an expression cannot express, so it binds as `c ? X : null` and requires a nullable content
+element type. Declarative frameworks already filter nulls out of children (Reactor's `Element?[]` +
+`FilterChildren`), so this is the natural spelling rather than a special case — but it is a real constraint,
+and a non-nullable element type rejects the construct rather than silently substituting a default.
+
+Both the parser predicate and the member parse are gated on `FactoryInitializerContent`, so with the feature
+off `if` in an initializer keeps producing today's errors. Syntax suite 10,557/10,557, semantic 19,763/19,763.
 
 This is genuinely open ground. There is **no championed csharplang proposal** for `if`/`foreach` inside a
 collection expression: [#9754 "Immediately Enumerated Collection Expressions"](https://github.com/dotnet/csharplang/blob/main/proposals/immediately-enumerated-collection-expressions.md)
@@ -734,11 +776,13 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
    plausibly a worse regression than the allocation win. Note also that §4's variant 5 measured
    construct-once vs. merge-repeatedly on a flat mini-model with no buckets — it does **not** measure
    promotion, and should not be cited as evidence for it.
-5. **Prototype target-typed content control flow next** (§6.4). Nested member paths (§6.5) are implemented
-   and that line is now **closed**: `#9003` is a separately-championed proposal motivated by symmetry with
-   extended property patterns, not a declarative-UI feature, and the auto-create rule Reactor would need is
-   a third feature that is not worth pursuing on its own merits. The implementation stands as a contribution
-   to `#9003` — which had no specification — and nothing here should wait on it.
+5. **Statement-form `if` in content position is implemented** (§6.4) and is the strongest remaining
+   candidate. It is genuinely open ground — no championed csharplang proposal covers `if` inside a
+   collection expression — and it demonstrates that Swift's `@ViewBuilder` type-checking cost does **not**
+   transfer to C#, because content is target-typed rather than inferred. Nested member paths (§6.5) are
+   implemented but that line is **closed**: `#9003` is a separately-championed symmetry proposal, not a
+   declarative-UI feature, and the auto-create rule Reactor would need is a third feature not worth pursuing
+   on its own merits.
 6. **Engage the in-flight mixed-initializer stack** (`dotnet/roslyn` #83750–#83761, §8). The disambiguation
    rule is already settled and agrees with this prototype; the open questions that decide whether the feature
    is usable for immutable UI trees — `Add` versus a content property, spread inside `{ }`, and trailing-only
