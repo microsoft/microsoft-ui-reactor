@@ -894,6 +894,38 @@ Border { child }
 Migration requirement: single-child factories need a `= null` default before the parens-omitted form is
 available for them.
 
+**Follow-up (2026-08-20, branch `azchohfi-single-child-factory-defaults`).** Done, and the scope was smaller
+and messier than this section assumed. An earlier draft said "17 single-child factories"; verification found
+only **14** `Factories` methods take a leading `Element` at all, and exactly **9** have the single-required-
+leading-`Element` shape where one default yields a zero-argument form: `Border`, `ScrollViewer`,
+`ScrollView`, `Viewbox`, `ItemContainer`, `RefreshContainer`, `SwipeControl`, `ParallaxView`, `Card`.
+`SplitView` was already zero-arg callable.
+
+Three findings worth carrying:
+
+- **`ErrorBoundary` cannot be done at all.** Defaulting both of its parameters makes `ErrorBoundary()`
+  ambiguous (`CS0121`) across its `(Element, Func<Exception,Element>)` and `(Element, Element)` overloads.
+  It was named as a candidate in this document's earlier draft; it is not one.
+- **`Popup` and `ContentFlyout` would NRE at render time**, and this is a latent issue independent of the
+  language feature. `Reconciler.Mount` takes a **non-nullable** `Element` and dereferences
+  `element.Modifiers` immediately (`Reconciler.Mount.cs:29-32`); `CanUpdate` calls `oldEl.GetType()`
+  (`Reconciler.cs:2538`). These two are the only hand-coded, non-descriptor paths in the candidate set, and
+  they reach those unguarded (`OverlayLifecycle.MountPopup:527`, `Reconciler.CreateFlyoutFromElement:5328`).
+  Descriptor-backed factories are safe because `SingleContent` null-guards mount, update and unmount
+  (`V1HandlerAdapter.cs:166/271-284/456`) — so **no reconciler change was needed for the nine**.
+- **The change stands on its own merits.** All nine map to a WinUI control whose content slot is itself
+  nullable, so the empty form is a meaningful control rather than an affordance for an uncommitted language
+  feature: `Border()` is the standard divider/spacer idiom, `ItemContainer()` a placeholder cell.
+
+Six element records also moved their positional slot from `Element` to `Element?`, rather than keeping
+`new(child!)` in the factory — which would have left `ScrollViewer().Child` typed non-null while actually
+null. Nullability annotations are binary compatible.
+
+One interaction to note: `MissingFactoryArgumentAnalyzer` (`REACTOR_DYM_004`) uses `ScrollViewer()` as its
+canonical `CS7036` example, and that call now binds. No test broke — the analyzer tests compile against an
+inline stub `Factories`, not the real assembly — but the analyzer's XML docs still cite a shape that is no
+longer an error.
+
 ### B.2 Stage 2 — type-level opt-in
 
 Nothing changes at the call site. The whole delta is at the library:
