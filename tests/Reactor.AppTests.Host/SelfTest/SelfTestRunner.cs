@@ -116,13 +116,17 @@ internal static class SelfTestRunner
     // tests/Reactor.AppTests.Host/probe-aot-skips.ps1 against the AOT-published
     // Host. As of WindowsAppSDK#6394 workaround (see Reactor.AppTests.Host.csproj
     // _CopyWinUIResourcesForAot target), all NATIVE_CRASH skips are gone — the
-    // remaining failures map to reflection-heavy subsystems (Devtools/MCP,
-    // PropertyGrid auto-discovery) plus two control-collection assertions and
-    // the Issue142 XAML-metadata-provider edge cases.
+    // remaining failures map to reflection-driven surfaces: PropertyGrid
+    // auto-discovery, the two Devtools tools that resolve members by reflection
+    // (fire / state), and the Issue142 XAML-metadata-provider edge cases.
     //
     // Each name was verified to fail in isolation; wildcards from earlier
     // skip-list iterations have been replaced with explicit names so that
     // newly-passing siblings re-enter the run automatically.
+    //
+    // Keep this list honest: a stale entry is AOT coverage that is silently
+    // switched off. Re-run the probe after framework changes and delete whatever
+    // now passes.
     //
     // Override via REACTOR_AOT_SKIP=Pat1,Pat2 (no rebuild needed). Patterns
     // are exact-match or Prefix* wildcard. Re-run the probe after framework
@@ -135,36 +139,12 @@ internal static class SelfTestRunner
         "ControlUpdate_Collections",
         "CoreCov2_UseObservableTreeHook",
 
-        // -- Devtools / MCP server — JSON-RPC server uses reflection-heavy
-        // tool discovery that is not AOT-safe. Documented in
-        // docs/aot-support.md as a not-yet-AOT-clean subsystem. --
-        "Devtools_ClickInvokesButton",
-        "Devtools_ComponentsTool",
+        // -- Devtools / MCP server. The server and its tools are AOT-clean; only
+        // these two resolve members by reflection (fire resolves a named handler
+        // against the component's declared methods; state reads hook
+        // bookkeeping), so they cannot survive trimming. See docs/aot-support.md. --
         "Devtools_FireInvokesNamedHandler",
-        "Devtools_FireRejectsLifecycleMethods",
-        "Devtools_FocusElement",
-        "Devtools_InitializeHandshake",
-        "Devtools_InvokeDirectPattern",
-        "Devtools_LoggerWritesOneLinePerCall",
-        "Devtools_McpServerProtocolEdges",
-        "Devtools_NameSelectorMatchesButtonContent",
-        "Devtools_PropertyToolsExercise",
-        "Devtools_ScrollByAndInto",
-        "Devtools_SelectListItem",
         "Devtools_StateReadsHooks",
-        "Devtools_SwitchComponentInvalidatesIds",
-        "Devtools_ToggleFlipsCheckBox",
-        "Devtools_TreeFullView",
-        "Devtools_TreeIdsUniqueAcrossSiblingsWithDifferentParents",
-        "Devtools_TreeSelectorScope",
-        "Devtools_TreeSummary",
-        "Devtools_TypeSetsTextBox",
-        "Devtools_UnknownSelectorStructuredError",
-        "Devtools_VersionTool",
-        "Devtools_WaitForTextChange",
-        "Devtools_WaitForTimeout",
-        "Devtools_WaitForTimeoutLoggedAsErr",
-        "Devtools_WindowsTool",
 
         // -- PropertyGrid auto-discovery walks user types via reflection and is
         // not AOT-safe by design. Documented in docs/aot-support.md. --
@@ -629,3 +609,4 @@ internal static class SelfTestRunner
         }
     }
 }
+
