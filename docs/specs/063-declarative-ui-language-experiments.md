@@ -525,9 +525,28 @@ so `SimpleMemberAccessExpression` had to join `IdentifierName` in the object-ini
 
 **Why this matters more than it looks.** §10's rejection of promoting `ElementModifiers` fields onto the
 element records leaves Reactor with no way to set layout/styling at construction time without the fluent
-merge chain. Nested paths are the only candidate on the LDM's list that would close that gap *without*
-restructuring the element model — but only once gap 3 is resolved. Until then the feature is real,
-demonstrable, and not yet usable for the scenario that motivated it.
+merge chain. Nested paths looked like the only candidate on the LDM's list that would close that gap
+*without* restructuring the element model.
+
+**On reflection, that framing was wrong, and this line is closed.** Two things:
+
+1. **`#9003` is not a declarative-UI feature.** Its stated motivation is symmetry with
+   [extended property patterns](https://github.com/dotnet/csharplang/issues/4394) — *"If we go ahead and add
+   support for extended names in property patterns… it makes sense for symmetry to allow this in `with` and
+   object creation expressions."* The LDM cited it as a reference in the declarative-UI meeting, but it is a
+   separately-championed proposal with its own motivation and its own timeline. Treating it as part of this
+   effort conflated two things.
+
+2. **The auto-create rule is a third, separate feature.** Making `A.B.C = v` materialise a missing `A` is not
+   a refinement of nested paths — it is "silently construct objects the author did not write", closer in
+   spirit to null-conditional assignment than to member access. It would need its own justification, and
+   bolting it onto `#9003` would burden a clean symmetry proposal with a UI-specific requirement.
+
+So the implementation stands as a **contribution to `#9003`** — that proposal had no specification at all, and
+now has a working design with the copy-vs-mutate objection resolved and three concrete gaps documented. It is
+**not** a path to solving Reactor's construction-time problem, and Reactor should not wait on it. That problem
+remains open with no candidate: promotion was rejected (§10), and nested paths only reach it via a feature
+that is not worth pursuing on its own merits.
 
 ### 6.6 Nullable children are a real migration blocker for Reactor
 
@@ -715,12 +734,11 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
    plausibly a worse regression than the allocation win. Note also that §4's variant 5 measured
    construct-once vs. merge-repeatedly on a flat mini-model with no buckets — it does **not** measure
    promotion, and should not be cited as evidence for it.
-5. **Prototype target-typed content control flow next** (§6.4). Nested member paths (§6.5) are now
-   implemented — `#9003` had no specification, so the prototype proposes one: a nested path is exactly a
-   nested `with`, which resolves the copy-vs-mutate objection the 2021 and 2022 LDMs recorded. The
-   remaining question for the LDM is nullable intermediates: whether `A.B.C = v` should auto-create a
-   missing `A`, which is what the motivating scenario needs and what the prototype deliberately does not
-   assume.
+5. **Prototype target-typed content control flow next** (§6.4). Nested member paths (§6.5) are implemented
+   and that line is now **closed**: `#9003` is a separately-championed proposal motivated by symmetry with
+   extended property patterns, not a declarative-UI feature, and the auto-create rule Reactor would need is
+   a third feature that is not worth pursuing on its own merits. The implementation stands as a contribution
+   to `#9003` — which had no specification — and nothing here should wait on it.
 6. **Engage the in-flight mixed-initializer stack** (`dotnet/roslyn` #83750–#83761, §8). The disambiguation
    rule is already settled and agrees with this prototype; the open questions that decide whether the feature
    is usable for immutable UI trees — `Add` versus a content property, spread inside `{ }`, and trailing-only
