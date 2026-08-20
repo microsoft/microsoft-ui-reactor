@@ -98,7 +98,7 @@ the flags off the compiler is byte-for-byte the shipping language.
 | 1 | Factory initializers — trailing `{ … }` after a factory call, at **primary-expression precedence**; parens-optional form | `FactoryInitializers` | ✅ working |
 | 2 | **Type-level opt-in** (`[FactoryInitializable]` on the produced type) alongside member-level opt-in (`[Factory]`) | `FactoryInitializers` | ✅ working |
 | 3 | **Content elements** — bare children inside the initializer, with spread, assigned to a `[ContentProperty]` member | `FactoryInitializerContent` | ✅ working |
-| 4 | Nested member paths (`Layout.Padding.Left = v`) | `NestedMemberInitializers` | ⛔ not implemented (flag reserved) |
+| 4 | Nested member paths (`Layout.Padding.Left = v`) | `NestedMemberInitializers` | ✅ working — see §6.5 |
 | 5 | `init` / extension-`init` methods (styles) | — | ⛔ not implemented |
 
 **Implementation size:** 16 hand-edited compiler files, **702 inserted lines** (plus generated syntax/bound-node
@@ -124,8 +124,7 @@ unlike `with`.
 | Check | Result |
 |---|---|
 | Roslyn syntax unit tests | **10,551 / 10,551 pass** — 0 parser regressions |
-| Roslyn semantic unit tests | **19,763 / 19,763 pass** |
-| Roslyn emit unit tests | **7,153 / 7,153 pass** |
+| Roslyn semantic unit tests | **19,763 / 19,763 pass** || Roslyn emit unit tests | **7,153 / 7,153 pass** |
 | Roslyn IOperation unit tests | **2,501 / 2,501 pass** |
 | **Total** | **39,968 compiler tests, 0 failures** |
 | Feature flags **off** | Existing behaviour unchanged; `Factory() { … }` produces today's `CS1002: ; expected` |
@@ -439,7 +438,98 @@ collection expression: [#9754 "Immediately Enumerated Collection Expressions"](h
 explicitly lists conditional inclusion as future work; #9739 was closed in its favour; the 2021 LDM's interest
 in list comprehensions never produced a proposal; and no Swift-style result-builder proposal exists at all.
 
-### 6.5 Nullable children are a real migration blocker for Reactor
+### 6.5 Nested member paths — implemented (csharplang#9003)
+
+`#9003` is *Proposal champion / Needs More Work* and states **"Specification: None yet."** There is no
+design to implement, so the prototype is a design proposal as much as an implementation.
+
+**The semantics chosen: a nested path is exactly a nested `with`.**
+
+```csharp
+new T { A.B.C = v }   ⟶   new T { A = t.A with { B = t.A.B with { C = v } } }
+```
+
+This is the alternative spelling [LDM 2021-09-22](https://github.com/dotnet/csharplang/blob/main/meetings/2021/LDM-2021-09-22.md#nested-members-in-with-and-object-creation)
+floated, and it answers the objection recorded in that meeting and in
+[2022-01-24](https://github.com/dotnet/csharplang/blob/main/meetings/2022/LDM-2022-01-24.md#nested-members-in-with-and-object-creation) —
+that nested object initializers *mutate* an existing nested instance while `with` is expected to *copy*.
+Under this reading there is no ambiguity: every level is copied, and nothing reachable from the receiver is
+mutated.
+
+Working, verified by running the compiled program:
+
+```csharp
+var a = new Element { Name = "a", M.Layout.Width = 300 };   // 3 levels
+var b = a with { M.Background = "#202020" };                // inside `with`
+var c = new Element { M.Layout.Width = 1, M.Layout.Margin = 2 };  // shared prefix
+var d = new HasStruct { S.Width = 7 };                      // struct intermediate
+var e = new Element { M.Layout.Width = 5, Name = "e" };     // path before a plain member
+```
+
+```
+1  width=300 name=a
+2  bg=#202020 origBg=null          <- the receiver is untouched
+3  width=1 margin=2                <- both writes survive
+4  struct width=7
+5  width=5 name=e
+```
+
+Because each level is copied, intermediate types must be copyable. A mutable class in the middle is
+rejected rather than silently mutated:
+
+```
+error CS9706: Type 'MutableMid' cannot appear in the middle of a nested member path because it is
+              not copyable. Each level of the path is copied, so intermediate types must be records
+              or structs.
+```
+
+Implementation is ~250 lines in `Binder_NestedMemberPaths.cs`, plus a one-line parser change: the
+initializer classifier treated `{ A.B = v }` as a *collection* initializer (hence `CS1922` on the baseline),
+so `SimpleMemberAccessExpression` had to join `IdentifierName` in the object-initializer test.
+
+**Three gaps, all measured rather than assumed:**
+1. **A debug-only assertion fires.** Roslyn's `assertBindIdentifierTargets` (`MethodCompiler.cs`) requires
+   every identifier in a method body to map to a bound node; the synthesized member reads for the
+   intermediate path segments do not satisfy it. The **Release** compiler is unaffected — all output above
+   was produced by it, so binding, lowering and emit are correct — but this is a real defect, not a
+   cosmetic one, and it must be fixed before the prototype is more than a demo. (A second defect surfaced by
+   the same suite — a pooled `StringBuilder` leaked on an early-return path in the `[Factory]` attribute
+   lookup, because `&&` short-circuited past `ToStringAndFree()` — is fixed.)
+
+2. **Shared prefixes copy twice.** `{ A.B = 1, A.C = 2 }` lowers to two independent `with` chains over `A`,
+   so `A` is copied twice. Correct (both writes survive — case 3 above), but it forfeits precisely the
+   allocation saving that made this attractive. Grouping writes by common prefix before lowering is the
+   obvious fix and is not implemented.
+
+   Both gates were also verified in the **off** direction: with the flag omitted, `{ M.Layout.Width = 300 }`
+   produces today's exact diagnostics (`CS0103` + `CS0747`). That property did not hold in the first
+   iteration — the parser classifier and the binder dispatch were initially ungated, which silently changed
+   the diagnostic for existing code and was caught by two semantic tests
+   (`CS0747_ERR_InvalidInitializerElementInitializer_AssignmentExpression`,
+   `RefInitializer_OnEvent_ThisMemberAccess`). `ref` initializers are excluded from the nested-path branch
+   for the same reason: `A.B = ref x` is ref-assignment, which a chain of copies cannot express.
+
+3. **Nullable intermediates throw.** This is the blocker for the motivating Reactor scenario. Reactor's
+   `Modifiers` and its `Layout`/`Visual` buckets are all nullable (that is the point — an unstyled node pays
+   one null pointer, §10), so `Text("hi") { Modifiers.Layout.Width = 300 }` reads `null.Layout` and NREs.
+   Verified:
+
+   ```
+   6  nullable intermediate -> NullReferenceException
+   ```
+
+   Making this work needs an auto-create rule — `A = (A ?? new()) with { … }` — which is a genuine language
+   design decision, not plumbing: it requires the intermediate type to have an accessible parameterless
+   constructor, and it silently materialises objects the author never wrote. It should be decided
+   deliberately, and taken to the LDM as a question rather than assumed.
+
+**Why this matters more than it looks.** §10's rejection of promoting `ElementModifiers` fields onto the
+element records leaves Reactor with no way to set layout/styling at construction time without the fluent
+merge chain. Nested paths are the only candidate on the LDM's list that would close that gap *without*
+restructuring the element model — but only once gap 3 is resolved. Until then the feature is real,
+demonstrable, and not yet usable for the scenario that motivated it.
+
+### 6.6 Nullable children are a real migration blocker for Reactor
 
 Reactor's `StackElement.Children` is `Element[]`, with null filtering done inside the `params Element?[]`
 factories. A conditional `cond ? child : null` therefore cannot be a content element without either retyping
@@ -460,6 +550,8 @@ with the neighbouring positive case compiling in the same file:
 | `CS9702` | Content elements on a type with no `[ContentProperty]` |
 | `CS9703` | `[ContentProperty("Nope")]` naming a member that does not exist |
 | `CS9704` | Content element appearing before a member assignment |
+| `CS9705` | A `[Factory]` member returning a value that is not construction-like (5 distinct shapes tested) |
+| `CS9706` | A non-copyable type in the middle of a nested member path |
 
 ---
 
@@ -598,9 +690,9 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
    properties moved onto records). That is a multi-day migration, and until it is done the LDM's
    "before-and-after versions of complete applications" remains unsatisfied. The five-variant harness with an
    equality oracle is the best available substitute and should be labelled as such.
-5. **Stages 4 and 5 unimplemented** — nested member paths and `init` methods. Nested paths interact directly
-   with Reactor's `Modifiers.Layout` / `Modifiers.Visual` buckets and would remove the need to promote 60
-   properties, which makes them the highest-value remaining experiment after §6.4.
+5. **Stage 5 unimplemented** — `init` / extension-`init` methods (reusable style application). Stage 4
+   (nested member paths) is now implemented; see §6.5 for what works and the three gaps that remain,
+   the load-bearing one being nullable intermediates.
 
 ---
 
@@ -623,10 +715,12 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
    plausibly a worse regression than the allocation win. Note also that §4's variant 5 measured
    construct-once vs. merge-repeatedly on a flat mini-model with no buckets — it does **not** measure
    promotion, and should not be cited as evidence for it.
-5. **Prototype target-typed content control flow next** (§6.4), then nested member paths (§6.5). These attack
-   the patterns that every current variant handles badly. Note that #9003 (nested paths) currently says
-   "Specification: None yet" and is marked *Needs More Work*, so a prototype there is defining the design,
-   not implementing one.
+5. **Prototype target-typed content control flow next** (§6.4). Nested member paths (§6.5) are now
+   implemented — `#9003` had no specification, so the prototype proposes one: a nested path is exactly a
+   nested `with`, which resolves the copy-vs-mutate objection the 2021 and 2022 LDMs recorded. The
+   remaining question for the LDM is nullable intermediates: whether `A.B.C = v` should auto-create a
+   missing `A`, which is what the motivating scenario needs and what the prototype deliberately does not
+   assume.
 6. **Engage the in-flight mixed-initializer stack** (`dotnet/roslyn` #83750–#83761, §8). The disambiguation
    rule is already settled and agrees with this prototype; the open questions that decide whether the feature
    is usable for immutable UI trees — `Add` versus a content property, spread inside `{ }`, and trailing-only
@@ -819,7 +913,20 @@ VStack { Spacing = 4, new TextElement("child"), ..extra.Select(s => new TextElem
   -> Children = [child, c, d];  implements IEnumerable = False;  has Add = False
 ```
 
-### B.7 Everything together
+### B.7 Nested member paths (§6.5)
+
+```csharp
+// before — a temporary per level, or a fluent merge chain
+el with { Modifiers = el.Modifiers with { Layout = el.Modifiers.Layout with { Width = 300 } } }
+
+// after
+el with { Modifiers.Layout.Width = 300 }
+```
+
+Works today for non-nullable intermediates. Reactor's own buckets are nullable, so its motivating call site
+needs the auto-create rule discussed in §6.5 before this is usable there.
+
+### B.8 Everything together
 
 ```csharp
 return VStack {
