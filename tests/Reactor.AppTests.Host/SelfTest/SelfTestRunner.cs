@@ -147,9 +147,8 @@ internal static class SelfTestRunner
     // debugging workflow.
     private static readonly string[] DefaultAotSkipPatterns =
     {
-        // -- Reactor framework, control-collection assertions still under
+        // -- Reactor framework, control-collection assertion still under
         // investigation (no native crash; assertion fails inside the fixture). --
-        "ControlUpdate_Collections",
         "CoreCov2_UseObservableTreeHook",
 
         // -- Devtools / MCP server. The other 25 Devtools fixtures run under AOT;
@@ -678,3 +677,4 @@ internal static class SelfTestRunner
         }
     }
 }
+

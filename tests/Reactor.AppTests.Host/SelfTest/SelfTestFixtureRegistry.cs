@@ -168,6 +168,9 @@ internal static class SelfTestFixtureRegistry
         "TTV_ControlPropsMountAndUpdate",
         "TTV_EmptyThenPopulate",
         "TTV_DeepNestingRenders",
+        // Legacy text-node TreeView — the only Reactor item template that
+        // renders through a classic {Binding} (see TextTreeBindingAotFixtures).
+        "TXB_TextTreeNodeTextRendersUnderAot",
         "TTV_TwoIndependentTrees",
         // ItemsView reconciler arm — mount / update / layout-kind / selection.
         "ItemsView_Mount",
@@ -1877,6 +1880,7 @@ internal static class SelfTestFixtureRegistry
         "TTV_ControlPropsMountAndUpdate" => new TemplatedTreeViewFixtures.ControlPropsMountAndUpdate(harness),
         "TTV_EmptyThenPopulate" => new TemplatedTreeViewFixtures.EmptyThenPopulate(harness),
         "TTV_DeepNestingRenders" => new TemplatedTreeViewFixtures.DeepNestingRenders(harness),
+        "TXB_TextTreeNodeTextRendersUnderAot" => new TextTreeBindingAotFixtures.TextTree_NodeTextRendersUnderAot(harness),
         "TTV_TwoIndependentTrees" => new TemplatedTreeViewFixtures.TwoIndependentTrees(harness),
         "ItemsView_Mount" => new ItemsViewFixtures.ItemsView_BasicMount(harness),
         "ItemsView_Layout_UniformGrid" => new ItemsViewFixtures.ItemsView_LayoutKind_AppliesUniformGrid(harness),
@@ -3341,3 +3345,4 @@ internal static class SelfTestFixtureRegistry
         _ => null,
     };
 }
+
