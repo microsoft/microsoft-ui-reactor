@@ -24,7 +24,7 @@ public static partial class Factories
     /// Override any preset by chaining a fluent on the returned border:
     /// <c>Card(child).Padding(24).CornerRadius(16).Background(Theme.SubtleFill)</c>.
     /// </remarks>
-    public static BorderElement Card(Element child) =>
+    public static BorderElement Card(Element? child = null) =>
         Border(child)
             .Background(Core.Theme.CardBackground)
             .WithBorder(Core.Theme.CardStroke, thickness: 1)

@@ -575,7 +575,7 @@ public static partial class Factories
     /// <c>global::Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollMode(...)</c>
     /// (or introduce a type alias) to disambiguate.
     /// </remarks>
-    public static ScrollViewerElement ScrollViewer(Element child)
+    public static ScrollViewerElement ScrollViewer(Element? child = null)
     {
         return new(child);
     }
@@ -592,15 +592,15 @@ public static partial class Factories
     /// For the classic control, use <see cref="ScrollViewer(Element)"/>.
     /// Issue #348.
     /// </remarks>
-    public static ScrollViewElement ScrollView(Element child)
+    public static ScrollViewElement ScrollView(Element? child = null)
     {
         return new(child);
     }
 
-    public static BorderElement Border(Element? child)
+    public static BorderElement Border(Element? child = null)
     {
         // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
-        return new(child!);
+        return new(child);
     }
 
     /// <summary>
@@ -620,7 +620,7 @@ public static partial class Factories
         return new(pane, content);
     }
 
-    public static ViewboxElement Viewbox(Element child)
+    public static ViewboxElement Viewbox(Element? child = null)
     {
         // Descriptor-only migration (spec 058 §15 / P5.3): the generated
         // descriptor self-registers via ViewboxElement's Pattern-A static cctor,
@@ -1675,7 +1675,7 @@ public static partial class Factories
         return new(child) { IsOpen = isOpen, OnClosed = onClosed };
     }
 
-    public static RefreshContainerElement RefreshContainer(Element content, Action? onRefreshRequested = null)
+    public static RefreshContainerElement RefreshContainer(Element? content = null, Action? onRefreshRequested = null)
     {
         return new(content) { OnRefreshRequested = onRefreshRequested };
     }
@@ -1695,7 +1695,7 @@ public static partial class Factories
 
     // ── SwipeControl ────────────────────────────────────────────────
 
-    public static SwipeControlElement SwipeControl(Element content,
+    public static SwipeControlElement SwipeControl(Element? content = null,
         SwipeItemData[]? leftItems = null, SwipeItemData[]? rightItems = null)
     {
         return new(content) { LeftItems = leftItems, RightItems = rightItems };
@@ -1710,7 +1710,7 @@ public static partial class Factories
 
     // ── ParallaxView ────────────────────────────────────────────────
 
-    public static ParallaxViewElement ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0)
+    public static ParallaxViewElement ParallaxView(Element? child = null, double verticalShift = 0, double horizontalShift = 0)
     {
         return new(child) { VerticalShift = verticalShift, HorizontalShift = horizontalShift };
     }
@@ -1748,7 +1748,7 @@ public static partial class Factories
     /// view builder — ItemsView's selection / focus / animation
     /// infrastructure depends on it.
     /// </summary>
-    public static ItemContainerElement ItemContainer(Element? child)
+    public static ItemContainerElement ItemContainer(Element? child = null)
     {
         return new(child);
     }

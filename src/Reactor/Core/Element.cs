@@ -4301,7 +4301,7 @@ public partial record FlexElement(Element[] Children) : Element
 // hand-written descriptor never mapped it, so it stays unmapped (Exclude).
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.ScrollViewer), Exclude = new[] { "Orientation" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapEvent("ViewChanged")]
-public partial record ScrollViewerElement(Element Child) : Element
+public partial record ScrollViewerElement(Element? Child) : Element
 {
     public Orientation Orientation { get; init; } = Orientation.Vertical;
     public ScrollBarVisibility HorizontalScrollBarVisibility { get; init; } = ScrollBarVisibility.Auto;
@@ -4333,7 +4333,7 @@ public partial record ScrollViewerElement(Element Child) : Element
 /// <c>VerticalAnchorRatio</c>, and the <c>Scrolling*</c> enum surface.
 /// </summary>
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.ScrollView))]  // spec 058 §15 (P5.4)
-public partial record ScrollViewElement(Element Child) : Element
+public partial record ScrollViewElement(Element? Child) : Element
 {
     public WinUI.ScrollingContentOrientation ContentOrientation { get; init; } = WinUI.ScrollingContentOrientation.Vertical;
     public WinUI.ScrollingScrollBarVisibility HorizontalScrollBarVisibility { get; init; } = WinUI.ScrollingScrollBarVisibility.Auto;
@@ -4559,7 +4559,7 @@ public partial record SplitViewElement(
     }
 }
 
-public partial record ViewboxElement(Element Child) : Element
+public partial record ViewboxElement(Element? Child) : Element
 {
     public Stretch? Stretch { get; init; }
     public StretchDirection? StretchDirection { get; init; }
@@ -6844,7 +6844,7 @@ public record PopupElement(Element Child) : Element
 }
 
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.RefreshContainer))]  // spec 058 §15 (P5.4)
-public partial record RefreshContainerElement(Element Content) : Element
+public partial record RefreshContainerElement(Element? Content) : Element
 {
     public Action? OnRefreshRequested { get; init; }
     /// <summary>Direction the user pulls to trigger refresh. Defaults to <c>TopToBottom</c>.</summary>
@@ -6996,7 +6996,7 @@ public record SwipeItemData(
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("RightItems")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("LeftItemsMode")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("RightItemsMode")]
-public partial record SwipeControlElement(Element Content) : Element
+public partial record SwipeControlElement(Element? Content) : Element
 {
     public SwipeItemData[]? LeftItems { get; init; }
     public SwipeItemData[]? RightItems { get; init; }
@@ -7073,7 +7073,7 @@ public partial record AnimatedIconElement() : Element
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.ParallaxView))]  // spec 058 §15 (P5.6)
 [global::Microsoft.UI.Reactor.Wrappers.WrapContent("Child")]  // ParallaxView displays Child, not the inherited ContentControl.Content
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Source")]  // Source is UIElement (unsupported value type) — mapped explicitly (reference-equality gate)
-public partial record ParallaxViewElement(Element Child) : Element
+public partial record ParallaxViewElement(Element? Child) : Element
 {
     public double VerticalShift { get; init; }
     public double HorizontalShift { get; init; }

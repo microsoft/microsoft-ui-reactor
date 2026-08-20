@@ -29,7 +29,7 @@ BitmapIcon(Uri source, bool showAsMonochrome = true) → BitmapIconData
 Body(string content) → TextBlockElement
 BodyLarge(string content) → TextBlockElement
 BodyStrong(string content) → TextBlockElement
-Border(Element child) → BorderElement
+Border(Element child = null) → BorderElement
 Breadcrumb(string label, object tag = null) → BreadcrumbBarItemData
 BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData> onItemClicked = null) → BreadcrumbBarElement
 Button(Command command) → ButtonElement
@@ -39,7 +39,7 @@ CalendarDatePicker(Optional<DateTimeOffset?> date = default, Action<DateTimeOffs
 CalendarView() → CalendarViewElement
 Canvas(Element[] children) → CanvasElement
 Caption(string content) → TextBlockElement
-Card(Element child) → BorderElement
+Card(Element child = null) → BorderElement
 CheckBox(Optional<bool?> isChecked = default, Action<bool> onIsCheckedChanged = null, string label = null) → CheckBoxElement
 ColorPicker(Optional<Color> color = default, Action<Color> onColorChanged = null) → ColorPickerElement
 ComboBox(Element[] itemElements, Optional<int> selectedIndex, Action<int> onSelectedIndexChanged) → ComboBoxElement
@@ -100,7 +100,7 @@ InfoBar(string title = null, string message = null) → InfoBarElement
 InlineUI(Element child) → RichTextInlineUIContainer
 InlineUI(Func<FrameworkElement> factory) → RichTextInlineUIContainer
 InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
-ItemContainer(Element child) → ItemContainerElement
+ItemContainer(Element child = null) → ItemContainerElement
 ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → ItemsRepeaterElement<T>
 ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsRepeaterElement<T>
 ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsViewElement<T>
@@ -136,7 +136,7 @@ NavigationHost<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, Element> route
 NavigationView(NavigationViewItemData[] menuItems, Element content = null) → NavigationViewElement
 NumberBox(Optional<double> value = default, Action<double> onValueChanged = null, string header = null) → NumberBoxElement
 Paragraph(RichTextInline[] inlines) → RichTextParagraph
-ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0) → ParallaxViewElement
+ParallaxView(Element child = null, double verticalShift = 0, double horizontalShift = 0) → ParallaxViewElement
 PasswordBox(Optional<string> password = default, Action<string> onPasswordChanged = null, string placeholderText = null) → PasswordBoxElement
 Path2D() → PathElement
 PathIcon(string data) → PathIconData
@@ -157,7 +157,7 @@ RadioButtons(string[] items, Optional<int> selectedIndex = default, Action<int> 
 RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
 RatingControl(Optional<double> value = default, Action<double> onValueChanged = null) → RatingControlElement
 Rectangle() → RectangleElement
-RefreshContainer(Element content, Action onRefreshRequested = null) → RefreshContainerElement
+RefreshContainer(Element content = null, Action onRefreshRequested = null) → RefreshContainerElement
 RelativePanel(Element[] children) → RelativePanelElement
 RenderEachTime(Func<RenderContext, Element> render) → FuncElement
 RepeatButton(Command command) → RepeatButtonElement
@@ -166,8 +166,8 @@ RichEditBox(Optional<string> text = default, Action<string> onTextChanged = null
 RichTextBlock(RichTextParagraph[] paragraphs) → RichTextBlockElement
 RichTextBlock(string text) → RichTextBlockElement
 Run(string text) → RichTextRun
-ScrollView(Element child) → ScrollViewElement
-ScrollViewer(Element child) → ScrollViewerElement
+ScrollView(Element child = null) → ScrollViewElement
+ScrollViewer(Element child = null) → ScrollViewerElement
 SelectorBar(SelectorBarItemData[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
 SelectorBarItem(string text, string icon = null) → SelectorBarItemData
 SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
@@ -177,7 +177,7 @@ SplitButton(string label, Action onClick = null, Element flyout = null) → Spli
 SplitView(Element pane = null, Element content = null) → SplitViewElement
 SubHeading(string content) → TextBlockElement
 Subtitle(string content) → TextBlockElement
-SwipeControl(Element content, SwipeItemData[] leftItems = null, SwipeItemData[] rightItems = null) → SwipeControlElement
+SwipeControl(Element content = null, SwipeItemData[] leftItems = null, SwipeItemData[] rightItems = null) → SwipeControlElement
 SymbolIcon(string symbol) → SymbolIconData
 Tab(string header, Element content) → TabViewItemData
 TabView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
@@ -207,7 +207,7 @@ TreeView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, IReadOn
 UniformGrid(Orientation orientation, Element[] items) → GridElement
 VStack(Element[] children) → StackElement
 VStack(double spacing, Element[] children) → StackElement
-Viewbox(Element child) → ViewboxElement
+Viewbox(Element child = null) → ViewboxElement
 VirtualList(int itemCount, Func<int, Element> renderItem, Func<int, string> getItemKey = null, double? itemHeight = null, double estimatedItemHeight = 40, double spacing = 0, Action<VirtualListRef> ref = null, Action<int, int> onVisibleRangeChanged = null) → ComponentElement<VirtualListElement>
 WebView2(Uri source = null) → WebView2Element
 When(bool condition, Func<Element> then) → Element
