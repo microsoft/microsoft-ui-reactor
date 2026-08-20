@@ -388,10 +388,42 @@ no member to put `[Factory]` on. These are not fixable by more annotation, or by
 they are structurally excluded. Higher-order factories are a routine pattern in declarative UI, so this is
 worth raising on #10292 directly.
 
-After 876 annotations, 10 violations remain: **6 are genuine hazards the restriction correctly catches**
-(`Empty`, `When`, `If`, `Expr`, `DevtoolsMenu`, `AcrylicBrush` — all returning `EmptyElement.Instance` or a
-local), and 4 are further contagion (`Provide`, `SetAttached`). The safety mechanism works. Its blast radius
-is the finding.
+After 876 annotations, 10 violations remain. **A follow-up investigation showed these are false positives, not
+caught bugs** — see below. The safety mechanism is conservative and its blast radius is the finding.
+
+**Correction (2026-08-20): the six flagged methods are not hazards in Reactor.** An earlier draft of this
+section claimed the restriction "correctly caught six genuine hazards." That was wrong, and a dedicated
+investigation (branch `azchohfi-singleton-factories`, zero product-code changes) disproved it:
+
+- Aliasing an `Element` is only dangerous if the instance can acquire per-instance identity.
+  `EmptyElement` cannot: `Reconciler.Mount` maps it to `null` unconditionally
+  (`Reconciler.Mount.cs:117`), `Reconcile` intercepts it earlier still (`Reconciler.cs:1469/1476`), and
+  `FilterChildren` / `ChildReconciler` drop it from every child list. No control ⇒ no
+  `ReactorAttached.StateProperty`, no pool entry, no reconciler key. State sharing, pooling misbehaviour
+  and key collisions are structurally impossible, not merely unlikely.
+- The reconciler's element-level skip gate is `Element.ShallowEquals` — **structural**, with an explicit
+  `(EmptyElement, EmptyElement) => true` arm (`Element.cs:723`). Singleton and fresh instance are
+  indistinguishable to it. The `ReferenceEquals` sites nearby operate on DP values, rich-text paragraphs
+  and TreeView child arrays, not element identity.
+- Sharing is in places **by design**: `KeyedMemoCache.Resolve` deliberately returns the same instance
+  across renders, and `ElementReferenceComparer` exists to treat a repeated reference as a no-rebuild
+  signal. `Expr`'s pass-through identity is required by spec 033 §5 and asserted by existing tests
+  (`Assert.Same`), so "fixing" it would break them.
+- `AcrylicBrush` is **already fresh**; only the assign-to-local-then-return *shape* trips the rule, and it
+  cannot collapse into a single `new` expression without a behaviour change (writing `FallbackColor`
+  unconditionally would overwrite WinUI's default when the caller passes null).
+
+So the honest scoreline for `#10292`'s restriction on this codebase is: **876 annotations required, zero real
+defects found, at least one clear false positive.** The `Empty() { Margin = 4 }` corruption demonstrated in
+§5.1 is real, but only under *type-level* opt-in — the design that was rejected. Under member-level
+`[Factory]`, `Empty()` is simply never annotated and Reactor's immutability means no caller can mutate it
+anyway.
+
+`AcrylicBrush` is worth feeding back to `#10292`: a local that is provably a fresh allocation should
+arguably satisfy the restriction, since forbidding it pushes authors toward contorting a method body to
+satisfy a syntactic proxy. That is the same class of gap as the delegate-boundary limitation already raised
+in [discussions/6602](https://github.com/dotnet/csharplang/discussions/6602#discussioncomment-18085174) —
+the rule is a syntactic stand-in for an ownership property, sound but incomplete.
 
 The experiment was reverted; the framework is unchanged.
 
