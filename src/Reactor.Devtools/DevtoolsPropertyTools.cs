@@ -49,7 +49,7 @@ internal static class DevtoolsPropertyTools
 
                 if (name is not null)
                 {
-                    var (dp, field) = FindDependencyProperty(el, name);
+                    var (dp, member) = FindDependencyProperty(el, name);
                     var value = el.GetValue(dp);
                     bool isLocal;
                     try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
@@ -58,7 +58,7 @@ internal static class DevtoolsPropertyTools
                         name,
                         FormatValue(value),
                         value?.GetType().Name ?? "null",
-                        field.DeclaringType?.Name,
+                        member.DeclaringType?.Name,
                         isLocal);
                 }
 
@@ -90,11 +90,11 @@ internal static class DevtoolsPropertyTools
                 var windowId = DevtoolsTools.ReadString(@params, "window");
                 var el = resolver.Resolve(selector, windowId);
 
-                var (dp, field) = FindDependencyProperty(el, name);
+                var (dp, _) = FindDependencyProperty(el, name);
 
-                // Determine the target type from the DP field's declaring context.
-                // WinUI DPs don't expose PropertyType directly, so we infer from the
-                // current value's type, or fall back to the raw string.
+                // Determine the target type from the DP's current value. WinUI DPs
+                // don't expose PropertyType directly, so we infer from the current
+                // value's type, or fall back to the raw string.
                 var currentValue = el.GetValue(dp);
                 var targetType = currentValue?.GetType();
                 var parsed = ParseValue(raw, targetType);
@@ -331,49 +331,99 @@ internal static class DevtoolsPropertyTools
             ?? throw new McpToolException($"Missing required argument '{key}'.",
                 JsonRpcErrorCodes.InvalidParams);
 
-    /// <summary>Find a static DependencyProperty field on the element's type hierarchy,
+    /// <summary>Find a static DependencyProperty member on the element's type hierarchy,
     /// or on an owner type for attached properties (e.g. "Grid.Row").</summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses reflection to discover DependencyProperty fields.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools reflection for property discovery.")]
-    private static (DependencyProperty dp, FieldInfo field) FindDependencyProperty(UIElement el, string name)
+    /// <remarks>
+    /// A DP static can be either a field or a property depending on where the type
+    /// comes from: C#-authored DPs (Reactor's own, third-party controls) are
+    /// <c>public static readonly</c> <b>fields</b>, while CsWinRT projects the WinUI
+    /// ones as static <b>properties</b> — <c>typeof(Button)</c> exposes zero DP-typed
+    /// static fields and 112 DP-typed static properties. Checking only fields is what
+    /// made every WinUI lookup here fail (issue #1109), so both member kinds are
+    /// resolved, fields first.
+    /// </remarks>
+    private static (DependencyProperty dp, MemberInfo member) FindDependencyProperty(UIElement el, string name)
     {
+        // Convention: property "Foo" maps to static member "FooProperty".
+        var memberName = name.EndsWith("Property", StringComparison.Ordinal) ? name : name + "Property";
+
         // Support attached property syntax: "Grid.Row" → look on Grid type.
         if (name.Contains('.'))
         {
             var parts = name.Split('.', 2);
             var ownerName = parts[0];
             var propName = parts[1];
-            var fieldName = propName.EndsWith("Property", StringComparison.Ordinal) ? propName : propName + "Property";
+            memberName = propName.EndsWith("Property", StringComparison.Ordinal) ? propName : propName + "Property";
 
             // Search well-known WinUI namespaces for the owner type.
             var ownerType = FindTypeByName(ownerName);
-            if (ownerType is not null)
-            {
-                var field = ownerType.GetField(fieldName, BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
-                if (field is not null && field.FieldType == typeof(DependencyProperty))
-                    return ((DependencyProperty)field.GetValue(null)!, field);
-            }
+            if (ownerType is not null && TryReadDependencyPropertyStatic(ownerType, memberName) is { } attached)
+                return attached;
+
             throw new McpToolException(
                 $"No attached DependencyProperty '{name}' found. Check the owner type name.",
                 JsonRpcErrorCodes.InvalidParams);
         }
 
-        // Convention: property "Foo" maps to static field "FooProperty".
-        var dpFieldName = name.EndsWith("Property", StringComparison.Ordinal) ? name : name + "Property";
-
         for (var type = el.GetType(); type is not null; type = type.BaseType)
         {
-            var field = type.GetField(dpFieldName, BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
-            if (field is not null && field.FieldType == typeof(DependencyProperty))
-            {
-                var dp = (DependencyProperty)field.GetValue(null)!;
-                return (dp, field);
-            }
+            if (TryReadDependencyPropertyStatic(type, memberName) is { } found)
+                return found;
         }
 
         throw new McpToolException(
             $"No DependencyProperty '{name}' found on {el.GetType().Name} or its base types. For attached properties, use 'OwnerType.Property' syntax (e.g. 'Grid.Row').",
             JsonRpcErrorCodes.InvalidParams);
+    }
+
+    /// <summary>
+    /// Read the DependencyProperty exposed by the static member <paramref name="memberName"/>
+    /// on <paramref name="type"/>, as a field or (for CsWinRT-projected WinUI types) a
+    /// static property. Returns null when the member is absent, is not DP-typed, or
+    /// cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// <c>FlattenHierarchy</c> makes an ambiguous match possible when a derived type
+    /// re-declares an inherited static member, so both lookups tolerate
+    /// <see cref="AmbiguousMatchException"/> — <see cref="FindDependencyProperty"/>
+    /// walks the base chain anyway and will find the declaring type on a later step.
+    /// </remarks>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Devtools discovers DependencyProperty statics (fields on C#-authored types, CsWinRT-projected properties on WinUI ones) by reflecting over a Type that carries no DynamicallyAccessedMembers annotation. A member the trimmer removed reads back as null and is reported as not found.")]
+    private static (DependencyProperty dp, MemberInfo member)? TryReadDependencyPropertyStatic(Type type, string memberName)
+    {
+        const BindingFlags Flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+
+        FieldInfo? field = null;
+        try { field = type.GetField(memberName, Flags); }
+        catch (AmbiguousMatchException) { }
+        if (field is not null && field.FieldType == typeof(DependencyProperty)
+            && ReadStatic(() => field.GetValue(null)) is DependencyProperty fieldDp)
+        {
+            return (fieldDp, field);
+        }
+
+        PropertyInfo? property = null;
+        try { property = type.GetProperty(memberName, Flags); }
+        catch (AmbiguousMatchException) { }
+        if (property is not null && property.PropertyType == typeof(DependencyProperty) && property.CanRead
+            && ReadStatic(() => property.GetValue(null)) is DependencyProperty propertyDp)
+        {
+            return (propertyDp, property);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Read a static DP member, mapping a failing static initializer / WinRT
+    /// activation onto "not found" instead of surfacing a raw
+    /// <see cref="TargetInvocationException"/> through the MCP transport.
+    /// </summary>
+    private static object? ReadStatic(Func<object?> read)
+    {
+        try { return read(); }
+        catch (TargetInvocationException) { return null; }
+        catch (MemberAccessException) { return null; }
     }
 
     /// <summary>Resolve a short type name to a WinUI type (Grid, Canvas, ToolTipService, etc.).</summary>
@@ -397,9 +447,14 @@ internal static class DevtoolsPropertyTools
         return null;
     }
 
-    /// <summary>Enumerate all public static DependencyProperty fields on the element's type chain.</summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses reflection to enumerate DependencyProperty fields.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools reflection for property enumeration.")]
+    /// <summary>Enumerate all public static DependencyProperty members on the element's type chain.</summary>
+    /// <remarks>
+    /// Both member kinds are walked for the reason described on
+    /// <see cref="FindDependencyProperty"/>: WinUI's DP statics are CsWinRT-projected
+    /// static <b>properties</b>, C#-authored ones are static <b>fields</b>. Fields are
+    /// read first within each type, and the <c>seen</c> set keys on the trimmed
+    /// property name, so a DP exposed as both kinds is reported once.
+    /// </remarks>
     private static List<PropertyResult> EnumerateDependencyProperties(UIElement el)
     {
         var seen = new HashSet<string>();
@@ -407,35 +462,72 @@ internal static class DevtoolsPropertyTools
 
         for (var type = el.GetType(); type is not null && type != typeof(object); type = type.BaseType)
         {
-            var fields = type.GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
-            foreach (var f in fields)
-            {
-                if (f.FieldType != typeof(DependencyProperty)) continue;
-                var dp = (DependencyProperty)f.GetValue(null)!;
-                var propName = f.Name.EndsWith("Property", StringComparison.Ordinal)
-                    ? f.Name[..^8]
-                    : f.Name;
-
-                if (!seen.Add(propName)) continue;
-
-                object? value;
-                try { value = el.GetValue(dp); }
-                catch { value = "<error>"; }
-
-                var isLocal = false;
-                try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
-                catch { }
-
-                results.Add(new PropertyResult(
-                    propName,
-                    FormatValue(value),
-                    value?.GetType().Name ?? "null",
-                    type.Name,
-                    isLocal));
-            }
+            CollectDependencyProperties(el, type, seen, results);
         }
 
         return results;
+    }
+
+    /// <summary>Append the DP statics declared directly on <paramref name="type"/> to <paramref name="results"/>.</summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Devtools enumerates DependencyProperty statics (fields on C#-authored types, CsWinRT-projected properties on WinUI ones) over a Type that carries no DynamicallyAccessedMembers annotation. The result is a best-effort inventory for a diagnostic tool: a member the trimmer removed is simply absent from the listing, which degrades the output rather than breaking the tool.")]
+    private static void CollectDependencyProperties(
+        UIElement el,
+        Type type,
+        HashSet<string> seen,
+        List<PropertyResult> results)
+    {
+        const BindingFlags Flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+        foreach (var f in type.GetFields(Flags))
+        {
+            if (f.FieldType != typeof(DependencyProperty)) continue;
+            AddDependencyProperty(el, type, f.Name, () => f.GetValue(null), seen, results);
+        }
+
+        foreach (var p in type.GetProperties(Flags))
+        {
+            if (p.PropertyType != typeof(DependencyProperty) || !p.CanRead) continue;
+            AddDependencyProperty(el, type, p.Name, () => p.GetValue(null), seen, results);
+        }
+    }
+
+    /// <summary>Read one DP static and append its current value, skipping names already reported.</summary>
+    private static void AddDependencyProperty(
+        UIElement el,
+        Type declaringType,
+        string memberName,
+        Func<object?> read,
+        HashSet<string> seen,
+        List<PropertyResult> results)
+    {
+        var propName = memberName.EndsWith("Property", StringComparison.Ordinal)
+            ? memberName[..^"Property".Length]
+            : memberName;
+
+        if (!seen.Add(propName)) return;
+
+        if (ReadStatic(read) is not DependencyProperty dp)
+        {
+            // The static exists but couldn't be read (failed initializer / WinRT
+            // activation). Drop it from the listing rather than reporting a DP we
+            // don't have — and leave it in `seen` so a duplicate doesn't retry.
+            return;
+        }
+
+        object? value;
+        try { value = el.GetValue(dp); }
+        catch { value = "<error>"; }
+
+        var isLocal = false;
+        try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
+        catch { }
+
+        results.Add(new PropertyResult(
+            propName,
+            FormatValue(value),
+            value?.GetType().Name ?? "null",
+            declaringType.Name,
+            isLocal));
     }
 
     /// <summary>Format a DP value to a JSON-friendly string.</summary>
@@ -658,13 +750,7 @@ internal static class DevtoolsPropertyTools
 // so these are fully closed, source-generated records (registered in
 // DevtoolsJsonContext), and the serialized payloads no longer need the reflection
 // resolver fallback. The tool *logic* still introspects via reflection
-// (EnumerateDependencyProperties, DescribeStyle). Note that
-// Devtools_PropertyToolsExercise is no longer on
-// SelfTestRunner.DefaultAotSkipPatterns, but not because that reflection was shown
-// to survive trimming: the DP lookups return nothing on WinUI 3 under JIT and AOT
-// alike, because they search for fields while CsWinRT projects DependencyProperty
-// statics as properties (issue #1109). The fixture's live coverage is the
-// resource/style surface.
+// (EnumerateDependencyProperties, DescribeStyle).
 internal sealed record PropertyResult(string Name, string? Value, string ValueType, string? DeclaringType, bool IsLocal);
 
 internal sealed record PropertiesResult(int Count, IReadOnlyList<PropertyResult> Properties);
