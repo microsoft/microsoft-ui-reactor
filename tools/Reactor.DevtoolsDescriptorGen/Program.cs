@@ -61,7 +61,11 @@ if (!File.Exists(descriptorPath))
 }
 
 var onDisk = File.ReadAllText(descriptorPath);
-if (string.Equals(onDisk, generated, StringComparison.Ordinal))
+
+// Compare with line endings normalised. The generator emits LF, but git's autocrlf
+// hands a Windows clone CRLF, and a check that fails on that would be a spurious CI
+// break on every fresh clone rather than a real staleness signal.
+if (string.Equals(Normalise(onDisk), Normalise(generated), StringComparison.Ordinal))
 {
     Console.WriteLine("descriptor is up to date");
     return 0;
@@ -74,6 +78,8 @@ Console.Error.WriteLine(
     "A Windows App SDK update likely added or removed DependencyProperty statics. " +
     "Regenerate it (see docs/aot-support.md) and commit the result.");
 return 1;
+
+static string Normalise(string text) => text.Replace("\r\n", "\n");
 
 static string Generate(string assemblyPath)
 {
