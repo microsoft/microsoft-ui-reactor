@@ -235,7 +235,7 @@ internal static class SelfTestRunner
     private static void ValidateDefaultSkipPatterns(string[] allFixtures)
     {
         var stale = DefaultAotSkipPatterns
-            .Where(p => !allFixtures.Any(f => MatchesAnyPattern(f, new[] { p })))
+            .Where(p => !allFixtures.Any(f => MatchesPattern(f, p)))
             .ToArray();
         if (stale.Length == 0) return;
 
@@ -247,18 +247,21 @@ internal static class SelfTestRunner
             $"entry, or correct it to the fixture's current name.");
     }
 
+    /// <summary>
+    /// Matches one fixture name against one pattern: exact (ordinal) or a
+    /// <c>Prefix*</c> wildcard. Factored out of <see cref="MatchesAnyPattern"/> so
+    /// single-pattern callers don't have to wrap the pattern in a throwaway array.
+    /// </summary>
+    private static bool MatchesPattern(string name, string pattern) =>
+        pattern.EndsWith('*')
+            ? name.StartsWith(pattern[..^1], StringComparison.Ordinal)
+            : string.Equals(name, pattern, StringComparison.Ordinal);
+
     private static bool MatchesAnyPattern(string name, string[] patterns)
     {
         foreach (var p in patterns)
         {
-            if (p.EndsWith('*'))
-            {
-                if (name.StartsWith(p[..^1], StringComparison.Ordinal)) return true;
-            }
-            else if (string.Equals(name, p, StringComparison.Ordinal))
-            {
-                return true;
-            }
+            if (MatchesPattern(name, p)) return true;
         }
         return false;
     }
