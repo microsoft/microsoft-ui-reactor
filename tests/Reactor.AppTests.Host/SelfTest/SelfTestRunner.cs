@@ -116,10 +116,10 @@ internal static class SelfTestRunner
     // tests/Reactor.AppTests.Host/probe-aot-skips.ps1 against the AOT-published
     // Host. As of WindowsAppSDK#6394 workaround (see Reactor.AppTests.Host.csproj
     // _CopyWinUIResourcesForAot target), all NATIVE_CRASH skips are gone. What is
-    // left is the buckets below: two control-collection assertions still under
-    // investigation, the two Devtools fixtures whose reflection targets the
-    // trimmer removes, PropertyGrid auto-discovery, the Issue142
-    // XAML-metadata-provider edge cases, and hot-reload state migration.
+    // left is the buckets below: the UseObservableTree property walk, the two
+    // Devtools fixtures whose reflection targets the trimmer removes,
+    // PropertyGrid auto-discovery, the Issue142 XAML-metadata-provider edge
+    // cases, and hot-reload state migration.
     //
     // Reflection on its own does NOT make a fixture AOT-hostile, so don't use it
     // as the sorting rule. The 25 Devtools fixtures that run here mostly depend on
@@ -147,8 +147,12 @@ internal static class SelfTestRunner
     // debugging workflow.
     private static readonly string[] DefaultAotSkipPatterns =
     {
-        // -- Reactor framework, control-collection assertion still under
-        // investigation (no native crash; assertion fails inside the fixture). --
+        // -- UseObservableTree subscribes to nested INotifyPropertyChanged by
+        // walking the model graph with Type.GetProperties (see
+        // ObservableTreeTracker.CreateInpcCandidateProperties). The fixture's
+        // POCO model is not rooted for PublicProperties under AOT, so the walk
+        // finds no nested INPC source and the deep-mutation assertion fails
+        // (no native crash; the assertion fails inside the fixture). --
         "CoreCov2_UseObservableTreeHook",
 
         // -- Devtools / MCP server. The other 25 Devtools fixtures run under AOT;
@@ -677,4 +681,3 @@ internal static class SelfTestRunner
         }
     }
 }
-

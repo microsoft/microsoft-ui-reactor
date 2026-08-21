@@ -3345,4 +3345,3 @@ internal static class SelfTestFixtureRegistry
         _ => null,
     };
 }
-
