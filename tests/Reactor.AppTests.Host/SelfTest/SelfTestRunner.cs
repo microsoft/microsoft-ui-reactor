@@ -169,29 +169,15 @@ internal static class SelfTestRunner
         // Devtools_FireRejectsLifecycleMethods deliberately still runs: `fire`
         // refuses forbidden names against a static HashSet *before* it reflects
         // (DevtoolsFireTool.FindHandler), so that path is trim-safe and is worth
-        // keeping as live AOT coverage. See docs/aot-support.md. --
+        // keeping as live AOT coverage.
+        //
+        // DependencyProperty discovery for `properties` / `setProperty` used to be
+        // a third entry here (issue #1109) and is deliberately NOT one any more:
+        // Microsoft.UI.Reactor.Devtools now ships an ILLink descriptor that roots
+        // WinUI's DP statics, so Devtools_PropertyToolsDpDiscovery passes under AOT.
+        // See docs/aot-support.md. --
         "Devtools_FireInvokesNamedHandler",
         "Devtools_StateReadsHooks",
-
-        // DependencyProperty discovery for the `properties` / `setProperty` tools
-        // (issue #1109). WinUI's DP statics are CsWinRT-projected static
-        // *properties*, and ILCompiler keeps no reflection metadata for them unless
-        // something roots PublicProperties on those types, so the lookups find
-        // nothing under AOT and every DP assertion fails. Not limited to the
-        // projected properties: a C#-authored DP *field* on a purpose-built control
-        // is equally undiscoverable, so this is about reflection metadata in
-        // general, not about CsWinRT. Measured, not assumed: adding a probe that
-        // called typeof(Button).GetProperties() to the fixture made all 112 DP
-        // statics visible again and turned the whole fixture green, because
-        // DynamicallyAccessedMemberTypes.PublicProperties covers inherited members
-        // too — deleting the probe reproduced the failures exactly. Rooting the
-        // WinUI control hierarchy that way in every AOT app is not a trade a
-        // diagnostic-only tool should make, so this stays skipped rather than
-        // annotated. The AOT-safe rest of the property-tool surface (resources,
-        // styles, ancestors, value formatting/parsing) lives in
-        // Devtools_PropertyToolsExercise and Devtools_PropertyToolsReflectionExercise,
-        // which are deliberately NOT skipped. --
-        "Devtools_PropertyToolsDpDiscovery",
 
         // -- PropertyGrid auto-discovery walks user types via reflection and is
         // not AOT-safe by design. Documented in docs/aot-support.md. --

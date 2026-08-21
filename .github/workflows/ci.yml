@@ -421,11 +421,11 @@ jobs:
 
       # Run the published exe directly (not via `dotnet test`) so we exercise
       # the NativeAOT binary. SelfTestRunner.DefaultAotSkipPatterns gates the
-      # known-failing fixtures (16 entries: PropertyGrid auto-discovery, three
-      # Devtools fixtures — `fire`'s handler lookup, `state`'s hook read, and
-      # DependencyProperty discovery for `properties`/`setProperty` — Issue142
-      # XAML metadata, hot-reload state migration, and the UseObservableTree
-      # property walk); any *new* failure surfaces as exit code 1 and fails the job.
+      # known-failing fixtures (15 entries: PropertyGrid auto-discovery, two
+      # Devtools fixtures — `fire`'s handler lookup and `state`'s hook read —
+      # Issue142 XAML metadata, hot-reload state migration, and the
+      # UseObservableTree property walk); any *new* failure surfaces as exit
+      # code 1 and fails the job.
       # See docs/aot-support.md for the skip-list debugging workflow.
       - name: Run AOT selftests
         shell: pwsh
@@ -598,6 +598,23 @@ jobs:
           -c Release
           -o ${{ runner.temp }}/hello-world-aot-devtools-on
           --nologo
+
+      # The committed ILLink descriptor roots WinUI's DependencyProperty statics so
+      # devtools `properties`/`setProperty` work under AOT (issue #1109). A Windows App
+      # SDK bump that adds or removes DP statics makes it stale, and a stale descriptor
+      # fails silently — the affected DPs just stop being discoverable. Compare it
+      # against the WinUI assembly this publish actually resolved.
+      - name: Verify DependencyProperty descriptor is not stale
+        shell: pwsh
+        run: |
+          $winui = Get-ChildItem samples\apps\hello-world-aot-devtools-on\bin -Recurse -Filter Microsoft.WinUI.dll |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $winui) {
+            Write-Error "No resolved Microsoft.WinUI.dll found to check the descriptor against."
+            exit 1
+          }
+          dotnet run --project tools\Reactor.DevtoolsDescriptorGen -c Release -- $winui.FullName src\Reactor.Devtools\ILLink.Descriptors.xml --check
 
       - name: Verify switch-on mstat
         shell: pwsh

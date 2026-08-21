@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Roots the selftest's own DependencyProperty-bearing types so
+  Devtools_PropertyToolsDpDiscovery can run under NativeAOT (issue #1109).
+
+  The descriptor shipped inside Microsoft.UI.Reactor.Devtools roots WinUI's DP
+  statics, which is what makes the tools work against built-in controls. It cannot
+  root types declared *here* — and that is the point worth understanding rather than
+  papering over: an app with its own custom controls has exactly the same obligation
+  for its own assembly. This file is that obligation, discharged for the test host,
+  and doubles as the worked example the docs point at.
+-->
+<linker>
+  <assembly fullname="Reactor.AppTests.Host">
+    <!-- A DP declared the C# way, as a public static readonly field. -->
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFieldDpControl" preserve="all" />
+
+    <!-- Readable base DP field hidden by an unreadable derived static property. -->
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsReadableBaseControl" preserve="all" />
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsUnreadableShadowControl" preserve="all" />
+
+    <!-- Reflection shapes the lookup helpers have to survive: a throwing getter, a
+         write-only static, and `new`-hidden statics of both member kinds. -->
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/AwkwardDpStatics" preserve="all" />
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/ShadowedDpStatics" preserve="all" />
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/ShadowedDpStaticsBase" preserve="all" />
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/ShadowedDpFields" preserve="all" />
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/ShadowedDpFieldsBase" preserve="all" />
+  </assembly>
+</linker>
