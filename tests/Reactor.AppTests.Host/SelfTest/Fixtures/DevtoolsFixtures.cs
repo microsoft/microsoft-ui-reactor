@@ -1361,9 +1361,10 @@ internal static class DevtoolsFixtures
                 TryRead(typeof(AwkwardDpStatics), "WriteOnlyProperty") is { Threw: false, Value: null });
 
             // A DP field on a type whose static constructor threw reads back as
-            // not-found too. Reflection wraps the TypeInitializationException in a
-            // TargetInvocationException, so ReadStatic's first arm is what catches it —
-            // remove that arm and this check reddens.
+            // not-found too. This is the one place the two runtimes disagree: JIT wraps
+            // the TypeInitializationException in a TargetInvocationException, NativeAOT
+            // surfaces it bare, so ReadStatic needs an arm for each. Only the AOT run
+            // catches a regression here.
             H.Check("Devtools_Dp_FailingInitializerIsNotFound",
                 TryRead(typeof(FailingInitializerDpStatics), "BoomProperty") is { Threw: false, Value: null });
 

@@ -445,13 +445,15 @@ internal static class DevtoolsPropertyTools
     /// the MCP transport.
     /// </summary>
     /// <remarks>
-    /// A failing static constructor is covered by the <see cref="TargetInvocationException"/>
-    /// arm rather than needing a <see cref="TypeInitializationException"/> one: reflection
-    /// wraps the latter inside the former, for field reads and property getters alike and
-    /// on first and subsequent access. That is worth stating because
-    /// <see cref="TypeInitializationException"/> derives from neither arm below, so
-    /// without the wrapping it would escape — the wrapping is what makes the second arm
-    /// unnecessary, not the type hierarchy.
+    /// <see cref="TypeInitializationException"/> needs its own arm because the two
+    /// runtimes disagree. On CoreCLR/JIT, reflection wraps it in a
+    /// <see cref="TargetInvocationException"/> (measured for field reads and property
+    /// getters, first and subsequent access alike), so the first arm would suffice.
+    /// On NativeAOT it comes back bare, and since it derives from
+    /// <see cref="SystemException"/> rather than <see cref="MemberAccessException"/>,
+    /// nothing else here catches it — one control with a failing static constructor
+    /// would take down the whole <c>properties</c> call. Devtools is a debugging tool
+    /// pointed at whatever the app happens to contain, so it has to survive that.
     /// <para>
     /// <see cref="ArgumentException"/> is deliberately absent: that is what
     /// <c>GetValue(null)</c> throws for a write-only property, and swallowing it here
@@ -463,6 +465,7 @@ internal static class DevtoolsPropertyTools
     {
         try { return read(); }
         catch (TargetInvocationException) { return null; }
+        catch (TypeInitializationException) { return null; }
         catch (MemberAccessException) { return null; }
     }
 
