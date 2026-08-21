@@ -136,7 +136,7 @@ internal static class SelfTestRunner
     //
     // Keep this list honest: a stale entry is AOT coverage that is silently
     // switched off. Re-run the probe after framework changes and delete whatever
-    // now passes. ValidateDefaultSkipPatterns() fails the run when an entry stops
+    // now passes. ValidateDefaultSkipPatterns() aborts the run when an entry stops
     // matching any registered fixture, so a rename cannot quietly mute nothing
     // (or, via a wildcard, quietly mute more than intended).
     //
@@ -207,8 +207,8 @@ internal static class SelfTestRunner
     }
 
     /// <summary>
-    /// Fails the run when a committed <see cref="DefaultAotSkipPatterns"/> entry no
-    /// longer matches any registered fixture.
+    /// Throws when a committed <see cref="DefaultAotSkipPatterns"/> entry no longer
+    /// matches any registered fixture.
     /// </summary>
     /// <remarks>
     /// A skip entry is a silent instrument: when a fixture is renamed or deleted, its
@@ -218,30 +218,31 @@ internal static class SelfTestRunner
     /// remembers to run it. Checking the patterns against the registry turns it into
     /// a signal on every selftest run instead.
     ///
-    /// Runs on JIT as well as AOT — the JIT selftest job is far cheaper than the AOT
-    /// one, so it should be the tier that catches a rename. Only the committed
-    /// defaults are validated; ad-hoc REACTOR_AOT_SKIP additions are a debugging
-    /// affordance and may legitimately name nothing.
+    /// Throwing — rather than recording a failure and continuing — is deliberate. A
+    /// stale committed skip is a configuration error, not a fixture result, and it has
+    /// to fail both consumers of this run. The Host's own catch turns this into a TAP
+    /// <c>Bail out!</c> and exit 1, which the AOT CI job surfaces directly; because it
+    /// throws before any fixture runs, the MSTest wrapper sees exit 1 with an empty
+    /// fixture map and raises an init error (<c>SelfTestBatch.RunSelfTests</c>), so the
+    /// JIT job fails too. Merely incrementing the failure counter would leave the
+    /// wrapper reporting every fixture as passed.
+    ///
+    /// Only the committed defaults are validated; ad-hoc REACTOR_AOT_SKIP additions are
+    /// a debugging affordance and may legitimately name nothing.
     /// </remarks>
-    private static void ValidateDefaultSkipPatterns(Harness harness, string[] allFixtures)
+    private static void ValidateDefaultSkipPatterns(string[] allFixtures)
     {
         var stale = DefaultAotSkipPatterns
             .Where(p => !allFixtures.Any(f => MatchesAnyPattern(f, new[] { p })))
             .ToArray();
         if (stale.Length == 0) return;
 
-        // Not a `not ok` line: the TAP plan (`1..N`) is already committed to the
-        // fixture count, so this reports through the failure counter (which drives
-        // the exit code and the `# Total failures:` trailer) plus a diagnostic.
-        Console.WriteLine(
-            $"Bail out! STALE_AOT_SKIP: {stale.Length} DefaultAotSkipPatterns entr" +
+        throw new InvalidOperationException(
+            $"STALE_AOT_SKIP: {stale.Length} DefaultAotSkipPatterns entr" +
             $"{(stale.Length == 1 ? "y matches" : "ies match")} no registered fixture: " +
-            string.Join(", ", stale));
-        Console.WriteLine(
-            "# A renamed or deleted fixture leaves its skip entry muting nothing. " +
-            "Delete the entry, or correct it to the fixture's current name.");
-        Console.Error.WriteLine($"STALE_AOT_SKIP: {string.Join(", ", stale)}");
-        harness.RecordFailure();
+            $"{string.Join(", ", stale)}. A renamed or deleted fixture leaves its skip " +
+            $"entry muting nothing, which silently switches off AOT coverage. Delete the " +
+            $"entry, or correct it to the fixture's current name.");
     }
 
     private static bool MatchesAnyPattern(string name, string[] patterns)
@@ -295,6 +296,14 @@ internal static class SelfTestRunner
                 try
                 {
                     var allFixtures = SelfTestFixtureRegistry.AllFixtures;
+
+                    // Before the TAP header and before any fixture runs: a stale
+                    // committed skip is a configuration error, so it aborts the run
+                    // via the catch below rather than being reported as a result.
+                    // Validated against the full registry, not `fixtures`, so a
+                    // --filter run doesn't flag every unrelated pattern.
+                    ValidateDefaultSkipPatterns(allFixtures);
+
                     var fixtures = Filter is not null
                         ? allFixtures.Where(f => f.Contains(Filter, StringComparison.OrdinalIgnoreCase)).ToArray()
                         : allFixtures;
@@ -304,12 +313,6 @@ internal static class SelfTestRunner
 
                     Console.WriteLine($"TAP version 14");
                     Console.WriteLine($"1..{fixtures.Length}");
-
-                    // After the plan line so the diagnostic sits inside the TAP
-                    // stream rather than ahead of its header. Uses `allFixtures`,
-                    // not `fixtures`, so a --filter run doesn't report every
-                    // unrelated pattern as stale.
-                    ValidateDefaultSkipPatterns(harness, allFixtures);
 
                     // Suite clock. The whole run shares one process budget in the
                     // MSTest wrapper (SelfTestBatch.SelfTestTimeoutMs), and when it
