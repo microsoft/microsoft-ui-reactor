@@ -116,23 +116,23 @@ internal static class SelfTestRunner
     // tests/Reactor.AppTests.Host/probe-aot-skips.ps1 against the AOT-published
     // Host. As of WindowsAppSDK#6394 workaround (see Reactor.AppTests.Host.csproj
     // _CopyWinUIResourcesForAot target), all NATIVE_CRASH skips are gone. What is
-    // left is the buckets below: the UseObservableTree property walk, the two
+    // left is the buckets below: the UseObservableTree property walk, the
     // Devtools fixtures whose reflection targets the trimmer removes,
     // PropertyGrid auto-discovery, the Issue142 XAML-metadata-provider edge
     // cases, and hot-reload state migration.
     //
     // Reflection on its own does NOT make a fixture AOT-hostile, so don't use it
-    // as the sorting rule. The 25 Devtools fixtures that run here mostly depend on
+    // as the sorting rule. The Devtools fixtures that run here mostly depend on
     // *type-name* reflection (GetType().Name in TreeWalker / SelectorResolver),
     // which trimming always preserves. What breaks is *member-level* reflection
-    // over user code the trimmer drops — the two entries below. Do not read
-    // Devtools_PropertyToolsExercise as evidence that field reflection survives
-    // trimming: it passes, but its DP-enumeration path returns nothing on WinUI 3
-    // whether AOT or JIT (issue #1109), so it never exercises that question.
+    // whose target the trimmer drops — the Devtools entries below.
     //
     // Each name was verified to fail in isolation; wildcards from earlier
     // skip-list iterations have been replaced with explicit names so that
-    // newly-passing siblings re-enter the run automatically.
+    // newly-passing siblings re-enter the run automatically. Prefer splitting a
+    // fixture over skipping it whole: an entry mutes every check in the fixture,
+    // including the ones that do pass under AOT (see the #1109 entry below, which
+    // exists precisely so the AOT-safe property-tool checks stay live).
     //
     // Keep this list honest: a stale entry is AOT coverage that is silently
     // switched off. Re-run the probe after framework changes and delete whatever
@@ -141,6 +141,11 @@ internal static class SelfTestRunner
     // a no-op. It does NOT catch the opposite drift — an entry that still matches
     // but has started passing, or a wildcard that has grown to cover more fixtures
     // than intended. Only the probe finds those.
+    //
+    // When probing, beware the observer effect: diagnostic code that calls
+    // typeof(T).GetMembers()/GetProperties() on a constant type roots reflection
+    // metadata for T at compile time, so the probe can make the very thing it is
+    // measuring start working. Confirm any AOT verdict with the probe removed.
     //
     // Override via REACTOR_AOT_SKIP=Pat1,Pat2 (no rebuild needed). Patterns
     // are exact-match or Prefix* wildcard. See docs/aot-support.md for the full
@@ -155,11 +160,11 @@ internal static class SelfTestRunner
         // (no native crash; the assertion fails inside the fixture). --
         "CoreCov2_UseObservableTreeHook",
 
-        // -- Devtools / MCP server. The other 25 Devtools fixtures run under AOT;
-        // these two are the ones whose reflection targets the trimmer removes.
+        // -- Devtools / MCP server. The other Devtools fixtures run under AOT;
+        // these are the ones whose reflection targets the trimmer removes.
         // `fire` resolves a named handler with GetMethods(DeclaredOnly) over the
         // *user* component, and under AOT that set comes back empty — the tool
-        // answers "unknown-event" with reachableMethods: []. `state` reads hook
+        // answers unknown-event with reachableMethods: []. `state` reads hook
         // bookkeeping through Component's non-public Context property.
         // Devtools_FireRejectsLifecycleMethods deliberately still runs: `fire`
         // refuses forbidden names against a static HashSet *before* it reflects
@@ -167,6 +172,23 @@ internal static class SelfTestRunner
         // keeping as live AOT coverage. See docs/aot-support.md. --
         "Devtools_FireInvokesNamedHandler",
         "Devtools_StateReadsHooks",
+
+        // DependencyProperty discovery for the `properties` / `setProperty` tools
+        // (issue #1109). WinUI's DP statics are CsWinRT-projected static
+        // *properties*, and ILCompiler keeps no reflection metadata for them unless
+        // something roots PublicProperties on those types, so the lookups find
+        // nothing under AOT and every DP assertion fails. Measured, not assumed:
+        // adding a probe that called typeof(Button).GetProperties() to the fixture
+        // made all 112 DP statics visible again and turned the whole fixture green,
+        // because DynamicallyAccessedMemberTypes.PublicProperties covers inherited
+        // members too — deleting the probe reproduced the failures exactly. Rooting
+        // the WinUI control hierarchy that way in every AOT app is not a trade a
+        // diagnostic-only tool should make, so this stays skipped rather than
+        // annotated. The AOT-safe rest of the property-tool surface (resources,
+        // styles, ancestors, value formatting/parsing) lives in
+        // Devtools_PropertyToolsExercise and Devtools_PropertyToolsReflectionExercise,
+        // which are deliberately NOT skipped. --
+        "Devtools_PropertyToolsDpDiscovery",
 
         // -- PropertyGrid auto-discovery walks user types via reflection and is
         // not AOT-safe by design. Documented in docs/aot-support.md. --

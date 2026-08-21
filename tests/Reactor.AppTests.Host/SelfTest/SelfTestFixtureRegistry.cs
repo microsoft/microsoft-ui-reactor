@@ -910,6 +910,7 @@ internal static class SelfTestFixtureRegistry
         "Devtools_InitializeHandshake",
         "Devtools_SwitchComponentInvalidatesIds",
         "Devtools_PropertyToolsExercise",
+        "Devtools_PropertyToolsDpDiscovery",
         "Devtools_PropertyToolsReflectionExercise",
         "Devtools_McpServerProtocolEdges",
         // Coverage boost — targeting remaining gaps to reach 85%
@@ -2579,6 +2580,7 @@ internal static class SelfTestFixtureRegistry
         "Devtools_InitializeHandshake" => new DevtoolsFixtures.InitializeHandshake(harness),
         "Devtools_SwitchComponentInvalidatesIds" => new DevtoolsFixtures.SwitchComponentInvalidatesIds(harness),
         "Devtools_PropertyToolsExercise" => new DevtoolsFixtures.PropertyToolsExercise(harness),
+        "Devtools_PropertyToolsDpDiscovery" => new DevtoolsFixtures.PropertyToolsDpDiscovery(harness),
         "Devtools_PropertyToolsReflectionExercise" => new DevtoolsFixtures.PropertyToolsReflectionExercise(harness),
         "Devtools_McpServerProtocolEdges" => new DevtoolsFixtures.McpServerProtocolEdges(harness),
         // Coverage boost

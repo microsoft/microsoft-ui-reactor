@@ -1045,9 +1045,6 @@ internal static class DevtoolsFixtures
             {
                 Content = "Property Target",
                 Style = CreatePropertyButtonStyle(),
-                // A distinctive local value for the by-name read below, so the
-                // assertion doesn't depend on whatever the default/theme Padding is.
-                Padding = new Thickness(7, 8, 9, 10),
             };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(button, "prop-button");
             button.Resources["DevtoolsElementBrush"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
@@ -1068,72 +1065,6 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => null, nameof(PropertyToolsRoot));
-
-            // Each DP check below reads its response through `is { }` rather than
-            // `?? throw`, so a tool that regresses to an error envelope fails that one
-            // assertion instead of aborting the fixture and hiding the rest.
-            var allPropsResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button" });
-            var enumeratedNames = Result(allPropsResp) is { } allProps
-                ? allProps.GetProperty("properties").EnumerateArray()
-                    .Select(p => p.GetProperty("name").GetString())
-                    .ToArray()
-                : [];
-            // Issue #1109: `properties` used to return {"count":0,"properties":[]} for
-            // every element because DP discovery only looked at Type.GetField(s), while
-            // CsWinRT projects WinUI DependencyProperty statics as static *properties*.
-            // These names are the oracle: `Content` is declared on ContentControl and
-            // `Padding` on Control, so finding both also proves the walk climbs the base
-            // chain rather than stopping at Button.
-            H.Check("Devtools_Props_Enumerates",
-                Result(allPropsResp) is { } props
-                && props.GetProperty("count").GetInt32() == enumeratedNames.Length
-                && enumeratedNames.Length > 0
-                && enumeratedNames.Contains("Content")
-                && enumeratedNames.Contains("Padding"));
-
-            // The single-property path uses a different lookup (FindDependencyProperty
-            // by name) than the enumeration, so it needs its own oracle. Padding is
-            // declared on Control, three levels above Button, and carries the
-            // distinctive local value set above.
-            var singleReadResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button", Name = "Padding" });
-            H.Check("Devtools_Props_ReadsSingleByName",
-                Result(singleReadResp) is { } singleRead
-                && singleRead.GetProperty("name").GetString() == "Padding"
-                && singleRead.GetProperty("declaringType").GetString() == "Control"
-                && singleRead.GetProperty("value").GetString() == "7,8,9,10"
-                && singleRead.GetProperty("isLocal").GetBoolean());
-
-            // Attached DP read: Grid.RowProperty exists only as a CsWinRT-projected
-            // static property, so this is the exact shape #1109 broke. Grid.Row was
-            // never set, so it must read back as the DP's default of 0.
-            var attachedPropResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button", Name = "Grid.Row" });
-            H.Check("Devtools_Props_ReadAttached",
-                Result(attachedPropResp) is { } attachedProp
-                && attachedProp.GetProperty("name").GetString() == "Grid.Row"
-                && attachedProp.GetProperty("value").GetString() == "0"
-                && attachedProp.GetProperty("isLocal").GetBoolean() == false);
-
-            // Assert off the live control, not the tool's own echo: a setProperty that
-            // silently wrote nothing would still echo back ok:true for whatever it read.
-            var setAttachedResp = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#prop-button", Name = "Grid.Row", Value = "2" });
-            H.Check("Devtools_SetProp_Attached",
-                Result(setAttachedResp) is { } setAttached
-                && setAttached.GetProperty("ok").GetBoolean()
-                && Microsoft.UI.Xaml.Controls.Grid.GetRow(button) == 2);
-
-            var setDirectResp = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#prop-button", Name = "Width", Value = "321" });
-            H.Check("Devtools_SetProp_Direct",
-                Result(setDirectResp) is { } setDirect
-                && setDirect.GetProperty("ok").GetBoolean()
-                && button.Width == 321);
-
-            // The by-name lookup must still reject genuinely absent DPs rather than
-            // matching some unrelated static now that properties are in scope.
-            var missingProp = await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button", Name = "NoSuchDevtoolsProperty" });
-            H.Check("Devtools_Props_UnknownNameErrors",
-                Result(missingProp) is null
-                && Error(missingProp) is { } missingErr
-                && missingErr.GetProperty("message").GetString()!.Contains("NoSuchDevtoolsProperty", StringComparison.Ordinal));
 
             H.Check("Devtools_PropButton_Found", button is not null);
 
@@ -1211,6 +1142,162 @@ internal static class DevtoolsFixtures
         }
     }
 
+    /// <summary>
+    /// Issue #1109: DependencyProperty *discovery* for the <c>properties</c> /
+    /// <c>setProperty</c> MCP tools, asserted both end-to-end over JSON-RPC and
+    /// directly against the two reflection helpers.
+    /// <para>
+    /// This lives apart from <see cref="PropertyToolsExercise"/> and
+    /// <see cref="PropertyToolsReflectionExercise"/> for one reason: it is the only
+    /// part of the property-tool surface that does not survive trimming, so it is the
+    /// only part that has to be muted under NativeAOT
+    /// (<c>SelfTestRunner.DefaultAotSkipPatterns</c>). Keeping it separate means the
+    /// AOT-safe majority of those two fixtures — resources, styles, ancestors, value
+    /// formatting and parsing — keeps running as live AOT coverage instead of being
+    /// switched off as collateral.
+    /// </para>
+    /// </summary>
+    internal sealed class PropertyToolsDpDiscovery(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var button = new Button
+            {
+                Content = "DP Target",
+                // A distinctive local value for the by-name read below, so the assertion
+                // doesn't depend on whatever the default/theme Padding happens to be.
+                Padding = new Thickness(7, 8, 9, 10),
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(button, "dp-button");
+
+            H.Check("Devtools_Dp_Start", true);
+            H.SetContent(new Border { Child = button });
+            await Harness.Render();
+
+            using var mcp = new McpHarness(H.Window, () => null, nameof(PropertyToolsRoot));
+
+            // Each check reads its response through `is { }` rather than `?? throw`, so a
+            // tool that regresses to an error envelope fails that one assertion instead
+            // of aborting the fixture and hiding the rest.
+            var allPropsResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button" });
+            var enumeratedNames = Result(allPropsResp) is { } allProps
+                ? allProps.GetProperty("properties").EnumerateArray()
+                    .Select(p => p.GetProperty("name").GetString())
+                    .ToArray()
+                : [];
+            // Before the fix, `properties` returned {"count":0,"properties":[]} for every
+            // element because DP discovery only looked at Type.GetField(s), while CsWinRT
+            // projects WinUI DependencyProperty statics as static *properties*. These
+            // names are the oracle: `Content` is declared on ContentControl and `Padding`
+            // on Control, so finding both also proves the walk climbs the base chain
+            // rather than stopping at Button.
+            H.Check("Devtools_Dp_Enumerates",
+                Result(allPropsResp) is { } props
+                && props.GetProperty("count").GetInt32() == enumeratedNames.Length
+                && enumeratedNames.Length > 0
+                && enumeratedNames.Contains("Content")
+                && enumeratedNames.Contains("Padding"));
+
+            // The single-property path uses a different lookup (FindDependencyProperty by
+            // name) than the enumeration, so it needs its own oracle.
+            var singleReadResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "Padding" });
+            H.Check("Devtools_Dp_ReadsSingleByName",
+                Result(singleReadResp) is { } singleRead
+                && singleRead.GetProperty("name").GetString() == "Padding"
+                && singleRead.GetProperty("declaringType").GetString() == "Control"
+                && singleRead.GetProperty("value").GetString() == "7,8,9,10"
+                && singleRead.GetProperty("isLocal").GetBoolean());
+
+            // Attached DP read: Grid.RowProperty exists only as a CsWinRT-projected static
+            // property, never as a field, so this is the exact shape #1109 broke. Grid.Row
+            // was never set, so it must read back as the DP's default of 0.
+            var attachedPropResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "Grid.Row" });
+            H.Check("Devtools_Dp_ReadAttached",
+                Result(attachedPropResp) is { } attachedProp
+                && attachedProp.GetProperty("name").GetString() == "Grid.Row"
+                && attachedProp.GetProperty("value").GetString() == "0"
+                && attachedProp.GetProperty("isLocal").GetBoolean() == false);
+
+            // Assert off the live control, not the tool's own echo: a setProperty that
+            // silently wrote nothing would still echo back ok:true for whatever it read.
+            var setAttachedResp = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#dp-button", Name = "Grid.Row", Value = "2" });
+            H.Check("Devtools_Dp_SetAttached",
+                Result(setAttachedResp) is { } setAttached
+                && setAttached.GetProperty("ok").GetBoolean()
+                && Microsoft.UI.Xaml.Controls.Grid.GetRow(button) == 2);
+
+            var setDirectResp = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#dp-button", Name = "Width", Value = "321" });
+            H.Check("Devtools_Dp_SetDirect",
+                Result(setDirectResp) is { } setDirect
+                && setDirect.GetProperty("ok").GetBoolean()
+                && button.Width == 321);
+
+            // The by-name lookup must still reject genuinely absent DPs rather than
+            // matching some unrelated static now that properties are in scope.
+            var missingProp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "NoSuchDevtoolsProperty" });
+            H.Check("Devtools_Dp_UnknownNameErrors",
+                Result(missingProp) is null
+                && Error(missingProp) is { } missingErr
+                && missingErr.GetProperty("message").GetString()!.Contains("NoSuchDevtoolsProperty", StringComparison.Ordinal));
+
+            H.SetContent(null);
+
+            // -- and the same two helpers, called directly ---------------------------
+
+            var toolsType = typeof(DevtoolsPropertyTools);
+            object? Invoke(string name, params object?[] args) =>
+                toolsType.GetMethod(name, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!
+                    .Invoke(null, args);
+
+            var bare = new Button { Width = 123 };
+
+            // FindDependencyProperty must return the *real* Grid.RowProperty, not just
+            // "something non-null": prove it by writing through the returned DP and
+            // reading the value back with Grid.GetRow. The lookup throws McpToolException
+            // when it finds nothing, so catch that and fail this one check rather than
+            // aborting the fixture.
+            (DependencyProperty Dp, global::System.Reflection.MemberInfo Member)? found = null;
+            try
+            {
+                found = ((DependencyProperty, global::System.Reflection.MemberInfo))
+                    Invoke("FindDependencyProperty", bare, "Grid.Row")!;
+            }
+            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
+            {
+            }
+            if (found is { } attachedDp) bare.SetValue(attachedDp.Dp, 5);
+            H.Check("Devtools_Dp_ReflectFindsAttached",
+                found is { } resolved
+                && Microsoft.UI.Xaml.Controls.Grid.GetRow(bare) == 5
+                && resolved.Member.Name == "RowProperty"
+                && resolved.Member.DeclaringType == typeof(Microsoft.UI.Xaml.Controls.Grid));
+
+            bool missingDpThrows = false;
+            try { Invoke("FindDependencyProperty", bare, "NoSuchDevtoolsProperty"); }
+            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
+            {
+                missingDpThrows = true;
+            }
+            H.Check("Devtools_Dp_ReflectMissingThrows", missingDpThrows);
+
+            // Enumeration must reach DP statics declared across the whole base chain
+            // (Width on FrameworkElement, Content on ContentControl) and report each name
+            // exactly once even though a DP can surface as both a field and a
+            // CsWinRT-projected property.
+            var enumerated = (List<PropertyResult>)Invoke("EnumerateDependencyProperties", bare)!;
+            var reflectNames = enumerated.Select(p => p.Name).ToArray();
+            H.Check("Devtools_Dp_ReflectEnumerates",
+                reflectNames.Contains("Width")
+                && reflectNames.Contains("Content")
+                && reflectNames.Distinct().Count() == reflectNames.Length);
+
+            // …and it must report live values, not just names: Width was set to 123 above.
+            H.Check("Devtools_Dp_ReflectEnumeratesLiveValues",
+                enumerated.SingleOrDefault(p => p.Name == "Width")
+                    is { Value: "123", IsLocal: true, DeclaringType: "FrameworkElement" });
+        }
+    }
+
     internal sealed class PropertyToolsReflectionExercise(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -1228,53 +1315,11 @@ internal static class DevtoolsFixtures
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red),
             };
 
-            // FindDependencyProperty must return the *real* Grid.RowProperty, not just
-            // "something non-null": prove it by writing through the returned DP and
-            // reading the value back off the live control with Grid.GetRow. Grid.Row is
-            // the attached shape issue #1109 broke — RowProperty exists only as a
-            // CsWinRT-projected static property, never as a field.
-            //
-            // The lookup throws McpToolException when it finds nothing, so catch that and
-            // fail this one check rather than aborting the whole fixture.
-            (DependencyProperty Dp, global::System.Reflection.MemberInfo Member)? found = null;
-            try
-            {
-                found = ((DependencyProperty, global::System.Reflection.MemberInfo))
-                    Invoke("FindDependencyProperty", button, "Grid.Row")!;
-            }
-            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
-            {
-            }
-            if (found is { } attached) button.SetValue(attached.Dp, 5);
-            H.Check("Devtools_PropReflect_FindsAttachedDp",
-                found is { } resolved
-                && Microsoft.UI.Xaml.Controls.Grid.GetRow(button) == 5
-                && resolved.Member.Name == "RowProperty"
-                && resolved.Member.DeclaringType == typeof(Microsoft.UI.Xaml.Controls.Grid));
-
-            bool missingDpThrows = false;
-            try { Invoke("FindDependencyProperty", button, "NoSuchDevtoolsProperty"); }
-            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
-            {
-                missingDpThrows = true;
-            }
-            H.Check("Devtools_PropReflect_MissingDpThrows", missingDpThrows);
-
-            // Enumeration must reach DP statics declared across the whole base chain
-            // (Width on FrameworkElement, Content on ContentControl) and report each
-            // name exactly once even though a DP can surface as both a field and a
-            // CsWinRT-projected property.
-            var enumerated = (List<PropertyResult>)Invoke("EnumerateDependencyProperties", button)!;
-            var enumeratedNames = enumerated.Select(p => p.Name).ToArray();
-            H.Check("Devtools_PropReflect_Enumerates",
-                enumeratedNames.Contains("Width")
-                && enumeratedNames.Contains("Content")
-                && enumeratedNames.Distinct().Count() == enumeratedNames.Length);
-
-            // …and it must report live values, not just names: Width was set to 123 above.
-            H.Check("Devtools_PropReflect_EnumeratesLiveValues",
-                enumerated.SingleOrDefault(p => p.Name == "Width")
-                    is { Value: "123", IsLocal: true, DeclaringType: "FrameworkElement" });
+            // NOTE: DP *discovery* (FindDependencyProperty / EnumerateDependencyProperties)
+            // is asserted by Devtools_PropertyToolsDpDiscovery, not here — it is the one
+            // part of this surface that does not survive trimming, so it lives in a
+            // fixture that is skipped under NativeAOT. What remains below is the
+            // value-formatting / parsing / resource / style logic, which is AOT-safe.
 
             H.Check("Devtools_PropReflect_FormatValues",
                 (string?)Invoke("FormatValue", button.Background) == "#FFFF0000"
