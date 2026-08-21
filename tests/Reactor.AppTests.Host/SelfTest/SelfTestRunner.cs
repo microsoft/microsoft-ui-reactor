@@ -137,8 +137,10 @@ internal static class SelfTestRunner
     // Keep this list honest: a stale entry is AOT coverage that is silently
     // switched off. Re-run the probe after framework changes and delete whatever
     // now passes. ValidateDefaultSkipPatterns() aborts the run when an entry stops
-    // matching any registered fixture, so a rename cannot quietly mute nothing
-    // (or, via a wildcard, quietly mute more than intended).
+    // matching any registered fixture, so a rename cannot quietly turn a skip into
+    // a no-op. It does NOT catch the opposite drift — an entry that still matches
+    // but has started passing, or a wildcard that has grown to cover more fixtures
+    // than intended. Only the probe finds those.
     //
     // Override via REACTOR_AOT_SKIP=Pat1,Pat2 (no rebuild needed). Patterns
     // are exact-match or Prefix* wildcard. See docs/aot-support.md for the full
