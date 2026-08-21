@@ -177,12 +177,15 @@ internal static class SelfTestRunner
         // (issue #1109). WinUI's DP statics are CsWinRT-projected static
         // *properties*, and ILCompiler keeps no reflection metadata for them unless
         // something roots PublicProperties on those types, so the lookups find
-        // nothing under AOT and every DP assertion fails. Measured, not assumed:
-        // adding a probe that called typeof(Button).GetProperties() to the fixture
-        // made all 112 DP statics visible again and turned the whole fixture green,
-        // because DynamicallyAccessedMemberTypes.PublicProperties covers inherited
-        // members too — deleting the probe reproduced the failures exactly. Rooting
-        // the WinUI control hierarchy that way in every AOT app is not a trade a
+        // nothing under AOT and every DP assertion fails. Not limited to the
+        // projected properties: a C#-authored DP *field* on a purpose-built control
+        // is equally undiscoverable, so this is about reflection metadata in
+        // general, not about CsWinRT. Measured, not assumed: adding a probe that
+        // called typeof(Button).GetProperties() to the fixture made all 112 DP
+        // statics visible again and turned the whole fixture green, because
+        // DynamicallyAccessedMemberTypes.PublicProperties covers inherited members
+        // too — deleting the probe reproduced the failures exactly. Rooting the
+        // WinUI control hierarchy that way in every AOT app is not a trade a
         // diagnostic-only tool should make, so this stays skipped rather than
         // annotated. The AOT-safe rest of the property-tool surface (resources,
         // styles, ancestors, value formatting/parsing) lives in

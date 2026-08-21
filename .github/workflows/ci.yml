@@ -421,11 +421,11 @@ jobs:
 
       # Run the published exe directly (not via `dotnet test`) so we exercise
       # the NativeAOT binary. SelfTestRunner.DefaultAotSkipPatterns gates the
-      # known-failing fixtures (17 entries: PropertyGrid auto-discovery, three
+      # known-failing fixtures (16 entries: PropertyGrid auto-discovery, three
       # Devtools fixtures — `fire`'s handler lookup, `state`'s hook read, and
       # DependencyProperty discovery for `properties`/`setProperty` — Issue142
-      # XAML metadata, hot-reload state migration, and two control-collection
-      # assertions); any *new* failure surfaces as exit code 1 and fails the job.
+      # XAML metadata, hot-reload state migration, and the UseObservableTree
+      # property walk); any *new* failure surfaces as exit code 1 and fails the job.
       # See docs/aot-support.md for the skip-list debugging workflow.
       - name: Run AOT selftests
         shell: pwsh

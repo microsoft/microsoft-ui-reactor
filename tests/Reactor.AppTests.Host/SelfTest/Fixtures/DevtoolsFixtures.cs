@@ -1304,12 +1304,20 @@ internal static class DevtoolsFixtures
             // fields), so it needs a control that declares one.
             var fieldControl = new DevtoolsFieldDpControl { FieldOnly = "field-dp-live" };
 
-            var fieldFound = ((DependencyProperty, global::System.Reflection.MemberInfo))
-                Invoke("FindDependencyProperty", fieldControl, "FieldOnly")!;
+            (DependencyProperty Dp, global::System.Reflection.MemberInfo Member)? fieldFound = null;
+            try
+            {
+                fieldFound = ((DependencyProperty, global::System.Reflection.MemberInfo))
+                    Invoke("FindDependencyProperty", fieldControl, "FieldOnly")!;
+            }
+            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
+            {
+            }
             H.Check("Devtools_Dp_FindsFieldDeclaredDp",
-                ReferenceEquals(fieldFound.Item1, DevtoolsFieldDpControl.FieldOnlyProperty)
-                && fieldFound.Item2 is global::System.Reflection.FieldInfo
-                && fieldFound.Item2.DeclaringType == typeof(DevtoolsFieldDpControl));
+                fieldFound is { } fieldResolved
+                && ReferenceEquals(fieldResolved.Dp, DevtoolsFieldDpControl.FieldOnlyProperty)
+                && fieldResolved.Member is global::System.Reflection.FieldInfo
+                && fieldResolved.Member.DeclaringType == typeof(DevtoolsFieldDpControl));
 
             var fieldEnumerated = (List<PropertyResult>)Invoke("EnumerateDependencyProperties", fieldControl)!;
             H.Check("Devtools_Dp_EnumeratesFieldDeclaredDp",
