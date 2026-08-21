@@ -536,23 +536,28 @@ internal static class DevtoolsPropertyTools
             ? memberName[..^"Property".Length]
             : memberName;
 
-        if (!seen.Add(propName)) return;
+        if (seen.Contains(propName)) return;
 
-        if (ReadStatic(read) is not DependencyProperty dp)
-        {
-            // The static exists but couldn't be read (failed initializer / WinRT
-            // activation). Drop it from the listing rather than reporting a DP we
-            // don't have — and leave it in `seen` so a duplicate doesn't retry.
-            return;
-        }
+        // Claim the name only once a DP has actually been read. A member that exists
+        // but can't be read (failed initializer / WinRT activation) must not consume
+        // the name, or a readable same-named member of the other kind further up the
+        // base chain — a derived static property shadowing a base static field, say —
+        // would be skipped and the DP would vanish from the listing entirely.
+        if (ReadStatic(read) is not DependencyProperty dp) return;
 
+        seen.Add(propName);
+
+        // el.GetValue / ReadLocalValue run arbitrary WinUI property-system code for
+        // every one of ~112 DPs on a control. A single control that throws for one of
+        // them must degrade that row, not the whole listing, so both are caught
+        // broadly and on purpose.
         object? value;
         try { value = el.GetValue(dp); }
         catch { value = "<error>"; }
 
         var isLocal = false;
         try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
-        catch { }
+        catch { isLocal = false; }
 
         results.Add(new PropertyResult(
             propName,

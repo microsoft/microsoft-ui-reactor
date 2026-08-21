@@ -1216,7 +1216,7 @@ internal static class DevtoolsFixtures
                 Result(attachedPropResp) is { } attachedProp
                 && attachedProp.GetProperty("name").GetString() == "Grid.Row"
                 && attachedProp.GetProperty("value").GetString() == "0"
-                && attachedProp.GetProperty("isLocal").GetBoolean() == false);
+                && !attachedProp.GetProperty("isLocal").GetBoolean());
 
             // Assert off the live control, not the tool's own echo: a setProperty that
             // silently wrote nothing would still echo back ok:true for whatever it read.
@@ -1264,6 +1264,7 @@ internal static class DevtoolsFixtures
             }
             catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
             {
+                // Leave the tuple null; the H.Check below turns that into a red check.
             }
             if (found is { } attachedDp) bare.SetValue(attachedDp.Dp, 5);
             H.Check("Devtools_Dp_ReflectFindsAttached",
@@ -1312,6 +1313,7 @@ internal static class DevtoolsFixtures
             }
             catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
             {
+                // Leave the tuple null; the H.Check below turns that into a red check.
             }
             H.Check("Devtools_Dp_FindsFieldDeclaredDp",
                 fieldFound is { } fieldResolved
@@ -1354,6 +1356,17 @@ internal static class DevtoolsFixtures
             H.Check("Devtools_Dp_ShadowedFieldResolvesToDerived",
                 TryRead(typeof(ShadowedDpFields), "ShadowedProperty") is { } shadowedField
                 && shadowedField.Item2.DeclaringType == typeof(ShadowedDpFields));
+
+            // A member that exists but cannot be read must not claim the name: the
+            // derived type here hides a readable base DP *field* with a static property
+            // whose getter throws, and enumeration walks the derived type first. If the
+            // failed read consumed "ShadowedDp", the base's readable field would be
+            // skipped and the DP would disappear from the listing.
+            var shadowEnumerated = (List<PropertyResult>)Invoke(
+                "EnumerateDependencyProperties", new DevtoolsUnreadableShadowControl())!;
+            H.Check("Devtools_Dp_UnreadableMemberDoesNotHideReadableOne",
+                shadowEnumerated.SingleOrDefault(p => p.Name == "ShadowedDp")
+                    is { Value: "readable-base-dp", DeclaringType: nameof(DevtoolsReadableBaseControl) });
         }
 
         /// <summary>Static DP members that misbehave when read reflectively.</summary>
@@ -1718,6 +1731,32 @@ internal sealed partial class DevtoolsFieldDpControl : Control
         get => (string)GetValue(FieldOnlyProperty);
         set => SetValue(FieldOnlyProperty, value);
     }
+}
+
+/// <summary>
+/// Declares a readable DP field that <see cref="DevtoolsUnreadableShadowControl"/>
+/// hides with an unreadable static property of the same name.
+/// </summary>
+internal partial class DevtoolsReadableBaseControl : Control
+{
+    public static readonly DependencyProperty ShadowedDpProperty =
+        DependencyProperty.Register(
+            "ShadowedDp",
+            typeof(string),
+            typeof(DevtoolsReadableBaseControl),
+            new PropertyMetadata("readable-base-dp"));
+}
+
+/// <summary>
+/// Hides the base's readable DP field with a static property whose getter throws.
+/// Enumeration walks the derived type first, so if a failed read were allowed to
+/// claim the name, the base's perfectly readable field would be skipped and the DP
+/// would vanish from the listing — the ordering bug this shape pins.
+/// </summary>
+internal sealed partial class DevtoolsUnreadableShadowControl : DevtoolsReadableBaseControl
+{
+    public static new DependencyProperty ShadowedDpProperty =>
+        throw new InvalidOperationException("shadowing DP getter blew up");
 }
 
 [JsonSourceGenerationOptions(
