@@ -540,14 +540,21 @@ internal static class DevtoolsPropertyTools
 
         seen.Add(propName);
 
-        // el.GetValue / ReadLocalValue run arbitrary WinUI property-system code for
-        // every one of ~112 DPs on a control. A single control that throws for one of
-        // them must degrade that row, not the whole listing, so both are caught
-        // broadly and on purpose.
+        // el.GetValue / ReadLocalValue run arbitrary WinUI property-system code —
+        // including third-party property getters and changed-callbacks — once for
+        // each of the ~112 DPs on a control, across the WinRT ABI. The set of
+        // exception types that can come back is therefore open-ended, so these stay
+        // broad on purpose: narrowing to a fixed list would mean one control outside
+        // that list turns the whole `properties` listing into a JSON-RPC error
+        // (McpDispatcher's own catch) instead of degrading a single row. What the
+        // catch must not do is *hide* the failure, so the type is reported.
         object? value;
         try { value = el.GetValue(dp); }
-        catch (Exception) { value = "<error>"; }
+        catch (Exception ex) { value = $"<error: {ex.GetType().Name}>"; }
 
+        // No equivalent channel for this one — it feeds a bool — so a probe failure
+        // is reported as "not locally set". The value column above still carries the
+        // error when the DP is unreadable at all.
         var isLocal = false;
         try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
         catch (Exception) { isLocal = false; }
