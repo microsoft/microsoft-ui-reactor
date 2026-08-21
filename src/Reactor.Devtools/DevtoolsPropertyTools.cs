@@ -398,15 +398,8 @@ internal static class DevtoolsPropertyTools
     {
         const BindingFlags Flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
 
-        foreach (var f in type.GetFields(Flags))
-        {
-            if (f.FieldType == typeof(DependencyProperty)) return true;
-        }
-        foreach (var p in type.GetProperties(Flags))
-        {
-            if (p.PropertyType == typeof(DependencyProperty)) return true;
-        }
-        return false;
+        return type.GetFields(Flags).Any(f => f.FieldType == typeof(DependencyProperty))
+            || type.GetProperties(Flags).Any(p => p.PropertyType == typeof(DependencyProperty));
     }
 
     /// <summary>
@@ -553,11 +546,11 @@ internal static class DevtoolsPropertyTools
         // broadly and on purpose.
         object? value;
         try { value = el.GetValue(dp); }
-        catch { value = "<error>"; }
+        catch (Exception) { value = "<error>"; }
 
         var isLocal = false;
         try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
-        catch { isLocal = false; }
+        catch (Exception) { isLocal = false; }
 
         results.Add(new PropertyResult(
             propName,
