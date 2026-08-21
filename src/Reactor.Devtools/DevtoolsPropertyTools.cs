@@ -441,9 +441,24 @@ internal static class DevtoolsPropertyTools
 
     /// <summary>
     /// Read a static DP member, mapping a failing static initializer / WinRT
-    /// activation onto "not found" instead of surfacing a raw
-    /// <see cref="TargetInvocationException"/> through the MCP transport.
+    /// activation onto "not found" instead of surfacing the raw exception through
+    /// the MCP transport.
     /// </summary>
+    /// <remarks>
+    /// A failing static constructor is covered by the <see cref="TargetInvocationException"/>
+    /// arm rather than needing a <see cref="TypeInitializationException"/> one: reflection
+    /// wraps the latter inside the former, for field reads and property getters alike and
+    /// on first and subsequent access. That is worth stating because
+    /// <see cref="TypeInitializationException"/> derives from neither arm below, so
+    /// without the wrapping it would escape — the wrapping is what makes the second arm
+    /// unnecessary, not the type hierarchy.
+    /// <para>
+    /// <see cref="ArgumentException"/> is deliberately absent: that is what
+    /// <c>GetValue(null)</c> throws for a write-only property, and swallowing it here
+    /// would hide the fact that the <c>CanRead</c> guard in
+    /// <see cref="TryReadDependencyPropertyStatic"/> had stopped working.
+    /// </para>
+    /// </remarks>
     private static object? ReadStatic(Func<object?> read)
     {
         try { return read(); }

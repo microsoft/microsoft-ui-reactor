@@ -1330,42 +1330,72 @@ internal static class DevtoolsFixtures
             //
             // TryReadDependencyPropertyStatic takes a bare Type, so these can be plain
             // classes; they don't have to be UIElements.
-            (DependencyProperty, global::System.Reflection.MemberInfo)? TryRead(Type t, string member) =>
-                (global::System.ValueTuple<DependencyProperty, global::System.Reflection.MemberInfo>?)
-                    Invoke("TryReadDependencyPropertyStatic", t, member);
+            //
+            // The result distinguishes "the helper returned null" from "the helper let an
+            // exception escape". Collapsing the two would make every `is null` assertion
+            // below vacuous: a helper that stopped swallowing reflection failures would
+            // still look like a clean not-found.
+            (bool Threw, (DependencyProperty Dp, global::System.Reflection.MemberInfo Member)? Value) TryRead(Type t, string member)
+            {
+                try
+                {
+                    var raw = (global::System.ValueTuple<DependencyProperty, global::System.Reflection.MemberInfo>?)
+                        Invoke("TryReadDependencyPropertyStatic", t, member);
+                    return (false, raw);
+                }
+                catch (global::System.Reflection.TargetInvocationException)
+                {
+                    return (true, null);
+                }
+            }
 
             // A getter that throws must read back as "not found", not escape as a raw
             // TargetInvocationException through the MCP transport.
             H.Check("Devtools_Dp_ThrowingGetterIsNotFound",
-                TryRead(typeof(AwkwardDpStatics), "ThrowingProperty") is null);
+                TryRead(typeof(AwkwardDpStatics), "ThrowingProperty") is { Threw: false, Value: null });
 
             // A write-only DP-typed static must be skipped before GetValue(null) is
             // reached — that call throws ArgumentException, which is deliberately NOT in
             // ReadStatic's catch list, so this reddens if the CanRead guard is dropped.
             H.Check("Devtools_Dp_WriteOnlyPropertyIsNotFound",
-                TryRead(typeof(AwkwardDpStatics), "WriteOnlyProperty") is null);
+                TryRead(typeof(AwkwardDpStatics), "WriteOnlyProperty") is { Threw: false, Value: null });
+
+            // A DP field on a type whose static constructor threw reads back as
+            // not-found too. Reflection wraps the TypeInitializationException in a
+            // TargetInvocationException, so ReadStatic's first arm is what catches it —
+            // remove that arm and this check reddens.
+            H.Check("Devtools_Dp_FailingInitializerIsNotFound",
+                TryRead(typeof(FailingInitializerDpStatics), "BoomProperty") is { Threw: false, Value: null });
 
             // `new`-hiding a base static DP member does not make reflection ambiguous —
             // the binder resolves to the most-derived declaration. Asserted for both
             // member kinds so the lookups aren't carrying a speculative catch: if a
             // future runtime ever does throw AmbiguousMatchException here, these redden.
             H.Check("Devtools_Dp_ShadowedPropertyResolvesToDerived",
-                TryRead(typeof(ShadowedDpStatics), "ShadowedProperty") is { } shadowedProp
-                && shadowedProp.Item2.DeclaringType == typeof(ShadowedDpStatics));
+                TryRead(typeof(ShadowedDpStatics), "ShadowedProperty") is { Threw: false, Value: { } shadowedProp }
+                && shadowedProp.Member.DeclaringType == typeof(ShadowedDpStatics));
 
             H.Check("Devtools_Dp_ShadowedFieldResolvesToDerived",
-                TryRead(typeof(ShadowedDpFields), "ShadowedProperty") is { } shadowedField
-                && shadowedField.Item2.DeclaringType == typeof(ShadowedDpFields));
+                TryRead(typeof(ShadowedDpFields), "ShadowedProperty") is { Threw: false, Value: { } shadowedField }
+                && shadowedField.Member.DeclaringType == typeof(ShadowedDpFields));
 
             // A member that exists but cannot be read must not claim the name: the
             // derived type here hides a readable base DP *field* with a static property
             // whose getter throws, and enumeration walks the derived type first. If the
             // failed read consumed "ShadowedDp", the base's readable field would be
             // skipped and the DP would disappear from the listing.
-            var shadowEnumerated = (List<PropertyResult>)Invoke(
-                "EnumerateDependencyProperties", new DevtoolsUnreadableShadowControl())!;
+            List<PropertyResult>? shadowEnumerated = null;
+            try
+            {
+                shadowEnumerated = (List<PropertyResult>)Invoke(
+                    "EnumerateDependencyProperties", new DevtoolsUnreadableShadowControl())!;
+            }
+            catch (global::System.Reflection.TargetInvocationException)
+            {
+                // Enumeration let the throwing getter escape; the check below goes red.
+            }
             H.Check("Devtools_Dp_UnreadableMemberDoesNotHideReadableOne",
-                shadowEnumerated.SingleOrDefault(p => p.Name == "ShadowedDp")
+                shadowEnumerated?.SingleOrDefault(p => p.Name == "ShadowedDp")
                     is { Value: "readable-base-dp", DeclaringType: nameof(DevtoolsReadableBaseControl) });
         }
 
@@ -1379,6 +1409,15 @@ internal static class DevtoolsFixtures
             {
                 set { _ = value; }
             }
+        }
+
+        /// <summary>A DP static whose declaring type fails to initialize.</summary>
+        private sealed class FailingInitializerDpStatics
+        {
+            public static readonly DependencyProperty BoomProperty = null!;
+
+            static FailingInitializerDpStatics() =>
+                throw new InvalidOperationException("static constructor blew up");
         }
 
         /// <summary>Re-declares an inherited static property; the binder must pick the derived one.</summary>

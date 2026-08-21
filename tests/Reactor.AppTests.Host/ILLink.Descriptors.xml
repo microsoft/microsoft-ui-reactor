@@ -20,8 +20,10 @@
     <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsUnreadableShadowControl" preserve="all" />
 
     <!-- Reflection shapes the lookup helpers have to survive: a throwing getter, a
-         write-only static, and `new`-hidden statics of both member kinds. -->
+         write-only static, a type whose static constructor throws, and `new`-hidden
+         statics of both member kinds. -->
     <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/AwkwardDpStatics" preserve="all" />
+    <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/FailingInitializerDpStatics" preserve="all" />
     <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/ShadowedDpStatics" preserve="all" />
     <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/ShadowedDpStaticsBase" preserve="all" />
     <type fullname="Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures.DevtoolsFixtures/PropertyToolsDpDiscovery/ShadowedDpFields" preserve="all" />
