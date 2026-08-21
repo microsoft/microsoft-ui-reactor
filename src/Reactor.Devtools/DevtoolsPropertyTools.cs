@@ -38,7 +38,7 @@ internal static class DevtoolsPropertyTools
                 InputSchema: Schema.Root(
                     new[] { "selector" },
                     ("selector", Schema.Str("Element selector.")),
-                    ("name", Schema.Str("Optional DP name (e.g. 'Width', 'Margin'). Omit to list all.")),
+                    ("name", Schema.Str("Optional DP name (e.g. 'Width', 'Margin'). Use 'Owner.Property' for attached DPs (e.g. 'Grid.Row'). The 'Property' suffix is optional. Omit to list all.")),
                     ("window", Schema.Str("Window id (omit for default).")))),
             (@params) => server.OnDispatcher(() =>
             {
@@ -79,7 +79,7 @@ internal static class DevtoolsPropertyTools
                 InputSchema: Schema.Root(
                     new[] { "selector", "name", "value" },
                     ("selector", Schema.Str("Element selector.")),
-                    ("name", Schema.Str("DP name (e.g. 'Width', 'Margin', 'Background').")),
+                    ("name", Schema.Str("DP name (e.g. 'Width', 'Margin', 'Background'). Use 'Owner.Property' for attached DPs (e.g. 'Grid.Row').")),
                     ("value", Schema.Str("Value as string (e.g. '10', '1,2,3,4', '#FF0000', 'Visible').")),
                     ("window", Schema.Str("Window id (omit for default).")))),
             (@params) => server.OnDispatcher(() =>
@@ -344,27 +344,22 @@ internal static class DevtoolsPropertyTools
     /// </remarks>
     private static (DependencyProperty dp, MemberInfo member) FindDependencyProperty(UIElement el, string name)
     {
-        // Convention: property "Foo" maps to static member "FooProperty".
-        var memberName = name.EndsWith("Property", StringComparison.Ordinal) ? name : name + "Property";
-
         // Support attached property syntax: "Grid.Row" → look on Grid type.
         if (name.Contains('.'))
         {
             var parts = name.Split('.', 2);
-            var ownerName = parts[0];
-            var propName = parts[1];
-            memberName = propName.EndsWith("Property", StringComparison.Ordinal) ? propName : propName + "Property";
 
             // Search well-known WinUI namespaces for the owner type.
-            var ownerType = FindTypeByName(ownerName);
-            if (ownerType is not null && TryReadDependencyPropertyStatic(ownerType, memberName) is { } attached)
+            var ownerType = FindTypeByName(parts[0]);
+            if (ownerType is not null && TryReadDependencyPropertyStatic(ownerType, ToMemberName(parts[1])) is { } attached)
                 return attached;
 
             throw new McpToolException(
-                $"No attached DependencyProperty '{name}' found. Check the owner type name.",
+                $"No attached DependencyProperty '{name}' found. Check the owner type name.{TrimmedMetadataHint(ownerType)}",
                 JsonRpcErrorCodes.InvalidParams);
         }
 
+        var memberName = ToMemberName(name);
         for (var type = el.GetType(); type is not null; type = type.BaseType)
         {
             if (TryReadDependencyPropertyStatic(type, memberName) is { } found)
@@ -372,8 +367,46 @@ internal static class DevtoolsPropertyTools
         }
 
         throw new McpToolException(
-            $"No DependencyProperty '{name}' found on {el.GetType().Name} or its base types. For attached properties, use 'OwnerType.Property' syntax (e.g. 'Grid.Row').",
+            $"No DependencyProperty '{name}' found on {el.GetType().Name} or its base types. For attached properties, use 'OwnerType.Property' syntax (e.g. 'Grid.Row').{TrimmedMetadataHint(el.GetType())}",
             JsonRpcErrorCodes.InvalidParams);
+    }
+
+    /// <summary>Convention: the DP behind property "Foo" is the static member "FooProperty".</summary>
+    private static string ToMemberName(string name) =>
+        name.EndsWith("Property", StringComparison.Ordinal) ? name : name + "Property";
+
+    /// <summary>
+    /// Distinguish "you named it wrong" from "the runtime can no longer see it".
+    /// </summary>
+    /// <remarks>
+    /// Under NativeAOT / trimming, ILCompiler emits no reflection metadata for the
+    /// CsWinRT-projected DP statics unless something roots <c>PublicProperties</c> on
+    /// those types, so a perfectly valid name reads back as "not found" (issue #1109,
+    /// docs/aot-support.md). A type that reports <i>zero</i> DP statics is the tell:
+    /// every live WinUI element has dozens, so an empty result means the metadata went
+    /// away, not that the caller typed the name wrong. Runs on the failure path only.
+    /// </remarks>
+    private static string TrimmedMetadataHint(Type? type) =>
+        type is null || DeclaresAnyDependencyProperty(type)
+            ? string.Empty
+            : " Note: this type reports no DependencyProperty statics at all, so its reflection"
+                + " metadata was most likely trimmed — the property may exist but be undiscoverable"
+                + " in this build (see docs/aot-support.md).";
+
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Best-effort diagnostic probe over a Type that carries no DynamicallyAccessedMembers annotation, used only to word a failure message. Returning false because the trimmer removed the members is exactly the condition it reports.")]
+    private static bool DeclaresAnyDependencyProperty(Type type)
+    {
+        const BindingFlags Flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+
+        foreach (var f in type.GetFields(Flags))
+        {
+            if (f.FieldType == typeof(DependencyProperty)) return true;
+        }
+        foreach (var p in type.GetProperties(Flags))
+        {
+            if (p.PropertyType == typeof(DependencyProperty)) return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -383,28 +416,27 @@ internal static class DevtoolsPropertyTools
     /// cannot be read.
     /// </summary>
     /// <remarks>
-    /// <c>FlattenHierarchy</c> makes an ambiguous match possible when a derived type
-    /// re-declares an inherited static member, so both lookups tolerate
-    /// <see cref="AmbiguousMatchException"/> — <see cref="FindDependencyProperty"/>
-    /// walks the base chain anyway and will find the declaring type on a later step.
+    /// Neither lookup catches <see cref="AmbiguousMatchException"/>: for a name-only
+    /// lookup the binder applies hide-by-name and resolves to the most-derived
+    /// declaration, which <c>Devtools_Dp_Shadowed{Property,Field}ResolvesToDerived</c>
+    /// pins for both member kinds. A speculative catch there would have been an
+    /// untestable branch.
     /// </remarks>
     [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Devtools discovers DependencyProperty statics (fields on C#-authored types, CsWinRT-projected properties on WinUI ones) by reflecting over a Type that carries no DynamicallyAccessedMembers annotation. A member the trimmer removed reads back as null and is reported as not found.")]
     private static (DependencyProperty dp, MemberInfo member)? TryReadDependencyPropertyStatic(Type type, string memberName)
     {
         const BindingFlags Flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
 
-        FieldInfo? field = null;
-        try { field = type.GetField(memberName, Flags); }
-        catch (AmbiguousMatchException) { }
+        var field = type.GetField(memberName, Flags);
         if (field is not null && field.FieldType == typeof(DependencyProperty)
             && ReadStatic(() => field.GetValue(null)) is DependencyProperty fieldDp)
         {
             return (fieldDp, field);
         }
 
-        PropertyInfo? property = null;
-        try { property = type.GetProperty(memberName, Flags); }
-        catch (AmbiguousMatchException) { }
+        // CanRead guards the GetValue below: reading a write-only static throws
+        // ArgumentException, which ReadStatic deliberately does not catch.
+        var property = type.GetProperty(memberName, Flags);
         if (property is not null && property.PropertyType == typeof(DependencyProperty) && property.CanRead
             && ReadStatic(() => property.GetValue(null)) is DependencyProperty propertyDp)
         {

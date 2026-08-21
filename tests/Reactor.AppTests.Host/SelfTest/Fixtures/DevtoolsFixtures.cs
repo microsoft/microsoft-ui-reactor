@@ -1295,6 +1295,91 @@ internal static class DevtoolsFixtures
             H.Check("Devtools_Dp_ReflectEnumeratesLiveValues",
                 enumerated.SingleOrDefault(p => p.Name == "Width")
                     is { Value: "123", IsLocal: true, DeclaringType: "FrameworkElement" });
+
+            // -- the C#-authored shape: a DP that really is a static *field* -----------
+            //
+            // Everything above runs against CsWinRT-projected static properties. The
+            // fields arm is the pre-existing behaviour this change must not regress, and
+            // no WinUI type can exercise it (typeof(Button) has zero DP-typed static
+            // fields), so it needs a control that declares one.
+            var fieldControl = new DevtoolsFieldDpControl { FieldOnly = "field-dp-live" };
+
+            var fieldFound = ((DependencyProperty, global::System.Reflection.MemberInfo))
+                Invoke("FindDependencyProperty", fieldControl, "FieldOnly")!;
+            H.Check("Devtools_Dp_FindsFieldDeclaredDp",
+                ReferenceEquals(fieldFound.Item1, DevtoolsFieldDpControl.FieldOnlyProperty)
+                && fieldFound.Item2 is global::System.Reflection.FieldInfo
+                && fieldFound.Item2.DeclaringType == typeof(DevtoolsFieldDpControl));
+
+            var fieldEnumerated = (List<PropertyResult>)Invoke("EnumerateDependencyProperties", fieldControl)!;
+            H.Check("Devtools_Dp_EnumeratesFieldDeclaredDp",
+                fieldEnumerated.SingleOrDefault(p => p.Name == "FieldOnly")
+                    is { Value: "field-dp-live", IsLocal: true, DeclaringType: nameof(DevtoolsFieldDpControl) });
+
+            // -- reflection shapes the helper has to survive ---------------------------
+            //
+            // TryReadDependencyPropertyStatic takes a bare Type, so these can be plain
+            // classes; they don't have to be UIElements.
+            (DependencyProperty, global::System.Reflection.MemberInfo)? TryRead(Type t, string member) =>
+                (global::System.ValueTuple<DependencyProperty, global::System.Reflection.MemberInfo>?)
+                    Invoke("TryReadDependencyPropertyStatic", t, member);
+
+            // A getter that throws must read back as "not found", not escape as a raw
+            // TargetInvocationException through the MCP transport.
+            H.Check("Devtools_Dp_ThrowingGetterIsNotFound",
+                TryRead(typeof(AwkwardDpStatics), "ThrowingProperty") is null);
+
+            // A write-only DP-typed static must be skipped before GetValue(null) is
+            // reached — that call throws ArgumentException, which is deliberately NOT in
+            // ReadStatic's catch list, so this reddens if the CanRead guard is dropped.
+            H.Check("Devtools_Dp_WriteOnlyPropertyIsNotFound",
+                TryRead(typeof(AwkwardDpStatics), "WriteOnlyProperty") is null);
+
+            // `new`-hiding a base static DP member does not make reflection ambiguous —
+            // the binder resolves to the most-derived declaration. Asserted for both
+            // member kinds so the lookups aren't carrying a speculative catch: if a
+            // future runtime ever does throw AmbiguousMatchException here, these redden.
+            H.Check("Devtools_Dp_ShadowedPropertyResolvesToDerived",
+                TryRead(typeof(ShadowedDpStatics), "ShadowedProperty") is { } shadowedProp
+                && shadowedProp.Item2.DeclaringType == typeof(ShadowedDpStatics));
+
+            H.Check("Devtools_Dp_ShadowedFieldResolvesToDerived",
+                TryRead(typeof(ShadowedDpFields), "ShadowedProperty") is { } shadowedField
+                && shadowedField.Item2.DeclaringType == typeof(ShadowedDpFields));
+        }
+
+        /// <summary>Static DP members that misbehave when read reflectively.</summary>
+        private class AwkwardDpStatics
+        {
+            public static DependencyProperty ThrowingProperty =>
+                throw new InvalidOperationException("static DP getter blew up");
+
+            public static DependencyProperty WriteOnlyProperty
+            {
+                set { _ = value; }
+            }
+        }
+
+        /// <summary>Re-declares an inherited static property; the binder must pick the derived one.</summary>
+        private sealed class ShadowedDpStatics : ShadowedDpStaticsBase
+        {
+            public static new DependencyProperty ShadowedProperty => DevtoolsFieldDpControl.FieldOnlyProperty;
+        }
+
+        private class ShadowedDpStaticsBase
+        {
+            public static DependencyProperty ShadowedProperty => DevtoolsFieldDpControl.FieldOnlyProperty;
+        }
+
+        /// <summary>Same, as fields — the arm that resolves C#-authored DPs.</summary>
+        private sealed class ShadowedDpFields : ShadowedDpFieldsBase
+        {
+            public static new readonly DependencyProperty ShadowedProperty = DevtoolsFieldDpControl.FieldOnlyProperty;
+        }
+
+        private class ShadowedDpFieldsBase
+        {
+            public static readonly DependencyProperty ShadowedProperty = DevtoolsFieldDpControl.FieldOnlyProperty;
         }
     }
 
@@ -1598,6 +1683,34 @@ internal sealed record McpClientInfo(string Name, string Version);
 
 /// <summary>An empty JSON object (<c>{}</c>) — e.g. <c>capabilities</c>.</summary>
 internal sealed record McpEmptyObject;
+
+/// <summary>
+/// A control whose DependencyProperty is declared the C# way — a
+/// <c>public static readonly</c> <b>field</b> — rather than as the CsWinRT-projected
+/// static property WinUI types expose. Used by
+/// <see cref="DevtoolsFixtures.PropertyToolsDpDiscovery"/> to prove the fields arm of
+/// DP discovery still works after issue #1109 taught it to read properties too; no
+/// built-in WinUI type can cover that arm.
+/// <para>
+/// Declared at namespace scope, not nested in the fixture, because CsWinRT1028
+/// requires every enclosing type of a WinRT-derived class to be <c>partial</c>.
+/// </para>
+/// </summary>
+internal sealed partial class DevtoolsFieldDpControl : Control
+{
+    public static readonly DependencyProperty FieldOnlyProperty =
+        DependencyProperty.Register(
+            "FieldOnly",
+            typeof(string),
+            typeof(DevtoolsFieldDpControl),
+            new PropertyMetadata("field-dp-default"));
+
+    public string FieldOnly
+    {
+        get => (string)GetValue(FieldOnlyProperty);
+        set => SetValue(FieldOnlyProperty, value);
+    }
+}
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
