@@ -656,10 +656,15 @@ internal static class DevtoolsPropertyTools
 // -- DevtoolsPropertyTools result shapes -----------------------------------------
 // Every dynamic DP / resource / style value is reduced to a string by FormatValue,
 // so these are fully closed, source-generated records (registered in
-// DevtoolsJsonContext). The tool *logic* still introspects via reflection
-// (EnumerateDependencyProperties, DescribeStyle), which keeps the fixtures
-// AOT-skip-listed — but the serialized payloads no longer need the reflection
-// resolver fallback.
+// DevtoolsJsonContext), and the serialized payloads no longer need the reflection
+// resolver fallback. The tool *logic* still introspects via reflection
+// (EnumerateDependencyProperties, DescribeStyle). Note that
+// Devtools_PropertyToolsExercise is no longer on
+// SelfTestRunner.DefaultAotSkipPatterns, but not because that reflection was shown
+// to survive trimming: the DP lookups return nothing on WinUI 3 under JIT and AOT
+// alike, because they search for fields while CsWinRT projects DependencyProperty
+// statics as properties (issue #1109). The fixture's live coverage is the
+// resource/style surface.
 internal sealed record PropertyResult(string Name, string? Value, string ValueType, string? DeclaringType, bool IsLocal);
 
 internal sealed record PropertiesResult(int Count, IReadOnlyList<PropertyResult> Properties);

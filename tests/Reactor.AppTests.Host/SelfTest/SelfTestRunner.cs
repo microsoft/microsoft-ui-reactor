@@ -115,10 +115,20 @@ internal static class SelfTestRunner
     // Fixtures known to assert-fail under NativeAOT, captured by running
     // tests/Reactor.AppTests.Host/probe-aot-skips.ps1 against the AOT-published
     // Host. As of WindowsAppSDK#6394 workaround (see Reactor.AppTests.Host.csproj
-    // _CopyWinUIResourcesForAot target), all NATIVE_CRASH skips are gone — the
-    // remaining failures map to reflection-driven surfaces: PropertyGrid
-    // auto-discovery, the two Devtools tools that resolve members by reflection
-    // (fire / state), and the Issue142 XAML-metadata-provider edge cases.
+    // _CopyWinUIResourcesForAot target), all NATIVE_CRASH skips are gone. What is
+    // left is the buckets below: two control-collection assertions still under
+    // investigation, the two Devtools fixtures whose reflection targets the
+    // trimmer removes, PropertyGrid auto-discovery, the Issue142
+    // XAML-metadata-provider edge cases, and hot-reload state migration.
+    //
+    // Reflection on its own does NOT make a fixture AOT-hostile, so don't use it
+    // as the sorting rule. The 25 Devtools fixtures that run here mostly depend on
+    // *type-name* reflection (GetType().Name in TreeWalker / SelectorResolver),
+    // which trimming always preserves. What breaks is *member-level* reflection
+    // over user code the trimmer drops — the two entries below. Do not read
+    // Devtools_PropertyToolsExercise as evidence that field reflection survives
+    // trimming: it passes, but its DP-enumeration path returns nothing on WinUI 3
+    // whether AOT or JIT (issue #1109), so it never exercises that question.
     //
     // Each name was verified to fail in isolation; wildcards from earlier
     // skip-list iterations have been replaced with explicit names so that
@@ -126,11 +136,12 @@ internal static class SelfTestRunner
     //
     // Keep this list honest: a stale entry is AOT coverage that is silently
     // switched off. Re-run the probe after framework changes and delete whatever
-    // now passes.
+    // now passes. ValidateDefaultSkipPatterns() fails the run when an entry stops
+    // matching any registered fixture, so a rename cannot quietly mute nothing
+    // (or, via a wildcard, quietly mute more than intended).
     //
     // Override via REACTOR_AOT_SKIP=Pat1,Pat2 (no rebuild needed). Patterns
-    // are exact-match or Prefix* wildcard. Re-run the probe after framework
-    // changes to find new stale skips. See docs/aot-support.md for the full
+    // are exact-match or Prefix* wildcard. See docs/aot-support.md for the full
     // debugging workflow.
     private static readonly string[] DefaultAotSkipPatterns =
     {
@@ -139,10 +150,16 @@ internal static class SelfTestRunner
         "ControlUpdate_Collections",
         "CoreCov2_UseObservableTreeHook",
 
-        // -- Devtools / MCP server. The server and its tools are AOT-clean; only
-        // these two resolve members by reflection (fire resolves a named handler
-        // against the component's declared methods; state reads hook
-        // bookkeeping), so they cannot survive trimming. See docs/aot-support.md. --
+        // -- Devtools / MCP server. The other 25 Devtools fixtures run under AOT;
+        // these two are the ones whose reflection targets the trimmer removes.
+        // `fire` resolves a named handler with GetMethods(DeclaredOnly) over the
+        // *user* component, and under AOT that set comes back empty — the tool
+        // answers "unknown-event" with reachableMethods: []. `state` reads hook
+        // bookkeeping through Component's non-public Context property.
+        // Devtools_FireRejectsLifecycleMethods deliberately still runs: `fire`
+        // refuses forbidden names against a static HashSet *before* it reflects
+        // (DevtoolsFireTool.FindHandler), so that path is trim-safe and is worth
+        // keeping as live AOT coverage. See docs/aot-support.md. --
         "Devtools_FireInvokesNamedHandler",
         "Devtools_StateReadsHooks",
 
@@ -187,6 +204,44 @@ internal static class SelfTestRunner
         // Env var appends to defaults so callers can add new skips without
         // rebuilding the AOT binary.
         return DefaultAotSkipPatterns.Concat(extra).ToArray();
+    }
+
+    /// <summary>
+    /// Fails the run when a committed <see cref="DefaultAotSkipPatterns"/> entry no
+    /// longer matches any registered fixture.
+    /// </summary>
+    /// <remarks>
+    /// A skip entry is a silent instrument: when a fixture is renamed or deleted, its
+    /// stale entry keeps matching nothing and the run stays green, so the mute looks
+    /// like it is still doing its job either way. That is the failure mode this whole
+    /// list is meant to avoid, and the probe script only catches it when a human
+    /// remembers to run it. Checking the patterns against the registry turns it into
+    /// a signal on every selftest run instead.
+    ///
+    /// Runs on JIT as well as AOT — the JIT selftest job is far cheaper than the AOT
+    /// one, so it should be the tier that catches a rename. Only the committed
+    /// defaults are validated; ad-hoc REACTOR_AOT_SKIP additions are a debugging
+    /// affordance and may legitimately name nothing.
+    /// </remarks>
+    private static void ValidateDefaultSkipPatterns(Harness harness, string[] allFixtures)
+    {
+        var stale = DefaultAotSkipPatterns
+            .Where(p => !allFixtures.Any(f => MatchesAnyPattern(f, new[] { p })))
+            .ToArray();
+        if (stale.Length == 0) return;
+
+        // Not a `not ok` line: the TAP plan (`1..N`) is already committed to the
+        // fixture count, so this reports through the failure counter (which drives
+        // the exit code and the `# Total failures:` trailer) plus a diagnostic.
+        Console.WriteLine(
+            $"Bail out! STALE_AOT_SKIP: {stale.Length} DefaultAotSkipPatterns entr" +
+            $"{(stale.Length == 1 ? "y matches" : "ies match")} no registered fixture: " +
+            string.Join(", ", stale));
+        Console.WriteLine(
+            "# A renamed or deleted fixture leaves its skip entry muting nothing. " +
+            "Delete the entry, or correct it to the fixture's current name.");
+        Console.Error.WriteLine($"STALE_AOT_SKIP: {string.Join(", ", stale)}");
+        harness.RecordFailure();
     }
 
     private static bool MatchesAnyPattern(string name, string[] patterns)
@@ -249,6 +304,12 @@ internal static class SelfTestRunner
 
                     Console.WriteLine($"TAP version 14");
                     Console.WriteLine($"1..{fixtures.Length}");
+
+                    // After the plan line so the diagnostic sits inside the TAP
+                    // stream rather than ahead of its header. Uses `allFixtures`,
+                    // not `fixtures`, so a --filter run doesn't report every
+                    // unrelated pattern as stale.
+                    ValidateDefaultSkipPatterns(harness, allFixtures);
 
                     // Suite clock. The whole run shares one process budget in the
                     // MSTest wrapper (SelfTestBatch.SelfTestTimeoutMs), and when it
@@ -609,4 +670,3 @@ internal static class SelfTestRunner
         }
     }
 }
-

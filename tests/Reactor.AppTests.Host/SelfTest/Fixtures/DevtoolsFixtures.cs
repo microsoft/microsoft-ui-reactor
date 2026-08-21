@@ -1068,6 +1068,17 @@ internal static class DevtoolsFixtures
 
             var allProps = Result(await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button" }))
                 ?? throw new Exception("missing properties result");
+            // NOTE: these three checks are deliberately tolerant and are NOT coverage
+            // of the DP surface — see issue #1109. `properties` currently returns
+            // {"count":0,"properties":[]} for every element, and the attached-property
+            // read/write always fail, because DevtoolsPropertyTools discovers DPs with
+            // Type.GetField/GetFields while CsWinRT projects WinUI DependencyProperty
+            // statics as *properties*: typeof(Button) has 0 DP-typed static fields and
+            // 112 DP-typed static properties. `count >= 0` and "or any error" pass
+            // either way, which is why this went unnoticed. Left as-is here because
+            // fixing the tool is a product change out of scope for the AOT un-skip;
+            // the real coverage in this fixture is the resources/styles section below,
+            // which does work. Tighten these together with the #1109 fix.
             H.Check("Devtools_Props_Enumerates",
                 allProps.GetProperty("count").GetInt32() >= 0
                 && allProps.GetProperty("properties").ValueKind == JsonValueKind.Array);
