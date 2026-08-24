@@ -1,5 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 using static Microsoft.UI.Reactor.Factories;
 
 // Controls-catalog index doc app (spec 041 §2.1, §6.3).
@@ -124,3 +126,57 @@ class ChartingGroup : Component
     ).Padding(16);
 }
 // </snippet:charting-group>
+
+// <snippet:layout-group>
+class LayoutGroup : Component
+{
+    public override Element Render() => VStack(8,
+        Card(
+            HStack(8,
+                TextBlock("Border / Card").Bold(),
+                TextBlock("wraps one child").Opacity(0.7)
+            ).Padding(8)
+        ),
+        Expander("Expander", TextBlock("Collapsible section body.")),
+        Viewbox(TextBlock("Viewbox scales its child").FontSize(10))
+    ).Padding(16);
+}
+// </snippet:layout-group>
+
+// <snippet:navigation-group>
+class NavigationGroup : Component
+{
+    public override Element Render()
+    {
+        var (tab, setTab) = UseState(1);
+
+        return VStack(8,
+            BreadcrumbBar([
+                new BreadcrumbBarItemData("Home"),
+                new BreadcrumbBarItemData("Controls"),
+            ]),
+            SelectorBar([
+                new SelectorBarItemData("All"),
+                new SelectorBarItemData("Forms"),
+                new SelectorBarItemData("Layout"),
+            ], tab, setTab)
+        ).Padding(16);
+    }
+}
+// </snippet:navigation-group>
+
+// <snippet:shapes-group>
+class ShapesGroup : Component
+{
+    // Shape fills/strokes take a WinUI Brush (not a color string like the
+    // panel-level .Background(string) modifier).
+    static SolidColorBrush Swatch(byte r, byte g, byte b) =>
+        new(Color.FromArgb(255, r, g, b));
+
+    public override Element Render() => HStack(12,
+        Rectangle().Width(48).Height(32).Fill(Swatch(0x4a, 0x7e, 0xbb)),
+        Ellipse().Width(40).Height(40).Fill(Swatch(0xbb, 0x4a, 0x7e)),
+        Line(0, 0, 48, 32).Stroke(Swatch(0x7e, 0xbb, 0x4a)).StrokeThickness(3)
+    ).Padding(16);
+}
+// </snippet:shapes-group>

@@ -175,8 +175,9 @@ class ProgressRingDemo : Component
 
 The `value` argument is 0–100 for `Progress(double)` and 0–1 for
 `ProgressRing(double)` — same convention as the underlying WinUI
-controls. The `ProgressBar` factory is the deprecated legacy name; use
-`Progress` and `ProgressIndeterminate` for new code (spec 039 §5).
+controls. There is no `ProgressBar(...)` factory: the linear bar is
+reached through `Progress` / `ProgressIndeterminate`, which is what the
+element record `ProgressElement` binds to (spec 039 §5).
 
 WinUI design pages: [Progress controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/progress-controls).
 

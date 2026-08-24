@@ -2,16 +2,18 @@
 
 Collections are the highest-leverage primitive in any non-trivial app —
 a contacts list, a feed, a settings tree, an editor's gutter. Microsoft.UI.Reactor (Reactor)
-ships three typed bound collections (`ListView<T>`, `GridView<T>`,
-`LazyVStack<T>`) and one count-based virtualization primitive
+ships typed bound collections (`ListView<T>`, `GridView<T>`,
+`LazyVStack<T>` / `LazyHStack<T>`, `ItemsRepeater<T>`, `ItemsView<T>`,
+`TreeView<T>`) and one count-based virtualization primitive
 (`VirtualList`), plus the inline `ForEach` helper for non-scrolling
 maps over data. The decision tree starts with two questions: how big is
 the data, and how is it shaped. For a few dozen items in a list, reach
 for `ListView<T>`. For thousands of items with the same row template,
 reach for `LazyVStack<T>` (virtualizes by default). For millions of
 items or count-known-but-items-not-loaded scenarios, reach for
-`VirtualList`. For a tiled grid, `GridView<T>`. For inline maps inside
-a [`VStack`](layout.md), `ForEach`. Every collection takes a
+`VirtualList`. For a tiled grid, `GridView<T>`. For hierarchical data,
+`TreeView<T>`. For inline maps inside a [`VStack`](layout.md),
+`ForEach`. Every collection takes a
 [key selector](#stable-identity-with-withkey) so reconciliation can
 match items across renders; that is the single most important thing to
 get right. Skim the comparison table first, then jump to your control.
@@ -93,19 +95,28 @@ You get this for free as long as `keySelector` returns a value that is:
 
 ### `IReactorKeyed` — identity on the data
 
-When a model type owns its identity, implement `IReactorKeyed` to drop the
-`keySelector` boilerplate at every call site:
+When a model type owns its identity, implement `IReactorKeyed` (its single
+member is `string Key { get; }`) to drop the `keySelector` boilerplate at
+every call site:
 
 ```csharp
-record Contact(string Id, string Name, string Email) : IReactorKeyed
+record Person(string Id, string Name, string Email) : IReactorKeyed
 {
     string IReactorKeyed.Key => Id;
 }
 
-// keySelector is inferred from IReactorKeyed.Key:
-ListView<Contact>(contacts, (contact, index) => …);
-LazyVStack<Contact>(contacts, (contact, index) => …);
-GridView<Contact>(contacts, (contact, index) => …);
+static class KeyedUsage
+{
+    // keySelector is inferred from IReactorKeyed.Key:
+    public static Element List(IReadOnlyList<Person> people) =>
+        ListView<Person>(people, (person, index) => TextBlock(person.Name));
+
+    public static Element Lazy(IReadOnlyList<Person> people) =>
+        LazyVStack<Person>(people, (person, index) => TextBlock(person.Name));
+
+    public static Element Grid(IReadOnlyList<Person> people) =>
+        GridView<Person>(people, (person, index) => TextBlock(person.Name));
+}
 ```
 
 The explicit-`keySelector` overload remains the right choice for types you
@@ -119,16 +130,20 @@ similar — `.WithKey<TKey>(TKey item) where TKey : IReactorKeyed` is the
 ergonomic peer of `.WithKey(item.Key)`:
 
 ```csharp
-FlexColumn(
-    contacts.Select(c =>
-        TextBlock(c.Name).WithKey(c)   // identity-on-data
-    ).ToArray<Element?>()
-)
+static class HandBuiltKeyedChildren
+{
+    public static Element Column(IReadOnlyList<Person> people) =>
+        FlexColumn(
+            people.Select(p =>
+                TextBlock(p.Name).WithKey(p)   // identity-on-data
+            ).ToArray<Element?>()
+        );
+}
 ```
 
 Both shapes route through the same incremental diff, so a hand-built
-`FlexColumn` of contacts animates inserts and reorders just like the
-templated `ListView<Contact>`.
+`FlexColumn` of people animates inserts and reorders just like the
+templated `ListView<Person>`.
 
 ## LazyVStack (Virtualized)
 
@@ -178,10 +193,14 @@ inner component starts from its initial state instead of inheriting the
 previous item's:
 
 ```csharp
-// Each row owns edit state. Scrolling row 5 (dirty) onto row 12 must NOT
-// carry the dirty flag — keySelector identity guarantees a fresh mount.
-LazyVStack<Note>(notes, n => n.Id, (note, i) =>
-    Component<NoteEditor, Note>(note));
+static class RowStateReset
+{
+    // Each row owns edit state. Scrolling row 5 (dirty) onto row 12 must NOT
+    // carry the dirty flag — keySelector identity guarantees a fresh mount.
+    public static Element Default(IReadOnlyList<Note> notes) =>
+        LazyVStack<Note>(notes, n => n.Id, (note, i) =>
+            Component<NoteEditor, Note>(note));
+}
 ```
 
 Re-rendering the **same** item in place (its data changed but its key did not)
@@ -190,9 +209,13 @@ deliberately want a hand-picked identity, an explicit `.WithKey(...)` on the
 row element always wins over the implicit `keySelector` key:
 
 ```csharp
-LazyVStack<Note>(notes, n => n.Id, (note, i) =>
-    Component<NoteEditor, Note>(note)
-        .WithKey($"{note.Id}:{note.Revision}")); // remount on every revision
+static class RowStateExplicitKey
+{
+    public static Element RemountPerRevision(IReadOnlyList<Note> notes) =>
+        LazyVStack<Note>(notes, n => n.Id, (note, i) =>
+            Component<NoteEditor, Note>(note)
+                .WithKey($"{note.Id}:{note.Revision}")); // remount on every revision
+}
 ```
 
 Conversely, if you *want* a row's component state to survive recycling — a
@@ -201,10 +224,14 @@ hoisted so it should outlive any single logical item — opt out by giving every
 row the **same constant key** so the recycle reuse never trips a remount:
 
 ```csharp
-// Durable carry-over: a constant key disables the per-item reset, so the
-// recycled control keeps its component state across logical items.
-LazyVStack<Note>(notes, n => n.Id, (note, i) =>
-    Component<NoteEditor, Note>(note).WithKey("note-row"));
+static class RowStateConstantKey
+{
+    // Durable carry-over: a constant key disables the per-item reset, so the
+    // recycled control keeps its component state across logical items.
+    public static Element Durable(IReadOnlyList<Note> notes) =>
+        LazyVStack<Note>(notes, n => n.Id, (note, i) =>
+            Component<NoteEditor, Note>(note).WithKey("note-row"));
+}
 ```
 
 The more common way to keep state across recycles is to **hoist it above the
@@ -349,14 +376,18 @@ didn't change. When a row is a pure function of a stable key, `Memo<TKey>`
 removes that rebuild:
 
 ```csharp
-LazyVStack<Note>(notes, n => n.Id, (note, i) =>
-    Memo(note.Id, () =>                 // ← key, then the row factory
-        Border(
-            VStack(4,
-                TextBlock(note.Title).SemiBold(),
-                Caption(note.Body).Foreground(SecondaryText)
-            )
-        ).Padding(12)));
+static class RowMemo
+{
+    public static Element Rows(IReadOnlyList<Note> notes) =>
+        LazyVStack<Note>(notes, n => n.Id, (note, i) =>
+            Memo(note.Id, () =>                 // ← key, then the row factory
+                Border(
+                    VStack(4,
+                        TextBlock(note.Title).SemiBold(),
+                        Caption(note.Body).Foreground(Theme.SecondaryText)
+                    )
+                ).Padding(12)));
+}
 ```
 
 `Memo(key, factory)` caches the element `factory` returns in a bounded,
@@ -383,8 +414,21 @@ author's responsibility, not the framework's. Widen the key to a tuple so it
 changes whenever any input does:
 
 ```csharp
-// Row chrome depends on selection AND theme, so both belong in the key.
-Memo((note.Id, isSelected, theme.IsDark), () => RowBody(note, isSelected));
+class RowMemoTupleKey : Component<Note>
+{
+    Element RowBody(Note note, bool isSelected) =>
+        TextBlock(note.Title).SemiBold().Opacity(isSelected ? 1.0 : 0.6);
+
+    public override Element Render()
+    {
+        var note = Props;
+        var (isSelected, _) = UseState(true);
+        var isDark = UseIsDarkTheme();
+
+        // Row chrome depends on selection AND theme, so both belong in the key.
+        return Memo((note.Id, isSelected, isDark), () => RowBody(note, isSelected));
+    }
+}
 ```
 
 Keying on the whole item record (`Memo(note, …)`) is the simplest safe choice
@@ -423,17 +467,23 @@ key yourself and return the cached one on a hit, so the reconciler's
 `ReferenceEquals` skip still fires:
 
 ```csharp
-// Held in the parent component via UseRef so it survives re-renders.
-var cache = UseRef(new Dictionary<int, Element>()).Current;
-
-Element Row(Note note)
+class ManualRowCache : Component<IReadOnlyList<Note>>
 {
-    if (!cache.TryGetValue(note.Id, out var el))
-        cache[note.Id] = el = Border(/* … */);   // build once per id
-    return el;                                    // same instance on reuse
-}
+    public override Element Render()
+    {
+        // Held in the parent component via UseRef so it survives re-renders.
+        var cache = UseRef(new Dictionary<string, Element>()).Current;
 
-return LazyVStack<Note>(notes, n => n.Id, (note, i) => Row(note));
+        Element Row(Note note)
+        {
+            if (!cache.TryGetValue(note.Id, out var el))
+                cache[note.Id] = el = Border(TextBlock(note.Title)); // build once per id
+            return el;                                              // same instance on reuse
+        }
+
+        return LazyVStack<Note>(Props, n => n.Id, (note, i) => Row(note));
+    }
+}
 ```
 
 You then own the parts `Memo` handles for you: bound the dictionary (evict so
@@ -581,7 +631,9 @@ Rules for good keys:
   Avoid using the array index as a key — it defeats the purpose.
 - **Keys must be unique** within their sibling list. Duplicates cause
   undefined reconciliation behavior.
-- **Keys should be strings.** The `WithKey` modifier accepts a string.
+- **Keys should be strings.** `WithKey(string)` is the base modifier. For
+  types that implement [`IReactorKeyed`](#ireactorkeyed--identity-on-the-data)
+  there is also `WithKey<TKey>(TKey item)`, which reads `item.Key` for you.
 
 ## Grouping
 
@@ -778,19 +830,38 @@ the first row in that group. This is the canonical "A-Z scrubber"
 pattern from contacts apps:
 
 ```csharp
-var listRef = UseRef<VirtualListRef?>(null);
-var groupStarts = UseMemo(() => ComputeStartIndices(contacts), contacts);
+class LetterJump : Component<IReadOnlyList<Person>>
+{
+    static IReadOnlyDictionary<char, int> ComputeStartIndices(
+        IReadOnlyList<Person> people) =>
+        people
+            .Select((p, i) => (Letter: p.Name[0], Index: i))
+            .GroupBy(x => x.Letter)
+            .ToDictionary(g => g.Key, g => g.First().Index);
 
-return HStack(0,
-    VirtualList(contacts.Count, RenderRow,
-        getItemKey: i => contacts[i].Id,
-        itemHeight: 60,
-        @ref: r => listRef.Current = r).Width(360),
-    VStack(2,
-        ForEach("ABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray(), letter =>
-            Button(letter.ToString(), () =>
-                listRef.Current?.ScrollToIndex(groupStarts[letter]))))
-);
+    public override Element Render()
+    {
+        var contacts = Props;
+        var listRef = UseRef<VirtualListRef?>(null);
+        var groupStarts = UseMemo(() => ComputeStartIndices(contacts), contacts);
+
+        Element RenderRow(int i) => TextBlock(contacts[i].Name).Padding(8);
+
+        return HStack(0,
+            VirtualList(contacts.Count, RenderRow,
+                getItemKey: i => contacts[i].Id,
+                itemHeight: 60,
+                @ref: r => listRef.Current = r).Width(360),
+            VStack(2,
+                ForEach("ABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray(), letter =>
+                    Button(letter.ToString(), () =>
+                    {
+                        if (groupStarts.TryGetValue(letter, out var start))
+                            listRef.Current?.ScrollToIndex(start);
+                    })))
+        );
+    }
+}
 ```
 
 ### Lift state for selection across remounts
