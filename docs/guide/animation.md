@@ -96,6 +96,7 @@ class ScaleDemo : Component
             ).Padding(12)
              .CornerRadius(8)
              .Background("#e8e8e8")
+             .Scale(enlarged ? 1.5f : 1.0f)
              .ScaleTransition()
         ).Padding(24);
     }
