@@ -30,6 +30,40 @@ updates:
       - "dependencies"
       - "nuget"
     open-pull-requests-limit: 10
+    # Grouping is deliberately limited to package sets that NuGet itself forces
+    # to move together (exact-pin `[x, x]` dependencies or floors that advance
+    # every release). Families that merely share a prefix are left ungrouped, so
+    # an unrelated bump still gets its own reviewable PR.
+    groups:
+      # Roslyn ships Microsoft.CodeAnalysis.* as one version-locked set:
+      # Microsoft.CodeAnalysis.CSharp.Workspaces 5.6.0 exact-pins
+      # Microsoft.CodeAnalysis.CSharp [5.6.0, 5.6.0] and
+      # Microsoft.CodeAnalysis.Common [5.6.0, 5.6.0], and each Roslyn release
+      # raises its floor on Microsoft.CodeAnalysis.Analyzers (5.9.0 requires
+      # >= 5.9.0-1.26328.17). Updating them one package per PR breaks restore
+      # with NU1608 "Detected package version outside of dependency constraint",
+      # which is an error here because Release treats warnings as errors. This
+      # has already happened twice: #814 merged with CSharp.Workspaces stranded
+      # a version behind, and #1113 repeated it. Group them so a Roslyn bump
+      # always moves the whole set in a single PR.
+      roslyn:
+        patterns:
+          - "Microsoft.CodeAnalysis*"
+        # The analyzer/code-fix test harness ships from dotnet/roslyn-sdk on an
+        # independent 1.1.x line, so it must not be dragged into a 5.x bump.
+        exclude-patterns:
+          - "Microsoft.CodeAnalysis*Testing"
+
+      # The roslyn-sdk test harness is its own version-locked set, one line down:
+      # Microsoft.CodeAnalysis.CSharp.CodeFix.Testing 1.1.4 exact-pins
+      # Microsoft.CodeAnalysis.CodeFix.Testing [1.1.4, 1.1.4], which in turn
+      # exact-pins Microsoft.CodeAnalysis.Analyzer.Testing [1.1.4, 1.1.4] — the
+      # same package Microsoft.CodeAnalysis.CSharp.Analyzer.Testing 1.1.4 pins.
+      # Bumping one without the other reproduces the NU1608 above on the 1.1.x
+      # line, so they get their own group rather than joining `roslyn`.
+      roslyn-testing:
+        patterns:
+          - "Microsoft.CodeAnalysis*Testing"
     ignore:
       # Windows App SDK and Win2D are pinned via Directory.Build.props
       # (WindowsAppSDKVersion / WindowsAppSDKWinUIVersion / Win2DVersion) and bumped
