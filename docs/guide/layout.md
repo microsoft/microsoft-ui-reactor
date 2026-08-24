@@ -14,8 +14,8 @@ would do — forces every nested measure-and-arrange pass through
 multiple panels' code paths, which both costs more and reads worse.
 Start with `VStack` for a screen's top-level scaffold; switch to `Grid`
 the moment you have row-and-column alignment; switch to
-[`FlexPanel`](flex-layout.md) when you need ratio-based sizing or
-multi-line wrapping with gaps.
+[`FlexRow`/`FlexColumn`](flex-layout.md) when you need ratio-based
+sizing or multi-line wrapping with gaps.
 
 # Layout
 
@@ -29,7 +29,7 @@ screen structure. Every layout element accepts children and optional spacing.
 | Items in one direction | `VStack(spacing, children)` / `HStack(spacing, children)` | Single-axis stacking with built-in spacing. |
 | Items in rows × columns | `Grid(columns, rows, children)` | Two-axis with explicit track sizing (`Auto`, `Star`, `Px`). |
 | Items that should wrap | `WrapGrid(maxRowsOrColumns, children)` | Auto-flow after a row fills. |
-| Items that need ratio sizing or multi-line wrap with gaps | `FlexPanel(...)` (see [flex-layout](flex-layout.md)) | CSS-Flexbox semantics: grow/shrink/basis. |
+| Items that need ratio sizing or multi-line wrap with gaps | `FlexRow(...)` / `FlexColumn(...)` (see [flex-layout](flex-layout.md)) | CSS-Flexbox semantics: grow/shrink/basis. |
 | Absolute positioning | `Canvas(children)` | Free-form `Canvas.SetLeft` / `SetTop`. |
 | Visual container | `Border(child)` / `Card(child)` | Background, corner radius, padding around a single child. |
 | Overflow handling | `ScrollView(child)` | Wraps anything that may exceed its allotted space. |
@@ -326,9 +326,20 @@ Every element supports sizing and alignment modifiers:
 
 <!-- ai:lock -->
 ```csharp
-Text("Centered").HAlign(HorizontalAlignment.Center)
-Text("Fixed width").Width(200).Height(40)
-VStack(8, items).Margin(24).Padding(16)
+class AlignmentSizingDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Alignment and sizing"),
+
+        TextBlock("Centered").HAlign(HorizontalAlignment.Center),
+        TextBlock("Fixed width").Width(200).Height(40).Background("#E5F1FB"),
+
+        VStack(8,
+            TextBlock("Item A"),
+            TextBlock("Item B")
+        ).Margin(24).Padding(16).Background("#F3F3F3")
+    );
+}
 ```
 <!-- /ai:lock -->
 
@@ -349,9 +360,19 @@ case is a full-width button whose inner row should also stretch:
 
 <!-- ai:lock -->
 ```csharp
-Button(Text("Open"), onClick)
-  .HAlign(HorizontalAlignment.Stretch)
-  .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+class ContentAlignmentDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Content alignment"),
+
+        // The Button stretches to fill the row, and its inner content
+        // stretches too — without HorizontalContentAlignment the label
+        // would stay centered in an otherwise full-width button.
+        Button(TextBlock("Open"), () => { })
+            .HAlign(HorizontalAlignment.Stretch)
+            .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+    ).Width(320);
+}
 ```
 <!-- /ai:lock -->
 
@@ -450,8 +471,8 @@ class AutoGridExample : Component
 
 `maxRowsOrColumns` caps the major axis; the panel wraps once that
 count is reached. For content that should wrap by available pixel
-width (rather than item count), use [`FlexPanel`](flex-layout.md) with
-`FlexWrap.Wrap`.
+width (rather than item count), use [`FlexRow(...)`](flex-layout.md)
+with `Wrap = FlexWrap.Wrap`.
 
 ### Responsive switcher
 
@@ -569,23 +590,23 @@ intrinsic size and the surrounding empty cell appears. The
 analyzer's `REACTOR_GRID_001` (when enabled) flags the common
 "unused column" symptom.
 
-### Mixing FlexPanel and Stack on the same axis
+### Mixing Flex and Stack on the same axis
 
 ```csharp
 // Don't:
-FlexPanel(
+FlexRow(
     HStack(8, leftA, leftB),    // Stack inside Flex on the same axis
     HStack(8, rightA, rightB)
-).FlexDirection(FlexDirection.Row)
+)
 ```
 
-`FlexPanel` and `Stack` both lay out along an axis, but `FlexPanel`
-applies CSS-Flexbox semantics (`flex-grow`, `flex-shrink`, `flex-basis`)
-and `Stack` applies a simpler "give every child its natural size with
-fixed gaps" rule. Mixing them on the same axis means the outer
-`FlexPanel`'s grow/shrink calculations operate on opaque `Stack`
-measurements — predictable enough for trivial cases, surprising for
-anything dynamic. Pick one per axis. See
+`FlexRow`/`FlexColumn` (backed by `FlexPanel`) and `Stack` both lay out
+along an axis, but the flex panel applies CSS-Flexbox semantics
+(`flex-grow`, `flex-shrink`, `flex-basis`) and `Stack` applies a simpler
+"give every child its natural size with fixed gaps" rule. Mixing them on
+the same axis means the outer flex panel's grow/shrink calculations
+operate on opaque `Stack` measurements — predictable enough for trivial
+cases, surprising for anything dynamic. Pick one per axis. See
 [flex-layout](flex-layout.md) for when each shape is right.
 
 ### `HStack`/`VStack` in a `Grid` `Auto` track collapses to nothing
@@ -657,7 +678,7 @@ non-standard radius).
 ## Next Steps
 
 - **[Hooks](hooks.md)** — Previous: `UseState`, `UseMemo`, and the rest of the hook surface
-- **[Flex Layout](flex-layout.md)** — Next: `FlexPanel` for grow/shrink/basis and multi-line wrap with gaps
+- **[Flex Layout](flex-layout.md)** — Next: `FlexRow`/`FlexColumn` for grow/shrink/basis and multi-line wrap with gaps
 - **[Styling and Theming](styling.md)** — Apply colors, typography, and themes to your layouts
 - **[Collections](collections.md)** — `VirtualList` for large data sets that overflow `ScrollView`
 - **[Forms and Input](forms.md)** — Build data entry forms with text fields, checkboxes, and validation

@@ -15,7 +15,7 @@ build time so it cannot ship.
 
 # Theming Tokens
 
-Reactor exposes 35 named theme tokens on the static
+Reactor exposes 36 named theme tokens on the static
 [`Theme`](styling.md) class plus a `Theme.Ref(string)` escape hatch
 for any XAML resource key. Tokens resolve through WinUI's resource
 system (`XamlControlsResources` + the app's `ThemeDictionaries`), so
@@ -71,6 +71,12 @@ class SwatchGrid : Component
                 ("SystemCritical", Theme.SystemCritical),
                 ("SystemNeutral", Theme.SystemNeutral),
                 ("SystemSolidNeutral", Theme.SystemSolidNeutral),
+                ("SystemSolidAttention", Theme.SystemSolidAttention),
+                ("SystemAttentionBackground", Theme.SystemAttentionBackground),
+                ("SystemSuccessBackground", Theme.SystemSuccessBackground),
+                ("SystemCautionBackground", Theme.SystemCautionBackground),
+                ("SystemCriticalBackground", Theme.SystemCriticalBackground),
+                ("SystemNeutralBackground", Theme.SystemNeutralBackground),
             })
         ).Padding(20)
     );
@@ -153,8 +159,8 @@ non-color decision like which icon to render).
 
 ## Token catalog
 
-35 named tokens across 6 groups, plus the `Theme.Ref(string)` escape
-hatch.
+36 named tokens across 6 groups, plus the `Theme.Ref(string)` escape
+hatch. The list below mirrors `src/Reactor/Core/Theme.cs` exactly.
 
 <!-- TODO Phase 4: auto-generate this table from src/Reactor/Core/Theme.cs
      so a new token can never be added without the page updating. -->
@@ -208,7 +214,7 @@ hatch.
 | `Theme.ControlStroke` | `ControlStrokeColorDefaultBrush` | Default control border. |
 | `Theme.ControlStrokeSecondary` | `ControlStrokeColorSecondaryBrush` | Focus / pressed border. |
 
-### Signal (11 tokens)
+### Signal (12 tokens)
 
 | Token | WinUI key | Where to use |
 |---|---|---|
@@ -218,14 +224,15 @@ hatch.
 | `Theme.SystemCritical` | `SystemFillColorCriticalBrush` | Error state. |
 | `Theme.SystemNeutral` | `SystemFillColorNeutralBrush` | Info / neutral. |
 | `Theme.SystemSolidNeutral` | `SystemFillColorSolidNeutralBrush` | Solid neutral surface. |
+| `Theme.SystemSolidAttention` | `SystemFillColorSolidAttentionBackgroundBrush` | Solid attention surface. |
 | `Theme.SystemAttentionBackground` | `SystemFillColorAttentionBackgroundBrush` | Attention banner background. |
 | `Theme.SystemSuccessBackground` | `SystemFillColorSuccessBackgroundBrush` | Success banner background. |
 | `Theme.SystemCautionBackground` | `SystemFillColorCautionBackgroundBrush` | Warning banner background. |
 | `Theme.SystemCriticalBackground` | `SystemFillColorCriticalBackgroundBrush` | Error banner background. |
 | `Theme.SystemNeutralBackground` | `SystemFillColorNeutralBackgroundBrush` | Info banner background. |
 
-(`Theme.SystemSolidAttention` rounds it to 35 + the `Theme.Ref(key)`
-escape hatch — total surface ≥ 37 per spec §5.3.)
+That is the complete set: 4 + 5 + 5 + 5 + 5 + 12 = **36** typed tokens,
+plus `Theme.Ref(key)` for anything else in the resource tree.
 
 ### Custom keys
 
@@ -242,21 +249,39 @@ Button("Custom", () => { })
 
 The signal-background tokens pair with the foreground signal tokens
 to produce inline status banners that read correctly in either theme.
+Use WinUI's `InfoBarSeverity` for the discriminator — Reactor's own
+`Severity` enum (`Microsoft.UI.Reactor.Controls.Validation`) is for
+form-validation messages and has different members
+(`Info` / `Warning` / `Error`).
 
 ```csharp
-Element StatusBanner(string text, Severity severity) => HStack(8,
-    TextBlock(text).Foreground(severity switch {
-        Severity.Success  => Theme.SystemSuccess,
-        Severity.Warning  => Theme.SystemCaution,
-        Severity.Critical => Theme.SystemCritical,
-        _                  => Theme.SystemNeutral,
-    })
-).Background(severity switch {
-    Severity.Success  => Theme.SystemSuccessBackground,
-    Severity.Warning  => Theme.SystemCautionBackground,
-    Severity.Critical => Theme.SystemCriticalBackground,
-    _                  => Theme.SystemNeutralBackground,
-}).Padding(12).CornerRadius(4);
+// Map a severity onto the Signal token pair (foreground + matching
+// background) so the banner tracks the theme in both light and dark.
+class StatusBannerDemo : Component
+{
+    public override Element Render() => VStack(8,
+        StatusBanner("Saved", InfoBarSeverity.Success),
+        StatusBanner("Disk almost full", InfoBarSeverity.Warning),
+        StatusBanner("Upload failed", InfoBarSeverity.Error),
+        StatusBanner("Sync scheduled", InfoBarSeverity.Informational)
+    ).Padding(16);
+
+    internal static Element StatusBanner(string text, InfoBarSeverity severity) => HStack(8,
+        TextBlock(text).Foreground(severity switch
+        {
+            InfoBarSeverity.Success => Theme.SystemSuccess,
+            InfoBarSeverity.Warning => Theme.SystemCaution,
+            InfoBarSeverity.Error => Theme.SystemCritical,
+            _ => Theme.SystemNeutral,
+        })
+    ).Background(severity switch
+    {
+        InfoBarSeverity.Success => Theme.SystemSuccessBackground,
+        InfoBarSeverity.Warning => Theme.SystemCautionBackground,
+        InfoBarSeverity.Error => Theme.SystemCriticalBackground,
+        _ => Theme.SystemNeutralBackground,
+    }).Padding(12).CornerRadius(4);
+}
 ```
 
 Pair this with [`commanding`](commanding.md) to render the same banner
@@ -346,9 +371,12 @@ same component twice — once with `RequestedTheme(Light)`, once with
 [InlineData(ElementTheme.Dark)]
 public void StatusBanner_renders_in_both_themes(ElementTheme theme)
 {
-    var rendered = Mount(new StatusBanner("Saved", Severity.Success));
-    rendered = rendered.WithModifier(m => m.RequestedTheme(theme));
-    Assert.Empty(AccessibilityScanner.Scan(rendered));
+    // Build the element tree directly — the scanner walks Elements, so
+    // no WinUI controls need to be materialized and the test stays headless.
+    var tree = StatusBanner("Saved", InfoBarSeverity.Success)
+        .RequestedTheme(theme);
+
+    Assert.Empty(AccessibilityScanner.Scan(tree));
 }
 ```
 

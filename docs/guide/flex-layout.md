@@ -239,7 +239,7 @@ specification §4.5](https://www.w3.org/TR/css-flexbox-1/#min-size-auto)
 intuitively expect when laying out a row of cards or a column of
 sections: items don't squish smaller than their text or icons.
 
-Reactor's FlexPanel implements the auto-min rule as follows:
+Reactor's `FlexPanel` implements the auto-min rule as follows:
 
 | basis | minWidth / minHeight | Resulting floor |
 |---|---|---|
@@ -250,25 +250,37 @@ Reactor's FlexPanel implements the auto-min rule as follows:
 | any | explicit `N > 0` | `N` (your hard floor) |
 
 The auto-min rule applies **only to the main axis** (width for
-`Direction.Row`, height for `Direction.Column`). On the cross axis,
+`FlexDirection.Row`, height for `FlexDirection.Column`). On the cross axis,
 items shrink freely to 0 unless you set `minWidth`/`minHeight`
 explicitly.
 
 ```csharp
-// Default behavior — items keep their min-content size:
-FlexPanel(
-    Border("Long text that won't truncate").Flex(shrink: 1),
-    Border("Short").Flex(shrink: 1),
-).Direction(FlexDirection.Row);
+class MinSizingDemo : Component
+{
+    public override Element Render() => VStack(16,
+        SubHeading("Default — items keep their min-content size"),
+        FlexRow(
+            Border("Long text that won't truncate").Flex(shrink: 1)
+                .Background("#e0e0ff").Padding(8),
+            Border("Short").Flex(shrink: 1)
+                .Background("#ffe0e0").Padding(8)
+        ) with { ColumnGap = 8 },
 
-// Opt out — let items shrink below content (text will clip):
-FlexPanel(
-    Border("Long text that may be clipped").Flex(shrink: 1, minWidth: 0),
-    Border("Short").Flex(shrink: 1, minWidth: 0),
-).Direction(FlexDirection.Row);
+        SubHeading("Opt out — minWidth: 0 lets items shrink below content"),
+        FlexRow(
+            Border("Long text that may be clipped").Flex(shrink: 1, minWidth: 0)
+                .Background("#e0e0ff").Padding(8),
+            Border("Short").Flex(shrink: 1, minWidth: 0)
+                .Background("#ffe0e0").Padding(8)
+        ) with { ColumnGap = 8 },
 
-// Explicit floor — never below 80px regardless of content:
-Border(content).Flex(shrink: 1, minWidth: 80)
+        SubHeading("Explicit floor — never below 80px regardless of content"),
+        FlexRow(
+            Border("Hard floor").Flex(shrink: 1, minWidth: 80)
+                .Background("#e0ffe0").Padding(8)
+        ) with { ColumnGap = 8 }
+    ).Width(360);
+}
 ```
 
 > **Caveat:** **Performance:** computing `min-content` requires a WinUI

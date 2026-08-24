@@ -249,6 +249,35 @@ class WidthVsGrowRight : Component
 }
 // </snippet:width-vs-grow-right>
 
+// <snippet:min-sizing>
+class MinSizingDemo : Component
+{
+    public override Element Render() => VStack(16,
+        SubHeading("Default — items keep their min-content size"),
+        FlexRow(
+            Border("Long text that won't truncate").Flex(shrink: 1)
+                .Background("#e0e0ff").Padding(8),
+            Border("Short").Flex(shrink: 1)
+                .Background("#ffe0e0").Padding(8)
+        ) with { ColumnGap = 8 },
+
+        SubHeading("Opt out — minWidth: 0 lets items shrink below content"),
+        FlexRow(
+            Border("Long text that may be clipped").Flex(shrink: 1, minWidth: 0)
+                .Background("#e0e0ff").Padding(8),
+            Border("Short").Flex(shrink: 1, minWidth: 0)
+                .Background("#ffe0e0").Padding(8)
+        ) with { ColumnGap = 8 },
+
+        SubHeading("Explicit floor — never below 80px regardless of content"),
+        FlexRow(
+            Border("Hard floor").Flex(shrink: 1, minWidth: 80)
+                .Background("#e0ffe0").Padding(8)
+        ) with { ColumnGap = 8 }
+    ).Width(360);
+}
+// </snippet:min-sizing>
+
 class FlexLayoutApp : Component
 {
     public override Element Render()
@@ -264,7 +293,8 @@ class FlexLayoutApp : Component
                 Component<FlexVsStackDemo>(),
                 Component<AppShellDemo>(),
                 Component<ResponsiveNavDemo>(),
-                Component<WidthVsGrowRight>()
+                Component<WidthVsGrowRight>(),
+                Component<MinSizingDemo>()
             ).Padding(24)
         );
     }

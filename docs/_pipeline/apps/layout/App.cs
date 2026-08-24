@@ -297,6 +297,39 @@ class DoGridForForms : Component
 }
 // </snippet:do-grid-for-forms>
 
+// <snippet:alignment-sizing>
+class AlignmentSizingDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Alignment and sizing"),
+
+        TextBlock("Centered").HAlign(HorizontalAlignment.Center),
+        TextBlock("Fixed width").Width(200).Height(40).Background("#E5F1FB"),
+
+        VStack(8,
+            TextBlock("Item A"),
+            TextBlock("Item B")
+        ).Margin(24).Padding(16).Background("#F3F3F3")
+    );
+}
+// </snippet:alignment-sizing>
+
+// <snippet:content-alignment>
+class ContentAlignmentDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Content alignment"),
+
+        // The Button stretches to fill the row, and its inner content
+        // stretches too — without HorizontalContentAlignment the label
+        // would stay centered in an otherwise full-width button.
+        Button(TextBlock("Open"), () => { })
+            .HAlign(HorizontalAlignment.Stretch)
+            .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+    ).Width(320);
+}
+// </snippet:content-alignment>
+
 class LayoutApp : Component
 {
     public override Element Render()
@@ -314,7 +347,9 @@ class LayoutApp : Component
                 Component<AppShellExample>(),
                 Component<AutoGridExample>(),
                 Component<ResponsiveSwitcherExample>(),
-                Component<DoGridForForms>()
+                Component<DoGridForForms>(),
+                Component<AlignmentSizingDemo>(),
+                Component<ContentAlignmentDemo>()
             ).Padding(24)
         );
     }
