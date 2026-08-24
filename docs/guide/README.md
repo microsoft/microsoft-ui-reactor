@@ -164,8 +164,8 @@ first; everyone else can follow the order.
 ### 7. Tooling & process
 
 - **[Dev Tooling](dev-tooling.md)** — `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu
-- **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2022
-- **[Testing](testing.md)** — Headless renderer, snapshot tests, async test patterns
+- **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2022 (17.8+) and 2026 (18.x)
+- **[Testing](testing.md)** — Headless renderer, structural assertions, async test patterns
 - **[Performance](performance.md)** — ETW, EventDispatch, flame graphs
 - **[Packaging](packaging.md)** — MSIX, single-file, ARM64, AOT considerations
 
@@ -212,7 +212,9 @@ uniform Summary / Parameters / Returns / Discussion / Examples / See Also page.
 
 ## Minimal Project Setup
 
-Create a console project, then edit the `.csproj`:
+The fastest path is [`dotnet new reactorapp`](getting-started.md), which
+scaffolds all of this for you. To wire it up by hand instead, create a console
+project and edit the `.csproj`:
 
 <!-- ai:lock -->
 ```xml
@@ -222,14 +224,23 @@ Create a console project, then edit the `.csproj`:
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Windows App SDK needs a concrete architecture; without this an
+         unqualified `dotnet build` / `dotnet run` fails with
+         "WindowsAppSDKSelfContained requires a supported Windows architecture". -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.*" />
-    <ProjectReference Include="..\Reactor\Reactor.csproj" />
+    <PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.13" />
   </ItemGroup>
 </Project>
 ```
 <!-- /ai:lock -->
+
+One package reference is enough — `Microsoft.UI.Reactor` brings the Windows App
+SDK in transitively, so you only add `Microsoft.WindowsAppSDK` yourself when you
+want to pin a specific WinUI patch or bundle the runtime with
+`WindowsAppSDKSelfContained`. See [Packaging](packaging.md) for the
+`<Platforms>`, ARM64, and self-contained shapes the project template uses.
 
 Replace `App.cs` with a component and a `ReactorApp.Run<T>()` call, and run with
 `dotnet run`. That's your first Reactor app.
