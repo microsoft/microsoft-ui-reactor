@@ -228,16 +228,20 @@ class LayoutAnimationDemo : Component
         return VStack(12,
             SubHeading("Layout Animation"),
             HStack(8,
-                Button("Add Item", () => {
+                Button("Add Item", () =>
+                {
                     nextId.Current++;
-                    updateItems(l => [.. l, $"Item {nextId.Current}"]);
+                    updateItems(l => [$"Item {nextId.Current}", .. l]);
                 }),
-                Button("Remove Last", () => updateItems(l =>
-                    l.Count > 0 ? l.Take(l.Count - 1).ToList() : l))
+                Button("Remove Last", () =>
+                    updateItems(l => l.Count > 0 ? l[1..].ToList() : l))
             ),
             VStack(4, items.Select(item =>
-                TextBlock(item).Padding(horizontal: 8, vertical: 12).Background("#f0f0f0")
-                    .CornerRadius(4).LayoutAnimation()
+                TextBlock(item)
+                    .Padding(horizontal: 8, vertical: 12)
+                    .Background("#f0f0f0")
+                    .CornerRadius(4)
+                    .LayoutAnimation()
                     .WithKey($"item-{item}")
             ).ToArray())
         ).Padding(24);
