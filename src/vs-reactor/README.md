@@ -1,6 +1,6 @@
 # Visual Studio Reactor Preview
 
-Live embedded preview pane for Microsoft.UI.Reactor apps in Visual Studio 2022.
+Live embedded preview pane for Microsoft.UI.Reactor apps in Visual Studio 2022 (17.8+) and Visual Studio 2026 (18.x).
 
 > ⚠️ **Very rough / experimental.** This VSIX is the roughest surface in an already experimental repository. It exists to validate the embedded-preview direction and collect feedback; expect install friction, solution-load races, HWND/DPI quirks, blank-window bugs, and breaking changes while it is hardened.
 
