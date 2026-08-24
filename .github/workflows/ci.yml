@@ -484,7 +484,7 @@ jobs:
           REACTOR_AOT_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world
         run: |
           dotnet test --project tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions `
-            --nologo
+            --no-banner
 
       - name: Publish AOT Hello-World Advanced negative
         run: >
@@ -502,7 +502,7 @@ jobs:
           REACTOR_AOT_ADVANCED_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world-advanced
         run: |
           dotnet test --project tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.TrimAssertions `
-            --nologo
+            --no-banner
 
       - name: Publish AOT Hello-World Advanced positive
         run: >
@@ -520,7 +520,7 @@ jobs:
           REACTOR_AOT_ADVANCED_POSITIVE_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world-advanced-positive
         run: |
           dotnet test --project tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions `
-            --nologo
+            --no-banner
 
       - name: Upload published binary on failure
         if: failure()
@@ -729,7 +729,7 @@ jobs:
       # compilation, image processing, the blank-screenshot gate), so it
       # belongs here rather than in the WinUI unit-test job.
       - name: Doc-pipeline tests
-        run: dotnet test --project tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj -p:Platform=x64 --nologo
+        run: dotnet test --project tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj -p:Platform=x64 --no-banner
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
