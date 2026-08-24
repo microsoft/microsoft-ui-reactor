@@ -1233,12 +1233,19 @@ internal static class DevtoolsFixtures
                 && button.Width == 321);
 
             // The by-name lookup must still reject genuinely absent DPs rather than
-            // matching some unrelated static now that properties are in scope.
+            // matching some unrelated static now that properties are in scope — and it
+            // must not blame trimming for a plain typo. On any build where discovery
+            // works (JIT, or an AOT build that roots its DP statics) the error must
+            // carry no NativeAOT notice, or it sends the caller chasing a phantom.
             var missingProp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "NoSuchDevtoolsProperty" });
             H.Check("Devtools_Dp_UnknownNameErrors",
                 Result(missingProp) is null
                 && Error(missingProp) is { } missingErr
-                && missingErr.GetProperty("message").GetString()!.Contains("NoSuchDevtoolsProperty", StringComparison.Ordinal));
+                && missingErr.GetProperty("message").GetString() is { } missingMsg
+                && missingMsg.Contains("NoSuchDevtoolsProperty", StringComparison.Ordinal)
+                && (enumeratedNames.Length > 0
+                    ? !missingMsg.Contains("NativeAOT", StringComparison.Ordinal)
+                    : missingMsg.Contains("NativeAOT", StringComparison.Ordinal)));
 
             // The live listing and the notice must agree, whichever runtime this is on:
             // a JIT build (or a correctly-rooted AOT one) finds DPs and must NOT carry a
@@ -1268,6 +1275,21 @@ internal static class DevtoolsFixtures
                 && Notice(0, false) is null
                 && Notice(12, true) is null
                 && Notice(12, false) is null);
+
+            // Same gate for the by-name path, and the combination that must stay silent
+            // is the one no JIT run can reproduce: a NativeAOT build that *does* root its
+            // DP statics, where discovery works and a failed lookup really is a typo.
+            // Driving the decision directly is the only way to cover it.
+            var warnMethod = typeof(DevtoolsPropertyTools).GetMethod(
+                "ShouldWarnAboutTrimming",
+                global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!;
+            bool ShouldWarn(bool isAot, bool declaresDp) => (bool)warnMethod.Invoke(null, new object[] { isAot, declaresDp })!;
+
+            H.Check("Devtools_Dp_TrimmingBlamedOnlyWhenMetadataIsGone",
+                ShouldWarn(isAot: true, declaresDp: false)
+                && !ShouldWarn(isAot: true, declaresDp: true)
+                && !ShouldWarn(isAot: false, declaresDp: false)
+                && !ShouldWarn(isAot: false, declaresDp: true));
 
             H.SetContent(null);
 

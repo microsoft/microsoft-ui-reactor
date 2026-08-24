@@ -366,7 +366,7 @@ internal static class DevtoolsPropertyTools
                 return attached;
 
             throw new McpToolException(
-                $"No attached DependencyProperty '{name}' found. Check the owner type name.{AotNoticeIfRelevant()}",
+                $"No attached DependencyProperty '{name}' found. Check the owner type name.{AotNoticeIfRelevant(ownerType)}",
                 JsonRpcErrorCodes.InvalidParams);
         }
 
@@ -378,7 +378,7 @@ internal static class DevtoolsPropertyTools
         }
 
         throw new McpToolException(
-            $"No DependencyProperty '{name}' found on {el.GetType().Name} or its base types. For attached properties, use 'OwnerType.Property' syntax (e.g. 'Grid.Row').{AotNoticeIfRelevant()}",
+            $"No DependencyProperty '{name}' found on {el.GetType().Name} or its base types. For attached properties, use 'OwnerType.Property' syntax (e.g. 'Grid.Row').{AotNoticeIfRelevant(el.GetType())}",
             JsonRpcErrorCodes.InvalidParams);
     }
 
@@ -418,8 +418,49 @@ internal static class DevtoolsPropertyTools
         + " root the DependencyProperty statics with an ILLink descriptor"
         + " (see docs/aot-support.md); otherwise use a Debug build for property inspection.";
 
-    /// <summary>The NativeAOT notice, or an empty string on a runtime where it would be misleading.</summary>
-    private static string AotNoticeIfRelevant() => IsNativeAot ? NativeAotNotice : string.Empty;
+    /// <summary>
+    /// The NativeAOT notice, but only when this type's DP metadata really is missing.
+    /// </summary>
+    /// <remarks>
+    /// Being a NativeAOT build is not on its own evidence that trimming is the problem:
+    /// an AOT build that roots its DP statics resolves names fine, and there the notice
+    /// would turn an ordinary typo into a wild-goose chase. So both conditions are
+    /// required — the app is AOT, *and* the type being searched reports no DP statics at
+    /// all. Every live WinUI element has dozens, so zero is the tell that the metadata
+    /// was trimmed rather than that the caller misspelled something. Runs on the failure
+    /// path only.
+    /// </remarks>
+    private static string AotNoticeIfRelevant(Type? searchedType) =>
+        searchedType is not null
+        && ShouldWarnAboutTrimming(IsNativeAot, DeclaresAnyDpLazily(searchedType))
+            ? NativeAotNotice
+            : string.Empty;
+
+    /// <summary>
+    /// Whether a failed lookup should be blamed on trimming rather than on the name.
+    /// </summary>
+    /// <remarks>
+    /// Pure, and takes both inputs, so all four combinations are drivable from a test on
+    /// either runtime. Reading the ambient <see cref="IsNativeAot"/> here would leave the
+    /// gate untestable exactly where it matters — the branch that must NOT fire (a rooted
+    /// AOT build, where discovery works and the failure really is a typo) cannot be
+    /// reproduced on a JIT run at all.
+    /// </remarks>
+    internal static bool ShouldWarnAboutTrimming(bool isNativeAot, bool typeDeclaresAnyDp) =>
+        isNativeAot && !typeDeclaresAnyDp;
+
+    /// <summary>Short-circuits the reflection probe on JIT, where the answer cannot matter.</summary>
+    private static bool DeclaresAnyDpLazily(Type type) =>
+        !IsNativeAot || DeclaresAnyDependencyProperty(type);
+
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Best-effort diagnostic probe over a Type that carries no DynamicallyAccessedMembers annotation, used only to decide how to word a failure message. Returning false because the trimmer removed the members is exactly the condition it reports.")]
+    private static bool DeclaresAnyDependencyProperty(Type type)
+    {
+        const BindingFlags Flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+
+        return type.GetFields(Flags).Any(f => f.FieldType == typeof(DependencyProperty))
+            || type.GetProperties(Flags).Any(p => p.PropertyType == typeof(DependencyProperty));
+    }
 
     /// <summary>
     /// The notice to attach to an enumeration result, or null when none applies.
@@ -429,6 +470,10 @@ internal static class DevtoolsPropertyTools
     /// so both branches are reachable from a test on either runtime. Reading the ambient
     /// value would make this untestable exactly where it matters: the interesting branch
     /// only occurs on AOT, and the fixture that would cover it is AOT-skipped.
+    /// <para>
+    /// An empty count is the enumeration-side equivalent of the by-name check above — on
+    /// a rooted AOT build the count is non-zero and no notice is attached.
+    /// </para>
     /// </remarks>
     internal static string? EnumerationNotice(int count, bool isNativeAot) =>
         count == 0 && isNativeAot ? NativeAotNotice.TrimStart() : null;
