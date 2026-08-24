@@ -75,7 +75,7 @@ class TwoPaneDemo : Component
                                 TextBlock(""),
                                 TextBlock("class MainView : Component"),
                                 TextBlock("{"),
-                                TextBlock("    public override Element Render() => Text(\"Hello\");"),
+                                TextBlock("    public override Element Render() => TextBlock(\"Hello\");"),
                                 TextBlock("}")
                             ).Padding(16)
                         }
@@ -146,7 +146,7 @@ class TabGroupDemo : Component
                         TextBlock("public sealed class App : Component"),
                         TextBlock("{"),
                         TextBlock("    public override Element Render() =>"),
-                        TextBlock("        Text(\"hello, world\");"),
+                        TextBlock("        TextBlock(\"hello, world\");"),
                         TextBlock("}")
                     ).Padding(16)
                 },

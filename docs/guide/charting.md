@@ -478,9 +478,11 @@ DSL. Import `using static Microsoft.UI.Reactor.Charting.D3Charts;` for:
 - **`D3Axes`, `D3Grid`, `D3Legend`** — axis/legend composites
 - **`Brush(color)`, `Palette`** — brushes and the default categorical palette
 
-`Text` collides with the core `Text(...)` factory, so qualify that one as
-`D3Charts.Text(...)` when both `using static` directives are in scope;
-`TextRight` and `TextCenter` are unambiguous.
+These three are **positional**: `Text(x, y, text, …)` takes canvas
+coordinates and is unrelated to the core `TextBlock(...)` factory. Reactor has
+no core `Text(...)` element factory — the `Text(...)` members that exist
+elsewhere are the DataGrid cell-renderer and editor helpers, which return
+`Func<object, Element>`, not an `Element`.
 
 The scales are types, not `D3Charts` members — they live one namespace deeper.
 Add `using Microsoft.UI.Reactor.Charting.D3;` to reach them.
