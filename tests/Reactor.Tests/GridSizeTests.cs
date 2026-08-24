@@ -202,8 +202,8 @@ public class GridSizeTests
             columns: new[] { GridSize.Star(1) },
             rows: new[] { GridSize.Star(1) });
 
-        Assert.Equal(new[] { "*" }, typed.Definition.Columns);
-        Assert.Equal(new[] { "*" }, typed.Definition.Rows);
+        Assert.Equal(new[] { "*" }, typed.Definition.Columns.Select(cs => cs.ToString()));
+        Assert.Equal(new[] { "*" }, typed.Definition.Rows.Select(rs => rs.ToString()));
     }
 
     /// <summary>
@@ -228,7 +228,80 @@ public class GridSizeTests
             },
             rows: new[] { GridSize.Auto, GridSize.Star(1.5), GridSize.Px(48) });
 
-        Assert.Equal(new[] { "Auto", "*", "2*", "0.33*", "0", "120.5" }, typed.Definition.Columns);
-        Assert.Equal(new[] { "Auto", "1.5*", "48" }, typed.Definition.Rows);
+        Assert.Equal(new[] { "Auto", "*", "2*", "0.33*", "0", "120.5" }, typed.Definition.Columns.Select(cs => cs.ToString()));
+        Assert.Equal(new[] { "Auto", "1.5*", "48" }, typed.Definition.Rows.Select(rs => rs.ToString()));
+    }
+
+    [Fact]
+    public void GridSize_Fluent_MinSize()
+    {
+        var grid = Factories.Grid(
+            columns: new[]
+            {
+                GridSize.Star().MinSize(100),
+                GridSize.Auto.MinSize(100),
+                GridSize.Px(200).MinSize(100)
+            },
+            rows: new[]
+            {
+                GridSize.Star().MinSize(100),
+                GridSize.Auto.MinSize(100),
+                GridSize.Px(200).MinSize(100)
+            }
+        );
+
+        Assert.Equal(new[] {"*", "Auto", "200" }, grid.Definition.Columns.Select(cs => cs.ToString()));
+        Assert.Equal(new[] { "*", "Auto", "200" }, grid.Definition.Rows.Select(rs => rs.ToString()));
+        Assert.Equal(new double[] { 100, 100, 100 }, grid.Definition.Columns.Select(cs => cs.Min));
+        Assert.Equal(new double[] { 100, 100, 100 }, grid.Definition.Rows.Select(rs => rs.Min));
+    }
+
+    [Fact]
+    public void GridSize_Fluent_MaxSize()
+    {
+        var grid = Factories.Grid(
+            columns: new[]
+            {
+                GridSize.Star().MaxSize(500),
+                GridSize.Auto.MaxSize(500),
+                GridSize.Px(200).MaxSize(500)
+            },
+            rows: new[]
+            {
+                GridSize.Star().MaxSize(500),
+                GridSize.Auto.MaxSize(500),
+                GridSize.Px(200).MaxSize(500)
+            }
+        );
+
+        Assert.Equal(new[] { "*", "Auto", "200" }, grid.Definition.Columns.Select(cs => cs.ToString()));
+        Assert.Equal(new[] { "*", "Auto", "200" }, grid.Definition.Rows.Select(rs => rs.ToString()));
+        Assert.Equal(new double[] { 500, 500, 500 }, grid.Definition.Columns.Select(cs => cs.Max));
+        Assert.Equal(new double[] { 500, 500, 500 }, grid.Definition.Rows.Select(rs => rs.Max));
+    }
+
+    [Fact]
+    public void GridSize_Fluent_MinMaxSize()
+    {
+        var grid = Factories.Grid(
+            columns: new[]
+            {
+                GridSize.Star().MinMaxSize(100, 500),
+                GridSize.Auto.MinMaxSize(100, 500),
+                GridSize.Px(200).MinMaxSize(100, 500)
+            },
+            rows: new[]
+            {
+                GridSize.Star().MinMaxSize(100, 500),
+                GridSize.Auto.MinMaxSize(100, 500),
+                GridSize.Px(200).MinMaxSize(100, 500)
+            }
+        );
+        Assert.Equal(new[] { "*", "Auto", "200" }, grid.Definition.Columns.Select(cs => cs.ToString()));
+        Assert.Equal(new[] { "*", "Auto", "200" }, grid.Definition.Rows.Select(rs => rs.ToString()));
+        Assert.Equal(new double[] { 100, 100, 100 }, grid.Definition.Columns.Select(cs => cs.Min));
+        Assert.Equal(new double[] { 100, 100, 100 }, grid.Definition.Rows.Select(rs => rs.Min));
+        Assert.Equal(new double[] { 500, 500, 500 }, grid.Definition.Columns.Select(cs => cs.Max));
+        Assert.Equal(new double[] { 500, 500, 500 }, grid.Definition.Rows.Select(rs => rs.Max));
     }
 }

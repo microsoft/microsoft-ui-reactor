@@ -256,7 +256,7 @@ public class DataGridPerfCacheTests
         // No leading/trailing columns.
         var (widths, def) = state.GetColumnLayout(cols, false, false, false);
         Assert.Equal(cols.Count, def.Columns.Length);
-        Assert.Equal(new[] { "*" }, def.Rows);
+        Assert.Equal(new[] { "*" }, def.Rows.Select(rs => rs.ToString()));
         for (int c = 0; c < cols.Count; c++)
         {
             Assert.Equal(state.GetColumnWidth(cols[c].Name), widths[c]);

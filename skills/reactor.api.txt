@@ -2744,11 +2744,11 @@ GetHashCode() → int
 ToString() → string
 
 ### record GridDefinition
-new(GridSize[] columns, GridSize[] rows)
-new(string[] Columns, string[] Rows)
-string[] Columns { get; init; }
-string[] Rows { get; init; }
-Deconstruct(ref string[] Columns, ref string[] Rows) → void
+new(GridSize[] Columns, GridSize[] Rows)
+new(string[] columns, string[] rows)
+GridSize[] Columns { get; init; }
+GridSize[] Rows { get; init; }
+Deconstruct(ref GridSize[] Columns, ref GridSize[] Rows) → void
 Equals(GridDefinition other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -2771,6 +2771,8 @@ ToString() → string
 new(double Value, GridUnitType Type)
 GridSize Auto { get; }
 GridUnitType Type { get; init; }
+double Max { get; init; }
+double Min { get; init; }
 double Value { get; init; }
 Deconstruct(ref double Value, ref GridUnitType Type) → void
 Equals(GridSize other) → bool
@@ -2780,6 +2782,11 @@ Parse(string s) → GridSize
 Px(double pixels) → GridSize
 Star(double weight = 1) → GridSize
 ToString() → string
+
+### static class GridSizeExtensions
+GridSize.MaxSize(double max) → GridSize
+GridSize.MinMaxSize(double min, double max) → GridSize
+GridSize.MinSize(double min) → GridSize
 
 ### record GridViewElement
 new(Element[] Items)

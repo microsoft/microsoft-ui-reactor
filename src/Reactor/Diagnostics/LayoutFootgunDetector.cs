@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Xaml;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Diagnostics;
@@ -138,8 +139,8 @@ internal static class LayoutFootgunDetector
         GridElement grid,
         Element gridChild,
         StackElement stack,
-        string[]? columns,
-        string[]? rows,
+        GridSize[]? columns,
+        GridSize[]? rows,
         bool chainHasWidth,
         bool chainHasHeight,
         string? locationKey)
@@ -182,12 +183,12 @@ internal static class LayoutFootgunDetector
         // MinHeight also clamps the desired size during Measure, so it counts as an explicit size.
         => children.Any(static c => c?.Modifiers?.Height is not null || c?.Modifiers?.MinHeight is not null);
 
-    private static bool TrackIsAuto(string[]? tracks, int index)
+    private static bool TrackIsAuto(GridSize[]? tracks, int index)
     {
         if (tracks is null || index < 0 || index >= tracks.Length)
             return false;
         var track = tracks[index];
-        return track is not null && string.Equals(track.Trim(), "Auto", StringComparison.OrdinalIgnoreCase);
+        return track.Type == GridUnitType.Auto;
     }
 
     /// <summary>

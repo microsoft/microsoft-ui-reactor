@@ -27,6 +27,15 @@ namespace Microsoft.UI.Reactor;
 [DebuggerDisplay("{ToString(),nq}")]
 public readonly record struct GridSize(double Value, GridUnitType Type)
 {
+    /// <summary>
+    /// The minimum size of the track. Defaults to 0.
+    /// </summary>
+    public double Min { get; init; } = 0;
+    /// <summary>
+    /// The maximum size of the track. Defaults to <see cref="double.PositiveInfinity"/>.
+    /// </summary>
+    public double Max { get; init; } = double.PositiveInfinity;
+
     /// <summary>The auto-sized track. Equivalent to the WinUI <c>Auto</c> length.</summary>
     public static GridSize Auto { get; } = new(1, GridUnitType.Auto);
 
@@ -56,6 +65,14 @@ public readonly record struct GridSize(double Value, GridUnitType Type)
     /// with any WinUI surface that takes a <see cref="GridLength"/>.
     /// </summary>
     public static implicit operator GridLength(GridSize s) => new(s.Value, s.Type);
+
+    /// <summary>
+    /// Implicit conversion to <see cref="string"/> so the typed form composes
+    /// with any surface that takes a <see cref="string"/>.
+    /// This is to support the legacy <c>Grid</c> factory that takes string tracks.
+    /// </summary>
+    /// <param name="s"></param>
+    public static implicit operator string(GridSize s) => s.ToString();
 
     /// <summary>
     /// Canonical track-string form: <c>"Auto"</c>, <c>"*"</c>, <c>"&lt;n&gt;*"</c>, or

@@ -2413,7 +2413,7 @@ public record LayoutAnimationConfig
 //  Supporting data records (non-Element, used as structured params)
 // ════════════════════════════════════════════════════════════════════════
 
-public record GridDefinition(string[] Columns, string[] Rows)
+public record GridDefinition(GridSize[] Columns, GridSize[] Rows)
 {
     /// <summary>
     /// Construct a <see cref="GridDefinition"/> from the strongly-typed
@@ -2422,17 +2422,17 @@ public record GridDefinition(string[] Columns, string[] Rows)
     /// Spec 033 §1.
     /// </summary>
     /// <exception cref="global::System.ArgumentNullException">Thrown when either array is null.</exception>
-    public GridDefinition(GridSize[] columns, GridSize[] rows)
-        : this(ToStrings(columns), ToStrings(rows))
+    public GridDefinition(string[] columns, string[] rows)
+        : this(ToGridSizes(columns), ToGridSizes(rows))
     {
     }
 
-    private static string[] ToStrings(GridSize[] sizes)
+    private static GridSize[] ToGridSizes(string[] sizes)
     {
         if (sizes is null) throw new global::System.ArgumentNullException(nameof(sizes));
-        var result = new string[sizes.Length];
+        var result = new GridSize[sizes.Length];
         for (int i = 0; i < sizes.Length; i++)
-            result[i] = sizes[i].ToString();
+            result[i] = GridSize.Parse(sizes[i]);
         return result;
     }
 }
