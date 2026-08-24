@@ -325,7 +325,7 @@ Here's what's happening:
 - **[`UseState`](hooks.md)** returns the current value and a setter. When you call the
   setter, Reactor re-renders the component with the new value.
 - **[`VStack`](layout.md)** stacks children vertically. The number `16` is the pixel spacing.
-- **`Text(...).FontSize(24).Bold()`** is the fluent modifier pattern — every
+- **`TextBlock(...).FontSize(24).Bold()`** is the fluent modifier pattern — every
   element supports chainable modifiers for styling and layout.
 
 Type in the text box and the greeting updates instantly. There's no event
@@ -702,18 +702,34 @@ Every Reactor app eventually has the same two ingredients: an event
 handler that calls a setter, and a value rendered from the setter's
 state slot. The hello-world snippet above wires `setName` to
 `TextBox`'s change handler and reads `name` back in the
-`Text("Hello, ...")` line — that round trip is the entire reactivity
+`TextBlock("Hello, ...")` line — that round trip is the entire reactivity
 contract. Once it feels routine, every other [hook](hooks.md) is just
 a specialization (`UseReducer` for derived updates, `UseEffect` for
 side effects, `UseRef` for non-rendering bookkeeping).
 
 ### Running with devtools
 
-Launch with `dotnet run -c Debug` and Reactor mounts the in-app dev
-menu (Ctrl+Shift+D by default). The reconcile-highlight overlay flashes
-on every commit, and the [dev tooling](dev-tooling.md) page covers the
-full menu. The overlay is no-cost in Release builds — the dev menu
-compiles out under `#if DEBUG`.
+The dev menu needs **two** independent signals, and neither one is
+`#if DEBUG`. First the build-time capability — the `Reactor.DevtoolsSupport`
+feature switch, which `dotnet new reactorapp` already sets in Debug
+configurations along with the `Microsoft.UI.Reactor.Devtools` package. Second a
+session opt-in on the command line:
+
+```powershell
+dotnet run -- --devtools app
+```
+
+The scaffolded `Properties/launchSettings.json` ships a second
+`"<AppName> Devtools"` profile that passes that flag for you, so pick that
+profile in Visual Studio or use
+`dotnet run --launch-profile "<AppName> Devtools"`. The default profile
+deliberately passes no arguments — a plain `dotnet run -c Debug` starts the app
+with **no** dev menu.
+
+`UseDevtools()` returns `true` only when both signals are present, which is what
+gates the reconcile-highlight overlay and the rest of the menu. Release builds
+drop the package and the switch, so the devtools code trims away entirely. The
+[dev tooling](dev-tooling.md) page covers the full menu.
 
 ## Common Mistakes
 
@@ -765,7 +781,7 @@ one thing, then compose them in parent components. You'll rarely need more than
 `Component` or `Component<TProps>` as a base class.
 
 **Fluent modifiers are your friend.** Instead of wrapping elements in layout
-containers for simple styling, chain modifiers: `Text("hi").Margin(8).Bold()`
+containers for simple styling, chain modifiers: `TextBlock("hi").Margin(8).Bold()`
 reads cleanly and avoids unnecessary nesting.
 
 ## Next Steps

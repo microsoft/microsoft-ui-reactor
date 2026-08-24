@@ -36,7 +36,7 @@ complements.
 | State signal | `INotifyPropertyChanged.PropertyChanged` | Setter closure from `UseState` |
 | Property write | `BindingExpression.UpdateTarget` pulls VM getter | Reconciler writes after render |
 | Style application | `Style` + `Setter` + triggers | Modifier chain or `Use*` named-style hook |
-| Animation | `Storyboard` defined in XAML, started imperatively | `.WithAnimation(...)` modifier resolved by reconciler |
+| Animation | `Storyboard` defined in XAML, started imperatively | `.Animate(...)` / `.Transition(...)` modifier resolved by reconciler |
 | Layout state | `VisualStateManager` + `VisualState`/Group XAML | `.InteractionStates(...)` modifier on element |
 | Resources | `ResourceDictionary` / `ThemeDictionary` | [`ThemeRef`](theming-tokens.md) record struct |
 | Lists | `ItemsControl` + `DataTemplate` | `ForEach(items, item => …)` builds element per item |
@@ -78,7 +78,7 @@ public abstract record Element
 
     /// <summary>
     /// Layout modifiers (margin, padding, size, alignment, etc.) applied to this element.
-    /// Set via fluent extension methods: Text("hi").Margin(10).Width(200)
+    /// Set via fluent extension methods: TextBlock("hi").Margin(10).Width(200)
     /// Modifiers are stored inline so the concrete element type is preserved through chaining.
     /// </summary>
     public ElementModifiers? Modifiers { get; init; }
@@ -139,8 +139,8 @@ private static T ModifyTheme<T>(T el, string property, ThemeRef theme) where T :
 }
 ```
 
-The chain `Text("hi").FontSize(24).Margin(8)` produces one
-`TextElement` record with merged `Modifiers`. The reconciler reads
+The chain `TextBlock("hi").FontSize(24).Margin(8)` produces one
+`TextBlockElement` record with merged `Modifiers`. The reconciler reads
 both the typed fields and the modifiers when it patches the control.
 There is no per-property change notification: the comparison is
 record-level on the next render, and only differences become property
@@ -174,9 +174,9 @@ public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = fa
 
 Reactor doesn't install anything. `TextBlock(name)` reads the current
 value of `name` (a plain C# variable that happens to come out of
-`UseState`) and produces a `TextElement` with `Text = name` as a
+`UseState`) and produces a `TextBlockElement` with `Content = name` as a
 record field. When `name` changes, the setter writes the slot, the
-component re-renders, the new `TextElement` differs from the old, and
+component re-renders, the new `TextBlockElement` differs from the old, and
 the reconciler writes the new `Text` value onto the existing
 `TextBlock`. There is no binding object — the closure that produces
 the element is the binding.
@@ -196,7 +196,16 @@ and bind to properties on the item; the runtime keeps a pool and
 recycles.
 
 ```csharp
-ForEach(items, item => Card(item))
+// A XAML DataTemplate is a recipe the framework instantiates per item.
+// In Reactor the recipe is just a closure — `Card` is an ordinary method
+// returning an Element, and `ForEach` runs it once per item per render.
+static Element ProductList(IReadOnlyList<Product> items) =>
+    VStack(8, ForEach(items, item => Card(item).WithKey(item.Id.ToString())));
+
+static Element Card(Product item) =>
+    CardSurface(VStack(4,
+        TextBlock(item.Name).FontSize(16).SemiBold(),
+        TextBlock(item.Category).Foreground(Theme.SecondaryText)));
 ```
 
 The closure `item => Card(item)` is the template. It runs once per
@@ -218,19 +227,27 @@ Reactor has two analogues. The most common is a plain method that
 takes an element and applies modifiers:
 
 ```csharp
+// A XAML `Style` is a keyed bag of setters matched by TargetType. The
+// Reactor analogue is a plain method that applies modifiers — no static
+// registration, no runtime TargetType check, just composition.
 static Element CardSurface(Element child) =>
-    child.Background(Theme.CardBackground).CornerRadius(8).Padding(16);
+    child.Background(Theme.CardBackground)
+         .CornerRadius(8)
+         .Padding(16);
 ```
 
-Calling `CardSurface(Text("hi"))` returns the modified element. This
+Calling `CardSurface(TextBlock("hi"))` returns the modified element. This
 is just composition — no framework involvement, no static
 registration, no `Style.TargetType` check at runtime.
 
-For widely-reused style bundles, the [styling](styling.md) page
-documents the `UseNamedStyle` hook and the `.Named()` modifier, which
-let you declare a named bag of modifiers once and apply it across the
-app. Theme-aware brush properties resolve through
-[`ThemeRef`](theming-tokens.md) at reconcile time.
+For the handful of canonical WinUI named styles, the [styling](styling.md)
+page documents **named-style fluents** — `.AccentButton()`,
+`.SubtleButton()`, and `.TextLink()` on buttons, `.Informational()` /
+`.Success()` / `.Warning()` / `.Error()` on `InfoBar` — which bake a
+`StaticResource` style key into a single call. Anything broader than that
+is a helper method like `CardSurface` above: Reactor has no style
+registry and no `BasedOn` chain. Theme-aware brush properties resolve
+through [`ThemeRef`](theming-tokens.md) at reconcile time.
 
 ## ResourceDictionary → ThemeRef + Theme tokens
 
@@ -259,7 +276,7 @@ The latter resolves through the active `ThemeDictionaries[name]`.
 
 Reactor exposes the same WinUI theme dictionaries through
 `ThemeRef`, a readonly record struct holding a resource key. The
-static [`Theme`](theming-tokens.md) class names the 35 most-used
+static [`Theme`](theming-tokens.md) class names the most-used
 tokens (`Theme.Accent`, `Theme.CardBackground`, etc.); `Theme.Ref(key)`
 is the escape hatch for any other key. The reconciler walks
 `Application.Resources.ThemeDictionaries` exactly the way `{ThemeResource}`
@@ -283,20 +300,23 @@ element. See the [animation](animation.md) page for the full surface
 and the [animation-pipeline](animation-pipeline.md) page for the
 reconciler-side detail.
 
-## Storyboard → WithAnimation / Animate modifier
+## Storyboard → Animate / Transition modifiers
 
 `Storyboard` is the WinUI animation primitive: a tree of timelines
 animating dependency properties over time, started imperatively or
 declaratively via `VisualState`. The result is a long-lived
 `AnimationCollection` attached to the control.
 
-Reactor's `.WithAnimation(...)` and `.Animate(...)` modifiers on an
+Reactor's `.Animate(...)` and `.Transition(...)` modifiers on an
 element describe the same animation as a record on the element. The
 reconciler unpacks the record into either an
 `ImplicitAnimationCollection` (composition-level transitions) or a
 keyframe-driven property animation, depending on the mode. Stop the
 animation by removing the modifier on the next render; the reconciler
-detaches the collection.
+detaches the collection. For a one-off batch driven by an event rather
+than a persistent modifier, wrap the state change in the ambient
+`AnimationScope.WithAnimation(curve, action)` scope instead — see the
+[animation](animation.md) page for the full decision table.
 
 ## INotifyPropertyChanged → hook re-render
 
@@ -340,10 +360,11 @@ across navigations.
 
 Reactor doesn't separate VM from View. State lives in the component,
 in hooks. Commands are functions you close over. Pages persist via
-[`UsePersistedState`](persistence.md), not via a long-lived VM. When
+[`UsePersisted`](persistence.md), not via a long-lived VM. When
 you need a VM-shaped object — for shared logic across components,
 for an existing service-layer model — author a plain class, raise
-`PropertyChanged` (or wrap a value in [`Observable<T>`](#)), and let
+`PropertyChanged` (or wrap a value in
+[`Observable<T>`](advanced.md)), and let
 each consuming component subscribe via `UseObservable`. The component
 still owns its rendered slice of state; the VM is the source.
 

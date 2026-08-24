@@ -48,12 +48,15 @@ machines, with ARM64 second for Snapdragon X). The
 sub-package brings the WinUI 3 SDK — reference assemblies plus the MSBuild
 build/props/targets — while the native WinUI runtime is supplied by the
 machine-wide Windows App Runtime install (or bundled into the publish output
-when `WindowsAppSDKSelfContained=true`). The scaffolded template instead
-pins the full
+when `WindowsAppSDKSelfContained=true`). That sub-package is what a consumer
+gets transitively from `Microsoft.UI.Reactor`; the scaffolded template adds the
+full
 [`Microsoft.WindowsAppSDK`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK)
-metapackage (see below); inside this repo the correct reference is injected
-centrally from `Directory.Build.targets` and versioned by
-`WindowsAppSDKWinUIVersion` / `WindowsAppSDKVersion` in `Directory.Build.props`.
+metapackage on top at scaffold time (see below), because the self-contained
+shape needs the Runtime redist the metapackage carries. Inside this repo the
+correct reference is injected centrally from `Directory.Build.targets` and
+versioned by `WindowsAppSDKWinUIVersion` / `WindowsAppSDKVersion` in
+`Directory.Build.props`.
 
 `WindowsAppSDKSelfContained=true` is the other load-bearing piece —
 it bundles the WinUI runtime alongside the published exe so the app
@@ -242,23 +245,32 @@ source-built smoke packages still use `0.0.0-local` via `mur pack-local`.
 Trim-friendly deployments don't get any framework-side magic; the same trimmer
 configuration that works for any WinUI 3 app works here.
 
-**`Microsoft.WindowsAppSDK` is explicitly pinned in the template, not
-transitively inherited.** The `dotnet new reactorapp` CSPROJ
-references both `Microsoft.UI.Reactor` and `Microsoft.WindowsAppSDK`
-side-by-side so the SDK version is an obvious knob — bump it in the
-scaffolded CSPROJ when you need a specific WinUI patch. The
-repo-internal `WindowsAppSDKVersion` MSBuild property only governs
-projects under this clone (`Directory.Build.props`); consumer
-projects pick their version directly.
+**`Microsoft.WindowsAppSDK` is added by the template at scaffold time,
+not pinned in the checked-in CSPROJ.** The template file itself carries
+only `Microsoft.UI.Reactor`; a `dotnet new` post-action then runs the
+equivalent of `dotnet add package Microsoft.WindowsAppSDK`, so a freshly
+scaffolded project gets the **latest stable** SDK rather than a version
+frozen when the template shipped. The two references then sit
+side-by-side in your CSPROJ, so the SDK version stays an obvious knob —
+edit it there when you need a specific WinUI patch. If you skip the
+template and reference `Microsoft.UI.Reactor` by hand, the SDK still
+arrives transitively as `Microsoft.WindowsAppSDK.WinUI`; add the full
+metapackage yourself when you want `WindowsAppSDKSelfContained=true` or
+an MSIX, both of which need the Runtime redist. The repo-internal
+`WindowsAppSDKVersion` MSBuild property only governs projects under this
+clone (`Directory.Build.props`); consumer projects pick their version
+directly.
 
 **Debug builds of the scaffolded template auto-include the
 `Microsoft.UI.Reactor.Devtools` package** (gated by a
 `Condition="'$(Configuration)' == 'Debug'"` ItemGroup that adds both
 the package and `RuntimeHostConfigurationOption
-Reactor.DevtoolsSupport=true`). F5 from Visual Studio or VS Code
-runs the app with `--devtools` (from the scaffolded
-`Properties/launchSettings.json`), lighting up the right-click
-devtools menu and the docked devtools window. The Reactor Visual
+Reactor.DevtoolsSupport=true`). The scaffolded
+`Properties/launchSettings.json` ships a second
+`"<AppName> Devtools"` profile that passes `--devtools`; select it in
+Visual Studio or VS Code — the default profile passes no arguments — to
+light up the right-click devtools menu and the docked devtools window.
+The Reactor Visual
 Studio embedded-preview extension (spec 056) also relies on this
 Debug wiring — its `dotnet watch run -- --devtools run --embed
 --embed-host-pid <pid>` activation needs the devtools assembly

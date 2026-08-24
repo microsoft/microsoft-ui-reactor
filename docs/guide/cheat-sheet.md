@@ -129,12 +129,12 @@ Full coverage on [Styling](styling.md), [Animation](animation.md),
 
 | API | Purpose |
 |---|---|
-| `ReactorApp.Run<TComp>(title, width?, height?, preview?)` | Single-window app. |
-| `ReactorWindow.Open<TComp>(...)` | Additional window from a Component. |
+| `ReactorApp.Run<TComp>(title, width?, height?, fullScreen?, configure?)` | Single-window app. |
+| `ReactorApp.OpenWindow(spec, root)` | Additional window from a `WindowSpec`. |
 | `ReactorHost` / `ReactorHostControl` | Embed Reactor in XAML / WinForms. |
 | `NavigationHost(nav, routeMap)` | Multi-page navigation. |
 | `DeepLinkMap<TRoute>` | URI-pattern routing. |
-| `Command<T>` / `.Bind(button)` | [Commanding](commanding.md). |
+| `Command` / `Button(command)` / `.Command(cmd)` | [Commanding](commanding.md). |
 | `IDataSource<T>` / `DataGrid<T>` | [Data system](data-system.md). |
 | `ApplicationPersistedScope.Default` | Process-wide [persistence](persistence.md) cache. |
 
@@ -150,7 +150,7 @@ Full coverage on [Styling](styling.md), [Animation](animation.md),
 | `Theme.SystemSuccess` / `Theme.SystemCaution` / `Theme.SystemCritical` | Signal. |
 | `Theme.Ref("CustomKey")` | Escape hatch for an app-level key. |
 
-Full 35-token catalog on [Theming Tokens](theming-tokens.md).
+Full token catalog on [Theming Tokens](theming-tokens.md).
 
 ## Patterns at a glance
 
