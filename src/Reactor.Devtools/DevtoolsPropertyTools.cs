@@ -90,7 +90,7 @@ internal static class DevtoolsPropertyTools
                 InputSchema: Schema.Root(
                     new[] { "selector", "name", "value" },
                     ("selector", Schema.Str("Element selector.")),
-                    ("name", Schema.Str("DP name (e.g. 'Width', 'Margin', 'Background'). Use 'Owner.Property' for attached DPs (e.g. 'Grid.Row').")),
+                    ("name", Schema.Str("DP name (e.g. 'Width', 'Margin', 'Background'). Use 'Owner.Property' for attached DPs (e.g. 'Grid.Row'). The 'Property' suffix is optional.")),
                     ("value", Schema.Str("Value as string (e.g. '10', '1,2,3,4', '#FF0000', 'Visible').")),
                     ("window", Schema.Str("Window id (omit for default).")))),
             (@params) => server.OnDispatcher(() =>

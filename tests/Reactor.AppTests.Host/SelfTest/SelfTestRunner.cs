@@ -117,7 +117,7 @@ internal static class SelfTestRunner
     // Host. As of WindowsAppSDK#6394 workaround (see Reactor.AppTests.Host.csproj
     // _CopyWinUIResourcesForAot target), all NATIVE_CRASH skips are gone. What is
     // left is the buckets below: the UseObservableTree property walk, the
-    // Devtools fixtures whose reflection targets the trimmer removes,
+    // Devtools fixtures that reflect over members the trimmer removes,
     // PropertyGrid auto-discovery, the Issue142 XAML-metadata-provider edge
     // cases, and hot-reload state migration.
     //
@@ -161,7 +161,7 @@ internal static class SelfTestRunner
         "CoreCov2_UseObservableTreeHook",
 
         // -- Devtools / MCP server. The other Devtools fixtures run under AOT;
-        // these are the ones whose reflection targets the trimmer removes.
+        // these are the ones that reflect over members the trimmer removes.
         // `fire` resolves a named handler with GetMethods(DeclaredOnly) over the
         // *user* component, and under AOT that set comes back empty — the tool
         // answers unknown-event with reachableMethods: []. `state` reads hook

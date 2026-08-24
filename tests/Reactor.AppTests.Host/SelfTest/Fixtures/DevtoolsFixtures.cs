@@ -1232,6 +1232,24 @@ internal static class DevtoolsFixtures
                 && setDirect.GetProperty("ok").GetBoolean()
                 && button.Width == 321);
 
+            // Both tools document the 'Property' suffix as optional, so pin that contract
+            // rather than trusting the schema text: `properties` and `setProperty` share
+            // ToMemberName, and this asserts the suffixed form on the write path for both
+            // the plain and attached shapes, verified off the live control. Distinct
+            // values from the writes above so a no-op cannot pass.
+            var setSuffixed = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#dp-button", Name = "WidthProperty", Value = "456" });
+            var setAttachedSuffixed = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#dp-button", Name = "Grid.RowProperty", Value = "3" });
+            var readSuffixed = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "WidthProperty" });
+            H.Check("Devtools_Dp_PropertySuffixIsOptional",
+                Result(setSuffixed) is { } suffixed
+                && suffixed.GetProperty("ok").GetBoolean()
+                && button.Width == 456
+                && Result(setAttachedSuffixed) is { } attachedSuffixed
+                && attachedSuffixed.GetProperty("ok").GetBoolean()
+                && Microsoft.UI.Xaml.Controls.Grid.GetRow(button) == 3
+                && Result(readSuffixed) is { } readBack
+                && readBack.GetProperty("value").GetString() == "456");
+
             // The by-name lookup must still reject genuinely absent DPs rather than
             // matching some unrelated static now that properties are in scope — and it
             // must not blame trimming for a plain typo. On any build where discovery
