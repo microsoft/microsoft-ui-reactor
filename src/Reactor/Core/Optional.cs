@@ -54,7 +54,7 @@ public readonly struct Optional<T> : IEquatable<Optional<T>>
     /// <summary>
     /// Converts a value to an optional that explicitly contains that value.
     /// For reference-type optionals, <c>with { Background = null }</c> becomes
-    /// <c>Optional.Of(null)</c>, not <see cref="Unset"/>; use <see cref="Unset"/>
+    /// <c>Optional&lt;T&gt;.Of(null)</c>, not <see cref="Unset"/>; use <see cref="Unset"/>
     /// to express the unset state.
     /// </summary>
     /// <param name="value">The value to store. For reference types, <c>null</c> is an explicit value.</param>

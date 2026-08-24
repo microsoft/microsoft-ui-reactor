@@ -401,7 +401,7 @@ that is only a snapshot and breaks late binding and clear-on-unmount.
 
 > **Caveat:** For reference-type optionals, the implicit conversion is deliberate
 > but easy to misread: `with { Background = null }` for an
-> `Optional<Brush>` property becomes `Optional.Of(null)` — an explicit
+> `Optional<Brush>` property becomes `Optional<Brush>.Of(null)` — an explicit
 > force-assert of `null` — **not** `Optional<Brush>.Unset`. Write
 > `Optional<Brush>.Unset` when the control should own the value.
 
