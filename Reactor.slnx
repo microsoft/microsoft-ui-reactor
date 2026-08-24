@@ -462,9 +462,6 @@
   <Folder Name="/tools/Reactor.MurCheckGuardrail/">
     <Project Path="tools/Reactor.MurCheckGuardrail/Reactor.MurCheckGuardrail.csproj" />
   </Folder>
-  <Folder Name="/tools/Reactor.DevtoolsDescriptorGen/">
-    <Project Path="tools/Reactor.DevtoolsDescriptorGen/Reactor.DevtoolsDescriptorGen.csproj" />
-  </Folder>
   <Folder Name="/tools/Reactor.MstatVerifier/">
     <Project Path="tools/Reactor.MstatVerifier/Reactor.MstatVerifier.csproj" />
   </Folder>

@@ -24,15 +24,6 @@
     <PublishAot>true</PublishAot>
   </PropertyGroup>
 
-  <!-- Keeps the selftest's own DependencyProperty-bearing control types reflectable
-       under NativeAOT, so Devtools_PropertyToolsDpDiscovery can assert the
-       C#-authored-field arm there too (issue #1109). The Devtools package roots
-       WinUI's DP statics; an assembly's own types are its own responsibility, and
-       this file is the worked example the docs point at. -->
-  <ItemGroup>
-    <TrimmerRootDescriptor Include="ILLink.Descriptors.xml" />
-  </ItemGroup>
-
   <!--
     Workaround for WindowsAppSDK#6394 (https://github.com/microsoft/WindowsAppSDK/issues/6394):
     NativeAOT publish of an unpackaged (WindowsPackageType=None) WinUI 3 app does not copy

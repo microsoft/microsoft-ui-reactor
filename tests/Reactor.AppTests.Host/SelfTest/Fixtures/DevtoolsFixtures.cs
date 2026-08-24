@@ -1240,6 +1240,35 @@ internal static class DevtoolsFixtures
                 && Error(missingProp) is { } missingErr
                 && missingErr.GetProperty("message").GetString()!.Contains("NoSuchDevtoolsProperty", StringComparison.Ordinal));
 
+            // The live listing and the notice must agree, whichever runtime this is on:
+            // a JIT build (or a correctly-rooted AOT one) finds DPs and must NOT carry a
+            // notice, and a build where discovery is trimmed away finds none and MUST
+            // explain why. Written as one coupled assertion so it is meaningful on both —
+            // forcing this fixture under AOT with --no-aot-skip verifies the notice is
+            // really emitted end-to-end, rather than failing on an unrelated shape.
+            H.Check("Devtools_Dp_NoticeMatchesListing",
+                Result(allPropsResp) is { } noticeProbe
+                && (noticeProbe.GetProperty("count").GetInt32() > 0
+                    ? !noticeProbe.TryGetProperty("notice", out _)
+                    : noticeProbe.TryGetProperty("notice", out var liveNotice)
+                      && liveNotice.GetString()!.Contains("NativeAOT", StringComparison.Ordinal)));
+
+            // The notice fires only for the combination that actually indicates trimming:
+            // an empty listing on a NativeAOT build. Each of the other three combinations
+            // must stay silent, so a regression to "always warn" or "never warn" reddens.
+            var noticeMethod = typeof(DevtoolsPropertyTools).GetMethod(
+                "EnumerationNotice",
+                global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!;
+            string? Notice(int count, bool isAot) => (string?)noticeMethod.Invoke(null, new object[] { count, isAot });
+
+            H.Check("Devtools_Dp_NoticeExplainsEmptyAotListing",
+                Notice(0, true) is { } aotNotice
+                && aotNotice.Contains("NativeAOT", StringComparison.Ordinal)
+                && aotNotice.Contains("docs/aot-support.md", StringComparison.Ordinal)
+                && Notice(0, false) is null
+                && Notice(12, true) is null
+                && Notice(12, false) is null);
+
             H.SetContent(null);
 
             // -- and the same two helpers, called directly ---------------------------

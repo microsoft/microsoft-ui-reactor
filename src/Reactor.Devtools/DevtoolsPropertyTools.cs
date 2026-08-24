@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.UI;
@@ -64,7 +65,17 @@ internal static class DevtoolsPropertyTools
 
                 // Enumerate all DPs via reflection on the type hierarchy.
                 var props = EnumerateDependencyProperties(el);
-                return (object)new PropertiesResult(props.Count, props);
+
+                // An empty listing on an AOT build is the #1109 symptom, and it is
+                // indistinguishable from a genuinely property-less element unless the
+                // tool says so: every live WinUI element has dozens of DPs, so zero
+                // means the metadata was trimmed away rather than that there is nothing
+                // to show. Only attached when both conditions hold, so a JIT build and
+                // a correctly-rooted AOT build stay silent.
+                return (object)new PropertiesResult(
+                    props.Count,
+                    props,
+                    EnumerationNotice(props.Count, IsNativeAot));
             }));
     }
 
@@ -355,7 +366,7 @@ internal static class DevtoolsPropertyTools
                 return attached;
 
             throw new McpToolException(
-                $"No attached DependencyProperty '{name}' found. Check the owner type name.{TrimmedMetadataHint(ownerType)}",
+                $"No attached DependencyProperty '{name}' found. Check the owner type name.{AotNoticeIfRelevant()}",
                 JsonRpcErrorCodes.InvalidParams);
         }
 
@@ -367,7 +378,7 @@ internal static class DevtoolsPropertyTools
         }
 
         throw new McpToolException(
-            $"No DependencyProperty '{name}' found on {el.GetType().Name} or its base types. For attached properties, use 'OwnerType.Property' syntax (e.g. 'Grid.Row').{TrimmedMetadataHint(el.GetType())}",
+            $"No DependencyProperty '{name}' found on {el.GetType().Name} or its base types. For attached properties, use 'OwnerType.Property' syntax (e.g. 'Grid.Row').{AotNoticeIfRelevant()}",
             JsonRpcErrorCodes.InvalidParams);
     }
 
@@ -376,31 +387,51 @@ internal static class DevtoolsPropertyTools
         name.EndsWith("Property", StringComparison.Ordinal) ? name : name + "Property";
 
     /// <summary>
-    /// Distinguish "you named it wrong" from "the runtime can no longer see it".
+    /// True when the inspected app was published with NativeAOT.
     /// </summary>
     /// <remarks>
-    /// Under NativeAOT / trimming, ILCompiler emits no reflection metadata for the
-    /// CsWinRT-projected DP statics unless something roots <c>PublicProperties</c> on
-    /// those types, so a perfectly valid name reads back as "not found" (issue #1109,
-    /// docs/aot-support.md). A type that reports <i>zero</i> DP statics is the tell:
-    /// every live WinUI element has dozens, so an empty result means the metadata went
-    /// away, not that the caller typed the name wrong. Runs on the failure path only.
+    /// The devtools server runs in-process, so this describes the app being inspected,
+    /// not the tooling. <c>IsDynamicCodeSupported</c> is the documented way to ask:
+    /// ILCompiler substitutes it with <c>false</c>, and it is a constant the trimmer
+    /// folds, so this costs nothing at runtime.
     /// </remarks>
-    private static string TrimmedMetadataHint(Type? type) =>
-        type is null || DeclaresAnyDependencyProperty(type)
-            ? string.Empty
-            : " Note: this type reports no DependencyProperty statics at all, so its reflection"
-                + " metadata was most likely trimmed — the property may exist but be undiscoverable"
-                + " in this build (see docs/aot-support.md).";
+    private static bool IsNativeAot => !RuntimeFeature.IsDynamicCodeSupported;
 
-    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Best-effort diagnostic probe over a Type that carries no DynamicallyAccessedMembers annotation, used only to word a failure message. Returning false because the trimmer removed the members is exactly the condition it reports.")]
-    private static bool DeclaresAnyDependencyProperty(Type type)
-    {
-        const BindingFlags Flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+    /// <summary>
+    /// Explains an empty or failed DependencyProperty lookup when the app is a NativeAOT
+    /// build, where the honest answer is "this build can't see them" rather than
+    /// "no such property".
+    /// </summary>
+    /// <remarks>
+    /// DP discovery is reflection over static members, and ILCompiler keeps no metadata
+    /// for members nothing roots — so on an AOT build the lookups come back empty even
+    /// for DPs that plainly exist (issue #1109). Without this the tool reports the same
+    /// "not found" it would for a typo, which sends the caller hunting for a mistake
+    /// they did not make. Appended on the failure path only, so a working AOT build
+    /// (one that roots the DP statics) never sees it.
+    /// </remarks>
+    private const string NativeAotNotice =
+        " NOTE: this app is published with NativeAOT. DependencyProperty discovery works by"
+        + " reflecting over static members, and trimming removes the metadata for members"
+        + " nothing roots — so DPs that do exist can be undiscoverable here even though the"
+        + " same lookup works in a Debug/JIT build. If you need DP inspection in an AOT build,"
+        + " root the DependencyProperty statics with an ILLink descriptor"
+        + " (see docs/aot-support.md); otherwise use a Debug build for property inspection.";
 
-        return type.GetFields(Flags).Any(f => f.FieldType == typeof(DependencyProperty))
-            || type.GetProperties(Flags).Any(p => p.PropertyType == typeof(DependencyProperty));
-    }
+    /// <summary>The NativeAOT notice, or an empty string on a runtime where it would be misleading.</summary>
+    private static string AotNoticeIfRelevant() => IsNativeAot ? NativeAotNotice : string.Empty;
+
+    /// <summary>
+    /// The notice to attach to an enumeration result, or null when none applies.
+    /// </summary>
+    /// <remarks>
+    /// Takes <paramref name="isNativeAot"/> rather than reading <see cref="IsNativeAot"/>
+    /// so both branches are reachable from a test on either runtime. Reading the ambient
+    /// value would make this untestable exactly where it matters: the interesting branch
+    /// only occurs on AOT, and the fixture that would cover it is AOT-skipped.
+    /// </remarks>
+    internal static string? EnumerationNotice(int count, bool isNativeAot) =>
+        count == 0 && isNativeAot ? NativeAotNotice.TrimStart() : null;
 
     /// <summary>
     /// Read the DependencyProperty exposed by the static member <paramref name="memberName"/>
@@ -808,7 +839,10 @@ internal static class DevtoolsPropertyTools
 // (EnumerateDependencyProperties, DescribeStyle).
 internal sealed record PropertyResult(string Name, string? Value, string ValueType, string? DeclaringType, bool IsLocal);
 
-internal sealed record PropertiesResult(int Count, IReadOnlyList<PropertyResult> Properties);
+// `Notice` is set only when the listing is empty on a NativeAOT build, where zero DPs
+// means the reflection metadata was trimmed rather than that the element has none. It is
+// omitted from the JSON otherwise, since DevtoolsJsonContext ignores nulls.
+internal sealed record PropertiesResult(int Count, IReadOnlyList<PropertyResult> Properties, string? Notice = null);
 
 internal sealed record SetPropertyResult(bool Ok, string Name, string? NewValue) : IOkResult;
 
