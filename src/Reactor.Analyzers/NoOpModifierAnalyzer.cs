@@ -308,7 +308,7 @@ public sealed class NoOpModifierAnalyzer : DiagnosticAnalyzer
     /// directly (<c>el with { Fill = brush }</c>), and for a reference-typed property backed by a
     /// dependency property the generated descriptor takes the <c>Optional&lt;T&gt;</c> + dp channel.
     /// <c>Optional&lt;T&gt;</c> is explicit that <c>with { X = null }</c> becomes
-    /// <c>Optional.Of(null)</c> and <b>not</b> <c>Unset</c> — an explicit set-to-null, which clears
+    /// <c>Optional&lt;T&gt;.Of(null)</c> and <b>not</b> <c>Unset</c> — an explicit set-to-null, which clears
     /// the brush. Rewriting <c>.Background(null)</c> to <c>.Fill(null)</c> would therefore turn a
     /// no-op into an active clear: a behaviour-changing auto-fix, which is the exact failure this
     /// analyzer exists to prevent.

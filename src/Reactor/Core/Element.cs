@@ -3633,7 +3633,7 @@ public partial record RadioButtonElement(
     internal override bool HasCallbacks => OnIsCheckedChanged is not null;
 }
 
-/// <summary>RadioButtons element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+/// <summary>RadioButtons element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.RadioButtons))]  // spec 058 §15 (P5.4)
 [global::Microsoft.UI.Reactor.Wrappers.WrapControlled("SelectedIndex", Events = new[] { "SelectionChanged" })]
 public partial record RadioButtonsElement(
@@ -3647,7 +3647,7 @@ public partial record RadioButtonsElement(
     internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
-/// <summary>ComboBox element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+/// <summary>ComboBox element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
 // Spec 058 §15 (P5.21) — items control. Header/IsEditable/Description auto-map. The bespoke
 // parts (all in Customize): the dual-source ItemsHost (ItemElements Element[] takes precedence
 // over Items string[] — overwrites the auto single-source strategy), the value-diff SelectedIndex
@@ -4994,7 +4994,7 @@ public partial record TabViewElement(
     TabViewItemData[] Tabs
 ) : Element
 {
-    /// <summary>Selected tab index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected tab index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnTabCloseRequested { get; init; }
@@ -5096,7 +5096,7 @@ public partial record PivotElement(
 PivotItemData[] Items
 ) : Element
 {
-/// <summary>Selected pivot item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+/// <summary>Selected pivot item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
 public Optional<int> SelectedIndex { get; init; } = default;
 public Action<int>? OnSelectedIndexChanged { get; init; }
 public string? Title { get; init; }
@@ -5150,7 +5150,7 @@ public record ListViewElement(
     Element[] Items
 ) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnItemClick { get; init; }
@@ -5178,7 +5178,7 @@ public record GridViewElement(
     Element[] Items
 ) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnItemClick { get; init; }
@@ -5265,7 +5265,7 @@ public partial record FlipViewElement(
     Element[] Items
 ) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
@@ -5940,7 +5940,7 @@ public record TemplatedFlipViewElement<T>(
     Func<T, int, Element> ViewBuilder
 ) : TemplatedFlipViewElementBase
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
@@ -6676,7 +6676,7 @@ public partial record SemanticZoomElement(Element ZoomedInView, Element ZoomedOu
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("SelectedIndex")]
 public partial record ListBoxElement(string[] Items) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     /// <summary>
@@ -6737,7 +6737,7 @@ public partial record ListBoxElement(string[] Items) : Element
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("SelectedIndex")]
 public partial record SelectorBarElement(SelectorBarItemData[] Items) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.SelectorBar>[] Setters { get; init; } = [];
@@ -6814,7 +6814,7 @@ public record SelectorBarItemData(string Text, string? Icon = null);
 [global::Microsoft.UI.Reactor.Wrappers.WrapControlled("SelectedPageIndex", ChangedEvent = "SelectedIndexChanged")]
 public partial record PipsPagerElement(int NumberOfPages) : Element
 {
-    /// <summary>Selected page index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no page selection.</summary>
+    /// <summary>Selected page index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no page selection.</summary>
     public Optional<int> SelectedPageIndex { get; init; } = default;
     public Action<int>? OnSelectedPageIndexChanged { get; init; }
     /// <summary>Whether the selected index wraps around the ends. Defaults to <c>None</c>.</summary>

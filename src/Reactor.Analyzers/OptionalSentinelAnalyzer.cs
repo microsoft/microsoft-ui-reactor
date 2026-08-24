@@ -17,12 +17,12 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// <remarks>
 /// Since spec 050 the selection properties are <c>Optional&lt;T&gt;</c>, which has an
 /// implicit <c>T -&gt; Optional&lt;T&gt;</c> conversion (<c>Optional.cs</c>). So
-/// <c>element with { SelectedIndex = -1 }</c> becomes <c>Optional.Of(-1)</c> — a
+/// <c>element with { SelectedIndex = -1 }</c> becomes <c>Optional&lt;int&gt;.Of(-1)</c> — a
 /// force-assert "clear it" re-applied every render — rather than
 /// <c>Optional&lt;T&gt;.Unset</c>, which lets the control own the selection. Both
 /// compile; they mean opposite things at runtime. This is an <see
 /// cref="DiagnosticSeverity.Info"/> nudge to make the intent explicit, not a
-/// correctness error — <c>Optional.Of(-1)</c> is a documented-valid force-assert.
+/// correctness error — <c>Optional&lt;int&gt;.Of(-1)</c> is a documented-valid force-assert.
 /// <c>SelectedItem</c>/<c>SelectedValue</c> are handled by a different rule (CTRL_001).
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -56,7 +56,7 @@ public sealed class OptionalSentinelAnalyzer : DiagnosticAnalyzer
     /// is type-compatible and the entry could never fire on compilable code (it would only
     /// mislead). <c>Date</c> stays because <c>CalendarDatePickerElement.Date</c> is
     /// <c>Optional&lt;DateTimeOffset?&gt;</c> (nullable), so <c>Date = null</c> does compile
-    /// into the silent <c>Optional.Of(null)</c> force-assert this rule targets.
+    /// into the silent <c>Optional&lt;DateTimeOffset?&gt;.Of(null)</c> force-assert this rule targets.
     /// </remarks>
     internal static readonly ImmutableHashSet<string> SelectionMembers =
         ImmutableHashSet.Create(
@@ -74,7 +74,7 @@ public sealed class OptionalSentinelAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString Description =
         "Since spec 050 the selection properties are Optional<T>, which has an implicit T -> Optional<T> " +
-        "conversion. Assigning the XAML-habit sentinel (-1 / null) therefore becomes Optional.Of(sentinel) " +
+        "conversion. Assigning the XAML-habit sentinel (-1 / null) therefore becomes Optional<T>.Of(sentinel) " +
         "— a force-assert re-applied every render — rather than Optional<T>.Unset, which lets the control own " +
         "the selection. Both compile; they mean opposite things at runtime. Make the intent explicit.";
 
