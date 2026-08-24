@@ -6,7 +6,7 @@ namespace Microsoft.UI.Reactor.Cli.Loc;
 /// <summary>
 /// Generates hierarchical key names from code context.
 /// Pattern: {ClassName (stripped)}.{ContextHint}
-/// Example: Text("Save") in SettingsPage → Settings.Save
+/// Example: TextBlock("Save") in SettingsPage → Settings.Save
 /// </summary>
 internal static class KeyNamer
 {

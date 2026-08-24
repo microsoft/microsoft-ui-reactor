@@ -96,7 +96,7 @@ public abstract record Element
 
     /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
-    /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
+    /// Set via fluent extension methods: TextBlock("hi").Grid(row: 1, column: 2)
     /// Stored as a type-keyed dictionary so each provider defines its own data record.
     /// </summary>
     public IReadOnlyDictionary<Type, object>? Attached
@@ -108,7 +108,7 @@ public abstract record Element
 
     /// <summary>
     /// Implicit transitions (opacity, scale, rotation, translation, background).
-    /// Set via fluent extension methods: Rectangle().WithOpacityTransition()
+    /// Set via fluent extension methods: Rectangle().OpacityTransition()
     /// Applied by the reconciler after mount/update, so they are always present when
     /// property values are set via .Set() callbacks.
     /// </summary>
@@ -121,7 +121,7 @@ public abstract record Element
 
     /// <summary>
     /// Theme transitions (children, item container).
-    /// Set via fluent extension methods: VStack(children).WithThemeTransitions(...)
+    /// Set via fluent extension methods: VStack(children).WithTransitions(...)
     /// </summary>
     public ThemeTransitions? ThemeTransitions
     {
@@ -133,7 +133,7 @@ public abstract record Element
     /// <summary>
     /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
     /// When set, the reconciler resolves from WinUI theme resources instead of using local values.
-    /// Set via fluent extension methods: Text("hi").Background(Theme.Accent)
+    /// Set via fluent extension methods: TextBlock("hi").Background(Theme.Accent)
     /// </summary>
     public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings
     {
@@ -337,7 +337,7 @@ public abstract record Element
 
     /// <summary>
     /// Convenience: implicitly convert a string to a TextBlockElement.
-    /// Allows writing: VStack("Hello", "World") instead of VStack(Text("Hello"), Text("World"))
+    /// Allows writing: VStack("Hello", "World") instead of VStack(TextBlock("Hello"), TextBlock("World"))
     /// </summary>
     public static implicit operator Element(string text) => Microsoft.UI.Reactor.Factories.TextBlock(text);
 
@@ -1657,14 +1657,14 @@ public record ElementExtras
 {
     /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
-    /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
+    /// Set via fluent extension methods: TextBlock("hi").Grid(row: 1, column: 2)
     /// Stored as a type-keyed dictionary so each provider defines its own data record.
     /// </summary>
     public IReadOnlyDictionary<Type, object>? Attached { get; init; }
 
     /// <summary>
     /// Implicit transitions (opacity, scale, rotation, translation, background).
-    /// Set via fluent extension methods: Rectangle().WithOpacityTransition()
+    /// Set via fluent extension methods: Rectangle().OpacityTransition()
     /// Applied by the reconciler after mount/update, so they are always present when
     /// property values are set via .Set() callbacks.
     /// </summary>
@@ -1672,14 +1672,14 @@ public record ElementExtras
 
     /// <summary>
     /// Theme transitions (children, item container).
-    /// Set via fluent extension methods: VStack(children).WithThemeTransitions(...)
+    /// Set via fluent extension methods: VStack(children).WithTransitions(...)
     /// </summary>
     public ThemeTransitions? ThemeTransitions { get; init; }
 
     /// <summary>
     /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
     /// When set, the reconciler resolves from WinUI theme resources instead of using local values.
-    /// Set via fluent extension methods: Text("hi").Background(Theme.Accent)
+    /// Set via fluent extension methods: TextBlock("hi").Background(Theme.Accent)
     /// </summary>
     public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings { get; init; }
 

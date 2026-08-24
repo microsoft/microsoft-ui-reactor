@@ -46,7 +46,7 @@ public enum AnimationKind
 /// <para>
 /// <c>Animate</c> does <b>not</b> animate arbitrary property changes
 /// (color, size) on surviving leaves — that remains the job of
-/// per-element modifiers such as <c>WithImplicitTransition</c>. Scoping
+/// per-element modifiers such as <c>OpacityTransition</c>. Scoping
 /// the transaction to keyed structural changes keeps the SwiftUI
 /// "withAnimation only animates layout-shape ops" contract intact.
 /// (spec 042 §6, scope discipline)

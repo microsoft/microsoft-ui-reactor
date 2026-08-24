@@ -123,7 +123,7 @@ public static class UseFocusTrapExtensions
     /// var trap = UseFocusTrap(isDialogOpen);
     /// return Border(
     ///     VStack(
-    ///         Text("Confirm delete?"),
+    ///         TextBlock("Confirm delete?"),
     ///         Button("Cancel", () => setOpen(false)),
     ///         Button("Delete", onDelete)
     ///     )

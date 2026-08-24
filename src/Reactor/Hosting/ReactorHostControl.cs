@@ -23,7 +23,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// Usage in code-behind:
 ///   ductHost.Mount(new MyComponent());
 ///   — or —
-///   ductHost.Mount(ctx => VStack(Text("Hello from Reactor!")));
+///   ductHost.Mount(ctx => VStack(TextBlock("Hello from Reactor!")));
 ///   — or via XAML property —
 ///   <![CDATA[
 ///   <local:ReactorHostControl ComponentFactory="{x:Bind CreateMyComponent}" />
