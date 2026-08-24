@@ -1,0 +1,102 @@
+name: CI (Uno)
+
+# Build gate for the Uno Platform port (src/Reactor.Uno + samples/Uno).
+#
+# Kept separate from ci.yml on purpose: the main CI drives the Windows / Windows
+# App SDK build against Reactor.slnx and must never restore Uno.Sdk. This leg
+# restores Uno.Sdk (from nuget.org, incl. the current 6.7.0-dev.* build the port
+# pins) and builds Reactor.Uno.slnx for desktop and WebAssembly, plus Android and
+# iOS in a second job. It is path-gated so it only runs when the Uno port or the
+# shared source it source-shares (src/Reactor, src/Reactor.Advanced) changes.
+#
+# Both samples are Uno single-projects targeting all four heads, so the whole
+# solution builds per-TFM for desktop / wasm / android / ios. Android and iOS run
+# in a second job because they need extra workloads. See issue #2033.
+
+on:
+  pull_request:
+    paths:
+      - 'src/Reactor.Uno/**'
+      - 'samples/Uno/**'
+      - 'src/Reactor/**'
+      # The port also source-shares Charting/, Markdown/ and the DataGrid from
+      # Reactor.Advanced (spec 062 Track B moved them out of core), so changes
+      # there can break the Uno build exactly like changes to src/Reactor.
+      - 'src/Reactor.Advanced/**'
+      # The Uno gallery source-shares ~10k lines from the Windows gallery.
+      - 'samples/ReactorGallery/**'
+      - 'Reactor.Uno.slnx'
+      - 'global.json'
+      - '.github/workflows/ci-uno.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Reactor.Uno/**'
+      - 'samples/Uno/**'
+      - 'src/Reactor/**'
+      # The port also source-shares Charting/, Markdown/ and the DataGrid from
+      # Reactor.Advanced (spec 062 Track B moved them out of core), so changes
+      # there can break the Uno build exactly like changes to src/Reactor.
+      - 'src/Reactor.Advanced/**'
+      # The Uno gallery source-shares ~10k lines from the Windows gallery.
+      - 'samples/ReactorGallery/**'
+      - 'Reactor.Uno.slnx'
+      - 'global.json'
+      - '.github/workflows/ci-uno.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-uno-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-uno:
+    name: Build Reactor.Uno (desktop + wasm)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Required for the net10.0-browserwasm target.
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      # Per-TFM builds (not a bare slnx build) so the library's net10.0-android
+      # TFM is skipped — desktop and wasm are the sample-backed, validated targets.
+      - name: Build desktop
+        run: dotnet build Reactor.Uno.slnx -f net10.0-desktop -c Debug
+
+      - name: Build WebAssembly
+        run: dotnet build Reactor.Uno.slnx -f net10.0-browserwasm -c Debug
+
+  build-mobile:
+    name: Build Reactor.Uno (android + ios)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install mobile workloads
+        run: dotnet workload install android ios
+
+      # Produces a signed APK for both samples, so the Android head cannot rot.
+      - name: Build Android
+        run: dotnet build Reactor.Uno.slnx -f net10.0-android -c Debug
+
+      # Managed compile only -- a device build/deploy needs a Mac, but this keeps
+      # the iOS head honest.
+      - name: Build iOS
+        run: dotnet build Reactor.Uno.slnx -f net10.0-ios -c Debug

@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Isolation boundary for the Uno samples. Like src/Reactor.Uno, these are
+    Uno.Sdk single-project apps that must NOT inherit the Windows build
+    infrastructure: the repo-root samples/Directory.Build.props chains up to
+    the WinAppSDK-tuned root Directory.Build.props (which imports
+    Reactor.targets). MSBuild stops walking up at the first match, so this
+    file stops that inheritance — the samples build against the Uno.Sdk pinned
+    in this folder's global.json, with Central Package Management OFF
+    (Directory.Packages.props) and the isolated nuget.config alongside.
+    Intentionally does NOT chain to the parent.
+  -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>

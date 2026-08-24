@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Isolation boundary for the Uno port. This file STOPS MSBuild from walking up
+    into the repo-root Directory.Build.props (which is tuned for the Windows /
+    Windows App SDK build and imports Reactor.targets). The Uno port is a
+    self-contained subtree that only *shares source* with src/Reactor via
+    explicit <Compile Include> globs — it must not inherit the Windows build
+    infrastructure. Intentionally does NOT chain to the parent.
+  -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <!-- Quiet down doc-comment cref warnings: shared source has <see cref>
+         pointers to Windows-only types that don't exist in the Uno build. -->
+    <NoWarn>$(NoWarn);CS1591;CS1574;CS1580;CS1735</NoWarn>
+  </PropertyGroup>
+</Project>

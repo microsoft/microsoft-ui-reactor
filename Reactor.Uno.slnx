@@ -1,0 +1,28 @@
+<Solution>
+  <!--
+    Dedicated solution for the Uno Platform port. Kept SEPARATE from
+    Reactor.slnx on purpose: the main solution drives the Windows / Windows
+    App SDK build (and CI restores/builds it), so pulling the Uno.Sdk projects
+    into it would force Uno.Sdk + Skia/WASM/Android package restore onto every
+    Windows build. Each project here resolves the Uno.Sdk from its own nearby
+    global.json (src/Reactor.Uno, samples/Uno) and builds in isolation.
+
+    Build everything:  dotnet build Reactor.Uno.slnx
+    The file-based single-file app (samples/Uno/file-based/Counter.cs) is not a
+    project; run it with `dotnet run Counter.cs` from its folder.
+
+    samples/Uno/ReactorUnoDroid (the Android head) is deliberately NOT listed
+    here either: it targets only net10.0-android, and this solution is built
+    per-TFM (`-f net10.0-desktop` / `-f net10.0-browserwasm`), which would fail
+    that project with NETSDK1005. Build it directly instead:
+      cd samples/Uno/ReactorUnoDroid && dotnet build
+  -->
+  <Folder Name="/src/">
+    <Project Path="src/Reactor.Uno/Reactor.Uno.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Uno/ReactorUnoCounter/ReactorUnoCounter.csproj" />
+    <Project Path="samples/Uno/ReactorUnoShowcase/ReactorUnoShowcase.csproj" />
+    <Project Path="samples/Uno/ReactorGalleryUno/ReactorGalleryUno.csproj" />
+  </Folder>
+</Solution>
