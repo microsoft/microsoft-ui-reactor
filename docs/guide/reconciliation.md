@@ -29,8 +29,8 @@ source pointers that let you verify it.
 
 | Inputs | Path | Outcome |
 |---|---|---|
-| `newEl` is null or `EmptyElement`, `existingControl` exists | Unmount | `Unmount` runs effect cleanups, returns control to pool |
-| `oldEl` is null/Empty, `existingControl` is null | Mount | `Mount` rents from pool or allocates, populates, returns new control |
+| `newEl` is null or `EmptyElement` | Unmount | `Unmount` runs effect cleanups, returns control to pool |
+| `oldEl` is null/`EmptyElement`, **or** `existingControl` is null | Mount | `Mount` rents from pool or allocates, populates, returns new control |
 | both elements present, `CanUpdate(old, new)` returns true | Update | the matching handler patches changed properties only; child lists diff |
 | both present, `CanUpdate` false (type changed) | Replace | Unmount then Mount; the new control replaces the old in the parent |
 
@@ -54,22 +54,80 @@ public UIElement? Reconcile(
     UIElement? existingControl,
     Action requestRerender)
 {
-    return (oldElement, newElement) switch
+    ReferenceDirtySet.BeginCommit();
+    try
     {
-        (null, not null) => Mount(newElement, requestRerender),
-        (not null, null) => UnmountAndReturnNull(existingControl),
-        (not null, not null) => Update(oldElement, newElement, existingControl!, requestRerender),
-        _ => null,
-    };
-}
+    // Trace only top-level reconcile passes (depth == 0) to avoid flooding
+    // the provider with per-subtree entries; nested Reconcile() calls during
+    // the same pass don't emit their own start/stop. Gate the depth counter
+    // and Start emit on IsEnabled so the disabled path pays nothing extra.
+    bool emitTrace = Diagnostics.ReactorEventSource.Log.IsEnabled(
+        global::System.Diagnostics.Tracing.EventLevel.Informational,
+        Diagnostics.ReactorEventSource.Keywords.Reconcile)
+        && _reconcileTraceDepth++ == 0;
+    if (emitTrace)
+    {
+        Diagnostics.ReactorEventSource.Log.ReconcileStart(
+            newElement?.GetType().Name ?? "null");
+    }
+    if (_debugReconcileDepth++ == 0)
+    {
+        DebugElementsDiffed = 0;
+        DebugElementsSkipped = 0;
+        DebugUIElementsCreated = 0;
+        DebugUIElementsModified = 0;
+        if (ReactorFeatureFlags.HighlightReconcileChanges)
+        {
+            (_highlightMounted ??= new()).Clear();
+            (_highlightModified ??= new()).Clear();
+        }
+        // Consume the hot-reload signal exactly once per top-level pass so
+        // every component re-runs Render() even when props/deps are unchanged.
+        _forceFullRenderActive = ForceFullRenderPending;
+        ForceFullRenderPending = false;
+
+        // Build the dirty-ancestor path. For every component node
+        // whose SelfTriggered is true, walk up the realized visual
+        // tree and add each ancestor control. Consumed by Update's
+        // shallow-equality short-circuit so the walk can reach the
+        // self-triggered descendant even when its ancestor element
+        // records are structurally unchanged.
+        PopulateDirtyAncestorPath();
+    }
+    try {
+    try
+    {
+        if (newElement is null or EmptyElement)
+        {
+            if (existingControl is not null)
+                Unmount(existingControl);
+            return null;
+        }
+
+        if (oldElement is null or EmptyElement || existingControl is null)
+            return Mount(newElement, requestRerender);
+
+        return ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
 ```
 
 `Reconcile` is short on purpose. The interesting work is in `Mount`,
-`Update`, and the child reconciler — this method just routes. The
-ETW emit gate at the top is `IsEnabled`-guarded so the disabled path
-costs a single read and branch. `_reconcileTraceDepth` makes sure
-nested `Reconcile` calls during the same pass don't emit their own
-start/stop events; only the top-level pass logs.
+`ReconcileImperative`, and the child reconciler — this method just
+routes. Note that `EmptyElement` is treated exactly like `null` on both
+sides: an element that renders to nothing unmounts the old control, and
+an old `EmptyElement` mounts a fresh one rather than trying to patch.
+A missing `existingControl` also forces the mount arm even when both
+element records are present.
+
+The prologue the snippet elides is bookkeeping. `ReferenceDirtySet.BeginCommit()`
+opens the deferred reference-write batch described above (the matching
+`EndCommitAndFlush()` runs in the outermost `finally`). The ETW emit gate
+is `IsEnabled`-guarded so the disabled path costs a single read and
+branch, and `_reconcileTraceDepth` makes sure nested `Reconcile` calls
+during the same pass don't emit their own start/stop events; only the
+top-level pass logs. `PopulateDirtyAncestorPath()` runs once per
+top-level pass and marks the realized ancestors of every self-triggered
+component so `Update`'s shallow-equality short-circuit still descends to
+a component whose own state changed under structurally unchanged parents.
 
 The reconciler holds debug counters (`DebugElementsDiffed`,
 `DebugElementsSkipped`, `DebugUIElementsCreated`,
@@ -148,7 +206,7 @@ The early-skip optimization is in two places. At the element level,
 are structurally identical, are not theme-sensitive,
 and have the same callback presence — the reconciler can avoid the
 `children.Get(i)` COM call entirely and just refresh the
-[Tag](#tag-based-event-dispatch) if the element carries callbacks. At
+[element tag](#element-tag-event-dispatch) if the element carries callbacks. At
 the property level, the descriptor or handler short-circuits per
 property: unchanged property → no DP write.
 
@@ -240,27 +298,55 @@ Don't use the array index as a key when the list can reorder — that
 defeats the entire point. The [REACTOR_DSL_001](rules-of-reactor.md)
 analyzer flags missing keys in `ForEach` and similar APIs.
 
-## Tag-based event dispatch
+## Element-tag event dispatch
 
 The reconciler wires WinUI events (`Click`, `Tapped`, `TextChanged`,
-…) once at mount time. The handler doesn't capture the element's
-callback directly — it would go stale after every re-render. Instead,
-the reconciler stamps the current element onto the control via a
-`ReactorAttached` dependency property (the "tag"), and the handler
-reads the current element from `sender.Tag` and invokes whatever
-callback is stored on the latest element.
+…) once at mount time and never detaches. The handler doesn't capture
+the element's callback directly — it would go stale after every
+re-render. Instead, the reconciler stamps the current element onto the
+control, and the handler reads the *live* element back out and invokes
+whatever callback is stored on it.
+
+The store is an attached dependency property,
+`Reconciler.ReactorAttached.StateProperty`, carrying a `ReactorState`
+whose `Element` field is the tag. It is deliberately *not*
+`FrameworkElement.Tag` (that belongs to app code) and deliberately not
+a `ConditionalWeakTable`: WinRT projection can hand out two managed RCWs
+for the same native `DependencyObject`, and anything keyed by managed
+identity would give each wrapper its own state and double-subscribe the
+native event. The attached DP lives on the native object, so every
+wrapper observes the same `ReactorState`.
+
+`ReactorState` also carries the per-element `ModifierEventHandlerState`
+(the routed-input family — `.OnPointerPressed` and friends — allocated
+lazily) and a per-control `ControlEventStateBox` for control-intrinsic
+events. Routed-input modifiers dispatch through that state's `Current*`
+fields, which `ApplyEventHandlers` refreshes each render, so they do not
+resolve through the tag at all.
 
 ```csharp
-// Mount: wire once
-button.Click += (sender, _) =>
+private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __ClickTrampoline = (s, _) =>
 {
-    var el = Reconciler.GetElementTag<ButtonElement>(sender);
-    el?.OnClick?.Invoke();
+    if (global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag((WinUI.Button)s!) is ButtonElement live)
+    {
+        if (live.IsDisabledFocusable) return;
+        if (live.OnClick is not null) live.OnClick();
+        else if (live.Command is not null) global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(live.Command);
+    }
 };
-
-// Update: refresh the tag
-Reconciler.SetElementTag(button, newElement);
 ```
+
+```csharp
+// Mount / Update: refresh the tag, but only when something will read it
+Reconciler.SetElementTagIfNeeded(control, newElement);
+```
+
+Tagging is allocation-gated. `NeedsTag(element)` is true when the
+element has callbacks (`Element.HasCallbacks`), carries a `Key`, has
+`Extensions`, or uses a reference modifier — the four cases where
+downstream code reads the element back through `GetElementTag`. An
+element with none of those never pays for a `ReactorState` allocation
+or the attached-DP write.
 
 This is why `Element.HasCallbacks` is load-bearing in the early-skip
 path of the [child reconciler](#child-reconciler-keyed-vs-positional)
@@ -325,9 +411,18 @@ public abstract record Element
 
 When you write a control that owns children (a custom panel, a
 third-party container Reactor doesn't wrap), the integration point is
-`RegisterType` + a custom `ReconcileChildren` callback. The
+the same one the built-in controls use: register a handler with the
+global `ControlRegistry` — either a
+`ControlDescriptor<TElement, TControl>` wrapped in a
+`DescriptorHandler`, where you pick a
+[children strategy](extending-reactor-controls.md) and the engine runs
+the child diff for you, or a hand-coded
+`IElementHandler<TElement, TControl>` whose `ReconcileChildren` owns the
+walk. `Reconciler.RegisterHandler` and the older raw-delegate
+`Reconciler.RegisterType(mount, update, unmount)` are the per-host
+override surfaces, useful for tests and host substitution. The
 [Architecture Overview](architecture-overview.md) source-map row
-"Reconciler" lists the partial files where the type registry lives;
+"Reconciler" lists the partial files where the registries live;
 the third-party-controls test fixtures
 (`tests/Reactor.AppTests.ThirdPartyControls/`) are the canonical
 worked example.
