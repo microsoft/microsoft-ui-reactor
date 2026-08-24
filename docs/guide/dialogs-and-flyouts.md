@@ -257,12 +257,13 @@ the target's position.
 
 | Item factory | Shape |
 |---|---|
-| `MenuItem(label, onClick, icon?)` | Standard menu item with a click handler. |
+| `MenuItem(text, onClick?, icon?)` | Standard menu item with a click handler. |
 | `MenuItem(Command)` | Bind to a command. Label, icon, enabled-state, accelerator come from the command. |
-| `ToggleMenuItem(label, isChecked, onChanged?)` | Two-state check item. |
-| `RadioMenuItem(label, groupName, isChecked, onClick?)` | One of a radio group. |
+| `MenuItem<T>(Command<T>, T parameter)` | Bind to a parameterized command with the row's data. |
+| `ToggleMenuItem(text, isChecked?, onIsCheckedChanged?, icon?)` | Two-state check item. |
+| `RadioMenuItem(text, groupName, isChecked?, onClick?, icon?)` | One of a radio group. |
 | `MenuSeparator()` | Horizontal divider. |
-| `MenuSubItem(label, items...)` | Nested submenu. |
+| `MenuSubItem(text, items...)` | Nested submenu. |
 
 The same `Command` record that drives a `Button` plugs into
 [`MenuItem(Command)`](commanding.md) — one declaration, three surfaces
@@ -331,9 +332,9 @@ flyout on the `false` → `true` edge and the user dismisses it from there.
 
 | Item factory | Shape |
 |---|---|
-| `AppBarButton(label, onClick, icon?)` | Standard tool-strip button. |
+| `AppBarButton(label, onClick?, icon?)` | Standard tool-strip button. |
 | `AppBarButton(Command)` | Command-driven variant. |
-| `AppBarToggleButton(...)` | Two-state. |
+| `AppBarToggleButton(label, isChecked?, onIsCheckedChanged?, icon?)` | Two-state. |
 | `AppBarSeparator()` | Vertical divider. |
 
 WinUI design page: [Command bar flyout](https://learn.microsoft.com/en-us/windows/apps/design/controls/command-bar-flyout).
@@ -346,21 +347,33 @@ Create an `ElementRef<FrameworkElement>`, attach it to the target with
 `target:` parameter or the `.Target(target)` fluent:
 
 ```csharp
-var target = UseElementRef<FrameworkElement>();
+class TeachingTipTargetDemo : Component
+{
+    public override Element Render()
+    {
+        var (show, setShow) = UseState(false);
 
-return HStack(16,
-    Border(
-        Button("Show anchored tip", () => setShow(true))
-            .Ref(target)),
-    Border(
-        TeachingTip(
-            "Cross-container target",
-            "This TeachingTip is declared in a different subtree.",
-            target: target) with
-        {
-            IsOpen = show,
-            OnClosed = () => setShow(false),
-        }));
+        // ElementRef<T> converts implicitly to the non-generic ElementRef the
+        // TeachingTip target: parameter takes. UseElementRef is an extension on
+        // Component, so call it through `this.`.
+        var target = this.UseElementRef<FrameworkElement>();
+
+        return HStack(16,
+            Border(
+                Button("Show anchored tip", () => setShow(true))
+                    .Ref(target)),
+            Border(
+                TeachingTip(
+                    "Cross-container target",
+                    "This TeachingTip is declared in a different subtree.",
+                    target: target) with
+                {
+                    IsOpen = show,
+                    OnClosed = () => setShow(false),
+                })
+        ).Padding(24);
+    }
+}
 ```
 
 The target is a reactive reference property, not a one-time
@@ -494,14 +507,37 @@ close.
 The exception is `Popup`. The popup has none of the above; it is a
 positioning primitive. For a popup that should behave like a modal,
 wrap its content with `UseFocusTrap` and apply the dialog role
-explicitly:
+explicitly. `UseFocusTrap(bool isActive)` takes the active flag, and the
+handle attaches with the `.FocusTrap(handle)` element modifier — inside a
+`Component`, call the hook as `this.UseFocusTrap(...)` because it is an
+extension method:
 
 ```csharp
-// Inside a popup that should behave modally:
-var trap = UseFocusTrap();
-return Popup(
-    Border(content).WithFocusTrap(trap),
-    isOpen: open);
+class ModalPopupDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+
+        // UseFocusTrap is an extension on Component (hence `this.`) and takes the
+        // active flag; attach the handle with .FocusTrap(...).
+        var trap = this.UseFocusTrap(open);
+
+        return VStack(8,
+            SubHeading("Popup that behaves modally"),
+            Button("Open modal popup", () => setOpen(true)),
+            Popup(
+                Border(
+                    VStack(8,
+                        TextBlock("Focus stays inside this popup."),
+                        Button("Close", () => setOpen(false))
+                    ).Padding(16)
+                ).FocusTrap(trap),
+                isOpen: open,
+                onClosed: () => setOpen(false))
+        ).Padding(24);
+    }
+}
 ```
 
 The trap shape and the ARIA mapping are documented in
@@ -539,34 +575,56 @@ user took, but accept that `None` is the user's right.
 
 Async confirmations — "Are you sure?" → "Doing it…" → "Done." — fit a
 single `Command` with `ExecuteAsync`. The dialog primary triggers the
-command; the command tracks `IsExecuting` via [`UseCommand`](commanding.md);
-the dialog's primary disables itself while the action runs. The user
+command; [`UseCommand`](commanding.md) wraps `ExecuteAsync` into `Execute`
+and tracks `IsExecuting`, so `Command.IsEnabled` (`CanExecute &&
+!IsExecuting && !IsDebouncing`) goes false for the duration and the
+dialog's primary disables itself while the action runs. The user
 can't double-tap the destructive button:
 
 ```csharp
-var delete = ctx.UseCommand(new Command
+class DialogAsyncCommandDemo : Component
 {
-    Label = "Delete",
-    ExecuteAsync = async () =>
+    public override Element Render()
     {
-        await api.DeleteAsync(item.Id);
-        setOpen(false);
-    },
-    CanExecute = !item.IsLocked,
-});
+        var (open, setOpen) = UseState(false);
+        var (deleted, setDeleted) = UseState(false);
 
-ContentDialog("Delete?", body, primaryButtonText: "Delete") with
-{
-    IsOpen = open,
-    SecondaryButtonText = "Cancel",
-    IsPrimaryButtonEnabled = delete.IsEnabled,
-    OnClosed = r =>
-    {
-        if (r == ContentDialogResult.Primary && delete.IsEnabled)
-            delete.Execute?.Invoke();
-        else
-            setOpen(false);
-    },
+        // UseCommand wraps ExecuteAsync into Execute and tracks IsExecuting,
+        // so IsEnabled goes false for the duration of the async action.
+        var delete = UseCommand(new Command
+        {
+            Label = "Delete",
+            ExecuteAsync = async () =>
+            {
+                await Task.Delay(400);
+                setDeleted(true);
+                setOpen(false);
+            },
+            CanExecute = !deleted,
+        });
+
+        return VStack(8,
+            SubHeading("Dialog-driven async command"),
+            Button("Delete item…", () => setOpen(true)),
+            TextBlock(deleted ? "Deleted." : "Not deleted.").Opacity(0.6),
+            ContentDialog(
+                "Delete this item?",
+                TextBlock("This action cannot be undone."),
+                primaryButtonText: "Delete") with
+            {
+                IsOpen = open,
+                SecondaryButtonText = "Cancel",
+                IsPrimaryButtonEnabled = delete.IsEnabled,
+                OnClosed = r =>
+                {
+                    if (r == ContentDialogResult.Primary && delete.IsEnabled)
+                        delete.Execute?.Invoke();
+                    else
+                        setOpen(false);
+                },
+            }
+        ).Padding(24);
+    }
 }
 ```
 
@@ -579,11 +637,12 @@ the WinUI control.
 `MenuFlyout` attaches to its target. Inside a [`ListView`](collections.md)
 row template, wrap the row in `MenuFlyout(rowContent, items...)` and
 the menu binds to that row instance. Tie the menu items to the row's
-data — `Command<T>` lets a single command apply to every row's
-context:
+data — `MenuItem<T>(Command<T>, T)` lets a single command apply to every
+row's context. The keyed `ListView<T>` overload takes a `Func<T, string>`
+key selector, so project non-string ids to a string:
 
 ```csharp
-ListView(items, x => x.Id, (item, _) =>
+ListView(items, x => x.Id.ToString(), (item, _) =>
     MenuFlyout(
         RowContent(item),
         MenuItem(deleteCommand, item),

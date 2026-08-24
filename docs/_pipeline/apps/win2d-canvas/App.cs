@@ -166,6 +166,93 @@ class VirtualCanvasDemo : Component
 }
 // </snippet:virtual-canvas>
 
+// <snippet:shared-device>
+class SharedDeviceDemo : Component
+{
+    public override Element Render()
+    {
+        return Memo(ctx =>
+        {
+            // Built on Win2D's process-wide shared device.
+            var sprite = ctx.UseCanvasResources<CanvasBitmap>(device => ValueTask.FromResult(
+                CanvasBitmap.CreateFromBytes(
+                    device,
+                    new byte[] { 0x00, 0x78, 0xD4, 0xFF },
+                    widthInPixels: 1,
+                    heightInPixels: 1,
+                    Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized)));
+
+            return Win2DAnimatedCanvas(
+                    onUpdate: (_, _) => { },
+                    onDraw: (session, _, _) =>
+                    {
+                        if (sprite.Current is { } bitmap)
+                            session.DrawImage(bitmap, 16, 16, new Rect(0, 0, 1, 1));
+                    })
+                .TargetFps(60)
+                // Required: the canvas draws a shared-device resource, so it must
+                // stop using its own dedicated device.
+                .UseSharedDevice();
+        });
+    }
+}
+// </snippet:shared-device>
+
+// <snippet:create-resources-callback>
+class CanvasOwnedResourceDemo : Component
+{
+    private static readonly Uri SpriteUri = new("ms-appx:///Assets/sprite.png");
+
+    // Owned by this component and built on the CANVAS's own device — no
+    // .UseSharedDevice() needed, and none wanted.
+    private CanvasBitmap? _sprite;
+
+    public override Element Render()
+    {
+        return Win2DAnimatedCanvas(
+            onUpdate: (_, _) => { },
+            onDraw: (session, _, _) =>
+            {
+                if (_sprite is { } s)
+                    session.DrawImage(s, 16, 16);
+            }) with
+        {
+            // Win2D re-raises this callback with the fresh device after a loss.
+            OnCreateResources = async ctrl =>
+                _sprite = await CanvasBitmap.LoadAsync(ctrl.Device, SpriteUri),
+        };
+    }
+}
+// </snippet:create-resources-callback>
+
+// <snippet:use-draw-command>
+class DrawCommandDemo : Component
+{
+    public override Element Render()
+    {
+        return Memo(ctx =>
+        {
+            var (count, setCount) = ctx.UseState(0);
+
+            // Memoized like UseCallback: the delegate is rebuilt only when a dep changes.
+            var draw = ctx.UseDrawCommand(
+                state: count,
+                draw: static (session, _, value) =>
+                    session.DrawText($"Count = {value}", 16, 16, Colors.Black),
+                deps: [count]);
+
+            return VStack(12,
+                Button($"Redraw with count {count}", () => setCount(count + 1)),
+                Win2DCanvas(draw, redrawKey: count)
+                    .ClearColor(Colors.White)
+                    .Width(240)
+                    .Height(80)
+            ).Padding(20);
+        });
+    }
+}
+// </snippet:use-draw-command>
+
 class Win2DCanvasApp : Component
 {
     public override Element Render()
@@ -183,7 +270,8 @@ class Win2DCanvasApp : Component
                 Heading("Win2D canvas"),
                 Component<ManualCanvasDemo>(),
                 Component<AnimatedCanvasDemo>(),
-                Component<VirtualCanvasDemo>()
+                Component<VirtualCanvasDemo>(),
+                Component<DrawCommandDemo>()
             ).Padding(24)
         );
     }

@@ -105,7 +105,7 @@ optional `Microsoft.UI.Reactor.Advanced` package (spec 062 §7). Add the
 package reference and a second `using static`:
 
 ```xml
-<PackageReference Include="Microsoft.UI.Reactor.Advanced" />
+<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.13" />
 ```
 
 ```csharp
@@ -136,8 +136,9 @@ class AutoColumnsDemo : Component
 ![DataGrid with auto-generated columns](images/data-system/auto-columns.png)
 
 Auto-generation uses `TypeRegistry` for custom type metadata when available.
-Pass a `columnOverrides` function to tweak individual columns without
-defining them all manually.
+To tweak individual columns without defining them all manually, pass an
+`overrides` function to `AutoColumns<T>()`, or `columnOverrides:` to the
+registry-based `DataGrid<T>(source, registry, …)` overload.
 
 `AutoColumns<T>()` is a fast-path for demos and admin panels. For
 user-facing grids, define columns explicitly — auto-generated columns
@@ -175,9 +176,10 @@ class SortFilterDemo : Component
 
 ![Sorted and filtered grid](images/data-system/sort-filter.png)
 
-Filtering uses `FilterDescriptor` with 10 operators: `Equals`, `NotEquals`,
-`Contains`, `StartsWith`, `EndsWith`, `GreaterThan`, `LessThan`,
-`GreaterThanOrEqual`, `LessThanOrEqual`, and `Between`.
+Filtering uses `FilterDescriptor`, whose `FilterOperator` enum has 13
+operators: `Equals`, `NotEquals`, `Contains`, `StartsWith`, `EndsWith`,
+`GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`,
+`Between`, `In`, `IsNull`, and `IsNotNull`.
 
 Enable `showSearch: true` to add a built-in search bar that highlights
 matching cells.
@@ -446,18 +448,40 @@ reads from the same state. Selection survives sort changes, filter
 changes, and refresh because the state lives outside the grid:
 
 ```csharp
-var (selected, setSelected) = UseState<RowKey?>(null);
-var source = UseMemo(() => new ListDataSource<Order>(orders, o => (RowKey)o.Id), orders);
-var detail = orders.FirstOrDefault(o => selected is { } k && (RowKey)o.Id == k);
+class MasterDetailDemo : Component
+{
+    public override Element Render()
+    {
+        // Selection lives in the parent, so it survives sort, filter, and refresh.
+        var (selected, setSelected) = UseState<RowKey?>(null);
 
-return HStack(0,
-    DataGrid<Order>(source, columns,
-        selectionMode: SelectionMode.Single,
-        onSelectionChanged: keys => setSelected(keys.FirstOrDefault())
-    ).Width(480),
-    detail is null
-        ? Border(Caption("Select an order")).Padding(24)
-        : OrderDetail(detail).Padding(24).Width(360));
+        var source = UseMemo(() => new ListDataSource<Product>(
+            SampleProducts.Items, p => (RowKey)p.Id));
+
+        var columns = UseMemo(() => new FieldDescriptor[]
+        {
+            Column<Product>("Name", p => p.Name, width: 180),
+            Column<Product>("Price", p => p.Price, format: "C2", width: 100),
+        });
+
+        var detail = SampleProducts.Items.FirstOrDefault(
+            p => selected is { } key && (RowKey)p.Id == key);
+
+        return HStack(0,
+            DataGrid<Product>(source, columns,
+                selectionMode: SelectionMode.Single,
+                // The callback hands you the full selection snapshot, not a delta.
+                onSelectionChanged: keys => setSelected(
+                    keys.Count == 0 ? null : (RowKey?)keys.First())
+            ).Width(480).Height(350),
+            detail is null
+                ? Border(Caption("Select a product")).Padding(24)
+                : VStack(4,
+                    SubHeading(detail.Name),
+                    Caption($"{detail.Category} — {detail.Price:C2}")
+                  ).Padding(24).Width(360));
+    }
+}
 ```
 
 The full pattern with sub-grids, optimistic updates, and async detail
@@ -475,13 +499,29 @@ hooks; the grid subscribes when it mounts and unsubscribes when it
 unmounts:
 
 ```csharp
-var collection = UseRef(new ObservableCollection<Order>(orders));
-var source = UseMemo(() => new ObservableListDataSource<Order>(
-    collection.Current, o => (RowKey)o.Id), collection.Current);
+class ObservableSourceDemo : Component
+{
+    public override Element Render()
+    {
+        // One stable collection instance; the source wraps it exactly once.
+        var collection = UseRef(new ObservableCollection<Product>(SampleProducts.Items));
 
-// Mutations to collection.Current flow through to the grid:
-//   collection.Current.Add(new Order(...));
-//   collection.Current.RemoveAt(i);
+        var source = UseMemo(() => new ObservableListDataSource<Product>(
+            collection.Current, p => (RowKey)p.Id), collection.Current);
+
+        var columns = UseMemo(() => new FieldDescriptor[]
+        {
+            Column<Product>("Name", p => p.Name, width: 180),
+            Column<Product>("Stock", p => p.Stock, width: 80),
+        });
+
+        return VStack(12,
+            // Mutations raise CollectionChanged -> DataChanged -> the grid re-fetches.
+            Button("Add product", () => collection.Current.Add(new Product(
+                collection.Current.Count + 1, "New item", "Accessories", 9.99, 1))),
+            DataGrid<Product>(source, columns).Height(320));
+    }
+}
 ```
 
 The mutation pattern works for incoming server pushes (SignalR feed,
@@ -492,13 +532,15 @@ the grid catches up.
 ### Server-driven paging with a custom IDataSource
 
 For data behind a paged REST or GraphQL endpoint, implement
-`IDataSource<T>` directly. `GetPageAsync(DataRequest)` receives the
-sort/filter/search state, the requested page offset, and a
-`CancellationToken`; return a `DataPage<T>` with the items and
-`TotalCount` (if known). Mount the grid against your source — same
-column code, same selection callback. Set
+`IDataSource<T>` directly.
+`GetPageAsync(DataRequest request, CancellationToken cancellationToken = default)`
+receives the sort/filter/search state and the requested page offset on the
+`DataRequest`, with the cancellation token as a separate parameter; return a
+`DataPage<T>` with the items and `TotalCount` (if known). Mount the grid
+against your source — same column code, same selection callback. Set
 `Capabilities = ServerSort | ServerFilter | ServerCount` to opt out of
-the client-side fallback path. The
+the client-side fallback path (`DataSourceCapabilities` also carries
+`ServerSearch`, `ServerSelect`, `Mutate`, and `Refresh`). The
 [`recipes/paginated-list`](recipes/paginated-list.md) recipe walks the
 shape end-to-end for a list; the grid wires up identically.
 
@@ -554,9 +596,11 @@ DataGrid<Order>(source, columns,
 
 The grid does maintain selection internally, but reading it requires a
 ref and the state is invisible to the rest of your component. Lift the
-selection out: `var (selected, setSelected) = UseState(new HashSet<RowKey>())`
-plus `onSelectionChanged: setSelected`. Toolbars, badges, and detail
-panels that need "what's selected" can now read it.
+selection out: `var (selected, setSelected) = UseState<IReadOnlySet<RowKey>>(new HashSet<RowKey>())`
+plus `onSelectionChanged: setSelected`. Declare the state as
+`IReadOnlySet<RowKey>` rather than `HashSet<RowKey>` — that is the exact
+parameter type of the callback, so the setter binds directly. Toolbars,
+badges, and detail panels that need "what's selected" can now read it.
 
 ### Using AutoColumns in production
 

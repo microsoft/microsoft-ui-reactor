@@ -302,6 +302,127 @@ class AccessibleChartDemo : Component
 }
 // </snippet:accessible-chart>
 
+// <snippet:live-chart>
+record Sample(DateTime Time, double Value);
+
+class LiveChartDemo : Component
+{
+    public override Element Render()
+    {
+        var (samples, updateSamples) = UseReducer<IReadOnlyList<Sample>>(Array.Empty<Sample>());
+
+        // UseEffect takes a synchronous Action/Func<Action> — never an async lambda.
+        // Start the pump from the effect and cancel it from the returned cleanup.
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            _ = PumpAsync(cts.Token);
+            return () => { cts.Cancel(); cts.Dispose(); };
+        }, Array.Empty<object>());
+
+        return VStack(12,
+            SubHeading("Live feed"),
+            LineChart(samples, s => s.Time.Ticks, s => s.Value)
+                .Title("Live feed")
+                .SeriesName("Value")
+                .Width(600).Height(220)
+                .Stroke("#0078D4")
+        ).Padding(24);
+
+        async Task PumpAsync(CancellationToken token)
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(200));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    updateSamples(prev =>
+                    {
+                        var next = prev.Append(new Sample(DateTime.Now, Random.Shared.Next(0, 100))).ToList();
+                        return next.Count > 60 ? next.Skip(next.Count - 60).ToList() : next;
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected on unmount.
+            }
+        }
+    }
+}
+// </snippet:live-chart>
+
+// <snippet:chart-switching>
+class ChartSwitchDemo : Component
+{
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 120), new(2, 180), new(3, 150), new(4, 220), new(5, 310), new(6, 280)
+    ];
+
+    public override Element Render()
+    {
+        // ComboBox reports the selected *index*, so hold an int and branch on it.
+        var (kind, setKind) = UseState(0);
+        var kinds = new[] { "line", "bar", "area" };
+
+        // Each factory returns ChartElement<T>, so the switch has one common type
+        // and the modifier chain below is shared.
+        ChartElement<SalesPoint> chart = kind switch
+        {
+            0 => LineChart(Data, d => d.Month, d => d.Revenue),
+            1 => BarChart(Data, d => d.Month, d => d.Revenue),
+            _ => AreaChart(Data, d => d.Month, d => d.Revenue),
+        };
+
+        return VStack(8,
+            SubHeading("Switch chart type"),
+            ComboBox(kinds, kind, setKind),
+            chart
+                .Title("Revenue")
+                .SeriesName("Revenue")
+                .Width(600).Height(250)
+                .Stroke("#0078D4")
+        ).Padding(24);
+    }
+}
+// </snippet:chart-switching>
+
+// <snippet:d3-custom>
+class D3CustomDemo : Component
+{
+    public override Element Render()
+    {
+        const double w = 600, h = 240;
+        const double left = 50, top = 20, right = 20, bottom = 40;
+        double plotW = w - left - right, plotH = h - top - bottom;
+
+        var data = Enumerable.Range(0, 40)
+            .Select(i => (x: (double)i, y: 40 + 30 * Math.Sin(i / 4.0) + i))
+            .ToArray();
+
+        var (yMin, yMax) = D3Extent.Extent(data.Select(d => d.y));
+
+        // Scales are plain objects: Set* mutates fluently, Map projects a value.
+        var xs = new LinearScale([0, 39], [left, left + plotW]);
+        var ys = new LinearScale([yMax, yMin], [top, top + plotH]).Nice();
+
+        var line = D3Charts.Brush("#0078D4");
+
+        return VStack(12,
+            SubHeading("Custom D3 canvas"),
+            D3Charts.D3Canvas(w, h,
+                [.. D3Charts.D3Grid(ys, left, plotW),
+                 .. D3Charts.D3Axes(xs, ys, left, top, plotW, plotH),
+                 D3Charts.D3LinePath(data, x: d => xs.Map(d.x), y: d => ys.Map(d.y),
+                     stroke: line, strokeWidth: 2),
+                 .. data.Select(d => (Element)(D3Charts.D3Circle(xs.Map(d.x), ys.Map(d.y), 3)
+                     with { Fill = line }))])
+        ).Padding(24);
+    }
+}
+// </snippet:d3-custom>
+
 class ChartingApp : Component
 {
     public override Element Render()
@@ -317,7 +438,10 @@ class ChartingApp : Component
                 Component<DynamicDataDemo>(),
                 Component<PieLabelViewDemo>(),
                 Component<AxisTickViewDemo>(),
-                Component<AccessibleChartDemo>()
+                Component<AccessibleChartDemo>(),
+                Component<ChartSwitchDemo>(),
+                Component<D3CustomDemo>(),
+                Component<LiveChartDemo>()
             ).Padding(24)
         );
     }
