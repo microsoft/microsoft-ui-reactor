@@ -6,4 +6,4 @@
 //
 // The whole assembly runs in well under a second, so serializing collections
 // costs nothing measurable and removes the entire class of interference.
-[assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
+[assembly: Xunit.v3.Parallelization(Mode = Xunit.Sdk.ParallelMode.None)]

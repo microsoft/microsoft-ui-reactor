@@ -184,7 +184,7 @@ element and redirecting via a mutable field on every update. No API change.
       (6390/6390 passing post-refactor — no behavioural differences)
 - [ ] All existing E2E event tests (`EventHandlerTests.cs`) pass unchanged
       (run via Appium harness, not part of this commit — to verify, run
-      `dotnet test tests/Reactor.AppTests --filter ClassName=EventHandlerTests`)
+      `dotnet test --project tests/Reactor.AppTests --filter ClassName=EventHandlerTests`)
 
 ---
 

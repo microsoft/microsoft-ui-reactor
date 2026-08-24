@@ -119,7 +119,7 @@ Mark each item ✅ / ❌ / ➖ (N/A or deferred). Sign at the bottom.
 Run before the visual pass to capture the regression-test baseline:
 
 ```
-dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64 \
+dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64 \
   --filter "FullyQualifiedName~Docking" --no-build
 
 "tests/Reactor.AppTests.Host/bin/x64/Debug/net10.0-windows10.0.22621.0/Reactor.AppTests.Host.exe" \

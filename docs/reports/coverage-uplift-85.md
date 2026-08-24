@@ -79,7 +79,7 @@ Verbatim from `CONTRIBUTING.md`, captured here so this doc is self-contained.
 dotnet build tests/Reactor.Tests -c Debug -p:Optimize=false -p:DebugType=portable
 dotnet-coverage collect -s coverage.settings.xml `
   --output unit.cobertura.xml --output-format cobertura `
-  -- dotnet test tests/Reactor.Tests --no-build
+  -- dotnet test --project tests/Reactor.Tests --no-build
 
 # --- Selftest ---
 # 1. Rebuild product + host with portable PDBs

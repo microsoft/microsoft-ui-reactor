@@ -4,6 +4,10 @@
     <RootNamespace>Microsoft.UI.Reactor.SelfTests</RootNamespace>
     <AssemblyName>Reactor.SelfTests</AssemblyName>
     <IsTestProject>true</IsTestProject>
+    <!-- xunit.v3 v4 is Microsoft.Testing.Platform-only, so global.json pins the repo-wide
+         runner to MTP. MSTest speaks MTP natively behind this switch, which keeps this
+         harness runnable under the same `dotnet test` invocation as the xunit suites. -->
+    <EnableMSTestRunner>true</EnableMSTestRunner>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

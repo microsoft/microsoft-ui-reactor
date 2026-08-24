@@ -47,6 +47,11 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- Supplies the MTP hangdump option (replaces the VSTest "blame hang timeout" flag). -->
+    <PackageReference Include="Microsoft.Testing.Extensions.HangDump" />
+    <!-- Supplies the MTP report-trx option; the internal OneBranch pipeline publishes a
+         TRX from this suite via PublishTestResults. -->
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>

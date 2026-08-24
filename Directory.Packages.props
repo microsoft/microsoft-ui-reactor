@@ -68,6 +68,13 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.3.3" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.3.3" />
+    <!-- Microsoft.Testing.Platform extensions. xunit.v3 v4 dropped the VSTest bridge, so
+         the repo runs every suite under MTP (see global.json). MTP ships no TRX writer or
+         hang detector in the box: these restore the VSTest "logger trx" and "blame hang"
+         behaviours CI depended on, via the MTP report-trx / hangdump options. Version
+         tracks the MTP that xunit.v3 4.x / MSTest 4.x resolve. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.3.3" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="SharpFuzz" Version="2.3.0" />
     <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.6" />

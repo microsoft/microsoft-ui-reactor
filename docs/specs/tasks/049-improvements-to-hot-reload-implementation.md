@@ -45,9 +45,9 @@ A task is "done" only when:
    `IsAotCompatible=true` (trim/AOT warnings-as-errors in the core library).
 2. New public/internal surface that uses reflection is trim-annotated.
 3. Tests cover the happy path **and** the documented failure modes.
-4. `dotnet test tests/Reactor.Tests` and `dotnet test tests/Reactor.SelfTests`
+4. `dotnet test --project tests/Reactor.Tests` and `dotnet test --project tests/Reactor.SelfTests`
    are green. On x64 dev machines run unit tests as
-   `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
+   `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
 
 ---
 
@@ -558,7 +558,7 @@ were migrated during the last HR pass.
       `UpdateApplication`.)
 - [x] Run via
       `dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "HotReload"`
-      and `dotnet test tests/Reactor.SelfTests`.
+      and `dotnet test --project tests/Reactor.SelfTests`.
 
 ---
 
@@ -615,13 +615,13 @@ were migrated during the last HR pass.
 - [x] **Build:** `dotnet build Reactor.slnx` clean (warnings-as-errors).
 - [x] **AOT/trim:** core `Reactor.dll` compiles `IsAotCompatible=true` with
       zero new trim/AOT warnings.
-- [x] **Unit:** `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
+- [x] **Unit:** `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
       green, including the new `HotReload/` directory. Targeted run during
       iteration:
-      `dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~HotReload"`
+      `dotnet test --project tests/Reactor.Tests --filter-class "*HotReload*"`
       → 17/17. (Full-suite run unchanged from the Phase 1 baseline; this change
       only adds gated HR branches.)
-- [x] **Selftests:** `dotnet test tests/Reactor.SelfTests` green; the new HR
+- [x] **Selftests:** `dotnet test --project tests/Reactor.SelfTests` green; the new HR
       fixture passes in isolation (`--filter "HotReload"`) → 6/6 + 7/7.
 - [x] **No-regression of steady state:** confirm that with HR **not** live
       (`WithinUpdatePass == false`, `UpdatedTypes == null`) every new branch

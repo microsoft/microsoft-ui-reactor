@@ -67,7 +67,7 @@ if (-not $SkipBuild) {
 Write-Host '==> Unit coverage' -ForegroundColor Cyan
 dotnet-coverage collect -s coverage.settings.xml `
   --output $unitOut --output-format cobertura `
-  -- dotnet test tests/Reactor.Tests --no-build -p:Platform=$Platform
+  -- dotnet test --project tests/Reactor.Tests --no-build -p:Platform=$Platform
 if ($LASTEXITCODE -ne 0) { throw "Unit coverage collect failed" }
 
 if ($UnitOnly) {

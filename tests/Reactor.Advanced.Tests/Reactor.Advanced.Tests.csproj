@@ -18,7 +18,7 @@
 
          Analyzer-on is the deliverable. A NativeAOT test *run* was investigated and is NOT
          feasible here: `dotnet publish -r win-x64 -p:PublishAot=true` reaches ILC "Generating
-         native code" and then fails inside the xunit.v3 3.2.2 runner itself —
+         native code" and then fails inside the xunit.v3 runner itself (diagnosed on 3.2.2) —
          XunitTestRunnerBase.CreateTestClassInstance (Type.MakeGenericType) and
          AsyncUtility.TryConvertToValueTask (MethodInfo.MakeGenericMethod) are IL3050
          RequiresDynamicCode, plus IL2075/IL2070 reflection over test classes. Those are
@@ -41,6 +41,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- Supplies the MTP hangdump option (replaces the VSTest "blame hang timeout" flag). -->
+    <PackageReference Include="Microsoft.Testing.Extensions.HangDump" />
   </ItemGroup>
 
   <ItemGroup>

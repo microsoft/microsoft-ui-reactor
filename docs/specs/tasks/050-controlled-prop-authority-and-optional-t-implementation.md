@@ -41,13 +41,13 @@ Derived from: [`docs/specs/050-controlled-prop-authority-and-optional-t.md`](../
   The closed-generic instantiation set (§8.5 ≈ 25 types) is verified by
   the existing AOT publish CI step.
 - Run tests on x64 dev machines via
-  `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
+  `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
   (per repo memory — bare `dotnet test` fails on a transitive Minesweeper
   Windows App SDK arch error).
 - A task is **done** only when:
   1. Code compiles clean under `Reactor.slnx` with warnings-as-errors.
   2. New analyzer rule `REACTOR0050` has both positive and negative tests.
-  3. `dotnet test tests/Reactor.Tests` and `dotnet test tests/Reactor.SelfTests`
+  3. `dotnet test --project tests/Reactor.Tests` and `dotnet test --project tests/Reactor.SelfTests`
      are green on `main` HEAD as the baseline (Task 12.1) and on the
      migrated tree.
   4. The §11.4 baseline sweep is signed off (every newly-failed test is
@@ -116,11 +116,11 @@ readers are force-audited.
 
 - [ ] Run `dotnet build Reactor.slnx -p:Platform=x64` against the merge-base.
       Record full output (warnings count especially).
-- [ ] Run `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
+- [ ] Run `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
       Record pass/fail set.
 - [ ] Run `dotnet run --project tests/Reactor.AppTests.Host -- --self-test`.
       Record pass/fail set.
-- [ ] Run `dotnet test tests/Reactor.SelfTests`.
+- [ ] Run `dotnet test --project tests/Reactor.SelfTests`.
       Record pass/fail set.
 - [ ] Save baseline artifacts under
       `docs/specs/050-baseline-sweep/` (not committed to history beyond PR

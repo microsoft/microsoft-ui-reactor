@@ -455,8 +455,8 @@ Done:
 
 Verified locally:
 - `dotnet build Reactor.sln -c Release` → 0 errors.
-- `dotnet test tests/Reactor.Tests` → 6836 passed.
-- `dotnet test tests/Reactor.SelfTests` → 639 passed.
+- `dotnet test --project tests/Reactor.Tests` → 6836 passed.
+- `dotnet test --project tests/Reactor.SelfTests` → 639 passed.
 - `dotnet pack src/Reactor -c Release -p:Platform=x64 -p:Version=0.0.1-smoke` → produces `.nupkg` containing `lib/net10.0-windows10.0.22621.0/Reactor.dll`, `analyzers/dotnet/cs/Reactor.Analyzers.dll`, `analyzers/dotnet/cs/Reactor.Localization.Generator.dll`, `LICENSE`, `Reactor.xml`.
 
 Still TODO under P0:

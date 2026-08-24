@@ -338,7 +338,7 @@ if (-not (Test-WindowsAppRuntime20)) {
 # through the `winapp ui` CLI (Microsoft.WinAppCli) instead of WinAppDriver.
 # WinAppUi.ResolveWinAppExe() resolves it from %LOCALAPPDATA%\Microsoft\
 # WindowsApps\winapp.exe (the alias winget's MSIX install drops) or `winapp`
-# on PATH. Install it best-effort so `dotnet test tests/Reactor.AppTests`
+# on PATH. Install it best-effort so `dotnet test --project tests/Reactor.AppTests`
 # works out of the box — a missing winget only warns, it never fails bootstrap.
 Write-Step 'Checking winapp CLI (E2E UI test driver)'
 
@@ -689,7 +689,7 @@ Write-Host '    mur upgrade    refresh local packages + plugin after `git pull`'
 Write-Host '    mur --help     full command list'
 Write-Host ''
 Write-Host 'Run the E2E UI tests (needs the winapp CLI installed above):'
-Write-Host "    dotnet test tests/Reactor.AppTests -c Debug -p:Platform=$hostArch"
+Write-Host "    dotnet test --project tests/Reactor.AppTests -c Debug -p:Platform=$hostArch"
 Write-Host ''
 Write-Host 'Visual Studio preview (if VS installed): View -> Other Windows -> Reactor Preview'
 

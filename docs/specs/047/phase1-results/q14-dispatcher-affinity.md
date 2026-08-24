@@ -20,7 +20,7 @@ implementation ships:
 
 ## What the Phase 1 measurement needs to capture
 
-1. Run a Release build of the in-tree test suite (`dotnet test
+1. Run a Release build of the in-tree test suite (`dotnet test --project
    tests/Reactor.Tests`) with the check toggled to unconditional and
    record any violations.
 2. Repeat for `StressPerf.Reactor` + `StressPerf.ReactorV2` to catch

@@ -9,7 +9,7 @@
 
       1. Build Reactor.Tests, src/Reactor, and Reactor.AppTests.Host (Debug, portable
          PDBs, no optimization) so the assemblies can be instrumented.
-      2. Collect UNIT coverage (dotnet test Reactor.Tests) as cobertura.
+      2. Collect UNIT coverage (dotnet test --project Reactor.Tests) as cobertura.
       3. Statically instrument the built Reactor.dll.
       4. Collect SELFTEST coverage (the AppTests.Host --self-test run) as cobertura.
       5. Merge the two cobertura reports.
@@ -103,7 +103,7 @@ try {
     Invoke-Checked 'Collect unit coverage' {
         dotnet-coverage collect -s $SettingsFile `
             --output $unitReport --output-format cobertura `
-            -- dotnet test tests/Reactor.Tests --no-build -p:Platform=$Platform
+            -- dotnet test --project tests/Reactor.Tests --no-build -p:Platform=$Platform
     }
 
     # 3. Instrument the built product DLLs (dynamic instrumentation skips referenced

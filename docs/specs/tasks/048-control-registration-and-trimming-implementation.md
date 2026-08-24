@@ -126,7 +126,7 @@ so the rest of the codebase keeps working unchanged.
 
 ### 1.4 Phase 1 exit gate
 
-- [x] Full xunit green: `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
+- [x] Full xunit green: `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
       (CI green; ARM64 dev box blocked by pre-existing
       `NumberBoxDescriptor` cctor / WinAppSDK activation issue affecting
       all local unit-test runs, unrelated to this work.)
@@ -169,7 +169,7 @@ present in the trimmed app's binary" probe).
 
 ### 2.2 Run the existing external proof tests against Pattern A
 
-- [x] `dotnet test tests/external_proof/Reactor.External.TestControl.Tests`
+- [x] `dotnet test --project tests/external_proof/Reactor.External.TestControl.Tests`
       stays green; the Pattern A registration replaces the per-host
       registration cleanly. (Selftest path verified: 6 fixtures pass.
       xunit `RegisterHandler_*` tests blocked locally by the pre-existing
@@ -855,7 +855,7 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 > the type, so the direct ctor is safe.
 >
 > **Verification** — `dotnet build Reactor.slnx -p:Platform=x64` 0
-> errors; `dotnet test tests/Reactor.Tests` 9176 passed / 0 failed;
+> errors; `dotnet test --project tests/Reactor.Tests` 9176 passed / 0 failed;
 > `dotnet run --project tests/Reactor.AppTests.Host -- --self-test`
 > 0 failures (77 Spec048 checks + full WinUI selftest suite).
 >
@@ -1060,7 +1060,7 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 
 - [x] Full xunit + selftest + solution build green on x64.
       (xunit: 9176 passed / 0 failed / 62 skipped on
-      `dotnet test tests\Reactor.Tests --no-build -p:Platform=x64`;
+      `dotnet test --project tests\Reactor.Tests --no-build -p:Platform=x64`;
       selftest Spec048 fixtures: 77 checks across 9 groups, 0 failures
       on `dotnet run --project tests\Reactor.AppTests.Host
       -p:Platform=x64 -- --self-test --filter Spec048`.)
@@ -1298,9 +1298,9 @@ docs/_pipeline/templates/*.md.dt".
 
 ## Build / test cmds (verified in this env, dotnet 10.0.x)
 
-- xunit: `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
+- xunit: `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
 - selftest: `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test [--filter Name]`
 - solution build: `dotnet build Reactor.slnx -p:Platform=x64`
 - AOT publish (after §2.3 lands): `dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld -c Release -r win-x64 -p:PublishAot=true`
-- external proof tests: `dotnet test tests/external_proof/Reactor.External.TestControl.Tests`
+- external proof tests: `dotnet test --project tests/external_proof/Reactor.External.TestControl.Tests`
 - docs compile (when `mur` is available): `mur docs compile`

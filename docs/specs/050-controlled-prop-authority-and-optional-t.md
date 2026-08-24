@@ -629,7 +629,7 @@ Goal: confirm no >5% regression on element allocation; no measurable change on r
 
 Before this PR merges:
 
-1. Run `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64` against `main` HEAD; record the pass/fail set.
+1. Run `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64` against `main` HEAD; record the pass/fail set.
 2. Run full selftest suite (`dotnet run --project tests/Reactor.AppTests.Host -- --self-test`); record results.
 3. Land migration; re-run both. Any newly-failing test gets triaged into:
    - **Genuine regression** — fix the implementation.

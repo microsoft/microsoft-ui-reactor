@@ -168,7 +168,7 @@ changes behavior yet.
       not-yet-implemented `SetCurrent` surface (no other failures).
 - [x] `RefNode` fixtures discovered by the self-host filter.
 - [x] Baseline perf number recorded.
-- [x] Full xunit green: `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
+- [x] Full xunit green: `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
 
 ---
 
@@ -351,7 +351,7 @@ writes). Register each fixture in both `SelfTestFixtureRegistry.cs` spots (0.3).
 - [x] Headless `ReactiveElementRefTests` green.
 - [x] Full §9 matrix (rows 1, 2, 4–14) green via
       `dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter RefNode`
-      **and** through `dotnet test tests/Reactor.SelfTests`.
+      **and** through `dotnet test --project tests/Reactor.SelfTests`.
 - [x] `TeachingTip.Target` first-party proof + ArcGIS (or in-repo fan-out) external
       proof green.
 - [x] **Surface-parity test (1.8) green** — record construction, fluent, and factory

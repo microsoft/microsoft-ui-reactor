@@ -1298,7 +1298,7 @@ Location: `src/vs-reactor/Tests/Reactor.VsExtension.Tests/` (xUnit, net472
 or net48, no VS SDK dependency).
 
 Add to `Reactor.slnx` like all other test projects. Run via
-`dotnet test src/vs-reactor/Tests/Reactor.VsExtension.Tests/`.
+`dotnet test --project src/vs-reactor/Tests/Reactor.VsExtension.Tests/`.
 
 Aim for ~80% line coverage of the pure-logic surface. Specifically:
 
@@ -1390,7 +1390,7 @@ Add a new CI workflow step in `.github/workflows/ci.yml`:
 
 ```yaml
 - name: Test VS extension
-  run: dotnet test src/vs-reactor/Tests/Reactor.VsExtension.Tests/Reactor.VsExtension.Tests.csproj --no-build --verbosity normal
+  run: dotnet test --project src/vs-reactor/Tests/Reactor.VsExtension.Tests/Reactor.VsExtension.Tests.csproj --no-build --verbosity normal
 ```
 
 The VSIX itself builds as part of the existing solution build because

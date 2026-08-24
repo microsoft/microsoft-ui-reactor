@@ -417,11 +417,11 @@ Note: the first three rules below are pre-existing gaps for **all** hooks; file 
 
 Run before merging any phase:
 
-- [ ] **All unit tests** (`dotnet test tests/Reactor.Tests`) — 2,200+ existing + phase-specific additions
+- [ ] **All unit tests** (`dotnet test --project tests/Reactor.Tests`) — 2,200+ existing + phase-specific additions
 - [ ] **All threading tests** with `-m:1` (single process) and `-m:4` (parallel) to expose contention that only appears under load
 - [ ] **All selfhost fixtures** (`dotnet run --project tests/Reactor.AppTests.Host -- --self-test`) including the `AsyncResource.*` prefix
 - [ ] **Framerate fixtures** (`--filter "AsyncResource.Framerate"`) — these are the regression canary for "works once, breaks at 60Hz"
-- [ ] **E2E regression** (`dotnet test tests/Reactor.AppTests`) — no new E2E tests required; verify no existing AT/a11y regression
+- [ ] **E2E regression** (`dotnet test --project tests/Reactor.AppTests`) — no new E2E tests required; verify no existing AT/a11y regression
 - [ ] **DataGrid parity CI job** (phase 3 only) — both `UseHookBasedPaging` values green
 - [ ] **Unobserved-task assertion** — a test-collection-level subscription to `TaskScheduler.UnobservedTaskException` fails the run on any fire
 - [ ] **Memory leak probe** — before/after `GC.GetTotalMemory(true)` delta on the rapid-remount fixtures; budget enforced in CI

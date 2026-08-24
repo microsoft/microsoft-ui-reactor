@@ -121,14 +121,14 @@ jobs:
         # `run:` block) so a non-zero exit here fails the job. PowerShell surfaces only
         # the last command's exit code, so a chained failure would be masked whenever a
         # later command succeeds — that hid 14 Devtools failures from PR CI once.
-        run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
+        run: dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --hangdump --hangdump-timeout 180s --hangdump-type None
 
       - name: Test (Reactor.Advanced.Tests)
         # !cancelled() so this still runs when Reactor.Tests failed above — we want
         # the full failure picture from one CI run, not one-failure-at-a-time. The
         # job still fails because the Reactor.Tests step's non-zero exit stands.
         if: ${{ !cancelled() }}
-        run: dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
+        run: dotnet test --project tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --hangdump --hangdump-timeout 180s --hangdump-type None
 
   audit-ledger:
     name: Audit ledger gate
@@ -149,7 +149,7 @@ jobs:
         run: dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
 
       - name: Test (swallowed-error audit ledger)
-        run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --filter "FullyQualifiedName~SwallowedErrorAudit" --logger "console;verbosity=normal"
+        run: dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --filter-class "*SwallowedErrorAudit*"
 
   integration-tests:
     name: Integration Tests
@@ -169,7 +169,7 @@ jobs:
         run: dotnet restore Reactor.slnx
 
       - name: Test
-        run: dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --logger "console;verbosity=normal"
+        run: dotnet test --project tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore
 
   selftests:
     name: Selftests
@@ -193,7 +193,7 @@ jobs:
         run: dotnet restore tests/Reactor.SelfTests/Reactor.SelfTests.csproj -p:Platform=x64
 
       - name: Test
-        run: dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
+        run: dotnet test --project tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore -p:Platform=x64
 
   e2e-tests:
     name: E2E Tests (winapp ui)
@@ -223,9 +223,12 @@ jobs:
 
       - name: Test
         # --results-directory pins the TRX under the workspace root so the gate below can find it.
-        # Without it, `dotnet test <csproj>` drops TestResults under the project dir
+        # Without it, `dotnet test --project <csproj>` drops results under the project dir
         # (tests/Reactor.AppTests/TestResults), where the repo-root TRX lookup never looks.
-        run: dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --logger "console;verbosity=normal" --logger "trx;LogFileName=app-tests.trx" --results-directory TestResults
+        # --report-trx is the Microsoft.Testing.Platform equivalent of the old
+        # `--logger "trx;LogFileName=..."`; it needs Microsoft.Testing.Extensions.TrxReport,
+        # which Reactor.AppTests references.
+        run: dotnet test --project tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --report-trx --report-trx-filename app-tests.trx --results-directory TestResults
 
       - name: Fail on skipped input-injection E2Es
         shell: pwsh
@@ -269,10 +272,10 @@ jobs:
         run: dotnet build Reactor.slnx --no-restore --configuration Release
 
       - name: VSIX Tier A tests
-        run: dotnet test src\vs-reactor\Tests\Reactor.VsExtension.Tests\Reactor.VsExtension.Tests.csproj -c Release --no-restore --logger "console;verbosity=normal"
+        run: dotnet test --project src\vs-reactor\Tests\Reactor.VsExtension.Tests\Reactor.VsExtension.Tests.csproj -c Release --no-restore
 
       - name: VSIX Tier B SDK tests
-        run: dotnet test src\vs-reactor\Tests\Reactor.VsExtension.SdkTests\Reactor.VsExtension.SdkTests.csproj -c Release --no-restore --logger "console;verbosity=normal"
+        run: dotnet test --project src\vs-reactor\Tests\Reactor.VsExtension.SdkTests\Reactor.VsExtension.SdkTests.csproj -c Release --no-restore
 
       # Tier C E2E/manual smoke is intentionally not run in CI; see src/vs-reactor/TESTING.md.
       - name: Validate structural VSIX build
@@ -480,9 +483,8 @@ jobs:
         env:
           REACTOR_AOT_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world
         run: |
-          dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions `
-            --nologo `
-            --logger "console;verbosity=normal"
+          dotnet test --project tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions `
+            --nologo
 
       - name: Publish AOT Hello-World Advanced negative
         run: >
@@ -499,9 +501,8 @@ jobs:
         env:
           REACTOR_AOT_ADVANCED_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world-advanced
         run: |
-          dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.TrimAssertions `
-            --nologo `
-            --logger "console;verbosity=normal"
+          dotnet test --project tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.TrimAssertions `
+            --nologo
 
       - name: Publish AOT Hello-World Advanced positive
         run: >
@@ -518,9 +519,8 @@ jobs:
         env:
           REACTOR_AOT_ADVANCED_POSITIVE_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world-advanced-positive
         run: |
-          dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions `
-            --nologo `
-            --logger "console;verbosity=normal"
+          dotnet test --project tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions `
+            --nologo
 
       - name: Upload published binary on failure
         if: failure()
@@ -729,7 +729,7 @@ jobs:
       # compilation, image processing, the blank-screenshot gate), so it
       # belongs here rather than in the WinUI unit-test job.
       - name: Doc-pipeline tests
-        run: dotnet test tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj -p:Platform=x64 --nologo
+        run: dotnet test --project tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj -p:Platform=x64 --nologo
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

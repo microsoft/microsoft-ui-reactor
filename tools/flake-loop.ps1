@@ -26,7 +26,7 @@ for ($i = 1; $i -le $Iterations; $i++) {
     $runLog = Join-Path $LogDir ("run-{0:D3}.log" -f $i)
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-    & dotnet test $Project -c Release --no-build --nologo 2>&1 |
+    & dotnet test --project $Project -c Release --no-build --nologo 2>&1 |
         Tee-Object -FilePath $runLog | Out-Null
 
     $sw.Stop()

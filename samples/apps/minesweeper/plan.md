@@ -79,7 +79,7 @@ Passed!  - Failed: 0, Passed: 41, Skipped: 0, Total: 41
 
 Run with:
 ```
-dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64 \
+dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64 \
   --filter "FullyQualifiedName~Microsoft.UI.Reactor.Tests.Minesweeper"
 ```
 

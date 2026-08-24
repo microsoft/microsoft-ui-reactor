@@ -90,7 +90,7 @@ netstandard2.0; analyzer + code-fix co-located in the one shipped DLL (RS1038 su
 - Required per rule (spec §7): **positive**, **negative**, and the **near-miss** that
   almost trips the syntactic fast path. Every ✔ (code-fix) rule adds a **fix
   round-trip** test.
-- Run tests with **`dotnet test tests/Reactor.Tests -p:Platform=x64 --filter FullyQualifiedName~<YourClass>`**.
+- Run tests with **`dotnet test --project tests/Reactor.Tests -p:Platform=x64 --filter FullyQualifiedName~<YourClass>`**.
   The project is `Platforms=x64;ARM64` + `WindowsAppSDKSelfContained=true`; if a plain
   `dotnet test` errors with a WindowsAppSDK architecture mismatch (the flight sessions
   consistently hit this in worktrees), the explicit `-p:Platform=x64` reliably avoids it.

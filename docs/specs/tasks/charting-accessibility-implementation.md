@@ -573,7 +573,7 @@ real assistive technology through the Windows UIA pipeline. These tests live in
 
 ### 9.4 — Final validation
 
-- [x] Run full unit test suite: `dotnet test tests/Reactor.Tests`
-- [ ] Run full selftest suite: `dotnet test tests/Reactor.SelfTests`
-- [ ] Run E2E tests: `dotnet test tests/Reactor.AppTests --filter "ClassName~ChartAccessibilityTests"`
+- [x] Run full unit test suite: `dotnet test --project tests/Reactor.Tests`
+- [ ] Run full selftest suite: `dotnet test --project tests/Reactor.SelfTests`
+- [ ] Run E2E tests: `dotnet test --project tests/Reactor.AppTests --filter "ClassName~ChartAccessibilityTests"`
 - [x] Verify zero `A11Y_CHART_*` scanner violations on all sample charts
