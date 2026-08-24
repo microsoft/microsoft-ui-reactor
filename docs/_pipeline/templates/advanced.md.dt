@@ -169,10 +169,14 @@ manage it.
 
 `Optional<T>` is Reactor's authority marker for controlled props. A
 controlled element property such as `SliderElement.Value` is not just a
-`double`; it is either `Optional.Of(value)` (Reactor is asserting the
-value) or `Optional<double>.Unset` (the WinUI control owns the value).
+`double`; it is either `Optional<double>.Of(value)` (Reactor is asserting
+the value) or `Optional<double>.Unset` (the WinUI control owns the value).
 This distinction exists because C# records cannot tell "property
 omitted" from "property set to the default" the way JSX can.
+
+`Of` is a static member **on the generic struct**, so the type argument
+goes on `Optional<T>`, never on `Of` — `Optional<double>.Of(5.0)`, not
+`Optional.Of(5.0)` and not `Optional.Of<double>(5.0)`.
 
 ### Snap-back recipe
 
@@ -184,7 +188,7 @@ re-render from the change callback:
 ```
 
 Flow: the user drags the slider away from 5, the callback toggles the
-reducer state, the next render produces `Optional.Of(5.0)`, and the
+reducer state, the next render produces `Optional<double>.Of(5.0)`, and the
 controlled Update gate sees `HasValue` plus drift and writes 5 back
 with echo suppression. Use this only when the snap-back is intentional;
 ordinary inputs should bind to state (`Slider(value, setValue)`) or use
@@ -198,11 +202,11 @@ local value":
 ```csharp snippet="advanced/clear-value-channel"
 ```
 
-`Background = Optional.Of<Brush?>(brush)` writes a local brush;
+`Background = Optional<Brush?>.Of(brush)` writes a local brush;
 `Background = Optional<Brush?>.Unset` calls `ClearValue` so WinUI's
 style, template, inherited value, or registered default can show
 through. Be explicit with nulls: `with { Background = null }` uses the
-implicit conversion and means `Optional.Of(null)`, not `Unset`.
+implicit conversion and means `Optional<Brush?>.Of(null)`, not `Unset`.
 
 ## Custom hooks
 
