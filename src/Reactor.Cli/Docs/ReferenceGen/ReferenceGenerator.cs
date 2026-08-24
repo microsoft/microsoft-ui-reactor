@@ -20,7 +20,15 @@ internal sealed record ReferenceGenResult(
     IReadOnlyList<GeneratedPage> Pages,
     IReadOnlyList<RefGenFinding> Findings);
 
-internal sealed record GeneratedPage(MemberDoc Member, RouterResult Route, string Body);
+internal sealed record GeneratedPage(MemberDoc Member, RouterResult Route, string Body)
+{
+    /// <summary>
+    /// Every member this page documents, in render order. Overloads share a
+    /// short name and therefore a page; <see cref="Member"/> is the first of
+    /// them and supplies the page's headline cref.
+    /// </summary>
+    public IReadOnlyList<MemberDoc> Members { get; init; } = new[] { Member };
+}
 
 /// <summary>
 /// Orchestrates reference page generation:
@@ -30,14 +38,16 @@ internal sealed record GeneratedPage(MemberDoc Member, RouterResult Route, strin
 /// <item>Groups by category via <see cref="MemberRouter"/>.</item>
 /// <item>Filters to the categories requested by the caller (Phase 1B
 ///   restricts to <c>hooks</c>).</item>
-/// <item>Routes each member to an output path; detects collisions.</item>
+/// <item>Routes each member to an output path; members sharing an output
+///   path are merged onto one page, one section each.</item>
 /// <item>Builds a <see cref="CrefResolver"/> over the routed set and
 ///   renders each page.</item>
 /// </list>
 ///
 /// Findings carry <c>REACTOR_DOC_REFGEN_001</c> (unresolved cref →
-/// error), <c>_REFGEN_002</c> (name collision → error) and
-/// <c>_REFGEN_W001</c> (missing summary → warning).
+/// warning), <c>_REFGEN_002</c> (a page name claimed by two unrelated
+/// declaring scopes → warning) and <c>_REFGEN_W001</c> (missing summary →
+/// warning).
 /// </summary>
 internal sealed class ReferenceGenerator
 {
@@ -63,10 +73,21 @@ internal sealed class ReferenceGenerator
         var members = XmlDocReader.Read(xmlPath);
         var router = new MemberRouter(map, referenceRoot);
 
-        // 1) Route each member; collect collisions per category.
-        var routes = new Dictionary<string, RouterResult>(StringComparer.Ordinal);
-        // collision map: category → (short name → first-seen cref)
-        var collisionMap = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        // Documented <typeparam> names, keyed by type cref, so a method's
+        // `N markers can be rendered with the declaring type's own parameter
+        // names rather than positional placeholders.
+        var typeParamsByType = members
+            .Where(m => m.Kind == MemberKind.Type && m.TypeParams.Count > 0)
+            .GroupBy(m => m.Cref, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.First().TypeParams.Select(p => p.Name).ToList(),
+                StringComparer.Ordinal);
+
+        // 1) Route each member and bucket by output path. Every member that
+        //    lands on a page is kept: collapsing overloads to a single
+        //    "winner" silently deleted the rest from the docset.
+        var groups = new Dictionary<string, PageGroup>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var m in members)
         {
@@ -81,58 +102,100 @@ internal sealed class ReferenceGenerator
             if (r.ShortName.Equals("#ctor", StringComparison.Ordinal) ||
                 r.ShortName.Equals("_ctor", StringComparison.Ordinal)) continue;
 
-            // Methods have one "name" each but ref-gen collapses overloads
-            // to the same MD page. Sidestep collision detection between an
-            // overload-pair and a same-named property by keying on category+
-            // name and only complaining when the *first-seen cref* differs
-            // from the current one's parameter list-stripped form.
-            if (!collisionMap.TryGetValue(r.Category, out var byName))
-                collisionMap[r.Category] = byName = new(StringComparer.OrdinalIgnoreCase);
-
-            if (byName.TryGetValue(r.ShortName, out var firstCref) && !SameMemberFamily(firstCref, m.Cref))
-            {
-                // Phase 1B routes one page per short-name, so two members
-                // that share a name (e.g. parallel extension classes that
-                // both expose `UseMemoCells`) collide. The first-seen entry
-                // wins the page; later phases will disambiguate per-type.
-                // Keep the finding so authors see the drift, but emit at
-                // warning severity rather than failing the build.
-                findings.Add(new RefGenFinding(
-                    "REACTOR_DOC_REFGEN_002",
-                    $"name collision in category '{r.Category}': '{r.ShortName}' already routed from {firstCref}, now also from {m.Cref}",
-                    r.RelativePath,
-                    TierLintSeverity.Warning));
-                continue;
-            }
-            byName[r.ShortName] = m.Cref;
-            // First overload encountered wins the page; subsequent overloads
-            // are appended in a later phase (out of scope for 1B).
-            if (!routes.ContainsKey(m.Cref))
-                routes.Add(m.Cref, r);
+            if (!groups.TryGetValue(r.AbsolutePath, out var group))
+                groups[r.AbsolutePath] = group = new PageGroup(r);
+            group.Members.Add(m);
         }
 
-        // 2) Build the resolver over the routed set so <see cref> links
-        //    only resolve to pages we're actually emitting.
-        var resolver = new CrefResolver(routes);
+        // 2) Order each group deterministically and assign headings/anchors.
+        //    Ordering is derived entirely from the cref, never from the order
+        //    members happen to appear in the XML file, so re-running the
+        //    generator over an unchanged assembly reproduces byte-identical
+        //    output.
+        var routes = new Dictionary<string, RouterResult>(StringComparer.Ordinal);
+        var anchors = new Dictionary<string, string>(StringComparer.Ordinal);
+        var pageMembers = new Dictionary<string, List<PageMember>>(StringComparer.OrdinalIgnoreCase);
 
-        // 3) Render each page. Walk in cref order for deterministic output
-        //    (file diffs stay tidy across runs).
-        foreach (var m in members.OrderBy(x => x.Cref, StringComparer.Ordinal))
+        foreach (var group in groups.Values.OrderBy(g => g.Route.AbsolutePath, StringComparer.Ordinal))
         {
-            if (!routes.TryGetValue(m.Cref, out var route)) continue;
+            var ordered = group.Members
+                .OrderBy(m => m.Kind == MemberKind.Type ? 0 : 1)
+                .ThenBy(m => CrefSignature.Parse(m.Cref).DeclaringName, StringComparer.Ordinal)
+                .ThenBy(m => CrefSignature.Parse(m.Cref).GenericArity)
+                .ThenBy(m => CrefSignature.Parse(m.Cref).ParameterTypes.Count)
+                .ThenBy(m => m.Cref, StringComparer.Ordinal)
+                .ToList();
 
-            // Skip overload duplicates — the first cref wins the page.
-            // A later phase will merge overload signatures into one page.
-            if (pages.Any(p => p.Route.AbsolutePath == route.AbsolutePath)) continue;
+            var list = new List<PageMember>(ordered.Count);
+            var used = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var m in ordered)
+            {
+                routes[m.Cref] = group.Route;
 
-            var write = ReferenceWriter.Write(m, route, resolver);
-            pages.Add(new GeneratedPage(m, route, write.Body));
+                if (ordered.Count == 1)
+                {
+                    // Single-member page — the title is the heading.
+                    list.Add(new PageMember(m, string.Empty, string.Empty));
+                    continue;
+                }
 
-            if (write.MissingSummary)
+                var declaringCref = CrefSignature.DeclaringTypeCref(m.Cref);
+                var declaringParams = declaringCref is not null &&
+                                      typeParamsByType.TryGetValue(declaringCref, out var tps)
+                    ? tps
+                    : null;
+                var heading = CrefSignature.Format(m, declaringParams);
+                var anchor = Deduplicate(CrefSignature.Anchor(heading), used);
+                anchors[m.Cref] = anchor;
+                list.Add(new PageMember(m, heading, anchor));
+            }
+            pageMembers[group.Route.AbsolutePath] = list;
+
+            // 3) REFGEN_002 now means "this page name is claimed by two
+            //    unrelated declaring scopes" — a genuine ambiguity an author
+            //    must resolve in reference-map.yaml. Overloads of one method
+            //    are not ambiguous, they're the normal case, and they are all
+            //    rendered. Ambiguous members are rendered too (dropping them
+            //    is the bug this replaced) but still reported.
+            var scopes = ordered
+                .Select(DeclaringScope)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(s => s, StringComparer.Ordinal)
+                .ToList();
+            if (scopes.Count > 1)
+            {
+                findings.Add(new RefGenFinding(
+                    "REACTOR_DOC_REFGEN_002",
+                    $"name collision in category '{group.Route.Category}': '{group.Route.ShortName}' is claimed by " +
+                    $"{scopes.Count} unrelated declaring scopes ({string.Join(", ", scopes)}); " +
+                    "all members are rendered on one page — pin them to distinct categories in reference-map.yaml to separate them",
+                    group.Route.RelativePath,
+                    TierLintSeverity.Warning));
+            }
+        }
+
+        // 4) Build the resolver over the routed set so <see cref> links
+        //    only resolve to pages we're actually emitting.
+        var resolver = new CrefResolver(routes, anchors);
+
+        // 5) Render each page. Walk in output-path order for deterministic
+        //    output (file diffs stay tidy across runs).
+        foreach (var group in groups.Values.OrderBy(g => g.Route.AbsolutePath, StringComparer.Ordinal))
+        {
+            var list = pageMembers[group.Route.AbsolutePath];
+            var route = group.Route;
+
+            var write = ReferenceWriter.Write(list, route, resolver);
+            pages.Add(new GeneratedPage(list[0].Member, route, write.Body)
+            {
+                Members = list.Select(pm => pm.Member).ToList(),
+            });
+
+            foreach (var cref in write.MissingSummaryCrefs)
             {
                 findings.Add(new RefGenFinding(
                     "REACTOR_DOC_REFGEN_W001",
-                    $"member has no <summary> — placeholder emitted ({m.Cref})",
+                    $"member has no <summary> — placeholder emitted ({cref})",
                     route.RelativePath,
                     TierLintSeverity.Warning));
             }
@@ -147,7 +210,7 @@ internal sealed class ReferenceGenerator
                 // when later phases bring those categories online.
                 findings.Add(new RefGenFinding(
                     "REACTOR_DOC_REFGEN_001",
-                    $"unresolvable cref '{u}' in {m.Cref}",
+                    $"unresolvable cref '{u.Cref}' in {u.InMemberCref}",
                     route.RelativePath,
                     TierLintSeverity.Warning));
             }
@@ -157,23 +220,40 @@ internal sealed class ReferenceGenerator
     }
 
     /// <summary>
-    /// Strips method parameter lists and generic arity so two overloads of
-    /// the same method don't trigger a collision finding. The collision
-    /// detector only fires across genuinely different members (e.g. a
-    /// property and a method with the same name in the same category).
+    /// The scope that owns a member for collision purposes: the declaring
+    /// type for a member, or the type itself for a <c>T:</c> entry. Two
+    /// members sharing a scope are overloads of one another; two members
+    /// with different scopes that landed on the same page are a genuine
+    /// naming ambiguity.
     /// </summary>
-    private static bool SameMemberFamily(string crefA, string crefB)
+    private static string DeclaringScope(MemberDoc member)
     {
-        return StemOf(crefA) == StemOf(crefB);
+        var parts = CrefSignature.Parse(member.Cref);
+        if (parts.Kind == "T")
+            return string.IsNullOrEmpty(parts.DeclaringName)
+                ? parts.Name
+                : parts.DeclaringName + "." + parts.Name;
+        return string.IsNullOrEmpty(parts.DeclaringName) ? parts.Name : parts.DeclaringName;
     }
 
-    private static string StemOf(string cref)
+    /// <summary>
+    /// GitHub appends <c>-1</c>, <c>-2</c>, … to repeated heading slugs on a
+    /// page; mirror that so generated anchors match what the renderer emits.
+    /// </summary>
+    private static string Deduplicate(string anchor, HashSet<string> used)
     {
-        var stem = cref;
-        if (stem.Length >= 2 && stem[1] == ':') stem = stem[2..];
-        var paren = stem.IndexOf('(');
-        if (paren >= 0) stem = stem[..paren];
-        return stem;
+        if (used.Add(anchor)) return anchor;
+        for (int i = 1; ; i++)
+        {
+            var candidate = $"{anchor}-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            if (used.Add(candidate)) return candidate;
+        }
+    }
+
+    private sealed class PageGroup(RouterResult route)
+    {
+        public RouterResult Route { get; } = route;
+        public List<MemberDoc> Members { get; } = new();
     }
 
     /// <summary>

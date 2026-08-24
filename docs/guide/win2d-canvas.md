@@ -4,7 +4,7 @@ Reactor is a retained UI framework: a [component](components.md) renders immutab
 
 # Win2D canvas
 
-`Reactor.Advanced` exposes the three Win2D canvas controls as Reactor elements: <!-- ref:Win2DCanvas -->, <!-- ref:Win2DAnimatedCanvas -->, and <!-- ref:Win2DVirtualCanvas -->. Add the package when you need immediate-mode drawing; keep using ordinary [components](components.md), [Animation](animation.md), and the [Extending Reactor controls](extending-reactor-controls.md) model for retained UI.
+`Reactor.Advanced` exposes the three Win2D canvas controls as Reactor elements: `Win2DCanvas`, `Win2DAnimatedCanvas`, and `Win2DVirtualCanvas`. Add the package when you need immediate-mode drawing; keep using ordinary [components](components.md), [Animation](animation.md), and the [Extending Reactor controls](extending-reactor-controls.md) model for retained UI.
 
 ## Three canvases, three workloads
 

@@ -12,10 +12,10 @@ with the mutator's result or fault.
 
 ## Discussion
 
-<para>Ordering: `OnOptimistic` fires
-synchronously before the mutator starts. `OnSuccess`
-or `OnError` fires on the hook's dispatcher
-thread after completion.</para><para>If `OnOptimistic` throws, the
+<para>Ordering: [OnOptimistic](MutationOptions.md) fires
+synchronously before the mutator starts. [OnSuccess](MutationOptions.md)
+or [OnError](MutationOptions.md) fires on the hook's dispatcher
+thread after completion.</para><para>If [OnOptimistic](MutationOptions.md) throws, the
 mutator is never invoked and the returned task is faulted with the optimistic
 exception — prevents half-applied state where the optimistic patch ran but the
 real request can't.</para>
