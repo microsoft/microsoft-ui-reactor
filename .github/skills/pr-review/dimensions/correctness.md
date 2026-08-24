@@ -43,11 +43,17 @@ Yoga/Flex layout math.
     matching decrement, or a write path that bypasses the scope);
   - using the suppressor directly instead of `WriteSuppressed` / a descriptor
     declaration (this is an alternative-solution finding too).
-- **Element pooling.** `ElementPool` recycles controls; poolable types wire
-  events once via `ConditionalWeakTable<FrameworkElement, PoolableWireFlags>`.
-  Flag:
-  - new event wiring on a poolable control that isn't guarded by the
-    one-time-wire flag (double subscription across rent/return);
+- **Element pooling.** `ElementPool` recycles controls. V1 pools only
+  non-interactive controls, so there is no event re-wiring to guard. It keeps a
+  `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements
+  that have had `GetElementVisual()` called — those permanently lose the XAML
+  implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …) and are
+  therefore excluded from pooling. Flag:
+  - a control made poolable without considering whether it carries event
+    handlers or composition state a later renter would inherit;
+  - code that touches an element's composition Visual without calling
+    `ElementPool.MarkCompositorTainted`, so a tainted element can still be
+    pooled and handed to a renter that needs implicit transitions;
   - state left on a control when it's returned to the pool (next renter sees
     stale value/selection/handlers);
   - per-element state read from `FrameworkElement.Tag` or a CWT instead of

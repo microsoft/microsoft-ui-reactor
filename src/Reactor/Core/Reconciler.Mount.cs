@@ -13,8 +13,12 @@ using WinShapes = Microsoft.UI.Xaml.Shapes;
 namespace Microsoft.UI.Reactor.Core;
 
 // AI-HINT: Reconciler.Mount.cs — creates real WinUI controls from Element descriptions.
-// Mount() is a big switch over all Element subtypes → MountXxx() methods.
-// Each MountXxx allocates (or rents from pool) a WinUI control, sets properties,
+// Mount() dispatches through the V1 protocol: each element type resolves to a
+// registered ControlDescriptor/IElementHandler (see ControlRegistry), which owns
+// creation and property application. There is no longer a switch over Element
+// subtypes and no MountXxx() methods — spec 048 removed that dispatch path; what
+// remains here is the dispatch entry point plus the composition-primitive handlers.
+// A handler allocates (or rents from pool) a WinUI control, sets properties, and
 // wires event handlers that look up the current Element via the ReactorAttached
 // DP (see Reconciler.SetElementTag), so handlers are wired once and survive
 // element recycling — the trampoline re-reads the current Element on each fire.
