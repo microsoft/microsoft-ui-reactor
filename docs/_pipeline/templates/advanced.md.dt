@@ -180,18 +180,7 @@ Sometimes the app deliberately wants to clamp a user-editable control
 to a fixed value. Keep the element value `HasValue` and force a
 re-render from the change callback:
 
-```csharp
-public override Element Render()
-{
-    // RenderContext.UseReducer<T>(T initialValue) returns
-    // (T Value, Action<Func<T, T>> Update). Toggling the bool guarantees
-    // a changed reducer result and therefore a re-render.
-    var (_, bump) = UseReducer(false);
-
-    return Slider(
-        value: Optional<double>.Of(5.0),
-        onValueChanged: _ => bump(b => !b));
-}
+```csharp snippet="advanced/snap-back"
 ```
 
 Flow: the user drags the slider away from 5, the callback toggles the
@@ -206,18 +195,7 @@ ordinary inputs should bind to state (`Slider(value, setValue)`) or use
 For DP-backed one-way props, `Optional<T>` also expresses "release the
 local value":
 
-```csharp
-public sealed record CardElement : Element
-{
-    public Optional<Brush?> Background { get; init; } = Optional<Brush?>.Unset;
-}
-
-static readonly ControlDescriptor<CardElement, Border> Descriptor =
-    new ControlDescriptor<CardElement, Border>()
-        .OneWay(
-            get: static e => e.Background,
-            set: static (c, v) => c.Background = v,
-            dp: Border.BackgroundProperty);
+```csharp snippet="advanced/clear-value-channel"
 ```
 
 `Background = Optional.Of<Brush?>(brush)` writes a local brush;
@@ -303,30 +281,7 @@ The escape hatch is to construct the `Element` and its
 so perf-critical code can build them once instead of having the fluent
 chain rebuild them step-by-step.
 
-```csharp
-// Fluent — five clones per cell. Right tool for ordinary UI.
-var cell = TextBlock(label)
-    .FontSize(8)
-    .Foreground(item.IsUp ? GreenBrush : RedBrush)
-    .Padding(2, 1, 2, 1)
-    .Grid(row: r, column: c);
-
-// Direct record initializer — one TextBlockElement, one ElementModifiers,
-// two bucket sub-records, one Attached dictionary. Use only when the
-// allocation cost shows up in profiles.
-var cell = new TextBlockElement(label)
-{
-    FontSize = 8,
-    Modifiers = new ElementModifiers
-    {
-        Layout = new LayoutModifiers { Padding = new Thickness(2, 1, 2, 1) },
-        Visual = new VisualModifiers { Foreground = item.IsUp ? GreenBrush : RedBrush },
-    },
-    Attached = new Dictionary<Type, object>(1)
-    {
-        [typeof(GridAttached)] = new GridAttached(r, c, 1, 1),
-    },
-};
+```csharp snippet="advanced/hot-loop-cells"
 ```
 
 **Registration contract.** Factory methods (`TextBlock(...)`, `Button(...)`,
@@ -377,12 +332,7 @@ declared dependencies) haven't changed since the previous render. The
 reconciler's `ReferenceEquals` shortcut means a reused cell allocates
 nothing and skips diffing entirely.
 
-```csharp
-var theme = ctx.UseTheme();
-var children = ctx.UseMemoCells(
-    stocks,
-    (item, i) => Cell(item, theme),
-    theme);   // ← deps; framework invalidates on change
+```csharp snippet="advanced/memo-cells"
 ```
 
 **When it's the right hammer.** Tickers, log tables, file lists, large
@@ -503,15 +453,9 @@ longer matters. Put state resets in the effect body or in an event
 handler that explicitly transitions the parent. See
 [effects-scheduling](effects-scheduling.md) for cleanup ordering.
 
-### Subscribing to events from a parent that captures the wrong `this`
+### Subscribing to control events from a parent that captures the wrong `this`
 
-```csharp
-// Don't — captures the parent's `this` inside the child component.
-class Parent : Component
-{
-    public override Element Render() =>
-        Component<Child>().Set(c => c.Loaded += (s, e) => this.OnChildLoaded());
-}
+```csharp snippet="advanced/wrong-this-capture"
 ```
 
 `.Set(control => ...)` runs on every mount and update — every event
@@ -521,6 +465,11 @@ reference to a stale render's component instance after the parent has
 re-rendered. Two fixes: lift the handler to a stable `UseCallback`
 in the parent and pass it via [props](components.md), or use
 `.OnMount(...)` for a one-shot subscription with explicit cleanup.
+
+(`.Set` is generated per control-backed element — `ButtonElement.Set(Action<Button>)`,
+`TextBoxElement.Set(Action<TextBox>)`, and so on. Component elements returned by
+`Component<T>()` have no `.Set`; to reach a child's control, put the `.Set` on the
+control-backed element inside that child's own `Render`.)
 
 ### Reaching for `.Set` when a modifier exists
 

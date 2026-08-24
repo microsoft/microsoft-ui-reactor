@@ -1,7 +1,9 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Localization;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Windows.System;
 
 ReactorApp.Run<CommandingApp>("Commanding", width: 650, height: 550
@@ -260,6 +262,264 @@ class DontCreateInRender : Component
     }
 }
 // </snippet:dont-create-in-render>
+
+// <snippet:command-modifier>
+class CommandModifierExample : Component
+{
+    public override Element Render()
+    {
+        var saveCmd = new Command { Label = "Save", Execute = () => { } };
+
+        return VStack(12,
+            // Plain label — the factory is enough:
+            Button(saveCmd),
+
+            // Custom content — compose the layout, then bind the command:
+            Button(HStack(8, Icon(SymbolIcon("Save")), TextBlock("Save")))
+                .Command(saveCmd)
+        ).Padding(24);
+    }
+}
+// </snippet:command-modifier>
+
+// <snippet:binding-paths>
+class BindingPathsExample : Component
+{
+    public override Element Render()
+    {
+        var saveCmd = new Command { Label = "Save", Execute = () => { } };
+
+        return VStack(12,
+            // Factory — plain label:
+            Button(saveCmd),
+
+            // Modifier — custom content:
+            Button(HStack(8, Icon(SymbolIcon("Save")), TextBlock("Save"))).Command(saveCmd),
+
+            // Record-init — the typed property is public (the Label ctor arg is required):
+            new ButtonElement(saveCmd.Label) { Command = saveCmd },
+
+            // `with` on an existing element hits the same property:
+            Button("Save") with { Command = saveCmd },
+
+            // The typed property also covers the split buttons:
+            new SplitButtonElement(saveCmd.Label) { Command = saveCmd }
+        ).Padding(24);
+    }
+}
+// </snippet:binding-paths>
+
+// <snippet:debounce-ms>
+class DebounceExample : Component
+{
+    public override Element Render()
+    {
+        var (runs, setRuns) = UseState(0);
+
+        // Sync action + framework-managed debounce — no fake async, no Task.Delay.
+        var runCmd = UseCommand(new Command
+        {
+            Label = "Run",
+            Execute = () => setRuns(runs + 1),
+            DebounceMs = 1500,
+        });
+
+        // Async action — IsExecuting still tracks the lambda; DebounceMs keeps the
+        // button disabled past the lambda's return (the disabled window is the
+        // longer of the two).
+        var regenCmd = UseCommand(new Command
+        {
+            Label = "Re-gen",
+            ExecuteAsync = () => { setRuns(runs + 1); return Task.CompletedTask; },
+            DebounceMs = 250,
+        });
+
+        return VStack(12,
+            HStack(8, Button(runCmd), Button(regenCmd)),
+            TextBlock($"Fired {runs} time(s)").Foreground(Theme.SecondaryText)
+        ).Padding(24);
+    }
+}
+// </snippet:debounce-ms>
+
+// <snippet:menuitem-parameterized>
+class MenuItemParameterizedExample : Component
+{
+    public override Element Render()
+    {
+        var (log, setLog) = UseState("");
+        var item = new TodoItem(1, "Buy milk");
+
+        var deleteCommand = new Command<TodoItem>
+        {
+            Label = "Delete",
+            Execute = i => setLog($"Deleted {i.Title}"),
+        };
+        var renameCommand = new Command<TodoItem>
+        {
+            Label = "Rename",
+            Execute = i => setLog($"Renamed {i.Title}"),
+        };
+
+        // The row content is the flyout target; each MenuItem carries the row's data.
+        return VStack(8,
+            MenuFlyout(TextBlock(item.Title).Padding(8),
+                MenuItem(deleteCommand, item),
+                MenuItem(renameCommand, item)),
+            TextBlock(log).Foreground(Theme.SecondaryText)
+        ).Padding(24);
+    }
+}
+// </snippet:menuitem-parameterized>
+
+// <snippet:accelerator-scope>
+class AcceleratorScopeExample : Component
+{
+    public override Element Render()
+    {
+        var (saves, setSaves) = UseState(0);
+
+        var save = new Command
+        {
+            Label = "Save",
+            Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
+            Execute = () => setSaves(saves + 1),
+        };
+
+        // Window-scoped via MenuBar at the root.
+        return VStack(0,
+            MenuBar(Menu("File", MenuItem(save))),
+            TextBlock($"Saved {saves} time(s)").Padding(16));
+    }
+}
+// </snippet:accelerator-scope>
+
+// <snippet:three-surfaces>
+class ThreeSurfacesExample : Component
+{
+    public override Element Render()
+    {
+        var (saves, setSaves) = UseState(0);
+
+        var save = new Command
+        {
+            Label = "Save",
+            Icon = SymbolIcon("Save"),
+            Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
+            ExecuteAsync = () => { setSaves(saves + 1); return Task.CompletedTask; },
+        };
+        var saveWrapped = UseCommand(save);
+
+        return VStack(0,
+            MenuBar(Menu("File", MenuItem(saveWrapped))),
+            CommandBar(primaryCommands: new[] { AppBarButton(saveWrapped) }),
+            TextBlock($"Saved {saves} time(s)").Padding(16));
+    }
+}
+// </snippet:three-surfaces>
+
+// <snippet:canexecute-dont>
+class CanExecuteDontExample : Component
+{
+    public override Element Render()
+    {
+        var (text, setText) = UseState("");
+
+        // Don't — the guard hides inside Execute, so every surface still
+        // looks enabled and the user clicks expecting an action.
+        var save = new Command
+        {
+            Label = "Save",
+            Execute = () => { if (text.Length > 0) Save(); },
+        };
+
+        return VStack(12, TextBox(text, setText).Width(300), Button(save))
+            .Padding(24);
+
+        void Save() { }
+    }
+}
+// </snippet:canexecute-dont>
+
+// <snippet:canexecute-do>
+class CanExecuteDoExample : Component
+{
+    public override Element Render()
+    {
+        var (text, setText) = UseState("");
+
+        // Do — promote the predicate to CanExecute so every surface
+        // disables together.
+        var save = new Command
+        {
+            Label = "Save",
+            Execute = Save,
+            CanExecute = text.Length > 0,
+        };
+
+        return VStack(12, TextBox(text, setText).Width(300), Button(save))
+            .Padding(24);
+
+        void Save() { }
+    }
+}
+// </snippet:canexecute-do>
+
+// <snippet:async-confirm-dialog>
+class AsyncConfirmDialogExample : Component
+{
+    public override Element Render() => Memo(ctx =>
+    {
+        var (open, setOpen) = ctx.UseState(false);
+        var (status, setStatus) = ctx.UseState("Ready");
+
+        var delete = ctx.UseCommand(new Command
+        {
+            Label = "Delete",
+            ExecuteAsync = async () =>
+            {
+                await Task.Delay(500);   // stands in for api.DeleteAsync(id)
+                setStatus("Deleted");
+                setOpen(false);
+            },
+        });
+
+        return VStack(12,
+            Button("Delete…", () => setOpen(true)),
+            TextBlock(status).Foreground(Theme.SecondaryText),
+            ContentDialog("Delete?", TextBlock("This cannot be undone."),
+                    primaryButtonText: "Delete") with
+            {
+                IsOpen = open,
+                IsPrimaryButtonEnabled = delete.IsEnabled,
+                OnClosed = r =>
+                {
+                    if (r == ContentDialogResult.Primary) delete.Execute?.Invoke();
+                    else setOpen(false);
+                },
+            }
+        ).Padding(24);
+    });
+}
+// </snippet:async-confirm-dialog>
+
+// <snippet:localized-command>
+class LocalizedCommandExample : Component
+{
+    public override Element Render()
+    {
+        var intl = UseIntl();
+
+        var save = StandardCommand.Save(() => { }) with
+        {
+            Label = intl.Message(new MessageKey("Commands", "save.button")),
+            Description = intl.Message(new MessageKey("Commands", "save.tooltip")),
+        };
+
+        return VStack(12, Button(save)).Padding(24);
+    }
+}
+// </snippet:localized-command>
 
 // Main app
 class CommandingApp : Component

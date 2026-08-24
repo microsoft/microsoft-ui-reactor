@@ -112,13 +112,7 @@ richer content — an icon next to a label, a stacked layout, or any custom
 element tree — build the button from content and attach the command with
 the `.Command(command)` fluent modifier:
 
-```csharp
-// Plain label — the factory is enough:
-Button(saveCmd)
-
-// Custom content — compose the layout, then bind the command:
-Button(HStack(Icon(SymbolIcon("Save")), Text("Save")))
-    .Command(saveCmd)
+```csharp snippet="commanding/command-modifier"
 ```
 
 `.Command()` wires the same synchronized-state contract as the factory:
@@ -146,18 +140,7 @@ property on the element record. That property is public, so you can also set
 it directly with a record initializer — every path below binds identically:
 the action dispatches on click and `IsEnabled` is applied from the command.
 
-```csharp
-// Factory — plain label:
-Button(saveCmd)
-
-// Modifier — custom content:
-Button(HStack(Icon(SymbolIcon("Save")), Text("Save"))).Command(saveCmd)
-
-// Record-init — the typed property is public (the Label ctor arg is required):
-new ButtonElement(saveCmd.Label) { Command = saveCmd }
-
-// `with` on an existing element hits the same property:
-Button("Save") with { Command = saveCmd }
+```csharp snippet="commanding/binding-paths"
 ```
 
 The typed `Command` property is available on all six command-capable
@@ -232,24 +215,7 @@ fire within `DebounceMs` of it is dropped, and `IsEnabled` reports
 `false` for the duration so the bound control visibly disables and then
 re-enables when the window elapses.
 
-```csharp
-// Sync action + framework-managed debounce — no fake async, no Task.Delay.
-var runCmd = UseCommand(new Command
-{
-    Label = "Run",
-    Execute = () => RunStep(step),
-    DebounceMs = 1500,
-});
-
-// Async action — IsExecuting still tracks the lambda; DebounceMs keeps the
-// button disabled past the lambda's return (the disabled window is the
-// longer of the two).
-var regenCmd = UseCommand(new Command
-{
-    Label = "Re-gen",
-    ExecuteAsync = () => { RegenFromHere(step); return Task.CompletedTask; },
-    DebounceMs = 250,
-});
+```csharp snippet="commanding/debounce-ms"
 ```
 
 <!-- ai:caveat -->
@@ -282,10 +248,7 @@ The action receives the argument from the call site:
 For menu integration, the variadic `MenuItem(Command<T>, T parameter)`
 overload binds the row's data to the menu item:
 
-```csharp
-MenuFlyout(rowContent,
-    MenuItem(deleteCommand, item),
-    MenuItem(renameCommand, item))
+```csharp snippet="commanding/menuitem-parameterized"
 ```
 
 This is the same shape as the [right-click on a list row
@@ -334,18 +297,7 @@ command from a `MenuBar` or `CommandBar` at the window root — both
 attach their accelerators to the window's `KeyboardAccelerators`
 collection, which is window-scoped.
 
-```csharp
-var save = new Command
-{
-    Label = "Save",
-    Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
-    Execute = () => SaveDocument(),
-};
-
-// Window-scoped via MenuBar at the root.
-return VStack(0,
-    MenuBar(Menu("File", MenuItem(save))),
-    content);
+```csharp snippet="commanding/accelerator-scope"
 ```
 
 For a command palette-style global shortcut catalog, see
@@ -360,27 +312,7 @@ the dialog stays open until the await completes, the primary disables
 mid-flight. Wrap with `UseCommand`, bind `IsPrimaryButtonEnabled` to
 `command.IsEnabled`, and close the dialog from inside the async body:
 
-```csharp
-var delete = ctx.UseCommand(new Command
-{
-    Label = "Delete",
-    ExecuteAsync = async () =>
-    {
-        await api.DeleteAsync(id);
-        setOpen(false);
-    },
-});
-
-ContentDialog("Delete?", body, primaryButtonText: "Delete") with
-{
-    IsOpen = open,
-    IsPrimaryButtonEnabled = delete.IsEnabled,
-    OnClosed = r =>
-    {
-        if (r == ContentDialogResult.Primary) delete.Execute?.Invoke();
-        else setOpen(false);
-    },
-}
+```csharp snippet="commanding/async-confirm-dialog"
 ```
 
 See [dialogs and flyouts](dialogs-and-flyouts.md) for the full pattern.
@@ -390,15 +322,11 @@ See [dialogs and flyouts](dialogs-and-flyouts.md) for the full pattern.
 `StandardCommand` presets ship with English labels. Override per render
 using the `with { ... }` expression on the returned record:
 
-```csharp
-var save = StandardCommand.Save(action) with
-{
-    Label = intl.Get("save.button"),
-    Description = intl.Get("save.tooltip"),
-};
+```csharp snippet="commanding/localized-command"
 ```
 
-See [localization](localization.md) for the `UseIntl` accessor.
+See [localization](localization.md) for the `UseIntl` accessor and the
+`MessageKey` namespace/key shape.
 
 ### One command, three surfaces, one accelerator
 
@@ -406,20 +334,7 @@ The shape that motivates the whole model — Ctrl+S triggers the same
 action whether the user pressed it from the editor body, opened the
 File menu and clicked Save, or clicked the toolbar Save button:
 
-```csharp
-var save = new Command
-{
-    Label = "Save",
-    Icon = SymbolIcon("Save"),
-    Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
-    ExecuteAsync = SaveDocumentAsync,
-};
-var saveWrapped = UseCommand(save);
-
-return VStack(0,
-    MenuBar(Menu("File", MenuItem(saveWrapped))),
-    CommandBar(primaryCommands: new[] { AppBarButton(saveWrapped) }),
-    editorBody);
+```csharp snippet="commanding/three-surfaces"
 ```
 
 ## Common Mistakes
@@ -441,13 +356,7 @@ above the component.
 
 ### Ignoring CanExecute changes
 
-```csharp
-// Don't:
-var save = new Command
-{
-    Label = "Save",
-    Execute = () => { if (form.IsValid) Save(); },
-};
+```csharp snippet="commanding/canexecute-dont"
 ```
 
 Pushing the guard inside `Execute` works but loses the synchronized
@@ -455,13 +364,7 @@ disable across surfaces — the toolbar button stays *enabled-looking*,
 the menu item is still focusable, and the user clicks expecting an
 action. Promote the predicate to `CanExecute`:
 
-```csharp
-var save = new Command
-{
-    Label = "Save",
-    Execute = Save,
-    CanExecute = form.IsValid,
-};
+```csharp snippet="commanding/canexecute-do"
 ```
 
 Now the button greys out, the menu item disables, and the accelerator
