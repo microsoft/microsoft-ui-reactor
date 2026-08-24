@@ -126,11 +126,13 @@ of leaving you at an error fallback.
 ### When migration misbehaves
 
 State migration is best-effort. If an unusual edit leaves a component in a
-bad state, force a clean "lose everything, remount fresh" reload from your
-app: call `HotReloadService.ResetAllContexts()`, which runs every live
-context's pending cleanups, clears its hook list, and re-renders so hooks
-re-mount from scratch. Reach for it only when the targeted migration above
-doesn't produce the result you expect.
+bad state, the recovery is a full restart: stop `dotnet watch` and start
+it again, which remounts every hook from scratch. The runtime's own
+"lose everything, remount fresh" path (`HotReloadService.ResetAllContexts`)
+is internal to the framework and runs automatically when a hook-shape
+change is detected — it is not an API your app calls. Reach for a
+restart only when the targeted migration above doesn't produce the
+result you expect.
 
 ### NativeAOT builds
 
@@ -171,33 +173,63 @@ subcommands map one-to-one to the workflows below.
 
 | Subcommand | Purpose | Common invocation |
 |------------|---------|-------------------|
-| `mur docs` | Compile the docset (templates + doc apps → `docs/guide/`) | `mur docs compile` |
+| `mur docs compile` | Compile the docset (templates + doc apps → `docs/guide/`) | `mur docs compile` |
+| `mur docs check-tier` | Run only the tier lint, without cross-link / reference / emit | `mur docs check-tier --topic hooks` |
 | `mur docs render-diagrams` | Render `.mmd` Mermaid diagrams to `.svg` for fast inner-loop iteration | `mur docs render-diagrams --topic architecture-overview` |
 | `mur docs new-diagram <topic> <id>` | Scaffold a new Mermaid `.mmd` for a topic | `mur docs new-diagram hooks slot-table` |
-| `mur loc` | Run the localization pipeline (extract strings, validate `.resw`, generate manifests) | `mur loc extract` |
-| `mur devtools` | Start the MCP server for VS Code or agent integration | `mur devtools serve` |
+| `mur loc` | Run the localization pipeline (`extract`, `translate`, `validate`, `status`, `prune`) | `mur loc extract` |
+| `mur devtools` | Launch the project with `--devtools run`, supervise reloads, and host the MCP endpoint | `mur devtools` |
 | `mur check` | Repo-health checks (cref validity, namespace policy, "did you mean" suggestions) | `mur check` |
+| `mur doctor` | Verify the install — SDK, `mur`, local feed, template, plugin | `mur doctor` |
+| `mur upgrade` | Re-pack framework + templates and refresh the plugin after a `git pull` | `mur upgrade` |
+| `mur figma watch` | Poll a Figma file for design changes | `mur figma watch` |
 | `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for source-built framework smoke tests; the app template defaults to the public Reactor preview unless `--MSUIReactorVersion` is supplied | `mur pack-local` |
+
+Beyond the subcommands there are four top-level options worth knowing:
+`mur --create <Name>` scaffolds a new Reactor project, `mur --skill`
+prints the embedded `SKILL.md` agent reference, `mur --api` prints the
+`reactor.api.txt` signatures index, and `mur --regen-api` regenerates
+that index from a source checkout.
 
 `mur docs compile` is the workflow you reach for most often. See
 [the doc-pipeline contributor guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
-for the full surface and the `--validate-only`, `--skip-screenshots`,
-`--skip-diagrams`, `--skip-reference`, and `--tier=<stub|solid|comprehensive>`
+for the full surface and the `--validate-only`, `--no-screenshots`
+(alias `--skip-screenshots`), `--skip-diagrams`, `--no-build`,
+`--skip-reference`, and `--tier <stub|solid|comprehensive>`
 flags that make the inner loop fast.
 
 ## MCP Server
 
-`mur devtools serve` starts a [Model Context Protocol](https://modelcontextprotocol.io/)
-server that surfaces a small inventory of the running Reactor universe to
-an external agent or editor: the doc topic list, the API reference index,
-diagnostic-rule descriptions, and a `compile` action that wraps
-`mur docs compile`. The server is **not** auto-started by `dotnet watch` —
-you launch it explicitly when you want agent integration.
+`mur devtools` launches your project with `--devtools run`, supervises
+it across reloads, and pins a [Model Context Protocol](https://modelcontextprotocol.io/)
+endpoint that an external agent or editor can attach to. The endpoint
+surfaces the **running app**, not the repo: window list, visual tree,
+screenshots, hook state, log ring buffer, and a set of UIA-backed
+verbs (`click`, `type`, `focus`, `toggle`, `select`, `scroll`, `wait`)
+that drive the live UI.
+
+```
+mur devtools                     # launch + supervise; prints MCP_ENDPOINT
+mur devtools --mcp-port 9000     # pin the port across reloads
+mur devtools --print-config      # emit MCP config for Claude Code / VS Code / Copilot
+```
+
+The same verbs are available from the CLI without an agent — each one
+attaches to the running session through lockfile discovery:
+
+```
+mur devtools tree --view summary
+mur devtools screenshot --out shot.png
+mur devtools click "Button[Increment]"
+mur devtools session list
+```
+
+There is no `mur devtools serve` subcommand, and nothing is
+auto-started by `dotnet watch` — `mur devtools` *is* the launcher, so
+run it instead of `dotnet watch run` when you want agent integration.
 
 The deeper protocol surface lives in
-[DevTools Internals](devtools-internals.md). The
-[`docs/contributing/devtools.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/devtools.md) guide is
-the operational reference (how to plug it into Claude Desktop / VS Code).
+[DevTools Internals](devtools-internals.md).
 
 ## VS Code Panel
 
@@ -216,10 +248,12 @@ a side panel that:
   [focus &amp; input internals](focus-and-input-internals.md).
 - Exposes a "compile docs" button that shells out to `mur docs compile`.
 
-The extension talks to the MCP server (above), so a panel session is
-just a long-lived `mur devtools serve` plus a UI on top. Reactor has
+The extension talks to the MCP endpoint (above), so a panel session is
+just a long-lived `mur devtools` process plus a UI on top. Reactor has
 no special editor requirement beyond the standard C# Dev Kit — the
-panel is additive.
+panel is additive. For the interactive Visual Studio alternative that
+embeds the real WinUI surface instead of streaming screenshots, see
+[Visual Studio Embedded Preview](vs-extension.md).
 
 When you use **Reactor: Connect to Preview** against an already-running
 preview process, enter both the `CAPTURE_PORT=...` and `CAPTURE_TOKEN=...`
@@ -253,17 +287,34 @@ combine:
    myapp.exe --devtools app
    ```
 
-`UseDevtools()` returns `true` only when **both** are present. Gate
-any dev-only element with a ternary in `Render()`:
+`UseDevtools()` returns `true` only when **both** are present. It is a
+`RenderContext` extension, so you call it from a
+[function component](components.md)'s `ctx` — or from any helper you
+hand the `ctx` to — and gate the dev-only element with a ternary:
 
 ```csharp
-public override Element Render()
+static class DevGate
 {
-    var dev = ctx.UseDevtools();
-    return VStack(
-        MainContent(),
-        dev ? DebugOverlay() : null
-    );
+    // UseDevtools() is a RenderContext extension, so it is reached from a
+    // function component's ctx (or any helper you hand the ctx to) — there is
+    // no Component-level forwarder. It returns true only when BOTH the
+    // Reactor.DevtoolsSupport build switch and `--devtools app` are present.
+    public static Element Shell(RenderContext ctx)
+    {
+        var dev = ctx.UseDevtools();
+
+        return VStack(8,
+            MainContent(),
+            dev ? DebugOverlay() : Empty()
+        );
+    }
+
+    private static Element MainContent() => TextBlock("App content");
+
+    // Only *constructed* when dev is true. In retail the ternary costs one
+    // bool read plus one branch — no element tree, no children reconciled.
+    private static Element DebugOverlay() =>
+        TextBlock("debug overlay").Opacity(0.6);
 }
 ```
 
@@ -274,20 +325,35 @@ allocated, no children reconciled. The cost model carries over to
 titlebar item only when `UseDevtools()` is true:
 
 ```csharp
-class TitleBar : Component
+static class DevMenu
 {
-    public override Element Render() => HStack(
-        Text("My App"), Spacer(),
-        DevtoolsMenu(() => new MenuFlyoutItemBase[]
-        {
-            ToggleMenuItem("Debug UI",
-                AppFlags.DebugUI.Value,
-                v => AppFlags.DebugUI.Value = v),
-            MenuSeparator(),
-            MenuItem("Clear cache", () => CacheService.Clear()),
-            MenuItem("Reload",      () => Application.Current.Reload()),
-        })
-    );
+    public static Element TitleBar(RenderContext ctx)
+    {
+        // Subscribe during render — not inside the menu builder. The builder
+        // lambda runs when the flyout opens, which is not a render pass, so a
+        // hook call in there would break hook ordering.
+        var debugUI = ctx.UseObservable(AppFlags.DebugUI).Value;
+
+        return HStack(8,
+            TextBlock("My App"),
+            // DevtoolsMenu renders itself as a titlebar item only when
+            // UseDevtools() is true, so the same cost model carries over.
+            DevtoolsMenu(() => new MenuFlyoutItemBase[]
+            {
+                ToggleMenuItem("Debug UI", debugUI,
+                    v => AppFlags.DebugUI.Value = v),
+                MenuSeparator(),
+                MenuItem("Clear cache", () => CacheService.Clear()),
+                MenuItem("Slow mode off", () => AppFlags.SlowMode.Value = false),
+            })
+        );
+    }
+}
+
+// Stand-in for whatever your app actually caches.
+static class CacheService
+{
+    public static void Clear() { }
 }
 ```
 
@@ -295,16 +361,20 @@ class TitleBar : Component
 `AppFlags.DebugUI`. Declare them as `static readonly` fields:
 
 ```csharp
+// Observable<T> is the lightweight INPC cell that backs dev-only flags.
+// Declare them as static readonly so every component shares one instance.
 public static class AppFlags
 {
-    public static readonly Observable<bool> DebugUI   = new(false);
-    public static readonly Observable<bool> SlowMode  = new(false);
+    public static readonly Observable<bool> DebugUI = new(false);
+    public static readonly Observable<bool> SlowMode = new(false);
     public static readonly Observable<bool> ForceDark = new(false);
 }
 ```
 
 Any component that wants to react to changes subscribes via
-`ctx.UseObservable(AppFlags.DebugUI).Value` — see
+`ctx.UseObservable(AppFlags.DebugUI).Value` **during render** — not
+inside the `DevtoolsMenu` builder lambda, which runs when the flyout
+opens rather than during a render pass. See
 [Advanced Patterns](advanced.md) for the broader observable-binding
 story.
 
@@ -409,13 +479,13 @@ without resetting your state.
 
 ### Treating the in-app dev menu as the only devtools surface
 
-The `mur devtools serve` MCP server and the VS Code panel are
+The `mur devtools` MCP endpoint and the VS Code panel are
 **separate** surfaces from the in-app menu. They observe a running
 app from the outside; the in-app menu observes the runtime from
 inside the app itself. Build-time capability (`Reactor.DevtoolsSupport`)
 plus `--devtools app` opens the in-app menu, while the external MCP
-server still requires a separate `mur devtools serve` invocation — don't
-expect it to start automatically.
+endpoint requires launching through `mur devtools` instead of a bare
+`dotnet watch run` — don't expect it to start automatically.
 
 ## Tips
 

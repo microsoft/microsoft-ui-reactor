@@ -57,7 +57,8 @@ mirror is `[Conditional("DEBUG")]` and compiles out in Release.
 
 The provider's events split across a small set of keywords; spec 044
 adds six subsystem keywords on top of the seven the perf-instrumentation
-page documents. Pick the bits that match what you're triaging:
+page documents, and spec 049 added a seventh (`HotReload`). Pick the
+bits that match what you're triaging:
 
 | Keyword | Bit | Covers |
 |---|---|---|
@@ -68,11 +69,14 @@ page documents. Pick the bits that match what you're triaging:
 | `Intl` | `0x400` | `IntlMissingKey` |
 | `Theme` | `0x800` | `ThemeApplyFailed` |
 | `Shell` | `0x1000` | `JumpList*` / `ThumbnailToolbar*` / `Tray*` (planned) |
+| `HotReload` | `0x2000` | Hook-state migration across edits (spec 049) |
 
 Combine bits with bitwise-or. The most common capture-everything-
 unsurprising mask is `0x1FA0` (`Errors | Hosting | Persistence |
 Navigation | Intl | Theme`) — drops the verbose `State` and
-`EventDispatch` keywords that produce per-state-write spam.
+`EventDispatch` keywords that produce per-state-write spam. Add
+`0x2000` when you are debugging why hot reload reset a component's
+state.
 
 ## Capturing a trace
 
@@ -221,15 +225,15 @@ The relevant entries will look like:
 
 ```
 SwallowedError  category=Hosting  operation=AppWindow.Close  exceptionType=COMException
-HResultFailed   category=Hosting  operation=AppWindow.Close  hr=0x80004005
+HResultFailed   category=Hosting  operation=AppWindow.Close  hr=0x80010108
 ```
 
 The operation label is stable and developer-authored — search the
 Reactor source for `"AppWindow.Close"` and you land on the
 `DiagnosticLog.SwallowedError` call site. The exception type and HR
-together pin the failure class (in this case, `E_FAIL` from the
-WinUI AppWindow lifecycle) without ever leaking the user-visible
-window title.
+together pin the failure class (in this case, `RPC_E_DISCONNECTED` —
+the AppWindow COM proxy was torn down before the call landed) without
+ever leaking the user-visible window title.
 
 ### Wiring `ReactorTrace.Subscribe` to a per-window debug overlay
 
@@ -239,6 +243,10 @@ now" doesn't need a file capture — just an in-process subscription:
 ```csharp
 public sealed class NavigationOverlay : IDisposable
 {
+    // ReactorEventSource is internal to Reactor, so an app names the
+    // keyword by its documented bit value rather than by symbol.
+    private const EventKeywords NavigationKeyword = (EventKeywords)0x200;
+
     private readonly IDisposable _subscription;
     private readonly Queue<string> _ring = new();
 
@@ -247,7 +255,6 @@ public sealed class NavigationOverlay : IDisposable
         _subscription = ReactorTrace.Subscribe(
             evt =>
             {
-                if ((evt.Keywords & ReactorEventSource.Keywords.Navigation) == 0) return;
                 var line = $"{evt.EventName} {string.Join(' ',
                     Enumerable.Range(0, evt.Payload.Count)
                         .Select(i => $"{evt.PayloadNames[i]}={evt.Payload[i]}"))}";
@@ -258,12 +265,15 @@ public sealed class NavigationOverlay : IDisposable
                 }
             },
             level: EventLevel.Verbose,
-            keywords: ReactorEventSource.Keywords.Navigation);
+            keywords: NavigationKeyword);
     }
 
     public void Dispose() => _subscription.Dispose();
 }
 ```
+
+`Subscribe` already applies the keyword mask, so the callback does not
+re-check `evt.Keywords`.
 
 The callback runs on the dispatcher (most navigation events
 originate there) — for a UI overlay that's actually what you want.
@@ -284,9 +294,9 @@ catch (Exception ex)
 ```
 
 ```csharp
-// Do:
+// Do (framework code):
 try { window.AppWindow.Close(); }
-catch (COMException ex) when (ex.HResult is HResults.RPC_E_DISCONNECTED or HResults.E_FAIL)
+catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
 {
     DiagnosticLog.SwallowedError(LogCategory.Hosting, "AppWindow.Close", ex);
 }
@@ -297,9 +307,20 @@ emits to `Microsoft-UI-Reactor` under `Keywords.Errors` at `Warning`
 in Release (zero allocation when no consumer is attached) *and*
 mirrors a richer line including `ex.Message` to `Debug.WriteLine`
 in Debug builds. The narrow `catch` filter is the deliberate part:
-spec 044 §6.7.2 calls for `catch (COMException) when (ex.HResult is
+spec 044 §6.7.2 calls for `catch (COMException ex) when (ex.HResult is
 HResults.X or HResults.Y)` — never a bare `catch (COMException)`,
 because the bug-class HRESULTs need to keep propagating.
+`HResults.IsTeardownReentry` bundles the standard four
+(`RPC_E_DISCONNECTED`, `E_HANDLE`, `RPC_E_SERVERFAULT`,
+`CO_E_OBJNOTCONNECTED`); name individual constants when a call site
+needs a different set.
+
+> **Caveat:** `DiagnosticLog`, `LogCategory`, `HResults`, and `ReactorEventSource`
+> are **internal to the Reactor assembly** — this pattern is the
+> contract for framework code, not an API your app calls. An app that
+> wants the same discipline should route its own swallows through its
+> own logger; what an app consumes from Reactor is the *event stream*,
+> via the four capture routes above.
 
 ### Capturing without pinning the level
 

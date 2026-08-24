@@ -2,8 +2,9 @@
 # Recipes
 
 A recipe is a small composition of Microsoft.UI.Reactor (Reactor) primitives that solves a
-real UI problem — login, master-detail, settings, modal confirmation,
-search-with-suggestions. The recipes here are not exhaustive apps;
+real UI problem — login, master-detail, settings, paginated list,
+modal confirmation, multi-step form, search-with-suggestions, command
+palette, drag-to-reorder. The recipes here are not exhaustive apps;
 each is a single screen showing the pattern, and each ships a tiny
 doc app you can clone and adapt.
 
@@ -53,18 +54,15 @@ class GalleryShape : Component
 
 | Recipe | What it shows |
 |---|---|
-| [Login](login.md) | Validation, async submit with optimistic UI, error display. |
+| [Login](login.md) | Per-keystroke validation, `UseMutation`-owned submit state, error display. |
 | [Master-detail](master-detail.md) | Two-pane selection-driven layout from a list and a record. |
 | [Settings page](settings-page.md) | Per-key `UsePersisted` for `Toggle` / `ComboBox` / `Slider`. |
+| [Paginated list](paginated-list.md) | `UseInfiniteResource` with empty / loading / error states and a load-more sentinel. |
 | [Modal dialog](modal-dialog.md) | Confirmation pattern with scrim and conditional render. |
-| [Search with suggestions](search-with-suggestions.md) | `UseMemo`-debounced suggestion list against a static catalog. |
-| Paginated list *(Phase 2.5)* | Coming soon — page cursor + lazy-load. |
-| Multi-step form *(Phase 2.5)* | Coming soon — wizard with per-step validation. |
-| Command palette *(Phase 2.5)* | Coming soon — Ctrl+K palette wired through `commanding`. |
-| Drag-reorder *(Phase 2.5)* | Coming soon — drag-handle list with optimistic reorder. |
-
-The "Phase 2.5" rows are stubs that ship in this docset so the gallery
-shape is visible and discoverable; the full recipes land in a follow-up.
+| [Multi-step form](multi-step-form.md) | Wizard navigation with per-step validation. |
+| [Search with suggestions](search-with-suggestions.md) | `UseMemo`-filtered suggestion list against a static catalog. |
+| [Command palette](command-palette.md) | Keyboard accelerator opening an overlay with a filtered command list. |
+| [Drag-reorder](drag-reorder.md) | Identity-preserving reorder of a keyed list, with a keyboard path. |
 
 ## How to read a recipe
 
@@ -85,12 +83,14 @@ snippet and replace the catalog data with yours.
 
 | Primitive | Used in |
 |---|---|
-| `UseState` | Every recipe. |
+| `UseState` | Most recipes. |
 | `UsePersisted` | [Settings](settings-page.md). |
 | `UseMemo` | [Search](search-with-suggestions.md). |
-| `UseEffect` + `Task` | [Login](login.md) (async submit). |
-| Conditional render | [Modal dialog](modal-dialog.md). |
+| `UseMutation` | [Login](login.md) — async submit, pending, error. |
+| `UseInfiniteResource` | [Paginated list](paginated-list.md). |
+| Conditional render | [Modal dialog](modal-dialog.md), [Command palette](command-palette.md). |
 | Two-pane HStack | [Master-detail](master-detail.md). |
+| Keyed children | [Drag-reorder](drag-reorder.md). |
 
 ## Tips
 
@@ -113,7 +113,9 @@ exist for shapes that span multiple controls and hooks.
 - **[Controls](../controls.md)** — Previous: the catalog of factories
   the recipes compose.
 - **[Forms](../forms.md)** — Forms-heavy recipes start here.
+- **[Async Resources](../async-resources.md)** — Behind the Login and
+  Paginated-list recipes.
 - **[Persistence](../persistence.md)** — Behind the Settings recipe.
-- **[Commanding](../commanding.md)** — Backs the (Phase 2.5) Command-palette recipe.
+- **[Commanding](../commanding.md)** — Backs the Command-palette recipe.
 - **[Navigation](../navigation.md)** — Recipes that span multiple
   screens lean on this.
