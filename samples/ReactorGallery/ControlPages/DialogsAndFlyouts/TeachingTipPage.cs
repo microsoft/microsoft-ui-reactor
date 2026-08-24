@@ -72,7 +72,7 @@ TeachingTip(""Did you know you can customize the title bar?"") with {
                                     OnClosed = () => setShowTargetedTip(false),
                                 })
                         ).Padding(16)),
-                    @"var target = UseElementRef<FrameworkElement>();
+                    @"var target = this.UseElementRef<FrameworkElement>();
 
 HStack(
     Border(Button(""Show anchored tip"", () => setShowTargetedTip(true)).Ref(target)),
