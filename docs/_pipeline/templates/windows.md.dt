@@ -28,13 +28,7 @@ for imperative lifecycle operations.
 ```csharp snippet="windows/run"
 ```
 
-```csharp
-var settings = ReactorApp.OpenWindow(
-    new WindowSpec { Title = "Settings", Width = 520, Height = 420 },
-    () => new SettingsWindow());
-
-settings.Activate();
-settings.Close();
+```csharp snippet="windows/open-window"
 ```
 
 Caveats:
@@ -65,18 +59,7 @@ to the OS. Runtime size is controlled by `SetSize`,
 chrome resize policy by `ResizeMode`, interactive aspect locks by `AspectRatio`,
 and content-driven sizing by `SizeToContent`.
 
-```csharp
-new WindowSpec
-{
-    Title = "Preview",
-    Width = 640,
-    Height = 360,
-    ResizeMode = WindowResizeMode.CanMinimize,
-    AspectRatio = 16.0 / 9.0,
-};
-
-window.SetAspectRatio(4.0 / 3.0);
-UseWindowAspectRatio(1.0); // lifetime-bound hook; unmount clears it
+```csharp snippet="windows/sizing"
 ```
 
 | API | Values / behavior |
@@ -100,26 +83,13 @@ Use `StartPosition` for initial placement, `SetPosition` for imperative moves,
 `Position` for read-back, and `PositionChanged` / `UseWindowPosition()` to react
 to live moves.
 
-```csharp
-var spec = new WindowSpec
-{
-    Title = "Command Palette",
-    StartPosition = WindowStartPosition.CenterOnCurrent,
-    IsMovableByBackground = true,
-};
-
-var (x, y) = UseWindowPosition();
-var drag = UseWindowDragMove();
-Button("Drag window", drag);
+```csharp snippet="windows/placement"
 ```
 
 `IsMovableByBackground` starts the OS move loop when a non-interactive part of
 the root is pressed. Mark custom interactive regions with `.Drag(false)`:
 
-```csharp
-HStack(
-    TextBlock("Palette"),
-    Button("Settings").Drag(false));
+```csharp snippet="windows/drag-regions"
 ```
 
 Placement options:
@@ -134,11 +104,7 @@ Placement options:
 
 Persistence is opt-in and explicit:
 
-```csharp
-var spec = new WindowSpec { Title = "Shell" }
-    .WithPersistence("main-window", fallback: WindowStartPosition.CenterOnCurrent);
-
-window.SavePlacement(); // manual best-effort flush
+```csharp snippet="windows/persistence"
 ```
 
 Caveats:
@@ -154,16 +120,7 @@ Caveats:
 separate because the taskbar button and Alt-Tab visibility are separate shell
 concepts.
 
-```csharp
-new WindowSpec
-{
-    Title = "Palette",
-    Level = WindowLevel.Floating,
-    ShowInTaskbar = false,
-    ShowInSwitcher = true,
-};
-
-var isCovered = UseIsCovered(); // hint from ZOrderChanged
+```csharp snippet="windows/z-order"
 ```
 
 | `WindowLevel` | Behavior |
@@ -192,15 +149,7 @@ Caveats:
 DWM corner preference. Backdrops are applied either on `WindowSpec.Backdrop` or
 with a root `.Backdrop(...)` modifier.
 
-```csharp
-new WindowSpec
-{
-    Title = "HUD",
-    Style = WindowStyle.None,
-    IsMovableByBackground = true,
-    CornerStyle = WindowCornerStyle.Rounded,
-    Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic),
-};
+```csharp snippet="windows/chrome"
 ```
 
 | API | Values |
@@ -214,10 +163,7 @@ is `null` (the default), mounting a `TitleBar(...)` element automatically sets
 `Window.ExtendsContentIntoTitleBar = true`. Explicit `true` or `false` on the
 spec wins over inference.
 
-```csharp
-VStack(
-    TitleBar("My app"),
-    TextBlock("Body"));
+```csharp snippet="windows/title-bar"
 ```
 
 `TitleBar(...)` accepts custom `Content` (and a trailing `RightHeader`). Interactive
@@ -226,14 +172,7 @@ controls inside the content are excluded from the window drag region automatical
 visual clickable or `.IsDragRegion(true)` to force it draggable, and set
 `.AutoRefreshDragRegions()` on the title bar when the content changes across renders:
 
-```csharp
-(TitleBar("Gallery") with
-{
-    Content = HStack(8,
-        AutoSuggestBox("", _ => {}).Width(200),
-        Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
-            .AutomationName("Settings").IsDragRegion(false)),
-}).AutoRefreshDragRegions();
+```csharp snippet="windows/title-bar-content"
 ```
 
 ### Tall title bar
@@ -241,11 +180,7 @@ visual clickable or `.IsDragRegion(true)` to force it draggable, and set
 A title bar that hosts navigation chrome — a back button, a pane toggle — uses the
 tall (48 DIP) caption. `.Tall()` declares it:
 
-```csharp
-TitleBar("My app")
-    .WithNavigation(nav)
-    .PaneToggleButtonVisible(true)
-    .Tall();                                  // or .HeightOption(WindowTitleBarHeight.Tall)
+```csharp snippet="windows/title-bar-tall"
 ```
 
 This sets **both** halves, which is the part that is easy to get wrong by hand: the
@@ -258,13 +193,7 @@ The same knob exists on the spec, for windows that need it without a `TitleBar(.
 element (it requires content extension either way, and wins over the element's
 declaration when both are set):
 
-```csharp
-new WindowSpec
-{
-    Title = "My app",
-    ExtendsContentIntoTitleBar = true,
-    TitleBarHeight = WindowTitleBarHeight.Tall,
-};
+```csharp snippet="windows/title-bar-height-spec"
 ```
 
 | API | Values |
@@ -282,15 +211,7 @@ effect body.
 Earlier code — including the Windows App SDK `reactor-navview` template — re-posted
 the assignment onto the dispatcher queue:
 
-```csharp
-// Don't do this any more.
-var window = UseWindow();
-UseEffect(() =>
-{
-    if (window is not { } win) return;
-    win.NativeWindow?.DispatcherQueue.TryEnqueue(() =>
-        win.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall);
-});
+```csharp snippet="windows/title-bar-tall-legacy"
 ```
 
 Delete the whole effect and declare `.Tall()` instead.
@@ -326,17 +247,12 @@ Caveats:
 
 ## Taskbar integration
 
-`TaskbarItem` groups all taskbar features while keeping the older shortcuts on
-`ReactorWindow` for compatibility.
+`TaskbarItem` groups the per-window taskbar features while keeping the older
+shortcuts on `ReactorWindow` for compatibility. The jump list is the one
+taskbar surface that is *not* on `TaskbarItem`, because it is per-process
+rather than per-window — see [Jump list](#jump-list) below.
 
-```csharp
-var taskbar = UseWindow()!.TaskbarItem;
-taskbar.Description = "Build in progress";
-taskbar.Progress.State = TaskbarProgressState.Normal;
-taskbar.Progress.Value = 0.42;
-taskbar.SetThumbnailToolbar([
-    new ThumbnailToolbarButton("pause", WindowIcon.FromPath("pause.ico"), "Pause", () => Pause())
-]);
+```csharp snippet="windows/taskbar"
 ```
 
 Facade members:
@@ -353,14 +269,54 @@ Caveats:
 - Thumbnail toolbars support at most seven buttons.
 - Overlay icons need HICON-compatible sources; resource URIs are not overlay HICONs.
 
+### Jump list
+
+`JumpList` is a process-wide static: the shell attaches one list per
+application identity, not per window. `JumpList.UpdateAsync` replaces the
+whole list, and `JumpList.ClearAsync` removes it.
+
+Activating an entry re-launches the process with the entry's `Arguments`
+string. Reactor surfaces that as `LaunchKind.JumpList` on the
+`ReactorAppContext` handed to the `ReactorApp.Run(Action<ReactorAppContext>)`
+startup callback. The recommended convention is to put a deep-link URI in
+`Arguments` (that is what `JumpListItem.ForUri` is for) and resolve it through
+a [`DeepLinkMap<TRoute>`](navigation.md):
+
+```csharp snippet="windows/jump-list"
+```
+
+| API | Purpose |
+| --- | --- |
+| `JumpList.AppUserModelId` | Shell identity. Required before the first `UpdateAsync` on unpackaged apps; ignored under MSIX. |
+| `JumpList.ShowRecent` / `ShowFrequent` | Toggle the OS-managed categories. Contents are shell-owned. |
+| `JumpList.UpdateAsync(items)` | Replace the whole list. UI thread only. |
+| `JumpList.ClearAsync()` | Remove the app's entries. |
+| `JumpListItem.ForUri(...)` | Deep-link entry — `Arguments` is the URI. |
+| `JumpListItem.ForCommandLine(...)` | argv-style entry; escapes each value for `CommandLineToArgvW`. |
+| `JumpListItemKind` | `Task`, `Custom` (needs `GroupCategory`), `Separator` |
+
+Caveats:
+
+- **Argument strings round-trip through the shell into the next process
+  launch.** Reactor never auto-executes them. Validate through `DeepLinkMap`
+  before acting, and build entries carrying non-literal data with
+  `JumpListItem.ForCommandLine` so a hostile value cannot break out into a
+  neighbouring argv slot.
+- Jump-list entries, tray "Open", and thumbnail-toolbar buttons are
+  indistinguishable at the WinUI activation surface — all three arrive as
+  `LaunchKind.JumpList`. Encode any finer distinction in the URI itself.
+- Icons on the packaged path require `WindowIcon.FromResource`
+  (`ms-appx:///…`); `FromPath` values are silently ignored there.
+- `UpdateAsync` validates the whole batch before touching the shell, so one
+  bad entry never leaves a half-populated list behind. Non-separator entries
+  must have a non-empty `Title`.
+
 ## Displays
 
 `ReactorDisplay` exposes the current monitor layout in Reactor's DIP-oriented
 shape and raises `DisplayLayoutChanged` when Windows reports a layout change.
 
-```csharp
-var displays = UseDisplays();
-var nearest = ReactorDisplay.NearestTo(window.Position.X, window.Position.Y);
+```csharp snippet="windows/displays"
 ```
 
 `DisplayInfo` contains:
@@ -386,14 +342,7 @@ Picker hooks create WinUI storage pickers and initialize them with the owning
 window HWND, so the picker is modal to the correct window without app code doing
 HWND interop.
 
-```csharp
-async Task OpenAsync()
-{
-    var file = await UseFilePickerAsync(new FilePickerOptions(
-        FileTypeFilter: [".txt", ".md"]));
-}
-
-var folder = await UseFolderPickerAsync(new FolderPickerOptions());
+```csharp snippet="windows/pickers"
 ```
 
 Caveats:
@@ -403,6 +352,10 @@ Caveats:
 - Tests should inject the picker service rather than opening native dialogs.
 
 ## WPF / UWP migration map
+
+Coming from a pre-054 Reactor app instead? See
+[Migration: Windowing evolution](migration/054-windowing-evolution.md) for the
+fields that were removed and what replaced them.
 
 | Prior stack concept | Reactor 054 shape | Notes |
 | --- | --- | --- |
@@ -415,14 +368,12 @@ Caveats:
 | WPF taskbar visibility | `ShowInTaskbar` | Split from `ShowInSwitcher`. |
 | Manual settings persistence | `.WithPersistence(id)` | Opt-in, one line. |
 | `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. |
+| WPF `JumpTask` / `JumpList` | `JumpListItem` / `JumpList` | Process-wide, not per-window; `UpdateAsync` replaces the whole list. |
 | UWP/WinUI picker HWND setup | `UseFilePickerAsync` / `UseFolderPickerAsync` | Owning HWND is wired automatically. |
 
 ## Finding and enumerating windows
 
-```csharp
-ReactorApp.Windows          // IReadOnlyList<ReactorWindow> snapshot
-ReactorApp.PrimaryWindow    // first window opened, or null after it closes
-ReactorApp.FindWindow(key)  // look up by WindowKey
+```csharp snippet="windows/enumerate"
 ```
 
 Use `WindowKey` for any window you might want to find again. `UseOpenWindow`
@@ -464,6 +415,7 @@ transparency or arbitrary region corners, see [Advanced Windowing](windowing-adv
 ## Next Steps
 
 - **[Advanced Windowing](windowing-advanced.md)** — unsupported / interop-heavy window recipes
+- **[Migration: Windowing evolution](migration/054-windowing-evolution.md)** — the spec 054 breaking changes and their replacements
 - **[Docking Windows](docking.md)** — dock panes, floating document tear-outs, persistence
 - **[Persistence](persistence.md)** — persisted scopes beyond window placement
 - **[Dialogs and Flyouts](dialogs-and-flyouts.md)** — modal in-window UI

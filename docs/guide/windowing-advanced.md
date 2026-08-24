@@ -15,11 +15,20 @@ click-through. The WinUI XAML compositor does not compose cleanly with classic
 interop.
 
 ```csharp
-var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window.NativeWindow);
-var ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-SetWindowLongPtr(hwnd, GWL_EXSTYLE,
-    ex | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW);
-SetLayeredWindowAttributes(hwnd, 0, 160, LWA_ALPHA);
+const int GWL_EXSTYLE = -20;
+const nint WS_EX_TRANSPARENT = 0x00000020;
+const nint WS_EX_TOOLWINDOW = 0x00000080;
+const nint WS_EX_LAYERED = 0x00080000;
+const uint LWA_ALPHA = 0x00000002;
+
+public static void MakeClickThrough(ReactorWindow window)
+{
+    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window.NativeWindow);
+    var ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    SetWindowLongPtr(hwnd, GWL_EXSTYLE,
+        ex | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW);
+    SetLayeredWindowAttributes(hwnd, 0, 160, LWA_ALPHA);
+}
 ```
 
 Caveats:
@@ -34,21 +43,26 @@ A HUD-style surface can stay inside the supported Reactor contract when it only
 needs an aesthetic, not true transparency:
 
 ```csharp
-new WindowSpec
+static class HudWindow
 {
-    Title = "HUD",
-    Style = WindowStyle.None,
-    IsMovableByBackground = true,
-    Level = WindowLevel.Floating,
-    CornerStyle = WindowCornerStyle.Rounded,
-    Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic),
-};
+    public static WindowSpec Spec { get; } = new()
+    {
+        Title = "HUD",
+        Style = WindowStyle.None,
+        IsMovableByBackground = true,
+        Level = WindowLevel.Floating,
+        CornerStyle = WindowCornerStyle.Rounded,
+        Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic),
+    };
+}
 ```
 
 Render a dark-tinted root `Border`, add a custom `TitleBar(...)`, and keep the
-surface app-local with `WindowLevel.Floating`. A dedicated `samples/apps/hud-overlay/`
-may be added in a later sample-polish phase; until then, this snippet is the
-recommended shape.
+surface app-local with `WindowLevel.Floating`. The shipping
+`samples/apps/window-styles` app is the live counterpart: it toggles every
+`WindowStyle`, `WindowLevel`, `WindowCornerStyle`, and `BackdropKind` on one
+window so you can see the combination before committing to it, and
+`samples/apps/tool-palette` shows the same shape as a real palette window.
 
 Caveats:
 
@@ -63,8 +77,18 @@ DWM exposes only discrete corner preferences (`Default`, `Square`, `Rounded`,
 not a platform-quality default.
 
 ```csharp
-using var region = CreateRoundRectRgn(0, 0, widthPx, heightPx, radiusPx, radiusPx);
-SetWindowRgn(hwnd, region.DangerousGetHandle(), true);
+public static void ApplyRoundedRegion(nint hwnd, int widthPx, int heightPx, int radiusPx)
+{
+    var region = CreateRoundRectRgn(0, 0, widthPx, heightPx, radiusPx, radiusPx);
+    if (region == 0) return;
+
+    // SetWindowRgn transfers ownership of the HRGN to the system on
+    // success — the region must NOT be deleted afterwards. Delete it
+    // only when the call fails, or the next repaint reads freed GDI
+    // memory.
+    if (SetWindowRgn(hwnd, region, bRedraw: true) == 0)
+        DeleteObject(region);
+}
 ```
 
 Tradeoffs:
@@ -72,6 +96,10 @@ Tradeoffs:
 - DWM shadows are often lost or clipped.
 - Edges can be jagged at 100% DPI because regions are binary masks.
 - The region must be recomputed during resize, which can cause redraw cascades.
+- **The system takes ownership of the `HRGN` on a successful `SetWindowRgn`.**
+  Deleting it afterwards — or wrapping it in a `using` / `SafeHandle` that does —
+  frees GDI memory the compositor still reads. Delete the region only when
+  `SetWindowRgn` fails.
 
 Use this only for highly specialized shells that accept those costs.
 

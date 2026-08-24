@@ -213,7 +213,9 @@ use `ContentFactory` instead of `ComponentType`:
 
 The factory function runs on the UI thread after the XAML Island is ready.
 Return any `UIElement` — typically a `ReactorHostControl` wrapping your
-component.
+component. Note that `ComponentType` lives on `XamlIslandControl`, not on
+`ReactorHostControl`: inside a factory you set `ComponentFactory` for a
+parameterless component, or call `Mount(component)` when it takes arguments.
 
 ## Patterns
 

@@ -504,13 +504,16 @@ Reactor keeps that WinUI default. Opt in to a full-height tab body with
 TabView([
     Tab("Editor", Border(TextBlock("Editor")).Background(Theme.CardBackground)),
     Tab("Preview", TextBlock("Preview")),
-]).FillContentArea()
+]).FillContentArea();
 ```
 
 The init property is available for record-construction syntax too:
 
 ```csharp
-TabView([...]) with { FillContentArea = true }
+TabView([
+    Tab("Editor", TextBlock("Editor")),
+    Tab("Preview", TextBlock("Preview")),
+]) with { FillContentArea = true };
 ```
 
 An explicit `.VAlign(...)` on the `TabView` element always wins over the opt-in,

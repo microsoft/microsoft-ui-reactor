@@ -136,11 +136,13 @@ need a label and heading level.
 
 Some accessibility properties point at another realized element rather
 than a string. Use `ElementRef<FrameworkElement>` for those
-relationships:
+relationships. `UseElementRef<T>` is an extension on `Component` /
+`RenderContext`, so inside a component call it as `this.UseElementRef<T>()`
+(it lives in `Microsoft.UI.Reactor.Hooks`):
 
 ```csharp
-var label = UseElementRef<FrameworkElement>();
-var help = UseElementRef<FrameworkElement>();
+var label = this.UseElementRef<FrameworkElement>();
+var help = this.UseElementRef<FrameworkElement>();
 
 return VStack(4,
     TextBlock("Email").Ref(label),
@@ -537,7 +539,7 @@ ListView(contacts, c => c.Id, (contact, i) =>
     HStack(
         Image(contact.AvatarUrl).AccessibilityHidden(),
         VStack(TextBlock(contact.Name).Bold(), TextBlock(contact.Role))
-    ).AutomationName($"{contact.Name}, {contact.Role}"))
+    ).AutomationName($"{contact.Name}, {contact.Role}"));
 ```
 
 Leave it off when the composite already reads well descendant by
@@ -593,8 +595,8 @@ borders, redundant labels).
 
 ```csharp
 // Don't:
-TextBlock("Page Title").HeadingLevel(Level1),
-TextBlock("Subtle Detail").HeadingLevel(Level4)
+TextBlock("Page Title").HeadingLevel(AutomationHeadingLevel.Level1),
+TextBlock("Subtle Detail").HeadingLevel(AutomationHeadingLevel.Level4)
 ```
 
 Screen readers build a page outline by walking heading levels in
