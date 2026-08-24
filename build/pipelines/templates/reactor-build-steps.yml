@@ -237,7 +237,7 @@ steps:
     # already-restored packages, needing no network). `-p:CI=true` keeps
     # Copilot/SignaturesGen gated off for consistency.
     #
-    # AnalyzerTests are EXCLUDED here (`--filter "FullyQualifiedName!~AnalyzerTests"`).
+    # AnalyzerTests are EXCLUDED here (`--filter-not-class "*AnalyzerTests*"`).
     # They use the Microsoft.CodeAnalysis.Testing harness, which resolves .NET
     # reference-assembly packs (Microsoft.NETCore.App.Ref, etc.) at TEST RUNTIME via
     # NuGet `Settings.LoadDefaultSettings(root: null)` -- this reads only the USER/MACHINE

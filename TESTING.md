@@ -47,11 +47,21 @@ packages are already referenced by the projects that need them.
 | `--results-directory <dir>` | `--results-directory <dir>` *(unchanged)* | — |
 | `--blame-hang-timeout 180s --blame-hang-dump-type none` | `--hangdump --hangdump-timeout 180s --hangdump-type None` | `Microsoft.Testing.Extensions.HangDump` |
 | `--filter "FullyQualifiedName~Foo"` **(xUnit)** | `--filter-class "*Foo*"` (also `--filter-method`, `--filter-namespace`, `--filter-not-class`) | — |
+| `--filter "Category=Perf"` **(xUnit trait)** | `--filter-trait "Category=Perf"` | — |
 | `--filter "ClassName=Foo"` **(MSTest)** | `--filter "ClassName=Foo"` *(unchanged — MSTest keeps the VSTest expression syntax)* | — |
 
-> The two frameworks filter differently: passing xUnit's `--filter-class` to an
-> MSTest project (or `--filter` to an xUnit one) exits with code 5 — invalid
-> arguments — rather than silently running everything.
+> The two families are not interchangeable in both directions, so the failure is
+> asymmetric. MSTest **rejects** xUnit's `--filter-class` with exit code 5
+> (invalid arguments) rather than silently running everything. xUnit is the
+> lenient one: it accepts both its own `--filter-*` family **and** the VSTest
+> `--filter` expression, so an older `--filter "FullyQualifiedName~Foo"` still
+> works against the xUnit suites and selects the same tests. The `--filter-*`
+> spellings are preferred for new commands, but a surviving `--filter` on an
+> xUnit suite is stale style, not breakage.
+>
+> Verified on this tree: `--filter "FullyQualifiedName~SwallowedErrorAudit"` and
+> `--filter-class "*SwallowedErrorAudit*"` both select the same 11 tests, and
+> `--filter-class` against `tests/Reactor.SelfTests` exits 5.
 
 ## When to write which test
 
@@ -453,7 +463,7 @@ E2E test classes (across two host apps):
 dotnet test --project tests/Reactor.AppTests
 
 # A specific class
-dotnet test --project tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.AccessibilityTests"
+dotnet test --project tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
 ```
 
 > **Requires:** the **winapp CLI** (`winapp ui`). Install it with `winget install Microsoft.WinAppCli` (or run `./bootstrap.ps1`, which installs it for you). The harness resolves it from `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe` or `winapp` on PATH. Unit and selftest runs don't need it.

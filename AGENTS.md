@@ -24,15 +24,17 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 dotnet test --project tests/Reactor.AppTests
 
 # Single E2E class (MSTest suites keep the VSTest-style `--filter` expression)
-dotnet test --project tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.AccessibilityTests"
+dotnet test --project tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
 ```
 
 Every suite runs on **Microsoft.Testing.Platform** (MTP): `global.json` pins
 `test.runner`, xunit.v3 v4 is MTP-only, and the MSTest projects opt in with
 `EnableMSTestRunner`. Practical consequences: pass the project with `--project`,
-xUnit filtering uses `--filter-class` / `--filter-method` / `--filter-not-class`
-(MSTest keeps `--filter`), `--logger "trx;…"` becomes `--report-trx`, and
-`--blame-hang-*` becomes `--hangdump …`.
+prefer `--filter-class` / `--filter-method` / `--filter-not-class` / `--filter-trait`
+on the xUnit suites (they also still accept the VSTest `--filter` expression;
+MSTest accepts **only** `--filter` and rejects `--filter-class` with exit 5),
+`--logger "trx;…"` becomes `--report-trx`, and `--blame-hang-*` becomes
+`--hangdump …`.
 
 CI runs unit tests + selftests + full solution build on every PR. .NET 10 SDK, `windows-latest` runner.
 
