@@ -61,7 +61,7 @@ Echo handling is a documented hybrid (spec-047 §8.3). Synchronous, exact-compar
 
 ### Element pooling
 
-`ElementPool` recycles WinUI controls. Poolable types track one-time event wiring via `ConditionalWeakTable<FrameworkElement, PoolableWireFlags>` to avoid double-subscribing across rent/return cycles.
+`ElementPool` recycles WinUI controls. V1 pools only non-interactive controls, so there is no event re-wiring to manage. It keeps a `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements that have had `GetElementVisual()` called on them — those permanently lose the XAML implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …), so they are excluded from pooling rather than handed to a future user that might need those APIs.
 
 ### Per-element state via attached DP
 
@@ -104,7 +104,15 @@ The legacy Element-record + `MountXxx`/`UpdateXxx` dispatch-switch path is gone.
 
 1. **Element record** in `src/Reactor/Core/Element.cs`
 2. **Authoring shape** — a `ControlDescriptor<TElement, TControl>` (the primary path) or a hand-coded `IElementHandler<TElement, TControl>` for irregular controls.
-3. **Register** it in `RegisterV1BuiltInHandlers`.
+3. **Register** it. Spec 048 §3.4 removed the old bootstrap: built-in handlers now
+   self-register **lazily on the first factory call**, via the per-control
+   `Reg<>` / `RegDecorator<>` cctor latch in `Dsl.cs`. A `[GenerateReactorWrapper]`
+   element gets a static constructor emitting `ControlRegistry.Register` (spec 058).
+   To register a third-party control or override a built-in globally, call
+   `ControlRegistry.Register<TElement, TControl>` (or `RegisterDecorator`,
+   `RegisterForDerivedTypes`) at startup. `ReactorApp.RegisterAllBuiltIns()` is the
+   opt-in bulk path for direct-record/AOT callers. Note `new MyElement(...)` alone
+   registers nothing — the factory call is what latches it.
 4. **Selftest fixture** in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`.
 
 See [`docs/guide/extending-reactor-controls.md`](docs/guide/extending-reactor-controls.md) for the authoring-shape decision tree (prop/engine shapes, children strategies, echo handling, pooling).
