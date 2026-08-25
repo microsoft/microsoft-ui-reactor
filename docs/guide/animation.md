@@ -96,6 +96,7 @@ class ScaleDemo : Component
             ).Padding(12)
              .CornerRadius(8)
              .Background("#e8e8e8")
+             .Scale(enlarged ? 1.5f : 1.0f)
              .ScaleTransition()
         ).Padding(24);
     }
@@ -104,9 +105,10 @@ class ScaleDemo : Component
 
 ![Scale transition](images/animation/scale-transition.png)
 
-Scale uses the element's center as the transform origin. A value of `1.0f` is
-normal size, `1.5f` is 150%. You can pass a custom `Vector3Transition` to
-control which axes animate.
+A value of `1.0f` is normal size, `1.5f` is 150%. Scale grows from the
+element's top-left corner by default — set `.CenterPoint()` to scale around a
+different origin. You can pass a custom `Vector3Transition` to control which
+axes animate.
 
 ## Translation Transition
 
@@ -196,8 +198,10 @@ class CombinedDemo : Component
              .CornerRadius(8)
              .Background("#7b2ab5")
              .Opacity(active ? 1.0 : 0.4)
+             .Scale(active ? 1.2f : 1.0f)
              .Translation(active ? 40f : 0f, 0f, 0f)
              .OpacityTransition(TimeSpan.FromMilliseconds(400))
+             .ScaleTransition()
              .TranslationTransition()
         ).Padding(24);
     }

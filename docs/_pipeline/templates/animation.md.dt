@@ -81,9 +81,10 @@ factor:
 
 ![Scale transition](screenshot://animation/scale-transition)
 
-Scale uses the element's center as the transform origin. A value of `1.0f` is
-normal size, `1.5f` is 150%. You can pass a custom `Vector3Transition` to
-control which axes animate.
+A value of `1.0f` is normal size, `1.5f` is 150%. Scale grows from the
+element's top-left corner by default — set `.CenterPoint()` to scale around a
+different origin. You can pass a custom `Vector3Transition` to control which
+axes animate.
 
 ## Translation Transition
 
