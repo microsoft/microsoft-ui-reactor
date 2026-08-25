@@ -508,7 +508,7 @@ public class AgentKitDocGateInstrumentTests
     /// stopped recognising ```` ```csharp ```` — into a failure.
     /// </summary>
     /// <remarks>
-    /// The thresholds are set well under the measured values (63 documents, 374 snippets, 345
+    /// The thresholds are set well under the measured values (63 documents, 376 snippets, 348
     /// resolved chains, 115 factories at the time of writing) because they are guards against a
     /// mechanism breaking, not pins on the corpus. Raise one only if it stops discriminating; do
     /// <b>not</b> lower one to make a red build green, because the collapse it is describing is
@@ -614,8 +614,8 @@ public class AgentKitDocGateInstrumentTests
     /// <para>
     /// This is the fact that would have caught the four-space fences under list items 10 and 11 of
     /// <c>skills/design-docs/typography-and-colors.md</c>, which the original 0–3 space indent cap
-    /// silently skipped. The aggregate snippet floor did <b>not</b> catch it and could not: 372
-    /// blocks clear a floor of 150 just as comfortably as 374 do. A floor bounds the corpus from
+    /// silently skipped. The aggregate snippet floor did <b>not</b> catch it and could not: 374
+    /// blocks clear a floor of 150 just as comfortably as 376 do. A floor bounds the corpus from
     /// below; only a differential comparison against an independent derivation can say the
     /// extractor saw <em>everything</em>.
     /// </para>
@@ -640,17 +640,19 @@ public class AgentKitDocGateInstrumentTests
 
         foreach (var document in AgentKitCorpus.Documents.Where(d => d.EndsWith(".md", StringComparison.OrdinalIgnoreCase)))
         {
-            var lines = File.ReadAllText(Path.Combine(repoRoot, document.Replace('/', Path.DirectorySeparatorChar)))
-                .Replace("\r\n", "\n")
-                .Split('\n');
+            var markdown = File.ReadAllText(Path.Combine(repoRoot, document.Replace('/', Path.DirectorySeparatorChar)));
+            var lines = markdown.Replace("\r\n", "\n").Split('\n');
 
             extracted.TryGetValue(document, out var snippets);
             snippets ??= new List<AgentKitSnippet>();
 
-            // A snippet's own body may quote a fence as literal text; that line is content the
-            // extractor already read, not a block it skipped.
-            var covered = snippets
-                .SelectMany(s => Enumerable.Range(s.StartLine, s.Text.Split('\n').Length))
+            // Lines inside *any* fenced block, C# or not. A ````csharp` line quoted as literal text
+            // — inside a ```text block demonstrating fences, or inside a longer ```` block — is
+            // content the scanner already accounted for, not a block it skipped. Scoping this to
+            // extracted C# bodies alone would fail the moment a document explained fence syntax.
+            var covered = AgentKitDocCorpus.Fences(markdown)
+                .Where(region => region.BodyEndLine >= region.BodyStartLine)
+                .SelectMany(region => Enumerable.Range(region.BodyStartLine, region.BodyEndLine - region.BodyStartLine + 1))
                 .ToHashSet();
 
             var openedAt = snippets.Select(s => s.StartLine - 1).ToHashSet();
@@ -743,6 +745,64 @@ public class AgentKitDocGateInstrumentTests
         Assert.Equal(
             "TextBlock(paragraph).TextWrapping(TextWrapping.WrapWholeWords)",
             snippets[2].Text);
+    }
+
+    /// <summary>
+    /// A C# fence quoted as literal text inside another block is content, not a missed block.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Every_CSharp_Fence_In_The_Corpus_Is_Extracted"/> compares an indentation-blind
+    /// probe against the extractor, and the probe has no idea about block structure. Scoping its
+    /// exclusions to extracted <em>C#</em> bodies would fail the moment a document explained fence
+    /// syntax inside a <c>```text</c> block — a CI failure on correct documentation, triggered by
+    /// writing about the very feature this gate depends on. Excluding every fence body, whatever
+    /// its language, is what makes the comparison sound.
+    /// </remarks>
+    [Fact]
+    public void A_Fence_Quoted_Inside_Another_Block_Is_Not_A_Missed_Snippet()
+    {
+        const string Markdown = """
+            # Heading
+
+            ```text
+            Write a C# sample like this:
+            ```csharp
+            FlexColumn(children).Padding(16)
+            ```
+
+            ````csharp
+            // a real one, inside a longer fence
+            ```csharp
+            Border(child).Padding(8)
+            ````
+            """;
+
+        var fences = AgentKitDocCorpus.Fences(Markdown);
+        var extracted = AgentKitDocCorpus.ExtractFences("fixture/quoted.md", Markdown);
+
+        var covered = fences
+            .Where(r => r.BodyEndLine >= r.BodyStartLine)
+            .SelectMany(r => Enumerable.Range(r.BodyStartLine, r.BodyEndLine - r.BodyStartLine + 1))
+            .ToHashSet();
+
+        var openedAt = extracted.Select(s => s.StartLine - 1).ToHashSet();
+        var lines = Markdown.Replace("\r\n", "\n").Split('\n');
+
+        var missed = new List<int>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (!AgentKitDocCorpus.CSharpFenceProbe.IsMatch(lines[i]))
+                continue;
+
+            var line = i + 1;
+            if (!covered.Contains(line) && !openedAt.Contains(line))
+                missed.Add(line);
+        }
+
+        Assert.Empty(missed);
+
+        // The probe must have had something to find here, or this proves nothing about quoting.
+        Assert.Contains(lines, line => AgentKitDocCorpus.CSharpFenceProbe.IsMatch(line));
     }
 
     /// <summary>

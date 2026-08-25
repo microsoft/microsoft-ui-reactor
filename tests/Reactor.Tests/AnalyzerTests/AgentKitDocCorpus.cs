@@ -233,6 +233,57 @@ internal static class AgentKitDocCorpus
     }
 
     /// <summary>
+    /// One fenced block found in a markdown document, C# or not.
+    /// </summary>
+    /// <param name="BodyStartLine">1-based first line of the body.</param>
+    /// <param name="BodyEndLine">1-based last line of the body; less than
+    /// <paramref name="BodyStartLine"/> for an empty block.</param>
+    internal readonly record struct FenceRegion(int OpenLine, int BodyStartLine, int BodyEndLine, string Language, int Indent);
+
+    /// <summary>
+    /// Every fenced block in a markdown document, in source order, whatever its language.
+    /// </summary>
+    /// <remarks>
+    /// The single fence scanner. <see cref="ExtractFences"/> filters this to C#, and the
+    /// independent-probe fact uses the full list to know which lines are inside <em>some</em>
+    /// block — a <c>```csharp</c> quoted as literal text inside a <c>```text</c> block is content,
+    /// not a block the extractor skipped. Deriving both from one scan is what keeps them from
+    /// disagreeing about where blocks begin and end.
+    /// </remarks>
+    internal static IReadOnlyList<FenceRegion> Fences(string markdown)
+    {
+        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        var regions = new List<FenceRegion>();
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var open = FenceOpen.Match(lines[i]);
+            if (!open.Success)
+                continue;
+
+            var fenceChar = open.Groups["fence"].Value[0];
+            var fenceLength = open.Groups["fence"].Value.Length;
+
+            // Find the close first, so a non-C# fence still advances past its own body instead
+            // of letting the body's contents be re-read as markdown.
+            var close = i + 1;
+            while (close < lines.Length && !IsClosingFence(lines[close], fenceChar, fenceLength))
+                close++;
+
+            regions.Add(new FenceRegion(
+                OpenLine: i + 1,
+                BodyStartLine: i + 2,
+                BodyEndLine: close,          // 1-based last body line; == i+1 when empty.
+                Language: open.Groups["info"].Value.Trim().Split(' ', ',')[0],
+                Indent: open.Groups["indent"].Value.Length));
+
+            i = close;
+        }
+
+        return regions;
+    }
+
+    /// <summary>
     /// Pulls the C# fenced blocks out of one markdown document.
     /// </summary>
     /// <remarks>
@@ -246,37 +297,18 @@ internal static class AgentKitDocCorpus
     internal static IReadOnlyList<AgentKitSnippet> ExtractFences(string path, string markdown)
     {
         var lines = markdown.Replace("\r\n", "\n").Split('\n');
-        var snippets = new List<AgentKitSnippet>();
 
-        for (var i = 0; i < lines.Length; i++)
-        {
-            var open = FenceOpen.Match(lines[i]);
-            if (!open.Success)
-                continue;
-
-            var fenceChar = open.Groups["fence"].Value[0];
-            var fenceLength = open.Groups["fence"].Value.Length;
-            var indent = open.Groups["indent"].Value.Length;
-            var language = open.Groups["info"].Value.Trim().Split(' ', ',')[0];
-
-            // Find the close first, so a non-C# fence still advances past its own body instead
-            // of letting the body's contents be re-read as markdown.
-            var close = i + 1;
-            while (close < lines.Length && !IsClosingFence(lines[close], fenceChar, fenceLength))
-                close++;
-
-            if (CSharpFenceLanguages.Contains(language, StringComparer.OrdinalIgnoreCase) && close > i + 1)
-            {
-                snippets.Add(new AgentKitSnippet(
-                    path,
-                    i + 2,  // 1-based, and the body starts on the line after the fence.
-                    string.Join("\n", lines[(i + 1)..close].Select(line => StripIndent(line, indent)))));
-            }
-
-            i = close;
-        }
-
-        return snippets;
+        return Fences(markdown)
+            .Where(region => CSharpFenceLanguages.Contains(region.Language, StringComparer.OrdinalIgnoreCase)
+                             && region.BodyEndLine >= region.BodyStartLine)
+            .Select(region => new AgentKitSnippet(
+                path,
+                region.BodyStartLine,
+                string.Join(
+                    "\n",
+                    lines[(region.BodyStartLine - 1)..(region.BodyEndLine - 1 + 1)]
+                        .Select(line => StripIndent(line, region.Indent)))))
+            .ToList();
     }
 
     /// <summary>
@@ -349,7 +381,7 @@ internal static class AgentKitDocCorpus
 /// </summary>
 /// <remarks>
 /// <para>
-/// Reading 63 documents and parsing 374 snippets is not free, and every fact over the agent kit
+/// Reading 63 documents and parsing 376 snippets is not free, and every fact over the agent kit
 /// wants the same answer. Recomputing it per fact ran the scan three times concurrently — xUnit
 /// runs test classes in parallel — and the resulting CPU spike intermittently blew the wall-clock
 /// budget in <c>CompilationLoaderTests.Cold_load_under_500ms_warm_under_50ms_for_minimal_project</c>,
