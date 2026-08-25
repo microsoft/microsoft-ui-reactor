@@ -339,6 +339,8 @@ internal static class Phase5WindowingFixtures
             finally { WindowSpec.NoDragAffordanceWarningCountForTests = 0; await CloseAndSettle(win); }
         }
     }
+    /// <summary>
+    /// The maximized warning must stay latched across a root replacement.
     /// <c>OnHostContentRendered</c> runs per render and
     /// <c>AttachSizeToContentRoot</c> detaches whenever the root instance
     /// differs, then re-applies immediately — so re-arming the edge on detach

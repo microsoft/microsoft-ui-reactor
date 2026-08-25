@@ -490,7 +490,7 @@ type-checked operation, which is what "lightweight styling" needs (see §8).
 | WinUI Feature | Status | Reactor Surface | Notes |
 |---|---|---|---|
 | **Implicit styles** | Passthrough | Work on underlying controls | WinUI's implicit styles apply to Reactor-created controls normally |
-| **Explicit styles (x:Key)** | Augmented | `.ApplyStyle("AccentButtonStyle")` plus named-style fluents | `.AccentButton()`, `.SubtleButton()`, `.TextLink()`, `Title()`, `Subtitle()`, `Body()`, `BodyStrong()`, `BodyLarge()` wrap the common keys so the string literal is optional |
+| **Explicit styles (x:Key)** | Augmented | `.ApplyStyle("AccentButtonStyle")` plus named-style fluents | `.AccentButton()`, `.SubtleButton()`, `.TextLink()`, `Title()`, `Subtitle()`, `Body()`, `BodyStrong()`, `BodyLarge()`, `TitleLarge()`, `Display()` wrap the common keys so the string literal is optional |
 | **BasedOn inheritance** | Passthrough | Works in WinUI layer | Style inheritance works; Reactor doesn't interfere |
 | **Lightweight styling** | Exposed | `.Resources(r => r.Set("ButtonBackground", Theme.Accent))` | Per-control theme-resource key overrides; the `ThemeRef` overload keeps the override theme-reactive |
 | **ControlTemplate** | Blocked | — | Reactor renders content directly; no template authoring |
