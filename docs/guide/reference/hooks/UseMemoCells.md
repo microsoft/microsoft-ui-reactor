@@ -5,10 +5,12 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCel
 
 > **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
 
-## Overloads
+## Members
 
-- [`UseMemoCells<T>(Component, IReadOnlyList<T>, Func<T, int, Element>, object[])`](#usememocellstcomponent-ireadonlylistt-funct-int-element-object)
-- [`UseMemoCells<T>(RenderContext, IReadOnlyList<T>, Func<T, int, Element>, object[])`](#usememocellstrendercontext-ireadonlylistt-funct-int-element-object)
+> These members share a name but are declared on unrelated types. They are not overloads of one another.
+
+- [`UseMemoCells<T>(Component, IReadOnlyList<T>, Func<T, int, Element>, object[])`](#usememocellstcomponent-ireadonlylistt-funct-int-element-object) — `Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions`
+- [`UseMemoCells<T>(RenderContext, IReadOnlyList<T>, Func<T, int, Element>, object[])`](#usememocellstrendercontext-ireadonlylistt-funct-int-element-object) — `Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions`
 
 ## `UseMemoCells<T>(Component, IReadOnlyList<T>, Func<T, int, Element>, object[])`
 

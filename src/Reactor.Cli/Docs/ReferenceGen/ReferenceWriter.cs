@@ -61,12 +61,34 @@ internal static class ReferenceWriter
         }
 
         // Multi-member page: index first so a reader can jump straight to the
-        // overload they mean, then one section per member.
-        sb.AppendLine("## Overloads");
+        // member they mean, then one section per member.
+        //
+        // Members that share a short name but come from unrelated declaring
+        // types (REACTOR_DOC_REFGEN_002) are not overloads — e.g.
+        // FocusManager.Register and PendingScope.Register. Calling that section
+        // "Overloads" tells the reader they are one API with several forms.
+        // Label it "Members" and qualify each entry with its declaring type.
+        // The per-member headings are left alone: their anchors are computed
+        // upstream and are what cref links resolve to.
+        var scopes = members
+            .Select(pm => DeclaringScopeOf(pm.Member))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var collision = scopes.Count > 1;
+
+        sb.AppendLine(collision ? "## Members" : "## Overloads");
         sb.AppendLine();
+        if (collision)
+        {
+            sb.AppendLine(
+                "> These members share a name but are declared on unrelated types. " +
+                "They are not overloads of one another.");
+            sb.AppendLine();
+        }
         foreach (var pm in members)
         {
-            sb.AppendLine($"- [`{pm.Heading}`](#{pm.Anchor})");
+            var qualifier = collision ? $" — `{DeclaringScopeOf(pm.Member)}`" : string.Empty;
+            sb.AppendLine($"- [`{pm.Heading}`](#{pm.Anchor}){qualifier}");
         }
         sb.AppendLine();
 
@@ -85,6 +107,21 @@ internal static class ReferenceWriter
         }
 
         return new WriteResult(sb.ToString(), unresolved, missingSummary);
+    }
+
+    /// <summary>
+    /// Declaring scope for a member, mirroring <c>ReferenceGenerator.DeclaringScope</c>.
+    /// Used to tell genuine overloads apart from unrelated same-name members
+    /// that route to one page (REACTOR_DOC_REFGEN_002).
+    /// </summary>
+    private static string DeclaringScopeOf(MemberDoc member)
+    {
+        var parts = CrefSignature.Parse(member.Cref);
+        if (parts.Kind == "T")
+            return string.IsNullOrEmpty(parts.DeclaringName)
+                ? parts.Name
+                : parts.DeclaringName + "." + parts.Name;
+        return string.IsNullOrEmpty(parts.DeclaringName) ? parts.Name : parts.DeclaringName;
     }
 
     private static void AppendMemberSections(

@@ -5,10 +5,12 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.FocusManager.Register(System.String)`
 
 > **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
 
-## Overloads
+## Members
 
-- [`Register(string)`](#registerstring)
-- [`Register(object, bool)`](#registerobject-bool)
+> These members share a name but are declared on unrelated types. They are not overloads of one another.
+
+- [`Register(string)`](#registerstring) — `Microsoft.UI.Reactor.Hooks.FocusManager`
+- [`Register(object, bool)`](#registerobject-bool) — `Microsoft.UI.Reactor.Hooks.PendingScope`
 
 ## `Register(string)`
 

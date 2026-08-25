@@ -61,7 +61,7 @@ Echo handling is a documented hybrid (spec-047 §8.3). Synchronous, exact-compar
 
 ### Element pooling
 
-`ElementPool` recycles WinUI controls. V1 pools only non-interactive controls, so there is no event re-wiring to manage. It keeps a `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements that have had `GetElementVisual()` called on them — those permanently lose the XAML implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …), so they are excluded from pooling rather than handed to a future user that might need those APIs.
+`ElementPool` recycles WinUI controls. `PoolableTypes` includes interactive controls (`Button`, `TextBox`, `ToggleSwitch`) alongside the non-interactive ones: their event trampolines subscribe **once for the control's lifetime** and read the current element from attached state at invocation time, so a recycled control dispatches to the new element's callbacks. `Reconciler.ReturnControl<T>` therefore deliberately **preserves** `ReactorState.ControlEventState` across rent/return (issue #114) — clearing it would re-allocate on every rent and double-subscribe; the box is dropped only on full detach (`DetachReactorState`). New event wiring on a poolable control must go through that one-time trampoline, never a fresh per-rent subscription. It also keeps a `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements that have had `GetElementVisual()` called on them — those permanently lose the XAML implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …), so they are excluded from pooling rather than handed to a future user that might need those APIs.
 
 ### Per-element state via attached DP
 

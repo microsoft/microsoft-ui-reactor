@@ -42,8 +42,14 @@ sealed class ReactorWpfIsland : HwndHost
     protected override void OnRenderSizeChanged(SizeChangedInfo info)
     {
         base.OnRenderSizeChanged(info);
-        _source?.SiteBridge.MoveAndResize(
-            new RectInt32(0, 0, (int)ActualWidth, (int)ActualHeight));
+        // ActualWidth/Height are WPF DIPs; MoveAndResize sizes the child HWND
+        // in physical pixels. Scale by the current DPI or the island is too
+        // small at anything above 100%, and wrong after a monitor DPI change.
+        var scale = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+        _source?.SiteBridge.MoveAndResize(new RectInt32(
+            0, 0,
+            (int)(ActualWidth * scale.DpiScaleX),
+            (int)(ActualHeight * scale.DpiScaleY)));
     }
 
     protected override void DestroyWindowCore(HandleRef hwnd)

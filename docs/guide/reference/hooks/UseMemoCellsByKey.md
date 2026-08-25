@@ -5,10 +5,12 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCel
 
 > **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
 
-## Overloads
+## Members
 
-- [`UseMemoCellsByKey<T, TKey>(Component, IReadOnlyList<T>, Func<T, TKey>, Func<T, int, Element>, object[])`](#usememocellsbykeyt-tkeycomponent-ireadonlylistt-funct-tkey-funct-int-element-object)
-- [`UseMemoCellsByKey<T1, T2>(RenderContext, IReadOnlyList<T1>, Func<T1, T2>, Func<T1, int, Element>, object[])`](#usememocellsbykeyt1-t2rendercontext-ireadonlylistt1-funct1-t2-funct1-int-element-object)
+> These members share a name but are declared on unrelated types. They are not overloads of one another.
+
+- [`UseMemoCellsByKey<T, TKey>(Component, IReadOnlyList<T>, Func<T, TKey>, Func<T, int, Element>, object[])`](#usememocellsbykeyt-tkeycomponent-ireadonlylistt-funct-tkey-funct-int-element-object) — `Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions`
+- [`UseMemoCellsByKey<T1, T2>(RenderContext, IReadOnlyList<T1>, Func<T1, T2>, Func<T1, int, Element>, object[])`](#usememocellsbykeyt1-t2rendercontext-ireadonlylistt1-funct1-t2-funct1-int-element-object) — `Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions`
 
 ## `UseMemoCellsByKey<T, TKey>(Component, IReadOnlyList<T>, Func<T, TKey>, Func<T, int, Element>, object[])`
 

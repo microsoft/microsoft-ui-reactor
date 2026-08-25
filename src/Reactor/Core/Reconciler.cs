@@ -1430,10 +1430,15 @@ public sealed partial class Reconciler : IDisposable
         // the provider with per-subtree entries; nested Reconcile() calls during
         // the same pass don't emit their own start/stop. Gate the depth counter
         // and Start emit on IsEnabled so the disabled path pays nothing extra.
-        bool emitTrace = Diagnostics.ReactorEventSource.Log.IsEnabled(
+        // `traceEnabled` and `emitTrace` are tracked separately: every enabled
+        // call must decrement the depth it incremented, but only the outermost
+        // one emits. Decrementing on `emitTrace` alone would leak the counter
+        // once a pass contained a nested reconcile, permanently suppressing
+        // every later top-level trace.
+        bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
             global::System.Diagnostics.Tracing.EventLevel.Informational,
-            Diagnostics.ReactorEventSource.Keywords.Reconcile)
-            && _reconcileTraceDepth++ == 0;
+            Diagnostics.ReactorEventSource.Keywords.Reconcile);
+        bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
         if (emitTrace)
         {
             Diagnostics.ReactorEventSource.Log.ReconcileStart(
@@ -1481,12 +1486,15 @@ public sealed partial class Reconciler : IDisposable
         }
         finally
         {
-            if (emitTrace)
+            if (traceEnabled)
             {
                 _reconcileTraceDepth--;
-                Diagnostics.ReactorEventSource.Log.ReconcileStop(
-                    DebugElementsDiffed, DebugElementsSkipped,
-                    DebugUIElementsCreated, DebugUIElementsModified);
+                if (emitTrace)
+                {
+                    Diagnostics.ReactorEventSource.Log.ReconcileStop(
+                        DebugElementsDiffed, DebugElementsSkipped,
+                        DebugUIElementsCreated, DebugUIElementsModified);
+                }
             }
         }
         } finally

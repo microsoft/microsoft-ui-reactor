@@ -79,7 +79,9 @@ not a platform-quality default.
 ```csharp
 public static void ApplyRoundedRegion(nint hwnd, int widthPx, int heightPx, int radiusPx)
 {
-    var region = CreateRoundRectRgn(0, 0, widthPx, heightPx, radiusPx, radiusPx);
+    // CreateRoundRectRgn's last two args are the width/height of the corner
+    // ellipse, not the radius — pass the diameter to get `radiusPx` corners.
+    var region = CreateRoundRectRgn(0, 0, widthPx, heightPx, radiusPx * 2, radiusPx * 2);
     if (region == 0) return;
 
     // SetWindowRgn transfers ownership of the HRGN to the system on

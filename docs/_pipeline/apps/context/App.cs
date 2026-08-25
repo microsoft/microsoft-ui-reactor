@@ -188,10 +188,17 @@ class AdminPanel : Component
 
 // <snippet:memoize-context-value>
 // The value identity matters. Wrapping in UseMemo with explicit deps
-// stops every consumer from re-rendering on every provider render —
-// the inline-literal version below would create a fresh tuple every
-// frame even when nothing changed.
-record ThemeConfig(string Mode, int FontScale, string Accent);
+// stops every consumer from re-rendering on every provider render.
+// ThemeConfig is a *class*, so it compares by reference — context
+// invalidation uses Equals, and a record with unchanged fields would
+// compare equal and re-render nothing, hiding the very cost this
+// snippet is about.
+sealed class ThemeConfig(string mode, int fontScale, string accent)
+{
+    public string Mode { get; } = mode;
+    public int FontScale { get; } = fontScale;
+    public string Accent { get; } = accent;
+}
 
 static class ThemeContexts
 {
@@ -209,7 +216,8 @@ class MemoizeContextValueExample : Component
         // re-render when mode or scale actually change.
         var theme = UseMemo(() => new ThemeConfig(mode, scale, "#0078D4"), mode, scale);
 
-        // BAD — every render creates a fresh ThemeConfig.
+        // BAD — a fresh reference every render, so every consumer re-renders
+        // even when mode and scale are unchanged.
         // var theme = new ThemeConfig(mode, scale, "#0078D4");
 
         return VStack(12,

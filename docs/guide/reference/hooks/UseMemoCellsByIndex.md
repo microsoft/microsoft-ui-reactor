@@ -5,10 +5,12 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCel
 
 > **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
 
-## Overloads
+## Members
 
-- [`UseMemoCellsByIndex<T>(Component, IReadOnlyList<T>, IReadOnlyList<int>, Func<T, int, Element>, object[])`](#usememocellsbyindextcomponent-ireadonlylistt-ireadonlylistint-funct-int-element-object)
-- [`UseMemoCellsByIndex<T1>(RenderContext, IReadOnlyList<T1>, IReadOnlyList<int>, Func<T1, int, Element>, object[])`](#usememocellsbyindext1rendercontext-ireadonlylistt1-ireadonlylistint-funct1-int-element-object)
+> These members share a name but are declared on unrelated types. They are not overloads of one another.
+
+- [`UseMemoCellsByIndex<T>(Component, IReadOnlyList<T>, IReadOnlyList<int>, Func<T, int, Element>, object[])`](#usememocellsbyindextcomponent-ireadonlylistt-ireadonlylistint-funct-int-element-object) — `Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions`
+- [`UseMemoCellsByIndex<T1>(RenderContext, IReadOnlyList<T1>, IReadOnlyList<int>, Func<T1, int, Element>, object[])`](#usememocellsbyindext1rendercontext-ireadonlylistt1-ireadonlylistint-funct1-int-element-object) — `Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions`
 
 ## `UseMemoCellsByIndex<T>(Component, IReadOnlyList<T>, IReadOnlyList<int>, Func<T, int, Element>, object[])`
 

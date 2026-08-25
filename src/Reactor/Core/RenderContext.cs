@@ -817,9 +817,9 @@ public sealed class RenderContext
     /// <remarks>
     /// Spec 033 §2. The cache is currently process-wide
     /// (<see cref="ApplicationPersistedScope.Default"/>) and bounded by an LRU
-    /// policy. The two-arg form will trigger an analyzer warning in a follow-up
-    /// release; new code should use the three-arg overload to make the
-    /// intended scope explicit.
+    /// policy. The two-arg form is flagged by <c>REACTOR_PERSIST_001</c>
+    /// (<c>UsePersistedScopeAnalyzer</c>); new code should use the three-arg
+    /// overload to make the intended scope explicit.
     /// </remarks>
     public (T Value, Action<T> Set) UsePersisted<T>(string key, T initialValue)
         => UsePersisted(key, initialValue, PersistedScope.Application);
@@ -2350,8 +2350,9 @@ public sealed class RenderContext
     }
 
     /// <summary>
-    /// Parameterless overload — resolves the current host's window. Returns
-    /// false when called outside a window. (spec 036 §5.2)
+    /// Window-inferring overload — takes only <paramref name="minWidth"/> and
+    /// resolves the current host's window. Returns false when called outside a
+    /// window. (spec 036 §5.2)
     /// </summary>
     public bool UseBreakpoint(double minWidth)
     {

@@ -17,8 +17,9 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseBreakpoint(System.Double)`
 
 ### Summary
 
-Parameterless overload — resolves the current host's window. Returns
-false when called outside a window. (spec 036 §5.2)
+Window-inferring overload — takes only <paramref name="minWidth" /> and
+resolves the current host's window. Returns false when called outside a
+window. (spec 036 §5.2)
 
 ## `UseBreakpoint(Window, double)`
 

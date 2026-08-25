@@ -403,18 +403,24 @@ concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 ### Letting the control hold its own state
 
 ```csharp
-// Don't — there is no `initial:` parameter, and an uncontrolled TextBox
-// has no way to be read, reset, or pre-filled by its parent:
+// Don't — there is no `initial:` parameter. The bare string binds an
+// explicit value with no `onChanged`, so the framework re-asserts it on
+// every render and the user's edits are overwritten:
 TextBox("default value")
 ```
 
 ```csharp snippet="forms/controlled-input"
 ```
 
-Uncontrolled inputs work in trivial demos but break the moment the
-parent component needs to read, reset, or pre-fill the value. Reactor
-inputs all take `(value, onChanged)` — the control is always a passive
-view of state.
+The distinction that matters is not "controlled vs. uncontrolled" but
+whether the binding is *complete*. Omit the value entirely and the
+control owns its own state, which the parent cannot read, reset, or
+pre-fill. Pass a value without `onChanged` — as above — and you get the
+opposite failure: the value is pre-filled and the parent can replace it,
+but every keystroke is reverted on the next render, because a `string`
+implicitly becomes an explicit `Optional<string>` the reconciler
+re-applies. Reactor inputs take `(value, onChanged)` together; supply
+both and the control is a passive view of state.
 
 ### Validating in the click handler
 

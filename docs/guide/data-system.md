@@ -509,6 +509,11 @@ class ObservableSourceDemo : Component
         var source = UseMemo(() => new ObservableListDataSource<Product>(
             collection.Current, p => (RowKey)p.Id), collection.Current);
 
+        // The source subscribes to CollectionChanged and is IDisposable, so
+        // memoizing it is not enough — dispose it on unmount or the collection
+        // keeps the source (and its per-item subscriptions) alive.
+        UseEffect(() => () => source.Dispose(), source);
+
         var columns = UseMemo(() => new FieldDescriptor[]
         {
             Column<Product>("Name", p => p.Name, width: 180),

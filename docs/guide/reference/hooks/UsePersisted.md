@@ -25,9 +25,9 @@ Value is saved to cache on unmount.
 
 Spec 033 §2. The cache is currently process-wide
 (`Default`) and bounded by an LRU
-policy. The two-arg form will trigger an analyzer warning in a follow-up
-release; new code should use the three-arg overload to make the
-intended scope explicit.
+policy. The two-arg form is flagged by <c>REACTOR_PERSIST_001</c>
+(<c>UsePersistedScopeAnalyzer</c>); new code should use the three-arg
+overload to make the intended scope explicit.
 
 ## `UsePersisted<T1>(string, T1, PersistedScope)`
 

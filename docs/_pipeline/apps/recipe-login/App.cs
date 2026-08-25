@@ -32,7 +32,9 @@ class LoginForm : Component
             mutator: async (input, ct) =>
             {
                 await Task.Delay(800, ct);                   // pretend API call
-                if (input.Password == "wrong")
+                // Sentinel long enough to pass local validation, so the
+                // failure branch is actually reachable from the form.
+                if (input.Password == "wrongpassword")
                     throw new InvalidOperationException("Invalid credentials.");
                 return true;
             });
