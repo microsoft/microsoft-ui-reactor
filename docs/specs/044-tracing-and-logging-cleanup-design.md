@@ -183,7 +183,7 @@ internal enum LogCategory
 
 `LogCategory` replaces the stringly-typed `[Reactor.X]` prefixes. Enforced at compile-time; no typos.
 
-Phase A also lands the two generic events (`SwallowedError`, `HResultFailed`) on `ReactorEventSource` that the helper above calls. The subsystem-specific events from §6.2 land in Phase B; the migration in Phase C is unblocked because every catch site can route through the two generics regardless.
+Phase A also lands the generic events (`SwallowedError`, `HResultFailed`, and later `Warning`) on `ReactorEventSource` that the helper above calls. The subsystem-specific events from §6.2 land in Phase B; the migration in Phase C is unblocked because every catch site can route through the generics regardless.
 
 ### 6.2 Phase B — Expand `ReactorEventSource` coverage
 
@@ -339,7 +339,7 @@ public static class ReactorLoggingExtensions
     /// startup (typically in ConfigureLogging).
     ///
     /// Logger category resolution:
-    ///   • For generic events (SwallowedError, HResultFailed), the
+    ///   • For generic events (SwallowedError, HResultFailed, Warning), the
     ///     category payload field becomes the logger category
     ///     ("Reactor.Hosting", "Reactor.Shell", ...).
     ///   • For subsystem-specific events, the category derives from

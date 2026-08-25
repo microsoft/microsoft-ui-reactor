@@ -651,8 +651,9 @@ public static partial class ElementExtensions
     // `Reconciler.ApplyModifiers` invokes unguarded, failing the whole render.
     // A misspelled style key is an authoring mistake, not a corrupt-state condition,
     // so it now degrades to "keep the default appearance" and names the key in a
-    // warning instead. Lookup goes through `ResourceLookup.TryFind`, the same
-    // recursive walk `Theme` uses, so keys defined in a merged dictionary
+    // warning instead. Lookup goes through `ResourceLookup.TryFind`, which is a
+    // single `TryGetValue` plus a typed check — `ResourceDictionary` performs the
+    // merged-dictionary traversal itself, so keys defined in a merged dictionary
     // (`XamlControlsResources` and friends) still resolve.
     private static void ApplyNamedStyle(FrameworkElement fe, string styleName)
     {
@@ -671,6 +672,13 @@ public static partial class ElementExtensions
     // is an ordinary method, so an interpolated argument would otherwise be
     // allocated and discarded on a path this file works to keep allocation-free (#174).
     private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, byte> _warnedStyles = new();
+
+    // Test seam. The warned-key set is process-wide and never cleared in normal
+    // operation, so a fixture that fills it to capacity would silently change
+    // the de-duplication behaviour every later fixture in the same process sees.
+    // Selftests covering the capacity / overlong branches reset it around
+    // themselves so they stay hermetic and order-independent.
+    internal static void ResetUnresolvedStyleWarningsForTesting() => _warnedStyles.Clear();
 
     private static void WarnUnresolvedStyle(string styleName)
     {

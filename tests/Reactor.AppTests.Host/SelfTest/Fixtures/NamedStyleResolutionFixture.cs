@@ -259,6 +259,108 @@ internal static class NamedStyleResolutionFixture
     }
 
     /// <summary>
+    /// The two overflow branches of the de-duplication, which the single-key
+    /// fixture above cannot reach: past the entry cap warnings must keep coming
+    /// rather than go silent, and an overlong key must be truncated on the
+    /// payload and never retained (so the entry cap bounds retained memory, not
+    /// just retained count).
+    ///
+    /// <para>
+    /// Resets the process-wide warned-key set around itself — filling it to
+    /// capacity would otherwise change the de-duplication every later fixture
+    /// in this process observes, including <c>UnresolvedStyleKeyEmitsWarning</c>.
+    /// </para>
+    /// </summary>
+    internal class UnresolvedStyleWarningOverflowBranches(Harness h) : SelfTestFixtureBase(h)
+    {
+        // Mirrors StyleApplierCacheCap / EtwKeyMaxChars in ElementExtensions.
+        private const int Cap = 256;
+
+        public override async Task RunAsync()
+        {
+            ElementExtensions.ResetUnresolvedStyleWarningsForTesting();
+            try
+            {
+                var run = global::System.Guid.NewGuid().ToString("N");
+                var captured = new global::System.Collections.Generic.List<ReactorEvent>();
+                var gate = new object();
+
+                using (ReactorTrace.Subscribe(
+                    e => { lock (gate) { captured.Add(e); } },
+                    EventLevel.Verbose))
+                {
+                    // Fill the dedupe set to capacity with distinct misses.
+                    var filler = H.CreateHost();
+                    filler.Mount(_ =>
+                    {
+                        var children = new Element[Cap];
+                        for (var i = 0; i < Cap; i++)
+                            children[i] = TextBlock($"fill-{run}-{i}").ApplyStyle($"MissKey_{run}_{i}");
+                        return VStack(children);
+                    });
+                    await Harness.Render();
+
+                    // A *new* miss after the cap is full must still warn — going
+                    // quiet here would hide a real typo behind 256 earlier ones.
+                    var pastCapKey = $"PastCap_{run}";
+                    var afterCap = H.CreateHost();
+                    afterCap.Mount(_ => TextBlock($"past-cap-{run}").ApplyStyle(pastCapKey));
+                    await Harness.Render();
+
+                    // An overlong key: truncated on the payload, and never
+                    // retained, so it warns again on a second miss.
+                    var longKey = "L" + new string('x', Cap + 64) + $"_{run}";
+                    var longA = H.CreateHost();
+                    longA.Mount(_ => TextBlock($"long-a-{run}").ApplyStyle(longKey));
+                    await Harness.Render();
+                    var longB = H.CreateHost();
+                    longB.Mount(_ => TextBlock($"long-b-{run}").ApplyStyle(longKey));
+                    await Harness.Render();
+
+                    ReactorEvent[] snapshot;
+                    lock (gate) { snapshot = captured.ToArray(); }
+
+                    H.Check("NamedStyle_Overflow_PastCapStillWarns",
+                        CountWarningsContaining(snapshot, pastCapKey) >= 1);
+
+                    // The full key must never reach the payload...
+                    H.Check("NamedStyle_Overflow_LongKeyTruncated",
+                        CountWarningsContaining(snapshot, longKey) == 0);
+                    // ...but its bounded prefix must, so the message is still useful.
+                    var prefix = longKey.Substring(0, Cap);
+                    var longHits = CountWarningsContaining(snapshot, prefix);
+                    H.Check("NamedStyle_Overflow_LongKeyPrefixEmitted", longHits >= 1);
+                    // Not retained => not de-duplicated => both misses warned.
+                    H.Check("NamedStyle_Overflow_LongKeyNotDeduplicated", longHits == 2);
+                }
+            }
+            finally
+            {
+                ElementExtensions.ResetUnresolvedStyleWarningsForTesting();
+            }
+        }
+
+        private static int CountWarningsContaining(ReactorEvent[] events, string needle)
+        {
+            var n = 0;
+            foreach (var e in events)
+            {
+                if (!string.Equals(e.EventName, "Warning", StringComparison.Ordinal))
+                    continue;
+                foreach (var p in e.Payload)
+                {
+                    if (p is string s && s.Contains(needle, StringComparison.Ordinal))
+                    {
+                        n++;
+                        break;
+                    }
+                }
+            }
+            return n;
+        }
+    }
+
+    /// <summary>
     /// Pins the two facts <c>ResourceLookup.TryFind</c> is built on, against real
     /// <c>ResourceDictionary</c> instances (which a headless unit test cannot
     /// construct).

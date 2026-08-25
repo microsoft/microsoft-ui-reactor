@@ -2354,7 +2354,7 @@
       "id": "type-ramp",
       "name": "Type ramp",
       "category": "Text",
-      "description": "WinUI 3 type ramp factories — Title, Subtitle, Body, BodyStrong, BodyLarge.",
+      "description": "WinUI 3 type ramp factories — Title, Subtitle, Body, BodyStrong, BodyLarge, TitleLarge, Display.",
       "keywords": [
         "text styles",
         "font sizes",

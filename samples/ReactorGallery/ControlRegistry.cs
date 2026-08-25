@@ -95,7 +95,7 @@ public static class ControlRegistry
         new("AutoSuggestBox", "A text input that shows suggestions as the user types.", "Text", "\uE8D2", "auto-suggest-box", "AutoSuggestBox.png"),
         new("RichEditBox", "A rich text editing control with formatting support.", "Text", "\uE8D2", "rich-edit-box", "RichEditBox.png"),
         new("RichTextBlock", "A control that displays formatted read-only rich text.", "Text", "\uE8D2", "rich-text-block", "RichTextBlock.png"),
-        new("Type ramp", "WinUI 3 type ramp factories \u2014 Title, Subtitle, Body, BodyStrong, BodyLarge.", "Text", "\uE8D2", "type-ramp", "TextBlock.png"),
+        new("Type ramp", "WinUI 3 type ramp factories \u2014 Title, Subtitle, Body, BodyStrong, BodyLarge, TitleLarge, Display.", "Text", "\uE8D2", "type-ramp", "TextBlock.png"),
 
         // Styles
         new("Acrylic", "A translucent material brush that creates a frosted glass effect.", "Styles", "\uE790", "acrylic", "Acrylic.png"),
