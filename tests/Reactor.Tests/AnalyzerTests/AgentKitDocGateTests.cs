@@ -50,16 +50,66 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 public class AgentKitDocGateTests
 {
     /// <summary>
-    /// The conventions this repo already uses to mark a deliberately-broken sample, surveyed across
-    /// <c>skills/</c> and <c>plugins/</c>: <c>// Wrong:</c>, <c>// Bad:</c>, <c>// ❌ WRONG</c>,
-    /// <c>### ❌ The anti-pattern …</c>, <c>// Never hardcode …</c>.
+    /// A word that can open a deliberate-counterexample label.
     /// </summary>
-    internal static readonly Regex CounterexampleMarker = new(
-        @"\b(wrong|bad|don'?t|do not|avoid|never|incorrect|anti-?pattern)\b|❌",
+    private static readonly Regex MarkerWord = new(
+        @"^(wrong|bad|don'?t|avoid|never|incorrect|anti-?pattern)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>An explicit cross, which is a counterexample label all by itself.</summary>
+    private static readonly Regex CrossMark = new("[❌✗✘]", RegexOptions.Compiled);
+
     /// <summary>A bare URL, stripped from prose before the marker is matched against it.</summary>
-    internal static readonly Regex Urls = new(@"\b\w+://\S+", RegexOptions.Compiled);
+    private static readonly Regex Urls = new(@"\b\w+://\S+", RegexOptions.Compiled);
+
+    /// <summary>Leading list numbering, e.g. the <c>10.</c> of a numbered markdown item.</summary>
+    private static readonly Regex LeadingListNumber = new(@"^\d+[.)]\s*", RegexOptions.Compiled);
+
+    /// <summary>
+    /// True when the text reads as a deliberate-counterexample <b>label</b> — the shape this repo
+    /// already uses: <c>// Wrong:</c>, <c>// Bad: skipping levels</c>,
+    /// <c>// ❌ WRONG — feeds the host's shape back</c>,
+    /// <c>### ❌ The anti-pattern that breaks everything</c>, <c>Avoid this:</c>, <c>/* Wrong */</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A label, not a word that merely appears somewhere. Matching any occurrence of these words
+    /// exempted <c>// avoid re-enumerating children</c> — an ordinary explanatory comment — and a
+    /// broken sample underneath it would then ship unnoticed, which is the one outcome this gate
+    /// exists to prevent.
+    /// </para>
+    /// <para>
+    /// What separates the two is length, not vocabulary. A label is the short run of text before
+    /// the first delimiter: "Wrong", "Bad", "Avoid this". An explanation keeps going —
+    /// "avoid re-enumerating children", "Never hardcode hex on themed surfaces" — so requiring the
+    /// leading run to be at most two words separates them without needing to enumerate phrasings.
+    /// An explicit ❌ short-circuits all of it, being unambiguous on its own.
+    /// </para>
+    /// </remarks>
+    internal static bool IsCounterexampleLabel(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        // Strip comment slashes, markdown bullets/headings/emphasis, and any closing `*/`.
+        var stripped = text.Trim().TrimStart('/', '*', '#', '>', '-', '`', ' ', '\t');
+        stripped = LeadingListNumber.Replace(stripped, string.Empty)
+            .TrimStart('*', '`', ' ', '\t')
+            .TrimEnd('*', '/', '`', ' ', '\t');
+
+        if (stripped.Length == 0)
+            return false;
+
+        if (CrossMark.IsMatch(stripped))
+            return true;
+
+        var cut = stripped.IndexOfAny(new[] { ':', '—', '–', ',', '!', '.', ';' });
+        var head = (cut >= 0 ? stripped[..cut] : stripped).Trim();
+
+        var words = head.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+
+        return words.Length is > 0 and <= 2 && MarkerWord.IsMatch(words[0]);
+    }
 
     /// <summary>
     /// No shipped sample may apply a common modifier to a receiver
@@ -182,29 +232,48 @@ public class AgentKitDocGateTests
         if (index < 0 || index >= lines.Count)
             return false;
 
-        if (CounterexampleMarker.IsMatch(CommentText(lines[index])))
+        if (IsCounterexampleLabel(CommentText(lines[index])))
             return true;
 
-        // Walk up through the comment block, and — once past the fence — the markdown heading or
-        // lead-in paragraph, which is where `### ❌ The anti-pattern that breaks everything` lives.
+        // Walk up: first through the code above, then — once the opening fence is crossed — through
+        // the markdown that introduces the block. Whether the fence has been crossed is tracked
+        // rather than inferred from each line's shape, because a lead-in is often an ordinary
+        // paragraph (`Avoid this:`) with no `#`, `>` or `-` to recognise it by. Testing shape alone
+        // read that paragraph as code and abandoned the walk, turning a clearly labelled
+        // counterexample into a CI failure.
+        var crossedFence = false;
+
         for (var i = index - 1; i >= 0 && index - i <= 8; i--)
         {
             var text = lines[i].Trim();
             if (text.Length == 0)
                 continue;
 
-            var isComment = text.StartsWith("//", StringComparison.Ordinal);
-            var isProse = text.StartsWith("```", StringComparison.Ordinal)
-                          || text.StartsWith("~~~", StringComparison.Ordinal)
-                          || text.StartsWith("#", StringComparison.Ordinal)
-                          || text.StartsWith(">", StringComparison.Ordinal)
-                          || text.StartsWith("-", StringComparison.Ordinal);
+            if (text.StartsWith("```", StringComparison.Ordinal) || text.StartsWith("~~~", StringComparison.Ordinal))
+            {
+                // The second fence encountered closes an earlier, unrelated block; anything above it
+                // introduces that block, not this one.
+                if (crossedFence)
+                    return false;
 
-            if (!isComment && !isProse)
-                return false;   // real code above: any marker up there belongs to that line.
+                crossedFence = true;
+                continue;
+            }
 
-            var candidate = isComment ? CommentText(text) : Urls.Replace(text, " ");
-            if (CounterexampleMarker.IsMatch(candidate))
+            if (!crossedFence)
+            {
+                // Still inside the fence, so only a comment can carry a marker; real code above
+                // means any marker further up belongs to that line rather than this one.
+                if (!text.StartsWith("//", StringComparison.Ordinal))
+                    return false;
+
+                if (IsCounterexampleLabel(CommentText(text)))
+                    return true;
+
+                continue;
+            }
+
+            if (IsCounterexampleLabel(Urls.Replace(text, " ")))
                 return true;
         }
 

@@ -335,13 +335,21 @@ internal static class AgentKitSnippetWalker
     /// on purpose: <c>WithBorder</c>, <c>ThemeBackground</c> and <c>BorderBrush</c> all qualify, and
     /// over-matching here only ever suppresses a finding.
     /// </summary>
-    /// <remarks>
-    /// <c>Set</c> is in the list for a different reason: its lambda can write anything, and this
-    /// walker cannot see inside it. Treating an opaque write as a justification keeps the failure
-    /// mode on the safe side of the false-positive/false-negative trade this gate has to make.
-    /// </remarks>
     private static readonly string[] WrapperJustifications =
-        { "Background", "Border", "CornerRadius", "Shadow", "Clip", "Set" };
+        { "Background", "Border", "CornerRadius", "Shadow", "Clip" };
+
+    /// <summary>
+    /// Modifiers that justify a wrapper but must match <b>exactly</b>.
+    /// </summary>
+    /// <remarks>
+    /// <c>Set</c> counts because its lambda can write anything and this walker cannot see inside
+    /// it, so an opaque write is treated as carrying its own weight. As a substring it also
+    /// swallowed <c>PositionInSet</c>, <c>SetsSize</c> and anything else ending in "Set" — an
+    /// accessibility modifier that can live perfectly well on the inner element, silently
+    /// suppressing a genuine wrapper finding.
+    /// </remarks>
+    private static readonly HashSet<string> ExactWrapperJustifications =
+        new(StringComparer.Ordinal) { "Set" };
 
     /// <summary>
     /// Element types whose sole contribution is decoration, so relocating a modifier inward and
@@ -613,7 +621,8 @@ internal static class AgentKitSnippetWalker
                 continue;
 
             if (ChainModifiers(invocation).Any(name =>
-                    WrapperJustifications.Any(j => name.Contains(j, StringComparison.Ordinal))))
+                    ExactWrapperJustifications.Contains(name)
+                    || WrapperJustifications.Any(j => name.Contains(j, StringComparison.Ordinal))))
                 continue;
 
             return new AgentKitFinding(

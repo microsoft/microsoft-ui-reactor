@@ -262,6 +262,113 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A counterexample marker must be a <em>label</em>, not any occurrence of one of those words.
+    /// </summary>
+    /// <remarks>
+    /// The exemption is the only place this gate declines to report, so anything that widens it
+    /// converts a real violation into a pass. <c>// avoid re-enumerating children</c> is an
+    /// ordinary explanatory comment, and treating it as a label would ship the broken sample
+    /// beneath it unnoticed.
+    /// </remarks>
+    [Theory]
+    // Labels, as this repo actually writes them.
+    [InlineData("// Wrong: no effect, and costs a build-check cycle", true)]
+    [InlineData("// ❌ WRONG — feeds the host's shape back", true)]
+    [InlineData("// Bad: skipping levels", true)]
+    [InlineData("/* Wrong */", true)]
+    [InlineData("Avoid this:", true)]
+    [InlineData("### ❌ The anti-pattern that breaks everything", true)]
+    [InlineData("- Wrong, and it costs a build-check cycle:", true)]
+    // Explanations that merely contain a marker word.
+    [InlineData("// avoid re-enumerating children", false)]
+    [InlineData("// Never hardcode hex on themed surfaces — reviewers reject it", false)]
+    [InlineData("// Good: proper hierarchy", false)]
+    [InlineData("- background reading: https://example.com/patterns/avoid", false)]
+    [InlineData("// Common modifiers", false)]
+    public void Counterexample_Labels_Are_Labels_Not_Incidental_Words(string text, bool expected)
+    {
+        Assert.Equal(expected, AgentKitDocGateTests.IsCounterexampleLabel(text));
+    }
+
+    /// <summary>
+    /// An ordinary markdown lead-in paragraph above a fence must be read as prose.
+    /// </summary>
+    /// <remarks>
+    /// A lead-in usually has no <c>#</c>, <c>&gt;</c> or <c>-</c> to recognise it by, so inferring
+    /// "prose" from a line's shape read <c>Avoid this:</c> as code and abandoned the walk — turning
+    /// a clearly labelled counterexample into a CI failure the author cannot satisfy without
+    /// deleting their own example.
+    /// </remarks>
+    [Fact]
+    public void A_Plain_Lead_In_Paragraph_Above_The_Fence_Is_Prose()
+    {
+        var leadIn = new[]
+        {
+            "Avoid this:",
+            "",
+            "```csharp",
+            "FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(leadIn, 4));
+
+        // Negative control: the same shape with an ordinary sentence must NOT exempt, or the
+        // assertion above would be passing on "prose is reachable" rather than "the label matched".
+        var unlabelled = new[]
+        {
+            "Here is how spacing works:",
+            "",
+            "```csharp",
+            "FlexColumn(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(unlabelled, 4));
+
+        // The walk must not cross into an earlier, unrelated block and borrow its label.
+        var previousBlock = new[]
+        {
+            "Wrong:",
+            "",
+            "```csharp",
+            "VStack(8, items).Padding(15)",
+            "```",
+            "",
+            "```csharp",
+            "FlexColumn(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(previousBlock, 8));
+    }
+
+    /// <summary>
+    /// An unrelated modifier that merely ends in "Set" does not justify a wrapper.
+    /// </summary>
+    /// <remarks>
+    /// <c>.Set(...)</c> justifies one because its lambda is opaque to this walker. As a substring
+    /// that also swallowed <c>.PositionInSet(...)</c>, an accessibility modifier that can live on
+    /// the inner element — so a Border that is still only a padding workaround stopped being
+    /// reported.
+    /// </remarks>
+    [Fact]
+    public void Only_An_Exact_Set_Justifies_A_Wrapper()
+    {
+        var suppressed = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/set.md", 1, "Border(FlexColumn(children)).Padding(16).Set(b => b.Tag = x)"),
+        });
+
+        Assert.Empty(suppressed.Of(AgentKitFindingKind.WrapperWorkaround));
+
+        var reported = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/set.md", 1, "Border(FlexColumn(children)).Padding(16).PositionInSet(2, 5)"),
+        });
+
+        var finding = Assert.Single(reported.Of(AgentKitFindingKind.WrapperWorkaround));
+        Assert.Equal("FlexPadding", finding.Replacement);
+    }
+
+    /// <summary>
     /// Floors over the corpus and the reflection behind it. Each one turns a silent collapse — a
     /// glob that stopped matching, a factory map that resolved to nothing, a fence parser that
     /// stopped recognising ```` ```csharp ```` — into a failure.
