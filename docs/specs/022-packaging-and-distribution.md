@@ -251,15 +251,9 @@ Versions come from [MinVer](https://github.com/adamralph/minver), driven by git 
 
 ### Cutting a release
 
-The one-time bootstrap tag this section originally called for is long done — the repo has been tagged since `v0.1.0-preview.1`. Milestone bumps are explicit tags (`v0.1.0-preview.N`, `v0.2.0-preview.1`, …):
+The one-time bootstrap tag this section originally called for is long done — the repo has been tagged since `v0.1.0-preview.1`. Milestone bumps are explicit tags (`v0.1.0-preview.N`, `v0.2.0-preview.1`, …); between tags, every commit gets a unique, ordered version with zero coordination — height strictly increases as commits land, and MinVer takes it from there.
 
-```sh
-# N = one past the highest existing v0.1.0-preview.* tag
-git tag v0.1.0-preview.N
-git push --tags
-```
-
-Between tags, every commit gets a unique, ordered version with zero coordination — height strictly increases as commits land; MinVer takes it from there.
+The procedure itself is not repeated here: follow [`docs/contributing/release-runbook.md`](../contributing/release-runbook.md), which pushes an annotated tag by name (`git push origin v<version>`). Do not use `git push --tags` — it pushes *every* local tag, so a typo or a stale tag in someone's clone can match the `v*` trigger ([057 §8.1](057-release-channels.md)).
 
 ### Why MinVer over the alternatives
 
@@ -462,7 +456,7 @@ Verified locally:
 
 Still TODO under P0:
 - ~~**Bootstrap MinVer**~~ — done. The repo has been tagged since `v0.1.0-preview.1`, so MinVer always resolves against a real tag and the untagged `-p` fallback never applies.
-- First end-to-end test: after bootstrapping, push a tag like `v0.1.0-preview.1`, verify the workflow produces both assets, install into a throwaway consumer repo from the Release page.
+- First end-to-end test: push a future unused `v0.1.0-preview.N` tag, verify the workflow produces both assets, install into a throwaway consumer repo from the Release page.
 - Verify the on-PR pack produces a complete kit zip (no environment-specific path issues in `Compress-Archive`).
 - Decide whether the skill kit should also be smoke-tested by piping it through `install-skill-kit.ps1` on a clean Windows VM.
 
