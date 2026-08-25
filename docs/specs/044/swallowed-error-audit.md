@@ -139,7 +139,7 @@ all deliberate:
 **Updating it.** Edit your per-file row, run
 
 ```bash
-dotnet test tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --filter "FullyQualifiedName~SwallowedErrorAudit"
+dotnet test tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --filter-class "*SwallowedErrorAudit*"
 ```
 
 and paste the recomputed table the failure message prints. The two skip

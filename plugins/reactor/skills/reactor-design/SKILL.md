@@ -344,9 +344,19 @@ VStack(8, children).Padding(16)
 Border(child).Margin(12).Padding(8)
 HStack(4, items)
 
+// Flex containers take FlexPadding, NOT Padding. `.Padding()` silently has no
+// effect on a FlexElement (FlexRow / FlexColumn / Flex) — `mur check` reports
+// this as REACTOR_MOD_003. Don't add a Border solely to get padding; a Border is
+// still right when you also need its background, corner radius, or border brush.
+FlexColumn(children).FlexPadding(16)
+FlexRow(items).FlexPadding(horizontal: 16, vertical: 8)
+
 // Wrong: odd values cause blurry rendering at fractional scales
 VStack(5, children).Padding(15)
 Border(child).Margin(3)
+
+// Wrong: no effect, and costs a build-check cycle
+FlexColumn(children).Padding(16)
 ```
 
 #### Margin vs Padding

@@ -66,7 +66,7 @@ dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld `
 
 # 2. Point the assertion harness at the publish folder, then test.
 $env:REACTOR_AOT_PUBLISH_DIR = "${PWD}/artifacts/aot-hello-world"
-dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions --nologo
+dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions --no-banner
 ```
 
 The assertion project also auto-discovers the publish folder under
@@ -91,7 +91,7 @@ dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced `
     -o ${PWD}/artifacts/aot-hello-world-advanced
 
 $env:REACTOR_AOT_ADVANCED_PUBLISH_DIR = "${PWD}/artifacts/aot-hello-world-advanced"
-dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.TrimAssertions --nologo
+dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.TrimAssertions --no-banner
 
 # Positive: Win2DCanvas.Of(...) is called, so Win2DCanvasHandler must survive.
 dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive `
@@ -99,7 +99,7 @@ dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive `
     -o ${PWD}/artifacts/aot-hello-world-advanced-positive
 
 $env:REACTOR_AOT_ADVANCED_POSITIVE_PUBLISH_DIR = "${PWD}/artifacts/aot-hello-world-advanced-positive"
-dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions --nologo
+dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions --no-banner
 ```
 
 ## Phase 2 perf baseline (`RegStaticReadBench`)

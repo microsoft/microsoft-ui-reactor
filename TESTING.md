@@ -4,9 +4,16 @@ Reactor has three test suites. Each lives in its own project, so there are no fi
 
 | # | Suite | Project | Runner | What it tests |
 |---|-------|---------|--------|---------------|
-| 1 | **Unit** | `tests/Reactor.Tests` | xUnit | Algorithms, reconciliation, Yoga layout, hooks, D3 — no WinUI window |
-| 2 | **Selftest** | `tests/Reactor.SelfTests` | MSTest (wraps TAP subprocess) | Full reconciler pipeline against real WinUI controls, in-process |
-| 3 | **E2E** | `tests/Reactor.AppTests` | MSTest + winapp ui | Cross-process UIA validation, real user input |
+| 1 | **Unit** | `tests/Reactor.Tests` | xUnit (MTP) | Algorithms, reconciliation, Yoga layout, hooks, D3 — no WinUI window |
+| 2 | **Selftest** | `tests/Reactor.SelfTests` | MSTest (MTP; wraps TAP subprocess) | Full reconciler pipeline against real WinUI controls, in-process |
+| 3 | **E2E** | `tests/Reactor.AppTests` | MSTest (MTP) + winapp ui | Cross-process UIA validation, real user input |
+
+Every suite runs on **Microsoft.Testing.Platform**. `global.json` sets
+`test.runner` to `Microsoft.Testing.Platform` because xunit.v3 v4 dropped the
+VSTest bridge; the two MSTest projects set `EnableMSTestRunner` so they speak the
+same protocol. The suite commands below are unchanged — MTP still takes the
+project positionally — but the VSTest-era *flags* have MTP spellings (see
+[Flag translation](#flag-translation)).
 
 ## Three commands
 
@@ -25,6 +32,36 @@ dotnet test tests/Reactor.Tests && dotnet test tests/Reactor.SelfTests && dotnet
 ```
 
 Both `Reactor.SelfTests` and `Reactor.AppTests` declare a `ProjectReference` to `Reactor.AppTests.Host` with `ReferenceOutputAssembly="false"`, so `dotnet test` rebuilds the Host first. No stale binaries.
+
+## Flag translation
+
+The suites moved to Microsoft.Testing.Platform when xunit.v3 v4 removed VSTest
+support, so the old `dotnet test` flags have new spellings. The extension
+packages are already referenced by the projects that need them.
+
+| VSTest (before) | MTP (now) | Needs |
+|---|---|---|
+| `dotnet test <proj>` | `dotnet test <proj>` *(unchanged — the project is still positional; `--project` also works)* | — |
+| `--logger "console;verbosity=normal"` | *(drop it — terminal output is always on)* | — |
+| `--logger "trx;LogFileName=x.trx"` | `--report-trx --report-trx-filename x.trx` | `Microsoft.Testing.Extensions.TrxReport` |
+| `--results-directory <dir>` | `--results-directory <dir>` *(unchanged)* | — |
+| `--blame-hang-timeout 180s --blame-hang-dump-type none` | `--hangdump --hangdump-timeout 180s --hangdump-type None` | `Microsoft.Testing.Extensions.HangDump` |
+| `--filter "FullyQualifiedName~Foo"` **(xUnit)** | `--filter-class "*Foo*"` (also `--filter-method`, `--filter-namespace`, `--filter-not-class`) | — |
+| `--filter "Category=Perf"` **(xUnit trait)** | `--filter-trait "Category=Perf"` | — |
+| `--filter "ClassName=Foo"` **(MSTest)** | `--filter "ClassName=Foo"` *(unchanged — MSTest keeps the VSTest expression syntax)* | — |
+
+> The two families are not interchangeable in both directions, so the failure is
+> asymmetric. MSTest **rejects** xUnit's `--filter-class` with exit code 5
+> (invalid arguments) rather than silently running everything. xUnit is the
+> lenient one: it accepts both its own `--filter-*` family **and** the VSTest
+> `--filter` expression, so an older `--filter "FullyQualifiedName~Foo"` still
+> works against the xUnit suites and selects the same tests. The `--filter-*`
+> spellings are preferred for new commands, but a surviving `--filter` on an
+> xUnit suite is stale style, not breakage.
+>
+> Verified on this tree: `--filter "FullyQualifiedName~SwallowedErrorAudit"` and
+> `--filter-class "*SwallowedErrorAudit*"` both select the same 11 tests, and
+> `--filter-class` against `tests/Reactor.SelfTests` exits 5.
 
 ## When to write which test
 
@@ -76,7 +113,7 @@ xUnit tests covering framework internals **without a WinUI window**: element cre
 dotnet test tests/Reactor.Tests
 
 # Run a specific test class
-dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~ReconcilerMountUpdateTests"
+dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 ```
 
 ### Console-mutating tests need collection isolation
@@ -426,7 +463,7 @@ E2E test classes (across two host apps):
 dotnet test tests/Reactor.AppTests
 
 # A specific class
-dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.AccessibilityTests"
+dotnet test tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
 ```
 
 > **Requires:** the **winapp CLI** (`winapp ui`). Install it with `winget install Microsoft.WinAppCli` (or run `./bootstrap.ps1`, which installs it for you). The harness resolves it from `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe` or `winapp` on PATH. Unit and selftest runs don't need it.

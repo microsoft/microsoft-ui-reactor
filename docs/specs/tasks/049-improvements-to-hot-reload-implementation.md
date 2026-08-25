@@ -618,7 +618,7 @@ were migrated during the last HR pass.
 - [x] **Unit:** `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
       green, including the new `HotReload/` directory. Targeted run during
       iteration:
-      `dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~HotReload"`
+      `dotnet test tests/Reactor.Tests --filter-class "*HotReload*"`
       → 17/17. (Full-suite run unchanged from the Phase 1 baseline; this change
       only adds gated HR branches.)
 - [x] **Selftests:** `dotnet test tests/Reactor.SelfTests` green; the new HR

@@ -511,7 +511,7 @@ dotnet test tests/Reactor.Tests
 dotnet test tests/Reactor.SelfTests
 
 # E2E — cross-process UI Automation via winapp ui (~30s, needs the winapp CLI)
-dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.InteractiveTests"
+dotnet test tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InteractiveTests"
 
 # Everything
 dotnet test Reactor.slnx

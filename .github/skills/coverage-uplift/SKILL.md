@@ -83,7 +83,7 @@ that already exercises the path.
 
 - **Unit:** new `tests/Reactor.Tests/<Area>UnitCoverageExtraTests.cs` (glob picks it up;
   no csproj edit). One shared filter suffix (e.g. `UnitCoverageExtra`) so
-  `--filter "FullyQualifiedName~UnitCoverageExtra"` runs them all. Use `global::System.`
+  `--filter-class "*UnitCoverageExtra*"` runs them all. Use `global::System.`
   for fully-qualified `System` refs (the `Microsoft.UI.System` namespace shadows).
 - **Selftest fixture:** file under `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`,
   subclass `SelfTestFixtureBase`, use `H.CreateHost()`, `host.Mount(...)`,
@@ -107,7 +107,7 @@ oracle** — reviewers flag it.
 ```powershell
 # unit
 dotnet build tests/Reactor.Tests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -p:Optimize=false -p:DebugType=portable
-dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64 --filter "FullyQualifiedName~UnitCoverageExtra"
+dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64 --filter-class "*UnitCoverageExtra*"
 # selftest (fast TAP loop)
 dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter "<Prefix>"
 # e2e

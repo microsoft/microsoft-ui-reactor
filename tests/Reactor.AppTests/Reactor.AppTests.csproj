@@ -5,6 +5,10 @@
     <RootNamespace>Microsoft.UI.Reactor.AppTests</RootNamespace>
     <AssemblyName>Reactor.AppTests</AssemblyName>
     <IsTestProject>true</IsTestProject>
+    <!-- xunit.v3 v4 is Microsoft.Testing.Platform-only, so global.json pins the repo-wide
+         runner to MTP. MSTest speaks MTP natively behind this switch, which keeps this
+         harness runnable under the same `dotnet test` invocation as the xunit suites. -->
+    <EnableMSTestRunner>true</EnableMSTestRunner>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- Required by the LibraryImport source generator (SessionInteractivityGuard interop). -->
@@ -14,6 +18,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="MSTest.TestAdapter" />
     <PackageReference Include="MSTest.TestFramework" />
+    <!-- Supplies the MTP report-trx option (replaces the VSTest "logger trx" flag). -->
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
   </ItemGroup>
   <ItemGroup>
     <!-- Build dependency: ensures Host is built before tests, no runtime reference -->

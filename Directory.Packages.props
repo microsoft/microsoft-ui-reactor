@@ -33,29 +33,29 @@
 
   <ItemGroup>
     <!-- Framework runtime dependencies -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="System.Drawing.Common" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="System.Drawing.Common" Version="10.0.11" />
     <PackageVersion Include="System.Text.Json" Version="10.0.11" />
     <PackageVersion Include="System.Formats.Asn1" Version="10.0.11" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
     <PackageVersion Include="System.Reflection.DispatchProxy" Version="4.8.2" />
     <PackageVersion Include="MessageFormat" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0-preview.6.26359.118" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0-preview.7.26381.103" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Roslyn source generator that emits a static (reflection-free / NativeAOT-safe)
          YamlStaticContext for the CLI's doc-pipeline YAML DTOs. Analyzer-only
          (PrivateAssets=all) — never shipped in the `mur` tool output. Version tracks
          YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.8" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.11" />
     <PackageVersion Include="MessagePack" Version="2.5.301" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Roslyn (analyzers, source generators, CLI) -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.6.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.6.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.4" />
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
@@ -63,14 +63,21 @@
 
   <ItemGroup>
     <!-- Test infrastructure -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <PackageVersion Include="xunit.v3" Version="3.2.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.3.3" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.3.3" />
+    <!-- Microsoft.Testing.Platform extensions. xunit.v3 v4 dropped the VSTest bridge, so
+         the repo runs every suite under MTP (see global.json). MTP ships no TRX writer or
+         hang detector in the box: these restore the VSTest "logger trx" and "blame hang"
+         behaviours CI depended on, via the MTP report-trx / hangdump options. Version
+         tracks the MTP that xunit.v3 4.x / MSTest 4.x resolve. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.3.3" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="SharpFuzz" Version="2.3.0" />
-    <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.5" />
+    <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.6" />
   </ItemGroup>
 
   <ItemGroup>

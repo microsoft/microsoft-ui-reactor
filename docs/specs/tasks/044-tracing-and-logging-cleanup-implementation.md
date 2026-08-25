@@ -282,7 +282,7 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 ### 4.12 Phase C acceptance
 
 - [ ] Every audit entry has both checkboxes ticked or a documented reason it carried over to a follow-up PR.
-- [ ] `dotnet test tests/Reactor.Tests tests/Reactor.SelfTests` green.
+- [ ] `dotnet test tests/Reactor.Tests` and `dotnet test tests/Reactor.SelfTests` green.
 - [ ] AOT/trim build clean.
 
 ---

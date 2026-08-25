@@ -80,16 +80,16 @@ the spike is clean.
 dotnet build src/Reactor.Analyzers/Reactor.Analyzers.csproj -c Debug
 
 # analyzer tests
-dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~AnalyzerTests" -p:Platform=x64 -p:SkipSignaturesGen=true
+dotnet test tests/Reactor.Tests --filter-class "*AnalyzerTests*" -p:Platform=x64 -p:SkipSignaturesGen=true
 
 # mur check CLI tests (when you touched the CLI mirror)
-dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~CheckCommandTests" -p:Platform=x64 -p:SkipSignaturesGen=true
+dotnet test tests/Reactor.Tests --filter-class "*CheckCommandTests*" -p:Platform=x64 -p:SkipSignaturesGen=true
 ```
 
 `-p:SkipSignaturesGen=true` avoids the `CS2012 …\intermediatexaml\Reactor.dll` build race;
 `-p:Platform=x64` avoids the WinUI architecture failure. If you touched
 `RulePerformanceTests`/`CombinedStub`, run them explicitly with
-`--filter "FullyQualifiedName~RulePerformanceTests"` (they carry
+`--filter-class "*RulePerformanceTests*"` (they carry
 `[Trait("Category", "Perf")]` — the whole perf set runs via `--filter "Category=Perf"`).
 
 ### 5. Sync docs and skills (generated!)
