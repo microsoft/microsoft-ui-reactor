@@ -12,7 +12,7 @@ tier: stub
 
 > ⚠️ **Very rough / experimental.** This is the roughest surface in an already experimental Reactor repository. It is meant for early feedback on the embedded-preview direction, not for reliable day-to-day development yet. Expect install friction, solution-load races, HWND/DPI edge cases, blank-window bugs, and breaking changes while this area is hardened.
 
-The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio 2022 tool window. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.
+The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2022 (17.8+) or Visual Studio 2026 (18.x), with the **Visual Studio extension development** workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.
 
 ## When to use it
 
@@ -20,7 +20,7 @@ Use the Visual Studio extension when you are building a Reactor desktop app in V
 
 ## Install
 
-Build and install the VSIX using the developer instructions in the [VS extension README](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). For local validation, install into the Experimental hive first, then open a Reactor sample or app project and show the **Reactor Preview** tool window.
+Build and install the VSIX using the developer instructions in the [VS extension README](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). Phase 1 may ship unsigned for dev distribution, so Visual Studio may show an unsigned-extension warning. For local validation, install into the Experimental hive first (`/RootSuffix Exp`, which F5 on `Reactor.VsExtension` does for you), then open a Reactor sample or app project and show the **Reactor Preview** tool window.
 
 Do not treat the VSIX as a polished product install. It is currently a developer-smoke artifact for experimentation and feedback.
 

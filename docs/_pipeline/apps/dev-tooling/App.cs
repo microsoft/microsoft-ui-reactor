@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
@@ -83,3 +84,73 @@ class IterationDemo : Component
     }
 }
 // </snippet:iteration-demo>
+
+// <snippet:app-flags>
+// Observable<T> is the lightweight INPC cell that backs dev-only flags.
+// Declare them as static readonly so every component shares one instance.
+public static class AppFlags
+{
+    public static readonly Observable<bool> DebugUI = new(false);
+    public static readonly Observable<bool> SlowMode = new(false);
+    public static readonly Observable<bool> ForceDark = new(false);
+}
+// </snippet:app-flags>
+
+// <snippet:devtools-gate>
+static class DevGate
+{
+    // UseDevtools() is a RenderContext extension, so it is reached from a
+    // function component's ctx (or any helper you hand the ctx to) — there is
+    // no Component-level forwarder. It returns true only when BOTH the
+    // Reactor.DevtoolsSupport build switch and `--devtools app` are present.
+    public static Element Shell(RenderContext ctx)
+    {
+        var dev = ctx.UseDevtools();
+
+        return VStack(8,
+            MainContent(),
+            dev ? DebugOverlay() : Empty()
+        );
+    }
+
+    private static Element MainContent() => TextBlock("App content");
+
+    // Only *constructed* when dev is true. In retail the ternary costs one
+    // bool read plus one branch — no element tree, no children reconciled.
+    private static Element DebugOverlay() =>
+        TextBlock("debug overlay").Opacity(0.6);
+}
+// </snippet:devtools-gate>
+
+// <snippet:devtools-menu>
+static class DevMenu
+{
+    public static Element TitleBar(RenderContext ctx)
+    {
+        // Subscribe during render — not inside the menu builder. The builder
+        // lambda runs when the flyout opens, which is not a render pass, so a
+        // hook call in there would break hook ordering.
+        var debugUI = ctx.UseObservable(AppFlags.DebugUI).Value;
+
+        return HStack(8,
+            TextBlock("My App"),
+            // DevtoolsMenu renders itself as a titlebar item only when
+            // UseDevtools() is true, so the same cost model carries over.
+            DevtoolsMenu(() => new MenuFlyoutItemBase[]
+            {
+                ToggleMenuItem("Debug UI", debugUI,
+                    v => AppFlags.DebugUI.Value = v),
+                MenuSeparator(),
+                MenuItem("Clear cache", () => CacheService.Clear()),
+                MenuItem("Slow mode off", () => AppFlags.SlowMode.Value = false),
+            })
+        );
+    }
+}
+
+// Stand-in for whatever your app actually caches.
+static class CacheService
+{
+    public static void Clear() { }
+}
+// </snippet:devtools-menu>

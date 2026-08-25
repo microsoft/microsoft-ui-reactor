@@ -113,18 +113,36 @@ Every reconcile pass starts here. The event-id pair is `1` / `2`
 `ReconcileStop` are the per-pass cost summary:
 
 ```csharp
-ReconcileStart(elementType);
-ResetDebugCounters();
+// Gate the depth counter and the Start emit on IsEnabled so a session
+// with no consumer attached pays nothing beyond one bool check.
+bool emitTrace = ReactorEventSource.Log.IsEnabled(
+        EventLevel.Informational, ReactorEventSource.Keywords.Reconcile)
+    && _reconcileTraceDepth++ == 0;
 
-var result = ReconcileCore(oldElement, newElement, existingControl);
+if (emitTrace)
+    ReactorEventSource.Log.ReconcileStart(newElement?.GetType().Name ?? "null");
 
-ReconcileStop(
-    elementsDiffed,
-    elementsSkipped,
-    uiElementsCreated,
-    uiElementsModified);
-return result;
+try
+{
+    // ... mount / update walk ...
+}
+finally
+{
+    if (emitTrace)
+    {
+        _reconcileTraceDepth--;
+        ReactorEventSource.Log.ReconcileStop(
+            DebugElementsDiffed, DebugElementsSkipped,
+            DebugUIElementsCreated, DebugUIElementsModified);
+    }
+}
 ```
+
+Only *top-level* passes emit — the depth counter suppresses the
+nested `Reconcile()` calls a single pass makes into subtrees, so one
+band in the viewer is one user-visible update rather than hundreds of
+overlapping fragments. The real code lives in
+`Reconciler.Reconcile` in `src/Reactor/Core/Reconciler.cs`.
 
 In a flame-graph viewer you see a band whose top edge is
 `ReconcileStart` and whose bottom edge is `ReconcileStop`. The band's

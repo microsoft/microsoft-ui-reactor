@@ -1,6 +1,8 @@
+using System;
 using System.Threading.Tasks;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<LoginRecipeApp>("Login Recipe", width: 360, height: 380
@@ -16,34 +18,34 @@ class LoginForm : Component
     public override Element Render()
     {
         // <snippet:state>
+        // Only the two input fields are hand-held state. The in-flight flag
+        // and the last error belong to the mutation below, not to UseState.
         var (email, setEmail) = UseState("");
         var (pwd, setPwd) = UseState("");
-        var (submitting, setSubmitting) = UseState(false);
-        var (error, setError) = UseState<string?>(null);
         // </snippet:state>
+
+        // <snippet:submit>
+        // UseMutation owns IsPending / Error / LastResult and cancels the
+        // in-flight call on unmount. The mutator throws on failure; the hook
+        // captures the exception into signIn.Error and re-renders.
+        var signIn = UseMutation<(string Email, string Password), bool>(
+            mutator: async (input, ct) =>
+            {
+                await Task.Delay(800, ct);                   // pretend API call
+                if (input.Password == "wrong")
+                    throw new InvalidOperationException("Invalid credentials.");
+                return true;
+            });
+        // </snippet:submit>
 
         // <snippet:validation>
         // Local validation runs on every keystroke. The submit button is
-        // disabled until the form is valid; in-flight submits are gated
-        // by the same predicate.
+        // disabled until the form is valid; in-flight submits are gated by
+        // the same predicate, reading the mutation's own pending flag.
         var emailValid = email.Contains('@') && email.Contains('.');
         var pwdValid = pwd.Length >= 8;
-        var canSubmit = emailValid && pwdValid && !submitting;
+        var canSubmit = emailValid && pwdValid && !signIn.IsPending;
         // </snippet:validation>
-
-        // <snippet:submit>
-        async Task Submit()
-        {
-            setSubmitting(true);
-            setError(null);
-            try
-            {
-                await Task.Delay(800);                       // pretend API call
-                if (pwd == "wrong") setError("Invalid credentials.");
-            }
-            finally { setSubmitting(false); }
-        }
-        // </snippet:submit>
 
         // <snippet:render>
         return VStack(12,
@@ -51,10 +53,11 @@ class LoginForm : Component
             TextBox(email, setEmail, placeholderText: "you@example.com",
                 header: "Email").Width(280),
             PasswordBox(pwd, setPwd, placeholderText: "8+ characters"),
-            error is null
+            signIn.Error is null
                 ? Empty()
-                : TextBlock(error).Foreground("#C42B1C"),
-            Button(submitting ? "Signing in…" : "Sign in", () => _ = Submit())
+                : TextBlock(signIn.Error.Message).Foreground("#C42B1C"),
+            Button(signIn.IsPending ? "Signing in…" : "Sign in",
+                    () => _ = signIn.RunAsync((email, pwd)))
                 .IsEnabled(canSubmit)
         ).Padding(20).Width(320);
         // </snippet:render>
