@@ -210,13 +210,95 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
-    /// The fence reader must respect CommonMark's same-character, at-least-as-long closing rule,
-    /// and must report the body's real starting line.
+    /// Every C# fence a naive, indentation-blind probe can see in the packed corpus must have
+    /// produced a snippet.
     /// </summary>
     /// <remarks>
-    /// Both properties are load-bearing and neither is exercised by the corpus today: getting the
-    /// close wrong would swallow the rest of a document into one snippet (findings reported at
-    /// wildly wrong lines), and getting the line wrong would point every failure at the wrong place.
+    /// <para>
+    /// This is the fact that would have caught the four-space fences under list items 10 and 11 of
+    /// <c>skills/design-docs/typography-and-colors.md</c>, which the original 0–3 space indent cap
+    /// silently skipped. The aggregate snippet floor did <b>not</b> catch it and could not: 372
+    /// blocks clear a floor of 150 just as comfortably as 374 do. A floor bounds the corpus from
+    /// below; only a differential comparison against an independent derivation can say the
+    /// extractor saw <em>everything</em>.
+    /// </para>
+    /// <para>
+    /// The comparison is one-directional by design. <see cref="AgentKitDocCorpus.CSharpFenceProbe"/>
+    /// requires the language to stand alone on the line, so the extractor may legitimately find
+    /// fences the probe cannot (an info string carrying extra words). The reverse — a probe hit
+    /// with no snippet — is always either a miss or an empty block.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Every_CSharp_Fence_In_The_Corpus_Is_Extracted()
+    {
+        var repoRoot = AgentKitCorpus.RepoRoot;
+
+        var extracted = AgentKitCorpus.Snippets
+            .GroupBy(s => s.Path, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var probed = 0;
+        var missed = new List<string>();
+
+        foreach (var document in AgentKitCorpus.Documents.Where(d => d.EndsWith(".md", StringComparison.OrdinalIgnoreCase)))
+        {
+            var lines = File.ReadAllText(Path.Combine(repoRoot, document.Replace('/', Path.DirectorySeparatorChar)))
+                .Replace("\r\n", "\n")
+                .Split('\n');
+
+            extracted.TryGetValue(document, out var snippets);
+            snippets ??= new List<AgentKitSnippet>();
+
+            // A snippet's own body may quote a fence as literal text; that line is content the
+            // extractor already read, not a block it skipped.
+            var covered = snippets
+                .SelectMany(s => Enumerable.Range(s.StartLine, s.Text.Split('\n').Length))
+                .ToHashSet();
+
+            var openedAt = snippets.Select(s => s.StartLine - 1).ToHashSet();
+
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (!AgentKitDocCorpus.CSharpFenceProbe.IsMatch(lines[i]))
+                    continue;
+
+                var line = i + 1;
+                if (covered.Contains(line))
+                    continue;
+
+                probed++;
+
+                if (!openedAt.Contains(line))
+                    missed.Add($"{document}:{line} — `{lines[i].TrimEnd()}` opens a C# block that ExtractFences did not return");
+            }
+        }
+
+        // Positive control. Zero probe hits would make the loop above vacuous, and it would read
+        // exactly like a corpus the extractor covers perfectly.
+        Assert.True(
+            probed >= 150,
+            $"The indentation-blind probe found only {probed} C# fences in the packed corpus; " +
+            "expected 150+. The probe itself has stopped matching, so this comparison is measuring " +
+            "nothing and would pass over an extractor that returned no snippets at all.");
+
+        Assert.True(
+            missed.Count == 0,
+            $"{missed.Count} C# fence(s) in the shipped agent kit are not reaching the doc gate, so " +
+            "their samples ship unchecked:\n  " + string.Join("\n  ", missed));
+    }
+
+    /// <summary>
+    /// The fence reader must respect CommonMark's same-character, at-least-as-long closing rule,
+    /// must un-nest a fence indented inside a list item, and must report the body's real starting
+    /// line.
+    /// </summary>
+    /// <remarks>
+    /// Every property here is load-bearing and none is exercised by the corpus in a way that would
+    /// fail visibly: getting the close wrong would swallow the rest of a document into one snippet
+    /// (findings reported at wildly wrong lines), getting the line wrong would point every failure
+    /// at the wrong place, and getting the indent wrong drops whole blocks — which is exactly what
+    /// shipped in the first revision of this gate, silently, past a green floor.
     /// </remarks>
     [Fact]
     public void Fence_Extraction_Handles_Nesting_And_Reports_Real_Line_Numbers()
@@ -237,11 +319,18 @@ public class AgentKitDocGateInstrumentTests
             ```
             Border(child).Padding(8)
             ````
+
+            10. **A list item** — its fenced block is indented to the item's content column,
+                which is four spaces, not the three CommonMark allows at top level:
+
+                ```csharp
+                TextBlock(paragraph).TextWrapping(TextWrapping.WrapWholeWords)
+                ```
             """;
 
         var snippets = AgentKitDocCorpus.ExtractFences("fixture/fences.md", Markdown);
 
-        Assert.Equal(2, snippets.Count);
+        Assert.Equal(3, snippets.Count);
 
         Assert.Equal(4, snippets[0].StartLine);
         Assert.Equal("FlexColumn(children).FlexPadding(16)", snippets[0].Text);
@@ -249,6 +338,14 @@ public class AgentKitDocGateInstrumentTests
         Assert.Equal(12, snippets[1].StartLine);
         Assert.Contains("Border(child).Padding(8)", snippets[1].Text, StringComparison.Ordinal);
         Assert.DoesNotContain("not C#", snippets[1].Text, StringComparison.Ordinal);
+
+        // The list-nested block: found at all (the regression this pins), reported at its real
+        // line, and un-nested from the four-space list indent rather than carrying it into the
+        // snippet text.
+        Assert.Equal(21, snippets[2].StartLine);
+        Assert.Equal(
+            "TextBlock(paragraph).TextWrapping(TextWrapping.WrapWholeWords)",
+            snippets[2].Text);
     }
 
     /// <summary>

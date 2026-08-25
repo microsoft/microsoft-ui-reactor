@@ -58,13 +58,47 @@ internal static class AgentKitDocCorpus
     private static readonly string[] CSharpFenceLanguages = { "csharp", "cs", "c#" };
 
     /// <summary>
-    /// Opening fence: at least three backticks or tildes, then an optional info string. The
-    /// closing fence must use the same character and be at least as long, per CommonMark, which
-    /// is what keeps a nested <c>```</c> inside a longer fence from ending the block early.
+    /// Opening fence: any leading whitespace, then at least three backticks or tildes, then an
+    /// optional info string. The closing fence must use the same character and be at least as
+    /// long, per CommonMark, which is what keeps a nested <c>```</c> inside a longer fence from
+    /// ending the block early.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Indentation is not capped at 3.</b> CommonMark measures a fence's indent relative to its
+    /// <em>container</em>, so a fence inside a numbered list item legitimately sits at four or more
+    /// absolute spaces — <c>skills/design-docs/typography-and-colors.md</c> has two such blocks
+    /// under list items 10 and 11. Capping at 3 silently dropped them from the corpus, and the
+    /// aggregate snippet floor stayed green because the other 370-odd blocks more than covered it:
+    /// a gate that inspects less than it claims, which is the failure mode issue #1121 exists to
+    /// prevent. <c>Every_CSharp_Fence_In_The_Corpus_Is_Extracted</c> now measures this directly
+    /// rather than trusting a floor.
+    /// </para>
+    /// <para>
+    /// Accepting arbitrary indentation slightly over-reads: four-space text outside any list is an
+    /// indented code block, so a literal <c>```csharp</c> there is content, not a fence. That
+    /// direction is the safe one — it inspects an extra snippet rather than skipping a real one —
+    /// and the corpus contains no such construct today.
+    /// </para>
+    /// </remarks>
     private static readonly Regex FenceOpen = new(
-        @"^(?<indent>[ ]{0,3})(?<fence>`{3,}|~{3,})[ ]*(?<info>[^`\r\n]*)$",
+        @"^(?<indent>[ \t]*)(?<fence>`{3,}|~{3,})[ ]*(?<info>[^`\r\n]*)$",
         RegexOptions.Compiled);
+
+    /// <summary>
+    /// An opening C# fence, found with no regard for indentation or for surrounding block
+    /// structure — the independent probe
+    /// <c>AgentKitDocGateInstrumentTests.Every_CSharp_Fence_In_The_Corpus_Is_Extracted</c> measures
+    /// <see cref="ExtractFences"/> against.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately a different mechanism from <see cref="FenceOpen"/> rather than a second call to
+    /// it: two derivations of the same number only corroborate each other when they can fail
+    /// independently.
+    /// </remarks>
+    internal static readonly Regex CSharpFenceProbe = new(
+        @"^[ \t]*(`{3,}|~{3,})[ ]*(csharp|cs|c\#)[ ]*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
     /// Every <c>&lt;None&gt;</c> item packed under <c>agentkit/</c>, in declaration order, with
@@ -155,8 +189,9 @@ internal static class AgentKitDocCorpus
     /// Hand-rolled rather than routed through the repo's markdown parser: this needs the
     /// <em>source line number</em> of each fence so a finding can be reported at
     /// <c>path:line</c>, and it must run on documents that are not otherwise parsed at build
-    /// time. The rules implemented are the two that matter for fence extraction — same fence
-    /// character, closing run at least as long as the opening run.
+    /// time. The rules implemented are the three that matter for fence extraction — same fence
+    /// character, closing run at least as long as the opening run, and the opening fence's
+    /// indentation stripped from the body.
     /// </remarks>
     internal static IReadOnlyList<AgentKitSnippet> ExtractFences(string path, string markdown)
     {
@@ -171,6 +206,7 @@ internal static class AgentKitDocCorpus
 
             var fenceChar = open.Groups["fence"].Value[0];
             var fenceLength = open.Groups["fence"].Value.Length;
+            var indent = open.Groups["indent"].Value.Length;
             var language = open.Groups["info"].Value.Trim().Split(' ', ',')[0];
 
             // Find the close first, so a non-C# fence still advances past its own body instead
@@ -184,7 +220,7 @@ internal static class AgentKitDocCorpus
                 snippets.Add(new AgentKitSnippet(
                     path,
                     i + 2,  // 1-based, and the body starts on the line after the fence.
-                    string.Join("\n", lines[(i + 1)..close])));
+                    string.Join("\n", lines[(i + 1)..close].Select(line => StripIndent(line, indent)))));
             }
 
             i = close;
@@ -193,9 +229,26 @@ internal static class AgentKitDocCorpus
         return snippets;
     }
 
+    /// <summary>
+    /// Removes up to <paramref name="indent"/> leading whitespace characters, which is how
+    /// CommonMark un-nests a fenced block from its list container.
+    /// </summary>
+    /// <remarks>
+    /// C# is whitespace-insensitive, so this changes no verdict — it exists so a reported snippet
+    /// reads the way the document's author wrote it rather than carrying its list indentation.
+    /// </remarks>
+    private static string StripIndent(string line, int indent)
+    {
+        var strip = 0;
+        while (strip < indent && strip < line.Length && (line[strip] == ' ' || line[strip] == '\t'))
+            strip++;
+
+        return line[strip..];
+    }
+
     private static bool IsClosingFence(string line, char fenceChar, int openLength)
     {
-        var text = line.TrimStart(' ');
+        var text = line.TrimStart(' ', '\t');
         var run = 0;
         while (run < text.Length && text[run] == fenceChar)
             run++;
