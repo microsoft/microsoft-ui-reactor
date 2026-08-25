@@ -104,8 +104,8 @@ public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = fa
 ```
 
 `UseState` returns the *same* `Action<T>` setter instance across
-renders for a given hook slot (the closure captures `currentIndex`,
-which doesn't change). A `var (count, setCount) = UseState(0)` setter
+renders for a given hook slot — the delegate is built once and cached
+on the slot. A `var (count, setCount) = UseState(0)` setter
 is therefore safe to pass as a dependency — it compares equal between
 renders and won't restart the effect.
 
@@ -213,9 +213,9 @@ is your only chance to cancel the in-flight task — capture a
 ### Subscribe in mount, unsubscribe in cleanup
 
 The single most useful effect shape is "talk to something outside the
-component for as long as I'm on screen, then release it". Reactor's
-own [`Observable.cs#observable-bridge`](#) bridge follows this shape;
-so does any timer, event subscription, or background task.
+component for as long as I'm on screen, then release it". Reactor's own
+[`Observable<T>` bridge](reactivity-model.md) follows this shape; so
+does any timer, event subscription, or background task.
 
 ```csharp
 var (seconds, updateSeconds) = UseReducer(0);
@@ -364,9 +364,12 @@ classes and `new int[] { … }` are not — they change every render and
 restart the effect.
 
 **Read the source when timing surprises you.** `FlushEffects` in
-`RenderContext.cs` is fifty lines; the two-phase cleanup-then-body
-ordering is right there and explains every "why did my cleanup run
-before my body did?" question.
+`RenderContext.cs` is about thirty lines; the two-phase
+cleanup-then-body ordering is right there and explains every "why did my
+cleanup run before my body did?" question. `RunCleanups` next to it is
+the unmount path — it drains both `Cleanup` and any staged
+`PendingCleanup` so a teardown between render and flush can't leak a
+subscription.
 
 ## Next Steps
 

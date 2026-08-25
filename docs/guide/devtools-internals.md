@@ -154,22 +154,26 @@ private object? HandleCall(JsonElement? @params)
 }
 ```
 
-Tool handlers run on the UI dispatcher, not on the HTTP listener's
-worker thread. The MCP server takes the parsed request, looks up the
-handler in the [`McpToolRegistry`](https://github.com/microsoft/reactor),
-and posts the handler call through `DispatcherQueue.TryEnqueue`. That
-hop is what makes it safe for a handler to query the live WinUI tree
-— `WindowRegistry.Snapshot()`, `host.Mount(new T())`, every property
-read on a `FrameworkElement` — all of which assume the calling
-thread is the one that owns the visual tree. Without the hop, the
-handler would race against the UI thread and either throw
-`COMException` or produce a stale snapshot.
+Tool handlers reach the UI dispatcher, but not because the dispatcher
+puts them there. `McpDispatcher.HandleCall` parses `{ name, arguments }`
+off the JSON-RPC `params`, looks the handler up in the
+[`McpToolRegistry`](https://github.com/microsoft/reactor), and invokes
+it *inline on the transport's worker thread*. Each handler that touches
+WinUI wraps its body in `server.OnDispatcher<T>(...)`, which returns
+immediately when it already has thread access and otherwise posts
+through `DispatcherQueue.TryEnqueue` and waits (5 s default timeout).
+That hop is what makes it safe for a handler to query the live WinUI
+tree — `WindowRegistry.Snapshot()`, `host.Mount(new T())`, every
+property read on a `FrameworkElement` — all of which assume the calling
+thread is the one that owns the visual tree. A handler that forgets the
+wrapper races against the UI thread and either throws
+`COMException` or produces a stale snapshot.
 
 The dispatch path is the same for HTTP and stdio. The two transports
 diverge only at the read boundary (`HttpListenerContext` vs
 `StreamReader`) and the write boundary (`HttpListenerResponse` vs
 `StreamWriter`). Everything between — JSON-RPC parsing, the
-`McpDispatcher.Dispatch(body)` call, the dispatcher hop, the tool
+`McpDispatcher.Dispatch(body)` call, the registry lookup, the tool
 handler — is shared code.
 
 ## The reference-graph overlay
@@ -227,38 +231,45 @@ is off.
 
 ## Patterns
 
-### Adding a custom MCP tool
+### Adding a new MCP tool
 
-The MCP tool surface is open for extension at host bring-up. Any
-code with access to the `DevtoolsMcpServer` instance can call
-`server.Tools.Register(...)`. The shape is a descriptor (name,
-description, JSON input schema) plus a handler delegate that
-receives the parsed `params` element and returns a JSON-serializable
-result:
+The MCP tool surface is `internal` to `Reactor.Devtools` — the registry
+(`McpToolRegistry`), the descriptor (`McpToolDescriptor`), and the
+schema node (`SchemaNode`) are all internal types, so this is a
+framework-contributor extension point, not a host-app one. A host that
+wants agent-visible custom state exposes it through an existing tool's
+payload rather than registering a new verb.
+
+Inside the assembly, registration happens at server bring-up. The shape
+is a descriptor (name, description, input schema built with the
+`Schema` helpers) plus an `McpToolHandler` — a
+`delegate object? (JsonElement? @params)` — that returns a
+JSON-serializable result:
 
 ```csharp
 server.Tools.Register(
     new McpToolDescriptor(
         Name: "appStats",
         Description: "Returns the running app's render and reconcile counters.",
-        InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
-    _ => new
+        InputSchema: Schema.Root()),
+    _ => server.OnDispatcher<object>(() => new
     {
         renders = AppStats.RenderCount,
         reconciles = AppStats.ReconcileCount,
         avgRenderUs = AppStats.AvgRenderMicroseconds(),
-    });
+    }));
 ```
 
 The tool shows up in `tools/list` on the next call, with the input
 schema echoed back to agents that introspect their tool inventory.
-Handlers that touch WinUI state must run inside a
-`DispatcherQueue.TryEnqueue` block — the registry's dispatch is
-already on the UI thread, but the handler will run on the listener
-thread *if* the registration uses the synchronous shape. See the
-existing `windows.activate` registration in
-`src/Reactor.Devtools/DevtoolsTools.cs` for the dispatcher
-trampoline pattern.
+`Schema.Root()` with no arguments is the "takes no parameters" shape;
+the overloads take a `required` name array and `(name, node)` pairs, and
+a required name that isn't a declared property is a hard error at
+registration time rather than a wire-level surprise. Handlers that touch
+WinUI state wrap their body in `server.OnDispatcher<T>(...)`, which is
+the dispatcher trampoline every built-in tool uses — see the
+`docking.list` registration in
+`src/Reactor.Devtools/DevtoolsDockingTools.cs` for the canonical shape.
 
 ## Common Mistakes
 
@@ -301,12 +312,11 @@ re-render components that observe them. The
 `static readonly Observable<bool>` fields exactly so the
 [`UseObservable`](hooks.md) hook can pick up changes.
 
-**Tools that mutate must hop the dispatcher.** The MCP server
-dispatch lands on the UI thread by default through the
-`DispatcherQueue.TryEnqueue` call in the dispatcher, but custom
-handlers registered via `server.Tools.Register` are responsible
-for making sure any [reconciler](reconciliation.md)-touching
-code path runs on the same thread.
+**Tools that touch the tree must hop the dispatcher.** JSON-RPC
+dispatch runs the handler inline on the transport thread; the UI-thread
+hop is opt-in per handler via `server.OnDispatcher<T>(...)`. Any
+[reconciler](reconciliation.md)-touching or `FrameworkElement`-reading
+code path belongs inside that wrapper.
 
 ## Next Steps
 

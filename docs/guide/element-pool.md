@@ -47,7 +47,7 @@ doesn't know about would leak property state into the next user.
 | `ScrollViewer`, `Canvas`, `Viewbox` | Single-`Content` controls; content nulled on return | Same shape. |
 | `ProgressBar`, `ProgressRing` | Indeterminate flag + value reset to defaults | Stop-state restored on return. |
 | `Image`, `InfoBadge` | `Source` / `Value` nulled | Image source pooling is the largest win. |
-| `Button`, `TextBox`, `ToggleSwitch` | Interactive — pooled via Tag-based event trampoline | See "Why interactive controls are safe" below. |
+| `Button`, `TextBox`, `ToggleSwitch` | Interactive — pooled via the element-tag event trampoline | See "Why interactive controls are safe" below. |
 
 Types not in this set are not pooled — every mount of a `ListView`,
 `NumberBox`, `DatePicker`, etc. allocates fresh. That's deliberate:
@@ -125,27 +125,35 @@ fresh records every render by design.
 A `Button.Click` handler that closes over the captured rerender
 closure cannot be left dangling on a pooled control — the next user
 of that control would receive clicks targeting the wrong component.
-The fix is the Tag-based event trampoline: the WinUI subscription
-attached at first mount stays attached, but it reads the *current*
-element from the control's `Tag` at invocation time, so a recycled
+The fix is the element-tag event trampoline: the WinUI subscription
+attached at first mount stays attached, but the handler is a `static`
+delegate that reads the *current* element back off the control's
+`ReactorAttached.StateProperty` at invocation time, so a recycled
 control dispatching from its old subscription naturally routes to
-the new element's `OnClick` after `Reconciler.SetElementTag` runs:
+the new element's `OnClick` once the reconciler has re-tagged it:
 
 ```csharp
-private bool MarshalIfOffUIThread(string hookName, Action work)
+private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __ClickTrampoline = (s, _) =>
 {
-    // Hot path — same thread that ran BeginRender. ~1ns TLS read + cmp + branch.
-    if (Environment.CurrentManagedThreadId == _uiThreadId) return false;
+    if (global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag((WinUI.Button)s!) is ButtonElement live)
+    {
+        if (live.IsDisabledFocusable) return;
+        if (live.OnClick is not null) live.OnClick();
+        else if (live.Command is not null) global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(live.Command);
+    }
+};
 ```
 
-`CleanElement` calls `ClearCurrentEventHandlers(fe)` on pool return,
-which nulls the per-mount user-handler delegates without touching the
-WinUI subscription. On the next mount, the trampoline finds null
-handlers in the new Tag's element record, dispatches to nothing, and
-costs essentially zero — until the user actually wires `.Click(...)`,
-at which point the trampoline routes correctly. TASK-060 in
-`Reconciler.cs` calls this out specifically: clearing the delegate
-list on return is what stops a pooled control from firing the
+`CleanElement` calls `Reconciler.ClearElementTag(fe)` and
+`Reconciler.ClearCurrentEventHandlers(fe)` on pool return, which drop
+the element pointer and null the per-mount user-handler delegates
+without touching the WinUI subscription. On the next mount, the
+trampoline finds no element (or an element with null callbacks),
+dispatches to nothing, and costs essentially zero — until the user
+actually wires `.Click(...)`, at which point the trampoline routes
+correctly. The `SECURITY (TASK-060)` comment above that call in
+`ElementPool.CleanElement` calls this out specifically: clearing the
+delegates on return is what stops a pooled control from firing the
 previous component's captured closure into the next mount.
 
 ## Tips

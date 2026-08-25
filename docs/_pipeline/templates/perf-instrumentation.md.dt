@@ -72,15 +72,23 @@ power-of-two flags on `EventKeywords`, so a consumer can request
 ```csharp snippet="source:src/Reactor/Core/Diagnostics/ReactorEventSource.cs#etw-keywords"
 ```
 
-Seven keywords carve the event surface so a consumer can pay for
-exactly the events it wants. `Reconcile` covers the reconciler pass
-boundaries and the child-list diff; `Render` covers per-component
-render timing and the effect-flush boundary; `State` covers
-[`UseState`](hooks-internals.md) writes; `Mcp` covers
-[devtools](devtools-internals.md) tool dispatch; `Lifecycle` covers
-mount and unmount; `Errors` is severity-Error events; `EventDispatch`
+Fourteen keywords carve the event surface so a consumer can pay for
+exactly the events it wants. The original seven cover the render loop:
+`Reconcile` (0x1) covers the reconciler pass
+boundaries and the child-list diff; `Render` (0x2) covers per-component
+render timing and the effect-flush boundary; `State` (0x4) covers
+[`UseState`](hooks-internals.md) writes; `Mcp` (0x8) covers
+[devtools](devtools-internals.md) tool dispatch; `Lifecycle` (0x10) covers
+mount and unmount; `Errors` (0x20) is severity-Error events;
+`EventDispatch` (0x40)
 covers the trampoline that fans WinUI routed events out to the
-Reactor element callbacks. Adding a new event in any of those
+Reactor element callbacks. Spec 044 added seven more for the
+subsystems outside that loop — `Hosting` (0x80, window / HWND / DPI /
+backdrop), `Persistence` (0x100), `Navigation` (0x200), `Intl` (0x400,
+missing keys and format fallback), `Theme` (0x800), `Shell` (0x1000,
+JumpList / tray / thumbnail toolbar) — plus `HotReload` (0x2000) from
+spec 049 for state migration across edits.
+Adding a new event in any of those
 categories is a matter of picking the right keyword and the right
 event id; consumers already subscribed to the keyword pick the new
 event up automatically.
@@ -198,7 +206,8 @@ unstable.
 ### Computing a payload outside the IsEnabled gate
 
 ```csharp
-// Don't:
+// Don't (hypothetical shape — the real ComponentRenderStop takes a
+// precomputed long and gates before it is called):
 public void ComponentRenderStop(string componentName, Stopwatch sw)
 {
     var elapsed = sw.Elapsed.TotalMicroseconds;  // computed even with no consumer
@@ -234,7 +243,7 @@ emits an EventPipe-only session that the native provider doesn't
 flow into; you'd see Reactor's events in isolation, missing the
 WinUI side of every frame.
 
-**Use the `_reconcile-stop-event` band to spot the outlier.** PerfView's
+**Use the `ReconcileStart` / `ReconcileStop` band to spot the outlier.** PerfView's
 "Events" view groups paired Start/Stop events into duration bands.
 Sort by elapsed microseconds, scan for any band that's an order of
 magnitude longer than the median, and the offending pass is named

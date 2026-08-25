@@ -26,7 +26,7 @@ than either.
 
 | Step | Code | Notes |
 |---|---|---|
-| Setter call | closure returned from `UseState` | Captures the hook slot index |
+| Setter call | closure returned from `UseState` | Cached on the hook slot; closes over the slot cell |
 | UI-thread check | `MarshalIfOffUIThread` | Auto-marshal via `DispatcherQueue` from background |
 | Equality | `EqualityComparer<T>.Default.Equals` | No write, no rerender if equal |
 | Slot write | `ValueHookState<T>.Value = newValue` | Stays inside `RenderContext` |
@@ -114,10 +114,11 @@ A few details matter for understanding the model:
   no rerender. This is why hook-driven re-renders compose cleanly:
   passing the same slot value through three parent renders does not
   multiply work in the leaf.
-- **Setters are stable.** The closure captures the slot index and the
-  context, both of which are fixed for the lifetime of the component.
-  Passing `setCount` as a [`UseEffect`](effects.md) dependency or
-  through a child prop does not retrigger work.
+- **Setters are stable.** The delegate is built once, on the render that
+  created the slot, and cached on the slot itself; every later render
+  hands back the same instance. Passing `setCount` as a
+  [`UseEffect`](effects.md) dependency or through a child prop does not
+  retrigger work.
 
 > **Caveat:** Mutating a reference-typed slot value in place does not trigger a
 > rerender even if you call the setter. The equality check compares
@@ -239,14 +240,20 @@ A parent re-render normally cascades to its children: the parent's
 `Render()` produces a new element tree, the reconciler walks it, and
 each child component's `Render()` is invoked because the parent's call
 to `Component(...)` is what allocated the child element. The default
-`ShouldUpdate` returns `false` for *propless* components — those have
-no inputs that could have changed, so a parent re-render with the same
-shape doesn't propagate. Components with props always re-render on
-parent change today; equality comparison on props is on the roadmap.
+`ShouldUpdate()` on the propless `Component` base returns `false` —
+those have no inputs that could have changed, so a parent re-render with
+the same shape doesn't propagate. `Component<TProps>` overrides the
+props-aware sibling, `ShouldUpdate(TProps? old, TProps? next)`, with
+`!Equals(old, next)`: record props get structural comparison for free,
+so a parent that re-renders with equal props does not re-render the
+child. Class-typed props need their own `Equals` override or every
+parent render propagates.
 
-Override `ShouldUpdate` to opt a propless component back in (rare —
+Override `ShouldUpdate()` to opt a propless component back in (rare —
 the typical reason is a context value the component implicitly reads
-that you want it to pick up). Don't reach for it to memoize: use
+that you want it to pick up), or override the two-argument form to
+replace the default props comparison. Don't reach for either to
+memoize: use
 [`UseMemo`](hooks.md) on the expensive computation, or hoist state
 upward so the parent doesn't need to re-render for an unrelated
 change.

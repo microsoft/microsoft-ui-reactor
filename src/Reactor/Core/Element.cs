@@ -2955,6 +2955,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
     /// </summary>
     internal bool EffectiveIsEnabled => IsEnabled && (Command?.IsEnabled ?? true);
 
+    // <snippet:click-trampoline>
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __ClickTrampoline = (s, _) =>
     {
         if (global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag((WinUI.Button)s!) is ButtonElement live)
@@ -2964,6 +2965,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
             else if (live.Command is not null) global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(live.Command);
         }
     };
+    // </snippet:click-trampoline>
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ButtonElement, WinUI.Button> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ButtonElement, WinUI.Button> d)

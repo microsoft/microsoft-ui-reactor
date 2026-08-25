@@ -535,13 +535,25 @@ raises its change event synchronously. The event trampoline cannot
 distinguish "the user typed this" from "the framework just wrote
 this" without help, and forwarding the framework's own write to the
 element callback would round-trip the same value through the user's
-state setter and trigger a spurious re-render. `ReactorBinding`
-suppresses that echo with a per-control counter:
+state setter and trigger a spurious re-render.
+
+Reactor drops that echo with two mechanisms — the documented hybrid
+described on [Threading and Dispatch](threading-and-dispatch.md#the-change-echo-suppressor).
+Single-valued, exact-comparable, synchronous round-trips use a
+**value-diff arm**: the entry records the value it is about to write in
+`ReactorState.PendingEchoMatch`, writes bare, and the trampoline drops
+the one event whose readback matches. Everything else — doubles,
+coercing or deferred values, collection batches, `.Set(...)` scopes, and
+the public `WriteSuppressed` primitive — uses the **suppress counter**:
 
 | Method | When to call | Effect |
 |---|---|---|
 | `binding.WriteSuppressed(mutate)` | Inside `Update` when writing a controlled prop | Increments the suppress counter, runs the mutate, decrements |
 | `ReactorBinding.ShouldSuppressEcho(fe)` | Inside an event trampoline | Drains a pending suppress count and returns true; trampoline short-circuits |
+
+The counter arm wins first when both are live on the same control, and
+a value-diff arm still set at that moment is cleared rather than left to
+strand and swallow the user's next real interaction.
 
 The trampolines that `ReactorBinding.OnCustomEvent<TArgs>` generates drain
 the suppress counter on entry — every controlled prop in every built-in
@@ -555,19 +567,24 @@ payload box that anchors the trampoline for the control's lifetime.
 
 Every framework element record is anchored on its mounted
 `FrameworkElement` via `Reconciler.SetElementTag(fe, element)`, an
-attached state DP. The tag is what makes event trampolines safe across
+attached state DP (`ReactorAttached.StateProperty`, carrying a
+`ReactorState`). The tag is what makes event trampolines safe across
 re-renders: the trampoline closes over the control instance, calls
 `Reconciler.GetElementTag(control)` at fire time, casts the result to
 the typed element, and invokes the callback. The element value is
-refreshed by `Reconciler.SetElementTag` on every Update, so the
+refreshed on every Update, so the
 trampoline always sees the live element — including the live
 callback, the live state captured by the user's component, and any
 intervening prop changes.
 
 Handler authors get the tag wiring for free — the adapter writes it
-after `Mount` returns and after every `Update`. Hand-authored trampolines
-that need to read the tag (e.g. the descriptor's static
-`ClickTrampoline` for `Button`) call `GetElementTag` and pattern-match
+after `Mount` returns and after every `Update`. The write is
+allocation-gated by `SetElementTagIfNeeded`: an element with no
+callbacks, no `Key`, no `Extensions`, and no reference modifiers is
+never tagged, because nothing downstream would read it back.
+Hand-authored trampolines
+that need to read the tag (e.g. `ButtonElement`'s static
+`__ClickTrampoline`) call `GetElementTag` and pattern-match
 on the expected element type.
 
 ## Descriptors — declarative handlers

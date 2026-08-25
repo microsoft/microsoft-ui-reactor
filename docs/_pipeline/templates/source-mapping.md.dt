@@ -80,7 +80,7 @@ elements, and Y of them resulted in real WinUI writes."
 The reconciler resolves mounts through registered descriptors/handlers
 before falling back to composition-primitive handlers. The handler that
 constructs the WinUI control doesn't know which user line called
-`Text("hello")`:
+`TextBlock("hello")`:
 
 ```csharp snippet="source:src/Reactor/Core/Component.cs#render-loop"
 ```
@@ -98,10 +98,10 @@ adds.
 Spec 010 settles on two coordinated pieces:
 
 1. **CallerInfo on the DSL.** Every factory method
-   (`Text(string)`, `Button(...)`, `VStack(...)`) gains optional
+   (`TextBlock(string)`, `Button(...)`, `VStack(...)`) gains optional
    trailing `[CallerFilePath]` / `[CallerLineNumber]` parameters. C#
    bakes the values into IL as constants, so call sites stay
-   `Text("Hello")` and the runtime cost is zero. A `SourceLocation`
+   `TextBlock("Hello")` and the runtime cost is zero. A `SourceLocation`
    value rides on the element record (`Element.Source`).
 2. **Attached property on the WinUI control.** During reconcile, the
    location string is written to a custom attached
