@@ -251,4 +251,92 @@ internal static class NamedStyleResolutionFixture
             H.Check("NamedStyle_Warning_OncePerKey", matching.Count == 1);
         }
     }
+
+    /// <summary>
+    /// Pins the two facts <c>ResourceLookup.TryFind</c> is built on, against real
+    /// <c>ResourceDictionary</c> instances (which a headless unit test cannot
+    /// construct).
+    ///
+    /// <para>
+    /// The first is an assumption about WinUI, not about our code:
+    /// <c>ResourceDictionary.TryGetValue</c> performs the whole XAML resource
+    /// walk — merged dictionaries included, last-merged-wins. <c>TryFind</c>
+    /// deliberately does not re-implement that walk, so if WinUI ever stops
+    /// doing it these checks fail and say to reinstate a manual reverse walk.
+    /// </para>
+    ///
+    /// <para>
+    /// The second is ours: a key that resolves to the wrong type must report
+    /// "not found" rather than being skipped in favour of some other entry,
+    /// because that is what makes <c>ApplyStyle</c> warn instead of silently
+    /// applying an unrelated style.
+    /// </para>
+    /// </summary>
+    internal class ResourceLookupHonoursPrecedence(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            static Style StyleWith(double fontSize)
+            {
+                var s = new Style(typeof(WinUI.TextBlock));
+                s.Setters.Add(new Setter(WinUI.TextBlock.FontSizeProperty, fontSize));
+                return s;
+            }
+
+            var low = new ResourceDictionary();
+            var high = new ResourceDictionary();
+            var root = new ResourceDictionary();
+            // Declaration order: low first, high last. XAML resolves merged
+            // dictionaries in reverse, so `high` outranks `low`.
+            root.MergedDictionaries.Add(low);
+            root.MergedDictionaries.Add(high);
+
+            low["Dup"] = StyleWith(11);
+            high["Dup"] = StyleWith(99);
+
+            // ── Assumption checks: WinUI's own walk ──────────────────────────
+            // These are what license TryFind to be a single TryGetValue call.
+            H.Check("ResourceLookup_WinUI_TryGetValue_TraversesMerged",
+                root.TryGetValue("Dup", out _));
+            H.Check("ResourceLookup_WinUI_TryGetValue_LastMergedWins",
+                root.TryGetValue("Dup", out var raw) && raw is Style rs && FontSizeOf(rs) == 99);
+
+            // ── Our behaviour on top of it ───────────────────────────────────
+            var dupFound = ResourceLookup.TryFind<Style>(root, "Dup", out var dup);
+            H.Check("ResourceLookup_Duplicate_Resolves", dupFound);
+            H.Check("ResourceLookup_Duplicate_LastMergedWins",
+                dupFound && FontSizeOf(dup!) == 99);
+
+            // A key that resolves to a non-Style must report not-found. This is
+            // the assertion that covers TryFind's own logic: return `true`
+            // regardless of type and it fails.
+            low["Shadowed"] = StyleWith(11);
+            high["Shadowed"] = "not a style";
+            H.Check("ResourceLookup_WrongTypeIsNotFound",
+                !ResourceLookup.TryFind<Style>(root, "Shadowed", out var shadowed));
+            H.Check("ResourceLookup_WrongType_YieldsNullValue", shadowed is null);
+
+            // A dictionary's own entries outrank everything it merges.
+            root["Own"] = StyleWith(42);
+            high["Own"] = StyleWith(99);
+            var ownFound = ResourceLookup.TryFind<Style>(root, "Own", out var own);
+            H.Check("ResourceLookup_OwnEntryOutranksMerged",
+                ownFound && FontSizeOf(own!) == 42);
+
+            H.Check("ResourceLookup_Absent_IsNotFound",
+                !ResourceLookup.TryFind<Style>(root, "NoSuchKeyAnywhere", out _));
+
+            return Task.CompletedTask;
+        }
+
+        private static double FontSizeOf(Style style)
+        {
+            foreach (var setter in style.Setters)
+            {
+                if (setter is Setter s && s.Property == WinUI.TextBlock.FontSizeProperty)
+                    return (double)s.Value;
+            }
+            return double.NaN;
+        }
+    }
 }

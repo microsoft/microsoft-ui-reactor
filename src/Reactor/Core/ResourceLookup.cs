@@ -21,41 +21,43 @@ namespace Microsoft.UI.Reactor.Core;
 internal static class ResourceLookup
 {
     /// <summary>
-    /// Finds the value keyed <paramref name="key"/>, searching
-    /// <paramref name="resources"/> first and then recursing its merged
-    /// dictionaries in declaration order. Resource precedence is preserved: the
-    /// first dictionary that contains the key resolves it, so a wrong-typed
-    /// value there is reported as "not found" rather than being skipped in
-    /// favour of a shadowed entry deeper in the merge chain.
+    /// Resolves <paramref name="key"/> to a <typeparamref name="T"/> in
+    /// <paramref name="resources"/>.
+    ///
+    /// <para>
+    /// <see cref="ResourceDictionary.TryGetValue"/> already performs the full
+    /// XAML resource walk: it traverses <see cref="ResourceDictionary.MergedDictionaries"/>
+    /// and honours their reverse, last-merged-wins precedence, and a dictionary's
+    /// own entries outrank what it merges. So this helper does not re-implement
+    /// that walk — re-implementing it forward would actively *break* precedence,
+    /// and re-implementing it in reverse would be unreachable code. All this adds
+    /// is the typed check.
+    /// </para>
+    ///
+    /// <para>
+    /// That traversal is an assumption, not a guarantee we control, so the
+    /// <c>NamedStyle_ResourceLookupHonoursPrecedence</c> selftest pins it: if a
+    /// future WinUI stops traversing merged dictionaries, that fixture fails and
+    /// tells you to reinstate a manual reverse walk here.
+    /// </para>
+    ///
+    /// <para>
+    /// Returning <see langword="false"/> for a key that resolves to the wrong
+    /// type (rather than continuing to search) is what lets <c>ApplyStyle</c>
+    /// honour its "found but not a Style → warn" contract.
+    /// </para>
     /// </summary>
-    /// <returns><see langword="true"/> if a <typeparamref name="T"/> was
-    /// found; otherwise <see langword="false"/> with
-    /// <paramref name="value"/> set to <see langword="null"/>.</returns>
     internal static bool TryFind<T>(ResourceDictionary? resources, string key, [NotNullWhen(true)] out T? value)
         where T : class
     {
-        if (resources is not null)
-        {
-            // A dictionary's own entries shadow its MergedDictionaries, so a key
-            // present here resolves HERE — even when the value is the wrong type.
-            // Continuing the walk on a type mismatch would silently return a
-            // shadowed value from a merged dictionary, which is neither what the
-            // XAML resource-lookup walk does nor what `ApplyStyle`'s "found but
-            // not a Style → warn" contract promises.
-            if (resources.TryGetValue(key, out var found))
-            {
-                value = found as T;
-                return value is not null;
-            }
-
-            foreach (var merged in resources.MergedDictionaries)
-            {
-                if (TryFind(merged, key, out value))
-                    return true;
-            }
-        }
-
         value = null;
-        return false;
+        if (resources is null)
+            return false;
+
+        if (!resources.TryGetValue(key, out var found))
+            return false;
+
+        value = found as T;
+        return value is not null;
     }
 }

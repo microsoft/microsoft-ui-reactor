@@ -173,11 +173,17 @@ class TypeRampDemo : Component
 
 | Factory | WinUI style |
 |---------|-------------|
+| `Display(text)` | `DisplayTextBlockStyle` — 68px Semibold |
+| `TitleLarge(text)` | `TitleLargeTextBlockStyle` — 40px Semibold |
 | `Title(text)` | `TitleTextBlockStyle` — 28px Semibold |
 | `Subtitle(text)` | `SubtitleTextBlockStyle` — 20px Semibold |
 | `BodyLarge(text)` | `BodyLargeTextBlockStyle` — 18px regular |
 | `BodyStrong(text)` | `BodyStrongTextBlockStyle` — 14px Semibold |
 | `Body(text)` | `BodyTextBlockStyle` — 14px regular |
+
+`Display` and `TitleLarge` sit above the range the screenshot shows; reserve
+`Display` for a hero banner (at most one per page) and `TitleLarge` for a
+primary title on a feature or landing page.
 
 These are factories (not fluents) by design — see
 [spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §17.6. Layer
