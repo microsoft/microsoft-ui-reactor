@@ -98,20 +98,31 @@ internal sealed class ReactorSurface
         foreach (var method in factories.GetMethods(BindingFlags.Public | BindingFlags.Static))
         {
             var returned = method.ReturnType;
-            if (returned.IsGenericParameter || returned.ContainsGenericParameters || !ElementType.IsAssignableFrom(returned))
+            if (returned.IsGenericParameter || !ElementType.IsAssignableFrom(returned))
                 continue;
 
-            // An overload set that returns two different element types cannot be resolved from a
-            // bare name, so the name is poisoned to null rather than resolved to whichever
-            // overload reflection happened to hand back first.
-            if (_factories.TryGetValue(method.Name, out var existing))
+            // A generic factory returns an open constructed type — `ListView<T>` gives
+            // `TemplatedListViewElement<T>`. Keyed by its generic type definition so the map has an
+            // entry at all: dropping these made `ListView<Todo>(...)`, `LazyVStack<T>(...)` and
+            // friends invisible to the walker, and because a skipped chain neither reports nor
+            // counts, the aggregate floor stayed green over the blind spot. Those factories appear
+            // in the shipped corpus.
+            if (returned.ContainsGenericParameters)
+                returned = returned.GetGenericTypeDefinition();
+
+            var key = Key(method.Name, method.GetGenericArguments().Length);
+
+            // An overload set that returns two different element types at the same arity cannot be
+            // resolved from the call site, so the entry is poisoned to null rather than resolved to
+            // whichever overload reflection happened to hand back first.
+            if (_factories.TryGetValue(key, out var existing))
             {
                 if (existing != returned)
-                    _factories[method.Name] = null;
+                    _factories[key] = null;
             }
             else
             {
-                _factories[method.Name] = returned;
+                _factories[key] = returned;
             }
         }
     }
@@ -125,17 +136,32 @@ internal sealed class ReactorSurface
     public Type FactoriesType { get; }
 
     /// <summary>
-    /// Number of factory names that resolve to exactly one element type. A floor over this is what
-    /// tells a reading of "no findings" apart from "the reflection stopped resolving".
+    /// Number of factory signatures that resolve to exactly one element type. A floor over this is
+    /// what tells a reading of "no findings" apart from "the reflection stopped resolving".
     /// </summary>
     public int ResolvableFactoryCount => _factories.Count(pair => pair.Value is not null);
 
     /// <summary>
-    /// The element type a DSL factory name produces, or <see langword="null"/> when the name is
-    /// unknown or its overloads disagree.
+    /// The element type a DSL factory call produces, or <see langword="null"/> when the name is
+    /// unknown or its overloads at that arity disagree.
     /// </summary>
-    public Type? Element(string factoryName) =>
-        _factories.TryGetValue(factoryName, out var element) ? element : null;
+    /// <param name="factoryName">Factory name as written, e.g. <c>ListView</c>.</param>
+    /// <param name="typeArgumentCount">
+    /// Number of type arguments at the call site — <c>0</c> for <c>Border(...)</c>, <c>1</c> for
+    /// <c>ListView&lt;Todo&gt;(...)</c>.
+    /// </param>
+    /// <remarks>
+    /// Keyed by arity as well as name because several factories are both:
+    /// <c>ListView(...)</c> returns <c>ListViewElement</c> while <c>ListView&lt;T&gt;(...)</c>
+    /// returns <c>TemplatedListViewElement&lt;T&gt;</c>. Keyed by name alone the two collide and the
+    /// name is discarded as ambiguous, which silently excluded every such factory from the walker.
+    /// The call site states its own arity, so nothing has to be guessed.
+    /// </remarks>
+    public Type? Element(string factoryName, int typeArgumentCount) =>
+        _factories.TryGetValue(Key(factoryName, typeArgumentCount), out var element) ? element : null;
+
+    private static string Key(string factoryName, int typeArgumentCount) =>
+        typeArgumentCount == 0 ? factoryName : factoryName + "`" + typeArgumentCount;
 
     /// <summary>
     /// The controls an element's <c>Set</c> overloads name, empty when it declares none.
@@ -422,7 +448,7 @@ internal static class AgentKitSnippetWalker
                 if (head is null)
                     continue;
 
-                var element = ReactorSurface.Instance.Element(head.Value.Factory);
+                var element = ReactorSurface.Instance.Element(head.Value.Factory, head.Value.TypeArgumentCount);
                 if (element is null)
                     continue;
 
@@ -630,7 +656,7 @@ internal static class AgentKitSnippetWalker
             if (innerHead is null)
                 continue;
 
-            var inner = ReactorSurface.Instance.Element(innerHead.Value.Factory);
+            var inner = ReactorSurface.Instance.Element(innerHead.Value.Factory, innerHead.Value.TypeArgumentCount);
             if (inner is null || !string.Equals(inner.FullName, innerFullName, StringComparison.Ordinal))
                 continue;
 
@@ -680,11 +706,30 @@ internal static class AgentKitSnippetWalker
     {
         // Walk out to the outermost invocation first — `.Padding(24)` may be followed by
         // `.Background(...)`, and a justification that appears later still justifies the wrapper.
+        // Parentheses, `with` and the null-forgiving `!` are stepped through, because the downward
+        // walk below already treats them as transparent: stopping here but not there made
+        // `(Border(FlexColumn(children)).Padding(16)).Background(...)` report a workaround, never
+        // having reached the `Background` that justifies the Border.
         SyntaxNode outermost = invocation;
-        while (outermost.Parent is MemberAccessExpressionSyntax parentAccess
-               && parentAccess.Parent is InvocationExpressionSyntax parentInvocation)
+
+        while (true)
         {
-            outermost = parentInvocation;
+            var parent = outermost.Parent;
+
+            while (parent is ParenthesizedExpressionSyntax
+                   or WithExpressionSyntax
+                   or PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression })
+            {
+                parent = parent.Parent;
+            }
+
+            if (parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax parentInvocation })
+            {
+                outermost = parentInvocation;
+                continue;
+            }
+
+            break;
         }
 
         for (var node = outermost; node is not null;)
@@ -715,14 +760,21 @@ internal static class AgentKitSnippetWalker
     /// runtime, which is the same reason <see cref="NoOpModifierAnalyzer"/> refuses to report on a
     /// receiver typed as <c>Element</c>.
     /// </remarks>
-    private static (string Factory, SeparatedSyntaxList<ArgumentSyntax> Arguments)? ResolveHead(ExpressionSyntax expression)
+    private static (string Factory, int TypeArgumentCount, SeparatedSyntaxList<ArgumentSyntax> Arguments)? ResolveHead(ExpressionSyntax expression)
     {
         for (var node = expression; node is not null;)
         {
             switch (node)
             {
+                // `Border(...)` and `ListView<Todo>(...)` alike — a generic factory's name lives on
+                // GenericNameSyntax, and rejecting that shape was half of the blind spot that kept
+                // generic factories out of this walker entirely. The call site's own type-argument
+                // count is what tells `ListView(...)` from `ListView<T>(...)`.
+                case InvocationExpressionSyntax { Expression: GenericNameSyntax generic } genericInvocation:
+                    return (generic.Identifier.Text, generic.TypeArgumentList.Arguments.Count, genericInvocation.ArgumentList.Arguments);
+
                 case InvocationExpressionSyntax { Expression: IdentifierNameSyntax identifier } invocation:
-                    return (identifier.Identifier.Text, invocation.ArgumentList.Arguments);
+                    return (identifier.Identifier.Text, 0, invocation.ArgumentList.Arguments);
 
                 case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access }:
                     node = access.Expression;

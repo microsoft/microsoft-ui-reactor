@@ -427,6 +427,82 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A generic DSL factory must resolve like any other, so its chains are actually inspected.
+    /// </summary>
+    /// <remarks>
+    /// Two things kept them out: a generic factory returns an open constructed type
+    /// (<c>ListView&lt;T&gt;</c> gives <c>TemplatedListViewElement&lt;T&gt;</c>), and its call site
+    /// is <c>GenericNameSyntax</c> rather than <c>IdentifierNameSyntax</c>. A skipped chain neither
+    /// reports nor counts, so the blind spot was invisible to every floor — while
+    /// <c>ListView&lt;Todo&gt;(...)</c>, <c>ListView&lt;Item&gt;(...)</c> and
+    /// <c>ListView&lt;Order&gt;(...)</c> all appear in the shipped corpus.
+    /// </remarks>
+    [Theory]
+    [InlineData("ListView")]
+    [InlineData("GridView")]
+    [InlineData("LazyVStack")]
+    [InlineData("FlipView")]
+    public void Generic_Factories_Resolve_To_An_Element(string factory)
+    {
+        var element = ReactorSurface.Instance.Element(factory, typeArgumentCount: 1);
+
+        Assert.NotNull(element);
+        Assert.True(
+            typeof(Microsoft.UI.Reactor.Core.Element).IsAssignableFrom(element),
+            $"{factory}<T> resolved to {element}, which is not an Element.");
+
+        // Arity is what separates these from their non-generic namesakes; without it the two
+        // collide and the factory is discarded as ambiguous, which is how they were excluded.
+        Assert.NotEqual(element, ReactorSurface.Instance.Element(factory, typeArgumentCount: 0));
+    }
+
+    /// <summary>
+    /// A generic factory call site reaches the walker, rather than being dropped before it counts.
+    /// </summary>
+    [Fact]
+    public void A_Generic_Factory_Call_Site_Is_Walked()
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/generic.md", 1, "ListView<Todo>(items, (t, _) => Row(t)).Padding(16)"),
+        });
+
+        Assert.True(
+            scan.ResolvedChains >= 1,
+            "A `ListView<Todo>(...)` chain resolved nothing, so generic factories are still invisible " +
+            "to the gate and their samples ship uninspected.");
+    }
+
+    /// <summary>
+    /// A justification later in the chain still counts when the chain is parenthesised.
+    /// </summary>
+    /// <remarks>
+    /// The outward walk that collects chain modifiers has to treat the same nodes as transparent
+    /// that the downward walk does. While it did not,
+    /// <c>(Border(FlexColumn(children)).Padding(16)).Background(...)</c> was reported as a
+    /// workaround — the walk never reached the <c>Background</c> that justifies the Border — which
+    /// is a CI failure on valid documentation.
+    /// </remarks>
+    [Theory]
+    [InlineData("(Border(FlexColumn(children)).Padding(16)).Background(Theme.CardBackground)")]
+    [InlineData("(Border(FlexColumn(children)).Padding(16))!.Background(Theme.CardBackground)")]
+    public void A_Justification_Survives_Parentheses(string snippet)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/parens.md", 1, snippet) });
+
+        Assert.Empty(scan.Of(AgentKitFindingKind.WrapperWorkaround));
+
+        // Positive control on the same shape: without the justification it must still report, or
+        // this would pass because parenthesising had disabled the rule outright.
+        var unjustified = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/parens.md", 1, "(Border(FlexColumn(children)).Padding(16)).Margin(8)"),
+        });
+
+        Assert.Single(unjustified.Of(AgentKitFindingKind.WrapperWorkaround));
+    }
+
+    /// <summary>
     /// Floors over the corpus and the reflection behind it. Each one turns a silent collapse — a
     /// glob that stopped matching, a factory map that resolved to nothing, a fence parser that
     /// stopped recognising ```` ```csharp ```` — into a failure.
