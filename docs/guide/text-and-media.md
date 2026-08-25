@@ -599,8 +599,13 @@ class MarkdownRowsDemo : Component
         // Memo(key, factory) — the cross-recycle row cache. A scroll recycle
         // re-asks for the key and gets the same element instance back, so the
         // parser never runs again for an unchanged row.
+        //
+        // Key on the row identity *and* the body, not the body alone: this is a
+        // per-row cache, and two messages that happen to share text would
+        // otherwise collide on one entry. Including Id also reparses correctly
+        // when a single message's body is edited.
         return LazyVStack<Message>(messages, m => m.Id, (m, i) =>
-            Memo(m.Body, () => Markdown(m.Body))).Height(200);
+            Memo((m.Id, m.Body), () => Markdown(m.Body))).Height(200);
     }
 }
 ```
