@@ -625,9 +625,36 @@ public static partial class ElementExtensions
         if (_styleApplierCache.TryGetValue(styleName, out var cached))
             return cached;
         if (_styleApplierCache.Count >= StyleApplierCacheCap)
-            return fe => fe.Style = (Style)Application.Current.Resources[styleName];
+            return fe => ApplyNamedStyle(fe, styleName);
         return _styleApplierCache.GetOrAdd(styleName,
-            static name => fe => fe.Style = (Style)Application.Current.Resources[name]);
+            static name => fe => ApplyNamedStyle(fe, name));
+    }
+
+    // Resolve a named Style out of the merged application resources and assign it.
+    //
+    // Previously this was a bare `fe.Style = (Style)Application.Current.Resources[name]`.
+    // A key that does not resolve — or resolves to something that is not a Style —
+    // gave no signal at all: the cast either threw out of `OnMountAction`, which
+    // Reconciler.ApplyModifiers invokes unguarded, or the element simply kept its
+    // default typography. Either way the caller saw a correctly-structured tree that
+    // rendered at the wrong size, with nothing in the log to explain it.
+    private static void ApplyNamedStyle(FrameworkElement fe, string styleName)
+    {
+        var resources = Application.Current?.Resources;
+        if (resources is not null
+            && resources.TryGetValue(styleName, out var found)
+            && found is Style style)
+        {
+            fe.Style = style;
+            return;
+        }
+
+        Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
+            Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+            nameof(ApplyStyle),
+            $"Style '{styleName}' did not resolve to a Style in Application.Current.Resources; " +
+            "the element keeps its default appearance. Check the key spelling and that the " +
+            "resource dictionary defining it is merged into the application's resources.");
     }
 
     // ════════════════════════════════════════════════════════════════
