@@ -46,6 +46,7 @@ class ConnectedAnimationPage : Component
                         .Foreground(Theme.SecondaryText)
                         .TextWrapping(TextWrapping.Wrap)),
                 sourceCode: @"
+string[] items = [""Aurora"", ""Basalt"", ""Cirrus"", ""Delta""];
 var (selected, setSelected) = UseState<string?>(null);
 
 if (selected is not null)
