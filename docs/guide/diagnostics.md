@@ -61,7 +61,7 @@ page documents. Pick the bits that match what you're triaging:
 
 | Keyword | Bit | Covers |
 |---|---|---|
-| `Errors` | `0x20` | Generic `SwallowedError` / `HResultFailed`, plus `RenderError` |
+| `Errors` | `0x20` | Generic `SwallowedError` / `HResultFailed` / `Warning`, plus `RenderError` |
 | `Hosting` | `0x80` | `WindowOpened`, `WindowClosed`, `WindowDpiChanged`, `BackdropMaterializationFailed` |
 | `Persistence` | `0x100` | `PersistenceRead`, `PersistenceWrite`, `PersistenceRejected` |
 | `Navigation` | `0x200` | `NavigationRequested`, `NavigationCompleted`, `NavigationCancelled`, cache hit/miss/evict, transitions, deep-link |
@@ -73,6 +73,20 @@ Combine bits with bitwise-or. The most common capture-everything-
 unsurprising mask is `0x1FA0` (`Errors | Hosting | Persistence |
 Navigation | Intl | Theme`) — drops the verbose `State` and
 `EventDispatch` keywords that produce per-state-write spam.
+
+`Warning` carries a framework-authored diagnostic for a recoverable
+misconfiguration the framework chose to continue past — an unresolved
+`.ApplyStyle()` key, a backdrop that could not materialize. Its payload is
+three strings:
+
+| Field | Meaning |
+|---|---|
+| `category` | Subsystem label, e.g. `Theme`, `Hosting` |
+| `operation` | Stable operation identifier, e.g. `ApplyStyle` |
+| `message` | Framework-authored explanation, naming the offending key or property |
+
+The message is composed by the framework from developer-authored
+identifiers, never from user data (spec 044 §6.2.1).
 
 ## Capturing a trace
 
