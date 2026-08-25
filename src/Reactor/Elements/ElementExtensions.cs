@@ -688,14 +688,21 @@ public static partial class ElementExtensions
         // there would break the documented "unresolved keys are reported"
         // contract exactly when an app is most badly misconfigured, and would
         // hide a genuine typo behind 256 earlier ones.
-        if (_warnedStyles.Count < StyleApplierCacheCap && !_warnedStyles.TryAdd(styleName, 0))
+        //
+        // An overlong name is never stored, only warned: the entry cap bounds
+        // how MANY keys are retained but not how LARGE each one is, so a
+        // data-driven caller could otherwise root 256 arbitrarily long strings
+        // for the process lifetime. Skipping de-duplication for those matches
+        // the overflow behaviour above — warn every time, retain nothing.
+        var bounded = styleName.Length <= EtwKeyMaxChars;
+        if (bounded && _warnedStyles.Count < StyleApplierCacheCap && !_warnedStyles.TryAdd(styleName, 0))
             return;
 
         // Spec 044 §6.2.1: resource keys are developer-authored identifiers and
         // are allowed on the ETW payload (same category as IntlMissingKey's
         // `key`), but payloads must still be length-bounded so a data-driven
         // caller can't pump an oversized string through the ring buffer.
-        var safeName = styleName.Length <= EtwKeyMaxChars
+        var safeName = bounded
             ? styleName
             : string.Concat(styleName.AsSpan(0, EtwKeyMaxChars), "…");
 

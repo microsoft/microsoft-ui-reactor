@@ -32,18 +32,19 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// </summary>
 internal static class NamedStyleResolutionFixture
 {
-    // WinUI 3 type ramp (Windows App SDK generic.xaml). Font size is the
-    // cheapest observable that differs per style, so it doubles as the
-    // "right key" check: swapping any two keys reddens the pair.
-    private static readonly (string Label, double FontSize)[] Ramp =
+    // WinUI 3 type ramp (Windows App SDK generic.xaml). Size alone does not
+    // identify a style — Body and BodyStrong are both 14px — so each row also
+    // pins FontWeight. Together the pair is unique per row, which is what makes
+    // this a real "right key" guard: swap any two keys and the pair reddens.
+    private static readonly (string Label, double FontSize, ushort Weight)[] Ramp =
     [
-        ("ramp-Body", 14),
-        ("ramp-BodyStrong", 14),
-        ("ramp-BodyLarge", 18),
-        ("ramp-Subtitle", 20),
-        ("ramp-Title", 28),
-        ("ramp-TitleLarge", 40),
-        ("ramp-Display", 68),
+        ("ramp-Body", 14, 400),
+        ("ramp-BodyStrong", 14, 600),
+        ("ramp-BodyLarge", 18, 400),
+        ("ramp-Subtitle", 20, 600),
+        ("ramp-Title", 28, 600),
+        ("ramp-TitleLarge", 40, 600),
+        ("ramp-Display", 68, 600),
     ];
 
     /// <summary>
@@ -69,7 +70,7 @@ internal static class NamedStyleResolutionFixture
 
             await Harness.Render();
 
-            foreach (var (label, expected) in Ramp)
+            foreach (var (label, expected, expectedWeight) in Ramp)
             {
                 var tb = H.FindText(label);
                 H.Check($"NamedStyle_{label}_Mounted", tb is not null);
@@ -80,6 +81,11 @@ internal static class NamedStyleResolutionFixture
 
                 H.Check($"NamedStyle_{label}_FontSize{expected}",
                     tb is not null && Math.Abs(tb.FontSize - expected) < 0.01);
+
+                // Distinguishes styles that share a size — without this,
+                // swapping the Body and BodyStrong keys stays green.
+                H.Check($"NamedStyle_{label}_Weight{expectedWeight}",
+                    tb is not null && tb.FontWeight.Weight == expectedWeight);
             }
         }
     }
