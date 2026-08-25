@@ -3797,6 +3797,15 @@ public sealed partial class Reconciler : IDisposable
     /// have on those snapshots, leaving them composited over the fallback and available
     /// for a later same-key mount to travel from. Resolving the service is a COM call, so
     /// it is skipped entirely on the overwhelmingly common path where nothing was prepared.
+    ///
+    /// <para><b>Total by construction.</b> This runs after <c>_debugReconcileDepth</c> has
+    /// been incremented but before the <c>try/finally</c> that decrements it, so an
+    /// escaping exception would strand the counter above zero — and every later top-level
+    /// reconcile would then look nested and skip this reset, the hot-reload consume, and
+    /// the dirty-ancestor path. Releasing orphaned snapshots has no recovery worth that
+    /// blast radius, so a failure degrades to a logged no-op. The narrow teardown-only
+    /// filters elsewhere in this file are deliberate; here the caller's bookkeeping is
+    /// what needs protecting.</para>
     /// </remarks>
     private void ResetConnectedAnimationsForNewPass()
     {
@@ -3806,7 +3815,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 ReleaseUnclaimedConnectedAnimations(ConnectedAnimationService.GetForCurrentView());
             }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+            catch (Exception ex)
             {
                 Diagnostics.DiagnosticLog.SwallowedError(
                     Diagnostics.LogCategory.Reactor, "Reconciler.ResetConnectedAnimationsForNewPass", ex);
