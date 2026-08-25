@@ -125,7 +125,7 @@ mur docs compile --skip-screenshots --skip-diagrams
 Run the focused template tests:
 
 ```powershell
-dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj `
+dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
   -p:Platform=x64 `
   --filter FullyQualifiedName~TemplateMetadataTests
 ```

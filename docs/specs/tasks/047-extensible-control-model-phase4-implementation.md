@@ -265,7 +265,7 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > §4.5 deletes each arm.
 >
 > **Build/test cmds (verified this env, dotnet 10.0.204):**
-> - xunit (default = V1 ON now): `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
+> - xunit (default = V1 ON now): `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
 > - selftest V1 ON: `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test [--filter Name]`
 > - selftest V1 OFF (escape hatch): set `$env:REACTOR_USE_V1_PROTOCOL="0"` first.
 > - **Avoid running two `dotnet run` selftest builds concurrently** — they race on

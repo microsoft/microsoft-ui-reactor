@@ -147,7 +147,7 @@ $env:DOTNET_DbgMiniDumpName="$env:TEMP\reactor-hang-%p.dmp"
 
 ```powershell
 $env:REACTOR_SELFTEST_HOST_EXE="<publish-dir>\Reactor.AppTests.Host.exe"
-dotnet test --project tests/Reactor.SelfTests
+dotnet test tests/Reactor.SelfTests
 ```
 
 ### Disabling the watchdog while debugging

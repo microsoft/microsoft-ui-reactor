@@ -61,7 +61,7 @@ reflection added elsewhere in the class is still caught.
 
 **Result:** `dotnet build tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true`
 is warning/error-clean with the analyzer on, and all tests stay green:
-`dotnet test --project tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true`
+`dotnet test tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true`
 → **Failed: 0, Passed: 12454, Skipped: 64** (the skips are pre-existing).
 
 ## Native-AOT test *run* — DOCUMENTED BLOCKER (upstream)

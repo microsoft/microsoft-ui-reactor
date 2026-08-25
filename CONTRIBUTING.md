@@ -74,7 +74,7 @@ When building via the solution (`dotnet build Reactor.slnx`), the platform is se
 
 ```bash
 dotnet build tests/Reactor.Tests -p:Platform=x64
-dotnet test --project  tests/Reactor.Tests -p:Platform=x64
+dotnet test  tests/Reactor.Tests -p:Platform=x64
 ```
 
 ---
@@ -86,9 +86,9 @@ See [`TESTING.md`](TESTING.md) for the full guide — three suites (unit / selft
 Quick reference:
 
 ```bash
-dotnet test --project tests/Reactor.Tests       # unit (xUnit, headless, fast)
-dotnet test --project tests/Reactor.SelfTests   # selftest (real WinUI, in-process)
-dotnet test --project tests/Reactor.AppTests    # E2E (winapp ui)
+dotnet test tests/Reactor.Tests       # unit (xUnit, headless, fast)
+dotnet test tests/Reactor.SelfTests   # selftest (real WinUI, in-process)
+dotnet test tests/Reactor.AppTests    # E2E (winapp ui)
 ```
 
 ---
@@ -267,7 +267,7 @@ catch (COMException ex) when (ex.HResult is HResults.RPC_E_DISCONNECTED or HResu
 The summary table at the top of that file is **derived**, not maintained: it is the sum of the ledger rows, and `tests/Reactor.Tests/Docs/SwallowedErrorAuditTests.cs` fails on any drift. Never hand-edit a cell in it. Instead run
 
 ```bash
-dotnet test --project tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --filter-class "*SwallowedErrorAudit*"
+dotnet test tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --filter-class "*SwallowedErrorAudit*"
 ```
 
 and paste the table the failure prints. (The two skip flags are the pair CI passes; together they keep a ledger-only edit from leaving `skills/reactor.api.txt` modified in your tree.) Hand-incrementing was how the published counts became unreproducible (issue #959): two branches editing `37 → 38` from the same base produce identical edits that git auto-resolves as agreement, silently dropping one increment.

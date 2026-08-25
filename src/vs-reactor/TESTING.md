@@ -46,7 +46,7 @@
 
 ## Tier B SDK test status
 
-Tier B is partially running under `dotnet test --project src\vs-reactor\Tests\Reactor.VsExtension.SdkTests\Reactor.VsExtension.SdkTests.csproj`: 3 pass, 3 are intentionally skipped.
+Tier B is partially running under `dotnet test src\vs-reactor\Tests\Reactor.VsExtension.SdkTests\Reactor.VsExtension.SdkTests.csproj`: 3 pass, 3 are intentionally skipped.
 
 Running coverage for Tier A with `--collect:"XPlat Code Coverage"` is not currently available in this project; `dotnet test` reports `Unable to find a datacollector with friendly name 'XPlat Code Coverage'`.
 

@@ -26,7 +26,7 @@ Derived from: [`docs/specs/056-visual-studio-embedded-preview.md`](../056-visual
 >   stretch.
 > - Each phase keeps the Reactor triple gate green:
 >   `dotnet build Reactor.slnx -p:Platform=x64` →
->   `dotnet test --project tests/Reactor.Tests -p:Platform=x64 --no-build` →
+>   `dotnet test tests/Reactor.Tests -p:Platform=x64 --no-build` →
 >   `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test`.
 > - **The VSIX is .NET Framework 4.7.2.** It cannot reference Reactor
 >   core projects. The only contract is the HTTP API on
@@ -319,7 +319,7 @@ endpoints with `HttpClient`. They must fail until 1.1/1.2 land.
       outside embed mode)
 
 All tests live in `tests/Reactor.Tests/Devtools/PreviewCaptureServer_EmbedTests.cs`.
-Run via `dotnet test --project tests/Reactor.Tests -p:Platform=x64 --no-build
+Run via `dotnet test tests/Reactor.Tests -p:Platform=x64 --no-build
 --filter "FullyQualifiedName~PreviewCaptureServer_EmbedTests"`.
 
 ### 1.1 Reactor-side: `--embed` CLI plumbing (spec §5.1)

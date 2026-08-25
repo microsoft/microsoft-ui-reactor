@@ -107,11 +107,11 @@ oracle** — reviewers flag it.
 ```powershell
 # unit
 dotnet build tests/Reactor.Tests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -p:Optimize=false -p:DebugType=portable
-dotnet test --project  tests/Reactor.Tests --no-build -p:Platform=x64 --filter-class "*UnitCoverageExtra*"
+dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64 --filter-class "*UnitCoverageExtra*"
 # selftest (fast TAP loop)
 dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter "<Prefix>"
 # e2e
-dotnet test --project tests/Reactor.AppTests -p:Platform=x64
+dotnet test tests/Reactor.AppTests -p:Platform=x64
 ```
 
 Always pass `-p:Platform=x64` (AnyCPU app/test builds fail with *"WindowsAppSDKSelfContained

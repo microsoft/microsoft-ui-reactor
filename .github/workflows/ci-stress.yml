@@ -109,7 +109,7 @@ jobs:
           $failures = New-Object System.Collections.Generic.List[int]
           for ($i = 1; $i -le $count; $i++) {
             Write-Host "::group::Unit iteration $i / $count (shard $idx)"
-            dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --no-build -p:Platform=x64 --hangdump --hangdump-timeout 180s --hangdump-type None
+            dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --no-build -p:Platform=x64 --hangdump --hangdump-timeout 180s --hangdump-type None
             $code = $LASTEXITCODE
             Write-Host "::endgroup::"
             if ($code -ne 0) {
@@ -162,7 +162,7 @@ jobs:
           $failures = New-Object System.Collections.Generic.List[int]
           for ($i = 1; $i -le $count; $i++) {
             Write-Host "::group::Selftest iteration $i / $count (shard $idx)"
-            dotnet test --project tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --no-build -p:Platform=x64
+            dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --no-build -p:Platform=x64
             $code = $LASTEXITCODE
             Write-Host "::endgroup::"
             if ($code -ne 0) {
@@ -215,7 +215,7 @@ jobs:
           $failures = New-Object System.Collections.Generic.List[int]
           for ($i = 1; $i -le $count; $i++) {
             Write-Host "::group::Integration iteration $i / $count (shard $idx)"
-            dotnet test --project tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --no-build
+            dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --no-build
             $code = $LASTEXITCODE
             Write-Host "::endgroup::"
             if ($code -ne 0) {
@@ -355,7 +355,7 @@ jobs:
           "shard,iter,exit" | Out-File -FilePath $csv -Encoding utf8
           for ($i = 1; $i -le $count; $i++) {
             Write-Host "::group::E2E iteration $i / $count (shard $idx)"
-            dotnet test --project tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --report-trx --report-trx-filename "e2e-$idx-$i.trx" --results-directory TestResults
+            dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --report-trx --report-trx-filename "e2e-$idx-$i.trx" --results-directory TestResults
             $code = $LASTEXITCODE
             "$idx,$i,$code" | Add-Content -Path $csv
             Write-Host "::endgroup::"

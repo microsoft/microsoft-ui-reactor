@@ -80,10 +80,10 @@ the spike is clean.
 dotnet build src/Reactor.Analyzers/Reactor.Analyzers.csproj -c Debug
 
 # analyzer tests
-dotnet test --project tests/Reactor.Tests --filter-class "*AnalyzerTests*" -p:Platform=x64 -p:SkipSignaturesGen=true
+dotnet test tests/Reactor.Tests --filter-class "*AnalyzerTests*" -p:Platform=x64 -p:SkipSignaturesGen=true
 
 # mur check CLI tests (when you touched the CLI mirror)
-dotnet test --project tests/Reactor.Tests --filter-class "*CheckCommandTests*" -p:Platform=x64 -p:SkipSignaturesGen=true
+dotnet test tests/Reactor.Tests --filter-class "*CheckCommandTests*" -p:Platform=x64 -p:SkipSignaturesGen=true
 ```
 
 `-p:SkipSignaturesGen=true` avoids the `CS2012 …\intermediatexaml\Reactor.dll` build race;

@@ -536,8 +536,8 @@ flip default in N+1.
 
 ### 8.3 Acceptance results
 
-- [x] Full unit test suite: `dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj` — **6725 passed, 0 failed, 46 skipped** after this round (3 new `GridSizeTests` cases). Two timing-sensitive tests (`LogCaptureBufferTests.WaitForNewAsync_WakesOnAppend`, `UseResourceTests.Retry_Exhausted_Surfaces_Final_Error`) flake under load on the Windows on ARM64 runner; both pass when run in isolation. Tracked separately as flaky-test cleanup, unrelated to spec 033.
-- [x] Full self-test suite: `dotnet test --project tests/Reactor.SelfTests/Reactor.SelfTests.csproj` — **639 passed, 0 failed** after this round. Includes the four `Focus_TypedRef*` fixtures (3 from the prior pass + the new `Focus_TypedRefPreservesAutomationName` for §2.6).
+- [x] Full unit test suite: `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj` — **6725 passed, 0 failed, 46 skipped** after this round (3 new `GridSizeTests` cases). Two timing-sensitive tests (`LogCaptureBufferTests.WaitForNewAsync_WakesOnAppend`, `UseResourceTests.Retry_Exhausted_Surfaces_Final_Error`) flake under load on the Windows on ARM64 runner; both pass when run in isolation. Tracked separately as flaky-test cleanup, unrelated to spec 033.
+- [x] Full self-test suite: `dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj` — **639 passed, 0 failed** after this round. Includes the four `Focus_TypedRef*` fixtures (3 from the prior pass + the new `Focus_TypedRefPreservesAutomationName` for §2.6).
 - [x] Full solution build (`dotnet build Reactor.sln`) — **0 errors**. Warnings are limited to `REACTOR_A11Y_*` analyzer firings inside `samples/apps/a11y-showcase` (an intentional analyzer-demo sample) and `CS0618` from the deferred `[Obsolete]`-marked overloads being exercised on purpose by the deprecation-test fixtures.
 - [x] `samples/InteropFirst` builds clean.
 - [ ] Manual visual smoke (Mica/Acrylic on a real Win11 box, browse `ReactorGallery`, IntelliSense check) — out of scope for this automated implementation pass.

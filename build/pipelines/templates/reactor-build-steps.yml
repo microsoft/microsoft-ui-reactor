@@ -255,7 +255,7 @@ steps:
       displayName: 'Restore unit tests (internal feed)'
 
     - pwsh: |
-        dotnet test --project tests/Reactor.Tests/Reactor.Tests.csproj `
+        dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
           --no-restore -p:Platform=x64 -p:CI=true --configuration ${{ parameters.configuration }} `
           --filter-not-class "*AnalyzerTests*" `
           --report-trx --results-directory "$(Build.SourcesDirectory)\TestResults"

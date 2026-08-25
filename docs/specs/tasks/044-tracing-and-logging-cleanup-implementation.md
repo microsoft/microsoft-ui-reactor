@@ -18,7 +18,7 @@ A task is "done" only when:
 1. Code compiles clean under `Reactor.slnx` warnings-as-errors and AOT/trim-warnings-as-errors.
 2. Public API surface has XML doc comments.
 3. Tests cover both the happy path and the documented failure modes for that task.
-4. `dotnet test --project tests/Reactor.Tests` and `dotnet test --project tests/Reactor.SelfTests` are green.
+4. `dotnet test tests/Reactor.Tests` and `dotnet test tests/Reactor.SelfTests` are green.
 
 ---
 
@@ -80,7 +80,7 @@ Closes the foundation. Once this lands, every catch site in Phase C can route th
 ### 1.5 Phase A acceptance
 
 - [x] `dotnet build Reactor.slnx` clean (warnings-as-errors, AOT/trim).
-- [x] `dotnet test --project tests/Reactor.Tests` green.
+- [x] `dotnet test tests/Reactor.Tests` green.
 - [x] No existing call sites changed — Phase A is **additive only**.
 
 ---
@@ -138,7 +138,7 @@ Adds the typed events that the §6.7 "Promote to typed event" verdicts will use.
 ### 2.8 Phase B acceptance
 
 - [x] `dotnet build Reactor.slnx` clean.
-- [x] `dotnet test --project tests/Reactor.Tests` green.
+- [x] `dotnet test tests/Reactor.Tests` green.
 - [x] Each new event has its PII policy decision documented inline (a `// PII:` comment on the event method or in a section comment).
 
 ---
@@ -275,14 +275,14 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.11 Phase C tests
 
-- [ ] After each PR, run `dotnet test --project tests/Reactor.Tests` and `dotnet test --project tests/Reactor.SelfTests`. Both must stay green.
+- [ ] After each PR, run `dotnet test tests/Reactor.Tests` and `dotnet test tests/Reactor.SelfTests`. Both must stay green.
 - [ ] Add one regression test per major category that fires the migrated path and asserts the event lands on the ETW listener (e.g., `Reconciler_swallow_emits_SwallowedError_event`, `NavigationDiagnostics_push_emits_NavigationRequested`).
 - [ ] After Phase C is fully landed, the spec §12 acceptance criterion holds: **zero** `Debug.WriteLine` calls in `src/Reactor/` that report errors or HRESULT codes. Verify with a final grep.
 
 ### 4.12 Phase C acceptance
 
 - [ ] Every audit entry has both checkboxes ticked or a documented reason it carried over to a follow-up PR.
-- [ ] `dotnet test --project tests/Reactor.Tests` and `dotnet test --project tests/Reactor.SelfTests` green.
+- [ ] `dotnet test tests/Reactor.Tests` and `dotnet test tests/Reactor.SelfTests` green.
 - [ ] AOT/trim build clean.
 
 ---
@@ -360,8 +360,8 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 6.5 Phase F acceptance
 
-- [x] `dotnet test --project tests/Reactor.Tests` green (478 tests in the Diagnostics+Devtools filter, full suite below).
-- [x] `dotnet test --project tests/Reactor.SelfTests` green.
+- [x] `dotnet test tests/Reactor.Tests` green (478 tests in the Diagnostics+Devtools filter, full suite below).
+- [x] `dotnet test tests/Reactor.SelfTests` green.
 - [x] Existing devtools MCP clients (which do not pass `source=event`) see zero behavior change (spec §12).
 
 ---
@@ -434,7 +434,7 @@ Also added (over and above the spec checklist):
 
 - [x] All assertions in 8.2 pass.
 - [x] Test harness is **only** in the test assembly (`tests/Reactor.Tests/Diagnostics/ReactorTraceCollector.cs`, `internal sealed class`) — no production reference.
-- [x] `dotnet test --project tests/Reactor.Tests` green (492 tests in the Diagnostics+Devtools filter).
+- [x] `dotnet test tests/Reactor.Tests` green (492 tests in the Diagnostics+Devtools filter).
 
 ---
 

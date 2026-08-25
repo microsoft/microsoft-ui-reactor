@@ -12,8 +12,8 @@ Derived from: [`docs/specs/053-reactor-advanced-and-win2d-canvas.md`](../053-rea
 > - The Reactor `xunit + selftest + solution build` triple gate must stay
 >   green after every phase. Run order on Windows-x64:
 >   `dotnet build Reactor.slnx -p:Platform=x64` →
->   `dotnet test --project tests/Reactor.Tests -p:Platform=x64 --no-build` →
->   `dotnet test --project tests/Reactor.Advanced.Tests -p:Platform=x64 --no-build`
+>   `dotnet test tests/Reactor.Tests -p:Platform=x64 --no-build` →
+>   `dotnet test tests/Reactor.Advanced.Tests -p:Platform=x64 --no-build`
 >   (new in Phase 1) →
 >   `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test`.
 > - **No changes under `src/Reactor/`.** Spec §2 Goal 5: any edit there is
@@ -309,7 +309,7 @@ asserted via element/handler shape, not control instances.
       `src/Reactor.Advanced/`).
 - [ ] Register the new project in `Reactor.slnx`.
 - [ ] Add to the unit-test CI job in `.github/workflows/ci.yml` so
-      `dotnet test --project tests/Reactor.Advanced.Tests` runs on every PR.
+      `dotnet test tests/Reactor.Advanced.Tests` runs on every PR.
 
 #### 1.8.1 Element record discipline
 
@@ -385,9 +385,9 @@ asserted via element/handler shape, not control instances.
 ### 1.10 Phase 1 exit gate (spec §16 Phase 1)
 
 - [ ] `dotnet build Reactor.slnx -p:Platform=x64` clean.
-- [ ] `dotnet test --project tests/Reactor.Advanced.Tests -p:Platform=x64`
+- [ ] `dotnet test tests/Reactor.Advanced.Tests -p:Platform=x64`
       green.
-- [ ] `dotnet test --project tests/Reactor.Tests -p:Platform=x64` (no
+- [ ] `dotnet test tests/Reactor.Tests -p:Platform=x64` (no
       regressions in existing tests).
 - [ ] `dotnet publish src/Reactor.Advanced -p:PublishTrimmed=true -p:Platform=x64 -r win-x64`
       produces **zero new** trim/AOT warnings beyond the Win2D

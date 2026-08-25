@@ -321,7 +321,7 @@ The calibration runs through a test harness at `tests/Reactor.Tests/CheckCommand
 
 ```pwsh
 $env:MUR_TUNING_CORPUS = "docs\specs\tasks\038-tuning-reports\2026-05-11-525run-source\fixes.jsonl"
-dotnet test --project tests\Reactor.Tests\Reactor.Tests.csproj -p:Platform=x64 `
+dotnet test tests\Reactor.Tests\Reactor.Tests.csproj -p:Platform=x64 `
   --filter FullyQualifiedName~ThresholdTuningTests.EndToEnd_corpus_run
 ```
 

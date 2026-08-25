@@ -11,24 +11,24 @@ Reactor has three test suites. Each lives in its own project, so there are no fi
 Every suite runs on **Microsoft.Testing.Platform**. `global.json` sets
 `test.runner` to `Microsoft.Testing.Platform` because xunit.v3 v4 dropped the
 VSTest bridge; the two MSTest projects set `EnableMSTestRunner` so they speak the
-same protocol. That is why the project is passed as `--project` below, and why
-the VSTest-era flags have MTP spellings (see
+same protocol. The suite commands below are unchanged — MTP still takes the
+project positionally — but the VSTest-era *flags* have MTP spellings (see
 [Flag translation](#flag-translation)).
 
 ## Three commands
 
 ```bash
 # 1. Unit
-dotnet test --project tests/Reactor.Tests -p:Platform=x64
+dotnet test tests/Reactor.Tests -p:Platform=x64
 
 # 2. Selftest (in-process WinUI, ~10s; no filter needed)
-dotnet test --project tests/Reactor.SelfTests
+dotnet test tests/Reactor.SelfTests
 
 # 3. E2E (requires the winapp CLI)
-dotnet test --project tests/Reactor.AppTests
+dotnet test tests/Reactor.AppTests
 
 # All three
-dotnet test --project tests/Reactor.Tests && dotnet test --project tests/Reactor.SelfTests && dotnet test --project tests/Reactor.AppTests
+dotnet test tests/Reactor.Tests && dotnet test tests/Reactor.SelfTests && dotnet test tests/Reactor.AppTests
 ```
 
 Both `Reactor.SelfTests` and `Reactor.AppTests` declare a `ProjectReference` to `Reactor.AppTests.Host` with `ReferenceOutputAssembly="false"`, so `dotnet test` rebuilds the Host first. No stale binaries.
@@ -41,7 +41,7 @@ packages are already referenced by the projects that need them.
 
 | VSTest (before) | MTP (now) | Needs |
 |---|---|---|
-| `dotnet test <proj>` | `dotnet test --project <proj>` | — |
+| `dotnet test <proj>` | `dotnet test <proj>` *(unchanged — the project is still positional; `--project` also works)* | — |
 | `--logger "console;verbosity=normal"` | *(drop it — terminal output is always on)* | — |
 | `--logger "trx;LogFileName=x.trx"` | `--report-trx --report-trx-filename x.trx` | `Microsoft.Testing.Extensions.TrxReport` |
 | `--results-directory <dir>` | `--results-directory <dir>` *(unchanged)* | — |
@@ -110,10 +110,10 @@ xUnit tests covering framework internals **without a WinUI window**: element cre
 **When to run:** after any code change. Fast, no prerequisites beyond the .NET SDK.
 
 ```bash
-dotnet test --project tests/Reactor.Tests
+dotnet test tests/Reactor.Tests
 
 # Run a specific test class
-dotnet test --project tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
+dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 ```
 
 ### Console-mutating tests need collection isolation
@@ -122,7 +122,7 @@ Tests that write to `Console.Out`/`Console.Error` must be grouped with `[Collect
 
 ### Repo lints ride in this tier
 
-Some tests here parse repo *sources* with Roslyn rather than exercising Reactor at runtime, so a gallery or docs edit can fail `dotnet test --project tests/Reactor.Tests` with no code change at all. The ones under `Tooling/`:
+Some tests here parse repo *sources* with Roslyn rather than exercising Reactor at runtime, so a gallery or docs edit can fail `dotnet test tests/Reactor.Tests` with no code change at all. The ones under `Tooling/`:
 
 | Test | Fails when |
 |---|---|
@@ -141,7 +141,7 @@ In-process checks that run inside a real WinUI window at CPU speed. Each fixture
 **When to run:** after reconciler, control mount/update, or any UI-related changes.
 
 ```bash
-dotnet test --project tests/Reactor.SelfTests
+dotnet test tests/Reactor.SelfTests
 ```
 
 For faster iteration with raw TAP output, you can bypass MSTest and run the Host directly:
@@ -460,10 +460,10 @@ E2E test classes (across two host apps):
 | `WinFormsInteropTests` | WinForms | XAML Island rendering, tab navigation, UIA across boundaries |
 
 ```bash
-dotnet test --project tests/Reactor.AppTests
+dotnet test tests/Reactor.AppTests
 
 # A specific class
-dotnet test --project tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
+dotnet test tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
 ```
 
 > **Requires:** the **winapp CLI** (`winapp ui`). Install it with `winget install Microsoft.WinAppCli` (or run `./bootstrap.ps1`, which installs it for you). The harness resolves it from `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe` or `winapp` on PATH. Unit and selftest runs don't need it.
@@ -500,7 +500,7 @@ The canonical coverage metric is **unit + selftest merged**. Run both and merge:
 dotnet build tests/Reactor.Tests -c Debug -p:Optimize=false -p:DebugType=portable
 dotnet-coverage collect -s coverage.settings.xml \
   --output unit.cobertura.xml --output-format cobertura \
-  -- dotnet test --project tests/Reactor.Tests --no-build
+  -- dotnet test tests/Reactor.Tests --no-build
 
 # --- Selftest ---
 # Step 1: Rebuild with explicit Debug settings (required for instrumentation)

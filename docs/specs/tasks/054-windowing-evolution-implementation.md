@@ -22,7 +22,7 @@ Derived from: [`docs/specs/054-windowing-evolution.md`](../054-windowing-evoluti
 > - Reactor's triple gate must stay green after every phase. Run order on
 >   Windows-x64:
 >   `dotnet build Reactor.slnx -p:Platform=x64` →
->   `dotnet test --project tests/Reactor.Tests -p:Platform=x64 --no-build` →
+>   `dotnet test tests/Reactor.Tests -p:Platform=x64 --no-build` →
 >   `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test`.
 > - **All new feature assertions for spec 054 live in AppTests.Host
 >   selftest fixtures** — Win32 / AppWindow / DWM interop is not testable
@@ -118,7 +118,7 @@ this implementation PR.
    trees. CI grep proves zero residual references.
 3. `dotnet build Reactor.slnx -p:Platform=x64` is clean
    (warnings-as-errors on core lib).
-4. `dotnet test --project tests/Reactor.Tests -p:Platform=x64 --no-build` is green
+4. `dotnet test tests/Reactor.Tests -p:Platform=x64 --no-build` is green
    (existing unit suite — no new feature coverage added here, only
    migration fixups for the removed/renamed fields).
 5. Full selftest run
@@ -199,7 +199,7 @@ code lands, so later phases don't restart on a re-decision.
 - [x] Record the current selftest count and pass/fail baseline (clean
       `main` HEAD), so the post-054 delta is unambiguous. Expected ≈40
       new fixtures by the end of Phase 7.
-- [x] Record the current `dotnet test --project tests/Reactor.Tests` count on
+- [x] Record the current `dotnet test tests/Reactor.Tests` count on
       `main`. No new unit tests are expected from this work; the count
       should be stable (modulo migration fixups for removed fields).
 
@@ -916,7 +916,7 @@ Demonstrates runtime `UseWindowAspectRatio` swap.
 ### 11.3 Final triple gate
 
 - [x] `dotnet build Reactor.slnx -p:Platform=x64` — clean.
-- [x] `dotnet test --project tests/Reactor.Tests -p:Platform=x64 --no-build` —
+- [x] `dotnet test tests/Reactor.Tests -p:Platform=x64 --no-build` —
       green: 9,202 passed / 62 skipped / 0 failed (baseline match).
 - [x] `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test` —
       green: 1,118 total fixtures, 0 failures (baseline 1,069 + 49 new).

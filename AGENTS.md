@@ -9,28 +9,29 @@ Reactor is a declarative, component-based C# framework for building WinUI 3 desk
 dotnet build Reactor.slnx
 
 # Unit tests — xUnit, headless, fast (13,000+ tests incl. 590 Yoga fixtures)
-dotnet test --project tests/Reactor.Tests
+dotnet test tests/Reactor.Tests
 
 # Single test class (xUnit suites use the MTP filter flags, not `--filter`)
-dotnet test --project tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
+dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 
 # Selftests — real WinUI window, in-process (~10s)
-dotnet test --project tests/Reactor.SelfTests
+dotnet test tests/Reactor.SelfTests
 
 # Raw TAP output (faster iteration, supports --filter prefix)
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 
 # E2E — winapp ui CLI (install: winget install Microsoft.WinAppCli, or run ./bootstrap.ps1)
-dotnet test --project tests/Reactor.AppTests
+dotnet test tests/Reactor.AppTests
 
 # Single E2E class (MSTest suites keep the VSTest-style `--filter` expression)
-dotnet test --project tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
+dotnet test tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
 ```
 
 Every suite runs on **Microsoft.Testing.Platform** (MTP): `global.json` pins
 `test.runner`, xunit.v3 v4 is MTP-only, and the MSTest projects opt in with
-`EnableMSTestRunner`. Practical consequences: pass the project with `--project`,
-prefer `--filter-class` / `--filter-method` / `--filter-not-class` / `--filter-trait`
+`EnableMSTestRunner`. Practical consequences: the project is still passed
+positionally (`dotnet test tests/Reactor.Tests`), but prefer `--filter-class` /
+`--filter-method` / `--filter-not-class` / `--filter-trait`
 on the xUnit suites (they also still accept the VSTest `--filter` expression;
 MSTest accepts **only** `--filter` and rejects `--filter-class` with exit 5),
 `--logger "trx;…"` becomes `--report-trx`, and `--blame-hang-*` becomes
