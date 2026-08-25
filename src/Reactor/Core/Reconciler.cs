@@ -1445,13 +1445,12 @@ public sealed partial class Reconciler : IDisposable
             DebugElementsSkipped = 0;
             DebugUIElementsCreated = 0;
             DebugUIElementsModified = 0;
-            // Drop anything a previous pass queued but never flushed. Every shipped
-            // host flushes at the end of each render, but a Reconcile() caller that
-            // doesn't (tests, embedders) must not accumulate strong UIElement refs —
-            // QueueConnectedAnimationStart now enqueues for every keyed mount, not
-            // only when a prepared animation already exists.
-            _pendingConnectedAnimationStarts.Clear();
-            _preparedConnectedAnimationKeys.Clear();
+            // Drop anything a previous pass queued but never flushed, cancelling snapshots
+            // it still holds rather than just forgetting them. Every shipped host flushes
+            // at the end of each render, but a pass that threw mid-reconcile — or a
+            // Reconcile() caller that never flushes (tests, embedders) — must not leak
+            // strong UIElement refs or leave live snapshots the service still owns.
+            ResetConnectedAnimationsForNewPass();
             if (ReactorFeatureFlags.HighlightReconcileChanges)
             {
                 (_highlightMounted ??= new()).Clear();
@@ -3768,6 +3767,34 @@ public sealed partial class Reconciler : IDisposable
             }
             catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
         }
+    }
+
+    /// <summary>
+    /// Drops the per-pass connected-animation bookkeeping, cancelling any snapshot still
+    /// held by the service first.
+    /// </summary>
+    /// <remarks>
+    /// Reached when a pass prepared a source but never got to
+    /// <see cref="FlushConnectedAnimations"/> — both host render loops flush only after
+    /// <c>Reconcile</c> returns, so a throw mid-reconcile shows the error fallback and
+    /// skips the flush. Clearing the key set on its own would forget the only handle we
+    /// have on those snapshots, leaving them composited over the fallback and available
+    /// for a later same-key mount to travel from. Resolving the service is a COM call, so
+    /// it is skipped entirely on the overwhelmingly common path where nothing was prepared.
+    /// </remarks>
+    private void ResetConnectedAnimationsForNewPass()
+    {
+        if (_preparedConnectedAnimationKeys.Count > 0)
+        {
+            try
+            {
+                ReleaseUnclaimedConnectedAnimations(ConnectedAnimationService.GetForCurrentView());
+            }
+            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            _preparedConnectedAnimationKeys.Clear();
+        }
+
+        _pendingConnectedAnimationStarts.Clear();
     }
 
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers m, Action requestRerender)

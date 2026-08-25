@@ -192,7 +192,11 @@ TextBlock(""Slides horizontally"")
                         .Foreground(Theme.SecondaryText)
                         .TextWrapping(TextWrapping.Wrap)),
                 sourceCode: @"
-var (items, setItems) = UseState<IReadOnlyList<string>>([""Beta"", ""Gamma"", ""Delta""]);
+// Hoisted out of Render: a collection expression written inline in UseState is rebuilt
+// every render even though only the first one is ever read (REACTOR_HOOKS_013).
+static readonly IReadOnlyList<string> Seed = [""Beta"", ""Gamma"", ""Delta""];
+
+var (items, setItems) = UseState(Seed);
 
 VStack(6, items.Select(i =>
     Border(TextBlock(i))

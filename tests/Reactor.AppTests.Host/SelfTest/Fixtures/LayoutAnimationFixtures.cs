@@ -354,4 +354,60 @@ internal static class LayoutAnimationFixtures
                 host.Reconciler.ConnectedAnimationStartCount == beforeReturn + 1);
         }
     }
+
+    /// <summary>
+    /// A reconcile pass can prepare a source and then never reach
+    /// <c>FlushConnectedAnimations</c> — both hosts flush only after <c>Reconcile</c>
+    /// returns, so a mid-reconcile throw shows the error fallback and skips the flush.
+    /// The next pass must CANCEL what that pass left behind, not merely forget it:
+    /// forgetting drops the only handle on a snapshot the service still holds, which
+    /// keeps it composited over the new content and lets a later same-key mount travel
+    /// from it.
+    ///
+    /// Staged by driving the reconciler directly rather than through a host render, which
+    /// is the same shape — a completed pass with no flush after it — without needing to
+    /// inject a throw at an exact point mid-traversal.
+    /// </summary>
+    internal class ConnectedAnimationReleasesAcrossUnflushedPass(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var reconciler = H.CreateHost().Reconciler;
+            Action noop = () => { };
+
+            // Pass 1 — mount the keyed source and put it in the live visual tree, so the
+            // unmount below has something real to snapshot.
+            var sourceTree = VStack(
+                Button("OrphanSrc", noop)
+                    .ConnectedAnimation("orphan-pass-key")
+                    .AutomationId("orphan-src"));
+            var sourceControl = reconciler.Reconcile(null, sourceTree, null, noop);
+            H.SetContent(sourceControl);
+            await Harness.Render();
+
+            var src = H.FindControl<Button>(b =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(b) == "orphan-src");
+            H.Check("ConnectedAnimUnflushed_SourceMeasured",
+                src is not null && src.ActualWidth > 0 && src.ActualHeight > 0);
+
+            // Pass 2 — swap to a tree carrying no matching key. The unmount prepares a
+            // snapshot that nothing claims, and no flush runs afterwards.
+            var plainTree = VStack(TextBlock("no key here"));
+            var plainControl = reconciler.Reconcile(sourceTree, plainTree, sourceControl, noop);
+            H.SetContent(plainControl);
+            await Harness.Render();
+
+            int before = reconciler.ConnectedAnimationReleaseCount;
+
+            // Pass 3 — the next top-level pass must release the orphan. Reading
+            // before+1 also proves pass 2 really did prepare a snapshot, so a
+            // PrepareToAnimate that silently did nothing would fail here rather than
+            // making the assertion trivially true.
+            var thirdTree = VStack(TextBlock("third"));
+            reconciler.Reconcile(plainTree, thirdTree, plainControl, noop);
+
+            H.Check("ConnectedAnimUnflushed_OrphanReleasedOnNextPass",
+                reconciler.ConnectedAnimationReleaseCount == before + 1);
+        }
+    }
 }
