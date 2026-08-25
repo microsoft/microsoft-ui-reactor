@@ -134,8 +134,8 @@ class LayoutAnimationDemo : Component
                     nextId.Current++;
                     updateItems(l => [$"Item {nextId.Current}", .. l]);
                 }),
-                Button("Remove Last", () =>
-                    updateItems(l => l.Count > 0 ? l[1..].ToList() : l))
+                Button("Remove First", () =>
+                    updateItems(l => l.Count > 0 ? l[1..] : l))
             ),
             VStack(4, items.Select(item =>
                 TextBlock(item)
