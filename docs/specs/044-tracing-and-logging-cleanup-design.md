@@ -142,6 +142,26 @@ internal static class DiagnosticLog
         DebugHResult(category, operation, hr);
     }
 
+    /// <summary>
+    /// Logs a framework-authored warning for a recoverable misconfiguration the
+    /// framework chose to continue past (an unresolved `.ApplyStyle()` key, a
+    /// backdrop that could not materialize). Same release-visible contract as
+    /// the two above.
+    /// </summary>
+    public static void Warning(LogCategory category, string? operation, string? message)
+    {
+        if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Errors))
+            ReactorEventSource.Log.Warning(category.ToString(), operation ?? "", message ?? "");
+        DebugWarning(category, operation, message);
+    }
+
+    /// <summary>
+    /// Whether a <see cref="Warning"/> emitted now would reach any consumer.
+    /// Call sites that must interpolate a message gate on this so the string is
+    /// not built and immediately discarded when nothing is listening.
+    /// </summary>
+    public static bool IsWarningEnabled { get; }
+
     [Conditional("DEBUG")]
     private static void DebugSwallowedError(LogCategory category, string operation, Exception ex)
         => Debug.WriteLine($"[{category}] {operation} failed: {ex.GetType().Name}: {ex.Message}");
@@ -149,6 +169,10 @@ internal static class DiagnosticLog
     [Conditional("DEBUG")]
     private static void DebugHResult(LogCategory category, string operation, int hr)
         => Debug.WriteLine($"[{category}] {operation} HR=0x{hr:X8}");
+
+    [Conditional("DEBUG")]
+    private static void DebugWarning(LogCategory category, string? operation, string? message)
+        => Debug.WriteLine($"[{category}] {operation} warning: {message}");
 }
 
 internal enum LogCategory
@@ -192,6 +216,7 @@ New events (illustrative — full table in implementation PR):
 |---|---|---|---|
 | `SwallowedError(category, op, exType)` | Errors | Warning | Used by `DiagnosticLog.SwallowedError` |
 | `HResultFailed(category, op, hr)` | Errors | Warning | Used by `DiagnosticLog.HResultFailed` |
+| `Warning(category, op, message)` | Errors | Warning | Used by `DiagnosticLog.Warning`. `message` is framework-authored and composed only from developer-authored identifiers (resource keys, property names) per §6.2.1; length-bounded before emit. |
 | `WindowOpened/Closed/DpiChanged` | Hosting | Informational | `ReactorWindow` Debug.WriteLines |
 | `PersistenceRead/Write/Rejected` | Persistence | Informational | `JsonFileStore`, `PackagedSettingsStore`, `WindowPlacementCodec` |
 | `NavigationRequested/Completed/Cancelled` | Navigation | Informational | `NavigationDiagnostics` Debug.WriteLines |
@@ -619,7 +644,7 @@ Covers regression guards for:
 
 | Phase | Scope | Estimated PRs |
 |---|---|---|
-| **A** | `DiagnosticLog` helper + `LogCategory` enum + 6 new keywords + the two generic events (`SwallowedError`, `HResultFailed`) so Phase C can migrate against the generics immediately | 1 PR |
+| **A** | `DiagnosticLog` helper + `LogCategory` enum + 6 new keywords + the generic events (`SwallowedError`, `HResultFailed`; `Warning` added later alongside its `ApplyStyle` first consumer) so Phase C can migrate against the generics immediately | 1 PR |
 | **B** | Subsystem-specific events on `ReactorEventSource` (WindowOpened, PersistenceRead/Write, Navigation*, IntlMissingKey, ThemeApplyFailed, BackdropMaterializationFailed) + §6.2.1 PII policy enforcement | 1 PR |
 | **C-audit** | Stand up `docs/specs/044/swallowed-error-audit.md` with one entry per site (~80). Pure documentation PR — no code changes yet. Establishes the per-site verdicts and unblocks Phase C. | 1 PR |
 | **C** | Migrate ~150 `Debug.WriteLine` sites by category. One PR per category. **Each swallowed-error site that lands in this phase must reference its audit entry; sites with verdict ≠ Keep ship their fix (narrow / propagate / TryXxx / typed event) in the same PR.** | 5–6 PRs |

@@ -28,9 +28,12 @@ Conventions for contributors:
 
 ### Added
 
-- **`TitleLarge()` and `Display()` type-ramp factories (spec 039 §17.6).** Complete the
-  WinUI 3 type ramp alongside `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`, mapping to
-  `TitleLargeTextBlockStyle` (40px Semibold) and `DisplayTextBlockStyle` (68px Semibold).
+- **`TitleLarge()` and `Display()` type-ramp factories (spec 039 §17.6).** Extend the
+  named-style factory set alongside `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`,
+  mapping to `TitleLargeTextBlockStyle` (40px Semibold) and `DisplayTextBlockStyle`
+  (68px Semibold). `CaptionTextBlockStyle` still has no style-applying factory —
+  `Caption()` is a size-only preset — so reach for `.ApplyStyle()` when you need that
+  style's full setters.
 
 ### Changed
 
@@ -39,8 +42,9 @@ Conventions for contributors:
   out of the mount action, which `Reconciler.ApplyModifiers` invokes unguarded, failing the
   whole render over an authoring typo. The element now keeps its default appearance and the
   key is named in a warning on the `Microsoft-UI-Reactor` ETW provider (`Keywords.Errors`),
-  emitted once per distinct key. Lookup also now walks merged dictionaries, matching how
-  `Theme` resolves brushes.
+  emitted once per distinct key — until a few hundred distinct keys have been reported, past
+  which de-duplication stops and every miss warns again rather than going silent. Overlong
+  keys are never de-duplicated and are truncated on the payload.
 - **`DiagnosticLog.Warning` is release-visible (spec 044 §6.1).** It previously only called a
   `[Conditional("DEBUG")]` mirror, so every warning routed through it — backdrop fallback,
   `SizeToContent` on a maximized window, and now unresolved style keys — was silently
