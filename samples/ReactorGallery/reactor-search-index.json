@@ -2355,7 +2355,7 @@
       "id": "transitions",
       "name": "Transitions",
       "category": "Motion",
-      "description": "Implicit opacity, scale, translation, and layout animations that run on value change.",
+      "description": "Implicit opacity, scale, and translation transitions that run on value change, plus layout animation for layout-driven position changes.",
       "keywords": [
         "implicit animation",
         "fade",

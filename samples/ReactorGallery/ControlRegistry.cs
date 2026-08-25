@@ -142,7 +142,7 @@ public static class ControlRegistry
 
         // Motion
         new("Connected Animation", "Carries an element's visual from one view into another across a state change.", "Motion", "\uE945", "connected-animation"),
-        new("Transitions", "Implicit opacity, scale, translation, and layout animations that run on value change.", "Motion", "\uE945", "transitions"),
+        new("Transitions", "Implicit opacity, scale, and translation transitions that run on value change, plus layout animation for layout-driven position changes.", "Motion", "\uE945", "transitions"),
     }
     .OrderBy(c => c.Title, StringComparer.OrdinalIgnoreCase)
     .ToArray();
