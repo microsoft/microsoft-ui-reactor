@@ -229,7 +229,58 @@ internal static class Phase5WindowingFixtures
     }
 
     /// <summary>
-    /// The maximized warning must stay latched across a root replacement.
+    /// The no-drag-affordance warning must fire on entering the condition, not on
+    /// every <c>Update</c>. <c>Update</c> validates ahead of its own equality
+    /// check, so an app holding a chromeless, non-draggable window while changing
+    /// any unrelated field would otherwise emit one release-visible warning per
+    /// update for the life of the window.
+    /// </summary>
+    internal class NoDragAffordanceWarningIsEdgeTriggered(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            WindowSpec.NoDragAffordanceWarningCountForTests = 0;
+            var spec = new WindowSpec
+            {
+                Title = "No drag 0",
+                Width = 320,
+                Height = 240,
+                Style = WindowStyle.None,
+                IsMovableByBackground = false,
+            };
+            var win = await OpenAndSettle(spec, () => new FixedContent(200, 120));
+            try
+            {
+                // Construction validates once, which is the entering edge.
+                H.Check("NoDrag_WarnedOnConstruction",
+                    WindowSpec.NoDragAffordanceWarningCountForTests == 1);
+
+                // Change only an unrelated field, repeatedly. The suspicious
+                // combination persists, so it must not re-warn.
+                for (var i = 1; i <= 4; i++)
+                {
+                    win.Update(spec with { Title = $"No drag {i}" });
+                    await Harness.Render(30);
+                }
+                H.Check("NoDrag_NoRewarnPerUpdate",
+                    WindowSpec.NoDragAffordanceWarningCountForTests == 1);
+
+                // Clearing the condition re-arms it...
+                win.Update(spec with { Title = "movable", IsMovableByBackground = true });
+                await Harness.Render(30);
+                H.Check("NoDrag_ClearedWithoutWarning",
+                    WindowSpec.NoDragAffordanceWarningCountForTests == 1);
+
+                // ...so entering it again is a new edge and warns once more.
+                win.Update(spec with { Title = "no drag again", IsMovableByBackground = false });
+                await Harness.Render(30);
+                H.Check("NoDrag_ReentryWarnsAgain",
+                    WindowSpec.NoDragAffordanceWarningCountForTests == 2);
+            }
+            finally { WindowSpec.NoDragAffordanceWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
     /// <c>OnHostContentRendered</c> runs per render and
     /// <c>AttachSizeToContentRoot</c> detaches whenever the root instance
     /// differs, then re-applies immediately — so re-arming the edge on detach

@@ -164,6 +164,10 @@ public sealed class ReactorWindow : IDisposable
     // runs off LayoutUpdated, i.e. every layout pass, so this tracks whether the
     // warning has already been emitted for the current maximized spell.
     private bool _sizeToContentMaximizedWarned;
+    // Edge-trigger for WindowSpec's no-drag-affordance warning. Update validates
+    // ahead of its own equality check, so without this an app holding that
+    // configuration would emit one warning per spec change, indefinitely.
+    private bool _warnedNoDragAffordance;
     internal int SizeToContentApplyCountForTests;
 
     /// <summary>Stable id, e.g. <c>"win-3"</c>. Allocated monotonically per process.</summary>
@@ -358,6 +362,9 @@ public sealed class ReactorWindow : IDisposable
     {
         ArgumentNullException.ThrowIfNull(spec);
         spec.Validate();
+        // Validate() warned if the spec needs it; record that so Update doesn't
+        // repeat it for the same unchanged condition.
+        _warnedNoDragAffordance = spec.HasNoDragAffordance;
 
         _id = $"win-{Interlocked.Increment(ref s_nextId)}";
         _spec = spec;
@@ -2180,7 +2187,23 @@ public sealed class ReactorWindow : IDisposable
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Update));
         if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
 
-        next.Validate();
+        next.ValidateThrowing();
+
+        // Warn on entering the condition, not on every Update. The throwing
+        // invariants above must run every time, but this validation happens
+        // ahead of the equality check below — so an app that keeps a chromeless,
+        // non-draggable window while changing any other field (a title, an
+        // opacity tween) would otherwise emit one ETW event per update for the
+        // life of the window. Re-armed when the condition clears.
+        if (!next.HasNoDragAffordance)
+        {
+            _warnedNoDragAffordance = false;
+        }
+        else if (!_warnedNoDragAffordance)
+        {
+            _warnedNoDragAffordance = true;
+            next.WarnOnSuspiciousCombinations();
+        }
 
         // Only re-apply chrome when something visible changed. Equality on the
         // record handles all simple scalar fields; reference-types (Icon,

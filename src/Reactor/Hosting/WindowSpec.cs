@@ -282,6 +282,19 @@ public sealed record WindowSpec
     /// </summary>
     public void Validate()
     {
+        ValidateThrowing();
+        WarnOnSuspiciousCombinations();
+    }
+
+    /// <summary>
+    /// The throwing half of <see cref="Validate"/>. <see cref="ReactorWindow.Update"/>
+    /// calls this on every update — the invariants must hold every time — and drives
+    /// <see cref="WarnOnSuspiciousCombinations"/> on the edge instead, because
+    /// <c>Update</c> runs validation ahead of its own equality check and would
+    /// otherwise emit one warning per update for as long as the condition persists.
+    /// </summary>
+    internal void ValidateThrowing()
+    {
         // Every DIP size below reaches DipToPhysicalScalar / DipToPxScalar,
         // where a non-finite double casts to a garbage int — +Infinity on
         // MaxWidth, for instance, lands in ptMaxTrackSize as int.MinValue and
@@ -339,12 +352,6 @@ public sealed record WindowSpec
                 throw new ArgumentException("WindowSpec.PersistPlacement must be false when Embed is set.", nameof(PersistPlacement));
         }
 
-        if (Style == WindowStyle.None && !IsMovableByBackground)
-            Core.Diagnostics.DiagnosticLog.Warning(
-                Core.Diagnostics.LogCategory.Hosting,
-                "WindowSpec.Validate",
-                "WindowStyle.None without IsMovableByBackground can leave the window without a drag affordance.");
-
         if (!(Opacity >= 0.0 && Opacity <= 1.0) || double.IsNaN(Opacity))
             throw new ArgumentException(
                 $"WindowSpec.Opacity ({Opacity}) must be in [0, 1].", nameof(Opacity));
@@ -357,5 +364,30 @@ public sealed record WindowSpec
             throw new ArgumentException(
                 "WindowSpec.IgnorePointerInput requires Opacity < 1.0 (click-through is only effective on layered windows).",
                 nameof(IgnorePointerInput));
+    }
+
+    /// <summary>
+    /// True when this spec asks for a chromeless window that also cannot be
+    /// dragged by its background — a combination that leaves the user no way to
+    /// move it. Exposed so the host can edge-trigger the warning below.
+    /// </summary>
+    internal bool HasNoDragAffordance => Style == WindowStyle.None && !IsMovableByBackground;
+
+    internal static int NoDragAffordanceWarningCountForTests;
+
+    /// <summary>
+    /// The warning half of <see cref="Validate"/>. Reports recoverable
+    /// combinations that are legal but probably unintended; never throws.
+    /// </summary>
+    internal void WarnOnSuspiciousCombinations()
+    {
+        if (HasNoDragAffordance)
+        {
+            global::System.Threading.Interlocked.Increment(ref NoDragAffordanceWarningCountForTests);
+            Core.Diagnostics.DiagnosticLog.Warning(
+                Core.Diagnostics.LogCategory.Hosting,
+                "WindowSpec.Validate",
+                "WindowStyle.None without IsMovableByBackground can leave the window without a drag affordance.");
+        }
     }
 }
