@@ -325,16 +325,41 @@ internal sealed class ReactorSurface
         if (explicitTypeName is null)
             return types.All(IsNullable);
 
+        // `default(Microsoft.UI.Xaml.Media.Brush)`, `default(global::…Brush)` and `default(Brush?)`
+        // all name the same type as `default(Brush)`. Comparing the written syntax verbatim found
+        // no match for the qualified forms and refused to exempt them, making this gate stricter
+        // than the analyzer it mirrors — a finding on a sample REACTOR_MOD_003 accepts.
+        var simpleName = SimpleTypeName(explicitTypeName);
+
         // A value-type keyword settles it without any lookup, and covers the `default(double)` case
         // whose parameter type may not even be in this modifier's overload set.
-        if (ValueTypeKeywords.Contains(explicitTypeName))
+        if (ValueTypeKeywords.Contains(simpleName))
             return false;
 
-        if (explicitTypeName is "string" or "object")
+        if (simpleName is "string" or "object")
             return true;
 
-        var matches = types.Where(t => string.Equals(t.Name, explicitTypeName, StringComparison.Ordinal)).ToList();
+        var matches = types.Where(t => string.Equals(t.Name, simpleName, StringComparison.Ordinal)).ToList();
         return matches.Count > 0 && matches.All(IsNullable);
+    }
+
+    /// <summary>
+    /// Reduces written type syntax to the bare name reflection reports: strips <c>global::</c>,
+    /// any namespace qualification, a trailing <c>?</c>, and generic arguments.
+    /// </summary>
+    private static string SimpleTypeName(string written)
+    {
+        var text = written.Trim().TrimEnd('?').Trim();
+
+        var generic = text.IndexOf('<');
+        if (generic >= 0)
+            text = text[..generic];
+
+        var lastDot = text.LastIndexOf('.');
+        if (lastDot >= 0)
+            text = text[(lastDot + 1)..];
+
+        return text.Trim();
     }
 
     private static bool IsNullable(Type type) =>
@@ -478,39 +503,30 @@ internal sealed record AgentKitScan(
 internal static class AgentKitSnippetWalker
 {
     /// <summary>
-    /// Modifiers whose presence on a wrapper chain means the wrapper is carrying its own weight, so
-    /// it is not merely a workaround for the modifier the inner element drops. Matched by substring
-    /// on purpose: <c>WithBorder</c>, <c>ThemeBackground</c> and <c>BorderBrush</c> all qualify, and
-    /// over-matching here only ever suppresses a finding.
-    /// </summary>
-    /// <remarks>
-    /// <c>Style</c> is here for the same reason <c>Card</c> is not a passive factory: a style can
-    /// supply background, border and corner radius from a resource this walker cannot read, so
-    /// <c>Border(...).ApplyStyle(...)</c> is decorated in a way no chain inspection would reveal.
-    /// </remarks>
-    private static readonly string[] WrapperJustifications =
-        { "Background", "Border", "CornerRadius", "Shadow", "Clip", "Style" };
-
-    /// <summary>
-    /// Modifiers that justify a wrapper but must match <b>exactly</b>.
+    /// Modifiers that can move from the wrapper to the element it wraps without changing
+    /// behaviour, so their presence does not stop the wrapper being removable.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// These are the escape hatches whose effect this walker cannot see. <c>Set</c> takes a lambda
-    /// that can write any native property; <c>OnMount</c>/<c>OnMountAdd</c> can do the same at
-    /// mount time; <c>OnUnmount</c>/<c>OnUnmountAdd</c> make the wrapper's <em>lifecycle</em>
-    /// significant, so deleting it drops a callback whether or not it painted anything;
-    /// <c>Ref</c> hands the control out by identity. In every case "remove the wrapper" is not
-    /// behaviour-preserving, so the rule must not claim it is.
+    /// An <b>allowlist</b>, deliberately. The earlier denylist had the failure mode backwards: an
+    /// unrecognised modifier counted as "wrapper contributes nothing" and produced a finding, so
+    /// every modifier nobody had thought of became a false positive.
+    /// <c>Border(FlexColumn(children)).Padding(16).OnTapped(...)</c> was reported as removable even
+    /// though the Border is the routed-event source and hit-test boundary. The same applies to
+    /// flyouts, tooltips, connected animations and anything else keyed on control identity — an
+    /// open-ended set that cannot be enumerated safely.
     /// </para>
     /// <para>
-    /// Exact, not substring. <c>Set</c> as a substring also swallowed <c>PositionInSet</c> and
-    /// anything else ending in "Set" — an accessibility modifier that can live perfectly well on
-    /// the inner element, silently suppressing a genuine wrapper finding.
+    /// Everything here describes the wrapper's <em>position in its parent</em> or its reconciler
+    /// identity, which the inner element inherits when it takes the wrapper's place. Anything else
+    /// suppresses the finding. Adding an entry means claiming it is relocatable, so the burden sits
+    /// where the risk is.
     /// </para>
     /// </remarks>
-    private static readonly HashSet<string> ExactWrapperJustifications =
-        new(StringComparer.Ordinal) { "Set", "OnMount", "OnMountAdd", "OnUnmount", "OnUnmountAdd", "Ref" };
+    private static readonly HashSet<string> RelocatableModifiers = new(StringComparer.Ordinal)
+    {
+        "Flex", "Grid", "Margin", "WithKey", "HAlign", "VAlign", "Dock",
+    };
 
     /// <summary>
     /// DSL <b>factories</b> whose sole contribution is decoration, so relocating a modifier inward
@@ -795,7 +811,11 @@ internal static class AgentKitSnippetWalker
             if (inner is null || !string.Equals(inner.FullName, innerFullName, StringComparison.Ordinal))
                 continue;
 
-            if (ChainModifiers(invocation).Any(IsJustification))
+            // Report only when every *other* modifier on the chain would survive the wrapper being
+            // removed. Inverted from a denylist deliberately: an unrecognised modifier now
+            // suppresses rather than reports, so the open-ended set of behaviour-bearing modifiers
+            // (events, flyouts, tooltips, animations) costs a missed finding instead of a false one.
+            if (ChainModifiers(invocation).Any(m => m.Invocation != invocation && !IsRelocatable(m)))
                 continue;
 
             // A `with` initializer anywhere on the chain is opaque to the checks above: the chain
@@ -843,23 +863,19 @@ internal static class AgentKitSnippetWalker
     }
 
     /// <summary>
-    /// True when a modifier on the wrapper's chain really justifies the wrapper's existence.
+    /// True when a modifier on the wrapper's chain would survive the wrapper being removed.
     /// </summary>
     /// <remarks>
-    /// The name is necessary but not sufficient. A constant-null argument makes the modifier inert
-    /// — that is the premise <see cref="HasConstantNullArgument"/> already relies on — so
-    /// <c>Border(FlexColumn(children)).Padding(16).Background((Brush)null)</c> is still a Border
-    /// that supplies nothing but padding. Counting it hid the exact workaround this rule exists to
-    /// catch, behind a decorator that does nothing: a no-op suppression, and an internal
-    /// contradiction, since the same call is skipped as inert two checks earlier.
+    /// Two ways to qualify: it is a positional/identity modifier the inner element inherits when it
+    /// takes the wrapper's place, or it is inert. A constant-null argument makes a modifier do
+    /// nothing — the premise <see cref="HasConstantNullArgument"/> already rests on — so
+    /// <c>Border(inner).Padding(16).Background((Brush)null)</c> is still a Border supplying nothing
+    /// but padding. Without the second arm, a decorator that does nothing would hide the exact
+    /// workaround this rule exists to catch.
     /// </remarks>
-    private static bool IsJustification((string Name, InvocationExpressionSyntax Invocation) modifier)
-    {
-        var named = ExactWrapperJustifications.Contains(modifier.Name)
-                    || WrapperJustifications.Any(j => modifier.Name.Contains(j, StringComparison.Ordinal));
-
-        return named && !HasConstantNullArgument(modifier.Invocation, modifier.Name);
-    }
+    private static bool IsRelocatable((string Name, InvocationExpressionSyntax Invocation) modifier) =>
+        RelocatableModifiers.Contains(modifier.Name)
+        || HasConstantNullArgument(modifier.Invocation, modifier.Name);
 
     /// <summary>
     /// True when any <c>with</c> expression appears on the fluent chain this invocation belongs to.

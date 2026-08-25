@@ -142,6 +142,9 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("Rectangle().Background(null!)")]
     [InlineData("Rectangle().Background(((Brush)null)!)")]
     [InlineData("Rectangle().Background(default(Brush)!)")]
+    [InlineData("Rectangle().Background(default(Microsoft.UI.Xaml.Media.Brush))")]
+    [InlineData("Rectangle().Background(default(global::Microsoft.UI.Xaml.Media.Brush))")]
+    [InlineData("Rectangle().Background(default(Brush?))")]
     [InlineData("FlexColumn(children).Padding(null)")]
     public void Walker_Mirrors_The_Analyzers_Constant_Null_Gate(string snippet)
     {
@@ -344,34 +347,6 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
-    /// An unrelated modifier that merely ends in "Set" does not justify a wrapper.
-    /// </summary>
-    /// <remarks>
-    /// <c>.Set(...)</c> justifies one because its lambda is opaque to this walker. As a substring
-    /// that also swallowed <c>.PositionInSet(...)</c>, an accessibility modifier that can live on
-    /// the inner element — so a Border that is still only a padding workaround stopped being
-    /// reported.
-    /// </remarks>
-    [Fact]
-    public void Only_An_Exact_Set_Justifies_A_Wrapper()
-    {
-        var suppressed = AgentKitSnippetWalker.Scan(new[]
-        {
-            new AgentKitSnippet("fixture/set.md", 1, "Border(FlexColumn(children)).Padding(16).Set(b => b.Tag = x)"),
-        });
-
-        Assert.Empty(suppressed.Of(AgentKitFindingKind.WrapperWorkaround));
-
-        var reported = AgentKitSnippetWalker.Scan(new[]
-        {
-            new AgentKitSnippet("fixture/set.md", 1, "Border(FlexColumn(children)).Padding(16).PositionInSet(2, 5)"),
-        });
-
-        var finding = Assert.Single(reported.Of(AgentKitFindingKind.WrapperWorkaround));
-        Assert.Equal("FlexPadding", finding.Replacement);
-    }
-
-    /// <summary>
     /// A styled factory that happens to return a <c>BorderElement</c> is not a passive wrapper.
     /// </summary>
     /// <remarks>
@@ -562,52 +537,6 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
-    /// A modifier that does nothing cannot justify the wrapper that carries it.
-    /// </summary>
-    /// <remarks>
-    /// A constant-null argument makes a modifier inert — the premise the constant-null gate already
-    /// rests on — so <c>Border(...).Padding(16).Background((Brush)null)</c> is still a Border
-    /// supplying nothing but padding. Accepting it by name hid the exact workaround this rule
-    /// exists to catch behind a decorator that does nothing, and contradicted the same call being
-    /// skipped as inert two checks earlier.
-    /// </remarks>
-    [Theory]
-    [InlineData("Border(FlexColumn(children)).Padding(16).Background((Brush)null)")]
-    [InlineData("Border(FlexColumn(children)).Padding(16).Background(null)")]
-    [InlineData("Border(FlexColumn(children)).Padding(16).Background(null!)")]
-    [InlineData("Border(FlexColumn(children)).Padding(16).Background(default(Brush)!)")]
-    public void An_Inert_Modifier_Does_Not_Justify_A_Wrapper(string snippet)
-    {
-        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/inert.md", 1, snippet) });
-
-        var finding = Assert.Single(scan.Of(AgentKitFindingKind.WrapperWorkaround));
-        Assert.Equal("FlexPadding", finding.Replacement);
-    }
-
-    /// <summary>
-    /// A real decoration still justifies it, so the check above is not simply reporting everything.
-    /// </summary>
-    [Fact]
-    public void A_Live_Modifier_Still_Justifies_A_Wrapper()
-    {
-        var scan = AgentKitSnippetWalker.Scan(new[]
-        {
-            new AgentKitSnippet("fixture/inert.md", 1, "Border(FlexColumn(children)).Padding(16).Background(Theme.CardBackground)"),
-        });
-
-        Assert.Empty(scan.Of(AgentKitFindingKind.WrapperWorkaround));
-
-        // A value-typed `default` is a real zero-valued write, not an inert null, so it justifies
-        // the wrapper too — the same distinction the constant-null gate draws.
-        var zeroValued = AgentKitSnippetWalker.Scan(new[]
-        {
-            new AgentKitSnippet("fixture/inert.md", 1, "Border(FlexColumn(children)).Padding(16).CornerRadius(default(CornerRadius))"),
-        });
-
-        Assert.Empty(zeroValued.Of(AgentKitFindingKind.WrapperWorkaround));
-    }
-
-    /// <summary>
     /// A standalone block-comment label marks the block below it.
     /// </summary>
     /// <remarks>
@@ -637,28 +566,6 @@ public class AgentKitDocGateInstrumentTests
         };
 
         Assert.False(AgentKitDocGateTests.IsMarkedAt(unmarked, 3));
-    }
-
-    /// <summary>
-    /// An opaque lifecycle or identity escape hatch on the wrapper makes it non-deletable.
-    /// </summary>
-    /// <remarks>
-    /// <c>Set</c> was already handled; the rest are the same problem. <c>OnMount</c> can write any
-    /// native property at mount time, <c>OnUnmount</c> makes the wrapper's <em>lifecycle</em>
-    /// significant whether or not it paints anything, and <c>Ref</c> hands the control out by
-    /// identity. "Remove the wrapper" is not behaviour-preserving for any of them.
-    /// </remarks>
-    [Theory]
-    [InlineData("Border(FlexColumn(children)).Padding(16).OnMount(fe => Configure(fe))")]
-    [InlineData("Border(FlexColumn(children)).Padding(16).OnMountAdd(fe => Configure(fe))")]
-    [InlineData("Border(FlexColumn(children)).Padding(16).OnUnmount(fe => Teardown(fe))")]
-    [InlineData("Border(FlexColumn(children)).Padding(16).OnUnmountAdd(fe => Teardown(fe))")]
-    [InlineData("Border(FlexColumn(children)).Padding(16).Ref(borderRef)")]
-    public void A_Lifecycle_Escape_Hatch_Justifies_A_Wrapper(string snippet)
-    {
-        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/lifecycle.md", 1, snippet) });
-
-        Assert.Empty(scan.Of(AgentKitFindingKind.WrapperWorkaround));
     }
 
     /// <summary>
@@ -869,6 +776,46 @@ public class AgentKitDocGateInstrumentTests
             ReactorSurface.MergeTypeChange(map, "Modifier", typeof(int));
 
         Assert.Equal(typeof(int), map["Modifier"]);
+    }
+
+    /// <summary>
+    /// Only modifiers proven relocatable let the wrapper finding through; everything else
+    /// suppresses it.
+    /// </summary>
+    /// <remarks>
+    /// The allowlist replaced a denylist whose failure mode was backwards: an unrecognised modifier
+    /// counted as "the wrapper contributes nothing" and produced a finding, so
+    /// <c>Border(...).Padding(16).OnTapped(...)</c> was reported as removable even though the
+    /// Border is the routed-event source and hit-test boundary. Events, flyouts, tooltips and
+    /// connected animations are an open-ended set that cannot be enumerated safely, so the default
+    /// has to be "suppress".
+    /// </remarks>
+    [Theory]
+    // Positional / identity modifiers the inner element inherits: the finding still stands.
+    [InlineData("Border(FlexColumn(children)).Padding(16)", true)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Flex(grow: 1, basis: 0)", true)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Margin(8)", true)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).WithKey(\"k\")", true)]
+    // Inert: does nothing, so it cannot be what the wrapper is for.
+    [InlineData("Border(FlexColumn(children)).Padding(16).Background((Brush)null)", true)]
+    // Behaviour-bearing or opaque: the wrapper is load-bearing, so no finding.
+    [InlineData("Border(FlexColumn(children)).Padding(16).OnTapped((s, e) => Handle(e))", false)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).WithFlyout(menu)", false)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).ToolTip(\"hint\")", false)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Background(Theme.CardBackground)", false)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Set(b => b.Tag = x)", false)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).OnMount(fe => Configure(fe))", false)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Ref(borderRef)", false)]
+    [InlineData("Border(FlexColumn(children)).Padding(16).ApplyStyle(\"CardStyle\")", false)]
+    public void Only_Relocatable_Modifiers_Leave_A_Wrapper_Removable(string snippet, bool reported)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/relocatable.md", 1, snippet) });
+        var findings = scan.Of(AgentKitFindingKind.WrapperWorkaround);
+
+        if (reported)
+            Assert.Equal("FlexPadding", Assert.Single(findings).Replacement);
+        else
+            Assert.Empty(findings);
     }
 
     /// <summary>
