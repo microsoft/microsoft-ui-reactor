@@ -636,7 +636,14 @@ public static partial class ElementExtensions
         // happens at most once per distinct style name.
         if (_styleApplierCache.TryGetValue(styleName, out var cached))
             return cached;
-        if (_styleApplierCache.Count >= StyleApplierCacheCap)
+        // An overlong name is never cached, for the same reason the warned-key
+        // set refuses it: the cap bounds how many entries are retained but not
+        // how large each one is, and both the dictionary key and the cached
+        // delegate's capture hold the full string, so a data-driven caller
+        // could otherwise root 256 arbitrarily long keys for the process
+        // lifetime. Falls back to the per-call delegate, whose lifetime the
+        // caller's element tree controls.
+        if (styleName.Length > MaxKeyChars || _styleApplierCache.Count >= StyleApplierCacheCap)
             return fe => ApplyNamedStyle(fe, styleName);
         return _styleApplierCache.GetOrAdd(styleName,
             static name => fe => ApplyNamedStyle(fe, name));
@@ -702,7 +709,7 @@ public static partial class ElementExtensions
         // data-driven caller could otherwise root 256 arbitrarily long strings
         // for the process lifetime. Skipping de-duplication for those matches
         // the overflow behaviour above — warn every time, retain nothing.
-        var bounded = styleName.Length <= EtwKeyMaxChars;
+        var bounded = styleName.Length <= MaxKeyChars;
         if (bounded && _warnedStyles.Count < StyleApplierCacheCap && !_warnedStyles.TryAdd(styleName, 0))
             return;
 
@@ -712,7 +719,7 @@ public static partial class ElementExtensions
         // caller can't pump an oversized string through the ring buffer.
         var safeName = bounded
             ? styleName
-            : string.Concat(styleName.AsSpan(0, EtwKeyMaxChars), "…");
+            : string.Concat(styleName.AsSpan(0, MaxKeyChars), "…");
 
         Core.Diagnostics.DiagnosticLog.Warning(
             Core.Diagnostics.LogCategory.Theme,
@@ -722,9 +729,11 @@ public static partial class ElementExtensions
             "resource dictionary defining it is merged into the application's resources.");
     }
 
-    // Spec 044 §6.2.1 "typical cap: 256 chars", applied to the variable part of
-    // the message rather than the whole (the rest is a fixed literal).
-    private const int EtwKeyMaxChars = 256;
+    // Spec 044 §6.2.1 "typical cap: 256 chars". Bounds the variable part of the
+    // ETW message (the rest is a fixed literal), and doubles as the threshold
+    // past which a key is never retained — by either the applier cache or the
+    // warned-key set — so neither can be used to root unbounded strings.
+    private const int MaxKeyChars = 256;
 
     // ════════════════════════════════════════════════════════════════
     //  Sugar extensions (typed, return concrete element type)

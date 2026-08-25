@@ -254,6 +254,28 @@ public class NamedStyleFluentTests
         }
     }
 
+    [Fact]
+    public void ApplyStyle_DoesNotRetainOverlongStyleNames()
+    {
+        // The applier cache bounds how many delegates it keeps but not how long
+        // each captured key is, so an overlong name must bypass it entirely —
+        // otherwise a data-driven caller can root arbitrarily large strings for
+        // the process lifetime. Cache identity is the observable: a cached key
+        // hands back the same delegate instance, an uncached one does not.
+        var longKey = "L" + new string('x', 400);
+        var longA = TextBlock("a").ApplyStyle(longKey).Modifiers!.OnMountAction;
+        var longB = TextBlock("b").ApplyStyle(longKey).Modifiers!.OnMountAction;
+        Assert.NotNull(longA);
+        Assert.NotSame(longA, longB);
+
+        // Positive control: without this, the assertion above would also pass if
+        // the cache were broken outright, which would silently regress #174.
+        const string shortKey = "ShortStyleKey_ForApplierCacheTest";
+        var shortA = TextBlock("c").ApplyStyle(shortKey).Modifiers!.OnMountAction;
+        var shortB = TextBlock("d").ApplyStyle(shortKey).Modifiers!.OnMountAction;
+        Assert.Same(shortA, shortB);
+    }
+
     // ─────────────────────────────────────────────────────────────────
 
     private static global::System.Collections.IEnumerable GetSetters(TextBoxElement el) =>

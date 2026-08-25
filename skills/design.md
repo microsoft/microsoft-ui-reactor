@@ -446,7 +446,9 @@ Heading("Page Title")
 SubHeading("Section")
 Caption("Fine print")
 
-// Every WinUI type-ramp style has a factory — prefer it
+// Every WinUI type-ramp style has a factory except CaptionTextBlockStyle —
+// Caption() is a size-only preset, so use .ApplyStyle("CaptionTextBlockStyle")
+// when you need that style's line height and other setters
 BodyLarge("Prominent text")
 TitleLarge("Feature title")
 Display("Hero")
