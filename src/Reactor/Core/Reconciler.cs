@@ -3677,7 +3677,11 @@ public sealed partial class Reconciler : IDisposable
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
             _preparedConnectedAnimationKeys.Add(key);
         }
-        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+        {
+            Diagnostics.DiagnosticLog.SwallowedError(
+                Diagnostics.LogCategory.Reactor, "Reconciler.PrepareConnectedAnimationSource", ex);
+        }
     }
 
     /// <summary>
@@ -3734,12 +3738,20 @@ public sealed partial class Reconciler : IDisposable
                         _preparedConnectedAnimationKeys.Remove(key);
                     }
                 }
-                catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+                catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+                {
+                    Diagnostics.DiagnosticLog.SwallowedError(
+                        Diagnostics.LogCategory.Reactor, "Reconciler.FlushConnectedAnimations.start", ex);
+                }
             }
 
             ReleaseUnclaimedConnectedAnimations(service);
         }
-        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+        {
+            Diagnostics.DiagnosticLog.SwallowedError(
+                Diagnostics.LogCategory.Reactor, "Reconciler.FlushConnectedAnimations", ex);
+        }
 
         _pendingConnectedAnimationStarts.Clear();
         _preparedConnectedAnimationKeys.Clear();
@@ -3765,7 +3777,11 @@ public sealed partial class Reconciler : IDisposable
                     ConnectedAnimationReleaseCount++;
                 }
             }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+            {
+                Diagnostics.DiagnosticLog.SwallowedError(
+                    Diagnostics.LogCategory.Reactor, "Reconciler.ReleaseUnclaimedConnectedAnimations", ex);
+            }
         }
     }
 
@@ -3790,7 +3806,11 @@ public sealed partial class Reconciler : IDisposable
             {
                 ReleaseUnclaimedConnectedAnimations(ConnectedAnimationService.GetForCurrentView());
             }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+            {
+                Diagnostics.DiagnosticLog.SwallowedError(
+                    Diagnostics.LogCategory.Reactor, "Reconciler.ResetConnectedAnimationsForNewPass", ex);
+            }
             _preparedConnectedAnimationKeys.Clear();
         }
 
