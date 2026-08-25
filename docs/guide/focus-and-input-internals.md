@@ -295,16 +295,21 @@ them.
 
 ### Trapping focus in a modal
 
-A modal dialog is the canonical use of `UseFocusTrap` and
-[`UseAnnounce`](accessibility.md) together. The trap keeps Tab
-inside the dialog; the announcement tells the screen reader the
-dialog opened.
+`ContentDialog` is already modal: WinUI side-mounts its content into a
+XamlRoot popup and manages focus containment itself. **Do not add
+`UseFocusTrap` to it.** The trap cancels any focus move whose target is
+not a visual descendant of its container, and the dialog's content is
+not in that subtree — so the trap fights the dialog instead of helping
+it. That containment is asserted by the
+`FocusTrapContentDialog_ContainmentProbe` selftest.
+
+What a dialog *does* need is the announcement, so the screen reader is
+told it opened:
 
 ```csharp
 public override Element Render()
 {
     var (open, setOpen) = UseState(false);
-    var trap = UseFocusTrap(isActive: open);
     var announce = UseAnnounce();
 
     return VStack(
@@ -325,18 +330,38 @@ public override Element Render()
                 setOpen(false);
             },
         }
-    ).FocusTrap(trap);
+    );
 }
+```
+
+Note that the dialog is *controlled*: `IsOpen` is a field on the element
+record, not an imperative `ShowAsync` call, which is what
+[`REACTOR_DIALOG_001`](rules-of-reactor.md) enforces. The
+[reconciliation](reconciliation.md) page describes the mount /
+unmount machinery behind the element lifecycle.
+
+`UseFocusTrap` is for modals you build **in-tree** — an overlay `Grid`
+or `Border` layered over the page rather than hosted in a popup:
+
+```csharp
+var (open, setOpen) = UseState(false);
+var trap = UseFocusTrap(isActive: open);
+
+return VStack(
+    Button("Edit…", () => setOpen(true)),
+    open
+        ? Border(VStack(
+              TextBlock("Inline editor"),
+              Button("Close", () => setOpen(false))))
+            .Background(Theme.CardBackground)
+            .FocusTrap(trap)
+        : Empty()
+);
 ```
 
 The `UseFocusTrap(open)` call evaluates the active flag on every
 render — flip `open` to false and the trap deactivates on the next
-reconcile pass; flip it back to true and the trap reattaches. Note that
-the dialog is *controlled*: `IsOpen` is a field on the element record,
-not an imperative `ShowAsync` call, which is what
-[`REACTOR_DIALOG_001`](rules-of-reactor.md) enforces. The
-[reconciliation](reconciliation.md) page describes the mount /
-unmount machinery behind the element lifecycle.
+reconcile pass; flip it back to true and the trap reattaches.
 
 ## Common Mistakes
 
