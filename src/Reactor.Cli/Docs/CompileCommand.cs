@@ -86,7 +86,7 @@ internal static partial class CompileCommand
         // ── Phase 1: Validate ─────────────────────────────────────────────
         Console.WriteLine("═══ Phase 1: Validate ═══");
 
-        var apps = DiscoverApps(appsDir, topic);
+        var apps = DiscoverApps(appsDir, appIds: null);
         var screenshotTopics = screenshotFilter is null
             ? null
             : screenshotFilter
@@ -96,9 +96,6 @@ internal static partial class CompileCommand
         {
             apps = apps.Where(app => screenshotTopics.Contains(app.topicId)).ToList();
         }
-        Console.WriteLine($"  Found {apps.Count} doc app(s)");
-        foreach (var (id, dir) in apps)
-            Console.WriteLine($"    • {id} → {Path.GetRelativePath(repoRoot, dir)}");
 
         List<(string topicId, DocTemplate template)> templates;
         try
@@ -110,6 +107,19 @@ internal static partial class CompileCommand
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+
+        // Narrow the app set to what the selected templates actually need.
+        // This has to be keyed off the templates' `app:` binding, not the
+        // topic id — see DiscoverApps.
+        if (topic is not null)
+        {
+            var appIds = ResolveAppIds(templates);
+            apps = apps.Where(app => appIds.Contains(app.topicId)).ToList();
+        }
+
+        Console.WriteLine($"  Found {apps.Count} doc app(s)");
+        foreach (var (id, dir) in apps)
+            Console.WriteLine($"    • {id} → {Path.GetRelativePath(repoRoot, dir)}");
 
         // --tier <stub|solid|comprehensive> subsets templates to those that
         // explicitly declared the matching tier — for fast iteration on one
@@ -694,7 +704,21 @@ internal static partial class CompileCommand
 
     // ── Discovery ─────────────────────────────────────────────────────────
 
-    internal static List<(string topicId, string dir)> DiscoverApps(string appsDir, string? topic)
+    /// <summary>
+    /// Discovers doc apps under <paramref name="appsDir"/>, optionally
+    /// restricted to <paramref name="appIds"/> (directory names). Pass
+    /// <c>null</c> for "every app".
+    ///
+    /// Callers must filter by <em>app id</em>, never by topic id: a
+    /// template's app directory is named by its <c>app:</c> front-matter
+    /// field and frequently differs from the template id
+    /// (<c>async-resources</c> → <c>async-resources-cookbook</c>, every
+    /// <c>recipes/&lt;x&gt;</c> → <c>recipe-&lt;x&gt;</c>). Filtering by
+    /// topic id silently discovers nothing for those pages, which makes
+    /// snippet resolution fail and tier-lint report a fabricated
+    /// <c>REACTOR_DOC_TIER_003</c>. Use <see cref="ResolveAppIds"/>.
+    /// </summary>
+    internal static List<(string topicId, string dir)> DiscoverApps(string appsDir, IReadOnlySet<string>? appIds)
     {
         var result = new List<(string, string)>();
         if (!Directory.Exists(appsDir)) return result;
@@ -702,13 +726,38 @@ internal static partial class CompileCommand
         foreach (var dir in Directory.GetDirectories(appsDir))
         {
             var topicId = Path.GetFileName(dir);
-            if (topic != null && !topicId.Equals(topic, StringComparison.OrdinalIgnoreCase))
+            if (appIds is not null && !appIds.Contains(topicId))
                 continue;
             // Must have at least one .cs file
             if (Directory.GetFiles(dir, "*.cs", SearchOption.TopDirectoryOnly).Length > 0)
                 result.Add((topicId, dir));
         }
         return result;
+    }
+
+    /// <summary>
+    /// The set of doc-app directory names a group of templates depends on:
+    /// each template's declared <c>app:</c>, its own topic id (for templates
+    /// that predate the field and rely on the names matching), and the
+    /// leading segment of every <c>snippet="&lt;app&gt;/&lt;id&gt;"</c>
+    /// reference, so a page that borrows a snippet from another topic's app
+    /// still resolves it.
+    /// </summary>
+    internal static HashSet<string> ResolveAppIds(IEnumerable<(string topicId, DocTemplate template)> templates)
+    {
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (topicId, template) in templates)
+        {
+            if (!string.IsNullOrWhiteSpace(template.App)) ids.Add(template.App.Trim());
+            ids.Add(topicId);
+            foreach (var snippetRef in ExtractSnippetRefs(template.Body))
+            {
+                if (SnippetExtractor.TryParseSourceReference(snippetRef, out _, out _)) continue;
+                var slash = snippetRef.IndexOf('/');
+                if (slash > 0) ids.Add(snippetRef[..slash]);
+            }
+        }
+        return ids;
     }
 
     /// <summary>

@@ -86,14 +86,24 @@ internal static class ReferenceLinkInjector
             return $"{m.Value} ([guide](../../{guide}.md))";
         });
 
-        // 3) Featured-in reverse-index injection.
-        if (reverseIndex.TryGetValue(page.Member.Cref, out var refs) ||
-            reverseIndex.TryGetValue(page.Route.ShortName, out refs))
+        // 3) Featured-in reverse-index injection. A marker may name any of
+        //    the members this page documents (overloads share a page), or
+        //    the page's short name.
+        List<TemplateReference>? matched = null;
+        foreach (var key in page.Members.Select(m => m.Cref).Append(page.Route.ShortName))
+        {
+            if (!reverseIndex.TryGetValue(key, out var found)) continue;
+            matched ??= new List<TemplateReference>();
+            foreach (var r in found)
+                if (!matched.Any(x => x.TemplateId == r.TemplateId))
+                    matched.Add(r);
+        }
+        if (matched is not null)
         {
             var sb = new StringBuilder();
             sb.AppendLine("## Featured in");
             sb.AppendLine();
-            foreach (var r in refs)
+            foreach (var r in matched)
             {
                 sb.AppendLine($"- [{ToTitle(r.TemplateId)}](../../{r.TemplateId}.md)");
             }
@@ -107,8 +117,17 @@ internal static class ReferenceLinkInjector
     /// <summary>
     /// Scan a template body for <c>&lt;!-- ref:Member --&gt;</c> markers and
     /// expand each one to a relative MD link to the routed reference page.
-    /// Returns the rewritten body. Unknown members are left as-is and a
-    /// finding is added.
+    /// Returns the rewritten body.
+    ///
+    /// An unresolvable marker degrades to inline code — the same treatment
+    /// <see cref="ReferenceGen.CrefResolver.Rewrite"/> gives an unresolvable
+    /// cref — and reports <c>REACTOR_DOC_REFMARKER_001</c>. It must never be
+    /// left in place: the marker is an HTML comment, so passing it through
+    /// deletes the cross-reference from the rendered page and leaves a hole
+    /// mid-sentence with nothing on screen to show something is missing.
+    /// Reference generation is deliberately gated to one category, so a
+    /// marker naming a not-yet-generated type is an expected authoring
+    /// state, not a build break.
     /// </summary>
     public static string ExpandMarkers(
         string templateBody,
@@ -121,16 +140,16 @@ internal static class ReferenceLinkInjector
             var ident = m.Groups["ident"].Value.Trim();
             // Identifier may be a short name (UseState) or a full cref.
             GeneratedPage? target = ident.Contains(':')
-                ? refResult.Pages.FirstOrDefault(p => p.Member.Cref == ident)
+                ? refResult.Pages.FirstOrDefault(p => p.Members.Any(mem => mem.Cref == ident))
                 : refResult.Pages.FirstOrDefault(p => p.Route.ShortName == ident);
             if (target is null)
             {
                 findings.Add(new RefGenFinding(
                     "REACTOR_DOC_REFMARKER_001",
-                    $"<!-- ref:{ident} --> in template '{templateId}' does not resolve",
+                    $"<!-- ref:{ident} --> in template '{templateId}' does not resolve — rendered as inline code",
                     templateId,
                     TierLintSeverity.Warning));
-                return m.Value;
+                return $"`{MarkerShortName(ident)}`";
             }
             // Guide template lives at docs/guide/<topicId>.md; reference page
             // lives at docs/guide/reference/<cat>/<name>.md. Relative path
@@ -138,6 +157,23 @@ internal static class ReferenceLinkInjector
             var relative = target.Route.RelativePath.Replace('\\', '/');
             return $"[{target.Route.ShortName}]({relative})";
         });
+    }
+
+    /// <summary>
+    /// Reader-facing name for a marker that didn't resolve: the trailing
+    /// identifier, whether the author wrote a short name or a full cref.
+    /// </summary>
+    private static string MarkerShortName(string ident)
+    {
+        var stem = ident;
+        if (stem.Length >= 2 && stem[1] == ':') stem = stem[2..];
+        var paren = stem.IndexOf('(');
+        if (paren >= 0) stem = stem[..paren];
+        var dot = stem.LastIndexOf('.');
+        if (dot >= 0) stem = stem[(dot + 1)..];
+        var tick = stem.IndexOf('`');
+        if (tick > 0) stem = stem[..tick];
+        return stem;
     }
 
     /// <summary>

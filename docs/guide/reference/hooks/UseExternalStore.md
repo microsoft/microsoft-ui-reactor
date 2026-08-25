@@ -15,7 +15,7 @@ Re-renders only when a change notification yields a different snapshot.
 <para><paramref name="subscribe" /> is the effect dependency that decides whether the
 subscription is torn down and re-established, so it must be a <b>stable</b> delegate
 across renders. Pass a method group (e.g. <c>store.Subscribe</c>) or a
-[UseCallback](UseCallback.md) ([guide](../../hooks.md))-memoized delegate. A fresh capturing lambda
+[UseCallback](UseCallback.md#usecallbackaction-object)-memoized delegate. A fresh capturing lambda
 (<c>onChanged =&gt; store.Subscribe(onChanged)</c>) is a new delegate every render and
 will unsubscribe/resubscribe on each one. This mirrors React's guidance for
 <c>useSyncExternalStore</c>.

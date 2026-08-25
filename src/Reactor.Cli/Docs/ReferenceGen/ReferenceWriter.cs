@@ -3,11 +3,23 @@ using System.Text;
 namespace Microsoft.UI.Reactor.Cli.Docs.ReferenceGen;
 
 /// <summary>
-/// Emits one Markdown page per <see cref="MemberDoc"/> using the template
+/// One member as it appears on a page: the member itself plus the heading
+/// (and matching anchor slug) it is filed under. Single-member pages carry
+/// an empty heading/anchor — the page title already names the member.
+/// </summary>
+internal sealed record PageMember(MemberDoc Member, string Heading, string Anchor);
+
+/// <summary>
+/// Emits one Markdown page per routed short name using the template
 /// in spec 041 §7.1.2 (Name / Signature / Summary / Parameters / Returns /
-/// Discussion / Examples / Caveats / See Also). The writer takes a fully-
-/// routed member and the resolver so <c>&lt;see cref=&quot;...&quot;/&gt;</c>
+/// Discussion / Examples / Caveats / See Also). The writer takes the fully-
+/// routed member set and the resolver so <c>&lt;see cref=&quot;...&quot;/&gt;</c>
 /// links can be rewritten relative to this page.
+///
+/// A page may document several members. Overloads share a short name and
+/// therefore a page: each gets its own <c>##</c> section so nothing is
+/// dropped, and the page keeps its one-file-per-name identity so inbound
+/// links and <c>&lt;!-- ref:Name --&gt;</c> markers stay valid.
 /// </summary>
 internal static class ReferenceWriter
 {
@@ -16,26 +28,87 @@ internal static class ReferenceWriter
     /// findings (currently just unresolved cref warnings — REFGEN_001 lives
     /// in the orchestrator).
     /// </summary>
-    public static WriteResult Write(MemberDoc member, RouterResult route, CrefResolver resolver)
+    public static WriteResult Write(MemberDoc member, RouterResult route, CrefResolver resolver) =>
+        Write(new[] { new PageMember(member, string.Empty, string.Empty) }, route, resolver);
+
+    /// <summary>
+    /// Build a page documenting <paramref name="members"/> in the order
+    /// given. The caller is responsible for producing a deterministic order
+    /// and for assigning heading/anchor text (see
+    /// <see cref="ReferenceGenerator"/>), so that anchors are known before
+    /// any page is rendered and cross-page links can target them.
+    /// </summary>
+    public static WriteResult Write(
+        IReadOnlyList<PageMember> members,
+        RouterResult route,
+        CrefResolver resolver)
     {
-        var unresolved = new List<string>();
+        var unresolved = new List<UnresolvedCref>();
+        var missingSummary = new List<string>();
         var sb = new StringBuilder();
+        var primary = members[0].Member;
 
         sb.AppendLine($"# {route.ShortName}");
         sb.AppendLine();
-        sb.AppendLine($"`{KindLabel(member.Kind)}`  ");
-        sb.AppendLine($"_cref_: `{member.Cref}`");
+        sb.AppendLine($"`{KindLabel(primary.Kind)}`  ");
+        sb.AppendLine($"_cref_: `{primary.Cref}`");
         sb.AppendLine();
+
+        if (members.Count == 1)
+        {
+            AppendMemberSections(sb, primary, route, resolver, unresolved, missingSummary, headingLevel: 2);
+            return new WriteResult(sb.ToString(), unresolved, missingSummary);
+        }
+
+        // Multi-member page: index first so a reader can jump straight to the
+        // overload they mean, then one section per member.
+        sb.AppendLine("## Overloads");
+        sb.AppendLine();
+        foreach (var pm in members)
+        {
+            sb.AppendLine($"- [`{pm.Heading}`](#{pm.Anchor})");
+        }
+        sb.AppendLine();
+
+        foreach (var pm in members)
+        {
+            // Code-span the heading: a bare `UseEffect<T1>(...)` would have
+            // its `<T1>` eaten by the Markdown renderer's HTML sanitiser.
+            // GitHub drops the backticks when slugifying, so the anchor is
+            // unchanged by the wrapping.
+            sb.AppendLine($"## `{pm.Heading}`");
+            sb.AppendLine();
+            sb.AppendLine($"`{KindLabel(pm.Member.Kind)}`  ");
+            sb.AppendLine($"_cref_: `{pm.Member.Cref}`");
+            sb.AppendLine();
+            AppendMemberSections(sb, pm.Member, route, resolver, unresolved, missingSummary, headingLevel: 3);
+        }
+
+        return new WriteResult(sb.ToString(), unresolved, missingSummary);
+    }
+
+    private static void AppendMemberSections(
+        StringBuilder sb,
+        MemberDoc member,
+        RouterResult route,
+        CrefResolver resolver,
+        List<UnresolvedCref> unresolvedOut,
+        List<string> missingSummary,
+        int headingLevel)
+    {
+        var h = new string('#', headingLevel);
+        var unresolved = new List<string>();
 
         // Summary (Spec 041 §7.1.2 — "## Summary"). Authors writing the XML
         // doc may omit it; PHASE-1B emits a placeholder so the page is still
         // visible. The REACTOR_DOC_001 analyzer (1.8) is the canonical
         // enforcement; here we only warn so ref-gen can complete.
-        sb.AppendLine("## Summary");
+        sb.AppendLine($"{h} Summary");
         sb.AppendLine();
         if (string.IsNullOrWhiteSpace(member.Summary))
         {
             sb.AppendLine("*Summary pending.*");
+            missingSummary.Add(member.Cref);
         }
         else
         {
@@ -45,7 +118,7 @@ internal static class ReferenceWriter
 
         if (member.Params.Count > 0)
         {
-            sb.AppendLine("## Parameters");
+            sb.AppendLine($"{h} Parameters");
             sb.AppendLine();
             foreach (var p in member.Params)
             {
@@ -56,7 +129,7 @@ internal static class ReferenceWriter
 
         if (!string.IsNullOrWhiteSpace(member.Returns))
         {
-            sb.AppendLine("## Returns");
+            sb.AppendLine($"{h} Returns");
             sb.AppendLine();
             sb.AppendLine(resolver.Rewrite(member.Returns, route.RelativePath, unresolved));
             sb.AppendLine();
@@ -64,7 +137,7 @@ internal static class ReferenceWriter
 
         if (!string.IsNullOrWhiteSpace(member.Remarks))
         {
-            sb.AppendLine("## Discussion");
+            sb.AppendLine($"{h} Discussion");
             sb.AppendLine();
             sb.AppendLine(resolver.Rewrite(member.Remarks, route.RelativePath, unresolved));
             sb.AppendLine();
@@ -72,7 +145,7 @@ internal static class ReferenceWriter
 
         if (member.Examples.Count > 0)
         {
-            sb.AppendLine("## Examples");
+            sb.AppendLine($"{h} Examples");
             sb.AppendLine();
             foreach (var ex in member.Examples)
             {
@@ -83,7 +156,7 @@ internal static class ReferenceWriter
 
         if (member.Caveats.Count > 0)
         {
-            sb.AppendLine("## Caveats");
+            sb.AppendLine($"{h} Caveats");
             sb.AppendLine();
             foreach (var c in member.Caveats)
             {
@@ -94,16 +167,14 @@ internal static class ReferenceWriter
 
         if (member.SeeAlsos.Count > 0)
         {
-            sb.AppendLine("## See Also");
+            sb.AppendLine($"{h} See Also");
             sb.AppendLine();
             foreach (var seeAlsoCref in member.SeeAlsos)
             {
-                var target = resolver.Resolve(seeAlsoCref);
+                var target = resolver.ResolveTarget(seeAlsoCref);
                 if (target is not null)
                 {
-                    var fromDir = Path.GetDirectoryName(route.RelativePath)?.Replace('\\', '/') ?? string.Empty;
-                    var link = MakeRelativeLink(fromDir, target.RelativePath);
-                    sb.AppendLine($"- [{target.ShortName}]({link})");
+                    sb.AppendLine($"- [{target.DisplayName}]({CrefResolver.LinkTo(target, route.RelativePath)})");
                 }
                 else
                 {
@@ -114,7 +185,8 @@ internal static class ReferenceWriter
             sb.AppendLine();
         }
 
-        return new WriteResult(sb.ToString(), unresolved, MissingSummary: string.IsNullOrWhiteSpace(member.Summary));
+        foreach (var u in unresolved)
+            unresolvedOut.Add(new UnresolvedCref(u, member.Cref));
     }
 
     private static string KindLabel(MemberKind kind) => kind switch
@@ -126,24 +198,21 @@ internal static class ReferenceWriter
         MemberKind.Event => "event",
         _ => "member",
     };
-
-    private static string MakeRelativeLink(string fromDir, string targetRelativePath)
-    {
-        var fromSegments = string.IsNullOrEmpty(fromDir)
-            ? Array.Empty<string>()
-            : fromDir.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var toSegments = targetRelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-        int common = 0;
-        while (common < fromSegments.Length && common < toSegments.Length &&
-               string.Equals(fromSegments[common], toSegments[common], StringComparison.Ordinal))
-            common++;
-
-        var ups = string.Concat(Enumerable.Repeat("../", fromSegments.Length - common));
-        var rest = string.Join('/', toSegments.Skip(common));
-        var combined = ups + rest;
-        return combined.Length == 0 ? "." : combined;
-    }
 }
 
-internal sealed record WriteResult(string Body, IReadOnlyList<string> UnresolvedCrefs, bool MissingSummary);
+/// <summary>
+/// Rendered page plus the diagnostics the orchestrator turns into findings.
+/// </summary>
+/// <param name="MissingSummaryCrefs">Crefs of members rendered with a
+/// placeholder summary — one entry per member, because a page may document
+/// several.</param>
+internal sealed record WriteResult(
+    string Body,
+    IReadOnlyList<UnresolvedCref> UnresolvedCrefs,
+    IReadOnlyList<string> MissingSummaryCrefs);
+
+/// <summary>
+/// A cref that had no reference page and was degraded to inline code,
+/// together with the member whose docs referenced it.
+/// </summary>
+internal sealed record UnresolvedCref(string Cref, string InMemberCref);

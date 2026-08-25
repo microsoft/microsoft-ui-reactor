@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!--
+  Mirrors the real shapes that broke ref-gen (see ReferenceGenOverloadTests):
+
+  * RenderContext.UseEffect — eight overloads sharing one short name, split
+    across a params flavour, a Func<Action> cleanup flavour, and typed
+    dependency arities. Declared here in a deliberately shuffled order so a
+    test can prove render order comes from the cref, not the file.
+  * MutationOptions`2 — a positional record. Roslyn emits no <member> entry
+    for OnSuccess / OnError: the primary-constructor properties are
+    compiler-generated, so a <see cref="P:...OnSuccess"/> can only be
+    resolved through the declaring type.
+  * Register — one name claimed by two unrelated declaring types. Genuinely
+    ambiguous, unlike an overload set.
+-->
+<doc>
+  <assembly>
+    <name>Reactor</name>
+  </assembly>
+  <members>
+    <member name="M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``2(System.Func{System.Action},``0,``1)">
+      <summary>Two-dependency cleanup-flavor overload.</summary>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect(System.Func{System.Action},System.Object[])">
+      <summary>Like UseEffect but the effect returns a cleanup function.</summary>
+      <param name="effect">Factory returning the cleanup action.</param>
+      <param name="deps">Dependency list.</param>
+      <returns>Nothing.</returns>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``3(System.Action,``0,``1,``2)">
+      <summary>Three-dependency overload.</summary>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect(System.Action,System.Object[])">
+      <summary>Runs a side effect after render.</summary>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``1(System.Action,``0)">
+      <summary>Single-dependency overload.</summary>
+      <typeparam name="TDep">The dependency type.</typeparam>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``1(System.Func{System.Action},``0)">
+      <summary>Single-dependency cleanup-flavor overload.</summary>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``3(System.Func{System.Action},``0,``1,``2)">
+      <summary>Three-dependency cleanup-flavor overload.</summary>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``2(System.Action,``0,``1)">
+      <summary>Two-dependency overload.</summary>
+    </member>
+
+    <member name="T:Microsoft.UI.Reactor.Hooks.MutationOptions`2">
+      <summary>Callbacks for the mutation hook.</summary>
+      <typeparam name="TInput">Mutation input.</typeparam>
+      <typeparam name="TResult">Mutation result.</typeparam>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Hooks.UseMutationExtensions.UseMutation``2(Microsoft.UI.Reactor.Core.RenderContext)">
+      <summary>
+        On success <see cref="P:Microsoft.UI.Reactor.Hooks.MutationOptions`2.OnSuccess"/> runs,
+        then <see cref="P:Microsoft.UI.Reactor.Hooks.MutationOptions`2.InvalidateKeys"/> is applied.
+        Cancellation surfaces as <see cref="T:System.OperationCanceledException"/>, and focus is
+        restored via <see cref="M:Microsoft.UI.Reactor.Input.FocusManager.Focus(Microsoft.UI.Reactor.Input.ElementRef,Microsoft.UI.Xaml.FocusState)"/>.
+      </summary>
+    </member>
+
+    <member name="M:Microsoft.UI.Reactor.Hooks.PendingScope.Register(System.Object)">
+      <summary>Registers a pending token.</summary>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Hooks.FocusManager.Register(System.String)">
+      <summary>Registers a focusable field.</summary>
+    </member>
+  </members>
+</doc>

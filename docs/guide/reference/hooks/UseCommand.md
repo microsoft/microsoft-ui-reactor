@@ -5,7 +5,17 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCommand(Microsoft.UI.React
 
 > **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
 
-## Summary
+## Overloads
+
+- [`UseCommand(Command)`](#usecommandcommand)
+- [`UseCommand<T1>(Command<T1>)`](#usecommandt1commandt1)
+
+## `UseCommand(Command)`
+
+`method`  
+_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCommand(Microsoft.UI.Reactor.Core.Command)`
+
+### Summary
 
 Processes a Command for use in a component. Always consumes a <b>stable hook shape</b>
 (independent of whether the command is sync/async or debounced), so a command at a given
@@ -20,5 +30,16 @@ the window so the bound control disables, re-enabling when the window elapses. T
 command has a sync Execute action, ExecuteAsync = null, and preserves the authored
 DebounceMs value (re-passing it through UseCommand is a no-op — debounce is never applied
 twice).
+
+## `UseCommand<T1>(Command<T1>)`
+
+`method`  
+_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCommand``1(Microsoft.UI.Reactor.Core.Command{``0})`
+
+### Summary
+
+Processes a parameterized Command for use in a component. Consumes the same
+<b>stable hook shape</b> as the non-generic [UseCommand](UseCommand.md#usecommandcommand) and applies
+the same async tracking and leading-edge `DebounceMs` debounce.
 
 

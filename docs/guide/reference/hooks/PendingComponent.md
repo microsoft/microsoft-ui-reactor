@@ -9,7 +9,7 @@ _cref_: `T:Microsoft.UI.Reactor.Hooks.PendingComponent`
 
 Component backing the <c>Pending</c> element. Hosts a [PendingScope](PendingScope.md) ([guide](../../hooks.md)),
 subscribes to its [Changed](Changed.md) ([guide](../../hooks.md)) event, and chooses between
-`Fallback` and `Child`.
+[Fallback](PendingProps.md) and [Child](PendingProps.md).
 
 ## Discussion
 
