@@ -1450,6 +1450,21 @@ public sealed class ReactorWindow : IDisposable
         if (args.DidPositionChange)
             TryUpdatePositionCache(raiseEvent: true);
 
+        // The size-to-content maximized warning latches for one maximized spell.
+        // This is the only root-independent observer of window state:
+        // ApplySizeToContent's re-arm is driven by the root's SizeChanged /
+        // LayoutUpdated handlers and returns at its own null-root guard, so with
+        // no root attached (an Empty() tree) nothing on the content path can see
+        // a restore and the next maximized spell would be silently suppressed.
+        // Deliberately above the presenter/visibility filter below: a
+        // ShowWindow-driven restore reports neither of those, only a size change.
+        // The latch read is free and false in the common case, so the state
+        // resolution is only paid while a spell is actually latched — this
+        // handler also runs per move event. Uses the same predicate as the warning
+        // itself, so the two can never disagree about what "maximized" means.
+        if (_sizeToContentMaximizedWarned && ResolveCurrentState() != WindowState.Maximized)
+            _sizeToContentMaximizedWarned = false;
+
         if (!args.DidPresenterChange && !args.DidVisibilityChange) return;
         var newState = ResolveCurrentState();
         var prev = (WindowState)Volatile.Read(ref _stateValue);

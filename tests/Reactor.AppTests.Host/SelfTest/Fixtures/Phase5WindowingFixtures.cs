@@ -500,6 +500,59 @@ internal static class Phase5WindowingFixtures
         }
     }
 
+    /// <summary>
+    /// The mirror of <see cref="SizeToContentMaximizedWarningSurvivesEmptyRoot"/>:
+    /// preserving the latch across a null root must not let it survive a genuine
+    /// *new* maximized spell. With no root attached, the SizeChanged/LayoutUpdated
+    /// handlers are gone and <c>ApplySizeToContent</c> returns at its null-root
+    /// guard, so nothing on the content path can observe a restore. The window-state
+    /// observer (<c>OnAppWindowChanged</c>) is root-independent and must re-arm, or
+    /// the next maximized spell is silently suppressed — a false negative.
+    /// </summary>
+    internal class SizeToContentMaximizedWarningRearmsAfterRestoreWithNullRoot(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0;
+            var spec = new WindowSpec { Title = "STC Max NullRoot Restore", Width = 360, Height = 240 };
+            VanishingRootContent? content = null;
+            var win = await OpenAndSettle(spec, () => content = new VanishingRootContent());
+            try
+            {
+                // Spell 1: maximized with a real root -> warns once.
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+                win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
+                await Harness.Render(120);
+                H.Check("SizeToContent_NullRootRestore_WarnedFirstSpell",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+
+                // Drop the root, so no content-path observer remains.
+                content!.Toggle!();
+                await Harness.Render(120);
+
+                // Restore and re-maximize entirely while the root is null. This is
+                // the transition only OnAppWindowChanged can see.
+                Native.ShowWindow(Hwnd(win), Native.SW_RESTORE);
+                await Harness.WaitFor(() => !Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+                H.Check("SizeToContent_NullRootRestore_Restored", !Native.IsZoomed(Hwnd(win)));
+
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+
+                // Bring a real root back: spell 2 must report.
+                content!.Toggle!();
+                await Harness.Render(120);
+
+                H.Check("SizeToContent_NullRootRestore_StillMaximized", Native.IsZoomed(Hwnd(win)));
+                H.Check("SizeToContent_NullRootRestore_WarnedSecondSpell",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 2);
+            }
+            finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
     internal class SizeToContentAspectRatioBothRejected(Harness h) : SelfTestFixtureBase(h)
     {
         public override Task RunAsync()
@@ -583,6 +636,7 @@ internal static class Phase5WindowingFixtures
         public const int GWL_STYLE = -16;
         public const int GWL_EXSTYLE = -20;
         public const int SW_MAXIMIZE = 3;
+        public const int SW_RESTORE = 9;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT { public int Left, Top, Right, Bottom; }
