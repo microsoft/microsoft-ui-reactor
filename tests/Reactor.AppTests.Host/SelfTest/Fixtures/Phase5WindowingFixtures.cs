@@ -198,7 +198,11 @@ internal static class Phase5WindowingFixtures
                 win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
                 await Harness.Render(120);
                 H.Check("SizeToContent_NoOpWhenMaximized_State", Native.IsZoomed(Hwnd(win)));
-                H.Check("SizeToContent_NoOpWhenMaximized_Warning", ReactorWindow.SizeToContentMaximizedWarningCountForTests > 0);
+                // Exactly once, not once per layout pass: ApplySizeToContent runs
+                // off LayoutUpdated, and DiagnosticLog.Warning is release-visible,
+                // so a regression to per-pass warning is an unbounded ETW stream.
+                // `> 0` would pass either way.
+                H.Check("SizeToContent_NoOpWhenMaximized_Warning", ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
                 H.Check("SizeToContent_NoOpWhenMaximized_NoResize", win.SizeToContentApplyCountForTests == 0);
             }
             finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }

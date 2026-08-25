@@ -160,6 +160,10 @@ public sealed class ReactorWindow : IDisposable
     private SizeChangedEventHandler? _sizeToContentSizeChangedHandler;
     private EventHandler<object>? _sizeToContentLayoutUpdatedHandler;
     private bool _sizeToContentApplying;
+    // Edge-trigger for the "ignored while maximized" warning. ApplySizeToContent
+    // runs off LayoutUpdated, i.e. every layout pass, so this tracks whether the
+    // warning has already been emitted for the current maximized spell.
+    private bool _sizeToContentMaximizedWarned;
     internal int SizeToContentApplyCountForTests;
 
     /// <summary>Stable id, e.g. <c>"win-3"</c>. Allocated monotonically per process.</summary>
@@ -1973,10 +1977,21 @@ public sealed class ReactorWindow : IDisposable
 
         if (ResolveCurrentState() == WindowState.Maximized)
         {
-            Interlocked.Increment(ref SizeToContentMaximizedWarningCountForTests);
-            DiagnosticLog.Warning(LogCategory.Hosting, "ReactorWindow.SizeToContent", "SizeToContent is ignored while the window is maximized.");
+            // Warn on the edge into the ignored state, not on every layout pass.
+            // LayoutUpdated drives this method continuously, and DiagnosticLog.Warning
+            // is release-visible, so warning per pass would emit an unbounded ETW
+            // stream for as long as the window stays maximized. Re-armed below once
+            // it is restored, so a later maximize warns again.
+            if (!_sizeToContentMaximizedWarned)
+            {
+                _sizeToContentMaximizedWarned = true;
+                Interlocked.Increment(ref SizeToContentMaximizedWarningCountForTests);
+                DiagnosticLog.Warning(LogCategory.Hosting, "ReactorWindow.SizeToContent", "SizeToContent is ignored while the window is maximized.");
+            }
             return;
         }
+
+        _sizeToContentMaximizedWarned = false;
 
         var desiredDip = ResolveSizeToContentDesiredDip(root);
         if (!(desiredDip.Width > 0) || !(desiredDip.Height > 0)) return;
