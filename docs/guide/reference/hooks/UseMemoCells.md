@@ -33,11 +33,11 @@ Spec 034 §C.
 ## Examples
 
 <code>
-var theme = ctx.UseTheme();
+var scheme = ctx.UseColorScheme();
 var children = ctx.UseMemoCells(
 stocks,
-(item, i) =&gt; Cell(item, theme),
-theme);   // ← deps; framework invalidates on change
+(item, i) =&gt; Cell(item, scheme),
+scheme);   // ← deps; framework invalidates on change
 </code>
 
 

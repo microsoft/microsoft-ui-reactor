@@ -57,11 +57,11 @@ public static class UseMemoCellsExtensions
     /// any change invalidates the entire memo.</param>
     /// <example>
     /// <code>
-    /// var theme = ctx.UseTheme();
+    /// var scheme = ctx.UseColorScheme();
     /// var children = ctx.UseMemoCells(
     ///     stocks,
-    ///     (item, i) =&gt; Cell(item, theme),
-    ///     theme);   // ← deps; framework invalidates on change
+    ///     (item, i) =&gt; Cell(item, scheme),
+    ///     scheme);   // ← deps; framework invalidates on change
     /// </code>
     /// </example>
     /// <remarks>Spec 034 §C.</remarks>

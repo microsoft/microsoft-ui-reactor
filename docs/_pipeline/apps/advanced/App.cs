@@ -1,10 +1,13 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Input;
 using static Microsoft.UI.Reactor.Factories;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Component = Microsoft.UI.Reactor.Core.Component;
@@ -264,6 +267,118 @@ class FlakyComponent : Component
     }
 }
 // </snippet:error-boundary-retry>
+
+// <snippet:snap-back>
+class SnapBackDemo : Component
+{
+    public override Element Render()
+    {
+        // RenderContext.UseReducer<T>(T initialValue) returns
+        // (T Value, Action<Func<T, T>> Update). Toggling the bool guarantees
+        // a changed reducer result and therefore a re-render.
+        var (_, bump) = UseReducer(false);
+
+        return Slider(
+            value: Optional<double>.Of(5.0),
+            onValueChanged: _ => bump(b => !b));
+    }
+}
+// </snippet:snap-back>
+
+// <snippet:clear-value-channel>
+public sealed record CardElement : Element
+{
+    public Optional<Brush?> Background { get; init; } = Optional<Brush?>.Unset;
+}
+
+static class CardDescriptorHost
+{
+    public static readonly ControlDescriptor<CardElement, Microsoft.UI.Xaml.Controls.Border> Descriptor =
+        new ControlDescriptor<CardElement, Microsoft.UI.Xaml.Controls.Border>()
+            .OneWay(
+                get: static e => e.Background,
+                set: static (c, v) => c.Background = v,
+                dp: Microsoft.UI.Xaml.Controls.Border.BackgroundProperty);
+}
+// </snippet:clear-value-channel>
+
+// <snippet:hot-loop-cells>
+static class HotLoopCells
+{
+    record Quote(bool IsUp);
+
+    static readonly Brush GreenBrush = new SolidColorBrush(Colors.Green);
+    static readonly Brush RedBrush = new SolidColorBrush(Colors.Red);
+
+    public static void Build(string label, int r, int c)
+    {
+        var item = new Quote(IsUp: true);
+
+        // Fluent — five clones per cell. Right tool for ordinary UI.
+        var fluentCell = TextBlock(label)
+            .FontSize(8)
+            .Foreground(item.IsUp ? GreenBrush : RedBrush)
+            .Padding(2, 1, 2, 1)
+            .Grid(row: r, column: c);
+
+        // Direct record initializer — one TextBlockElement, one ElementModifiers,
+        // two bucket sub-records, one Attached dictionary. Use only when the
+        // allocation cost shows up in profiles.
+        var directCell = new TextBlockElement(label)
+        {
+            FontSize = 8,
+            Modifiers = new ElementModifiers
+            {
+                Layout = new LayoutModifiers { Padding = new Thickness(2, 1, 2, 1) },
+                Visual = new VisualModifiers { Foreground = item.IsUp ? GreenBrush : RedBrush },
+            },
+            Attached = new Dictionary<Type, object>(1)
+            {
+                [typeof(GridAttached)] = new GridAttached(r, c, 1, 1),
+            },
+        };
+
+        _ = (fluentCell, directCell);
+    }
+}
+// </snippet:hot-loop-cells>
+
+// <snippet:memo-cells>
+class MemoCellsDemo : Component
+{
+    record Stock(string Symbol, double Price);
+
+    static Element Cell(Stock item, ColorScheme scheme) =>
+        TextBlock($"{item.Symbol} {item.Price:F2}")
+            .Foreground(scheme == ColorScheme.Dark ? Theme.PrimaryText : Theme.SecondaryText);
+
+    public override Element Render() => Memo(ctx =>
+    {
+        var stocks = new[] { new Stock("MSFT", 431.2), new Stock("GOOG", 176.5) };
+
+        var scheme = ctx.UseColorScheme();
+        var children = ctx.UseMemoCells(
+            stocks,
+            (item, i) => Cell(item, scheme),
+            scheme);   // ← deps; framework invalidates on change
+
+        return VStack(4, children);
+    });
+}
+// </snippet:memo-cells>
+
+// <snippet:wrong-this-capture>
+// Don't — `.Set` runs on every mount AND update, so each render adds another
+// subscription, and the lambda captures the parent component instance that was
+// current when the closure was created.
+class WrongThisCaptureDemo : Component
+{
+    public override Element Render() =>
+        Button("Load").Set(b => b.Loaded += (s, e) => this.OnChildLoaded());
+
+    void OnChildLoaded() { }
+}
+// </snippet:wrong-this-capture>
 
 // Main app
 class AdvancedApp : Component

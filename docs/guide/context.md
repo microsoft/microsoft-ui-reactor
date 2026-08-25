@@ -434,9 +434,19 @@ shape; the flag record is the payload.
 ### Inline literals as the provided value
 
 ```csharp
-// Don't:
-return VStack(child)
-    .Provide(ctx, new ThemeConfig(mode, scale, "#0078D4"));
+class InlineLiteralProvideDont : Component
+{
+    public override Element Render()
+    {
+        var (mode, setMode) = UseState("light");
+        var (scale, setScale) = UseState(14);
+
+        // Don't — a fresh ThemeConfig every render re-renders every consumer
+        // in the subtree even when mode and scale are unchanged.
+        return VStack(8, Component<ThemedHeading>())
+            .Provide(ThemeContexts.Theme, new ThemeConfig(mode, scale, "#0078D4"));
+    }
+}
 ```
 
 Every render constructs a fresh `ThemeConfig`, which compares unequal
@@ -448,30 +458,51 @@ to the previous render's value, which re-renders every
 ### Reading context from outside any provider
 
 ```csharp
-// Static field default of `null`.
-public static Context<CurrentUser?> User = new(null);
+static class NullableUserContexts
+{
+    // Static field default of `null`.
+    public static Context<CurrentUser?> User = new(null);
+}
 
-// In a component that's somehow rendered before the root provides:
-var user = UseContext(AppContexts.User);
-var name = user.DisplayName;  // NullReferenceException
+class ReadsContextWithoutProvider : Component
+{
+    public override Element Render()
+    {
+        // In a component that's somehow rendered before the root provides,
+        // UseContext returns the context's DefaultValue — here, null.
+        var user = UseContext(NullableUserContexts.User);
+
+        // So branch on the sentinel instead of dereferencing blind:
+        return TextBlock(user?.DisplayName ?? "(not signed in)");
+    }
+}
 ```
 
 When no ancestor has called `.Provide`, `UseContext` silently returns
-`ctx.DefaultValue` — there's no warning, no exception. The component
+`Context<T>.DefaultValue` — there's no warning, no exception. The component
 runs against the default, which is rarely what the developer expected.
 Either pick a non-null default that's safe to render against, or treat
-the default as an "uninitialized" sentinel and branch explicitly. The
-[init pattern](recipes/login.md) uses the latter — anonymous user is
+the default as an "uninitialized" sentinel and branch explicitly (as above).
+The [init pattern](recipes/login.md) uses the latter — anonymous user is
 the sentinel, the authentication flow swaps it out at the provider.
 
 ### Using context for state that should be props
 
 ```csharp
-// Don't:
-public static Context<int> SelectedIndex = new(0);
+static class SelectionContexts
+{
+    // Don't — a single-source-single-sink value belongs in a prop.
+    public static Context<int> SelectedIndex = new(0);
+}
 
-// In a list component:
-var index = UseContext(SelectedIndex);
+class ContextForPropsDont : Component
+{
+    public override Element Render()
+    {
+        var index = UseContext(SelectionContexts.SelectedIndex);
+        return TextBlock($"Selected: {index}");
+    }
+}
 ```
 
 If the value flows from one parent to one child, it's a prop. Context

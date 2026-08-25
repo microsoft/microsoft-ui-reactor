@@ -333,8 +333,12 @@ store, `UseExternalStore` removes the usual `UseEffect` plus `UseReducer`
 boilerplate:
 
 ```csharp
-public sealed class SessionStore
+record SessionSnapshot(string Title);
+
+sealed class SessionStore
 {
+    private SessionSnapshot _snapshot = new("Untitled");
+
     public event Action? Changed;
     public SessionSnapshot Snapshot => _snapshot;
 
@@ -343,15 +347,32 @@ public sealed class SessionStore
         Changed += onChanged;
         return () => Changed -= onChanged;
     }
+
+    public void Rename(string title)
+    {
+        _snapshot = new SessionSnapshot(title);
+        Changed?.Invoke();
+    }
 }
 
-public override Element Render()
+class ExternalStoreDemo : Component
 {
-    var snapshot = UseExternalStore(
-        _store.Subscribe,
-        () => _store.Snapshot);
+    private static readonly SessionStore _store = new();
 
-    return TextBlock(snapshot.Title);
+    public override Element Render()
+    {
+        // `subscribe` is a method group — a stable delegate, so the effect
+        // doesn't tear down and re-establish the subscription every render.
+        var snapshot = UseExternalStore(
+            _store.Subscribe,
+            () => _store.Snapshot);
+
+        return VStack(8,
+            SubHeading("UseExternalStore"),
+            TextBlock(snapshot.Title),
+            Button("Rename", () => _store.Rename($"Doc {Random.Shared.Next(100)}"))
+        );
+    }
 }
 ```
 
@@ -450,7 +471,7 @@ public override Element Render()
     var (a, setA) = UseState(0);     // always first
     var (b, setB) = UseState("");    // always second
     UseEffect(() => { ... }, a);     // always third
-    return Text($"{a} {b}");
+    return TextBlock($"{a} {b}");
 }
 ```
 <!-- /ai:lock -->
@@ -463,7 +484,7 @@ public override Element Render()
     var (a, setA) = UseState(0);
     if (a > 0)
         UseEffect(() => { ... }, a);  // WRONG: conditional hook
-    return Text($"{a}");
+    return TextBlock($"{a}");
 }
 ```
 <!-- /ai:lock -->
@@ -500,30 +521,52 @@ contexts, so you can compose `UseState`, `UseEffect`, and friends into a
 named, reusable bundle without losing the rules.
 
 ```csharp
-static (string Value, Action<string> Set) UseDebouncedText(string initial, int ms)
+// A custom hook is a RenderContext extension method whose name starts with
+// `Use`. It owns three slots — two UseState and one UseEffect — and the caller
+// still gets the simple (value, setter) shape they'd get from UseState.
+static class DebouncedTextHook
 {
-    var ctx = RenderContext.Current;
-    var (value, setValue) = ctx.UseState(initial);
-    var (debounced, setDebounced) = ctx.UseState(initial);
-
-    ctx.UseEffect(() =>
+    public static (string Value, Action<string> Set) UseDebouncedText(
+        this RenderContext ctx, string initial, int ms)
     {
-        var cts = new CancellationTokenSource();
-        _ = Task.Run(async () =>
-        {
-            try { await Task.Delay(ms, cts.Token); setDebounced(value); }
-            catch (OperationCanceledException) { }
-        });
-        return () => cts.Cancel();
-    }, value);
+        var (value, setValue) = ctx.UseState(initial);
+        var (debounced, setDebounced) = ctx.UseState(initial);
 
-    return (debounced, setValue);
+        ctx.UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                try { await Task.Delay(ms, cts.Token); setDebounced(value); }
+                catch (OperationCanceledException) { }
+            });
+            return () => cts.Cancel();
+        }, value);
+
+        return (debounced, setValue);
+    }
+}
+
+class CustomHookDemo : Component
+{
+    public override Element Render() => Memo(ctx =>
+    {
+        var (debounced, setText) = ctx.UseDebouncedText("", 300);
+        return VStack(8,
+            SubHeading("Custom hook: UseDebouncedText"),
+            TextBox(debounced, setText, placeholderText: "Type…").Width(250),
+            Caption($"Debounced: {debounced}")
+        );
+    });
 }
 ```
 
 The hook owns three slots — two `UseState` and one `UseEffect` — and the
 caller still gets the simple `(value, setter)` shape they'd get from
-`UseState`. The compiled [Rules of Reactor](rules-of-reactor.md) page
+`UseState`. Custom hooks are `RenderContext` extension methods, so they take
+the context explicitly (`this RenderContext ctx`) and are called off the `ctx`
+of a `Memo(ctx => …)` function component or a class component's `Context`.
+The compiled [Rules of Reactor](rules-of-reactor.md) page
 catalogs the full set of custom-hook conventions.
 
 ### Lifted state
@@ -601,9 +644,16 @@ previous-value update.)
 ### Setter chain that should use `UseReducer`
 
 ```csharp
-// Don't:
-var (count, setCount) = UseState(0);
-Button("+3", () => { setCount(count + 1); setCount(count + 1); setCount(count + 1); });
+class SetterChainDontDemo : Component
+{
+    public override Element Render()
+    {
+        // Don't — all three calls read the same captured `count`.
+        var (count, setCount) = UseState(0);
+        return Button("+3", () =>
+            { setCount(count + 1); setCount(count + 1); setCount(count + 1); });
+    }
+}
 ```
 
 The three setter calls all read the same captured `count` and all write
@@ -611,8 +661,16 @@ The three setter calls all read the same captured `count` and all write
 so each functional update sees the previous one's result:
 
 ```csharp
-var (count, updateCount) = UseReducer(0);
-Button("+3", () => { updateCount(c => c + 1); updateCount(c => c + 1); updateCount(c => c + 1); });
+class SetterChainDoDemo : Component
+{
+    public override Element Render()
+    {
+        // Do — each functional update sees the previous one's result.
+        var (count, updateCount) = UseReducer(0);
+        return Button("+3", () =>
+            { updateCount(c => c + 1); updateCount(c => c + 1); updateCount(c => c + 1); });
+    }
+}
 ```
 
 This is the same Reactor-wide rule as the [stale closure](#stale-closures)
@@ -624,13 +682,24 @@ reads the latest committed value, not a snapshot.
 ### Reading state right after calling its setter
 
 ```csharp
-// Don't:
-var (sizeFitIdx, setSizeFitIdx) = UseState(0);
-ComboBox(SizeFitNames, sizeFitIdx, i =>
+class StaleReadDontDemo : Component
 {
-    setSizeFitIdx(i);
-    Apply(sizeFitIdx); // reads the PREVIOUS index — the setter only queued a re-render
-});
+    static readonly string[] SizeFitNames = ["Contain", "Cover", "Fill"];
+
+    public override Element Render()
+    {
+        var (sizeFitIdx, setSizeFitIdx) = UseState(0);
+
+        // Don't — the setter only queued a re-render.
+        return ComboBox(SizeFitNames, sizeFitIdx, i =>
+        {
+            setSizeFitIdx(i);
+            Apply(sizeFitIdx); // reads the PREVIOUS index
+        });
+
+        void Apply(int index) { }
+    }
+}
 ```
 
 A setter never mutates the local variable in the current closure; it
@@ -640,11 +709,23 @@ the stale, pre-update value — switching the dropdown appears to activate
 the previously selected item. Use the value you already have in hand:
 
 ```csharp
-ComboBox(SizeFitNames, sizeFitIdx, i =>
+class StaleReadDoDemo : Component
 {
-    setSizeFitIdx(i);
-    Apply(i); // use the new value directly
-});
+    static readonly string[] SizeFitNames = ["Contain", "Cover", "Fill"];
+
+    public override Element Render()
+    {
+        var (sizeFitIdx, setSizeFitIdx) = UseState(0);
+
+        return ComboBox(SizeFitNames, sizeFitIdx, i =>
+        {
+            setSizeFitIdx(i);
+            Apply(i); // use the new value directly
+        });
+
+        void Apply(int index) { }
+    }
+}
 ```
 
 The **REACTOR_HOOKS_008** analyzer flags a state variable read after its

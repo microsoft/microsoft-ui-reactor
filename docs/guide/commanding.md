@@ -175,12 +175,22 @@ element tree — build the button from content and attach the command with
 the `.Command(command)` fluent modifier:
 
 ```csharp
-// Plain label — the factory is enough:
-Button(saveCmd)
+class CommandModifierExample : Component
+{
+    public override Element Render()
+    {
+        var saveCmd = new Command { Label = "Save", Execute = () => { } };
 
-// Custom content — compose the layout, then bind the command:
-Button(HStack(Icon(SymbolIcon("Save")), Text("Save")))
-    .Command(saveCmd)
+        return VStack(12,
+            // Plain label — the factory is enough:
+            Button(saveCmd),
+
+            // Custom content — compose the layout, then bind the command:
+            Button(HStack(8, Icon(SymbolIcon("Save")), TextBlock("Save")))
+                .Command(saveCmd)
+        ).Padding(24);
+    }
+}
 ```
 
 `.Command()` wires the same synchronized-state contract as the factory:
@@ -209,17 +219,30 @@ it directly with a record initializer — every path below binds identically:
 the action dispatches on click and `IsEnabled` is applied from the command.
 
 ```csharp
-// Factory — plain label:
-Button(saveCmd)
+class BindingPathsExample : Component
+{
+    public override Element Render()
+    {
+        var saveCmd = new Command { Label = "Save", Execute = () => { } };
 
-// Modifier — custom content:
-Button(HStack(Icon(SymbolIcon("Save")), Text("Save"))).Command(saveCmd)
+        return VStack(12,
+            // Factory — plain label:
+            Button(saveCmd),
 
-// Record-init — the typed property is public (the Label ctor arg is required):
-new ButtonElement(saveCmd.Label) { Command = saveCmd }
+            // Modifier — custom content:
+            Button(HStack(8, Icon(SymbolIcon("Save")), TextBlock("Save"))).Command(saveCmd),
 
-// `with` on an existing element hits the same property:
-Button("Save") with { Command = saveCmd }
+            // Record-init — the typed property is public (the Label ctor arg is required):
+            new ButtonElement(saveCmd.Label) { Command = saveCmd },
+
+            // `with` on an existing element hits the same property:
+            Button("Save") with { Command = saveCmd },
+
+            // The typed property also covers the split buttons:
+            new SplitButtonElement(saveCmd.Label) { Command = saveCmd }
+        ).Padding(24);
+    }
+}
 ```
 
 The typed `Command` property is available on all six command-capable
@@ -353,23 +376,36 @@ fire within `DebounceMs` of it is dropped, and `IsEnabled` reports
 re-enables when the window elapses.
 
 ```csharp
-// Sync action + framework-managed debounce — no fake async, no Task.Delay.
-var runCmd = UseCommand(new Command
+class DebounceExample : Component
 {
-    Label = "Run",
-    Execute = () => RunStep(step),
-    DebounceMs = 1500,
-});
+    public override Element Render()
+    {
+        var (runs, setRuns) = UseState(0);
 
-// Async action — IsExecuting still tracks the lambda; DebounceMs keeps the
-// button disabled past the lambda's return (the disabled window is the
-// longer of the two).
-var regenCmd = UseCommand(new Command
-{
-    Label = "Re-gen",
-    ExecuteAsync = () => { RegenFromHere(step); return Task.CompletedTask; },
-    DebounceMs = 250,
-});
+        // Sync action + framework-managed debounce — no fake async, no Task.Delay.
+        var runCmd = UseCommand(new Command
+        {
+            Label = "Run",
+            Execute = () => setRuns(runs + 1),
+            DebounceMs = 1500,
+        });
+
+        // Async action — IsExecuting still tracks the lambda; DebounceMs keeps the
+        // button disabled past the lambda's return (the disabled window is the
+        // longer of the two).
+        var regenCmd = UseCommand(new Command
+        {
+            Label = "Re-gen",
+            ExecuteAsync = () => { setRuns(runs + 1); return Task.CompletedTask; },
+            DebounceMs = 250,
+        });
+
+        return VStack(12,
+            HStack(8, Button(runCmd), Button(regenCmd)),
+            TextBlock($"Fired {runs} time(s)").Foreground(Theme.SecondaryText)
+        ).Padding(24);
+    }
+}
 ```
 
 > **Caveat:** **`DebounceMs` requires `UseCommand`.** The debounce window and its
@@ -429,9 +465,33 @@ For menu integration, the variadic `MenuItem(Command<T>, T parameter)`
 overload binds the row's data to the menu item:
 
 ```csharp
-MenuFlyout(rowContent,
-    MenuItem(deleteCommand, item),
-    MenuItem(renameCommand, item))
+class MenuItemParameterizedExample : Component
+{
+    public override Element Render()
+    {
+        var (log, setLog) = UseState("");
+        var item = new TodoItem(1, "Buy milk");
+
+        var deleteCommand = new Command<TodoItem>
+        {
+            Label = "Delete",
+            Execute = i => setLog($"Deleted {i.Title}"),
+        };
+        var renameCommand = new Command<TodoItem>
+        {
+            Label = "Rename",
+            Execute = i => setLog($"Renamed {i.Title}"),
+        };
+
+        // The row content is the flyout target; each MenuItem carries the row's data.
+        return VStack(8,
+            MenuFlyout(TextBlock(item.Title).Padding(8),
+                MenuItem(deleteCommand, item),
+                MenuItem(renameCommand, item)),
+            TextBlock(log).Foreground(Theme.SecondaryText)
+        ).Padding(24);
+    }
+}
 ```
 
 This is the same shape as the [right-click on a list row
@@ -523,17 +583,25 @@ attach their accelerators to the window's `KeyboardAccelerators`
 collection, which is window-scoped.
 
 ```csharp
-var save = new Command
+class AcceleratorScopeExample : Component
 {
-    Label = "Save",
-    Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
-    Execute = () => SaveDocument(),
-};
+    public override Element Render()
+    {
+        var (saves, setSaves) = UseState(0);
 
-// Window-scoped via MenuBar at the root.
-return VStack(0,
-    MenuBar(Menu("File", MenuItem(save))),
-    content);
+        var save = new Command
+        {
+            Label = "Save",
+            Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
+            Execute = () => setSaves(saves + 1),
+        };
+
+        // Window-scoped via MenuBar at the root.
+        return VStack(0,
+            MenuBar(Menu("File", MenuItem(save))),
+            TextBlock($"Saved {saves} time(s)").Padding(16));
+    }
+}
 ```
 
 For a command palette-style global shortcut catalog, see
@@ -549,25 +617,40 @@ mid-flight. Wrap with `UseCommand`, bind `IsPrimaryButtonEnabled` to
 `command.IsEnabled`, and close the dialog from inside the async body:
 
 ```csharp
-var delete = ctx.UseCommand(new Command
+class AsyncConfirmDialogExample : Component
 {
-    Label = "Delete",
-    ExecuteAsync = async () =>
+    public override Element Render() => Memo(ctx =>
     {
-        await api.DeleteAsync(id);
-        setOpen(false);
-    },
-});
+        var (open, setOpen) = ctx.UseState(false);
+        var (status, setStatus) = ctx.UseState("Ready");
 
-ContentDialog("Delete?", body, primaryButtonText: "Delete") with
-{
-    IsOpen = open,
-    IsPrimaryButtonEnabled = delete.IsEnabled,
-    OnClosed = r =>
-    {
-        if (r == ContentDialogResult.Primary) delete.Execute?.Invoke();
-        else setOpen(false);
-    },
+        var delete = ctx.UseCommand(new Command
+        {
+            Label = "Delete",
+            ExecuteAsync = async () =>
+            {
+                await Task.Delay(500);   // stands in for api.DeleteAsync(id)
+                setStatus("Deleted");
+                setOpen(false);
+            },
+        });
+
+        return VStack(12,
+            Button("Delete…", () => setOpen(true)),
+            TextBlock(status).Foreground(Theme.SecondaryText),
+            ContentDialog("Delete?", TextBlock("This cannot be undone."),
+                    primaryButtonText: "Delete") with
+            {
+                IsOpen = open,
+                IsPrimaryButtonEnabled = delete.IsEnabled,
+                OnClosed = r =>
+                {
+                    if (r == ContentDialogResult.Primary) delete.Execute?.Invoke();
+                    else setOpen(false);
+                },
+            }
+        ).Padding(24);
+    });
 }
 ```
 
@@ -579,14 +662,25 @@ See [dialogs and flyouts](dialogs-and-flyouts.md) for the full pattern.
 using the `with { ... }` expression on the returned record:
 
 ```csharp
-var save = StandardCommand.Save(action) with
+class LocalizedCommandExample : Component
 {
-    Label = intl.Get("save.button"),
-    Description = intl.Get("save.tooltip"),
-};
+    public override Element Render()
+    {
+        var intl = UseIntl();
+
+        var save = StandardCommand.Save(() => { }) with
+        {
+            Label = intl.Message(new MessageKey("Commands", "save.button")),
+            Description = intl.Message(new MessageKey("Commands", "save.tooltip")),
+        };
+
+        return VStack(12, Button(save)).Padding(24);
+    }
+}
 ```
 
-See [localization](localization.md) for the `UseIntl` accessor.
+See [localization](localization.md) for the `UseIntl` accessor and the
+`MessageKey` namespace/key shape.
 
 ### One command, three surfaces, one accelerator
 
@@ -595,19 +689,27 @@ action whether the user pressed it from the editor body, opened the
 File menu and clicked Save, or clicked the toolbar Save button:
 
 ```csharp
-var save = new Command
+class ThreeSurfacesExample : Component
 {
-    Label = "Save",
-    Icon = SymbolIcon("Save"),
-    Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
-    ExecuteAsync = SaveDocumentAsync,
-};
-var saveWrapped = UseCommand(save);
+    public override Element Render()
+    {
+        var (saves, setSaves) = UseState(0);
 
-return VStack(0,
-    MenuBar(Menu("File", MenuItem(saveWrapped))),
-    CommandBar(primaryCommands: new[] { AppBarButton(saveWrapped) }),
-    editorBody);
+        var save = new Command
+        {
+            Label = "Save",
+            Icon = SymbolIcon("Save"),
+            Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
+            ExecuteAsync = () => { setSaves(saves + 1); return Task.CompletedTask; },
+        };
+        var saveWrapped = UseCommand(save);
+
+        return VStack(0,
+            MenuBar(Menu("File", MenuItem(saveWrapped))),
+            CommandBar(primaryCommands: new[] { AppBarButton(saveWrapped) }),
+            TextBlock($"Saved {saves} time(s)").Padding(16));
+    }
+}
 ```
 
 ## Common Mistakes
@@ -651,12 +753,26 @@ above the component.
 ### Ignoring CanExecute changes
 
 ```csharp
-// Don't:
-var save = new Command
+class CanExecuteDontExample : Component
 {
-    Label = "Save",
-    Execute = () => { if (form.IsValid) Save(); },
-};
+    public override Element Render()
+    {
+        var (text, setText) = UseState("");
+
+        // Don't — the guard hides inside Execute, so every surface still
+        // looks enabled and the user clicks expecting an action.
+        var save = new Command
+        {
+            Label = "Save",
+            Execute = () => { if (text.Length > 0) Save(); },
+        };
+
+        return VStack(12, TextBox(text, setText).Width(300), Button(save))
+            .Padding(24);
+
+        void Save() { }
+    }
+}
 ```
 
 Pushing the guard inside `Execute` works but loses the synchronized
@@ -665,12 +781,27 @@ the menu item is still focusable, and the user clicks expecting an
 action. Promote the predicate to `CanExecute`:
 
 ```csharp
-var save = new Command
+class CanExecuteDoExample : Component
 {
-    Label = "Save",
-    Execute = Save,
-    CanExecute = form.IsValid,
-};
+    public override Element Render()
+    {
+        var (text, setText) = UseState("");
+
+        // Do — promote the predicate to CanExecute so every surface
+        // disables together.
+        var save = new Command
+        {
+            Label = "Save",
+            Execute = Save,
+            CanExecute = text.Length > 0,
+        };
+
+        return VStack(12, TextBox(text, setText).Width(300), Button(save))
+            .Padding(24);
+
+        void Save() { }
+    }
+}
 ```
 
 Now the button greys out, the menu item disables, and the accelerator

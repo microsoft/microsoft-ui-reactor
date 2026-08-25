@@ -162,21 +162,7 @@ it. Otherwise a stale request can land after the user has navigated away,
 overwriting state on the next component instance (or worse, throwing on a
 disposed setter):
 
-```csharp
-UseEffect(() =>
-{
-    var cts = new CancellationTokenSource();
-    _ = Task.Run(async () =>
-    {
-        try
-        {
-            var data = await FetchAsync(query, cts.Token);
-            setItems(data);
-        }
-        catch (OperationCanceledException) { /* expected */ }
-    });
-    return () => cts.Cancel();
-}, query);
+```csharp snippet="effects/fetch-cancellation"
 ```
 
 When `query` changes, cleanup cancels the in-flight fetch before the new
@@ -191,15 +177,7 @@ The pattern is the same regardless of what you're subscribing to —
 WinUI control's `RoutedEventHandler`. Subscribe in the body, return an
 unsubscribe in the cleanup:
 
-```csharp
-var (tick, updateTick) = UseReducer(0);
-
-UseEffect(() =>
-{
-    void Handler(object? s, EventArgs e) => updateTick(t => t + 1);
-    Source.Changed += Handler;
-    return () => Source.Changed -= Handler;
-}, Source); // re-attach if Source identity changes
+```csharp snippet="effects/subscription-cleanup"
 ```
 
 If you only need to react to property changes on an `INotifyPropertyChanged`
@@ -222,10 +200,7 @@ re-implementing `UseResource`.
 
 ### Object or array literals in the deps array
 
-```csharp
-// Don't:
-var options = new { Url = url, Limit = 10 };
-UseEffect(() => FetchAsync(options), options); // new instance every render
+```csharp snippet="effects/deps-literal-dont"
 ```
 
 `options` is a fresh anonymous object on every render — its reference
@@ -234,8 +209,7 @@ and the fetch fires in a loop. The `REACTOR_HOOKS_004` analyzer warns
 when a hook's deps argument is a freshly-allocated object, array, or
 lambda. Pass the *primitives* instead:
 
-```csharp
-UseEffect(() => FetchAsync(url, 10), url);
+```csharp snippet="effects/deps-literal-do"
 ```
 
 Or memoize the container with [`UseMemo`](hooks.md) so its identity is
@@ -243,19 +217,7 @@ stable across renders.
 
 ### Missing cleanup
 
-```csharp
-// Don't:
-var (tick, updateTick) = UseReducer(0);
-
-UseEffect(() =>
-{
-    var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-    _ = Task.Run(async () =>
-    {
-        while (await timer.WaitForNextTickAsync())
-            updateTick(t => t + 1);
-    });
-}, Array.Empty<object>()); // no cleanup → timer fires forever after unmount
+```csharp snippet="effects/missing-cleanup-dont"
 ```
 
 The component unmounts, the timer keeps firing, the setter is called on a
@@ -263,28 +225,12 @@ dead [`RenderContext`](hooks-internals.md), and the setter throws (or worse,
 silently leaks the closure tree the timer captured). Always return a
 cleanup that cancels the producer:
 
-```csharp
-var (tick, updateTick) = UseReducer(0);
-
-UseEffect(() =>
-{
-    var cts = new CancellationTokenSource();
-    var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-    _ = Task.Run(async () =>
-    {
-        while (await timer.WaitForNextTickAsync(cts.Token))
-            updateTick(t => t + 1);
-    });
-    return () => { cts.Cancel(); timer.Dispose(); };
-}, Array.Empty<object>());
+```csharp snippet="effects/missing-cleanup-do"
 ```
 
 ### Running an effect that should be a memo
 
-```csharp
-// Don't:
-var (full, setFull) = UseState("");
-UseEffect(() => setFull($"{first} {last}"), first, last);
+```csharp snippet="effects/effect-vs-memo-dont"
 ```
 
 This pays for two extra renders (initial mount with empty `full`, then
@@ -292,9 +238,7 @@ re-render after the effect writes) just to derive a string. The deriving
 should happen **in render**, either inline or via
 [`UseMemo`](hooks.md) for an expensive computation:
 
-```csharp
-var full = $"{first} {last}";                  // inline
-var stats = UseMemo(() => Compute(input), input); // memoized when expensive
+```csharp snippet="effects/effect-vs-memo-do"
 ```
 
 Effects are for *side effects* — work that reaches outside the component.

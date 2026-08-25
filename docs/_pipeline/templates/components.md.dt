@@ -138,9 +138,7 @@ lambda or local function) on every render, so a child whose props carry an
 inline `Action` field compares unequal *every* render and re-renders even
 when no observable data changed:
 
-```csharp
-// Re-renders on every parent render — OnChanged is a fresh delegate each time.
-record StepProps(StepModel Step, Action<string> OnChanged);
+```csharp snippet="components/callback-props-naive"
 ```
 
 Wrap the callbacks in `Callbacks<T>` so their identity is excluded from the
@@ -149,14 +147,7 @@ memo comparison. `Callbacks<T>` is an always-equal record (`Equals` returns
 equality treats the callbacks slot as always-equal — only the data fields
 drive the re-render decision:
 
-```csharp
-record StepCallbacks(Action<string> OnChanged, Action OnRun);
-
-// Only Step drives re-render now; the callbacks slot is ignored by memo.
-record StepProps(StepModel Step, Callbacks<StepCallbacks> Cb);
-
-// Construct it — the payload converts implicitly:
-new StepProps(step, new StepCallbacks(onChanged, onRun));
+```csharp snippet="components/callback-props-callbacks"
 ```
 
 This replaces the old workaround of hand-writing `Equals`/`GetHashCode` on
@@ -203,7 +194,7 @@ You can also use a function component as the app root:
 ```csharp
 ReactorApp.Run("Title", ctx => {
     var (n, setN) = ctx.UseState(0);
-    return Text($"{n}");
+    return TextBlock($"{n}");
 }, width: 400, height: 300);
 ```
 <!-- /ai:lock -->
@@ -247,17 +238,7 @@ Component nesting is the primary way Reactor composes UI — there's no
 "slot" or `ContentPresenter` concept; the parent's `Render()` directly
 returns child element trees:
 
-```csharp
-class Card : Component<CardProps>
-{
-    public override Element Render() =>
-        Border(
-            VStack(8,
-                TextBlock(Props.Title).Bold(),
-                Props.Body                 // any Element, including child components
-            ).Padding(12)
-        ).CornerRadius(8).WithBorder(Theme.Stroke);
-}
+```csharp snippet="components/composition-children"
 ```
 
 The caller decides what to put inside — a `TextBlock`, a `Component<Form>`,
@@ -272,19 +253,14 @@ a `Func<…, Element>` prop. The function gets called inside the
 component's `Render()` and its return value is spliced in — same as
 React's render props or the `DataTemplate` selector pattern:
 
-```csharp
-record ListProps<T>(IReadOnlyList<T> Items, Func<T, Element> Render);
-
-class List<T> : Component<ListProps<T>>
-{
-    public override Element Render() =>
-        VStack(4, ForEach(Props.Items, item => Props.Render(item).WithKey(item)));
-}
+```csharp snippet="components/render-props"
 ```
 
 The caller picks the row shape — `item => TextBlock(item.Name)` or a full
-nested component — without the list component knowing anything about the
-item type beyond the key.
+nested component — and supplies a key selector, so the list component knows
+nothing about the item type beyond how to render it and how to identify it.
+(`.WithKey` takes either a `string` key or an item implementing
+`IReactorKeyed`; an unconstrained generic `T` needs the selector.)
 
 ### Lifted state
 
@@ -302,11 +278,7 @@ children's `Render` calls. The boundary swaps in your fallback element
 instead of letting the exception bubble up to the host, which would
 unmount the whole tree:
 
-```csharp
-ErrorBoundary(
-    fallback: ex => TextBlock($"Crash: {ex.Message}").Foreground(Theme.Error),
-    child: Component<RiskyView>()
-)
+```csharp snippet="components/error-boundary-composition"
 ```
 
 The [Advanced Patterns](advanced.md) page covers the lifecycle and
@@ -318,14 +290,7 @@ want isolation.
 
 ### Side effects in render
 
-```csharp
-// Don't:
-public override Element Render()
-{
-    File.AppendAllText("log.txt", "rendered\n");  // I/O during render
-    Globals.RenderCount++;                          // mutation during render
-    return TextBlock("hi");
-}
+```csharp snippet="components/side-effects-in-render"
 ```
 
 `Render()` may be called any number of times per user action — once per
@@ -336,13 +301,7 @@ run exactly once per commit. Diagnostic counters belong in
 
 ### Mutating props
 
-```csharp
-// Don't:
-public override Element Render()
-{
-    Props.Items.Add(newItem); // mutates the parent's collection
-    return ListView(...);
-}
+```csharp snippet="components/mutating-props"
 ```
 
 Props are inputs from the parent — read-only by contract. Mutating the
