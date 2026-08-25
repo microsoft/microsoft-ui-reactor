@@ -169,22 +169,7 @@ animation primitive. Wrap a state mutation, and any **structural** change to
 a keyed list (insert, move, remove) that comes out of that mutation picks up
 the kind — without a per-element modifier in sight.
 
-```csharp
-class TodoList : Component
-{
-    public override Element Render()
-    {
-        var (items, setItems) = UseState<IReadOnlyList<Todo>>(_seed);
-
-        return VStack(12,
-            Button("Add", () =>
-                Animations.Animate(AnimationKind.Spring, () =>
-                    setItems([.. items, new Todo(Guid.NewGuid().ToString(), "New")]))),
-            ListView<Todo>(items, (t, _) => TextBlock(t.Title).Padding(8))
-                .Height(400)
-        );
-    }
-}
+```csharp snippet="animation/transactional-animate"
 ```
 
 `AnimationKind` is the declarative knob — `Spring`, `EaseIn`, `EaseOut`,
@@ -195,21 +180,29 @@ diff pass so `ListView`, `GridView`, `LazyVStack` (and hand-built
 `FlexColumn(items.Select(...).WithKey(...))` children) all animate the
 resulting insert / move / remove. (See spec 042 §6.)
 
+The templated `ListView<T>(items, viewBuilder)` overload constrains
+`T : IReactorKeyed` — the model exposes a stable `string Key`, which is
+what lets the reconciler classify a change as an insert rather than a
+replace. Use the
+`ListView<T>(items, keySelector, viewBuilder)` overload when the model
+type can't implement the interface.
+
 ### What `Animate` does *not* do
 
 `Animate` is **scoped to structural changes**. A leaf `TextBlock` whose
 `Foreground` changes inside `Animate(.Spring)` does **not** animate the
-foreground — that remains the job of per-element modifiers like
-`.WithImplicitTransition(...)` or
+foreground — that remains the job of per-element implicit-transition
+modifiers like `.OpacityTransition(...)` / `.ScaleTransition(...)` /
+`.TranslationTransition(...)` / `.RotationTransition(...)`, or
 [`AnimationScope.WithAnimation(...)`](#withanimation-scope). The two
 channels are deliberately independent so the SwiftUI "`withAnimation` only
 animates layout-shape ops" contract holds; conflating them would surprise
 users coming from that mental model.
 
 Per-element animation modifiers continue to win when set: declaring
-`.Transition(Fade)` on a row makes that row's enter / exit use Fade
-regardless of the ambient. The ambient is a default for the transactional
-case, not a hammer for every change.
+`.Transition(Transition.Fade)` on a row makes that row's enter / exit use
+Fade regardless of the ambient. The ambient is a default for the
+transactional case, not a hammer for every change.
 
 ### Nesting and explicit suppression
 

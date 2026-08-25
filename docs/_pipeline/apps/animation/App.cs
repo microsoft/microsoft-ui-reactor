@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
@@ -340,6 +341,38 @@ class ChoreographyDemo : Component
 }
 // </snippet:choreography>
 
+// <snippet:transactional-animate>
+// ListView<T> keys rows by T.Key, so the model implements IReactorKeyed.
+// That is what lets the reconciler tell an insert from a replace — and
+// therefore what makes the transactional animation meaningful.
+record Todo(string Id, string Title) : IReactorKeyed
+{
+    public string Key => Id;
+}
+
+class TransactionalAnimateDemo : Component
+{
+    public override Element Render()
+    {
+        var (items, setItems) = UseState<IReadOnlyList<Todo>>(
+            [new Todo("seed-1", "First"), new Todo("seed-2", "Second")]);
+
+        return VStack(12,
+            SubHeading("Animations.Animate — structural changes"),
+
+            // Wrapping the setter makes the resulting list insert animate
+            // with a spring. No per-element modifier needed.
+            Button("Add", () =>
+                Animations.Animate(AnimationKind.Spring, () =>
+                    setItems([.. items, new Todo(Guid.NewGuid().ToString(), "New")]))),
+
+            ListView<Todo>(items, (t, _) => TextBlock(t.Title).Padding(8))
+                .Height(200)
+        ).Padding(24);
+    }
+}
+// </snippet:transactional-animate>
+
 // Main app
 class AnimationApp : Component
 {
@@ -361,7 +394,8 @@ class AnimationApp : Component
                 Component<TransitionDemo>(),
                 Component<StaggerDemo>(),
                 Component<KeyframeDemo>(),
-                Component<ChoreographyDemo>()
+                Component<ChoreographyDemo>(),
+                Component<TransactionalAnimateDemo>()
             ).Padding(24)
         );
     }

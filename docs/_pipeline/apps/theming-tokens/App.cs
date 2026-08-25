@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 
 // Doc app for `theming-tokens.md` — renders a swatch grid for every named
@@ -61,6 +62,12 @@ class SwatchGrid : Component
                 ("SystemCritical", Theme.SystemCritical),
                 ("SystemNeutral", Theme.SystemNeutral),
                 ("SystemSolidNeutral", Theme.SystemSolidNeutral),
+                ("SystemSolidAttention", Theme.SystemSolidAttention),
+                ("SystemAttentionBackground", Theme.SystemAttentionBackground),
+                ("SystemSuccessBackground", Theme.SystemSuccessBackground),
+                ("SystemCautionBackground", Theme.SystemCautionBackground),
+                ("SystemCriticalBackground", Theme.SystemCriticalBackground),
+                ("SystemNeutralBackground", Theme.SystemNeutralBackground),
             })
         ).Padding(20)
     );
@@ -101,6 +108,36 @@ class ThemeRefGood : Component
         Button("Click me", () => { }).Background(Theme.Accent);
 }
 // </snippet:good-theme-ref>
+
+// <snippet:status-banner>
+// Map a severity onto the Signal token pair (foreground + matching
+// background) so the banner tracks the theme in both light and dark.
+class StatusBannerDemo : Component
+{
+    public override Element Render() => VStack(8,
+        StatusBanner("Saved", InfoBarSeverity.Success),
+        StatusBanner("Disk almost full", InfoBarSeverity.Warning),
+        StatusBanner("Upload failed", InfoBarSeverity.Error),
+        StatusBanner("Sync scheduled", InfoBarSeverity.Informational)
+    ).Padding(16);
+
+    internal static Element StatusBanner(string text, InfoBarSeverity severity) => HStack(8,
+        TextBlock(text).Foreground(severity switch
+        {
+            InfoBarSeverity.Success => Theme.SystemSuccess,
+            InfoBarSeverity.Warning => Theme.SystemCaution,
+            InfoBarSeverity.Error => Theme.SystemCritical,
+            _ => Theme.SystemNeutral,
+        })
+    ).Background(severity switch
+    {
+        InfoBarSeverity.Success => Theme.SystemSuccessBackground,
+        InfoBarSeverity.Warning => Theme.SystemCautionBackground,
+        InfoBarSeverity.Error => Theme.SystemCriticalBackground,
+        _ => Theme.SystemNeutralBackground,
+    }).Padding(12).CornerRadius(4);
+}
+// </snippet:status-banner>
 
 // <snippet:use-color-scheme>
 // UseColorScheme reads the current scheme (Light / Dark) reactively so a

@@ -4,6 +4,9 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Advanced.Factories;
 
@@ -34,6 +37,103 @@ class PointerModifiersExample : Component
     }
 }
 // </snippet:pointer-modifiers>
+
+// <snippet:keyboard-events>
+class KeyboardEventsExample : Component
+{
+    public override Element Render()
+    {
+        var (value, setValue) = UseState("");
+        var (log, setLog) = UseState("press Enter to submit");
+
+        return VStack(12,
+            TextBox(value, setValue, placeholderText: "type here").Width(280)
+                // Tunnels first — the right spot to intercept before bubbling.
+                .OnPreviewKeyDown((_, _) => setLog("preview"))
+                // Bubbles — fires after the preview pair.
+                .OnKeyDown((_, e) =>
+                {
+                    if (e.Key == VirtualKey.Enter)
+                        setLog($"submitted: {value}");
+                })
+                .OnCharacterReceived((_, e) => setLog($"typed '{e.Character}'")),
+
+            TextBlock(log)
+        ).Padding(24);
+    }
+}
+// </snippet:keyboard-events>
+
+// <snippet:focus-events>
+class FocusEventsExample : Component
+{
+    public override Element Render()
+    {
+        var (value, setValue) = UseState("");
+        var (hint, setHint) = UseState("");
+
+        return VStack(12,
+            TextBox(value, setValue, placeholderText: "email").Width(280)
+                .OnGotFocus((_, _) => setHint("We never share your address."))
+                .OnLostFocus((_, _) => setHint("")),
+
+            TextBlock(hint).Foreground(Theme.SecondaryText)
+        ).Padding(24);
+    }
+}
+// </snippet:focus-events>
+
+// <snippet:focus-modifiers>
+class FocusModifiersExample : Component
+{
+    public override Element Render() => VStack(12,
+        // Declarative focus order + an access key (Alt+S) on the primary action.
+        Button("Submit", () => { })
+            .TabIndex(3)
+            .AccessKey("S")
+            .IsTabStop(),   // default-true overload
+
+        // Advanced focus knobs are first-class too.
+        VStack(8,
+            Button("One", () => { }),
+            Button("Two", () => { }))
+            .TabNavigation(KeyboardNavigationMode.Once)
+            .XYFocusKeyboardNavigation(XYFocusKeyboardNavigationMode.Enabled)
+    ).Padding(24);
+}
+// </snippet:focus-modifiers>
+
+// <snippet:command-access-key>
+class CommandAccessKeyExample : Component
+{
+    public override Element Render()
+    {
+        var save = new Command { Label = "Save", Execute = () => { }, AccessKey = "S" };
+
+        // A later .AccessKey(...) wins over the one carried by the Command.
+        return Button(save).AccessKey("F").Padding(24);
+    }
+}
+// </snippet:command-access-key>
+
+// <snippet:typed-ref>
+class SearchBoxExample : Component
+{
+    public override Element Render()
+    {
+        var (query, setQuery) = UseState("");
+
+        // ElementRef<T>.Current is already typed — no `as TextBox` at the call site.
+        var inputRef = this.UseElementRef<TextBox>();
+        UseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());
+
+        return VStack(12,
+            TextBlock("Text is pre-selected on mount via UseElementRef<TextBox>()."),
+            TextBox(query, setQuery).Width(280).Ref(inputRef)
+        ).Padding(24);
+    }
+}
+// </snippet:typed-ref>
 
 // <snippet:pan-gesture>
 class PanGestureExample : Component
