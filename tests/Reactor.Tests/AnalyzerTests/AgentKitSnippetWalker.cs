@@ -31,6 +31,7 @@ internal sealed class ReactorSurface
 {
     private readonly Dictionary<string, Type?> _factories = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, HashSet<Type>> _setControls = new();
+    private readonly Dictionary<string, HashSet<Type>> _modifierArguments = new(StringComparer.Ordinal);
 
     [UnconditionalSuppressMessage(
         "Trimming", "IL2026",
@@ -69,9 +70,29 @@ internal sealed class ReactorSurface
             controls.Add(parameters[1].ParameterType.GetGenericArguments()[0]);
         }
 
+        // Single-argument generic modifiers, keyed by name. Feeds DefaultIsProvablyNull: `default`
+        // is target-typed, so only the real parameter types can say whether it means null.
+        foreach (var method in elementExtensions.GetMethods(BindingFlags.Public | BindingFlags.Static))
+        {
+            if (!method.IsGenericMethodDefinition)
+                continue;
+
+            var parameters = method.GetParameters();
+            if (parameters.Length != 2 || !parameters[0].ParameterType.IsGenericParameter)
+                continue;   // not `M<T>(this T el, TArg value)`
+
+            var argument = parameters[1].ParameterType;
+            if (argument.IsGenericParameter)
+                continue;   // unconstrained: says nothing about reference-ness.
+
+            if (!_modifierArguments.TryGetValue(method.Name, out var types))
+                _modifierArguments[method.Name] = types = new HashSet<Type>();
+
+            types.Add(argument);
+        }
+
         var factories = reactor.GetType("Microsoft.UI.Reactor.Factories")
             ?? throw new InvalidOperationException("Microsoft.UI.Reactor.Factories not found.");
-
         FactoriesType = factories;
 
         foreach (var method in factories.GetMethods(BindingFlags.Public | BindingFlags.Static))
@@ -177,7 +198,70 @@ internal sealed class ReactorSurface
         return null;
     }
 
-    /// <summary>The control's own name followed by every base type name, most derived first.</summary>
+    /// <summary>
+    /// The parameter types of every single-argument generic overload of a modifier on
+    /// <c>ElementExtensions</c>, used to decide whether <c>default</c> at that position is
+    /// provably <see langword="null"/>.
+    /// </summary>
+    public IReadOnlyCollection<Type> SingleArgumentModifierTypes(string modifier) =>
+        _modifierArguments.TryGetValue(modifier, out var types) ? types : Array.Empty<Type>();
+
+    /// <summary>
+    /// True when a <c>default</c> at this modifier's single argument position must be
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <param name="modifier">Modifier name, e.g. <c>Background</c>.</param>
+    /// <param name="explicitTypeName">
+    /// The <c>T</c> of <c>default(T)</c> as written, or <see langword="null"/> for a bare
+    /// <c>default</c>.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <c>default</c> is target-typed, so syntax alone says nothing: <c>default(Brush)</c> is null,
+    /// <c>default(double)</c> is <c>0</c>, and <c>0</c> is a real write that <c>ApplyModifiers</c>
+    /// really does drop on a Flex receiver. Exempting it would hide a true finding — a silent miss,
+    /// which is the failure this gate is least able to detect in itself.
+    /// </para>
+    /// <para>
+    /// With an explicit <c>T</c> the answer comes from <c>T</c>. Without one, every overload the
+    /// call could bind to must be nullable, which is strictly conservative:
+    /// <c>.Background(default)</c> is in fact ambiguous across
+    /// <c>string</c>/<c>Brush</c>/<c>ThemeRef</c> and does not compile, so refusing to exempt it
+    /// costs nothing. Unprovable never exempts.
+    /// </para>
+    /// </remarks>
+    public bool DefaultIsProvablyNull(string modifier, string? explicitTypeName = null)
+    {
+        var types = SingleArgumentModifierTypes(modifier);
+        if (types.Count == 0)
+            return false;
+
+        if (explicitTypeName is null)
+            return types.All(IsNullable);
+
+        // A value-type keyword settles it without any lookup, and covers the `default(double)` case
+        // whose parameter type may not even be in this modifier's overload set.
+        if (ValueTypeKeywords.Contains(explicitTypeName))
+            return false;
+
+        if (explicitTypeName is "string" or "object")
+            return true;
+
+        var matches = types.Where(t => string.Equals(t.Name, explicitTypeName, StringComparison.Ordinal)).ToList();
+        return matches.Count > 0 && matches.All(IsNullable);
+    }
+
+    private static bool IsNullable(Type type) =>
+        !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
+
+    private static readonly HashSet<string> ValueTypeKeywords = new(StringComparer.Ordinal)
+    {
+        "int", "double", "float", "bool", "char", "byte", "sbyte",
+        "short", "ushort", "uint", "long", "ulong", "decimal", "nint", "nuint",
+    };
+
+    /// <summary>
+    /// The control's own name followed by every base type name, most derived first.</summary>
     public static IEnumerable<string> ControlBaseChain(Type control)
     {
         for (var current = control; current is not null; current = current.BaseType)
@@ -259,6 +343,28 @@ internal static class AgentKitSnippetWalker
     private static readonly string[] WrapperJustifications =
         { "Background", "Border", "CornerRadius", "Shadow", "Clip", "Set" };
 
+    /// <summary>
+    /// Element types whose sole contribution is decoration, so relocating a modifier inward and
+    /// deleting the wrapper preserves behaviour.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Exactly one entry, and it should stay hard to add to. <c>BorderElement</c> is the #1119
+    /// shape and the one <c>reactor-design/SKILL.md</c> names in prose: a <c>Border</c> contributes
+    /// background, corner radius, border brush and padding, so a <c>Border</c> supplying only
+    /// padding contributes nothing once <c>.FlexPadding(...)</c> exists.
+    /// </para>
+    /// <para>
+    /// "Single child" is <b>not</b> a substitute for this test.
+    /// <c>ScrollViewer(FlexColumn(children)).Padding(16)</c> has one child and is a gate-legal
+    /// receiver, yet deleting it deletes scrolling — the wrapper is load-bearing and the sample is
+    /// correct. Before adding a type here, establish that removing it changes nothing but
+    /// appearance; if it does anything else, the rule does not apply to it.
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<string> PassiveWrapperElements =
+        new(StringComparer.Ordinal) { "BorderElement" };
+
     public static AgentKitScan Scan(IEnumerable<AgentKitSnippet> snippets)
     {
         var findings = new List<AgentKitFinding>();
@@ -303,7 +409,7 @@ internal static class AgentKitSnippetWalker
                 // Mirrors NoOpModifierAnalyzer's constant-null gate (its line 232). Reporting here
                 // would let this gate reject a sample the packaged analyzer accepts, which is worse
                 // than the drift it exists to catch.
-                if (HasConstantNullArgument(invocation))
+                if (HasConstantNullArgument(invocation, modifier))
                     continue;
 
                 var line = LineOf(tree, snippet, access.Name);
@@ -345,13 +451,15 @@ internal static class AgentKitSnippetWalker
     /// <c>const</c> null is not a shape that occurs.
     /// </para>
     /// </remarks>
-    private static bool HasConstantNullArgument(InvocationExpressionSyntax invocation)
+    private static bool HasConstantNullArgument(InvocationExpressionSyntax invocation, string modifier)
     {
         foreach (var argument in invocation.ArgumentList.Arguments)
         {
             var expression = argument.Expression;
 
-            // (Brush)null, ((Brush)null), (Brush)default — unwrap to whatever is really passed.
+            // (Brush)null, ((Brush)null) — unwrap to whatever is really passed. The cast's own type
+            // is deliberately ignored: `(Brush)null` and `(object)null` are both null, and reading
+            // the cast would only re-introduce the guesswork DefaultIsProvablyNull exists to avoid.
             while (true)
             {
                 switch (expression)
@@ -367,10 +475,23 @@ internal static class AgentKitSnippetWalker
                 break;
             }
 
-            if (expression.IsKind(SyntaxKind.NullLiteralExpression)
-                || expression.IsKind(SyntaxKind.DefaultLiteralExpression)
-                || expression is DefaultExpressionSyntax)
+            // `null` is null whatever it is assigned to.
+            if (expression.IsKind(SyntaxKind.NullLiteralExpression))
                 return true;
+
+            // `default` and `default(T)` are not. `.Background(default(Brush))` is null, but
+            // `.Padding(default(double))` is 0 — a real write the analyzer reports and
+            // ApplyModifiers really does drop on a Flex receiver. Exempting it would hide a true
+            // finding, so the question is answered from the written type where there is one and
+            // from the modifier's overload set otherwise; unprovable never exempts.
+            if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) || expression is DefaultExpressionSyntax)
+            {
+                var written = (expression as DefaultExpressionSyntax)?.Type.ToString();
+
+                if (invocation.ArgumentList.Arguments.Count == 1
+                    && ReactorSurface.Instance.DefaultIsProvablyNull(modifier, written))
+                    return true;
+            }
         }
 
         return false;
@@ -471,10 +592,15 @@ internal static class AgentKitSnippetWalker
                 || !ReactorSurface.ControlBaseChain(wrapperControl).Any(name => gate.Contains(name, StringComparer.Ordinal)))
                 continue;
 
-            // Single-child wrappers only. `Border(inner)` is unambiguously "this element exists to
-            // hold that one", which is the shape the rule is about; a multi-argument container such
-            // as `VStack(8, flex, button)` is a real layout whose padding is its own business, and
-            // flagging it would be a false positive on correct documentation.
+            // The wrapper must be semantically passive: something whose *only* contribution is
+            // decoration, so moving the modifier inward and deleting it is behaviour-preserving.
+            // A single child does not establish that. `ScrollViewer(FlexColumn(children))` is also
+            // a one-child, gate-legal receiver, but deleting it deletes scrolling — reporting there
+            // would be a false positive on correct documentation, and the reader's only way to
+            // satisfy the gate would be to break the sample.
+            if (!PassiveWrapperElements.Contains(wrapperElement.Name))
+                continue;
+
             if (wrapperArguments.Count != 1)
                 continue;
 

@@ -112,6 +112,11 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("FlexRow(items).FlexPadding(horizontal: 16, vertical: 8)")]
     [InlineData("VStack(8, FlexColumn(children), Button(\"Go\")).Padding(16)")]
     [InlineData("Border(FlexColumn(children)).Padding(16).Background(Theme.CardBackground)")]
+    // A load-bearing single-child wrapper. Deleting the ScrollViewer deletes scrolling, so this is
+    // correct code and the wrapper rule must not claim otherwise. (A Viewbox would not do as the
+    // example here: it mounts a Viewbox, which is outside Padding's gate, so the dropped-modifier
+    // rule fires on it for a different and entirely correct reason.)
+    [InlineData("ScrollViewer(FlexColumn(children)).Padding(16)")]
     public void Walker_Stays_Silent_On_Sound_Code(string snippet)
     {
         var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/sound.md", 1, snippet) });
@@ -133,7 +138,6 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("Rectangle().Background((Brush)null)")]
     [InlineData("Rectangle().Background(null)")]
     [InlineData("Rectangle().Background(((Brush)null))")]
-    [InlineData("Rectangle().Background(default)")]
     [InlineData("Rectangle().Background(default(Brush))")]
     [InlineData("FlexColumn(children).Padding(null)")]
     public void Walker_Mirrors_The_Analyzers_Constant_Null_Gate(string snippet)
@@ -147,6 +151,60 @@ public class AgentKitDocGateInstrumentTests
         Assert.True(
             scan.ResolvedChains >= 1,
             $"'{snippet}' resolved no modifier chain, so this asserts nothing about the null gate.");
+    }
+
+    /// <summary>
+    /// A <c>default</c> that resolves to a value type is <b>not</b> null, so it must not inherit the
+    /// constant-null exemption.
+    /// </summary>
+    /// <remarks>
+    /// <c>default</c> is target-typed: <c>.Background(default)</c> is <c>default(Brush)</c> and
+    /// null, while <c>.Padding(default(double))</c> is <c>0</c> — a real write that
+    /// <c>ApplyModifiers</c> really does drop on a Flex receiver, and which
+    /// <c>NoOpModifierAnalyzer</c> correctly reports. Treating every <c>default</c> as null would
+    /// hide that, which is a silent miss: the failure mode this gate is least able to detect in
+    /// itself, since the result is indistinguishable from clean documentation.
+    /// </remarks>
+    [Theory]
+    [InlineData("FlexColumn(children).Padding(default(double))")]
+    [InlineData("FlexColumn(children).Padding(default(Thickness))")]
+    [InlineData("FlexColumn(children).Padding(default)")]
+    public void Walker_Still_Reports_A_Value_Typed_Default(string snippet)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/default.md", 1, snippet) });
+
+        var finding = Assert.Single(scan.Of(AgentKitFindingKind.DroppedModifier));
+        Assert.Equal("Padding", finding.Modifier);
+        Assert.Equal("FlexElement", finding.ElementName);
+    }
+
+    /// <summary>
+    /// The reference/value split behind that exemption is read off the real modifier signatures,
+    /// not guessed.
+    /// </summary>
+    [Fact]
+    public void Default_Is_Provably_Null_Only_For_Reference_Typed_Modifiers()
+    {
+        // Explicit type settles it, whichever way.
+        Assert.True(ReactorSurface.Instance.DefaultIsProvablyNull("Background", "Brush"));
+        Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Padding", "double"));
+        Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Padding", "Thickness"));
+
+        // Bare `default` must hold for every overload it could bind to. Background takes
+        // string/Brush/ThemeRef, and ThemeRef is a readonly record struct — so `.Background(default)`
+        // is not provably null (and is in fact ambiguous C#, which is why refusing costs nothing).
+        Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Background"));
+        Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Padding"));
+
+        // An unknown modifier or type must not exempt: unprovable is not the same as null.
+        Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("NoSuchModifierExists"));
+        Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Background", "NoSuchType"));
+
+        // Guard the reading above: if ThemeRef ever stopped being a value type, the Background
+        // assertions would start passing for a reason unrelated to what they claim to test.
+        Assert.Contains(
+            ReactorSurface.Instance.SingleArgumentModifierTypes("Background"),
+            t => t.Name == "ThemeRef" && t.IsValueType);
     }
 
     /// <summary>
