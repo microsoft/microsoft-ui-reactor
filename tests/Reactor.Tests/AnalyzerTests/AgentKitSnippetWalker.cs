@@ -1,0 +1,551 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.UI.Reactor.Analyzers;
+
+namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
+
+/// <summary>
+/// Reactor's element surface, read from the real assemblies as metadata.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Two maps, both taken from the same signals <see cref="NoOpModifierAnalyzer"/> reads at compile
+/// time: a factory's declared return type, and the control named by an element's
+/// <c>Set(this TElement, Action&lt;TControl&gt;)</c> overload. Nothing is derived from a parallel
+/// list, so widening a gate or re-pointing a factory moves this type with it.
+/// </para>
+/// <para>
+/// Reflection is metadata-only — no WinUI object is constructed — which is what makes it legal in
+/// the headless <c>Reactor.Tests</c> host, where instantiating any <c>Microsoft.UI.Xaml</c> type
+/// throws <c>COMException</c>.
+/// </para>
+/// </remarks>
+internal sealed class ReactorSurface
+{
+    private readonly Dictionary<string, Type?> _factories = new(StringComparer.Ordinal);
+    private readonly Dictionary<Type, HashSet<Type>> _setControls = new();
+
+    [UnconditionalSuppressMessage(
+        "Trimming", "IL2026",
+        Justification = "Test-only surface reader: enumerates the Reactor assemblies' types and factory methods by design. This host is never trimmed; behaviour-neutral.")]
+    [UnconditionalSuppressMessage(
+        "Trimming", "IL2075",
+        Justification = "Test-only surface reader: reflects the public static methods of Factories/ElementExtensions, resolved by name from the Reactor assembly. Intentional and JIT-only; behaviour-neutral.")]
+    private ReactorSurface()
+    {
+        ElementType = typeof(Microsoft.UI.Reactor.Core.Element);
+        var reactor = ElementType.Assembly;
+
+        var elementExtensions = reactor.GetType("Microsoft.UI.Reactor.ElementExtensions")
+            ?? throw new InvalidOperationException("Microsoft.UI.Reactor.ElementExtensions not found.");
+
+        ElementExtensionsType = elementExtensions;
+
+        foreach (var parameters in elementExtensions
+                     .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                     .Where(m => m.Name == "Set")
+                     .Select(m => m.GetParameters())
+                     .Where(p => p.Length == 2
+                                 && p[1].ParameterType.IsGenericType
+                                 && p[1].ParameterType.GetGenericTypeDefinition() == typeof(Action<>)))
+        {
+            var receiver = parameters[0].ParameterType;
+            if (receiver.IsGenericParameter)
+                continue;   // Set<T>(this T, …) says nothing about which control T mounts.
+
+            if (receiver.IsGenericType)
+                receiver = receiver.GetGenericTypeDefinition();
+
+            if (!_setControls.TryGetValue(receiver, out var controls))
+                _setControls[receiver] = controls = new HashSet<Type>();
+
+            controls.Add(parameters[1].ParameterType.GetGenericArguments()[0]);
+        }
+
+        var factories = reactor.GetType("Microsoft.UI.Reactor.Factories")
+            ?? throw new InvalidOperationException("Microsoft.UI.Reactor.Factories not found.");
+
+        FactoriesType = factories;
+
+        foreach (var method in factories.GetMethods(BindingFlags.Public | BindingFlags.Static))
+        {
+            var returned = method.ReturnType;
+            if (returned.IsGenericParameter || returned.ContainsGenericParameters || !ElementType.IsAssignableFrom(returned))
+                continue;
+
+            // An overload set that returns two different element types cannot be resolved from a
+            // bare name, so the name is poisoned to null rather than resolved to whichever
+            // overload reflection happened to hand back first.
+            if (_factories.TryGetValue(method.Name, out var existing))
+            {
+                if (existing != returned)
+                    _factories[method.Name] = null;
+            }
+            else
+            {
+                _factories[method.Name] = returned;
+            }
+        }
+    }
+
+    public static ReactorSurface Instance { get; } = new();
+
+    public Type ElementType { get; }
+
+    public Type ElementExtensionsType { get; }
+
+    public Type FactoriesType { get; }
+
+    /// <summary>
+    /// Number of factory names that resolve to exactly one element type. A floor over this is what
+    /// tells a reading of "no findings" apart from "the reflection stopped resolving".
+    /// </summary>
+    public int ResolvableFactoryCount => _factories.Count(pair => pair.Value is not null);
+
+    /// <summary>
+    /// The element type a DSL factory name produces, or <see langword="null"/> when the name is
+    /// unknown or its overloads disagree.
+    /// </summary>
+    public Type? Element(string factoryName) =>
+        _factories.TryGetValue(factoryName, out var element) ? element : null;
+
+    /// <summary>
+    /// The controls an element's <c>Set</c> overloads name, empty when it declares none.
+    /// </summary>
+    public IReadOnlyCollection<Type> SetControls(Type element)
+    {
+        var key = element.IsGenericType ? element.GetGenericTypeDefinition() : element;
+        return _setControls.TryGetValue(key, out var controls) ? controls : Array.Empty<Type>();
+    }
+
+    /// <summary>
+    /// The single control <c>ApplyModifiers</c> will be handed for this element, or
+    /// <see langword="null"/> when that cannot be established.
+    /// </summary>
+    /// <remarks>
+    /// Prefers the <c>Set</c> overload because that is the signal the shipped analyzer uses — the
+    /// generator attributes live in <c>Reactor.Wrappers.Abstractions</c> and are referenced with
+    /// <c>PrivateAssets="all"</c>, so they are unresolvable in a consumer compilation. The
+    /// attribute is the fallback for elements that declare no <c>Set</c> overload;
+    /// <c>ModifierTableIntegrityTests.Every_Element_Set_Overload_Names_The_Control_Its_Descriptor_Mounts</c>
+    /// pins the two to each other, so the fallback cannot disagree with the primary.
+    /// </remarks>
+    public Type? MountedControl(Type element)
+    {
+        var fromSet = SetControls(element);
+        if (fromSet.Count == 1)
+            return fromSet.Single();
+
+        return fromSet.Count == 0 ? DeclaredControl(element) : null;
+    }
+
+    /// <summary>
+    /// The control named by an element's <c>[GenerateReactorWrapper]</c> /
+    /// <c>[GenerateReactorDescriptor]</c> attribute, walking up the record hierarchy.
+    /// </summary>
+    /// <remarks>
+    /// <c>GetCustomAttributesData</c>, not <c>GetCustomAttributes</c>: the former reads metadata
+    /// without constructing the attribute, which matters because the constructor argument is a
+    /// WinUI <c>Type</c> and the generator assembly is not always loadable here.
+    /// </remarks>
+    [UnconditionalSuppressMessage(
+        "Trimming", "IL2075",
+        Justification = "Test-only contract guard: reads the generator attribute off an element type resolved from the Reactor assembly. Behaviour-neutral.")]
+    public static Type? DeclaredControl(Type element)
+    {
+        for (var current = element; current is not null; current = current.BaseType)
+        {
+            foreach (var attribute in current.GetCustomAttributesData())
+            {
+                var name = attribute.AttributeType.Name;
+                if (name is not ("GenerateReactorWrapperAttribute" or "GenerateReactorDescriptorAttribute")
+                    || attribute.ConstructorArguments.Count < 1)
+                    continue;
+
+                if (attribute.ConstructorArguments[0].Value is Type control)
+                    return control;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The control's own name followed by every base type name, most derived first.</summary>
+    public static IEnumerable<string> ControlBaseChain(Type control)
+    {
+        for (var current = control; current is not null; current = current.BaseType)
+            yield return current.Name;
+    }
+}
+
+/// <summary>What a finding accuses a shipped snippet of.</summary>
+internal enum AgentKitFindingKind
+{
+    /// <summary>
+    /// A common modifier applied to a receiver <c>Reconciler.ApplyModifiers</c> never writes it
+    /// to — the shipped-documentation form of <c>REACTOR_MOD_003</c>.
+    /// </summary>
+    DroppedModifier,
+
+    /// <summary>
+    /// A wrapper element introduced only to receive a modifier the inner element drops, where the
+    /// inner element has a first-class replacement.
+    /// </summary>
+    WrapperWorkaround,
+}
+
+/// <summary>One accusation against one line of one shipped document.</summary>
+/// <param name="Line">Line of the offending modifier itself — where a reader looks.</param>
+/// <param name="ChainStartLine">Line the fluent chain starts on. A multi-line chain puts its
+/// <c>// Wrong:</c> marker above the <em>head</em>, not above the modifier three lines down, so
+/// counterexample detection anchors here while the message points at <paramref name="Line"/>.</param>
+internal sealed record AgentKitFinding(
+    AgentKitFindingKind Kind,
+    string Path,
+    int Line,
+    int ChainStartLine,
+    string Modifier,
+    string ElementName,
+    string? Replacement,
+    string Detail);
+
+/// <summary>Everything one pass over the corpus produced, findings and instrumentation alike.</summary>
+internal sealed record AgentKitScan(
+    IReadOnlyList<AgentKitFinding> Findings,
+    int SnippetCount,
+    int ResolvedChains)
+{
+    public IEnumerable<AgentKitFinding> Of(AgentKitFindingKind kind) => Findings.Where(f => f.Kind == kind);
+}
+
+/// <summary>
+/// Runs Reactor's own modifier-gate rules over the C# in the shipped agent kit.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>Syntax only.</b> The snippets are fragments — undeclared <c>children</c>, no enclosing class,
+/// no usings — so they do not bind. A semantic pass would resolve every receiver to an error type,
+/// every check would skip, and the fact would report "no findings" while measuring nothing. Instead
+/// the chain head is resolved by <em>name</em> through <see cref="ReactorSurface"/>, and anything
+/// that does not resolve is skipped. That asymmetry is deliberate and mirrors
+/// <see cref="NoOpModifierAnalyzer"/>: uncertainty must never produce a finding, because this gate
+/// runs in CI over prose-adjacent artifacts and one false positive gets it deleted.
+/// </para>
+/// <para>
+/// The floors reported in <see cref="AgentKitScan"/> are what keep the skipping honest — a parser
+/// that stopped matching reads identically to a clean corpus otherwise.
+/// </para>
+/// </remarks>
+internal static class AgentKitSnippetWalker
+{
+    /// <summary>
+    /// Modifiers whose presence on a wrapper chain means the wrapper is carrying its own weight, so
+    /// it is not merely a workaround for the modifier the inner element drops. Matched by substring
+    /// on purpose: <c>WithBorder</c>, <c>ThemeBackground</c> and <c>BorderBrush</c> all qualify, and
+    /// over-matching here only ever suppresses a finding.
+    /// </summary>
+    /// <remarks>
+    /// <c>Set</c> is in the list for a different reason: its lambda can write anything, and this
+    /// walker cannot see inside it. Treating an opaque write as a justification keeps the failure
+    /// mode on the safe side of the false-positive/false-negative trade this gate has to make.
+    /// </remarks>
+    private static readonly string[] WrapperJustifications =
+        { "Background", "Border", "CornerRadius", "Shadow", "Clip", "Set" };
+
+    public static AgentKitScan Scan(IEnumerable<AgentKitSnippet> snippets)
+    {
+        var findings = new List<AgentKitFinding>();
+        var snippetCount = 0;
+        var resolvedChains = 0;
+
+        foreach (var snippet in snippets)
+        {
+            snippetCount++;
+
+            // Cheap pre-filter. The walker can only ever report on an invocation whose name is a
+            // ModifierTable key, so a snippet mentioning none of them can produce neither a finding
+            // nor a resolved chain — skipping its Roslyn parse is exactly equivalent, not merely
+            // cheaper, and it is most of the corpus. Note this is a bare-name test, deliberately
+            // looser than the syntax it stands in for: over-matching costs a parse, under-matching
+            // would cost coverage.
+            if (!MentionsAGatedModifier(snippet.Text))
+                continue;
+
+            var tree = CSharpSyntaxTree.ParseText(snippet.Text);
+            var root = tree.GetRoot();
+
+            foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                if (invocation.Expression is not MemberAccessExpressionSyntax access)
+                    continue;
+
+                var modifier = access.Name.Identifier.Text;
+                if (!ModifierTable.Properties.TryGetValue(modifier, out var info))
+                    continue;
+
+                var head = ResolveHead(access.Expression);
+                if (head is null)
+                    continue;
+
+                var element = ReactorSurface.Instance.Element(head.Value.Factory);
+                if (element is null)
+                    continue;
+
+                resolvedChains++;
+
+                var line = LineOf(tree, snippet, access.Name);
+                var chainStart = LineOf(tree, snippet, invocation);
+
+                if (DroppedModifier(element, modifier, info) is { } dropped)
+                {
+                    findings.Add(dropped with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
+                    continue;
+                }
+
+                if (WrapperWorkaround(element, head.Value.Arguments, modifier, invocation) is { } wrapper)
+                    findings.Add(wrapper with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
+            }
+        }
+
+        return new AgentKitScan(findings, snippetCount, resolvedChains);
+    }
+
+    /// <summary>
+    /// The shipped-documentation form of <c>REACTOR_MOD_003</c>: does
+    /// <c>Reconciler.ApplyModifiers</c> write <paramref name="modifier"/> to the control this
+    /// element mounts?
+    /// </summary>
+    /// <remarks>
+    /// Every early return mirrors one of the analyzer's hard gates. In particular a null
+    /// <see cref="ModifierInfo.ControlGate"/> is <b>not</b> read as "applies everywhere" — the
+    /// table leaves it null for properties WinUI only declares on <c>Control</c>, where the
+    /// <c>.Set</c> direction needs no predicate.
+    /// </remarks>
+    private static AgentKitFinding? DroppedModifier(Type element, string modifier, ModifierInfo info)
+    {
+        if (info.ControlGate is not { } gate)
+            return null;
+
+        // A type-specific overload writes the element record directly and is always sound.
+        if (info.ElementTypes is { } elementTypes && elementTypes.Contains(element.Name, StringComparer.Ordinal))
+            return null;
+
+        // The element's own descriptor consumes the common-modifier slot, so the gate is not the
+        // authority — RichTextBlockElement.Padding is the framework's only such case today.
+        if (NoOpModifierAnalyzer.DescriptorAppliedModifiers.Contains(
+                NoOpModifierAnalyzer.ElementModifierKey(element.FullName ?? element.Name, modifier)))
+            return null;
+
+        var control = ReactorSurface.Instance.MountedControl(element);
+        if (control is null)
+            return null;
+
+        // Polymorphic hosts stand in for "whatever was handed to us"; the declared type says
+        // nothing about what ApplyModifiers will see.
+        if (control.Name is "FrameworkElement" or "UIElement")
+            return null;
+
+        if (ReactorSurface.ControlBaseChain(control).Any(name => gate.Contains(name, StringComparer.Ordinal)))
+            return null;
+
+        return new AgentKitFinding(
+            AgentKitFindingKind.DroppedModifier,
+            Path: string.Empty,
+            Line: 0,
+            ChainStartLine: 0,
+            modifier,
+            element.Name,
+            Replacement(element, modifier),
+            $".{modifier}(...) on {element.Name} mounts {control.Name}, which is outside the gate " +
+            $"[{string.Join("|", gate.OrderBy(g => g, StringComparer.Ordinal))}] — ApplyModifiers drops the value");
+    }
+
+    /// <summary>
+    /// The #1119 shape: a wrapper element introduced purely to receive a modifier that the element
+    /// it wraps silently drops, when that element has a first-class replacement.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the rule <c>reactor-design/SKILL.md</c> states in prose — "don't add a Border solely
+    /// to get padding; a Border is still right when you also need its background, corner radius, or
+    /// border brush" — applied to the documents that ship alongside it. It is parameterised off
+    /// <see cref="NoOpModifierAnalyzer.ElementReplacements"/>, so a second entry in that table
+    /// extends the rule with no edit here.
+    /// </para>
+    /// <para>
+    /// Note the deliberate difference from <see cref="DroppedModifier"/>: the wrapper is a
+    /// <em>legal</em> receiver, so no gate is violated and <c>REACTOR_MOD_003</c> is correctly
+    /// silent. That is exactly why #1119 shipped — the contradiction lived in a sample the analyzer
+    /// had nothing to say about.
+    /// </para>
+    /// </remarks>
+    private static AgentKitFinding? WrapperWorkaround(
+        Type wrapperElement,
+        SeparatedSyntaxList<ArgumentSyntax> wrapperArguments,
+        string modifier,
+        InvocationExpressionSyntax invocation)
+    {
+        foreach (var (key, replacement) in NoOpModifierAnalyzer.ElementReplacements)
+        {
+            var separator = key.LastIndexOf('|');
+            if (separator < 0)
+                continue;
+
+            var innerFullName = key[..separator];
+            if (!string.Equals(key[(separator + 1)..], modifier, StringComparison.Ordinal))
+                continue;
+
+            // The wrapper must itself be a legal receiver; if it is not, the dropped-modifier rule
+            // already owns this line and reporting twice helps nobody.
+            if (!ModifierTable.Properties.TryGetValue(modifier, out var info) || info.ControlGate is not { } gate)
+                continue;
+
+            var wrapperControl = ReactorSurface.Instance.MountedControl(wrapperElement);
+            if (wrapperControl is null
+                || !ReactorSurface.ControlBaseChain(wrapperControl).Any(name => gate.Contains(name, StringComparer.Ordinal)))
+                continue;
+
+            // Single-child wrappers only. `Border(inner)` is unambiguously "this element exists to
+            // hold that one", which is the shape the rule is about; a multi-argument container such
+            // as `VStack(8, flex, button)` is a real layout whose padding is its own business, and
+            // flagging it would be a false positive on correct documentation.
+            if (wrapperArguments.Count != 1)
+                continue;
+
+            var innerHead = ResolveHead(wrapperArguments[0].Expression);
+            if (innerHead is null)
+                continue;
+
+            var inner = ReactorSurface.Instance.Element(innerHead.Value.Factory);
+            if (inner is null || !string.Equals(inner.FullName, innerFullName, StringComparison.Ordinal))
+                continue;
+
+            if (ChainModifiers(invocation).Any(name =>
+                    WrapperJustifications.Any(j => name.Contains(j, StringComparison.Ordinal))))
+                continue;
+
+            return new AgentKitFinding(
+                AgentKitFindingKind.WrapperWorkaround,
+                Path: string.Empty,
+                Line: 0,
+                ChainStartLine: 0,
+                modifier,
+                inner.Name,
+                replacement,
+                $"{wrapperElement.Name} wraps a {inner.Name} only to carry .{modifier}(...) — use " +
+                $".{replacement}(...) on the {inner.Name} instead. A {wrapperElement.Name} is still " +
+                "right when it also supplies background, corner radius, or border brush");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The replacement Reactor documents for this dropped modifier, element-specific first, then
+    /// the shape paint modifiers, then <see langword="null"/> when the framework offers none.
+    /// </summary>
+    private static string? Replacement(Type element, string modifier)
+    {
+        if (NoOpModifierAnalyzer.ElementReplacements.TryGetValue(
+                NoOpModifierAnalyzer.ElementModifierKey(element.FullName ?? element.Name, modifier),
+                out var elementSpecific))
+            return elementSpecific;
+
+        var control = ReactorSurface.Instance.MountedControl(element);
+        if (control is not null
+            && ReactorSurface.ControlBaseChain(control).Contains("Shape", StringComparer.Ordinal)
+            && NoOpModifierAnalyzer.ShapeReplacements.TryGetValue(modifier, out var shape))
+            return shape.FirstOrDefault();
+
+        return null;
+    }
+
+    /// <summary>Every modifier name applied anywhere on the fluent chain this invocation belongs to.</summary>
+    private static IEnumerable<string> ChainModifiers(InvocationExpressionSyntax invocation)
+    {
+        // Walk out to the outermost invocation first — `.Padding(24)` may be followed by
+        // `.Background(...)`, and a justification that appears later still justifies the wrapper.
+        SyntaxNode outermost = invocation;
+        while (outermost.Parent is MemberAccessExpressionSyntax parentAccess
+               && parentAccess.Parent is InvocationExpressionSyntax parentInvocation)
+        {
+            outermost = parentInvocation;
+        }
+
+        for (var node = outermost; node is not null;)
+        {
+            if (node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access })
+            {
+                yield return access.Name.Identifier.Text;
+                node = access.Expression;
+                continue;
+            }
+
+            node = node switch
+            {
+                ParenthesizedExpressionSyntax parenthesized => parenthesized.Expression,
+                WithExpressionSyntax with => with.Expression,
+                PostfixUnaryExpressionSyntax postfix => postfix.Operand,
+                _ => null,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Walks a fluent chain down to the factory call that started it.
+    /// </summary>
+    /// <remarks>
+    /// Returns <see langword="null"/> for anything that is not a bare factory invocation —
+    /// a local, a parameter, <c>this.Something</c>, a qualified call. Those could be any element at
+    /// runtime, which is the same reason <see cref="NoOpModifierAnalyzer"/> refuses to report on a
+    /// receiver typed as <c>Element</c>.
+    /// </remarks>
+    private static (string Factory, SeparatedSyntaxList<ArgumentSyntax> Arguments)? ResolveHead(ExpressionSyntax expression)
+    {
+        for (var node = expression; node is not null;)
+        {
+            switch (node)
+            {
+                case InvocationExpressionSyntax { Expression: IdentifierNameSyntax identifier } invocation:
+                    return (identifier.Identifier.Text, invocation.ArgumentList.Arguments);
+
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access }:
+                    node = access.Expression;
+                    continue;
+
+                case ParenthesizedExpressionSyntax parenthesized:
+                    node = parenthesized.Expression;
+                    continue;
+
+                case WithExpressionSyntax with:
+                    node = with.Expression;
+                    continue;
+
+                case PostfixUnaryExpressionSyntax postfix:
+                    node = postfix.Operand;
+                    continue;
+
+                default:
+                    return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static int LineOf(SyntaxTree tree, AgentKitSnippet snippet, SyntaxNode node) =>
+        snippet.StartLine + tree.GetLineSpan(node.Span).StartLinePosition.Line;
+
+    /// <summary>Every property name the gate rules can fire on, materialised once.</summary>
+    private static readonly string[] GatedModifierNames = ModifierTable.Properties.Keys.ToArray();
+
+    private static bool MentionsAGatedModifier(string text) =>
+        GatedModifierNames.Any(name => text.Contains(name, StringComparison.Ordinal));
+}
