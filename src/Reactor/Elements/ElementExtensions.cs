@@ -628,6 +628,14 @@ public static partial class ElementExtensions
     // cache stops growing past StyleApplierCacheCap and falls back to a
     // per-call delegate (the pre-#174 behavior) — correctness is unchanged,
     // only the allocation optimization stops applying beyond the cap.
+    //
+    // The cap is deliberately approximate, not an invariant: the Count check and
+    // the insert are not atomic, so writers racing at the boundary can overshoot
+    // by at most the number of them. That is fine for what the cap is — a memory
+    // guard against a pathological caller, where 256 vs 258 entries is
+    // immaterial — and taking a lock on the miss path would put contention on a
+    // path that runs during render, which is the cost #174 exists to avoid. The
+    // same reasoning applies to the warned-key set below.
     private const int StyleApplierCacheCap = 256;
     private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Action<FrameworkElement>> _styleApplierCache = new();
 
@@ -682,12 +690,18 @@ public static partial class ElementExtensions
     // allocated and discarded on a path this file works to keep allocation-free (#174).
     private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, byte> _warnedStyles = new();
 
-    // Test seam. The warned-key set is process-wide and never cleared in normal
-    // operation, so a fixture that fills it to capacity would silently change
-    // the de-duplication behaviour every later fixture in the same process sees.
-    // Selftests covering the capacity / overlong branches reset it around
-    // themselves so they stay hermetic and order-independent.
-    internal static void ResetUnresolvedStyleWarningsForTesting() => _warnedStyles.Clear();
+    // Test seam. Both caches are process-wide and never cleared in normal
+    // operation, so a fixture that fills either to capacity silently changes the
+    // behaviour every later fixture in the same process sees — the warned-key
+    // set changes de-duplication, and a saturated applier cache pushes everyone
+    // onto the uncached fallback, masking the #174 cached path. Selftests that
+    // fill them reset both around themselves so they stay hermetic and
+    // order-independent.
+    internal static void ResetStyleCachesForTesting()
+    {
+        _warnedStyles.Clear();
+        _styleApplierCache.Clear();
+    }
 
     private static void WarnUnresolvedStyle(string styleName)
     {
@@ -700,7 +714,8 @@ public static partial class ElementExtensions
             return;
 
         // Bounded like the applier cache above so a data-driven caller passing
-        // unbounded distinct bad keys cannot grow this set without limit. Past
+        // unbounded distinct bad keys cannot grow this set without limit — an
+        // approximate bound, for the reasons given on StyleApplierCacheCap. Past
         // capacity we stop deduping rather than stop warning: going silent
         // there would break the documented "unresolved keys are reported"
         // contract exactly when an app is most badly misconfigured, and would

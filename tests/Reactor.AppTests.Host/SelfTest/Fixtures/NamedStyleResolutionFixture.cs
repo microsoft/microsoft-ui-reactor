@@ -281,19 +281,21 @@ internal static class NamedStyleResolutionFixture
     /// just retained count).
     ///
     /// <para>
-    /// Resets the process-wide warned-key set around itself — filling it to
-    /// capacity would otherwise change the de-duplication every later fixture
-    /// in this process observes, including <c>UnresolvedStyleKeyEmitsWarning</c>.
+    /// Resets the process-wide style caches around itself — filling either would
+    /// otherwise change what every later fixture in this process observes: the
+    /// warned-key set changes de-duplication (including
+    /// <c>UnresolvedStyleKeyEmitsWarning</c>), and saturating the applier cache
+    /// pushes every later mount onto the uncached fallback.
     /// </para>
     /// </summary>
     internal class UnresolvedStyleWarningOverflowBranches(Harness h) : SelfTestFixtureBase(h)
     {
-        // Mirrors StyleApplierCacheCap / EtwKeyMaxChars in ElementExtensions.
+        // Mirrors StyleApplierCacheCap / MaxKeyChars in ElementExtensions.
         private const int Cap = 256;
 
         public override async Task RunAsync()
         {
-            ElementExtensions.ResetUnresolvedStyleWarningsForTesting();
+            ElementExtensions.ResetStyleCachesForTesting();
             try
             {
                 var run = global::System.Guid.NewGuid().ToString("N");
@@ -368,7 +370,7 @@ internal static class NamedStyleResolutionFixture
             }
             finally
             {
-                ElementExtensions.ResetUnresolvedStyleWarningsForTesting();
+                ElementExtensions.ResetStyleCachesForTesting();
             }
         }
 

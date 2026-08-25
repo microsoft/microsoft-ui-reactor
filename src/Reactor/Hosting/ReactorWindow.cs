@@ -1954,6 +1954,12 @@ public sealed class ReactorWindow : IDisposable
         _sizeToContentRoot = null;
         _sizeToContentSizeChangedHandler = null;
         _sizeToContentLayoutUpdatedHandler = null;
+        // Re-arm the maximized warning. The edge is normally cleared by
+        // ApplySizeToContent observing a restored window, but that runs off
+        // LayoutUpdated — which is exactly what we just unhooked. Without this,
+        // disabling SizeToContent while maximized, restoring, then re-enabling
+        // and maximizing again would be a new ignored spell that never warned.
+        _sizeToContentMaximizedWarned = false;
     }
 
     private void OnBackgroundPointerPressed(object sender, PointerRoutedEventArgs args)
