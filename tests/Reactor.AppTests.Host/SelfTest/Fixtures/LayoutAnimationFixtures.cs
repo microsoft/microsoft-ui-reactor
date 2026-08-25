@@ -336,11 +336,22 @@ internal static class LayoutAnimationFixtures
             H.Check("ConnectedAnimRelease_TwoOrphansReleased",
                 host.Reconciler.ConnectedAnimationReleaseCount == releaseBaseline + 2);
 
-            // Nothing is left prepared, so a later same-key mount cannot travel from a
-            // stale snapshot.
-            var svc = Microsoft.UI.Xaml.Media.Animation.ConnectedAnimationService.GetForCurrentView();
-            H.Check("ConnectedAnimRelease_ServiceDrained",
-                svc.GetAnimation("rel-Bravo") is null && svc.GetAnimation("rel-Charlie") is null);
+            // No stale snapshot leaked into a later pass. Navigating back unmounts ONE
+            // keyed element (the rel-Alpha headline) and mounts three keyed buttons, so
+            // exactly one animation may start. Without the release step the orphaned
+            // rel-Bravo / rel-Charlie snapshots would still be sitting in the service and
+            // their buttons would travel from them too, making this three.
+            //
+            // Deliberately not asserted via ConnectedAnimationService.GetAnimation: the
+            // service keeps returning a cancelled animation for an indeterminate time, so
+            // that reads green alone and red under suite load. Counting the starts Reactor
+            // actually performs is the same claim without the race.
+            int beforeReturn = host.Reconciler.ConnectedAnimationStartCount;
+            H.ClickButton("RelBack");
+            await host.WaitForIdleAsync();
+
+            H.Check("ConnectedAnimRelease_NoStaleStartsOnReturn",
+                host.Reconciler.ConnectedAnimationStartCount == beforeReturn + 1);
         }
     }
 }

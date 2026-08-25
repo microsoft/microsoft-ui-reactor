@@ -76,6 +76,10 @@
     "keywords": ["command binding", "icommand", "async execute", "can execute", "debounce"],
     "relatedControls": ["Button"]
   },
+  "connected-animation": {
+    "keywords": ["hero animation", "shared element transition", "list to detail", "continuity", "morph", "fly in"],
+    "relatedControls": ["Transitions"]
+  },
   "content-dialog": {
     "keywords": ["modal", "dialog box", "confirm", "alert", "prompt", "popup window"],
     "relatedControls": ["Flyout", "TeachingTip", "Popup"]
@@ -360,6 +364,10 @@
   "tool-tip": {
     "keywords": ["hover hint", "hover text", "help popup", "hint"],
     "relatedControls": ["TeachingTip", "Flyout"]
+  },
+  "transitions": {
+    "keywords": ["implicit animation", "fade", "opacity transition", "scale transition", "translation transition", "layout animation", "spring"],
+    "relatedControls": ["Connected Animation"]
   },
   "tree-view": {
     "keywords": ["tree", "hierarchy", "expandable nodes", "folder tree", "nested list"],

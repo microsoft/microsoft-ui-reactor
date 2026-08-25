@@ -139,6 +139,10 @@ public static class ControlRegistry
         new("PropertyGrid", "A reflection-driven editor for an object's properties.", "Data", "\uE7C3", "property-grid"),
 
         new("Commands", "Declarative Command binding with async IsExecuting tracking and debounce.", "Patterns", "\uE943", "commands"),
+
+        // Motion
+        new("Connected Animation", "Carries an element's visual from one view into another across a state change.", "Motion", "\uE945", "connected-animation"),
+        new("Transitions", "Implicit opacity, scale, translation, and layout animations that run on value change.", "Motion", "\uE945", "transitions"),
     }
     .OrderBy(c => c.Title, StringComparer.OrdinalIgnoreCase)
     .ToArray();
@@ -153,6 +157,7 @@ public static class ControlRegistry
         "Layout",
         "Media",
         "Menus and Toolbars",
+        "Motion",
         "Navigation",
         "Status and Info",
         "Text",

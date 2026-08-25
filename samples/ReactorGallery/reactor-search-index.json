@@ -518,6 +518,33 @@
       ]
     },
     {
+      "id": "connected-animation",
+      "name": "Connected Animation",
+      "category": "Motion",
+      "description": "Carries an element's visual from one view into another across a state change.",
+      "keywords": [
+        "hero animation",
+        "shared element transition",
+        "list to detail",
+        "continuity",
+        "morph",
+        "fly in"
+      ],
+      "relatedControls": [
+        "Transitions"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "connected-animation",
+      "samples": [
+        {
+          "header": "List to detail",
+          "language": "csharp",
+          "code": "var (selected, setSelected) = UseState<string?>(null);\n\nif (selected is not null)\n    return VStack(12,\n        Button(\"Back to list\", () => setSelected(null)),\n        TextBlock(selected).FontSize(34).Bold()\n            .ConnectedAnimation($\"hero-{selected}\"));\n\nreturn VStack(6, items.Select(i =>\n    Button(i, () => setSelected(i))\n        .ConnectedAnimation($\"hero-{i}\")).ToArray());\n\n// Source and destination must appear in the SAME render. The reconciler publishes the\n// outgoing element's snapshot during the reconcile pass and plays it into the incoming\n// element at the end of that same pass. A key that unmounts without a matching mount in\n// that render is released, which is what keeps the rows you didn't pick from ghosting."
+        }
+      ]
+    },
+    {
       "id": "content-dialog",
       "name": "ContentDialog",
       "category": "Dialogs and Flyouts",
@@ -2321,6 +2348,34 @@
           "header": "Text ToolTip",
           "language": "csharp",
           "code": "Button(\"Hover Me\").ToolTip(\"This is a simple tooltip\")\nButton(\"Save\").ToolTip(\"Save document (Ctrl+S)\")"
+        }
+      ]
+    },
+    {
+      "id": "transitions",
+      "name": "Transitions",
+      "category": "Motion",
+      "description": "Implicit opacity, scale, translation, and layout animations that run on value change.",
+      "keywords": [
+        "implicit animation",
+        "fade",
+        "opacity transition",
+        "scale transition",
+        "translation transition",
+        "layout animation",
+        "spring"
+      ],
+      "relatedControls": [
+        "Connected Animation"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "transitions",
+      "samples": [
+        {
+          "header": "ScaleTransition",
+          "language": "csharp",
+          "code": "var (enlarged, setEnlarged) = UseState(false);\n\nBorder(TextBlock(\"Scales from its centre\"))\n    .Scale(enlarged ? 1.4f : 1.0f)\n    .ScaleTransition()\n// Scale is a compositor transform, not a layout change: siblings do not reflow, so a\n// growing element overlaps them rather than pushing them aside."
         }
       ]
     },
