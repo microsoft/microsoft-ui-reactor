@@ -261,11 +261,13 @@ class ObservableSourceDemo : Component
 {
     public override Element Render()
     {
-        // One stable collection instance; the source wraps it exactly once.
-        var collection = UseRef(new ObservableCollection<Product>(SampleProducts.Items));
+        // One stable collection instance. UseMemo takes a factory, so the
+        // collection is allocated once; UseRef would re-evaluate its argument
+        // on every render and throw the copy away.
+        var collection = UseMemo(() => new ObservableCollection<Product>(SampleProducts.Items));
 
         var source = UseMemo(() => new ObservableListDataSource<Product>(
-            collection.Current, p => (RowKey)p.Id), collection.Current);
+            collection, p => (RowKey)p.Id), collection);
 
         // The source subscribes to CollectionChanged and is IDisposable, so
         // memoizing it is not enough — dispose it on unmount or the collection
@@ -280,8 +282,8 @@ class ObservableSourceDemo : Component
 
         return VStack(12,
             // Mutations raise CollectionChanged -> DataChanged -> the grid re-fetches.
-            Button("Add product", () => collection.Current.Add(new Product(
-                collection.Current.Count + 1, "New item", "Accessories", 9.99, 1))),
+            Button("Add product", () => collection.Add(new Product(
+                collection.Count + 1, "New item", "Accessories", 9.99, 1))),
             DataGrid<Product>(source, columns).Height(320));
     }
 }

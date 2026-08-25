@@ -1540,6 +1540,12 @@ public sealed partial class Reconciler : IDisposable
     // per pass. Only mutated when the Reconcile keyword is enabled.
     private int _reconcileTraceDepth;
 
+    // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host).
+    // The invariant is that this returns to 0 after every top-level pass; a
+    // non-zero value between passes means a nested Reconcile incremented
+    // without a matching decrement, which silently suppresses all later spans.
+    internal int ReconcileTraceDepthForTests => _reconcileTraceDepth;
+
     private static void FlushEffectsTraced(RenderContext ctx, string? componentName)
     {
         // Fast path when the Render keyword is off: no Stopwatch, no event emit.

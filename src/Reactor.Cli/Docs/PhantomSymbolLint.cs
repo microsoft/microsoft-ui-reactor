@@ -177,6 +177,7 @@ internal static class PhantomSymbolLint
         {
             var raw = lines[i];
             var trimmed = raw.Trim();
+            var isDocComment = trimmed.StartsWith("///", StringComparison.Ordinal);
 
             if (surface == Surface.Markdown)
             {
@@ -187,6 +188,15 @@ internal static class PhantomSymbolLint
                     if (!inFence) { skipAll = false; skipNames.Clear(); }
                     continue;
                 }
+            }
+            else if (surface == Surface.CSharpDocComments && !isDocComment)
+            {
+                // Leaving a contiguous `///` block ends the region a marker
+                // applied to — the doc-comment analogue of a closing fence.
+                // Without this a single skip marker would blind the lint to
+                // every later doc comment in the file.
+                skipAll = false;
+                skipNames.Clear();
             }
 
             // Honor skip markers wherever they appear, including immediately
@@ -201,7 +211,7 @@ internal static class PhantomSymbolLint
             var applicable = surface switch
             {
                 Surface.Markdown => inFence,
-                Surface.CSharpDocComments => trimmed.StartsWith("///", StringComparison.Ordinal),
+                Surface.CSharpDocComments => isDocComment,
                 _ => true,
             };
             if (!applicable || skipAll) continue;

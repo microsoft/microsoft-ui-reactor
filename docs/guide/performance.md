@@ -122,9 +122,13 @@ Every reconcile pass starts here. The event-id pair is `1` / `2`
 ```csharp
 // Gate the depth counter and the Start emit on IsEnabled so a session
 // with no consumer attached pays nothing beyond one bool check.
-bool emitTrace = ReactorEventSource.Log.IsEnabled(
-        EventLevel.Informational, ReactorEventSource.Keywords.Reconcile)
-    && _reconcileTraceDepth++ == 0;
+// `traceEnabled` and `emitTrace` are separate: every enabled call must
+// decrement the depth it incremented, but only the outermost one emits.
+// Decrementing on `emitTrace` alone would leak the counter once a pass
+// contained a nested reconcile, suppressing every later top-level span.
+bool traceEnabled = ReactorEventSource.Log.IsEnabled(
+    EventLevel.Informational, ReactorEventSource.Keywords.Reconcile);
+bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
 
 if (emitTrace)
     ReactorEventSource.Log.ReconcileStart(newElement?.GetType().Name ?? "null");
@@ -135,12 +139,15 @@ try
 }
 finally
 {
-    if (emitTrace)
+    if (traceEnabled)
     {
         _reconcileTraceDepth--;
-        ReactorEventSource.Log.ReconcileStop(
-            DebugElementsDiffed, DebugElementsSkipped,
-            DebugUIElementsCreated, DebugUIElementsModified);
+        if (emitTrace)
+        {
+            ReactorEventSource.Log.ReconcileStop(
+                DebugElementsDiffed, DebugElementsSkipped,
+                DebugUIElementsCreated, DebugUIElementsModified);
+        }
     }
 }
 ```
