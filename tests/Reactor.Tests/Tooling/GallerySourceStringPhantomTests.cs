@@ -87,6 +87,8 @@ public sealed class GallerySourceStringPhantomTests(ITestOutputHelper output)
     static IEnumerable<(string Path, string Literal)> EnumerateVerbatimLiterals(ref int fileCount)
     {
         var root = RepoRootFinder.FindRepoRoot();
+        if (string.IsNullOrEmpty(root)) return [];
+
         var dir = global::System.IO.Path.Combine(root, GalleryRoot.Replace('/', global::System.IO.Path.DirectorySeparatorChar));
         if (!global::System.IO.Directory.Exists(dir)) return [];
 
