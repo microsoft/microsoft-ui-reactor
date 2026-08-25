@@ -43,16 +43,15 @@ permissions:
 #   - No tags yet → `0.1.0-experimental.0.<height>+<sha7>` (defaults below;
 #     fallback only — see the `-p` flag note in "Resolve version")
 #
-# The repo is already bootstrapped: it has been tagged since `v0.1.0-preview.1`,
-# so every commit gets a unique, ordered version with zero coordination —
-# height strictly increases as commits land. Bump to a new milestone by
-# tagging the next `v0.1.0-preview.N`; MinVer takes it from there.
+# Every commit gets a unique, ordered version with zero coordination — height
+# strictly increases as commits land. Bump to a new milestone by tagging the
+# next `v0.1.0-preview.N`; MinVer takes it from there.
 #
 # Tag pushes (`v*`) produce a clean version and create a GitHub Release.
 # Pushes to main and PR builds get the same MinVer-computed version (they
 # differ by sha → unique workflow artifacts; the .nupkg filename may collide
-# across PR pushes from the same merge base, which is acceptable for the
-# experimental channel).
+# across PR pushes from the same merge base, which is acceptable for
+# pre-release CI builds).
 
 jobs:
   package:
