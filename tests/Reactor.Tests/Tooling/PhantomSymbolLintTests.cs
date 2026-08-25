@@ -29,6 +29,10 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// </summary>
 public sealed class PhantomSymbolLintTests
 {
+    readonly ITestOutputHelper _output;
+
+    public PhantomSymbolLintTests(ITestOutputHelper output) => _output = output;
+
     static List<PhantomFinding> LintCSharpDoc(string line) =>
         PhantomSymbolLint.Lint("probe.cs", line, PhantomSymbolLint.Surface.CSharpDocComments);
 
@@ -218,20 +222,33 @@ public sealed class PhantomSymbolLintTests
 
     /// <summary>
     /// The durable gate: sweep every <c>///</c> doc comment in <c>src/</c> with
-    /// the shipping matcher and hold the result against an explicit allow-list.
+    /// the shipping matcher and hold the result against an explicit budget.
     /// <c>src/</c> is the propagation source — these comments ship in
     /// <c>Reactor.xml</c> as IntelliSense, and guide templates have been
     /// observed quoting them almost verbatim — so this is the surface where
     /// letting a new phantom in costs the most.
     ///
-    /// <para>The allow-list is per-file counts of occurrences known at the time
-    /// this landed, each already owned by an in-flight fix on another branch.
-    /// It fails in <b>both</b> directions on purpose: a new phantom anywhere
-    /// fails, and clearing a known one also fails, so the list shrinks
-    /// deliberately instead of drifting.</para>
+    /// <para><b>Ceiling, not equality.</b> The budget is a maximum per
+    /// (file, phantom): a new file, a new phantom in a known file, or an
+    /// increased count fails; a decrease passes and is reported as a stale
+    /// entry to trim. Equality would be tidier bookkeeping but it turns
+    /// "somebody fixed a phantom" into a red build, landing on whoever merges
+    /// with no context — and this backlog is being cleared concurrently across
+    /// several branches. Anti-drift is preserved in the direction that
+    /// matters: the count can never silently grow.</para>
+    ///
+    /// <para><b>Keyed per (file, phantom), not per file.</b> A per-file total
+    /// would let five fixed <c>Text</c> occurrences mask five newly introduced
+    /// <c>Optional.Of</c> ones in the same file and still pass. Each phantom
+    /// class is bounded independently.</para>
+    ///
+    /// <para>Every entry is a real defect, not a suppression — each is an
+    /// unwritable spelling shipped in <c>Reactor.xml</c>. They are budgeted
+    /// rather than fixed here because each file is owned by a concurrent
+    /// branch; fixing them from this branch would collide.</para>
     /// </summary>
     [Fact]
-    public void SrcDocComments_ContainOnlyTheKnownPhantomBacklog()
+    public void SrcDocComments_StayWithinTheKnownPhantomBudget()
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
@@ -246,30 +263,76 @@ public sealed class PhantomSymbolLintTests
                 global::System.IO.File.ReadAllText(file),
                 PhantomSymbolLint.Surface.CSharpDocComments);
             if (findings.Count == 0) continue;
-            var name = global::System.IO.Path.GetFileName(file);
-            actual[name] = actual.TryGetValue(name, out var n) ? n + findings.Count : findings.Count;
+
+            var rel = global::System.IO.Path.GetRelativePath(root!, file).Replace('\\', '/');
+            foreach (var f in findings)
+            {
+                // The message opens with 'Name' — the phantom that fired.
+                var phantom = f.Message.Split('\'')[1];
+                var key = $"{rel}::{phantom}";
+                actual[key] = actual.TryGetValue(key, out var n) ? n + 1 : 1;
+            }
         }
 
-        // Known backlog at the time this gate landed. Every entry is a real
-        // defect, not a suppression: each is an unwritable spelling shipped in
-        // Reactor.xml. They are listed rather than fixed here because each file
-        // is owned by a concurrent branch — fixing them from this branch would
-        // collide. Shrink this list as those land.
-        var expected = new SortedDictionary<string, int>(global::System.StringComparer.Ordinal)
+        var over = new List<string>();
+        foreach (var kv in actual)
         {
-            ["Animation.cs"] = 1,             // WithImplicitTransition
-            ["Element.cs"] = 21,              // Text ×6, transitions ×4, Optional.Of ×11
-            ["ElementExtensions.cs"] = 4,     // Text
-            ["GridExtensions.cs"] = 1,        // Text
-            ["KeyNamer.cs"] = 1,              // Text
-            ["NoOpModifierAnalyzer.cs"] = 1,  // Optional.Of
-            ["Optional.cs"] = 1,              // Optional.Of
-            ["OptionalSentinelAnalyzer.cs"] = 3, // Optional.Of
-            ["ReactorHostControl.cs"] = 1,    // Text
-            ["UseFocusTrap.cs"] = 1,          // Text
-            ["UseMemoCells.cs"] = 1,          // UseTheme
-        };
+            if (!PhantomBudget.TryGetValue(kv.Key, out var budget))
+                over.Add($"  NEW    {kv.Key} = {kv.Value}   (no budget entry — this is new rot)");
+            else if (kv.Value > budget)
+                over.Add($"  GREW   {kv.Key} = {kv.Value}   (budget {budget})");
+        }
 
-        Assert.Equal(expected, actual);
+        var stale = PhantomBudget.Keys
+            .Where(k => !actual.ContainsKey(k) || actual[k] < PhantomBudget[k])
+            .OrderBy(k => k, global::System.StringComparer.Ordinal)
+            .ToList();
+        foreach (var k in stale)
+        {
+            var now = actual.TryGetValue(k, out var n) ? n : 0;
+            _output.WriteLine($"stale budget entry (fixed elsewhere — trim it): {k} budget {PhantomBudget[k]}, now {now}");
+        }
+
+        if (over.Count > 0)
+        {
+            Assert.Fail(
+                "REACTOR_DOC_PHANTOM_001: a phantom API entered a /// doc comment in src/.\n" +
+                "These ship in Reactor.xml as IntelliSense and are quoted by guide templates,\n" +
+                "so nothing else in the toolchain will catch them.\n\n" +
+                string.Join("\n", over) +
+                "\n\nFix the doc comment. If the text names the phantom in order to warn\n" +
+                "against it, add <!-- phantom:skip \"Name\" --> on that line instead.\n" +
+                "Only raise the budget in PhantomBudget if you are deliberately accepting it.");
+        }
     }
+
+    /// <summary>
+    /// Maximum tolerated occurrences per (repo-relative path, phantom), measured
+    /// on <c>main</c> when this gate landed. Shrink entries as the concurrent
+    /// fixes merge; the test reports stale entries on every run.
+    /// </summary>
+    static readonly SortedDictionary<string, int> PhantomBudget = new(global::System.StringComparer.Ordinal)
+    {
+        // Owned by azchohfi-guide-sample-audit @ a38a6b44 (Text + transitions).
+        ["src/Reactor/Core/Animation.cs::WithImplicitTransition"] = 1,
+        ["src/Reactor/Core/Element.cs::Text"] = 6,
+        ["src/Reactor/Core/Element.cs::WithOpacityTransition"] = 2,
+        ["src/Reactor/Core/Element.cs::WithThemeTransitions"] = 2,
+        ["src/Reactor/Elements/ElementExtensions.cs::Text"] = 4,
+        ["src/Reactor/Elements/GridExtensions.cs::Text"] = 1,
+        ["src/Reactor/Hooks/UseFocusTrap.cs::Text"] = 1,
+        ["src/Reactor/Hosting/ReactorHostControl.cs::Text"] = 1,
+        ["src/Reactor.Cli/Loc/KeyNamer.cs::Text"] = 1,
+
+        // Owned by azchohfi-guide-sample-audit @ c4cc8f41 (Optional.Of).
+        ["src/Reactor/Core/Element.cs::Optional.Of"] = 11,
+        ["src/Reactor.Analyzers/NoOpModifierAnalyzer.cs::Optional.Of"] = 1,
+        ["src/Reactor.Analyzers/OptionalSentinelAnalyzer.cs::Optional.Of"] = 3,
+
+        // Owned by the internals branch.
+        ["src/Reactor/Core/Optional.cs::Optional.Of"] = 1,
+
+        // Owned by the core-framework branch.
+        ["src/Reactor/Hooks/UseMemoCells.cs::UseTheme"] = 1,
+    };
 }
