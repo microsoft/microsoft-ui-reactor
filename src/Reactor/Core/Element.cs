@@ -2550,18 +2550,7 @@ public record PivotItemData(string Header, Element Content);
 
 public record BreadcrumbBarItemData(string Label, object? Tag = null);
 
-// The legacy node-mode TreeView renders node text through a classic {Binding}
-// (Reconciler.TreeViewTextItemTemplate resolves "Content.Content"). That path
-// goes through CsWinRT's ICustomPropertyProvider, which is reflection-based and
-// gets trimmed under NativeAOT — the TextBlock then silently renders empty, with
-// no build-time warning. This attribute makes the CsWinRT source generator emit
-// strongly-typed binding metadata for this type so the hop survives trimming.
-//
-// Scoped to just "Content": that is the only member the template binds, and the
-// parameterless overload would also emit an accessor for the [Obsolete]
-// ContentElement, which fails the warnings-as-errors Release build (CS0618).
-[WinRT.GeneratedBindableCustomProperty(["Content"], [])]
-public partial record TreeViewNodeData(string Content, TreeViewNodeData[]? Children = null)
+public record TreeViewNodeData(string Content, TreeViewNodeData[]? Children = null)
 {
     public bool IsExpanded { get; init; }
 
