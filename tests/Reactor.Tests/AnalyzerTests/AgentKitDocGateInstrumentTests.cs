@@ -120,6 +120,90 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A constant-null argument must not produce a finding, because
+    /// <c>NoOpModifierAnalyzer.HasConstantNullArgument</c> returns before reporting on exactly this
+    /// shape.
+    /// </summary>
+    /// <remarks>
+    /// A documentation gate that is stricter than the packaged analyzer produces findings a reader
+    /// cannot act on: the sample is correct, the analyzer agrees it is correct, and the only remedy
+    /// on offer is to delete the gate. This keeps the two aligned in the direction that matters.
+    /// </remarks>
+    [Theory]
+    [InlineData("Rectangle().Background((Brush)null)")]
+    [InlineData("Rectangle().Background(null)")]
+    [InlineData("Rectangle().Background(((Brush)null))")]
+    [InlineData("Rectangle().Background(default)")]
+    [InlineData("Rectangle().Background(default(Brush))")]
+    [InlineData("FlexColumn(children).Padding(null)")]
+    public void Walker_Mirrors_The_Analyzers_Constant_Null_Gate(string snippet)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/null.md", 1, snippet) });
+
+        Assert.Empty(scan.Findings);
+
+        // The chain still had to resolve, or this would be passing because the walker could not
+        // read the line at all rather than because the null gate fired.
+        Assert.True(
+            scan.ResolvedChains >= 1,
+            $"'{snippet}' resolved no modifier chain, so this asserts nothing about the null gate.");
+    }
+
+    /// <summary>
+    /// A counterexample marker must come from a real comment, not from a string literal or a URL
+    /// that happens to contain one of the marker words.
+    /// </summary>
+    /// <remarks>
+    /// The exemption is the one place this gate deliberately declines to report, so anything that
+    /// widens it silently converts a real violation into a pass. A textual <c>IndexOf("//")</c>
+    /// cannot tell <c>// Wrong:</c> from <c>"https://example/avoid"</c>, and the second case is a
+    /// perfectly ordinary thing for a sample to contain.
+    /// </remarks>
+    [Theory]
+    // Genuine markers: exempt.
+    [InlineData("FlexColumn(children).Padding(16) // Wrong: no effect", true)]
+    [InlineData("FlexColumn(children).Padding(16) // ❌ dropped", true)]
+    [InlineData("FlexColumn(children).Padding(16) /* Wrong */", true)]
+    // A marker word inside a string is not a marker.
+    [InlineData("FlexColumn(TextBlock(\"https://example/avoid\")).Padding(16)", false)]
+    [InlineData("FlexColumn(TextBlock(\"never do this\")).Padding(16)", false)]
+    [InlineData("Button(\"Never\").Padding(16)", false)]
+    // A marker inside a string does not become one just because a real comment follows.
+    [InlineData("FlexColumn(TextBlock(\"https://x/avoid\")).Padding(16) // see docs", false)]
+    [InlineData("FlexColumn(children).Padding(16)", false)]
+    public void Counterexample_Markers_Come_Only_From_Comments(string line, bool expected)
+    {
+        Assert.Equal(expected, AgentKitDocGateTests.IsMarkedAt(new[] { line }, 1));
+    }
+
+    /// <summary>
+    /// A URL in the prose above a fence is a citation, not an instruction that the block below it
+    /// is wrong.
+    /// </summary>
+    [Fact]
+    public void Prose_Urls_Do_Not_Mark_The_Block_Below_As_A_Counterexample()
+    {
+        var withUrl = new[]
+        {
+            "- background reading: https://example.com/patterns/avoid",
+            "```csharp",
+            "FlexColumn(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(withUrl, 3));
+
+        // Positive control: the same prose shape, marker in the words rather than the link.
+        var withMarker = new[]
+        {
+            "- Wrong, and it costs a build-check cycle:",
+            "```csharp",
+            "FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(withMarker, 3));
+    }
+
+    /// <summary>
     /// Floors over the corpus and the reflection behind it. Each one turns a silent collapse — a
     /// glob that stopped matching, a factory map that resolved to nothing, a fence parser that
     /// stopped recognising ```` ```csharp ```` — into a failure.

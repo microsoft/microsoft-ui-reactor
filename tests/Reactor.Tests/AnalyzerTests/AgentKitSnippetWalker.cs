@@ -300,6 +300,12 @@ internal static class AgentKitSnippetWalker
 
                 resolvedChains++;
 
+                // Mirrors NoOpModifierAnalyzer's constant-null gate (its line 232). Reporting here
+                // would let this gate reject a sample the packaged analyzer accepts, which is worse
+                // than the drift it exists to catch.
+                if (HasConstantNullArgument(invocation))
+                    continue;
+
                 var line = LineOf(tree, snippet, access.Name);
                 var chainStart = LineOf(tree, snippet, invocation);
 
@@ -315,6 +321,59 @@ internal static class AgentKitSnippetWalker
         }
 
         return new AgentKitScan(findings, snippetCount, resolvedChains);
+    }
+
+    /// <summary>
+    /// Mirrors <c>NoOpModifierAnalyzer.HasConstantNullArgument</c>: a syntactically constant
+    /// <see langword="null"/> argument makes the modifier inert whatever the receiver is, so the
+    /// control gate is not what stops it doing anything, and the replacement would not be
+    /// equivalent — <c>Optional&lt;T&gt;</c> turns <c>with { X = null }</c> into an explicit clear
+    /// rather than <c>Unset</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this, the documentation gate would reject a sample the packaged analyzer accepts
+    /// (<c>NoOpModifierAnalyzerTests.Does_Not_Fire_For_A_Constant_Null_Argument</c> pins the
+    /// analyzer's side of it). A gate stricter than the rule it enforces produces unfixable
+    /// findings, and the only remedy a reader would find is to delete the gate.
+    /// </para>
+    /// <para>
+    /// Syntactic only, matching this walker's boundary rather than the analyzer's: the analyzer
+    /// uses <c>GetConstantValue</c>, which additionally resolves <c>const</c> fields, and there is
+    /// no semantic model here. The gap is safe in one direction only — a constant this fails to
+    /// recognise yields a finding, never a silent miss — and a documentation sample passing a
+    /// <c>const</c> null is not a shape that occurs.
+    /// </para>
+    /// </remarks>
+    private static bool HasConstantNullArgument(InvocationExpressionSyntax invocation)
+    {
+        foreach (var argument in invocation.ArgumentList.Arguments)
+        {
+            var expression = argument.Expression;
+
+            // (Brush)null, ((Brush)null), (Brush)default — unwrap to whatever is really passed.
+            while (true)
+            {
+                switch (expression)
+                {
+                    case CastExpressionSyntax cast:
+                        expression = cast.Expression;
+                        continue;
+                    case ParenthesizedExpressionSyntax parenthesized:
+                        expression = parenthesized.Expression;
+                        continue;
+                }
+
+                break;
+            }
+
+            if (expression.IsKind(SyntaxKind.NullLiteralExpression)
+                || expression.IsKind(SyntaxKind.DefaultLiteralExpression)
+                || expression is DefaultExpressionSyntax)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

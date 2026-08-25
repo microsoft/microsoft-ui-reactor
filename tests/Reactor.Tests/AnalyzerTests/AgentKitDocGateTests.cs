@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.UI.Reactor.Analyzers;
 using Xunit;
 
@@ -52,9 +54,12 @@ public class AgentKitDocGateTests
     /// <c>skills/</c> and <c>plugins/</c>: <c>// Wrong:</c>, <c>// Bad:</c>, <c>// ❌ WRONG</c>,
     /// <c>### ❌ The anti-pattern …</c>, <c>// Never hardcode …</c>.
     /// </summary>
-    private static readonly Regex CounterexampleMarker = new(
+    internal static readonly Regex CounterexampleMarker = new(
         @"\b(wrong|bad|don'?t|do not|avoid|never|incorrect|anti-?pattern)\b|❌",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>A bare URL, stripped from prose before the marker is matched against it.</summary>
+    internal static readonly Regex Urls = new(@"\b\w+://\S+", RegexOptions.Compiled);
 
     /// <summary>
     /// No shipped sample may apply a common modifier to a receiver
@@ -156,22 +161,28 @@ public class AgentKitDocGateTests
     /// "real code above" and declare an obviously-marked counterexample unmarked.
     /// </para>
     /// <para>
-    /// Only the <em>comment</em> part of a line is considered. Reading the whole line would let
-    /// <c>Button("Never")</c> exempt itself, which is the sort of accidental self-exemption that
-    /// turns a gate into decoration.
+    /// Only genuine <em>comment trivia</em> is considered, obtained by lexing the line with Roslyn
+    /// rather than scanning for <c>//</c>. A textual search cannot tell a comment from a string:
+    /// <c>FlexColumn(TextBlock("https://example/avoid")).Padding(16)</c> contains both <c>//</c>
+    /// and the word "avoid", and would silently exempt itself. Reading the whole line has the same
+    /// defect in a plainer form — <c>Button("Never")</c> would do it.
+    /// </para>
+    /// <para>
+    /// The prose lines above a fence are matched with URLs stripped, for the same reason in the
+    /// markdown direction: a link ending in <c>/avoid</c> is a citation, not an instruction to
+    /// treat the block below it as wrong.
     /// </para>
     /// </remarks>
-    private static bool IsMarkedCounterexample(IReadOnlyList<string> lines, AgentKitFinding finding) =>
+    internal static bool IsMarkedCounterexample(IReadOnlyList<string> lines, AgentKitFinding finding) =>
         IsMarkedAt(lines, finding.Line) || IsMarkedAt(lines, finding.ChainStartLine);
 
-    private static bool IsMarkedAt(IReadOnlyList<string> lines, int line)
+    internal static bool IsMarkedAt(IReadOnlyList<string> lines, int line)
     {
         var index = line - 1;
         if (index < 0 || index >= lines.Count)
             return false;
 
-        var trailing = lines[index].IndexOf("//", StringComparison.Ordinal);
-        if (trailing >= 0 && CounterexampleMarker.IsMatch(lines[index][trailing..]))
+        if (CounterexampleMarker.IsMatch(CommentText(lines[index])))
             return true;
 
         // Walk up through the comment block, and — once past the fence — the markdown heading or
@@ -182,21 +193,43 @@ public class AgentKitDocGateTests
             if (text.Length == 0)
                 continue;
 
-            var isContext = text.StartsWith("//", StringComparison.Ordinal)
-                            || text.StartsWith("```", StringComparison.Ordinal)
-                            || text.StartsWith("~~~", StringComparison.Ordinal)
-                            || text.StartsWith("#", StringComparison.Ordinal)
-                            || text.StartsWith(">", StringComparison.Ordinal)
-                            || text.StartsWith("-", StringComparison.Ordinal);
+            var isComment = text.StartsWith("//", StringComparison.Ordinal);
+            var isProse = text.StartsWith("```", StringComparison.Ordinal)
+                          || text.StartsWith("~~~", StringComparison.Ordinal)
+                          || text.StartsWith("#", StringComparison.Ordinal)
+                          || text.StartsWith(">", StringComparison.Ordinal)
+                          || text.StartsWith("-", StringComparison.Ordinal);
 
-            if (!isContext)
+            if (!isComment && !isProse)
                 return false;   // real code above: any marker up there belongs to that line.
 
-            if (CounterexampleMarker.IsMatch(text))
+            var candidate = isComment ? CommentText(text) : Urls.Replace(text, " ");
+            if (CounterexampleMarker.IsMatch(candidate))
                 return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The comment trivia on one line of C#, concatenated — everything outside a comment removed.
+    /// </summary>
+    /// <remarks>
+    /// Lexing is enough: comment trivia is recognised without the fragment having to parse, which
+    /// matters because these lines are snippets pulled out of markdown with no enclosing class.
+    /// </remarks>
+    internal static string CommentText(string line)
+    {
+        if (!line.Contains("//", StringComparison.Ordinal) && !line.Contains("/*", StringComparison.Ordinal))
+            return string.Empty;
+
+        var trivia = CSharpSyntaxTree.ParseText(line)
+            .GetRoot()
+            .DescendantTrivia(descendIntoTrivia: true)
+            .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) || t.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            .Select(t => t.ToString());
+
+        return string.Join(" ", trivia);
     }
 
     /// <summary>Reads each document once; a scan touches the same file for every finding in it.</summary>
