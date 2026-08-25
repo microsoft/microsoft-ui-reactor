@@ -379,9 +379,14 @@ internal static partial class CompileCommand
             return combined ? 1 : 0;
         }
 
-        if (tierHasErrors && ci)
+        if (ci && (tierHasErrors || phantomErrors > 0))
         {
-            Console.Error.WriteLine("Tier lint failed in --ci mode.");
+            if (tierHasErrors)
+                Console.Error.WriteLine("Tier lint failed in --ci mode.");
+            if (phantomErrors > 0)
+                Console.Error.WriteLine(
+                    $"Phantom-API lint failed in --ci mode ({phantomErrors} error(s)). " +
+                    "A documented symbol does not exist in the public API.");
             return 1;
         }
 
