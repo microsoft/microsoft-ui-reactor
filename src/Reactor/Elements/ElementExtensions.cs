@@ -599,6 +599,14 @@ public static partial class ElementExtensions
     /// the variants different <see cref="WithKey{T}(T, string)"/> values to force
     /// a remount when the style itself must change.
     /// </para>
+    /// <para>
+    /// <b>Unresolved keys do not throw.</b> If <paramref name="styleName"/> is not
+    /// found in the application's resources (including merged dictionaries), or is
+    /// found but is not a <see cref="Style"/>, the element keeps its default
+    /// appearance and a warning naming the key is emitted once per key on the
+    /// <c>Microsoft-UI-Reactor</c> ETW provider (and to <c>Debug.WriteLine</c> in
+    /// DEBUG builds). Earlier versions threw out of the mount action instead.
+    /// </para>
     /// </summary>
     public static T ApplyStyle<T>(this T el, string styleName) where T : Element =>
         el.OnMount(StyleApplier(styleName));
@@ -630,29 +638,54 @@ public static partial class ElementExtensions
             static name => fe => ApplyNamedStyle(fe, name));
     }
 
-    // Resolve a named Style out of the merged application resources and assign it.
+    // Resolve a named Style out of the application resources and assign it.
     //
     // Previously this was a bare `fe.Style = (Style)Application.Current.Resources[name]`.
-    // A key that does not resolve — or resolves to something that is not a Style —
-    // gave no signal at all: the cast either threw out of `OnMountAction`, which
-    // Reconciler.ApplyModifiers invokes unguarded, or the element simply kept its
-    // default typography. Either way the caller saw a correctly-structured tree that
-    // rendered at the wrong size, with nothing in the log to explain it.
+    // `ResourceDictionary` implements `IDictionary`, so that indexer *throws* on a
+    // missing key, and the cast throws when a key resolves to a non-Style — so an
+    // author's typo surfaced as an exception out of `OnMountAction`, which
+    // `Reconciler.ApplyModifiers` invokes unguarded, failing the whole render.
+    // A misspelled style key is an authoring mistake, not a corrupt-state condition,
+    // so it now degrades to "keep the default appearance" and names the key in a
+    // warning instead. Lookup goes through `ResourceLookup.TryFind`, the same
+    // recursive walk `Theme` uses, so keys defined in a merged dictionary
+    // (`XamlControlsResources` and friends) still resolve.
     private static void ApplyNamedStyle(FrameworkElement fe, string styleName)
     {
-        var resources = Application.Current?.Resources;
-        if (resources is not null
-            && resources.TryGetValue(styleName, out var found)
-            && found is Style style)
+        if (ResourceLookup.TryFind<Style>(Application.Current?.Resources, styleName, out var style))
         {
             fe.Style = style;
             return;
         }
 
-        Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
-            Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+        WarnUnresolvedStyle(styleName);
+    }
+
+    // A style key is resolved once per mount, so one bad key on a virtualized list
+    // would warn once per realized item. Warn once per distinct key instead, and
+    // skip building the message when nothing is listening — `DiagnosticLog.Warning`
+    // is an ordinary method, so an interpolated argument would otherwise be
+    // allocated and discarded on a path this file works to keep allocation-free (#174).
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, byte> _warnedStyles = new();
+
+    private static void WarnUnresolvedStyle(string styleName)
+    {
+        // Repeat miss for a key already reported: lock-free, no allocation.
+        if (_warnedStyles.ContainsKey(styleName))
+            return;
+        // Checked before recording the key so that attaching a listener later
+        // still gets the first warning for it.
+        if (!Core.Diagnostics.DiagnosticLog.IsWarningEnabled)
+            return;
+        // Bounded like the applier cache above, so a data-driven caller passing
+        // unbounded distinct bad keys cannot grow this set without limit.
+        if (_warnedStyles.Count >= StyleApplierCacheCap || !_warnedStyles.TryAdd(styleName, 0))
+            return;
+
+        Core.Diagnostics.DiagnosticLog.Warning(
+            Core.Diagnostics.LogCategory.Theme,
             nameof(ApplyStyle),
-            $"Style '{styleName}' did not resolve to a Style in Application.Current.Resources; " +
+            $"Style '{styleName}' did not resolve to a Style in the application's resources; " +
             "the element keeps its default appearance. Check the key spelling and that the " +
             "resource dictionary defining it is merged into the application's resources.");
     }

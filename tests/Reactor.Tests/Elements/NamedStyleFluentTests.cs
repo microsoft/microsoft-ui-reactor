@@ -173,11 +173,15 @@ public class NamedStyleFluentTests
     [InlineData("BodyTextBlockStyle")]
     [InlineData("BodyStrongTextBlockStyle")]
     [InlineData("BodyLargeTextBlockStyle")]
+    [InlineData("TitleLargeTextBlockStyle")]
+    [InlineData("DisplayTextBlockStyle")]
     public void TypeRamp_Factory_Attaches_Mount_Action(string _)
     {
         // We can't resolve Style names without an app dispatcher; the
         // existence of an OnMount action is the parity check the unit
-        // layer can perform.
+        // layer can perform. That the keys actually resolve to a Style —
+        // and to the right one — is covered by the NamedStyleResolution
+        // selftest fixture, which mounts these against real controls.
         var elements = new[]
         {
             Title("x"),
@@ -185,6 +189,8 @@ public class NamedStyleFluentTests
             Body("x"),
             BodyStrong("x"),
             BodyLarge("x"),
+            TitleLarge("x"),
+            Display("x"),
         };
         foreach (var el in elements)
         {
@@ -202,6 +208,50 @@ public class NamedStyleFluentTests
         var el = Body("x").FontSize(20);
         Assert.IsType<TextBlockElement>(el);
         Assert.Equal(20, el.FontSize);
+    }
+
+    [Fact]
+    public void TitleLarge_Returns_TextBlockElement_Not_New_Type()
+    {
+        var el = TitleLarge("x").FontSize(20);
+        Assert.IsType<TextBlockElement>(el);
+        Assert.Equal(20, el.FontSize);
+    }
+
+    [Fact]
+    public void Display_Returns_TextBlockElement_Not_New_Type()
+    {
+        var el = Display("x").FontSize(20);
+        Assert.IsType<TextBlockElement>(el);
+        Assert.Equal(20, el.FontSize);
+    }
+
+    [Fact]
+    public void TypeRamp_Factories_Use_Distinct_Style_Keys()
+    {
+        // Each factory must attach its OWN cached applier delegate. StyleApplier
+        // caches one delegate per style name, so two factories that (say) both
+        // pasted "TitleTextBlockStyle" would share a delegate instance and render
+        // identically — a copy/paste slip this assertion catches without needing
+        // a live control. Point TitleLarge or Display at an existing key and
+        // this reddens.
+        var actions = new[]
+        {
+            ("Title", Title("x").Modifiers!.OnMountAction),
+            ("Subtitle", Subtitle("x").Modifiers!.OnMountAction),
+            ("Body", Body("x").Modifiers!.OnMountAction),
+            ("BodyStrong", BodyStrong("x").Modifiers!.OnMountAction),
+            ("BodyLarge", BodyLarge("x").Modifiers!.OnMountAction),
+            ("TitleLarge", TitleLarge("x").Modifiers!.OnMountAction),
+            ("Display", Display("x").Modifiers!.OnMountAction),
+        };
+
+        var seen = new global::System.Collections.Generic.HashSet<object>();
+        foreach (var (name, action) in actions)
+        {
+            Assert.NotNull(action);
+            Assert.True(seen.Add(action!), $"{name} shares its style-applier delegate with an earlier factory — duplicate style key.");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────

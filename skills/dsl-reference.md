@@ -26,6 +26,8 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 | `Body(content)` | WinUI `BodyTextBlockStyle` (14px Regular) | `string → TextBlockElement` |
 | `BodyStrong(content)` | WinUI `BodyStrongTextBlockStyle` (14px Semibold) | `string → TextBlockElement` |
 | `BodyLarge(content)` | WinUI `BodyLargeTextBlockStyle` (18px Regular) | `string → TextBlockElement` |
+| `TitleLarge(content)` | WinUI `TitleLargeTextBlockStyle` (40px Semibold) | `string → TextBlockElement` |
+| `Display(content)` | WinUI `DisplayTextBlockStyle` (68px Semibold) | `string → TextBlockElement` |
 | `RichTextBlock(text)` | Rich text block | `string → RichTextBlockElement` |
 
 **Implicit conversion:** `string` implicitly converts to `TextBlockElement`, so

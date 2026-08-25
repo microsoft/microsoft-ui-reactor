@@ -7,7 +7,8 @@ namespace Microsoft.UI.Reactor;
 // Named-style factories. Spec 039 §17.5 and §14 #6.
 //
 //   Card(child)                                       — preset BorderElement
-//   Title / Subtitle / Body / BodyStrong / BodyLarge  — WinUI 3 type-ramp
+//   Title / Subtitle / Body / BodyStrong / BodyLarge
+//     / TitleLarge / Display                          — WinUI 3 type-ramp
 public static partial class Factories
 {
     // ── §17.5 Card factory ─────────────────────────────────────────────

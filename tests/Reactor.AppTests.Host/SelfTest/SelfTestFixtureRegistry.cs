@@ -234,6 +234,11 @@ internal static class SelfTestFixtureRegistry
         "Issue522_SharedStyleAcrossMultipleElements_IsolatedRemoval",
         "Issue522_ThemeBindingsRemoval_AfterCacheClear_StillWorks",
         "Issue522_ThemeRef_CycleAcrossDifferentKeys",
+        // Named-style (.ApplyStyle) resolution against live app resources —
+        // the only tier that can prove a style key actually resolves.
+        "NamedStyle_TypeRampStylesResolve",
+        "NamedStyle_NewRampKeysAreDistinctAndNonDefault",
+        "NamedStyle_UnresolvedStyleKeyDoesNotBreakRender",
         // Issue #950 — the common Padding modifier (and the BiDi PaddingInline*
         // pair that folds into it) must reach a TextBlock, which is not a Control.
         "Issue950_PaddingMountUpdateUnset",
@@ -1936,6 +1941,10 @@ internal static class SelfTestFixtureRegistry
         "Issue522_SharedStyleAcrossMultipleElements_IsolatedRemoval" => new Issue522TextBlockStyleResetFixture.SharedStyleAcrossMultipleElements_IsolatedRemoval(harness),
         "Issue522_ThemeBindingsRemoval_AfterCacheClear_StillWorks" => new Issue522TextBlockStyleResetFixture.ThemeBindingsRemoval_AfterCacheClear_StillWorks(harness),
         "Issue522_ThemeRef_CycleAcrossDifferentKeys" => new Issue522TextBlockStyleResetFixture.ThemeRef_CycleAcrossDifferentKeys(harness),
+        // Named-style (.ApplyStyle) resolution against live app resources.
+        "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
+        "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),
+        "NamedStyle_UnresolvedStyleKeyDoesNotBreakRender" => new NamedStyleResolutionFixture.UnresolvedStyleKeyDoesNotBreakRender(harness),
         // Issue #950 — Padding / PaddingInline* on a TextBlock.
         "Issue950_PaddingMountUpdateUnset" => new Issue950TextBlockPaddingFixture.PaddingMountUpdateUnset(harness),
         "Issue950_InlinePaddingResolvesPerFlowDirection" => new Issue950TextBlockPaddingFixture.InlinePaddingResolvesPerFlowDirection(harness),

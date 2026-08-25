@@ -53,6 +53,7 @@ ContentDialog(string title, Element content, string primaryButtonText = "OK") �
 ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) → ContentFlyoutElement
 DatePicker(Optional<DateTimeOffset> date = default, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
 DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
+Display(string content) → TextBlockElement
 DropDownButton(string label, Element flyout = null) → DropDownButtonElement
 Ellipse() → EllipseElement
 Empty() → Element
@@ -194,6 +195,7 @@ ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?> on
 TimePicker(Optional<TimeSpan> time = default, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
 Title(string content) → TextBlockElement
 TitleBar(string title) → TitleBarElement
+TitleLarge(string content) → TextBlockElement
 ToggleButton(Command command, bool isChecked = false) → ToggleButtonElement
 ToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null) → ToggleButtonElement
 ToggleMenuItem(string text, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → ToggleMenuFlyoutItemData

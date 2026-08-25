@@ -28,7 +28,24 @@ Conventions for contributors:
 
 ### Added
 
+- **`TitleLarge()` and `Display()` type-ramp factories (spec 039 §17.6).** Complete the
+  WinUI 3 type ramp alongside `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`, mapping to
+  `TitleLargeTextBlockStyle` (40px Semibold) and `DisplayTextBlockStyle` (68px Semibold).
+
 ### Changed
+
+- **`.ApplyStyle()` reports an unresolved style key instead of throwing (spec 044 §6.1).**
+  A missing key — or one that resolves to something that is not a `Style` — previously threw
+  out of the mount action, which `Reconciler.ApplyModifiers` invokes unguarded, failing the
+  whole render over an authoring typo. The element now keeps its default appearance and the
+  key is named in a warning on the `Microsoft-UI-Reactor` ETW provider (`Keywords.Errors`),
+  emitted once per distinct key. Lookup also now walks merged dictionaries, matching how
+  `Theme` resolves brushes.
+- **`DiagnosticLog.Warning` is release-visible (spec 044 §6.1).** It previously only called a
+  `[Conditional("DEBUG")]` mirror, so every warning routed through it — backdrop fallback,
+  `SizeToContent` on a maximized window, and now unresolved style keys — was silently
+  discarded in shipped apps. It now emits ETW like its `SwallowedError` / `HResultFailed`
+  siblings.
 
 ### Deprecated
 
