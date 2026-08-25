@@ -4,7 +4,7 @@ Reactor is a retained UI framework: a [component](components.md) renders immutab
 
 # Win2D canvas
 
-`Reactor.Advanced` exposes the three Win2D canvas controls as Reactor elements: <!-- ref:Win2DCanvas -->, <!-- ref:Win2DAnimatedCanvas -->, and <!-- ref:Win2DVirtualCanvas -->. Add the package when you need immediate-mode drawing; keep using ordinary [components](components.md), [Animation](animation.md), and the [Extending Reactor controls](extending-reactor-controls.md) model for retained UI.
+`Reactor.Advanced` exposes the three Win2D canvas controls as Reactor elements: [`Win2DCanvas`](#manual-canvas-win2dcanvas), [`Win2DAnimatedCanvas`](#animated-canvas-win2danimatedcanvas), and [`Win2DVirtualCanvas`](#virtual-canvas-win2dvirtualcanvas). Add the package when you need immediate-mode drawing; keep using ordinary [components](components.md), [Animation](animation.md), and the [Extending Reactor controls](extending-reactor-controls.md) model for retained UI.
 
 ## Three canvases, three workloads
 
@@ -269,9 +269,35 @@ Win2D resources (bitmaps, geometries, render targets) are **device-affine**: a r
 Opt the canvas into the shared device with the declarative `.UseSharedDevice()` modifier whenever it draws `UseCanvasResources` output (or any resource built from `CanvasDevice.GetSharedDevice()`):
 
 ```csharp
-Win2DAnimatedCanvas(onUpdate: ..., onDraw: ..., drawState: dots.Current)
-    .TargetFps(60)
-    .UseSharedDevice();
+class SharedDeviceDemo : Component
+{
+    public override Element Render()
+    {
+        return Memo(ctx =>
+        {
+            // Built on Win2D's process-wide shared device.
+            var sprite = ctx.UseCanvasResources<CanvasBitmap>(device => ValueTask.FromResult(
+                CanvasBitmap.CreateFromBytes(
+                    device,
+                    new byte[] { 0x00, 0x78, 0xD4, 0xFF },
+                    widthInPixels: 1,
+                    heightInPixels: 1,
+                    Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized)));
+
+            return Win2DAnimatedCanvas(
+                    onUpdate: (_, _) => { },
+                    onDraw: (session, _, _) =>
+                    {
+                        if (sprite.Current is { } bitmap)
+                            session.DrawImage(bitmap, 16, 16, new Rect(0, 0, 1, 1));
+                    })
+                .TargetFps(60)
+                // Required: the canvas draws a shared-device resource, so it must
+                // stop using its own dedicated device.
+                .UseSharedDevice();
+        });
+    }
+}
 ```
 
 The modifier is available on all three canvas elements (`Win2DCanvas`, `Win2DAnimatedCanvas`, `Win2DVirtualCanvas`). Resources created and drawn entirely within a single canvas's own `OnCreateResources` (using that control's device) do not need it.
@@ -293,26 +319,62 @@ Both create device-backed resources with device-loss recovery; they differ in *w
 The `create` callback you pass to `UseCanvasResources` already receives the `CanvasDevice` to build on — the hook deliberately supplies the *shared* device so a single resource can feed any number of canvases. Passing a canvas's own device into the hook instead is not supported: the control creates its device lazily (it is usually not realized when the hook's effect runs) and replaces it on device loss, so there is no stable per-canvas device to hand the hook. When you want a resource bound to one canvas's device, create it in that canvas's `OnCreateResources` — Win2D re-raises the callback with the fresh device after a loss:
 
 ```csharp
-Win2DAnimatedCanvas(
-    onUpdate: ...,
-    onDraw: (session, _, _) => { if (_sprite is { } s) session.DrawImage(s); }) with
+class CanvasOwnedResourceDemo : Component
 {
-    OnCreateResources = async ctrl => _sprite = await CanvasBitmap.LoadAsync(ctrl.Device, spriteUri)
-};
+    private static readonly Uri SpriteUri = new("ms-appx:///Assets/sprite.png");
+
+    // Owned by this component and built on the CANVAS's own device — no
+    // .UseSharedDevice() needed, and none wanted.
+    private CanvasBitmap? _sprite;
+
+    public override Element Render()
+    {
+        return Win2DAnimatedCanvas(
+            onUpdate: (_, _) => { },
+            onDraw: (session, _, _) =>
+            {
+                if (_sprite is { } s)
+                    session.DrawImage(s, 16, 16);
+            }) with
+        {
+            // Win2D re-raises this callback with the fresh device after a loss.
+            OnCreateResources = async ctrl =>
+                _sprite = await CanvasBitmap.LoadAsync(ctrl.Device, SpriteUri),
+        };
+    }
+}
 ```
 
 ### `UseDrawCommand`
 
-`UseDrawCommand` is the Win2D equivalent of `UseCallback`: memoize a manual draw delegate when rebuilding the delegate would allocate or capture too much on every render.
+`UseDrawCommand` is the Win2D equivalent of `UseCallback`: memoize a manual draw delegate when rebuilding the delegate would allocate or capture too much on every render. Like the other two Win2D hooks it is a `RenderContext` extension, so call it as `ctx.UseDrawCommand(...)` from inside a `Memo(ctx => …)` body:
 
 ```csharp
-var draw = UseDrawCommand(
-    state: count,
-    draw: static (session, _, value) =>
-        session.DrawText($"Count = {value}", 16, 16, Colors.Black),
-    deps: [count]);
+class DrawCommandDemo : Component
+{
+    public override Element Render()
+    {
+        return Memo(ctx =>
+        {
+            var (count, setCount) = ctx.UseState(0);
 
-return Win2DCanvas(draw, redrawKey: count);
+            // Memoized like UseCallback: the delegate is rebuilt only when a dep changes.
+            var draw = ctx.UseDrawCommand(
+                state: count,
+                draw: static (session, _, value) =>
+                    session.DrawText($"Count = {value}", 16, 16, Colors.Black),
+                deps: [count]);
+
+            return VStack(12,
+                Button($"Redraw with count {count}", () => setCount(count + 1)),
+                Win2DCanvas(draw, redrawKey: count)
+                    .ClearColor(Colors.White)
+                    .Width(240)
+                    .Height(80)
+            ).Padding(20);
+        });
+    }
+}
 ```
 
 ## Threading

@@ -329,10 +329,42 @@ internal static partial class CompileCommand
         }
         Console.WriteLine($"  Cross-link findings: {xlinkFindings.Count} ({xlinkErrors} error, {xlinkFindings.Count - xlinkErrors} warning).");
 
+        // ── Phantom-API lint (REACTOR_DOC_PHANTOM_001) ────────────────────
+        // Walk the ASSEMBLED body of every template — assembly has already
+        // inlined each snippet= block, so one pass covers both the bare
+        // ```csharp blocks that live in the template and the example code that
+        // comes from a doc app's App.cs (including code carried inside string
+        // literals, which the C# compiler never validates). Only fenced code is
+        // linted, so prose that names a phantom in order to warn against it
+        // stays silent. Same Warning-on-roll-out staging as the cross-link lint.
+        Console.WriteLine();
+        Console.WriteLine("═══ Phantom API Lint ═══");
+        var phantomFindings = new List<PhantomFinding>();
+        foreach (var (topicId, template) in templates)
+        {
+            var body = AssembleForLint(template, allSnippets, allScreenshots, topicId, reactorVersion).body;
+            phantomFindings.AddRange(PhantomSymbolLint.Lint(
+                template.FilePath, body, PhantomSymbolLint.Surface.Markdown));
+        }
+        var phantomErrors = 0;
+        foreach (var f in phantomFindings)
+        {
+            if (f.Severity == TierLintSeverity.Error)
+            {
+                Console.Error.WriteLine(f.Format());
+                phantomErrors++;
+            }
+            else
+            {
+                Console.WriteLine($"  ⚠ {f.Format()}");
+            }
+        }
+        Console.WriteLine($"  Phantom-API findings: {phantomFindings.Count} ({phantomErrors} error, {phantomFindings.Count - phantomErrors} warning).");
+
         if (validateOnly)
         {
             Console.WriteLine();
-            var combined = hasErrors || tierHasErrors || xlinkErrors > 0;
+            var combined = hasErrors || tierHasErrors || xlinkErrors > 0 || phantomErrors > 0;
             Console.WriteLine(combined ? "Validation finished with errors." : "Validation passed.");
             return combined ? 1 : 0;
         }

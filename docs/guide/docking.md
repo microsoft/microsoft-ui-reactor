@@ -18,7 +18,7 @@ Docking ships in the optional `Microsoft.UI.Reactor.Advanced` package
 (spec 062 §7). Add its package reference:
 
 ```xml
-<PackageReference Include="Microsoft.UI.Reactor.Advanced" />
+<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.13" />
 ```
 
 Docking is an opt-in element type — register it at host construction
@@ -75,7 +75,7 @@ class TwoPaneDemo : Component
                                 TextBlock(""),
                                 TextBlock("class MainView : Component"),
                                 TextBlock("{"),
-                                TextBlock("    public override Element Render() => Text(\"Hello\");"),
+                                TextBlock("    public override Element Render() => TextBlock(\"Hello\");"),
                                 TextBlock("}")
                             ).Padding(16)
                         }
@@ -146,7 +146,7 @@ class TabGroupDemo : Component
                         TextBlock("public sealed class App : Component"),
                         TextBlock("{"),
                         TextBlock("    public override Element Render() =>"),
-                        TextBlock("        Text(\"hello, world\");"),
+                        TextBlock("        TextBlock(\"hello, world\");"),
                         TextBlock("}")
                     ).Padding(16)
                 },

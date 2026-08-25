@@ -243,7 +243,7 @@ Markdown(string markdown, MarkdownOptions options)
 
 > **Package note.** `Markdown(...)` ships in the optional
 > `Microsoft.UI.Reactor.Advanced` package (spec 062 §7). Add a
-> `<PackageReference Include="Microsoft.UI.Reactor.Advanced" />` and import
+> `<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.13" />` and import
 > its factories alongside the core ones:
 > `using static Microsoft.UI.Reactor.Advanced.Factories;`. Both overloads
 > return the base `Element`, and `MarkdownOptions` stays in
