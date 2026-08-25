@@ -140,9 +140,13 @@ TextBlock(""Slides horizontally"")
 
     sealed class LayoutSample : Component
     {
+        // Hoisted out of Render: a collection expression inline in UseState is rebuilt every
+        // render even though only the first one is ever read (REACTOR_HOOKS_013).
+        static readonly IReadOnlyList<string> Seed = ["Beta", "Gamma", "Delta"];
+
         public override Element Render()
         {
-            var (items, setItems) = UseState<IReadOnlyList<string>>(["Beta", "Gamma", "Delta"]);
+            var (items, setItems) = UseState(Seed);
             var (spring, setSpring) = UseState(false);
             var (n, setN) = UseState(0);
 
