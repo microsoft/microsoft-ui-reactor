@@ -140,6 +140,8 @@ steps:
             throw "minver not found at $minver"
           }
           # Keep parity with the GitHub workflow / ob-release.yml MinVer settings.
+          # `-p experimental.0` is the fallback prerelease identifier for an untagged
+          # repo only; shipped releases are tagged `v0.1.0-preview.N`, so it never fires.
           $version = (& $minver -t v -p experimental.0 -m 0.1).Trim()
 
           # Per-PR builds: append a unique, monotonic suffix so repeated iterations /

@@ -240,25 +240,26 @@ Versions come from [MinVer](https://github.com/adamralph/minver), driven by git 
 | Past tag `v0.1.0-preview.1` by N commits | `0.1.0-preview.1.N+<sha7>` |
 | Exactly at tag `v0.1.0-preview.1` | `0.1.0-preview.1` |
 | Tag push of `v0.1.0` | `0.1.0` (stable, P3 only) |
-| No tags yet (defaults below) | `0.1.0-experimental.0.<height>+<sha7>` |
+| No tags yet (defaults below) | `0.1.0-experimental.0.<height>+<sha7>` (fallback only — never reached, see below) |
 | `workflow_dispatch` with explicit `version` input | as supplied |
 
 `minver-cli` flags:
 
 - `-t v` — tag prefix
-- `-p experimental.0` — default prerelease identifiers when no tag is reachable
+- `-p experimental.0` — fallback prerelease identifiers, applied **only** when no `v*` tag is reachable. Shipped releases are tagged `v0.1.0-preview.N` and CI clones with full history, so this fallback never fires; no `experimental` version has ever been published.
 - `-m 0.1` — minimum major.minor when no tag (so an untagged repo doesn't start at `0.0.x`)
 
-### Bootstrap
+### Cutting a release
 
-Tag the repo once before the first CI run:
+The one-time bootstrap tag this section originally called for is long done — the repo has been tagged since `v0.1.0-preview.1`. Milestone bumps are explicit tags (`v0.1.0-preview.N`, `v0.2.0-preview.1`, …):
 
 ```sh
-git tag v0.1.0-experimental.0
+# N = one past the highest existing v0.1.0-preview.* tag
+git tag v0.1.0-preview.N
 git push --tags
 ```
 
-After that, every commit gets a unique, ordered version with zero coordination — height strictly increases as commits land. Milestone bumps are explicit tags (`v0.1.0-preview.1`, `v0.2.0-experimental.0`, …); MinVer takes it from there.
+Between tags, every commit gets a unique, ordered version with zero coordination — height strictly increases as commits land; MinVer takes it from there.
 
 ### Why MinVer over the alternatives
 
@@ -270,7 +271,7 @@ MinVer hits the sweet spot: tag-driven, no extra files in the repo, conventional
 
 ### PR vs main distinguishability
 
-Pure MinVer doesn't add a PR identifier — both PR and main builds with the same git height produce the same `0.1.0-experimental.0.<height>` filename. This is acceptable because:
+Pure MinVer doesn't add a PR identifier — both PR and main builds with the same git height produce the same `0.1.0-preview.N.<height>` filename. This is acceptable because:
 
 - The `+<sha7>` build metadata in the SemVer string differs (visible in package metadata, even if NuGet drops it from the filename).
 - Workflow artifact uploads are run-scoped — each workflow run gets its own download URL regardless of version collision.
@@ -460,7 +461,7 @@ Verified locally:
 - `dotnet pack src/Reactor -c Release -p:Platform=x64 -p:Version=0.0.1-smoke` → produces `.nupkg` containing `lib/net10.0-windows10.0.22621.0/Reactor.dll`, `analyzers/dotnet/cs/Reactor.Analyzers.dll`, `analyzers/dotnet/cs/Reactor.Localization.Generator.dll`, `LICENSE`, `Reactor.xml`.
 
 Still TODO under P0:
-- **Bootstrap MinVer**: `git tag v0.1.0-experimental.0 && git push --tags` so the first CI run produces `0.1.0-experimental.0.<height>` rather than the pre-bootstrap default.
+- ~~**Bootstrap MinVer**~~ — done. The repo has been tagged since `v0.1.0-preview.1`, so MinVer always resolves against a real tag and the untagged `-p` fallback never applies.
 - First end-to-end test: after bootstrapping, push a tag like `v0.1.0-preview.1`, verify the workflow produces both assets, install into a throwaway consumer repo from the Release page.
 - Verify the on-PR pack produces a complete kit zip (no environment-specific path issues in `Compress-Archive`).
 - Decide whether the skill kit should also be smoke-tested by piping it through `install-skill-kit.ps1` on a clean Windows VM.

@@ -38,14 +38,15 @@ permissions:
 # ─── Version strategy ───────────────────────────────────────────────────────
 # Versions come from MinVer (commit-height past the latest `v*` tag). Pattern:
 #
-#   - Past tag `v0.1.0-experimental.1` by N commits → `0.1.0-experimental.1.N+<sha7>`
+#   - Past tag `v0.1.0-preview.1` by N commits → `0.1.0-preview.1.N+<sha7>`
 #   - Exactly at a tag → that tag's version
-#   - No tags yet → `0.1.0-experimental.0.<height>+<sha7>` (defaults below)
+#   - No tags yet → `0.1.0-experimental.0.<height>+<sha7>` (defaults below;
+#     fallback only — see the `-p` flag note in "Resolve version")
 #
-# Bootstrap once: `git tag v0.1.0-experimental.0 && git push --tags`. After
-# that, every commit gets a unique, ordered version with zero coordination —
+# The repo is already bootstrapped: it has been tagged since `v0.1.0-preview.1`,
+# so every commit gets a unique, ordered version with zero coordination —
 # height strictly increases as commits land. Bump to a new milestone by
-# tagging (e.g. `v0.1.0-experimental.1`); MinVer takes it from there.
+# tagging the next `v0.1.0-preview.N`; MinVer takes it from there.
 #
 # Tag pushes (`v*`) produce a clean version and create a GitHub Release.
 # Pushes to main and PR builds get the same MinVer-computed version (they
@@ -94,7 +95,12 @@ jobs:
           } else {
             # MinVer flags:
             #   -t v                          tag prefix
-            #   -p experimental.0             default prerelease identifiers — flags pre-P1 builds as experimental
+            #   -p experimental.0             fallback prerelease identifiers — used ONLY when no
+            #                                 `v*` tag is reachable. Shipped releases are tagged
+            #                                 `v0.1.0-preview.N` and this job checks out with
+            #                                 fetch-depth: 0, so a tag is always reachable and this
+            #                                 fallback never fires — no `experimental` version has
+            #                                 ever been published.
             #   -m 0.1                        minimum major.minor when no tag (so untagged → 0.1.x)
             $version = (& minver -t v -p experimental.0 -m 0.1).Trim()
           }
