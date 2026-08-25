@@ -106,6 +106,13 @@ three strings:
 The message is composed by the framework from developer-authored
 identifiers, never from user data (spec 044 §6.2.1).
 
+> **NativeAOT:** the .NET NativeAOT toolchain defaults the `EventSourceSupport`
+> feature switch to `false`, which compiles the whole `EventSource` surface out.
+> A NativeAOT-published app therefore emits none of these events — including
+> `Warning` — until it opts back in with
+> `<EventSourceSupport>true</EventSourceSupport>` in its project file. The DEBUG
+> `Debug.WriteLine` mirror is unaffected.
+
 ## Capturing a trace
 
 There are four routes. Pick by where the consumer lives.

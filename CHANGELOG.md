@@ -44,7 +44,8 @@ Conventions for contributors:
   key is named in a warning on the `Microsoft-UI-Reactor` ETW provider (`Keywords.Errors`),
   emitted once per distinct key — until a few hundred distinct keys have been reported, past
   which de-duplication stops and every miss warns again rather than going silent. Overlong
-  keys are never de-duplicated and are truncated on the payload.
+  keys are never de-duplicated and are truncated on the payload. Note that a NativeAOT app
+  emits no ETW at all unless it sets `EventSourceSupport=true`.
 - **`DiagnosticLog.Warning` is release-visible (spec 044 §6.1).** It previously only called a
   `[Conditional("DEBUG")]` mirror, so every warning routed through it — backdrop fallback,
   `SizeToContent` on a maximized window, and now unresolved style keys — was silently

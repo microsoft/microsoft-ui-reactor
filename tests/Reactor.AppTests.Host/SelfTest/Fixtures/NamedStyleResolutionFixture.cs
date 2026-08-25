@@ -222,6 +222,27 @@ internal static class NamedStyleResolutionFixture
             ReactorEvent[] snapshot;
             lock (gate) { snapshot = captured.ToArray(); }
 
+            // Precondition that holds whether or not ETW is available: the
+            // unresolved key degraded instead of throwing, so the product path
+            // under test actually ran. Keeps a real red available if the
+            // harness or the mount path breaks, rather than skipping blindly.
+            var mounted = H.FindText("warn-second");
+            H.Check("NamedStyle_Warning_ProductPathRan",
+                mounted is not null && mounted.Style is null);
+
+            // NativeAOT defaults the EventSourceSupport feature switch to false
+            // (see tests/startup_perf/BlankReactorMsix/BlankReactor.csproj), so
+            // the whole provider is inert there and no subscriber can observe
+            // anything. Detect that by the absence of *any* event — Verbose is
+            // subscribed above, so a live provider always delivers some — and
+            // skip rather than redden the AOT run for a platform limitation.
+            if (snapshot.Length == 0)
+            {
+                H.Skip("NamedStyle_Warning_Emitted",
+                    "EventSource delivered no events at all; NativeAOT defaults EventSourceSupport=false, so ETW-based assertions cannot run in this configuration.");
+                return;
+            }
+
             var matching = new global::System.Collections.Generic.List<ReactorEvent>();
             foreach (var e in snapshot)
             {
@@ -238,12 +259,6 @@ internal static class NamedStyleResolutionFixture
             }
 
             H.Check("NamedStyle_Warning_Emitted", matching.Count > 0);
-
-            // Independent control on the capture pipe: reconcile/render events
-            // flow at Verbose regardless of whether the product emits its
-            // warning, so this stays green when only the warning is broken and
-            // isolates "subscription dead" from "warning missing".
-            H.Check("NamedStyle_Warning_SubscriptionSawEvents", snapshot.Length > 0);
 
             var first = matching.Count > 0 ? matching[0] : default;
             H.Check("NamedStyle_Warning_CategoryIsTheme",
@@ -307,6 +322,14 @@ internal static class NamedStyleResolutionFixture
                     afterCap.Mount(_ => TextBlock($"past-cap-{run}").ApplyStyle(pastCapKey));
                     await Harness.Render();
 
+                    // Real precondition, checked while this host is still the
+                    // live one (see the sibling fixture): the past-cap miss
+                    // degraded instead of throwing, so the branch under test ran
+                    // even where ETW cannot be observed.
+                    var pastCapEl = H.FindText($"past-cap-{run}");
+                    H.Check("NamedStyle_Overflow_ProductPathRan",
+                        pastCapEl is not null && pastCapEl.Style is null);
+
                     // An overlong key: truncated on the payload, and never
                     // retained, so it warns again on a second miss.
                     var longKey = "L" + new string('x', Cap + 64) + $"_{run}";
@@ -319,6 +342,15 @@ internal static class NamedStyleResolutionFixture
 
                     ReactorEvent[] snapshot;
                     lock (gate) { snapshot = captured.ToArray(); }
+
+                    // NativeAOT defaults EventSourceSupport=false, so the
+                    // provider is inert and no ETW assertion can run there.
+                    if (snapshot.Length == 0)
+                    {
+                        H.Skip("NamedStyle_Overflow_PastCapStillWarns",
+                            "EventSource delivered no events at all; NativeAOT defaults EventSourceSupport=false, so ETW-based assertions cannot run in this configuration.");
+                        return;
+                    }
 
                     H.Check("NamedStyle_Overflow_PastCapStillWarns",
                         CountWarningsContaining(snapshot, pastCapKey) >= 1);

@@ -609,7 +609,9 @@ public static partial class ElementExtensions
     /// The warning fires once per distinct key, so one bad key in a virtualized
     /// list does not warn per realized item; past a few hundred distinct
     /// unresolved keys the de-duplication stops and every miss warns again,
-    /// because staying quiet there would hide a real typo.
+    /// because staying quiet there would hide a real typo. Under NativeAOT the
+    /// ETW half is compiled out unless the app sets
+    /// <c>EventSourceSupport=true</c>; the DEBUG mirror is unaffected.
     /// </para>
     /// </summary>
     public static T ApplyStyle<T>(this T el, string styleName) where T : Element =>
