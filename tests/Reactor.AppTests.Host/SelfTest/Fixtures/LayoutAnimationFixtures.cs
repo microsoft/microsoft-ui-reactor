@@ -285,129 +285,64 @@ internal static class LayoutAnimationFixtures
         }
     }
 
+
     /// <summary>
-    /// Reactor prepares a source snapshot for EVERY unmounting element carrying a key,
-    /// because the reconciler cannot know which sibling the user designated. When a list
-    /// of N keyed siblings collapses to one destination, N-1 preparations go unclaimed —
-    /// and WinUI keeps each unclaimed snapshot composited at its source element's old
-    /// position for about a second, painting the old list on top of the new view. The
-    /// flush must release them.
+    /// Regression for a native access violation in Microsoft.UI.Xaml.dll (0xC0000005),
+    /// reproduced by hand in the ReactorGallery "Both ends need the same key" card:
+    /// toggle the destination key off, then activate the source. That is the shape where
+    /// a pass prepares a snapshot and NOTHING claims it — no destination carries the key
+    /// at all. An earlier revision withdrew those unclaimed preparations with
+    /// <c>ConnectedAnimation.Cancel()</c> to stop them ghosting; by then the source has
+    /// been pooled and reset, and cancelling faulted the process. This pins the no-crash
+    /// behaviour: the unclaimed snapshot is left to time out on its own.
     /// </summary>
-    internal class ConnectedAnimationReleasesUnclaimedSources(Harness h) : SelfTestFixtureBase(h)
+    internal class ConnectedAnimationOrphanOnlyPassDoesNotCrash(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
-            string[] items = ["Alpha", "Bravo", "Charlie"];
 
             host.Mount(ctx =>
             {
-                var (selected, setSelected) = ctx.UseState<string?>(null);
+                var (open, setOpen) = ctx.UseState(false);
 
-                if (selected is not null)
+                // Destination deliberately carries NO key, exactly like the gallery card
+                // with its toggle off.
+                if (open)
                     return VStack(12,
-                        Button("RelBack", () => setSelected(null)),
-                        TextBlock(selected).FontSize(28)
-                            .ConnectedAnimation($"rel-{selected}")
-                            .AutomationId("rel-destination"));
+                        Button("OrphanOnlyBack", () => setOpen(false)),
+                        TextBlock("Fluent").FontSize(34).AutomationId("orphan-only-dest"));
 
                 return VStack(12,
-                    TextBlock("Pick one"),
-                    VStack(4, items.Select(i =>
-                        (Element)Button($"Rel{i}", () => setSelected(i))
-                            .ConnectedAnimation($"rel-{i}")).ToArray()));
+                    TextBlock("Open the detail view"),
+                    Button("OrphanOnlyGo", () => setOpen(true))
+                        .ConnectedAnimation("orphan-only-key"));
             });
 
             await Harness.Render();
 
             int startBaseline = host.Reconciler.ConnectedAnimationStartCount;
-            int releaseBaseline = host.Reconciler.ConnectedAnimationReleaseCount;
 
-            // Three sources unmount under keys rel-Alpha / rel-Bravo / rel-Charlie;
-            // only rel-Alpha has a destination.
-            H.ClickButton("RelAlpha");
+            H.ClickButton("OrphanOnlyGo");
             await host.WaitForIdleAsync();
 
-            H.Check("ConnectedAnimRelease_ClaimedOneStarted",
-                host.Reconciler.ConnectedAnimationStartCount == startBaseline + 1);
+            H.Check("ConnectedAnimOrphanOnly_DestinationMounted",
+                H.FindText("Fluent") is not null);
+            H.Check("ConnectedAnimOrphanOnly_NothingStarted",
+                host.Reconciler.ConnectedAnimationStartCount == startBaseline);
 
-            // The two siblings nobody travelled from must be cancelled, not left to
-            // linger as ghosts over the detail view.
-            H.Check("ConnectedAnimRelease_TwoOrphansReleased",
-                host.Reconciler.ConnectedAnimationReleaseCount == releaseBaseline + 2);
-
-            // No stale snapshot leaked into a later pass. Navigating back unmounts ONE
-            // keyed element (the rel-Alpha headline) and mounts three keyed buttons, so
-            // exactly one animation may start. Without the release step the orphaned
-            // rel-Bravo / rel-Charlie snapshots would still be sitting in the service and
-            // their buttons would travel from them too, making this three.
-            //
-            // Deliberately not asserted via ConnectedAnimationService.GetAnimation: the
-            // service keeps returning a cancelled animation for an indeterminate time, so
-            // that reads green alone and red under suite load. Counting the starts Reactor
-            // actually performs is the same claim without the race.
-            int beforeReturn = host.Reconciler.ConnectedAnimationStartCount;
-            H.ClickButton("RelBack");
+            // Round-trip and repeat: the hand repro needed a second activation, and a
+            // dangling native object often only faults on later use rather than at the
+            // call that orphaned it.
+            H.ClickButton("OrphanOnlyBack");
+            await host.WaitForIdleAsync();
+            H.ClickButton("OrphanOnlyGo");
+            await host.WaitForIdleAsync();
+            H.ClickButton("OrphanOnlyBack");
             await host.WaitForIdleAsync();
 
-            H.Check("ConnectedAnimRelease_NoStaleStartsOnReturn",
-                host.Reconciler.ConnectedAnimationStartCount == beforeReturn + 1);
-        }
-    }
-
-    /// <summary>
-    /// A reconcile pass can prepare a source and then never reach
-    /// <c>FlushConnectedAnimations</c> — both hosts flush only after <c>Reconcile</c>
-    /// returns, so a mid-reconcile throw shows the error fallback and skips the flush.
-    /// The next pass must CANCEL what that pass left behind, not merely forget it:
-    /// forgetting drops the only handle on a snapshot the service still holds, which
-    /// keeps it composited over the new content and lets a later same-key mount travel
-    /// from it.
-    ///
-    /// Staged by driving the reconciler directly rather than through a host render, which
-    /// is the same shape — a completed pass with no flush after it — without needing to
-    /// inject a throw at an exact point mid-traversal.
-    /// </summary>
-    internal class ConnectedAnimationReleasesAcrossUnflushedPass(Harness h) : SelfTestFixtureBase(h)
-    {
-        public override async Task RunAsync()
-        {
-            var reconciler = H.CreateHost().Reconciler;
-            Action noop = () => { };
-
-            // Pass 1 — mount the keyed source and put it in the live visual tree, so the
-            // unmount below has something real to snapshot.
-            var sourceTree = VStack(
-                Button("OrphanSrc", noop)
-                    .ConnectedAnimation("orphan-pass-key")
-                    .AutomationId("orphan-src"));
-            var sourceControl = reconciler.Reconcile(null, sourceTree, null, noop);
-            H.SetContent(sourceControl);
-            await Harness.Render();
-
-            var src = H.FindControl<Button>(b =>
-                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(b) == "orphan-src");
-            H.Check("ConnectedAnimUnflushed_SourceMeasured",
-                src is not null && src.ActualWidth > 0 && src.ActualHeight > 0);
-
-            // Pass 2 — swap to a tree carrying no matching key. The unmount prepares a
-            // snapshot that nothing claims, and no flush runs afterwards.
-            var plainTree = VStack(TextBlock("no key here"));
-            var plainControl = reconciler.Reconcile(sourceTree, plainTree, sourceControl, noop);
-            H.SetContent(plainControl);
-            await Harness.Render();
-
-            int before = reconciler.ConnectedAnimationReleaseCount;
-
-            // Pass 3 — the next top-level pass must release the orphan. Reading
-            // before+1 also proves pass 2 really did prepare a snapshot, so a
-            // PrepareToAnimate that silently did nothing would fail here rather than
-            // making the assertion trivially true.
-            var thirdTree = VStack(TextBlock("third"));
-            reconciler.Reconcile(plainTree, thirdTree, plainControl, noop);
-
-            H.Check("ConnectedAnimUnflushed_OrphanReleasedOnNextPass",
-                reconciler.ConnectedAnimationReleaseCount == before + 1);
+            H.Check("ConnectedAnimOrphanOnly_SurvivesRepeatedRoundTrips",
+                H.FindText("Open the detail view") is not null);
         }
     }
 }

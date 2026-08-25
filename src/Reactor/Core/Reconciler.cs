@@ -1450,7 +1450,12 @@ public sealed partial class Reconciler : IDisposable
             // at the end of each render, but a pass that threw mid-reconcile — or a
             // Reconcile() caller that never flushes (tests, embedders) — must not leak
             // strong UIElement refs or leave live snapshots the service still owns.
-            ResetConnectedAnimationsForNewPass();
+            // Drop anything a previous pass queued but never flushed. Every shipped host
+            // flushes at the end of each render, but a pass that threw mid-reconcile — or
+            // a Reconcile() caller that never flushes (tests, embedders) — must not
+            // accumulate strong UIElement refs. A list clear, so nothing here can throw
+            // and strand the depth counter incremented just above.
+            _pendingConnectedAnimationStarts.Clear();
             if (ReactorFeatureFlags.HighlightReconcileChanges)
             {
                 (_highlightMounted ??= new()).Clear();
@@ -3652,30 +3657,31 @@ public sealed partial class Reconciler : IDisposable
     // start count is the only non-vacuous oracle available to an automated test.
     internal int ConnectedAnimationStartCount;
 
-    // Test-only seam: counts prepared-but-unclaimed source snapshots released by
-    // ReleaseUnclaimedConnectedAnimations. Unreleased ones stay painted over the new
-    // UI until WinUI times them out (~1s), which is far longer than the transition.
-    internal int ConnectedAnimationReleaseCount;
-
     /// <summary>
-    /// Keys for which this reconcile pass published a source snapshot via
-    /// <c>PrepareToAnimate</c>. Reactor prepares speculatively — every unmounting element
-    /// carrying a key gets a snapshot, because the reconciler cannot know which one the
-    /// user's interaction designated as the source. Whatever the flush does not claim is
-    /// released, otherwise the leftovers hang over the new UI as ghosts.
+    /// Publishes the source snapshot for an unmounting element, so a destination mounting
+    /// under the same key in this pass can travel from it.
     /// </summary>
-    private readonly HashSet<string> _preparedConnectedAnimationKeys = new(StringComparer.Ordinal);
-
-    /// <summary>
-    /// Publishes the source snapshot for an unmounting element and records the key so an
-    /// unclaimed preparation can be released at the end of the pass.
-    /// </summary>
+    /// <remarks>
+    /// Preparation is speculative: every unmounting element carrying a key gets a
+    /// snapshot, because the reconciler cannot know which sibling the user's interaction
+    /// designated as the source. Collapsing a list of N keyed rows to one detail element
+    /// therefore leaves N-1 preparations that nothing claims, and WinUI keeps each of
+    /// those composited at its source's old position until it times out — roughly a
+    /// second of the old list ghosting over the new view.
+    ///
+    /// <para>That is a known cosmetic wart, deliberately left alone. Withdrawing an
+    /// unclaimed preparation with <c>ConnectedAnimation.Cancel()</c> faults WinUI natively
+    /// (0xC0000005 in Microsoft.UI.Xaml.dll 3.2.3.0): by flush time the source has been
+    /// unmounted and returned to <see cref="ElementPool"/>, so the animation is holding a
+    /// visual that <c>CleanElement</c> has already reset. A crash is strictly worse than a
+    /// ghost, so the ghosts stay until there is a safe way to withdraw a preparation.
+    /// <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c> pins the no-crash behaviour.</para>
+    /// </remarks>
     private void PrepareConnectedAnimationSource(string key, UIElement control)
     {
         try
         {
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
-            _preparedConnectedAnimationKeys.Add(key);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {
@@ -3706,18 +3712,16 @@ public sealed partial class Reconciler : IDisposable
         => _pendingConnectedAnimationStarts.Add((key, target));
 
     /// <summary>
-    /// Starts all queued connected animations, then releases every source snapshot this
-    /// pass prepared that no destination claimed. Call AFTER the new tree has been
-    /// attached to the visual tree (e.g., after Window.Content = newControl).
+    /// Starts all queued connected animations. Call AFTER the new tree has been attached
+    /// to the visual tree (e.g., after Window.Content = newControl).
     /// </summary>
     /// <remarks>
-    /// Source and destination must therefore appear in the SAME reconcile pass. That is
-    /// the shape Reactor's model produces — a single state change swaps both subtrees —
-    /// and it is what makes speculative preparation safe to clean up.
+    /// Source and destination must appear in the SAME reconcile pass — that is the shape
+    /// Reactor's model produces, since a single state change swaps both subtrees.
     /// </remarks>
     public void FlushConnectedAnimations()
     {
-        if (_pendingConnectedAnimationStarts.Count == 0 && _preparedConnectedAnimationKeys.Count == 0)
+        if (_pendingConnectedAnimationStarts.Count == 0)
             return;
 
         try
@@ -3732,11 +3736,7 @@ public sealed partial class Reconciler : IDisposable
                     // e.g. the very first mount of a keyed element, which has no source
                     // to travel from.
                     if (service.GetAnimation(key) is { } anim && anim.TryStart(target))
-                    {
                         ConnectedAnimationStartCount++;
-                        // Claimed: leave it alone, it owns its own teardown from here.
-                        _preparedConnectedAnimationKeys.Remove(key);
-                    }
                 }
                 catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
                 {
@@ -3744,83 +3744,11 @@ public sealed partial class Reconciler : IDisposable
                         Diagnostics.LogCategory.Reactor, "Reconciler.FlushConnectedAnimations.start", ex);
                 }
             }
-
-            ReleaseUnclaimedConnectedAnimations(service);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {
             Diagnostics.DiagnosticLog.SwallowedError(
                 Diagnostics.LogCategory.Reactor, "Reconciler.FlushConnectedAnimations", ex);
-        }
-
-        _pendingConnectedAnimationStarts.Clear();
-        _preparedConnectedAnimationKeys.Clear();
-    }
-
-    /// <summary>
-    /// Cancels the source snapshots nothing travelled from. Without this, unmounting a
-    /// list of N keyed siblings to show one of them leaves N-1 prepared animations behind,
-    /// and WinUI keeps each one's snapshot composited at the source element's old position
-    /// until it times out — the old list stays painted on top of the new view for about a
-    /// second. It also stops an orphan leaking into a LATER pass, where a same-key mount
-    /// would travel from a stale snapshot.
-    /// </summary>
-    private void ReleaseUnclaimedConnectedAnimations(ConnectedAnimationService service)
-    {
-        foreach (var key in _preparedConnectedAnimationKeys)
-        {
-            try
-            {
-                if (service.GetAnimation(key) is { } orphan)
-                {
-                    orphan.Cancel();
-                    ConnectedAnimationReleaseCount++;
-                }
-            }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
-            {
-                Diagnostics.DiagnosticLog.SwallowedError(
-                    Diagnostics.LogCategory.Reactor, "Reconciler.ReleaseUnclaimedConnectedAnimations", ex);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Drops the per-pass connected-animation bookkeeping, cancelling any snapshot still
-    /// held by the service first.
-    /// </summary>
-    /// <remarks>
-    /// Reached when a pass prepared a source but never got to
-    /// <see cref="FlushConnectedAnimations"/> — both host render loops flush only after
-    /// <c>Reconcile</c> returns, so a throw mid-reconcile shows the error fallback and
-    /// skips the flush. Clearing the key set on its own would forget the only handle we
-    /// have on those snapshots, leaving them composited over the fallback and available
-    /// for a later same-key mount to travel from. Resolving the service is a COM call, so
-    /// it is skipped entirely on the overwhelmingly common path where nothing was prepared.
-    ///
-    /// <para><b>Total by construction.</b> This runs after <c>_debugReconcileDepth</c> has
-    /// been incremented but before the <c>try/finally</c> that decrements it, so an
-    /// escaping exception would strand the counter above zero — and every later top-level
-    /// reconcile would then look nested and skip this reset, the hot-reload consume, and
-    /// the dirty-ancestor path. Releasing orphaned snapshots has no recovery worth that
-    /// blast radius, so a failure degrades to a logged no-op. The narrow teardown-only
-    /// filters elsewhere in this file are deliberate; here the caller's bookkeeping is
-    /// what needs protecting.</para>
-    /// </remarks>
-    private void ResetConnectedAnimationsForNewPass()
-    {
-        if (_preparedConnectedAnimationKeys.Count > 0)
-        {
-            try
-            {
-                ReleaseUnclaimedConnectedAnimations(ConnectedAnimationService.GetForCurrentView());
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.DiagnosticLog.SwallowedError(
-                    Diagnostics.LogCategory.Reactor, "Reconciler.ResetConnectedAnimationsForNewPass", ex);
-            }
-            _preparedConnectedAnimationKeys.Clear();
         }
 
         _pendingConnectedAnimationStarts.Clear();

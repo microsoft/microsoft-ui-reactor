@@ -38,9 +38,9 @@ class ConnectedAnimationPage : Component
                 VStack(12,
                     Stage(selected is null ? ListView(setSelected) : DetailView(selected, setSelected)),
                     Caption(selected is null
-                            ? "Every row carries a key, but only the row you pick has a destination — the "
-                            + "other three are released at the end of the render instead of hovering over "
-                            + "the detail view."
+                            ? "Every row carries a key, but only the row you pick has a destination — Reactor "
+                            + "cannot know which one you meant, so it snapshots them all and the unpicked "
+                            + "ones fade on their own."
                             : "The row's snapshot travelled here and grew into the headline. Going back "
                             + "reverses it: the headline is now the source.")
                         .Foreground(Theme.SecondaryText)
@@ -61,8 +61,8 @@ return VStack(6, items.Select(i =>
 
 // Source and destination must appear in the SAME render. The reconciler publishes the
 // outgoing element's snapshot during the reconcile pass and plays it into the incoming
-// element at the end of that same pass. A key that unmounts without a matching mount in
-// that render is released, which is what keeps the rows you didn't pick from ghosting.
+// element at the end of that same pass. Every keyed row is snapshotted, since the
+// reconciler cannot tell which one you activated; the unpicked ones expire on their own.
 ");
         }
 
