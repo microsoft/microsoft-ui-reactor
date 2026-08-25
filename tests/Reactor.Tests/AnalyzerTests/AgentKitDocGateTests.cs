@@ -149,14 +149,8 @@ public class AgentKitDocGateTests
                 continue;
             }
 
-            if (finding.Replacement is { } replacement
-                && !documents.Text(finding.Path).Contains(replacement, StringComparison.Ordinal))
-            {
-                problems.Add(
-                    $"{finding.Path}:{finding.Line} — marked as a counterexample, but the document " +
-                    $"never names the replacement `{replacement}`. A shipped 'do not write this' " +
-                    "with no 'write this instead' is the half of #1119 that caused the contradiction");
-            }
+            if (MissingRemedy(finding, documents) is { } missingRemedy)
+                problems.Add(missingRemedy);
         }
 
         Assert.True(
@@ -186,10 +180,24 @@ public class AgentKitDocGateTests
         var scan = AgentKitCorpus.Scan;
         var documents = new DocumentCache(repoRoot);
 
-        var problems = scan.Of(AgentKitFindingKind.WrapperWorkaround)
-            .Where(finding => !IsMarkedCounterexample(documents.Lines(finding.Path), finding))
-            .Select(finding => $"{finding.Path}:{finding.Line} — {finding.Detail}")
-            .ToList();
+        var problems = new List<string>();
+
+        foreach (var finding in scan.Of(AgentKitFindingKind.WrapperWorkaround))
+        {
+            if (!IsMarkedCounterexample(documents.Lines(finding.Path), finding))
+            {
+                problems.Add($"{finding.Path}:{finding.Line} — {finding.Detail}");
+                continue;
+            }
+
+            // The same "names its remedy" condition the dropped-modifier fact applies, and it
+            // matters more here: this is the #1119 shape, and the sibling fact cannot cover for it,
+            // because a Border really is a legal Padding receiver and so nothing else objects. A
+            // document showing the workaround under a `// Wrong:` label while never mentioning
+            // FlexPadding would ship exactly the half-guidance that caused the contradiction.
+            if (MissingRemedy(finding, documents) is { } missing)
+                problems.Add(missing);
+        }
 
         Assert.True(
             problems.Count == 0,
@@ -198,6 +206,31 @@ public class AgentKitDocGateTests
             "not to reach for a wrapper, while a sample packed beside it does:\n  " +
             string.Join("\n  ", problems));
     }
+
+    /// <summary>
+    /// The complaint when a document marks a counterexample but never names what to write instead,
+    /// or <see langword="null"/> when it does.
+    /// </summary>
+    private static string? MissingRemedy(AgentKitFinding finding, DocumentCache documents) =>
+        NamesRemedy(documents.Text(finding.Path), finding.Replacement)
+            ? null
+            : $"{finding.Path}:{finding.Line} — marked as a counterexample, but the document never " +
+              $"names the replacement `{finding.Replacement}`. A shipped 'do not write this' with no " +
+              "'write this instead' is the half of #1119 that caused the contradiction";
+
+    /// <summary>
+    /// True when a document names the replacement for a counterexample it shows, or when the
+    /// framework offers no replacement to name.
+    /// </summary>
+    /// <remarks>
+    /// Both facts apply this, and it matters most on the wrapper one: that is the #1119 shape, and
+    /// no other check can cover for it, because the wrapper really is a legal receiver so nothing
+    /// else objects. A document showing the workaround under a <c>// Wrong:</c> label while never
+    /// mentioning <c>FlexPadding</c> would ship exactly the half-guidance that caused the
+    /// contradiction.
+    /// </remarks>
+    internal static bool NamesRemedy(string documentText, string? replacement) =>
+        replacement is null || documentText.Contains(replacement, StringComparison.Ordinal);
 
     /// <summary>
     /// True when the sample is marked as deliberately wrong — on the offending line itself, or in

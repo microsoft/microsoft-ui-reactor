@@ -92,6 +92,25 @@ internal static class AgentKitDocCorpus
         RegexOptions.Compiled);
 
     /// <summary>
+    /// A blockquote container prefix: any run of <c>&gt;</c> markers with optional spacing.
+    /// </summary>
+    /// <remarks>
+    /// Fences are legal inside a blockquote, and the prefix is container syntax rather than
+    /// content. Matching only whitespace before the delimiter skipped <c>&gt; ```csharp</c>
+    /// entirely — and <see cref="CSharpFenceProbe"/> shared the restriction, so the differential
+    /// oracle stayed green while the block went uninspected. The corpus has four blockquoted
+    /// fences today, all untagged shell, so this closes the gap before a C# one appears.
+    /// </remarks>
+    private static readonly Regex BlockquotePrefix = new(@"^(?:[ \t]*(?:>[ \t]?)+)", RegexOptions.Compiled);
+
+    /// <summary>Splits a line into its blockquote container prefix and the content inside it.</summary>
+    private static (int PrefixLength, string Content) StripBlockquote(string line)
+    {
+        var match = BlockquotePrefix.Match(line);
+        return match.Success && match.Length > 0 ? (match.Length, line[match.Length..]) : (0, line);
+    }
+
+    /// <summary>
     /// An opening C# fence, found with no regard for indentation or for surrounding block
     /// structure — the independent probe
     /// <c>AgentKitDocGateInstrumentTests.Every_CSharp_Fence_In_The_Corpus_Is_Extracted</c> measures
@@ -103,7 +122,7 @@ internal static class AgentKitDocCorpus
     /// independently.
     /// </remarks>
     internal static readonly Regex CSharpFenceProbe = new(
-        @"^[ \t]*(`{3,}|~{3,})[ ]*(csharp|cs|c\#)[ ]*$",
+        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(`{3,}|~{3,})[ ]*(csharp|cs|c\#)[ ]*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -255,7 +274,7 @@ internal static class AgentKitDocCorpus
     /// <param name="BodyStartLine">1-based first line of the body.</param>
     /// <param name="BodyEndLine">1-based last line of the body; less than
     /// <paramref name="BodyStartLine"/> for an empty block.</param>
-    internal readonly record struct FenceRegion(int OpenLine, int BodyStartLine, int BodyEndLine, string Language, int Indent);
+    internal readonly record struct FenceRegion(int OpenLine, int BodyStartLine, int BodyEndLine, string Language, int Indent, int BlockquotePrefix);
 
     /// <summary>
     /// Every fenced block in a markdown document, in source order, whatever its language.
@@ -274,7 +293,9 @@ internal static class AgentKitDocCorpus
 
         for (var i = 0; i < lines.Length; i++)
         {
-            var open = FenceOpen.Match(lines[i]);
+            var (prefix, content) = StripBlockquote(lines[i]);
+
+            var open = FenceOpen.Match(content);
             if (!open.Success)
                 continue;
 
@@ -303,7 +324,8 @@ internal static class AgentKitDocCorpus
                 BodyStartLine: i + 2,
                 BodyEndLine: close,          // 1-based last body line; == i+1 when empty.
                 Language: open.Groups["info"].Value.Trim().Split(' ', ',')[0],
-                Indent: open.Groups["indent"].Value.Length));
+                Indent: indent,
+                BlockquotePrefix: prefix));
 
             i = close;
         }
@@ -330,7 +352,7 @@ internal static class AgentKitDocCorpus
     {
         for (var i = index - 1; i >= 0; i--)
         {
-            var line = lines[i];
+            var line = StripBlockquote(lines[i]).Content;
             if (line.Trim().Length == 0)
                 continue;   // a blank line does not end a list item's content.
 
@@ -371,7 +393,7 @@ internal static class AgentKitDocCorpus
                 string.Join(
                     "\n",
                     lines[(region.BodyStartLine - 1)..(region.BodyEndLine - 1 + 1)]
-                        .Select(line => StripIndent(line, region.Indent)))))
+                        .Select(line => StripIndent(StripBlockquote(line).Content, region.Indent)))))
             .ToList();
     }
 
@@ -402,8 +424,9 @@ internal static class AgentKitDocCorpus
     /// demonstrating Markdown — truncate the block, so the rest of that sample was never scanned.
     /// The differential probe trusts <see cref="Fences"/> for block structure, so it cannot see it.
     /// </remarks>
-    private static bool IsClosingFence(string line, char fenceChar, int openLength, int containerIndent)
+    private static bool IsClosingFence(string rawLine, char fenceChar, int openLength, int containerIndent)
     {
+        var line = StripBlockquote(rawLine).Content;
         var text = line.TrimStart(' ', '\t');
 
         if (line.Length - text.Length - containerIndent > 3)

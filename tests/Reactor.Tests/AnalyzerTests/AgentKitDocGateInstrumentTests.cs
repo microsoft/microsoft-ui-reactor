@@ -819,6 +819,56 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A fence inside a blockquote is extracted, with the container prefix stripped.
+    /// </summary>
+    /// <remarks>
+    /// The opener previously allowed only whitespace before the delimiter, so <c>&gt; ```csharp</c>
+    /// was skipped — and <see cref="AgentKitDocCorpus.CSharpFenceProbe"/> shared the restriction,
+    /// so the differential oracle stayed green while the block shipped uninspected. The corpus has
+    /// four blockquoted fences today, all untagged shell, so this closes the gap before a C# one
+    /// appears rather than after.
+    /// </remarks>
+    [Fact]
+    public void A_Fence_Inside_A_Blockquote_Is_Extracted()
+    {
+        const string Markdown = """
+            > ### Note
+            >
+            > ```csharp
+            > FlexColumn(children).FlexPadding(16)
+            > ```
+            """;
+
+        var snippet = Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/quote.md", Markdown));
+
+        // Line 3 opens the fence, so the body — and StartLine — is line 4.
+        Assert.Equal(4, snippet.StartLine);
+        Assert.Equal("FlexColumn(children).FlexPadding(16)", snippet.Text);
+
+        // The probe must see it too, or the differential oracle would stay blind to this shape even
+        // once the extractor handles it.
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "> ```csharp");
+    }
+
+    /// <summary>
+    /// Both facts require a marked counterexample to name its remedy.
+    /// </summary>
+    /// <remarks>
+    /// This is the condition that closes the #1119 gap, and on the wrapper fact nothing else can
+    /// cover for it: the wrapper is a legal receiver, so no other check objects to the sample at
+    /// all. Tested directly because the corpus currently produces zero wrapper findings, which
+    /// would leave the branch unexecuted and the guard vacuous.
+    /// </remarks>
+    [Theory]
+    [InlineData("Use .FlexPadding(16) instead.", "FlexPadding", true)]
+    [InlineData("Never wrap in a Border just for padding.", "FlexPadding", false)]
+    [InlineData("anything at all", null, true)]
+    public void A_Counterexample_Must_Name_Its_Remedy(string documentText, string? replacement, bool ok)
+    {
+        Assert.Equal(ok, AgentKitDocGateTests.NamesRemedy(documentText, replacement));
+    }
+
+    /// <summary>
     /// Floors over the corpus and the reflection behind it. Each one turns a silent collapse — a
     /// glob that stopped matching, a factory map that resolved to nothing, a fence parser that
     /// stopped recognising ```` ```csharp ```` — into a failure.
