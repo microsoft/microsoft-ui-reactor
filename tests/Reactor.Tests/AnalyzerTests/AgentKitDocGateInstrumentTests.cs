@@ -450,10 +450,6 @@ public class AgentKitDocGateInstrumentTests
         Assert.True(
             typeof(Microsoft.UI.Reactor.Core.Element).IsAssignableFrom(element),
             $"{factory}<T> resolved to {element}, which is not an Element.");
-
-        // Arity is what separates these from their non-generic namesakes; without it the two
-        // collide and the factory is discarded as ambiguous, which is how they were excluded.
-        Assert.NotEqual(element, ReactorSurface.Instance.Element(factory, typeArgumentCount: 0));
     }
 
     /// <summary>
@@ -500,6 +496,66 @@ public class AgentKitDocGateInstrumentTests
         });
 
         Assert.Single(unjustified.Of(AgentKitFindingKind.WrapperWorkaround));
+    }
+
+    /// <summary>
+    /// A generic factory written without explicit type arguments still resolves.
+    /// </summary>
+    /// <remarks>
+    /// C# infers <c>T</c>, so <c>LazyVStack(items, (x, _) => Row(x))</c> reaches the walker as a
+    /// plain identifier with arity 0 while the surface map holds it at arity 1. Keying on the
+    /// written arity alone therefore reintroduced the same blind spot for the far more common call
+    /// shape — and, as ever, a skipped chain neither reports nor counts, so no floor would say so.
+    /// </remarks>
+    [Theory]
+    [InlineData("LazyVStack")]
+    [InlineData("LazyHStack")]
+    public void An_Inferred_Generic_Factory_Resolves_Without_Type_Arguments(string factory)
+    {
+        var written = ReactorSurface.Instance.Element(factory, typeArgumentCount: 0);
+        var explicitly = ReactorSurface.Instance.Element(factory, typeArgumentCount: 1);
+
+        Assert.NotNull(explicitly);
+        Assert.Equal(explicitly, written);
+    }
+
+    /// <summary>
+    /// The fallback stays conservative where the name is genuinely ambiguous.
+    /// </summary>
+    /// <remarks>
+    /// Several names are both. <c>ListView(...)</c> returns <c>ListViewElement</c> while
+    /// <c>ListView&lt;T&gt;(...)</c> returns <c>TemplatedListViewElement&lt;T&gt;</c>. The written
+    /// form is honoured exactly, and inference is never used to overrule an arity that really
+    /// exists — guessing there would attribute a chain to the wrong control, which is how a gate
+    /// starts reporting findings that are not true.
+    /// </remarks>
+    [Theory]
+    [InlineData("ListView")]
+    [InlineData("GridView")]
+    [InlineData("FlipView")]
+    [InlineData("TreeView")]
+    public void Inference_Never_Overrules_An_Arity_That_Exists(string factory)
+    {
+        var nonGeneric = ReactorSurface.Instance.Element(factory, typeArgumentCount: 0);
+        var generic = ReactorSurface.Instance.Element(factory, typeArgumentCount: 1);
+
+        Assert.NotNull(nonGeneric);
+        Assert.NotNull(generic);
+        Assert.NotEqual(nonGeneric, generic);
+    }
+
+    [Fact]
+    public void An_Inferred_Generic_Call_Site_Is_Walked()
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/inferred.md", 1, "LazyVStack(items, (x, _) => Row(x)).Padding(16)"),
+        });
+
+        Assert.True(
+            scan.ResolvedChains >= 1,
+            "A `LazyVStack(items, ...)` chain resolved nothing, so generic factories written without " +
+            "explicit type arguments — the common form — are still invisible to the gate.");
     }
 
     /// <summary>

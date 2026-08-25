@@ -30,6 +30,7 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 internal sealed class ReactorSurface
 {
     private readonly Dictionary<string, Type?> _factories = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<Type>> _factoriesByName = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, HashSet<Type>> _setControls = new();
     private readonly Dictionary<string, HashSet<Type>> _modifierArguments = new(StringComparer.Ordinal);
 
@@ -125,6 +126,22 @@ internal sealed class ReactorSurface
                 _factories[key] = returned;
             }
         }
+
+        // Name → the element types it can produce at any arity, for the inferred-generic fallback
+        // in Element(...). Built after the loop so poisoned entries are already resolved to null.
+        foreach (var (key, element) in _factories)
+        {
+            if (element is null)
+                continue;
+
+            var tick = key.IndexOf('`');
+            var name = tick < 0 ? key : key[..tick];
+
+            if (!_factoriesByName.TryGetValue(name, out var types))
+                _factoriesByName[name] = types = new HashSet<Type>();
+
+            types.Add(element);
+        }
     }
 
     public static ReactorSurface Instance { get; } = new();
@@ -157,8 +174,25 @@ internal sealed class ReactorSurface
     /// name is discarded as ambiguous, which silently excluded every such factory from the walker.
     /// The call site states its own arity, so nothing has to be guessed.
     /// </remarks>
-    public Type? Element(string factoryName, int typeArgumentCount) =>
-        _factories.TryGetValue(Key(factoryName, typeArgumentCount), out var element) ? element : null;
+    public Type? Element(string factoryName, int typeArgumentCount)
+    {
+        if (_factories.TryGetValue(Key(factoryName, typeArgumentCount), out var exact))
+            return exact;
+
+        // An explicit `<T>` that matched nothing is simply unknown.
+        if (typeArgumentCount != 0)
+            return null;
+
+        // No arity-0 entry, but the name may still be a generic factory whose T the compiler infers
+        // — `LazyVStack(items, (x, _) => Row(x))` is written without `<T>` and arrives here as a
+        // plain identifier. Resolve it only when every arity for the name agrees on one element
+        // type; disagreement means the binding cannot be recovered without a semantic model, and
+        // guessing there would attribute the chain to the wrong control.
+        if (!_factoriesByName.TryGetValue(factoryName, out var candidates))
+            return null;
+
+        return candidates.Count == 1 ? candidates.Single() : null;
+    }
 
     private static string Key(string factoryName, int typeArgumentCount) =>
         typeArgumentCount == 0 ? factoryName : factoryName + "`" + typeArgumentCount;
