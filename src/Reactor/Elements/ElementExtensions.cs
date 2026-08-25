@@ -2938,7 +2938,7 @@ public static partial class ElementExtensions
     /// Sets AutomationProperties.LiveSetting. Screen readers announce content changes.
     /// Polite = queued after current speech. Assertive = interrupts immediately.
     /// </summary>
-    /// <example>Text(statusMessage).LiveRegion(AutomationLiveSetting.Polite)</example>
+    /// <example>TextBlock(statusMessage).LiveRegion(AutomationLiveSetting.Polite)</example>
     public static T LiveRegion<T>(this T el, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting mode = Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { LiveSetting = mode });
 
