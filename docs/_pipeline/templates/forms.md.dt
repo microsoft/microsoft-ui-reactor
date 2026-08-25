@@ -385,7 +385,7 @@ per page.
 For a single-field form (search box, comment input), wire submission
 to Enter rather than a Submit button. `AutoSuggestBox` does this
 automatically via `onQuerySubmitted`. For `TextBox`, route through
-`.KeyDown` or wrap the field in an `[ai:lock]` form panel; see
+`.OnKeyDown` and check for `VirtualKey.Enter`; see
 [input-and-gestures](input-and-gestures.md) for the routed-events
 surface.
 
@@ -394,7 +394,7 @@ surface.
 `Validate.MustAsync<T>(...)` runs a predicate that returns
 `Task<bool>`. The `ValidationContext` tracks the in-flight async work
 and reports `IsValidating` per field, so the Submit button can disable
-while async validation runs. Pair with `DisabledFocusable()` so the
+while async validation runs. Pair with `.IsDisabledFocusable()` so the
 button stays in tab order while validating — same accessibility
 concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 
@@ -403,8 +403,9 @@ concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 ### Letting the control hold its own state
 
 ```csharp
-// Don't:
-TextBox(initial: "default value")
+// Don't — there is no `initial:` parameter, and an uncontrolled TextBox
+// has no way to be read, reset, or pre-filled by its parent:
+TextBox("default value")
 ```
 
 ```csharp snippet="forms/controlled-input"
