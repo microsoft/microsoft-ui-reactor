@@ -403,6 +403,8 @@ VStack(spacing, children...)    HStack(spacing, children...)
 TextBlock("hi")  Heading("Title")    SubHeading("Section")  Caption("note")
 // WinUI 3 type-ramp factories — map 1:1 to TitleTextBlockStyle etc.
 Title("Page")    Subtitle("Group")   Body("paragraph")      BodyStrong("bold")  BodyLarge("intro")
+TitleLarge("Feature")                // 40px — primary title on a feature/landing page
+Display("Hero")                      // 68px — hero banner, at most one per page
 // Card(child) factory bakes in CardBackground + 1px CardStroke + 8 radius + 16 padding.
 Card(child)
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)

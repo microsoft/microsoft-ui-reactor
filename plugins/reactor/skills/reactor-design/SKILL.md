@@ -244,8 +244,11 @@ Use the predefined text factories or WinUI style tokens. Never set `FontSize` an
 | `SubHeading("text")` | 20px | 600 | Section headers, card titles (Reactor preset) |
 | `Title("text")` | 28px | Semibold | WinUI `TitleTextBlockStyle` — page titles |
 | `Heading("text")` | 28px | 700 | Page titles (Reactor preset, slightly heavier) |
+| `TitleLarge("text")` | 40px | Semibold | WinUI `TitleLargeTextBlockStyle` — primary titles on feature/landing pages |
+| `Display("text")` | 68px | Semibold | WinUI `DisplayTextBlockStyle` — hero banners, at most one per page |
 
-The `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge` factories map 1:1 to
+The `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`/`TitleLarge`/`Display`
+factories map 1:1 to
 WinUI's named TextBlock styles (Spec 039 §17.6). Prefer them when matching
 WinUI design specs; the `Heading`/`SubHeading` factories are the older
 Reactor presets and remain valid.
@@ -272,8 +275,8 @@ TextBlock("Page Title").Bold()
 | `BodyLargeTextBlockStyle` | 18px | Regular | Prominent body text |
 | `SubtitleTextBlockStyle` | 20px | Semibold | Section headings, card group labels |
 | `TitleTextBlockStyle` | 28px | Semibold | Page titles, dialog headings |
-| `TitleLargeTextBlockStyle` | 40px | Semibold | Primary page titles on feature pages |
-| `DisplayTextBlockStyle` | 68px | Semibold | Hero banners — one per page at most |
+| `TitleLargeTextBlockStyle` | 40px | Semibold | Primary page titles on feature pages — prefer the `TitleLarge()` factory |
+| `DisplayTextBlockStyle` | 68px | Semibold | Hero banners — one per page at most; prefer the `Display()` factory |
 
 For sizes not covered by the factories, use `.ApplyStyle()` to apply WinUI text block styles. This sets size, weight, line height, and optical sizing in one call:
 

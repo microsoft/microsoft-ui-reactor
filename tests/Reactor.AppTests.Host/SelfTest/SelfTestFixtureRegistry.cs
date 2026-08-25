@@ -239,6 +239,7 @@ internal static class SelfTestFixtureRegistry
         "NamedStyle_TypeRampStylesResolve",
         "NamedStyle_NewRampKeysAreDistinctAndNonDefault",
         "NamedStyle_UnresolvedStyleKeyDoesNotBreakRender",
+        "NamedStyle_UnresolvedStyleKeyEmitsWarning",
         // Issue #950 — the common Padding modifier (and the BiDi PaddingInline*
         // pair that folds into it) must reach a TextBlock, which is not a Control.
         "Issue950_PaddingMountUpdateUnset",
@@ -1945,6 +1946,7 @@ internal static class SelfTestFixtureRegistry
         "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
         "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),
         "NamedStyle_UnresolvedStyleKeyDoesNotBreakRender" => new NamedStyleResolutionFixture.UnresolvedStyleKeyDoesNotBreakRender(harness),
+        "NamedStyle_UnresolvedStyleKeyEmitsWarning" => new NamedStyleResolutionFixture.UnresolvedStyleKeyEmitsWarning(harness),
         // Issue #950 — Padding / PaddingInline* on a TextBlock.
         "Issue950_PaddingMountUpdateUnset" => new Issue950TextBlockPaddingFixture.PaddingMountUpdateUnset(harness),
         "Issue950_InlinePaddingResolvesPerFlowDirection" => new Issue950TextBlockPaddingFixture.InlinePaddingResolvesPerFlowDirection(harness),

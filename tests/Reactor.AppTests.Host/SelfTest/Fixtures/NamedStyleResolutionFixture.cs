@@ -1,5 +1,7 @@
+using System.Diagnostics.Tracing;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using WinUI = Microsoft.UI.Xaml.Controls;
@@ -157,6 +159,96 @@ internal static class NamedStyleResolutionFixture
             H.Check("NamedStyle_Unresolved_NoStyleApplied", target?.Style is null);
             H.Check("NamedStyle_Unresolved_KeepsThemeDefaultSize",
                 target is not null && Math.Abs(target.FontSize - 14) < 0.01);
+        }
+    }
+
+    /// <summary>
+    /// The behaviour the PR is named for: an unresolved key is actually
+    /// <i>reported</i>, on the release-visible ETW surface, naming the key —
+    /// and only once per distinct key however many elements mount it.
+    ///
+    /// <para>
+    /// The sibling fixture above deliberately does not cover this: deleting
+    /// <c>WarnUnresolvedStyle</c> (or reverting <c>DiagnosticLog.Warning</c> to
+    /// its DEBUG-only form) leaves every assertion there green, because
+    /// "degrades instead of throwing" is indistinguishable from "does nothing
+    /// at all". Subscribing to the trace is the only oracle that separates them.
+    /// </para>
+    /// </summary>
+    internal class UnresolvedStyleKeyEmitsWarning(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // The once-per-key set is process-wide and never cleared, so a fixed
+            // key could already have been consumed by an earlier fixture in this
+            // run — which would make the "emitted" check pass or fail for reasons
+            // unrelated to the code under test. A fresh key per run removes that.
+            var key = "ReactorMissingStyle_" + global::System.Guid.NewGuid().ToString("N");
+
+            var captured = new global::System.Collections.Generic.List<ReactorEvent>();
+            var gate = new object();
+
+            // Subscribing also flips ReactorEventSource.IsEnabled on, which is
+            // what lets DiagnosticLog.Warning emit at all — the same gate a real
+            // consumer (dotnet-trace, an ILogger bridge) trips.
+            //
+            // Verbose (not Warning) on purpose: reconcile/render events then flow
+            // too, so `SubscriptionSawEvents` below is a control that stays green
+            // when the product warning is removed. Filtering to Warning here
+            // instead would make that control fail for the same reason as the
+            // assertion it is supposed to be controlling for, proving nothing.
+            using (ReactorTrace.Subscribe(
+                e => { lock (gate) { captured.Add(e); } },
+                EventLevel.Verbose))
+            {
+                var host1 = H.CreateHost();
+                host1.Mount(_ => TextBlock("warn-first").ApplyStyle(key));
+                await Harness.Render();
+
+                // Second mount of the SAME key in a fresh host: proves the
+                // dedupe, which is what keeps a virtualized list from emitting
+                // one warning per realized item.
+                var host2 = H.CreateHost();
+                host2.Mount(_ => TextBlock("warn-second").ApplyStyle(key));
+                await Harness.Render();
+            }
+
+            ReactorEvent[] snapshot;
+            lock (gate) { snapshot = captured.ToArray(); }
+
+            var matching = new global::System.Collections.Generic.List<ReactorEvent>();
+            foreach (var e in snapshot)
+            {
+                if (!string.Equals(e.EventName, "Warning", StringComparison.Ordinal))
+                    continue;
+                foreach (var p in e.Payload)
+                {
+                    if (p is string s && s.Contains(key, StringComparison.Ordinal))
+                    {
+                        matching.Add(e);
+                        break;
+                    }
+                }
+            }
+
+            H.Check("NamedStyle_Warning_Emitted", matching.Count > 0);
+
+            // Independent control on the capture pipe: reconcile/render events
+            // flow at Verbose regardless of whether the product emits its
+            // warning, so this stays green when only the warning is broken and
+            // isolates "subscription dead" from "warning missing".
+            H.Check("NamedStyle_Warning_SubscriptionSawEvents", snapshot.Length > 0);
+
+            var first = matching.Count > 0 ? matching[0] : default;
+            H.Check("NamedStyle_Warning_CategoryIsTheme",
+                matching.Count > 0 && first.Payload.Count > 0
+                    && first.Payload[0] as string == "Theme");
+            H.Check("NamedStyle_Warning_OperationIsApplyStyle",
+                matching.Count > 0 && first.Payload.Count > 1
+                    && first.Payload[1] as string == "ApplyStyle");
+
+            // Two mounts, one warning.
+            H.Check("NamedStyle_Warning_OncePerKey", matching.Count == 1);
         }
     }
 }

@@ -21,9 +21,12 @@ namespace Microsoft.UI.Reactor.Core;
 internal static class ResourceLookup
 {
     /// <summary>
-    /// Finds the first value keyed <paramref name="key"/> that is a
-    /// <typeparamref name="T"/>, searching <paramref name="resources"/> first
-    /// and then recursing its merged dictionaries in declaration order.
+    /// Finds the value keyed <paramref name="key"/>, searching
+    /// <paramref name="resources"/> first and then recursing its merged
+    /// dictionaries in declaration order. Resource precedence is preserved: the
+    /// first dictionary that contains the key resolves it, so a wrong-typed
+    /// value there is reported as "not found" rather than being skipped in
+    /// favour of a shadowed entry deeper in the merge chain.
     /// </summary>
     /// <returns><see langword="true"/> if a <typeparamref name="T"/> was
     /// found; otherwise <see langword="false"/> with
@@ -33,10 +36,16 @@ internal static class ResourceLookup
     {
         if (resources is not null)
         {
-            if (resources.TryGetValue(key, out var found) && found is T typed)
+            // A dictionary's own entries shadow its MergedDictionaries, so a key
+            // present here resolves HERE — even when the value is the wrong type.
+            // Continuing the walk on a type mismatch would silently return a
+            // shadowed value from a merged dictionary, which is neither what the
+            // XAML resource-lookup walk does nor what `ApplyStyle`'s "found but
+            // not a Style → warn" contract promises.
+            if (resources.TryGetValue(key, out var found))
             {
-                value = typed;
-                return true;
+                value = found as T;
+                return value is not null;
             }
 
             foreach (var merged in resources.MergedDictionaries)
