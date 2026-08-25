@@ -302,6 +302,13 @@ class ConnectedAnimationDemo : Component
 
 Both the source and destination elements must use the same key string. The
 animation runs automatically when the reconciler detects the transition.
+Source and destination must appear in the **same render** — the reconciler
+publishes the outgoing element's snapshot during the reconcile pass and plays
+it into the incoming element at the end of that same pass. A key that unmounts
+without a matching mount in that render is released rather than left to hover
+over the new view, so a list of keyed siblings can collapse to a single detail
+element without the unpicked siblings ghosting on screen.
+
 Use connected animations for list-to-detail [navigation](navigation.md)
 where an element "flies" from the list into the detail view.
 

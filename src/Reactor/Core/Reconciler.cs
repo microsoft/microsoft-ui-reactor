@@ -48,7 +48,7 @@ public sealed partial class Reconciler : IDisposable
     // doesn't run (and stays JIT-cold) for default apps.
     // Internal so V1-owned lifecycle classes can pass it into shared keyed-diff helpers.
     internal readonly ILogger? _logger;
-    private readonly List<(ConnectedAnimation Animation, UIElement Target)> _pendingConnectedAnimationStarts = new();
+    private readonly List<(string Key, UIElement Target)> _pendingConnectedAnimationStarts = new();
     private readonly ContextScope _contextScope = new();
     // Ancestor-aware effective theme for the subtree currently being mounted/updated,
     // threaded top-down through Mount/Update (an element's own RequestedTheme wins,
@@ -1445,6 +1445,13 @@ public sealed partial class Reconciler : IDisposable
             DebugElementsSkipped = 0;
             DebugUIElementsCreated = 0;
             DebugUIElementsModified = 0;
+            // Drop anything a previous pass queued but never flushed. Every shipped
+            // host flushes at the end of each render, but a Reconcile() caller that
+            // doesn't (tests, embedders) must not accumulate strong UIElement refs —
+            // QueueConnectedAnimationStart now enqueues for every keyed mount, not
+            // only when a prepared animation already exists.
+            _pendingConnectedAnimationStarts.Clear();
+            _preparedConnectedAnimationKeys.Clear();
             if (ReactorFeatureFlags.HighlightReconcileChanges)
             {
                 (_highlightMounted ??= new()).Clear();
@@ -2061,12 +2068,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
         {
-            try
-            {
-                var service = ConnectedAnimationService.GetForCurrentView();
-                service.PrepareToAnimate(caEl.ConnectedAnimationKey, control);
-            }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            PrepareConnectedAnimationSource(caEl.ConnectedAnimationKey, control);
         }
 
         // Clean up animation state (mirrors UnmountAndCollect)
@@ -2424,12 +2426,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
         {
-            try
-            {
-                var service = ConnectedAnimationService.GetForCurrentView();
-                service.PrepareToAnimate(caEl.ConnectedAnimationKey, control);
-            }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            PrepareConnectedAnimationSource(caEl.ConnectedAnimationKey, control);
         }
 
         // Clean up animation state
@@ -3649,37 +3646,128 @@ public sealed partial class Reconciler : IDisposable
     //  Connected animations (cross-container transitions)
     // ════════════════════════════════════════════════════════════════
 
+    // Test-only seam (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host): counts
+    // connected animations that actually STARTED (ConnectedAnimation.TryStart returned
+    // true). A selftest asserts this increments across a source→destination transition;
+    // the settled visual tree looks identical whether or not the animation ran, so the
+    // start count is the only non-vacuous oracle available to an automated test.
+    internal int ConnectedAnimationStartCount;
+
+    // Test-only seam: counts prepared-but-unclaimed source snapshots released by
+    // ReleaseUnclaimedConnectedAnimations. Unreleased ones stay painted over the new
+    // UI until WinUI times them out (~1s), which is far longer than the transition.
+    internal int ConnectedAnimationReleaseCount;
+
     /// <summary>
-    /// Queues a connected animation start for an element that was just mounted.
-    /// Called from Mount() when the element has a ConnectedAnimationKey and a
-    /// prepared animation exists with that key.
+    /// Keys for which this reconcile pass published a source snapshot via
+    /// <c>PrepareToAnimate</c>. Reactor prepares speculatively — every unmounting element
+    /// carrying a key gets a snapshot, because the reconciler cannot know which one the
+    /// user's interaction designated as the source. Whatever the flush does not claim is
+    /// released, otherwise the leftovers hang over the new UI as ghosts.
     /// </summary>
-    internal void QueueConnectedAnimationStart(UIElement target, string key)
+    private readonly HashSet<string> _preparedConnectedAnimationKeys = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Publishes the source snapshot for an unmounting element and records the key so an
+    /// unclaimed preparation can be released at the end of the pass.
+    /// </summary>
+    private void PrepareConnectedAnimationSource(string key, UIElement control)
     {
         try
         {
-            var service = ConnectedAnimationService.GetForCurrentView();
-            var anim = service.GetAnimation(key);
-            if (anim is not null)
-                _pendingConnectedAnimationStarts.Add((anim, target));
+            ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
+            _preparedConnectedAnimationKeys.Add(key);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
     }
 
     /// <summary>
-    /// Starts all queued connected animations. Call AFTER the new tree has been
+    /// Queues a connected animation start for an element that was just mounted.
+    /// Called from Mount() whenever the element carries a ConnectedAnimationKey.
+    /// </summary>
+    /// <remarks>
+    /// The key is resolved to a <see cref="ConnectedAnimation"/> in
+    /// <see cref="FlushConnectedAnimations"/>, NOT here. Mount runs before the unmount
+    /// that publishes the source snapshot: the child-reconciler's type-mismatch arm
+    /// mounts the replacement first and only then calls
+    /// <see cref="ReplaceChildWithExitTransition"/>, which unmounts the old control (and
+    /// the keyed/LIS arms mount inserts before removing leftovers). Looking the key up
+    /// at mount time therefore observed the service *before*
+    /// <c>PrepareToAnimate</c> had run for it, returned null, and silently dropped the
+    /// animation — the destination simply appeared at its final position. Deferring the
+    /// lookup to the flush, which runs after the whole reconcile pass has completed,
+    /// makes the source snapshot visible to the destination regardless of the order the
+    /// reconciler happened to visit the two subtrees in.
+    /// </remarks>
+    internal void QueueConnectedAnimationStart(UIElement target, string key)
+        => _pendingConnectedAnimationStarts.Add((key, target));
+
+    /// <summary>
+    /// Starts all queued connected animations, then releases every source snapshot this
+    /// pass prepared that no destination claimed. Call AFTER the new tree has been
     /// attached to the visual tree (e.g., after Window.Content = newControl).
     /// </summary>
+    /// <remarks>
+    /// Source and destination must therefore appear in the SAME reconcile pass. That is
+    /// the shape Reactor's model produces — a single state change swaps both subtrees —
+    /// and it is what makes speculative preparation safe to clean up.
+    /// </remarks>
     public void FlushConnectedAnimations()
     {
-        if (_pendingConnectedAnimationStarts.Count == 0) return;
+        if (_pendingConnectedAnimationStarts.Count == 0 && _preparedConnectedAnimationKeys.Count == 0)
+            return;
 
-        foreach (var (anim, target) in _pendingConnectedAnimationStarts)
+        try
         {
-            try { anim.TryStart(target); }
+            var service = ConnectedAnimationService.GetForCurrentView();
+
+            foreach (var (key, target) in _pendingConnectedAnimationStarts)
+            {
+                try
+                {
+                    // Null when nothing unmounted under this key during the pass —
+                    // e.g. the very first mount of a keyed element, which has no source
+                    // to travel from.
+                    if (service.GetAnimation(key) is { } anim && anim.TryStart(target))
+                    {
+                        ConnectedAnimationStartCount++;
+                        // Claimed: leave it alone, it owns its own teardown from here.
+                        _preparedConnectedAnimationKeys.Remove(key);
+                    }
+                }
+                catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            }
+
+            ReleaseUnclaimedConnectedAnimations(service);
+        }
+        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+
+        _pendingConnectedAnimationStarts.Clear();
+        _preparedConnectedAnimationKeys.Clear();
+    }
+
+    /// <summary>
+    /// Cancels the source snapshots nothing travelled from. Without this, unmounting a
+    /// list of N keyed siblings to show one of them leaves N-1 prepared animations behind,
+    /// and WinUI keeps each one's snapshot composited at the source element's old position
+    /// until it times out — the old list stays painted on top of the new view for about a
+    /// second. It also stops an orphan leaking into a LATER pass, where a same-key mount
+    /// would travel from a stale snapshot.
+    /// </summary>
+    private void ReleaseUnclaimedConnectedAnimations(ConnectedAnimationService service)
+    {
+        foreach (var key in _preparedConnectedAnimationKeys)
+        {
+            try
+            {
+                if (service.GetAnimation(key) is { } orphan)
+                {
+                    orphan.Cancel();
+                    ConnectedAnimationReleaseCount++;
+                }
+            }
             catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
         }
-        _pendingConnectedAnimationStarts.Clear();
     }
 
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers m, Action requestRerender)

@@ -553,6 +553,9 @@ internal static class SelfTestFixtureRegistry
         "LayoutAnimation_SpringSetup",
         "LayoutAnimation_SizeSetup",
         "ConnectedAnimation_MountUnmount",
+        "ConnectedAnimation_StartsAcrossReplace",
+        "ConnectedAnimation_NoSourceDoesNotStart",
+        "ConnectedAnimation_ReleasesUnclaimedSources",
         // Thread-safe hook stress tests — real WinUI rendering + background threads
         "ThreadSafe_RapidBackgroundSetState",
         "ThreadSafe_MultipleHooksConcurrent",
@@ -2228,6 +2231,9 @@ internal static class SelfTestFixtureRegistry
         "LayoutAnimation_SpringSetup" => new LayoutAnimationFixtures.SpringAnimationSetup(harness),
         "LayoutAnimation_SizeSetup" => new LayoutAnimationFixtures.SizeAnimationSetup(harness),
         "ConnectedAnimation_MountUnmount" => new LayoutAnimationFixtures.ConnectedAnimationMountUnmount(harness),
+        "ConnectedAnimation_StartsAcrossReplace" => new LayoutAnimationFixtures.ConnectedAnimationStartsAcrossReplace(harness),
+        "ConnectedAnimation_NoSourceDoesNotStart" => new LayoutAnimationFixtures.ConnectedAnimationNoSourceDoesNotStart(harness),
+        "ConnectedAnimation_ReleasesUnclaimedSources" => new LayoutAnimationFixtures.ConnectedAnimationReleasesUnclaimedSources(harness),
         // Thread-safe hook stress tests
         "ThreadSafe_RapidBackgroundSetState" => new ThreadSafeHookFixtures.RapidBackgroundSetState(harness),
         "ThreadSafe_MultipleHooksConcurrent" => new ThreadSafeHookFixtures.MultipleHooksConcurrent(harness),
