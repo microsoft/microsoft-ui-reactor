@@ -640,6 +640,58 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// An opaque lifecycle or identity escape hatch on the wrapper makes it non-deletable.
+    /// </summary>
+    /// <remarks>
+    /// <c>Set</c> was already handled; the rest are the same problem. <c>OnMount</c> can write any
+    /// native property at mount time, <c>OnUnmount</c> makes the wrapper's <em>lifecycle</em>
+    /// significant whether or not it paints anything, and <c>Ref</c> hands the control out by
+    /// identity. "Remove the wrapper" is not behaviour-preserving for any of them.
+    /// </remarks>
+    [Theory]
+    [InlineData("Border(FlexColumn(children)).Padding(16).OnMount(fe => Configure(fe))")]
+    [InlineData("Border(FlexColumn(children)).Padding(16).OnMountAdd(fe => Configure(fe))")]
+    [InlineData("Border(FlexColumn(children)).Padding(16).OnUnmount(fe => Teardown(fe))")]
+    [InlineData("Border(FlexColumn(children)).Padding(16).OnUnmountAdd(fe => Teardown(fe))")]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Ref(borderRef)")]
+    public void A_Lifecycle_Escape_Hatch_Justifies_A_Wrapper(string snippet)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/lifecycle.md", 1, snippet) });
+
+        Assert.Empty(scan.Of(AgentKitFindingKind.WrapperWorkaround));
+    }
+
+    /// <summary>
+    /// A <c>with</c> mutation anywhere on the chain suppresses the wrapper finding.
+    /// </summary>
+    /// <remarks>
+    /// The chain walkers step through <c>with</c> to reach the receiver, so its assignments are
+    /// never seen: <c>with { Background = brush }</c> supplies the decoration that would justify
+    /// the wrapper, and <c>with { Child = other }</c> replaces the very element the finding names.
+    /// Element records are configured this way by design, so reporting through one is a false
+    /// positive on idiomatic code.
+    /// </remarks>
+    [Theory]
+    [InlineData("Border(FlexColumn(children)).Padding(16) with { Background = brush }")]
+    [InlineData("Border(FlexColumn(children)).Padding(16) with { Child = other }")]
+    [InlineData("(Border(FlexColumn(children)) with { Background = brush }).Padding(16)")]
+    public void A_With_Mutation_Suppresses_The_Wrapper_Finding(string snippet)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/with.md", 1, snippet) });
+
+        Assert.Empty(scan.Of(AgentKitFindingKind.WrapperWorkaround));
+
+        // Positive control on the same shape: the identical chain with no `with` must still report,
+        // or this would pass because the rule had stopped working rather than because it deferred.
+        var plain = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/with.md", 1, "Border(FlexColumn(children)).Padding(16)"),
+        });
+
+        Assert.Single(plain.Of(AgentKitFindingKind.WrapperWorkaround));
+    }
+
+    /// <summary>
     /// Floors over the corpus and the reflection behind it. Each one turns a silent collapse — a
     /// glob that stopped matching, a factory map that resolved to nothing, a fence parser that
     /// stopped recognising ```` ```csharp ```` — into a failure.

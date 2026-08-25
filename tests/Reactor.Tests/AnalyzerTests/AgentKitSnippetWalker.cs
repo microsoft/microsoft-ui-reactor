@@ -407,14 +407,22 @@ internal static class AgentKitSnippetWalker
     /// Modifiers that justify a wrapper but must match <b>exactly</b>.
     /// </summary>
     /// <remarks>
-    /// <c>Set</c> counts because its lambda can write anything and this walker cannot see inside
-    /// it, so an opaque write is treated as carrying its own weight. As a substring it also
-    /// swallowed <c>PositionInSet</c>, <c>SetsSize</c> and anything else ending in "Set" — an
-    /// accessibility modifier that can live perfectly well on the inner element, silently
-    /// suppressing a genuine wrapper finding.
+    /// <para>
+    /// These are the escape hatches whose effect this walker cannot see. <c>Set</c> takes a lambda
+    /// that can write any native property; <c>OnMount</c>/<c>OnMountAdd</c> can do the same at
+    /// mount time; <c>OnUnmount</c>/<c>OnUnmountAdd</c> make the wrapper's <em>lifecycle</em>
+    /// significant, so deleting it drops a callback whether or not it painted anything;
+    /// <c>Ref</c> hands the control out by identity. In every case "remove the wrapper" is not
+    /// behaviour-preserving, so the rule must not claim it is.
+    /// </para>
+    /// <para>
+    /// Exact, not substring. <c>Set</c> as a substring also swallowed <c>PositionInSet</c> and
+    /// anything else ending in "Set" — an accessibility modifier that can live perfectly well on
+    /// the inner element, silently suppressing a genuine wrapper finding.
+    /// </para>
     /// </remarks>
     private static readonly HashSet<string> ExactWrapperJustifications =
-        new(StringComparer.Ordinal) { "Set" };
+        new(StringComparer.Ordinal) { "Set", "OnMount", "OnMountAdd", "OnUnmount", "OnUnmountAdd", "Ref" };
 
     /// <summary>
     /// DSL <b>factories</b> whose sole contribution is decoration, so relocating a modifier inward
@@ -702,6 +710,14 @@ internal static class AgentKitSnippetWalker
             if (ChainModifiers(invocation).Any(IsJustification))
                 continue;
 
+            // A `with` initializer anywhere on the chain is opaque to the checks above: the chain
+            // walkers step through it to reach the receiver, so its assignments are never seen.
+            // `Border(inner).Padding(16) with { Background = brush }` supplies a background, and
+            // `with { Child = other }` replaces the very element the finding names — both make the
+            // report wrong, and element records are configured this way by design.
+            if (HasWithMutation(invocation))
+                continue;
+
             return new AgentKitFinding(
                 AgentKitFindingKind.WrapperWorkaround,
                 Path: string.Empty,
@@ -757,39 +773,51 @@ internal static class AgentKitSnippetWalker
         return named && !HasConstantNullArgument(modifier.Invocation, modifier.Name);
     }
 
+    /// <summary>
+    /// True when any <c>with</c> expression appears on the fluent chain this invocation belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Conservative by construction: a <c>with</c> initializer can supply the very decoration that
+    /// would justify the wrapper (<c>with { Background = brush }</c>) or replace the element the
+    /// finding names (<c>with { Child = other }</c>), and reading it properly would mean modelling
+    /// record initializers well enough to be trusted. Skipping costs a finding on an unusual shape;
+    /// guessing costs a false report on correct documentation, which is the more expensive mistake
+    /// for a gate that runs in CI.
+    /// </remarks>
+    private static bool HasWithMutation(InvocationExpressionSyntax invocation)
+    {
+        for (var node = Outermost(invocation); node is not null;)
+        {
+            switch (node)
+            {
+                case WithExpressionSyntax:
+                    return true;
+
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access }:
+                    node = access.Expression;
+                    continue;
+
+                case ParenthesizedExpressionSyntax parenthesized:
+                    node = parenthesized.Expression;
+                    continue;
+
+                case PostfixUnaryExpressionSyntax postfix:
+                    node = postfix.Operand;
+                    continue;
+
+                default:
+                    return false;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Every modifier applied anywhere on the fluent chain this invocation belongs to.</summary>
     private static IEnumerable<(string Name, InvocationExpressionSyntax Invocation)> ChainModifiers(
         InvocationExpressionSyntax invocation)
     {
-        // Walk out to the outermost invocation first — `.Padding(24)` may be followed by
-        // `.Background(...)`, and a justification that appears later still justifies the wrapper.
-        // Parentheses, `with` and the null-forgiving `!` are stepped through, because the downward
-        // walk below already treats them as transparent: stopping here but not there made
-        // `(Border(FlexColumn(children)).Padding(16)).Background(...)` report a workaround, never
-        // having reached the `Background` that justifies the Border.
-        SyntaxNode outermost = invocation;
-
-        while (true)
-        {
-            var parent = outermost.Parent;
-
-            while (parent is ParenthesizedExpressionSyntax
-                   or WithExpressionSyntax
-                   or PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression })
-            {
-                parent = parent.Parent;
-            }
-
-            if (parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax parentInvocation })
-            {
-                outermost = parentInvocation;
-                continue;
-            }
-
-            break;
-        }
-
-        for (var node = outermost; node is not null;)
+        for (var node = Outermost(invocation); node is not null;)
         {
             if (node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access } chained)
             {
@@ -805,6 +833,41 @@ internal static class AgentKitSnippetWalker
                 PostfixUnaryExpressionSyntax postfix => postfix.Operand,
                 _ => null,
             };
+        }
+    }
+
+    /// <summary>
+    /// Walks out to the outermost invocation of the fluent chain this one belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Parentheses, <c>with</c> and the null-forgiving <c>!</c> are stepped through, because the
+    /// downward walks treat them as transparent: stopping here but not there made
+    /// <c>(Border(FlexColumn(children)).Padding(16)).Background(...)</c> report a workaround,
+    /// never having reached the <c>Background</c> that justifies the Border.
+    /// </remarks>
+    private static SyntaxNode Outermost(InvocationExpressionSyntax invocation)
+    {
+        SyntaxNode outermost = invocation;
+
+        while (true)
+        {
+            var parent = outermost.Parent;
+
+            while (parent is ParenthesizedExpressionSyntax
+                   or WithExpressionSyntax
+                   or PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression })
+            {
+                outermost = parent;
+                parent = parent.Parent;
+            }
+
+            if (parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax parentInvocation })
+            {
+                outermost = parentInvocation;
+                continue;
+            }
+
+            return outermost;
         }
     }
 
