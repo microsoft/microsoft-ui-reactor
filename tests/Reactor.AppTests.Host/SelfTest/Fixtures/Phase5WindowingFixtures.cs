@@ -340,6 +340,51 @@ internal static class Phase5WindowingFixtures
         }
     }
     /// <summary>
+    /// Turning size-to-content off and on again while maximized must warn for
+    /// each ignored spell.
+    ///
+    /// <para>
+    /// The re-arm lives in <c>AttachSizeToContentRoot</c>'s Manual branch, and
+    /// <c>Update</c> reaches it deterministically: switching to Manual makes the
+    /// spec unequal, so <c>ApplyChrome</c> runs and calls
+    /// <c>OnHostContentRendered</c> (<c>ReactorWindow.cs</c> ~line 641), which
+    /// re-attaches. No render is required. This pins that chain — if the Manual
+    /// branch stops re-arming, the second spell goes unreported.
+    /// </para>
+    /// </summary>
+    internal class SizeToContentMaximizedWarningRearmsAfterManual(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0;
+            var spec = new WindowSpec { Title = "STC Manual", Width = 360, Height = 240 };
+            var win = await OpenAndSettle(spec, () => new FixedContent(500, 400));
+            try
+            {
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+
+                var enabled = spec with { SizeToContent = WindowSizeToContent.WidthAndHeight };
+                win.Update(enabled);
+                await Harness.Render(120);
+                H.Check("STCManual_WarnedOnFirstSpell",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+
+                // Off, then on again — a second ignored spell.
+                win.Update(spec with { Title = "STC Manual off", SizeToContent = WindowSizeToContent.Manual });
+                win.Update(enabled with { Title = "STC Manual on again" });
+                win.ApplySizeToContentForTests();
+
+                H.Check("STCManual_StillMaximized", Native.IsZoomed(Hwnd(win)));
+                H.Check("STCManual_RearmedAfterManual",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 2);
+            }
+            finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
     /// The maximized warning must stay latched across a root replacement.
     /// <c>OnHostContentRendered</c> runs per render and
     /// <c>AttachSizeToContentRoot</c> detaches whenever the root instance

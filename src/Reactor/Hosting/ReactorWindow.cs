@@ -2010,6 +2010,11 @@ public sealed class ReactorWindow : IDisposable
     private void ApplySizeToContent()
     {
         var spec = Volatile.Read(ref _spec);
+        // Size-to-content off: nothing to apply. Re-arming the maximized-warning
+        // latch is AttachSizeToContentRoot's Manual branch's job, which ApplyChrome
+        // reaches via OnHostContentRendered on every spec change. Doing it here too
+        // would be redundant, and this method also runs for reasons unrelated to a
+        // spec change.
         if (spec.SizeToContent == WindowSizeToContent.Manual) return;
         var root = _sizeToContentRoot;
         if (root is null || _sizeToContentApplying) return;
