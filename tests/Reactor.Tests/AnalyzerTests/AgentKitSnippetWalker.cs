@@ -335,8 +335,13 @@ internal static class AgentKitSnippetWalker
     /// on purpose: <c>WithBorder</c>, <c>ThemeBackground</c> and <c>BorderBrush</c> all qualify, and
     /// over-matching here only ever suppresses a finding.
     /// </summary>
+    /// <remarks>
+    /// <c>Style</c> is here for the same reason <c>Card</c> is not a passive factory: a style can
+    /// supply background, border and corner radius from a resource this walker cannot read, so
+    /// <c>Border(...).ApplyStyle(...)</c> is decorated in a way no chain inspection would reveal.
+    /// </remarks>
     private static readonly string[] WrapperJustifications =
-        { "Background", "Border", "CornerRadius", "Shadow", "Clip" };
+        { "Background", "Border", "CornerRadius", "Shadow", "Clip", "Style" };
 
     /// <summary>
     /// Modifiers that justify a wrapper but must match <b>exactly</b>.
@@ -352,26 +357,35 @@ internal static class AgentKitSnippetWalker
         new(StringComparer.Ordinal) { "Set" };
 
     /// <summary>
-    /// Element types whose sole contribution is decoration, so relocating a modifier inward and
-    /// deleting the wrapper preserves behaviour.
+    /// DSL <b>factories</b> whose sole contribution is decoration, so relocating a modifier inward
+    /// and deleting the call preserves behaviour.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Exactly one entry, and it should stay hard to add to. <c>BorderElement</c> is the #1119
-    /// shape and the one <c>reactor-design/SKILL.md</c> names in prose: a <c>Border</c> contributes
-    /// background, corner radius, border brush and padding, so a <c>Border</c> supplying only
-    /// padding contributes nothing once <c>.FlexPadding(...)</c> exists.
+    /// Keyed by factory name, not element type, and that distinction is load-bearing.
+    /// <c>Factories.Card</c> also returns a <c>BorderElement</c>, but it is
+    /// <c>Border(child).Background(...).WithBorder(...).CornerRadius(8).Padding(16)</c> — its
+    /// decoration is baked into the factory where no chain inspection can see it, and its own
+    /// documentation offers <c>Card(child).Padding(24)</c> as the sanctioned way to override the
+    /// preset. Judging by element type reported that as a workaround: a false positive on
+    /// documented, correct usage.
+    /// </para>
+    /// <para>
+    /// Exactly one entry, and it should stay hard to add to. <c>Border</c> contributes background,
+    /// corner radius, border brush and padding, so a plain <c>Border</c> supplying only padding
+    /// contributes nothing once <c>.FlexPadding(...)</c> exists.
     /// </para>
     /// <para>
     /// "Single child" is <b>not</b> a substitute for this test.
     /// <c>ScrollViewer(FlexColumn(children)).Padding(16)</c> has one child and is a gate-legal
     /// receiver, yet deleting it deletes scrolling — the wrapper is load-bearing and the sample is
-    /// correct. Before adding a type here, establish that removing it changes nothing but
-    /// appearance; if it does anything else, the rule does not apply to it.
+    /// correct. Before adding a factory here, establish that removing it changes nothing but
+    /// appearance <em>and</em> that it applies no decoration of its own; if either fails, the rule
+    /// does not apply to it.
     /// </para>
     /// </remarks>
-    private static readonly HashSet<string> PassiveWrapperElements =
-        new(StringComparer.Ordinal) { "BorderElement" };
+    private static readonly HashSet<string> PassiveWrapperFactories =
+        new(StringComparer.Ordinal) { "Border" };
 
     public static AgentKitScan Scan(IEnumerable<AgentKitSnippet> snippets)
     {
@@ -429,7 +443,7 @@ internal static class AgentKitSnippetWalker
                     continue;
                 }
 
-                if (WrapperWorkaround(element, head.Value.Arguments, modifier, invocation) is { } wrapper)
+                if (WrapperWorkaround(element, head.Value.Factory, head.Value.Arguments, modifier, invocation) is { } wrapper)
                     findings.Add(wrapper with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
             }
         }
@@ -576,6 +590,7 @@ internal static class AgentKitSnippetWalker
     /// </remarks>
     private static AgentKitFinding? WrapperWorkaround(
         Type wrapperElement,
+        string wrapperFactory,
         SeparatedSyntaxList<ArgumentSyntax> wrapperArguments,
         string modifier,
         InvocationExpressionSyntax invocation)
@@ -602,11 +617,10 @@ internal static class AgentKitSnippetWalker
 
             // The wrapper must be semantically passive: something whose *only* contribution is
             // decoration, so moving the modifier inward and deleting it is behaviour-preserving.
-            // A single child does not establish that. `ScrollViewer(FlexColumn(children))` is also
-            // a one-child, gate-legal receiver, but deleting it deletes scrolling — reporting there
-            // would be a false positive on correct documentation, and the reader's only way to
-            // satisfy the gate would be to break the sample.
-            if (!PassiveWrapperElements.Contains(wrapperElement.Name))
+            // Neither a single child nor the element type establishes that — `Card(...)` is also a
+            // one-child BorderElement, and `ScrollViewer(...)` is also a one-child gate-legal
+            // receiver, but deleting either loses something the sample needs.
+            if (!PassiveWrapperFactories.Contains(wrapperFactory))
                 continue;
 
             if (wrapperArguments.Count != 1)

@@ -369,6 +369,64 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A styled factory that happens to return a <c>BorderElement</c> is not a passive wrapper.
+    /// </summary>
+    /// <remarks>
+    /// <c>Factories.Card</c> is
+    /// <c>Border(child).Background(...).WithBorder(...).CornerRadius(8).Padding(16)</c> — its
+    /// decoration is baked in where no chain inspection can see it, and its own XML doc offers
+    /// <c>Card(child).Padding(24)</c> as the sanctioned way to override the preset. Judging
+    /// passivity by element type reported that as a workaround, which is a false positive on
+    /// documented usage. The same applies to a style applied from a resource.
+    /// </remarks>
+    [Theory]
+    [InlineData("Card(FlexColumn(children)).Padding(24)")]
+    [InlineData("Border(FlexColumn(children)).Padding(24).ApplyStyle(\"CardStyle\")")]
+    public void A_Decorated_Wrapper_Is_Not_A_Padding_Workaround(string snippet)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/card.md", 1, snippet) });
+
+        Assert.Empty(scan.Of(AgentKitFindingKind.WrapperWorkaround));
+
+        // Positive control on the same shape: the plain factory, undecorated, must still report —
+        // otherwise this would pass because the wrapper rule had stopped working altogether.
+        var plain = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/card.md", 1, "Border(FlexColumn(children)).Padding(24)"),
+        });
+
+        Assert.Single(plain.Of(AgentKitFindingKind.WrapperWorkaround));
+    }
+
+    /// <summary>
+    /// A pack item is selected by where it ships, whichever separator the csproj spells it with.
+    /// </summary>
+    /// <remarks>
+    /// NuGet accepts both, and this project already uses backslashes for other items. An
+    /// <c>agentkit\…</c> item would ship and never enter the corpus, and since the entry is dropped
+    /// whole, <see cref="Every_AgentKit_Pack_Glob_Still_Matches_Files"/> could not see the gap
+    /// either — the corpus would simply be smaller than the package, silently.
+    /// </remarks>
+    [Fact]
+    public void Pack_Entries_Are_Found_Whichever_Separator_The_Csproj_Uses()
+    {
+        const string Project = """
+            <Project>
+              <ItemGroup>
+                <None Include="..\..\skills\*.md" Pack="true" PackagePath="agentkit/skills/" />
+                <None Include="..\..\SKILL.md" Pack="true" PackagePath="agentkit\" />
+                <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
+              </ItemGroup>
+            </Project>
+            """;
+
+        var packagePaths = AgentKitDocCorpus.AgentKitPackagePaths(Project);
+
+        Assert.Equal(2, packagePaths.Count);
+        Assert.Contains(@"agentkit\", packagePaths);
+    }
+
+    /// <summary>
     /// Floors over the corpus and the reflection behind it. Each one turns a silent collapse — a
     /// glob that stopped matching, a factory map that resolved to nothing, a fence parser that
     /// stopped recognising ```` ```csharp ```` — into a failure.

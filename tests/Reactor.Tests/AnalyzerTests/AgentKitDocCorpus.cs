@@ -101,6 +101,33 @@ internal static class AgentKitDocCorpus
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
+    /// The <c>PackagePath</c> of every <c>&lt;None&gt;</c> item in a project that ships under
+    /// <c>agentkit/</c> — the selection predicate <see cref="PackEntries"/> uses, exposed so it can
+    /// be tested against project XML directly rather than only through the working tree.
+    /// </summary>
+    internal static IReadOnlyList<string> AgentKitPackagePaths(string projectXml) =>
+        XDocument.Parse(projectXml)
+            .Descendants()
+            .Where(e => e.Name.LocalName == "None")
+            .Select(e => (Path: (string?)e.Attribute("PackagePath"), Include: (string?)e.Attribute("Include")))
+            .Where(item => item.Path is not null && item.Include is not null && IsAgentKitPath(item.Path))
+            .Select(item => item.Path!)
+            .ToList();
+
+    /// <summary>
+    /// True when an item's <c>PackagePath</c> puts it under <c>agentkit/</c>.
+    /// </summary>
+    /// <remarks>
+    /// NuGet accepts either separator, and this very project uses backslashes elsewhere
+    /// (<c>Reactor.csproj</c> packs <c>lib\$(TargetFramework)\Reactor\Hosting\</c>). An agentkit
+    /// item written that way would ship and simply never enter this corpus — and because the entry
+    /// is dropped whole, the unmatched-glob guard could not see the gap either. Normalising is what
+    /// keeps "packed" and "inspected" the same set.
+    /// </remarks>
+    private static bool IsAgentKitPath(string packagePath) =>
+        packagePath.Replace('\\', '/').StartsWith(AgentKitPrefix, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Every <c>&lt;None&gt;</c> item packed under <c>agentkit/</c>, in declaration order, with
     /// its glob expanded against the working tree.
     /// </summary>
@@ -121,8 +148,10 @@ internal static class AgentKitDocCorpus
             var packagePath = (string?)none.Attribute("PackagePath");
             var include = (string?)none.Attribute("Include");
 
-            if (packagePath is null || include is null
-                || !packagePath.StartsWith(AgentKitPrefix, StringComparison.Ordinal))
+            if (packagePath is null || include is null)
+                continue;
+
+            if (!IsAgentKitPath(packagePath))
                 continue;
 
             var files = new List<string>();
