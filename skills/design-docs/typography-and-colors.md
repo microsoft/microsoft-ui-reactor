@@ -24,11 +24,16 @@ Windows 11 defines a type ramp of semantic text styles. In Reactor, use the buil
 
 #### Full WinUI Type Ramp
 
-Every style in the ramp now has a matching factory:
+Every style in the ramp maps to a factory that applies it, except
+`CaptionTextBlockStyle` — `Caption()` is a Reactor preset that sets
+`FontSize = 12` only, so reach for `.ApplyStyle("CaptionTextBlockStyle")` when
+you need the style's line height and other setters too. The same applies to
+`Heading()` / `SubHeading()`, which are size/weight presets rather than style
+appliers.
 
 | WinUI Style | Size | Weight | Reactor Equivalent |
 |-------------|------|--------|-----------------|
-| `CaptionTextBlockStyle` | 12px | Regular | `Caption()` |
+| `CaptionTextBlockStyle` | 12px | Regular | `Caption()` sets size only — use `.ApplyStyle("CaptionTextBlockStyle")` for exact parity |
 | `BodyTextBlockStyle` | 14px | Regular | `Body()` |
 | `BodyStrongTextBlockStyle` | 14px | SemiBold | `BodyStrong()` |
 | `BodyLargeTextBlockStyle` | 18px | Regular | `BodyLarge()` |

@@ -351,19 +351,19 @@ Use WinUI semantic text styles via `.ApplyStyle()` or Reactor text factories. Do
 | Figma Text Style | Reactor Code |
 |---|---|
 | Caption (12/16, Regular) | `Caption(text)` |
-| Body (14/20, Regular) | `TextBlock(text)` — no modifier |
-| Body Strong (14/20, SemiBold) | `TextBlock(text).SemiBold()` |
-| Subtitle (20/28, SemiBold) | `SubHeading(text)` |
-| Title (28/36, SemiBold) | `Heading(text)` |
+| Body (14/20, Regular) | `Body(text)` |
+| Body Strong (14/20, SemiBold) | `BodyStrong(text)` |
+| Subtitle (20/28, SemiBold) | `Subtitle(text)` |
+| Title (28/36, SemiBold) | `Title(text)` |
 
-### WinUI Style Tokens (for sizes without a factory)
+### WinUI Style Tokens
 
 | Figma Text Style | Reactor Code |
 |---|---|
-| Body Large (18/24, Regular) | `TextBlock(text).ApplyStyle("BodyLargeTextBlockStyle")` |
-| Body Large Strong (18/24, SemiBold) | `TextBlock(text).ApplyStyle("BodyLargeTextBlockStyle").SemiBold()` |
-| Title Large (40/52, SemiBold) | `TextBlock(text).ApplyStyle("TitleLargeTextBlockStyle")` |
-| Display (68/92, SemiBold) | `TextBlock(text).ApplyStyle("DisplayTextBlockStyle")` |
+| Body Large (18/24, Regular) | `BodyLarge(text)` |
+| Body Large Strong (18/24, SemiBold) | `BodyLarge(text).SemiBold()` |
+| Title Large (40/52, SemiBold) | `TitleLarge(text)` |
+| Display (68/92, SemiBold) | `Display(text)` |
 
 **Rules:**
 - Don't set font family — Segoe UI Variable is the WinUI default

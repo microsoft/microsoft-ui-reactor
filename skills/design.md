@@ -446,9 +446,15 @@ Heading("Page Title")
 SubHeading("Section")
 Caption("Fine print")
 
-// Escape hatch: .Set() for styles not exposed via .ApplyStyle()
-TextBlock("Prominent text").Set(tb => tb.Style =
-    (Style)Application.Current.Resources["BodyLargeTextBlockStyle"])
+// Every WinUI type-ramp style has a factory — prefer it
+BodyLarge("Prominent text")
+TitleLarge("Feature title")
+Display("Hero")
+
+// For any other named style, use .ApplyStyle(): it reports an unresolved key
+// instead of throwing. Never assign Application.Current.Resources[...] through
+// .Set() — that indexer throws out of the mount action on a misspelled key.
+TextBlock("Custom").ApplyStyle("MyAppTextBlockStyle")
 
 // Wrong: raw font properties for standard UI text
 TextBlock("Title").FontSize(28).FontWeight(new FontWeight(700))

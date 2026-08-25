@@ -503,6 +503,7 @@ internal sealed class ReactorEventSource : EventSource
     //       18-32 (spec 044 Phase B subsystem coverage),
     //       33-35 (spec 044 Phase C §4.2 navigation transition + deep link),
     //       36    (spec 045 §2.7 docking layout load fallback),
-    //       37-38 (spec 049 §6 hot reload state migration).
-    // Next free EventId: 39.
+    //       37-38 (spec 049 §6 hot reload state migration),
+    //       39    (spec 044 §6.1 generic framework Warning).
+    // Next free EventId: 40.
 }

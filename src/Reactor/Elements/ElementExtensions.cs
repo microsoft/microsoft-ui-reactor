@@ -603,9 +603,13 @@ public static partial class ElementExtensions
     /// <b>Unresolved keys do not throw.</b> If <paramref name="styleName"/> is not
     /// found in the application's resources (including merged dictionaries), or is
     /// found but is not a <see cref="Style"/>, the element keeps its default
-    /// appearance and a warning naming the key is emitted once per key on the
+    /// appearance and a warning naming the key is emitted on the
     /// <c>Microsoft-UI-Reactor</c> ETW provider (and to <c>Debug.WriteLine</c> in
     /// DEBUG builds). Earlier versions threw out of the mount action instead.
+    /// The warning fires once per distinct key, so one bad key in a virtualized
+    /// list does not warn per realized item; past a few hundred distinct
+    /// unresolved keys the de-duplication stops and every miss warns again,
+    /// because staying quiet there would hide a real typo.
     /// </para>
     /// </summary>
     public static T ApplyStyle<T>(this T el, string styleName) where T : Element =>
@@ -677,18 +681,35 @@ public static partial class ElementExtensions
         // still gets the first warning for it.
         if (!Core.Diagnostics.DiagnosticLog.IsWarningEnabled)
             return;
-        // Bounded like the applier cache above, so a data-driven caller passing
-        // unbounded distinct bad keys cannot grow this set without limit.
-        if (_warnedStyles.Count >= StyleApplierCacheCap || !_warnedStyles.TryAdd(styleName, 0))
+
+        // Bounded like the applier cache above so a data-driven caller passing
+        // unbounded distinct bad keys cannot grow this set without limit. Past
+        // capacity we stop deduping rather than stop warning: going silent
+        // there would break the documented "unresolved keys are reported"
+        // contract exactly when an app is most badly misconfigured, and would
+        // hide a genuine typo behind 256 earlier ones.
+        if (_warnedStyles.Count < StyleApplierCacheCap && !_warnedStyles.TryAdd(styleName, 0))
             return;
+
+        // Spec 044 §6.2.1: resource keys are developer-authored identifiers and
+        // are allowed on the ETW payload (same category as IntlMissingKey's
+        // `key`), but payloads must still be length-bounded so a data-driven
+        // caller can't pump an oversized string through the ring buffer.
+        var safeName = styleName.Length <= EtwKeyMaxChars
+            ? styleName
+            : string.Concat(styleName.AsSpan(0, EtwKeyMaxChars), "…");
 
         Core.Diagnostics.DiagnosticLog.Warning(
             Core.Diagnostics.LogCategory.Theme,
             nameof(ApplyStyle),
-            $"Style '{styleName}' did not resolve to a Style in the application's resources; " +
+            $"Style '{safeName}' did not resolve to a Style in the application's resources; " +
             "the element keeps its default appearance. Check the key spelling and that the " +
             "resource dictionary defining it is merged into the application's resources.");
     }
+
+    // Spec 044 §6.2.1 "typical cap: 256 chars", applied to the variable part of
+    // the message rather than the whole (the rest is a fixed literal).
+    private const int EtwKeyMaxChars = 256;
 
     // ════════════════════════════════════════════════════════════════
     //  Sugar extensions (typed, return concrete element type)
