@@ -280,12 +280,13 @@ internal static class AgentKitDocCorpus
 
             var indent = open.Groups["indent"].Value.Length;
 
-            // A run of four or more spaces outside a list is an *indented code block*, so a fence
-            // written there is literal text, not an opener. Honouring it swallowed everything up to
-            // the next close — including a genuine top-level ```csharp opener, which would then
-            // never be extracted. The differential probe cannot catch that, since it derives its
-            // exclusions from this same scan.
-            if (indent >= 4 && !IsInsideListItem(lines, i))
+            // CommonMark measures a fence's indent against its *container*: at most three spaces
+            // past the content column. Beyond that it is an indented code block, where a fence is
+            // literal text — and honouring one swallowed everything to the next close, including a
+            // genuine ```csharp opener below it, which then shipped uninspected. The differential
+            // probe cannot catch that, since it derives its exclusions from this same scan.
+            var container = ContainerIndent(lines, i);
+            if (indent - container > 3)
                 continue;
 
             var fenceChar = open.Groups["fence"].Value[0];
@@ -294,7 +295,7 @@ internal static class AgentKitDocCorpus
             // Find the close first, so a non-C# fence still advances past its own body instead
             // of letting the body's contents be re-read as markdown.
             var close = i + 1;
-            while (close < lines.Length && !IsClosingFence(lines[close], fenceChar, fenceLength))
+            while (close < lines.Length && !IsClosingFence(lines[close], fenceChar, fenceLength, container))
                 close++;
 
             regions.Add(new FenceRegion(
@@ -314,17 +315,18 @@ internal static class AgentKitDocCorpus
     private static readonly Regex ListItemMarker = new(@"^(?<indent>[ \t]*)([-*+]|\d+[.)])\s", RegexOptions.Compiled);
 
     /// <summary>
-    /// True when the deeply-indented line at <paramref name="index"/> is the content of a list item
-    /// rather than an indented code block.
+    /// The content column of the innermost list item containing <paramref name="index"/>, or
+    /// <c>0</c> at top level — the indentation a fence there is measured against.
     /// </summary>
     /// <remarks>
-    /// CommonMark measures a fence's indent relative to its container, so a fence inside a list item
-    /// legitimately sits at four or more absolute spaces — but the identical indentation outside a
-    /// list is a code block, where a fence is literal text. Distinguishing them is what lets the
-    /// corpus include the two real blocks under items 10 and 11 of
-    /// <c>skills/design-docs/typography-and-colors.md</c> without also honouring a quoted fence.
+    /// CommonMark measures a fence's indent relative to its container, not absolutely. A fence
+    /// inside <c>10. </c> legitimately sits at four spaces because that is the item's content
+    /// column; the identical four spaces under <c>- </c> (content column 2) is two past the column
+    /// and still fine, while six would be four past it and therefore literal indented code. Testing
+    /// absolute indentation alone got both ends wrong: it dropped real blocks at top level and
+    /// accepted literal ones inside shallow list items.
     /// </remarks>
-    private static bool IsInsideListItem(string[] lines, int index)
+    private static int ContainerIndent(string[] lines, int index)
     {
         for (var i = index - 1; i >= 0; i--)
         {
@@ -334,15 +336,15 @@ internal static class AgentKitDocCorpus
 
             var marker = ListItemMarker.Match(line);
             if (marker.Success)
-                return true;
+                return marker.Length;   // through the marker and its trailing whitespace.
 
             // Any other line at lower indentation closes the container.
             var indent = line.Length - line.TrimStart(' ', '\t').Length;
             if (indent < 4)
-                return false;
+                return 0;
         }
 
-        return false;
+        return 0;
     }
 
     /// <summary>
@@ -390,9 +392,23 @@ internal static class AgentKitDocCorpus
         return line[strip..];
     }
 
-    private static bool IsClosingFence(string line, char fenceChar, int openLength)
+    /// <summary>
+    /// True when the line closes a fence opened with <paramref name="openLength"/> run of
+    /// <paramref name="fenceChar"/> inside a container at <paramref name="containerIndent"/>.
+    /// </summary>
+    /// <remarks>
+    /// The indentation bound matters as much as the run length. Accepting any indentation let an
+    /// indented <c>```</c> — literal text inside a C# sample, for instance in a raw string
+    /// demonstrating Markdown — truncate the block, so the rest of that sample was never scanned.
+    /// The differential probe trusts <see cref="Fences"/> for block structure, so it cannot see it.
+    /// </remarks>
+    private static bool IsClosingFence(string line, char fenceChar, int openLength, int containerIndent)
     {
         var text = line.TrimStart(' ', '\t');
+
+        if (line.Length - text.Length - containerIndent > 3)
+            return false;
+
         var run = 0;
         while (run < text.Length && text[run] == fenceChar)
             run++;

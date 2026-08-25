@@ -753,21 +753,21 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
-    /// A fence indented as a code block is literal text and must not open a region.
+    /// Fence indentation is measured against the container, at both ends.
     /// </summary>
     /// <remarks>
-    /// Four spaces outside a list is an indented code block. Honouring a fence written there
-    /// swallowed everything up to the next close — including the genuine top-level
-    /// ```` ```csharp ```` opener below it, which then shipped uninspected. The differential probe
-    /// cannot catch this, because it derives its exclusions from the same scan.
+    /// Three distinct ways to get this wrong, all pinned here: a top-level indented block whose
+    /// literal fence must not open; a shallow list item where the same absolute indent <em>is</em>
+    /// too deep; and an indented <c>```</c> inside a sample that must not close it early. Each
+    /// leaves real C# outside the gate, and the differential probe cannot see any of them because
+    /// it trusts this scanner for block structure.
     /// </remarks>
     [Fact]
-    public void An_Indented_Literal_Fence_Does_Not_Swallow_A_Real_Block()
+    public void Fence_Indentation_Is_Measured_Against_Its_Container()
     {
-        const string Markdown = """
-            # Heading
-
-            Some prose, then an indented code block quoting a fence:
+        // Top level: four spaces is an indented code block, so the fence in it is literal.
+        const string TopLevel = """
+            Prose, then an indented code block quoting a fence:
 
                 ```text
                 not a real fence
@@ -777,23 +777,98 @@ public class AgentKitDocGateInstrumentTests
             ```
             """;
 
-        var snippets = AgentKitDocCorpus.ExtractFences("fixture/indented.md", Markdown);
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/top.md", TopLevel)).Text);
 
-        var real = Assert.Single(snippets);
-        Assert.Equal("FlexColumn(children).FlexPadding(16)", real.Text);
-
-        // Positive control: the same indentation *inside a list item* is a real fence, which is how
-        // the two blocks in typography-and-colors.md reach the corpus.
-        const string InList = """
-            10. **An item** — its block is indented to the item's content column:
+        // `10. ` has content column 4, so a fence at 4 is flush with it and real.
+        const string NumberedItem = """
+            10. **An item** — its block sits at the item's content column:
 
                 ```csharp
                 TextBlock(p).TextWrapping(TextWrapping.WrapWholeWords)
                 ```
             """;
 
-        var nested = Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/list.md", InList));
-        Assert.Equal("TextBlock(p).TextWrapping(TextWrapping.WrapWholeWords)", nested.Text);
+        Assert.Equal(
+            "TextBlock(p).TextWrapping(TextWrapping.WrapWholeWords)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/numbered.md", NumberedItem)).Text);
+
+        // `- ` has content column 2, so six spaces is four past it — literal, not a fence.
+        const string ShallowItem = """
+            - item
+
+                  ```text
+                  not a real fence
+
+            ```csharp
+            Border(child).Padding(8)
+            ```
+            """;
+
+        Assert.Equal(
+            "Border(child).Padding(8)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/shallow.md", ShallowItem)).Text);
+    }
+
+    /// <summary>
+    /// An indented <c>```</c> inside a sample does not close the block early.
+    /// </summary>
+    [Fact]
+    public void An_Indented_Run_Does_Not_Close_A_Top_Level_Fence()
+    {
+        // Four-quote delimiter so the sample can contain a three-quote raw string of its own.
+        const string Markdown = """"
+            ```csharp
+            var doc = """
+                ```
+                """;
+            FlexColumn(children).Padding(16)
+            ```
+            """";
+
+        var snippet = Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/raw.md", Markdown));
+
+        Assert.Contains("FlexColumn(children).Padding(16)", snippet.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A disagreement between overloads poisons a type-changing modifier permanently.
+    /// </summary>
+    /// <remarks>
+    /// The A, B, A ordering is the point. Removing the entry on disagreement let the third overload
+    /// re-add it, so an ambiguous modifier resolved to one arbitrary answer — and since
+    /// <c>GetMethods</c> order is unspecified, which answer was not reproducible. The live surface
+    /// cannot reach this state (one type-changing modifier, all overloads agreeing), so the merge
+    /// is tested directly rather than through reflection.
+    /// </remarks>
+    [Theory]
+    [InlineData("A,B,A")]
+    [InlineData("A,A,B")]
+    [InlineData("B,A,A")]
+    [InlineData("A,B,A,B,A")]
+    public void Disagreeing_Overloads_Poison_A_Type_Changing_Modifier(string order)
+    {
+        var types = new Dictionary<string, Type> { ["A"] = typeof(int), ["B"] = typeof(string) };
+        var map = new Dictionary<string, Type?>(StringComparer.Ordinal);
+
+        foreach (var step in order.Split(','))
+            ReactorSurface.MergeTypeChange(map, "Modifier", types[step]);
+
+        Assert.True(map.ContainsKey("Modifier"), "The name must stay known so the walk still stops on it.");
+        Assert.Null(map["Modifier"]);
+    }
+
+    /// <summary>Agreeing overloads, however many, still resolve.</summary>
+    [Fact]
+    public void Agreeing_Overloads_Resolve_A_Type_Changing_Modifier()
+    {
+        var map = new Dictionary<string, Type?>(StringComparer.Ordinal);
+
+        for (var i = 0; i < 4; i++)
+            ReactorSurface.MergeTypeChange(map, "Modifier", typeof(int));
+
+        Assert.Equal(typeof(int), map["Modifier"]);
     }
 
     /// <summary>

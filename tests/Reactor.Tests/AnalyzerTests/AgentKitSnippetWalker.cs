@@ -33,7 +33,7 @@ internal sealed class ReactorSurface
     private readonly Dictionary<string, HashSet<Type>> _factoriesByName = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, HashSet<Type>> _setControls = new();
     private readonly Dictionary<string, HashSet<Type>> _modifierArguments = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Type> _typeChangingModifiers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Type?> _typeChangingModifiers = new(StringComparer.Ordinal);
 
     [UnconditionalSuppressMessage(
         "Trimming", "IL2026",
@@ -110,13 +110,7 @@ internal sealed class ReactorSurface
                 || !ElementType.IsAssignableFrom(returned))
                 continue;   // type-preserving (returns T) or not an element at all.
 
-            // Two overloads disagreeing would make the name unusable; none do today, and poisoning
-            // to "unknown" would silently restore the walk-through this exists to stop, so a
-            // disagreement removes the entry and ModifierTableIntegrity-style floors stay honest.
-            if (_typeChangingModifiers.TryGetValue(method.Name, out var existing) && existing != returned)
-                _typeChangingModifiers.Remove(method.Name);
-            else
-                _typeChangingModifiers[method.Name] = returned;
+            MergeTypeChange(_typeChangingModifiers, method.Name, returned);
         }
 
         var factories = reactor.GetType("Microsoft.UI.Reactor.Factories")
@@ -206,7 +200,7 @@ internal sealed class ReactorSurface
         // A type-changing modifier is not a factory, but ResolveHead reports it in the same slot
         // because it decides the chain's element the same way.
         if (_typeChangingModifiers.TryGetValue(factoryName, out var changed))
-            return changed;
+            return changed;   // null when the name is poisoned by disagreeing overloads.
 
         if (_factories.TryGetValue(Key(factoryName, typeArgumentCount), out var exact))
             return exact;
@@ -365,7 +359,54 @@ internal sealed class ReactorSurface
     /// nothing, while still incrementing the resolution count that is supposed to detect exactly
     /// that kind of silent shortfall.
     /// </remarks>
-    public IReadOnlyDictionary<string, Type> TypeChangingModifiers => _typeChangingModifiers;
+    public IReadOnlyDictionary<string, Type> TypeChangingModifiers =>
+        _typeChangingModifiers
+            .Where(pair => pair.Value is not null)
+            .ToDictionary(pair => pair.Key, pair => pair.Value!, StringComparer.Ordinal);
+
+    /// <summary>
+    /// True for any name known to change the chain's element type, including one poisoned by
+    /// disagreeing overloads.
+    /// </summary>
+    /// <remarks>
+    /// The walk must stop at a poisoned name too. Treating "ambiguous" as "not type-changing" would
+    /// resume walking down to the head factory and resolve the chain to an element it is no longer
+    /// — the very substitution this stop exists to prevent. Stopping yields an unresolvable name,
+    /// the chain is skipped, and nothing is claimed.
+    /// </remarks>
+    public bool IsTypeChanging(string name) => _typeChangingModifiers.ContainsKey(name);
+
+    /// <summary>
+    /// Folds one overload's return type into the type-changing map, poisoning the name to
+    /// <see langword="null"/> the moment two overloads disagree.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The poison must be <b>irreversible</b>, which is why this writes null rather than removing
+    /// the entry. Removing let the next overload re-add the name: with return types arriving as
+    /// A, B, A — the ordinary shape when several overloads return A and one returns B — the B
+    /// removed it and the second A restored it, leaving a genuinely ambiguous modifier resolving to
+    /// one arbitrary answer. <c>GetMethods</c> order is unspecified, so that was not even
+    /// reproducible.
+    /// </para>
+    /// <para>
+    /// Extracted so the ordering can be tested directly. The live surface has one type-changing
+    /// modifier whose overloads all agree, so no reflection over the real assembly can reach the
+    /// state this guards.
+    /// </para>
+    /// </remarks>
+    internal static void MergeTypeChange(Dictionary<string, Type?> map, string name, Type returned)
+    {
+        if (map.TryGetValue(name, out var existing))
+        {
+            if (existing != returned)
+                map[name] = null;
+        }
+        else
+        {
+            map[name] = returned;
+        }
+    }
 
     /// <summary>
     /// The control's own name followed by every base type name, most derived first.</summary>
@@ -948,7 +989,7 @@ internal static class AgentKitSnippetWalker
                     // describes what it wrapped, not what the chain now is. `Semantics` is the only
                     // one today, and walking through it resolved `Border(child).Semantics(...)` as a
                     // Border while the value really lands on a SemanticPanel.
-                    if (ReactorSurface.Instance.TypeChangingModifiers.ContainsKey(access.Name.Identifier.Text))
+                    if (ReactorSurface.Instance.IsTypeChanging(access.Name.Identifier.Text))
                         return (access.Name.Identifier.Text, 0, default);
 
                     node = access.Expression;
