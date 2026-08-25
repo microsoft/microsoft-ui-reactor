@@ -539,9 +539,11 @@ internal static class AgentKitSnippetWalker
         {
             var expression = argument.Expression;
 
-            // (Brush)null, ((Brush)null) — unwrap to whatever is really passed. The cast's own type
-            // is deliberately ignored: `(Brush)null` and `(object)null` are both null, and reading
-            // the cast would only re-introduce the guesswork DefaultIsProvablyNull exists to avoid.
+            // (Brush)null, ((Brush)null), null! — unwrap to whatever is really passed. The cast's
+            // own type is deliberately ignored: `(Brush)null` and `(object)null` are both null, and
+            // reading the cast would only re-introduce the guesswork DefaultIsProvablyNull exists
+            // to avoid. `!` is unwrapped for the same reason the chain walkers treat it as
+            // transparent — it changes nullability analysis, never the value.
             while (true)
             {
                 switch (expression)
@@ -551,6 +553,9 @@ internal static class AgentKitSnippetWalker
                         continue;
                     case ParenthesizedExpressionSyntax parenthesized:
                         expression = parenthesized.Expression;
+                        continue;
+                    case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } forgiving:
+                        expression = forgiving.Operand;
                         continue;
                 }
 
@@ -694,9 +699,7 @@ internal static class AgentKitSnippetWalker
             if (inner is null || !string.Equals(inner.FullName, innerFullName, StringComparison.Ordinal))
                 continue;
 
-            if (ChainModifiers(invocation).Any(name =>
-                    ExactWrapperJustifications.Contains(name)
-                    || WrapperJustifications.Any(j => name.Contains(j, StringComparison.Ordinal))))
+            if (ChainModifiers(invocation).Any(IsJustification))
                 continue;
 
             return new AgentKitFinding(
@@ -735,8 +738,28 @@ internal static class AgentKitSnippetWalker
         return null;
     }
 
-    /// <summary>Every modifier name applied anywhere on the fluent chain this invocation belongs to.</summary>
-    private static IEnumerable<string> ChainModifiers(InvocationExpressionSyntax invocation)
+    /// <summary>
+    /// True when a modifier on the wrapper's chain really justifies the wrapper's existence.
+    /// </summary>
+    /// <remarks>
+    /// The name is necessary but not sufficient. A constant-null argument makes the modifier inert
+    /// — that is the premise <see cref="HasConstantNullArgument"/> already relies on — so
+    /// <c>Border(FlexColumn(children)).Padding(16).Background((Brush)null)</c> is still a Border
+    /// that supplies nothing but padding. Counting it hid the exact workaround this rule exists to
+    /// catch, behind a decorator that does nothing: a no-op suppression, and an internal
+    /// contradiction, since the same call is skipped as inert two checks earlier.
+    /// </remarks>
+    private static bool IsJustification((string Name, InvocationExpressionSyntax Invocation) modifier)
+    {
+        var named = ExactWrapperJustifications.Contains(modifier.Name)
+                    || WrapperJustifications.Any(j => modifier.Name.Contains(j, StringComparison.Ordinal));
+
+        return named && !HasConstantNullArgument(modifier.Invocation, modifier.Name);
+    }
+
+    /// <summary>Every modifier applied anywhere on the fluent chain this invocation belongs to.</summary>
+    private static IEnumerable<(string Name, InvocationExpressionSyntax Invocation)> ChainModifiers(
+        InvocationExpressionSyntax invocation)
     {
         // Walk out to the outermost invocation first — `.Padding(24)` may be followed by
         // `.Background(...)`, and a justification that appears later still justifies the wrapper.
@@ -768,9 +791,9 @@ internal static class AgentKitSnippetWalker
 
         for (var node = outermost; node is not null;)
         {
-            if (node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access })
+            if (node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access } chained)
             {
-                yield return access.Name.Identifier.Text;
+                yield return (access.Name.Identifier.Text, chained);
                 node = access.Expression;
                 continue;
             }

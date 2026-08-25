@@ -139,6 +139,9 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("Rectangle().Background(null)")]
     [InlineData("Rectangle().Background(((Brush)null))")]
     [InlineData("Rectangle().Background(default(Brush))")]
+    [InlineData("Rectangle().Background(null!)")]
+    [InlineData("Rectangle().Background(((Brush)null)!)")]
+    [InlineData("Rectangle().Background(default(Brush)!)")]
     [InlineData("FlexColumn(children).Padding(null)")]
     public void Walker_Mirrors_The_Analyzers_Constant_Null_Gate(string snippet)
     {
@@ -556,6 +559,84 @@ public class AgentKitDocGateInstrumentTests
             scan.ResolvedChains >= 1,
             "A `LazyVStack(items, ...)` chain resolved nothing, so generic factories written without " +
             "explicit type arguments — the common form — are still invisible to the gate.");
+    }
+
+    /// <summary>
+    /// A modifier that does nothing cannot justify the wrapper that carries it.
+    /// </summary>
+    /// <remarks>
+    /// A constant-null argument makes a modifier inert — the premise the constant-null gate already
+    /// rests on — so <c>Border(...).Padding(16).Background((Brush)null)</c> is still a Border
+    /// supplying nothing but padding. Accepting it by name hid the exact workaround this rule
+    /// exists to catch behind a decorator that does nothing, and contradicted the same call being
+    /// skipped as inert two checks earlier.
+    /// </remarks>
+    [Theory]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Background((Brush)null)")]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Background(null)")]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Background(null!)")]
+    [InlineData("Border(FlexColumn(children)).Padding(16).Background(default(Brush)!)")]
+    public void An_Inert_Modifier_Does_Not_Justify_A_Wrapper(string snippet)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/inert.md", 1, snippet) });
+
+        var finding = Assert.Single(scan.Of(AgentKitFindingKind.WrapperWorkaround));
+        Assert.Equal("FlexPadding", finding.Replacement);
+    }
+
+    /// <summary>
+    /// A real decoration still justifies it, so the check above is not simply reporting everything.
+    /// </summary>
+    [Fact]
+    public void A_Live_Modifier_Still_Justifies_A_Wrapper()
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/inert.md", 1, "Border(FlexColumn(children)).Padding(16).Background(Theme.CardBackground)"),
+        });
+
+        Assert.Empty(scan.Of(AgentKitFindingKind.WrapperWorkaround));
+
+        // A value-typed `default` is a real zero-valued write, not an inert null, so it justifies
+        // the wrapper too — the same distinction the constant-null gate draws.
+        var zeroValued = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/inert.md", 1, "Border(FlexColumn(children)).Padding(16).CornerRadius(default(CornerRadius))"),
+        });
+
+        Assert.Empty(zeroValued.Of(AgentKitFindingKind.WrapperWorkaround));
+    }
+
+    /// <summary>
+    /// A standalone block-comment label marks the block below it.
+    /// </summary>
+    /// <remarks>
+    /// <c>IsCounterexampleLabel</c> documents <c>/* Wrong */</c> as supported and
+    /// <c>CommentText</c> reads multi-line trivia, but the upward walk accepted only <c>//</c>
+    /// lines — so the documented placement produced a CI failure. Same class of defect as the
+    /// prose lead-in: a contract stated in one place and not honoured in another.
+    /// </remarks>
+    [Fact]
+    public void A_Block_Comment_Label_Marks_The_Line_Below()
+    {
+        var marked = new[]
+        {
+            "```csharp",
+            "/* Wrong */",
+            "FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(marked, 3));
+
+        // Negative control: a block comment that is not a label must not exempt.
+        var unmarked = new[]
+        {
+            "```csharp",
+            "/* spacing sample */",
+            "FlexColumn(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(unmarked, 3));
     }
 
     /// <summary>

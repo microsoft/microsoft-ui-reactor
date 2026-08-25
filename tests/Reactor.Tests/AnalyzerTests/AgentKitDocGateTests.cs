@@ -263,8 +263,15 @@ public class AgentKitDocGateTests
             if (!crossedFence)
             {
                 // Still inside the fence, so only a comment can carry a marker; real code above
-                // means any marker further up belongs to that line rather than this one.
-                if (!text.StartsWith("//", StringComparison.Ordinal))
+                // means any marker further up belongs to that line rather than this one. A whole
+                // line that is a block comment counts too — `IsCounterexampleLabel` documents
+                // `/* Wrong */` as a supported label and `CommentText` reads that trivia, so
+                // rejecting the placement here contradicted both.
+                var isComment = text.StartsWith("//", StringComparison.Ordinal)
+                                || (text.StartsWith("/*", StringComparison.Ordinal)
+                                    && text.EndsWith("*/", StringComparison.Ordinal));
+
+                if (!isComment)
                     return false;
 
                 if (IsCounterexampleLabel(CommentText(text)))
