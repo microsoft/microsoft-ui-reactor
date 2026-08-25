@@ -46,12 +46,12 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``1(System.Action,``
 Single-dependency <c>UseEffect</c> overload that avoids the
 <c>params object[]</c> allocation (and value-type boxing) on the
 deps-unchanged path. Semantically identical to the params overload called
-with one dependency: the effect re-runs only when <paramref name="d1" />
+with one dependency: the effect re-runs only when `d1`
 changes.
 
 ### Discussion
 
-If <paramref name="d1" />'s compile-time type is an array of reference types
+If `d1`'s compile-time type is an array of reference types
 (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
 element-wise — matching the <c>params object[]</c> overload — not as a single
 reference-compared value. A dependency whose static type is not an array is
@@ -70,7 +70,7 @@ identical to the params overload called with one dependency.
 
 ### Discussion
 
-If <paramref name="d1" />'s compile-time type is an array of reference types
+If `d1`'s compile-time type is an array of reference types
 (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
 element-wise — matching the <c>params object[]</c> overload — not as a single
 reference-compared value. A dependency whose static type is not an array is

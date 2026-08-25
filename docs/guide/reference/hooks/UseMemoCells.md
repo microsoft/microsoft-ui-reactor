@@ -37,11 +37,11 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions.UseMemoCells``1(Mic
 
 ### Summary
 
-Memoize cell construction for <paramref name="items" />. On the first
+Memoize cell construction for `items`. On the first
 render the builder runs for every index; on subsequent renders, an
 item that compares `Equals`
 against the previous render's value at the same index reuses the
-previous element. Any change to <paramref name="dependencies" />
+previous element. Any change to `dependencies`
 invalidates the entire cache and rebuilds every cell.
 
 ### Parameters
@@ -49,7 +49,7 @@ invalidates the entire cache and rebuilds every cell.
 - **ctx** — The render context.
 - **items** — Source items, one cell per item.
 - **builder** — Builder for a single cell. Must be a pure
-function of <c>(item, index)</c> plus <paramref name="dependencies" />.
+function of <c>(item, index)</c> plus `dependencies`.
 Closure captures missing from the deps list are flagged by the
 <c>REACTOR_HOOKS_007</c> analyzer.
 - **dependencies** — Trailing-<c>params</c> list of values

@@ -62,12 +62,18 @@ internal static class PhantomSymbolLint
     public const string Code = "REACTOR_DOC_PHANTOM_001";
 
     /// <summary>
-    /// Warning rather than Error on first roll-out so the docset doesn't break
-    /// while the known occurrences are being cleared across branches — same
-    /// staging <see cref="CrossLinkLint.DefaultSeverity"/> used. Elevate to
-    /// Error once the tree reports zero.
+    /// Error. The staged roll-out (Warning while known occurrences were being
+    /// cleared across branches) is complete: the tree now reports zero
+    /// template and assembled-snippet findings, which is the condition this
+    /// was waiting on. Leaving it at Warning meant a newly introduced
+    /// <!-- phantom:skip "Text" --> <!-- phantom:skip "UseTheme" -->
+    /// <c>Text("...")</c> or <c>UseTheme()</c> still passed
+    /// <c>mur docs compile</c>, which is the exact regression the rule exists
+    /// to stop. The <c>src/**</c> XML-doc backlog is gated separately by the
+    /// ceiling-budget test, so raising this does not fail on the known
+    /// historical occurrences.
     /// </summary>
-    internal const TierLintSeverity DefaultSeverity = TierLintSeverity.Warning;
+    internal const TierLintSeverity DefaultSeverity = TierLintSeverity.Error;
 
     /// <summary>
     /// The phantom table. Add an entry here to cover a new phantom; every

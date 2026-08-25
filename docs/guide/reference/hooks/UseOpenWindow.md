@@ -7,8 +7,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseOpenWindow(Microsoft.UI.Re
 
 ## Summary
 
-Open or reuse a secondary window keyed by <paramref name="key" />. Renders
-that pass the same <paramref name="key" /> share the same
+Open or reuse a secondary window keyed by `key`. Renders
+that pass the same `key` share the same
 `ReactorWindow`; if the spec changes
 across renders the live window is updated via
 `Update`. The returned

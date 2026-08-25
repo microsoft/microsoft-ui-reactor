@@ -29,8 +29,8 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseInfiniteResourceExtensions.UseInfiniteR
 
 ### Summary
 
-Returns the `InfiniteResource`1` owned by this hook slot. The
-resource's state is driven by <paramref name="fetchPage" />; <paramref name="deps" />
+Returns the `InfiniteResource` owned by this hook slot. The
+resource's state is driven by `fetchPage`; `deps`
 controls cache-keying and deps-change restart.
 
 

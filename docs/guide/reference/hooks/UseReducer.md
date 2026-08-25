@@ -21,7 +21,7 @@ Declares a piece of state with a functional updater variant.
 The updater receives the previous value and returns the next.
 Cross-thread updater calls are auto-marshaled onto the captured UI dispatcher
 (same semantics as [UseState](UseState.md) ([guide](../../hooks.md))); pass
-<paramref name="threadSafe" />: <c>true</c> for locked in-place updates that
+`threadSafe`: <c>true</c> for locked in-place updates that
 serialize many concurrent writers without an intervening UI tick.
 
 ## `UseReducer<T1, T2>(Func<T1, T2, T1>, T1, bool)`
@@ -36,7 +36,7 @@ The reducer takes (currentState, action) and returns the next state.
 Returns (currentState, dispatch) where dispatch sends an action through the reducer.
 Cross-thread dispatch calls are auto-marshaled onto the captured UI dispatcher
 (same semantics as [UseState](UseState.md) ([guide](../../hooks.md))); pass
-<paramref name="threadSafe" />: <c>true</c> for locked in-place dispatch that
+`threadSafe`: <c>true</c> for locked in-place dispatch that
 serializes concurrent writers without an intervening UI tick.
 
 ## Featured in

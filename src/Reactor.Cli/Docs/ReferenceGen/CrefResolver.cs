@@ -115,7 +115,7 @@ internal sealed class CrefResolver
         // <see cref="X" /> or <seealso cref="X" /> — both produce inline links
         // in MD. (Block-level seealso under the dedicated section is handled
         // by ReferenceWriter; this rewrite covers the inline cases.)
-        return SeeCrefPattern.Replace(xml, m =>
+        var rewritten = SeeCrefPattern.Replace(xml, m =>
         {
             var cref = m.Groups["cref"].Value;
             var target = ResolveTarget(cref);
@@ -130,6 +130,11 @@ internal sealed class CrefResolver
             var name = ShortNameFallback(cref);
             return $"`{name}`";
         });
+
+        // <paramref name="x"/> and <typeparamref name="T"/> carry no visible
+        // text, so leaving them intact drops the word from the rendered
+        // sentence entirely. Emit them as inline code.
+        return ParamRefPattern.Replace(rewritten, m => $"`{m.Groups["name"].Value}`");
     }
 
     private static string MakeRelativeLink(string fromDir, string targetRelativePath)
@@ -159,8 +164,18 @@ internal sealed class CrefResolver
         var paren = stem.IndexOf('(');
         if (paren >= 0) stem = stem[..paren];
         var dot = stem.LastIndexOf('.');
-        return dot >= 0 ? stem[(dot + 1)..] : stem;
+        var name = dot >= 0 ? stem[(dot + 1)..] : stem;
+
+        // Strip the CLR metadata arity suffix (`1, ``2) — rendering
+        // `NavigationHandle`1` inside backticks both reads as noise and
+        // terminates the code span early in Markdown.
+        var tick = name.IndexOf('`');
+        return tick >= 0 ? name[..tick] : name;
     }
+
+    internal static readonly Regex ParamRefPattern = new(
+        @"<(?:paramref|typeparamref)\s+name=""(?<name>[^""]+)""\s*/?>(?:\s*</(?:paramref|typeparamref)>)?",
+        RegexOptions.Compiled);
 
     internal static readonly Regex SeeCrefPattern = new(
         @"<(?:see|seealso)\s+cref=""(?<cref>[^""]+)""\s*/?>(?:\s*</(?:see|seealso)>)?",

@@ -7,7 +7,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.Mutation`2.RunAsync(`0)`
 
 ## Summary
 
-Kick off the mutator with <paramref name="input" />. Returns a task that completes
+Kick off the mutator with `input`. Returns a task that completes
 with the mutator's result or fault.
 
 ## Discussion

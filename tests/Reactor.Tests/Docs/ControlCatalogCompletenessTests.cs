@@ -200,14 +200,29 @@ public sealed class ControlCatalogCompletenessTests
         var template = ReadText(CatalogPath);
         var symbols = new HashSet<string>(global::System.StringComparer.Ordinal);
 
-        foreach (Match m in Regex.Matches(template, @"`([A-Za-z][\w<>]*)`"))
+        // Only the first cell of a table row counts as a catalog entry.
+        // Scanning every inline code span in the file would also pick up
+        // prose — including this test's own exclusion note, which names each
+        // excluded family in backticks — so a control mentioned anywhere on
+        // the page would satisfy the "has a catalog row" check without
+        // actually having one.
+        foreach (var line in template.Split('\n'))
         {
-            var raw = m.Groups[1].Value;
-            symbols.Add(raw);
+            var trimmed = line.TrimStart();
+            if (trimmed.Length == 0 || trimmed[0] != '|') continue;
 
-            var generic = raw.IndexOf('<');
-            if (generic > 0)
-                symbols.Add(raw[..generic]);
+            var cells = trimmed.Split('|', global::System.StringSplitOptions.RemoveEmptyEntries);
+            if (cells.Length == 0) continue;
+
+            foreach (Match m in Regex.Matches(cells[0], @"`([A-Za-z][\w<>]*)`"))
+            {
+                var raw = m.Groups[1].Value;
+                symbols.Add(raw);
+
+                var generic = raw.IndexOf('<');
+                if (generic > 0)
+                    symbols.Add(raw[..generic]);
+            }
         }
 
         // Slash-separated rows ("`Title` / `Heading`") already produce one span

@@ -17,7 +17,7 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseBreakpoint(System.Double)`
 
 ### Summary
 
-Window-inferring overload — takes only <paramref name="minWidth" /> and
+Window-inferring overload — takes only `minWidth` and
 resolves the current host's window. Returns false when called outside a
 window. (spec 036 §5.2)
 

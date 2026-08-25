@@ -38,7 +38,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions.UseMemoCellsByKey``
 
 ### Summary
 
-Memoize cell construction keyed by <paramref name="keySelector" />.
+Memoize cell construction keyed by `keySelector`.
 Cells are reused when both the item's key and value match the
 previous render. Keys that recur with mutated content rebuild that
 cell only. Reordered keys reuse cells (the reconciler's keyed-

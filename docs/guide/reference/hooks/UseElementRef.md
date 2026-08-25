@@ -32,6 +32,6 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(M
 
 ### Summary
 
-Returns a stable `ElementRef`1` for the current component scope.
+Returns a stable `ElementRef` for the current component scope.
 
 
