@@ -10,6 +10,7 @@ namespace Microsoft.UI.Reactor;
 /// <c>Microsoft.UI.Reactor.Factories.Grid(GridSize[], GridSize[], Element?[])</c>
 /// factory in place of the legacy string-form (<c>"Auto"</c>, <c>"*"</c>,
 /// <c>"200"</c>, <c>"1.5*"</c>) tracks.
+/// Optional <c>Min</c> and <c>Max</c> properties are available to constrain the track size.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -24,17 +25,40 @@ namespace Microsoft.UI.Reactor;
 /// case-insensitively; numeric forms use <see cref="CultureInfo.InvariantCulture"/>.
 /// </para>
 /// </remarks>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when <c>GridType</c> is set to <c>Pixel</c> and the <c>Value</c> is &lt; 0, or when the GridType is set to <c>Star</c> and the <c>Value</c> is &lt;= 0.</exception>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when the <c>Value</c>, <c>Min</c>, or <c>Max</c> properties are out of range.</exception>
 [DebuggerDisplay("{ToString(),nq}")]
-public readonly record struct GridSize(double Value, GridUnitType Type)
+public readonly record struct GridSize
 {
-    /// <summary>
-    /// The minimum size of the track. Defaults to 0.
-    /// </summary>
-    public double Min { get; init; } = 0;
-    /// <summary>
-    /// The maximum size of the track. Defaults to <see cref="double.PositiveInfinity"/>.
-    /// </summary>
-    public double Max { get; init; } = double.PositiveInfinity;
+    private readonly double? _min;
+    private readonly double? _max;
+    public double Value { get; }
+    public GridUnitType Type { get; }
+    public double Min => _min ?? 0;
+    public double Max => _max ?? double.PositiveInfinity;  
+    public GridSize(double value, GridUnitType type, double min = 0, double max = double.PositiveInfinity)
+    {
+        if (type == GridUnitType.Pixel && value < 0)
+            throw new ArgumentOutOfRangeException(nameof(value), value, "Pixel size must be >= 0.");
+        
+        if (type == GridUnitType.Star && value <= 0)
+            throw new ArgumentOutOfRangeException(nameof(value), value, "Star weight must be > 0.");
+
+        if (min < 0)
+            throw new ArgumentOutOfRangeException(nameof(min), min, "Min size must be >= 0.");
+        
+        if (max < 0)
+            throw new ArgumentOutOfRangeException(nameof(max), max, "Max size must be >= 0.");
+        
+        if (max < min)
+            throw new ArgumentOutOfRangeException(nameof(max), max, "Max size must be >= Min size.");
+        
+        Value = value;
+        Type = type;
+        _min = min;
+        _max = max;
+    }
+
 
     /// <summary>The auto-sized track. Equivalent to the WinUI <c>Auto</c> length.</summary>
     public static GridSize Auto { get; } = new(1, GridUnitType.Auto);
@@ -44,35 +68,17 @@ public readonly record struct GridSize(double Value, GridUnitType Type)
     /// 1.5 produces <c>"1.5*"</c>, 0.33 produces <c>"0.33*"</c>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="weight"/> is &lt;= 0.</exception>
-    public static GridSize Star(double weight = 1)
-    {
-        if (!(weight > 0))
-            throw new ArgumentOutOfRangeException(nameof(weight), weight, "Star weight must be > 0.");
-        return new GridSize(weight, GridUnitType.Star);
-    }
+    public static GridSize Star(double weight = 1) => new(weight, GridUnitType.Star);
 
     /// <summary>A pixel-sized track. <paramref name="pixels"/> must be &gt;= 0.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="pixels"/> is &lt; 0.</exception>
-    public static GridSize Px(double pixels)
-    {
-        if (pixels < 0)
-            throw new ArgumentOutOfRangeException(nameof(pixels), pixels, "Pixel size must be >= 0.");
-        return new GridSize(pixels, GridUnitType.Pixel);
-    }
+    public static GridSize Px(double pixels) => new(pixels, GridUnitType.Pixel);
 
     /// <summary>
     /// Implicit conversion to <see cref="GridLength"/> so the typed form composes
     /// with any WinUI surface that takes a <see cref="GridLength"/>.
     /// </summary>
     public static implicit operator GridLength(GridSize s) => new(s.Value, s.Type);
-
-    /// <summary>
-    /// Implicit conversion to <see cref="string"/> so the typed form composes
-    /// with any surface that takes a <see cref="string"/>.
-    /// This is to support the legacy <c>Grid</c> factory that takes string tracks.
-    /// </summary>
-    /// <param name="s"></param>
-    public static implicit operator string(GridSize s) => s.ToString();
 
     /// <summary>
     /// Canonical track-string form: <c>"Auto"</c>, <c>"*"</c>, <c>"&lt;n&gt;*"</c>, or

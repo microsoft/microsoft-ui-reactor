@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
+using Microsoft.UI.Xaml;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
@@ -244,7 +245,7 @@ public class DataGridPerfCacheTests
 
         // ...and the new layout reflects the resize.
         Assert.Equal(100, w3[2]);
-        Assert.Equal("100", d3.Columns[2]);
+        Assert.Equal(100, d3.Columns[2].Value);
     }
 
     [Fact]
@@ -256,25 +257,25 @@ public class DataGridPerfCacheTests
         // No leading/trailing columns.
         var (widths, def) = state.GetColumnLayout(cols, false, false, false);
         Assert.Equal(cols.Count, def.Columns.Length);
-        Assert.Equal(new[] { "*" }, def.Rows.Select(rs => rs.ToString()));
+        Assert.Equal(new[] { GridSize.Star() }, def.Rows);
         for (int c = 0; c < cols.Count; c++)
         {
             Assert.Equal(state.GetColumnWidth(cols[c].Name), widths[c]);
             Assert.Equal(
-                state.GetColumnWidth(cols[c].Name).ToString(CultureInfo.InvariantCulture),
-                def.Columns[c]);
+                state.GetColumnWidth(cols[c].Name),
+                def.Columns[c].Value);
         }
 
         // Full shape: row-detail (24) + select (40) leading, edit-actions (Auto) trailing.
         var (_, shaped) = state.GetColumnLayout(cols, true, true, true);
         Assert.Equal(cols.Count + 3, shaped.Columns.Length);
-        Assert.Equal("24", shaped.Columns[0]);
-        Assert.Equal("40", shaped.Columns[1]);
+        Assert.Equal(GridSize.Px(24), shaped.Columns[0]);
+        Assert.Equal(GridSize.Px(40), shaped.Columns[1]);
         for (int c = 0; c < cols.Count; c++)
             Assert.Equal(
-                state.GetColumnWidth(cols[c].Name).ToString(CultureInfo.InvariantCulture),
-                shaped.Columns[2 + c]);
-        Assert.Equal("Auto", shaped.Columns[^1]);
+                state.GetColumnWidth(cols[c].Name),
+                shaped.Columns[2 + c].Value);
+        Assert.Equal(GridUnitType.Auto, shaped.Columns[^1].Type);
     }
 
     // ════════════════════════════════════════════════════════════════
