@@ -28,9 +28,9 @@ class App : Component
     {
         var titleBar = TitleBar("MyApp").Flex(shrink: 0);
 
-        var body = Border(
-            FlexColumn(/* page content */) with { RowGap = 16 }
-        ).Padding(24).Flex(grow: 1, basis: 0);
+        var body = (FlexColumn(/* page content */) with { RowGap = 16 })
+            .FlexPadding(24)
+            .Flex(grow: 1, basis: 0);
 
         return FlexColumn(titleBar, body)
             .Backdrop(BackdropKind.Mica);
@@ -41,7 +41,7 @@ class App : Component
 Why each line is load-bearing:
 - `TitleBar(...)` — integrates with the Windows caption (drag region, system menu, min/max/close). Avoids the double-header trap of stacking a custom header row below the system chrome.
 - `.Flex(shrink: 0)` on the title bar — title bar keeps its natural height; only `body` absorbs vertical resizing.
-- `Border(...).Padding(24)` — `FlexColumn` doesn't support `.Padding()`, so wrap. 24px is "Section" page padding from the 4px grid; bump to 36px for hero pages.
+- `.FlexPadding(24)` on the body — a `FlexColumn` silently ignores `.Padding()` (`mur check` reports `REACTOR_MOD_003`); `.FlexPadding()` is the Flex equivalent. 24px is "Section" page padding from the 4px grid; bump to 36px for hero pages. Wrap in a `Border` only when you also need its background, corner radius, or border brush.
 - `.Flex(grow: 1, basis: 0)` on body — body fills the window below the title bar.
 - `RowGap = 16` — sibling spacing on the 4px grid; the default is 0.
 - `.Backdrop(BackdropKind.Mica)` on the root — Win11 signature material. The root must not paint an opaque background (no `Theme.SolidBackground`) or Mica won't show through.
@@ -498,9 +498,19 @@ VStack(8, children).Padding(16)
 Border(child).Margin(12).Padding(8)
 HStack(4, items)
 
+// Flex containers take FlexPadding, NOT Padding. `.Padding()` silently has no
+// effect on a FlexElement (FlexRow / FlexColumn / Flex) — `mur check` reports
+// this as REACTOR_MOD_003. Don't add a Border solely to get padding; a Border is
+// still right when you also need its background, corner radius, or border brush.
+FlexColumn(children).FlexPadding(16)
+FlexRow(items).FlexPadding(horizontal: 16, vertical: 8)
+
 // Wrong: odd values cause blurry rendering at fractional scales
 VStack(5, children).Padding(15)
 Border(child).Margin(3)
+
+// Wrong: no effect, and costs a build-check cycle
+FlexColumn(children).Padding(16)
 ```
 
 #### Margin vs Padding

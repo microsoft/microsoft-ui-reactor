@@ -1694,7 +1694,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         }
 
         if (filterIcon is not null)
-            return FlexRow(TextBlock(label).SemiBold().Flex(grow: 1), filterIcon).Padding(horizontal: 8, vertical: 6);
+            return FlexRow(TextBlock(label).SemiBold().Flex(grow: 1), filterIcon).FlexPadding(horizontal: 8, vertical: 6);
 
         return TextBlock(label).SemiBold().Padding(horizontal: 8, vertical: 6);
     }
