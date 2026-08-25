@@ -1,0 +1,7 @@
+app:
+  title: "Advanced Windowing"
+  width: 520
+  height: 360
+  startup-delay: 1500
+
+screenshots: []

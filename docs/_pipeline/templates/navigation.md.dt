@@ -263,17 +263,12 @@ A tab child with a background paints only a band behind its own text.
 Reactor keeps that WinUI default. Opt in to a full-height tab body with
 `FillContentArea`:
 
-```csharp
-TabView([
-    Tab("Editor", Border(TextBlock("Editor")).Background(Theme.CardBackground)),
-    Tab("Preview", TextBlock("Preview")),
-]).FillContentArea()
+```csharp snippet="navigation/tab-fill-content-area"
 ```
 
 The init property is available for record-construction syntax too:
 
-```csharp
-TabView([...]) with { FillContentArea = true }
+```csharp snippet="navigation/tab-fill-content-area-init"
 ```
 
 An explicit `.VAlign(...)` on the `TabView` element always wins over the opt-in,
@@ -333,9 +328,7 @@ violation rather than throwing, which no `try`/`catch` and no
 
 Reactor checks first and refuses, reporting through `.NavigationFailed(...)`:
 
-```csharp
-Frame(typeof(MyCodeOnlyPage))          // no .xaml → refused, not fatal
-    .NavigationFailed((t, ex) => Log(ex.Message));
+```csharp snippet="navigation/frame-code-only-page"
 ```
 
 **This is a deliberate boundary, not a gap.** Reactor's navigation system is

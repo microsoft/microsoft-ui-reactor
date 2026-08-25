@@ -15,7 +15,7 @@ Spec 050 changes controlled element-record properties from plain `T` to
 `Optional<T>`. Factory calls such as `TextBox(text, setText)`,
 `Slider(value, 0, 100, setValue)`, and `ComboBox(items, index,
 setIndex)` keep their existing plain-value signatures; they wrap the
-value in `Optional.Of(value)` internally. Most app code therefore keeps
+value in `Optional<T>.Of(value)` internally. Most app code therefore keeps
 compiling unchanged.
 
 The break you may see is direct element-record readback:
@@ -25,13 +25,18 @@ The break you may see is direct element-record readback:
 int index = element.SelectedIndex;
 
 // After: choose the intent
-int index = element.SelectedIndex.GetValueOrDefault(-1); // tolerate control-owned
-int asserted = element.SelectedIndex.Value;              // require HasValue
+int tolerant = element.SelectedIndex.GetValueOrDefault(-1); // tolerate control-owned
+int asserted = element.SelectedIndex.Value;                 // require HasValue
 ```
 
 Use `Optional<T>.Unset` when the native control should own the value.
-Use `Optional.Of(value)` when Reactor should force-assert the value on
+Use `Optional<T>.Of(value)` when Reactor should force-assert the value on
 Mount and Update.
+
+> `Of` and `Unset` are static members of the generic struct itself — there is
+> no non-generic `Optional` helper class, so `Optional.Of(x)` does not compile.
+> Spell the type argument (`Optional<int>.Of(-1)`), or rely on the implicit
+> `T` → `Optional<T>` conversion when the intent is unambiguous.
 
 ## Migrated properties
 
@@ -69,16 +74,16 @@ Mount and Update.
 
 | Old pattern | If the control should own the value | If Reactor should force-assert |
 |---|---|---|
-| `SelectedIndex = -1` | `SelectedIndex = Optional<int>.Unset` | `SelectedIndex = Optional.Of(-1)` |
-| `SelectedPageIndex = 0` as "not set" | `SelectedPageIndex = Optional<int>.Unset` | `SelectedPageIndex = Optional.Of(0)` |
-| `IsChecked = false` as "not set" | `IsChecked = Optional<bool>.Unset` | `IsChecked = Optional.Of(false)` |
-| `IsChecked = null` on tri-state checkbox | `IsChecked = Optional<bool?>.Unset` | `IsChecked = Optional.Of<bool?>(null)` |
-| `Value = 0.0` as "not set" | `Value = Optional<double>.Unset` | `Value = Optional.Of(0.0)` |
-| `Value = ""` / `Text = ""` as "not set" | `Value = Optional<string>.Unset` / `Text = Optional<string>.Unset` | `Optional.Of("")` |
-| `Date = null` on `CalendarDatePicker` | `Date = Optional<DateTimeOffset?>.Unset` | `Date = Optional.Of<DateTimeOffset?>(null)` |
+| `SelectedIndex = -1` | `SelectedIndex = Optional<int>.Unset` | `SelectedIndex = Optional<int>.Of(-1)` |
+| `SelectedPageIndex = 0` as "not set" | `SelectedPageIndex = Optional<int>.Unset` | `SelectedPageIndex = Optional<int>.Of(0)` |
+| `IsChecked = false` as "not set" | `IsChecked = Optional<bool>.Unset` | `IsChecked = Optional<bool>.Of(false)` |
+| `IsChecked = null` on tri-state checkbox | `IsChecked = Optional<bool?>.Unset` | `IsChecked = Optional<bool?>.Of(null)` |
+| `Value = 0.0` as "not set" | `Value = Optional<double>.Unset` | `Value = Optional<double>.Of(0.0)` |
+| `Value = ""` / `Text = ""` as "not set" | `Value = Optional<string>.Unset` / `Text = Optional<string>.Unset` | `Optional<string>.Of("")` |
+| `Date = null` on `CalendarDatePicker` | `Date = Optional<DateTimeOffset?>.Unset` | `Date = Optional<DateTimeOffset?>.Of(null)` |
 
 Reference-type null is explicit. For an `Optional<Brush>` property,
-`with { Background = null }` means `Optional.Of(null)`, not `Unset`.
+`with { Background = null }` means `Optional<Brush>.Of(null)`, not `Unset`.
 Write `Optional<Brush>.Unset` when you want WinUI fallback.
 
 ## Descriptor-author reminder
@@ -94,7 +99,7 @@ Custom descriptors must return `Optional<T>` from `.Controlled` and
 
 **Choose `Unset` intentionally.** Use `Optional<T>.Unset` only when the native WinUI control should own the value through user input, styling, template fallback, or default state.
 
-**Force-assert sentinels explicitly.** If `-1`, `false`, `null`, or `""` is the value you want Reactor to assert, wrap it with `Optional.Of(...)` so future readers do not mistake it for "not set".
+**Force-assert sentinels explicitly.** If `-1`, `false`, `null`, or `""` is the value you want Reactor to assert, wrap it with `Optional<T>.Of(...)` so future readers do not mistake it for "not set".
 
 ## Next Steps
 

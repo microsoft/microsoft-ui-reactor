@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Interop.WinForms;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -124,25 +125,31 @@ class BackgroundDemo : Component
 // </snippet:background>
 
 // <snippet:content-factory>
-// Use ContentFactory for components needing parameters:
-//
-// var island = new XamlIslandControl
-// {
-//     ContentFactory = () =>
-//     {
-//         var host = new ReactorHostControl();
-//         host.SetComponent<ConfigurableComponent>();
-//         return host;
-//     }
-// };
+// ContentFactory runs on the UI thread once the island is ready. Return any
+// UIElement — typically a ReactorHostControl wrapping your component.
+// ReactorHostControl has no SetComponent<T>() method: use ComponentFactory for
+// parameterless components, or Mount(...) when the component needs arguments.
+static class ConfigurableIsland
+{
+    public static XamlIslandControl Create(string title) => new()
+    {
+        ContentFactory = () =>
+        {
+            var host = new ReactorHostControl();
+            host.Mount(new ConfigurableComponent(title));
+            return host;
+        },
+        Dock = SWF.DockStyle.Fill,
+    };
+}
 
-class ConfigurableComponent : Component
+class ConfigurableComponent(string title) : Component
 {
     public override Element Render()
     {
         var (count, setCount) = UseState(0);
         return VStack(12,
-            Heading("Dashboard"),
+            Heading(title),
             TextBlock($"Value: {count}"),
             Button("+1", () => setCount(count + 1))
         ).Padding(24).Background(SolidBackground);

@@ -567,3 +567,50 @@ class NavigationApp : Component
         );
     }
 }
+
+// ────────────────────────────────────────────────────────────────────
+//  TabView content-area fill + Frame code-only-page refusal.
+// ────────────────────────────────────────────────────────────────────
+
+class TabFillDemo : Component
+{
+    public override Element Render() =>
+        // <snippet:tab-fill-content-area>
+        TabView([
+            Tab("Editor", Border(TextBlock("Editor")).Background(Theme.CardBackground)),
+            Tab("Preview", TextBlock("Preview")),
+        ]).FillContentArea();
+        // </snippet:tab-fill-content-area>
+}
+
+class TabFillInitDemo : Component
+{
+    public override Element Render() =>
+        // <snippet:tab-fill-content-area-init>
+        TabView([
+            Tab("Editor", TextBlock("Editor")),
+            Tab("Preview", TextBlock("Preview")),
+        ]) with { FillContentArea = true };
+        // </snippet:tab-fill-content-area-init>
+}
+
+// A Page declared only in C# — no .xaml, so it never reaches the XAML type
+// metadata that Frame resolves against.
+internal sealed partial class MyCodeOnlyPage : Page
+{
+    public MyCodeOnlyPage()
+    {
+        Content = new TextBlock { Text = "Code-only page" };
+    }
+}
+
+class FrameRefusalDemo : Component
+{
+    private static void Log(string message) => Console.WriteLine(message);
+
+    public override Element Render() =>
+        // <snippet:frame-code-only-page>
+        Frame(typeof(MyCodeOnlyPage))          // no .xaml → refused, not fatal
+            .NavigationFailed((t, ex) => Log(ex.Message));
+        // </snippet:frame-code-only-page>
+}

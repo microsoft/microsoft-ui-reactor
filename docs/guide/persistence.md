@@ -83,9 +83,13 @@ var (token, setToken) = UsePersisted(
 ```
 
 The two-arg overload `UsePersisted(key, initial)` defaults to
-`PersistedScope.Application` for back-compat and will eventually
-trigger an analyzer warning — new code should pass the scope
-explicitly.
+`PersistedScope.Application` for back-compat. Analyzer
+`REACTOR_PERSIST_001` now warns on it — process-wide state bleeds
+across windows or tabs that share a key, and that stays invisible
+until two windows are open at once. The bundled code fix offers
+`PersistedScope.Window` (recommended) or an explicit
+`PersistedScope.Application`; new code should pass the scope
+explicitly either way.
 
 ## Versioned shape migration
 

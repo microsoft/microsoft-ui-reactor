@@ -122,3 +122,27 @@ record AppSettings(bool NotificationsOn);
 [JsonSerializable(typeof(AppSettings))]
 partial class AppSettingsJsonContext : JsonSerializerContext;
 // </snippet:disk-bridge>
+
+// ────────────────────────────────────────────────────────────────────
+//  Explicit scope selection.
+// ────────────────────────────────────────────────────────────────────
+
+class ScopedStateDemo : Component
+{
+    public override Element Render()
+    {
+        // <snippet:scopes>
+        // Survives a tab swap; dropped on window close.
+        var (filter, setFilter) = UsePersisted(
+            "list/filter", "", PersistedScope.Window);
+
+        // Survives navigation across windows in this process.
+        var (token, setToken) = UsePersisted(
+            "auth/token", "", PersistedScope.Application);
+        // </snippet:scopes>
+
+        return VStack(8,
+            TextBox(filter, setFilter, placeholderText: "Filter"),
+            TextBlock(token.Length == 0 ? "(signed out)" : "(signed in)"));
+    }
+}

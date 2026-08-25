@@ -24,12 +24,7 @@ click-through. The WinUI XAML compositor does not compose cleanly with classic
 `IgnorePointerInput`, `WindowStyle.None`) and leaves true layered overlays to HWND
 interop.
 
-```csharp
-var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window.NativeWindow);
-var ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-SetWindowLongPtr(hwnd, GWL_EXSTYLE,
-    ex | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW);
-SetLayeredWindowAttributes(hwnd, 0, 160, LWA_ALPHA);
+```csharp snippet="windowing-advanced/layered-overlay"
 ```
 
 Caveats:
@@ -43,22 +38,15 @@ Caveats:
 A HUD-style surface can stay inside the supported Reactor contract when it only
 needs an aesthetic, not true transparency:
 
-```csharp
-new WindowSpec
-{
-    Title = "HUD",
-    Style = WindowStyle.None,
-    IsMovableByBackground = true,
-    Level = WindowLevel.Floating,
-    CornerStyle = WindowCornerStyle.Rounded,
-    Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic),
-};
+```csharp snippet="windowing-advanced/hud-spec"
 ```
 
 Render a dark-tinted root `Border`, add a custom `TitleBar(...)`, and keep the
-surface app-local with `WindowLevel.Floating`. A dedicated `samples/apps/hud-overlay/`
-may be added in a later sample-polish phase; until then, this snippet is the
-recommended shape.
+surface app-local with `WindowLevel.Floating`. The shipping
+`samples/apps/window-styles` app is the live counterpart: it toggles every
+`WindowStyle`, `WindowLevel`, `WindowCornerStyle`, and `BackdropKind` on one
+window so you can see the combination before committing to it, and
+`samples/apps/tool-palette` shows the same shape as a real palette window.
 
 Caveats:
 
@@ -72,9 +60,7 @@ DWM exposes only discrete corner preferences (`Default`, `Square`, `Rounded`,
 `RoundedSmall`). You can force arbitrary regions with `SetWindowRgn`, but that is
 not a platform-quality default.
 
-```csharp
-using var region = CreateRoundRectRgn(0, 0, widthPx, heightPx, radiusPx, radiusPx);
-SetWindowRgn(hwnd, region.DangerousGetHandle(), true);
+```csharp snippet="windowing-advanced/window-region"
 ```
 
 Tradeoffs:
@@ -82,6 +68,10 @@ Tradeoffs:
 - DWM shadows are often lost or clipped.
 - Edges can be jagged at 100% DPI because regions are binary masks.
 - The region must be recomputed during resize, which can cause redraw cascades.
+- **The system takes ownership of the `HRGN` on a successful `SetWindowRgn`.**
+  Deleting it afterwards — or wrapping it in a `using` / `SafeHandle` that does —
+  frees GDI memory the compositor still reads. Delete the region only when
+  `SetWindowRgn` fails.
 
 Use this only for highly specialized shells that accept those costs.
 

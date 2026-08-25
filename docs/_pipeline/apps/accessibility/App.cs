@@ -253,3 +253,47 @@ class AccessibilityApp : Component
         );
     }
 }
+
+// ────────────────────────────────────────────────────────────────────
+//  Relationship reference properties + list-item naming.
+// ────────────────────────────────────────────────────────────────────
+
+class RelationshipRefsDemo : Component
+{
+    public override Element Render()
+    {
+        var (email, setEmail) = UseState("");
+
+        // <snippet:relationship-refs>
+        var label = this.UseElementRef<FrameworkElement>();
+        var help = this.UseElementRef<FrameworkElement>();
+
+        return VStack(4,
+            TextBlock("Email").Ref(label),
+            Caption("Use your work address.").Ref(help),
+            TextBox(email, setEmail)
+                .LabeledBy(label)
+                .DescribedBy(help));
+        // </snippet:relationship-refs>
+    }
+}
+
+record Contact(string Id, string Name, string Role, string AvatarUrl);
+
+class ListItemNameDemo : Component
+{
+    private static readonly IReadOnlyList<Contact> contacts =
+    [
+        new("1", "Ada Lovelace", "Engineer", "ms-appx:///Assets/ada.png"),
+        new("2", "Grace Hopper", "Admiral", "ms-appx:///Assets/grace.png"),
+    ];
+
+    public override Element Render() =>
+        // <snippet:list-item-name>
+        ListView(contacts, c => c.Id, (contact, i) =>
+            HStack(
+                Image(contact.AvatarUrl).AccessibilityHidden(),
+                VStack(TextBlock(contact.Name).Bold(), TextBlock(contact.Role))
+            ).AutomationName($"{contact.Name}, {contact.Role}"));
+        // </snippet:list-item-name>
+}

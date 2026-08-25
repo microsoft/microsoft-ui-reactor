@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Navigation;
 using static Microsoft.UI.Reactor.Factories;
 
 // <snippet:run>
@@ -157,3 +158,346 @@ class TrayHost : Component
     }
 }
 // </snippet:tray-icon>
+
+// ────────────────────────────────────────────────────────────────────
+//  Compiled counterparts for the guide's per-section examples.
+// ────────────────────────────────────────────────────────────────────
+
+static class WindowLifecycle
+{
+    // <snippet:open-window>
+    public static void OpenSettings()
+    {
+        var settings = ReactorApp.OpenWindow(
+            new WindowSpec { Title = "Settings", Width = 520, Height = 420 },
+            () => new SettingsWindow());
+
+        settings.Activate();
+        settings.Close();
+    }
+    // </snippet:open-window>
+}
+
+// <snippet:sizing>
+class PreviewWindow : Component
+{
+    public static WindowSpec Spec => new()
+    {
+        Title = "Preview",
+        Width = 640,
+        Height = 360,
+        ResizeMode = WindowResizeMode.CanMinimize,
+        AspectRatio = 16.0 / 9.0,
+    };
+
+    public override Element Render()
+    {
+        var window = UseWindow();
+
+        UseWindowAspectRatio(1.0); // lifetime-bound hook; unmount clears it
+
+        return Button("Widescreen", () => window?.SetAspectRatio(4.0 / 3.0));
+    }
+}
+// </snippet:sizing>
+
+// <snippet:placement>
+class CommandPalette : Component
+{
+    public static WindowSpec Spec => new()
+    {
+        Title = "Command Palette",
+        StartPosition = WindowStartPosition.CenterOnCurrent,
+        IsMovableByBackground = true,
+    };
+
+    public override Element Render()
+    {
+        var (x, y) = UseWindowPosition();
+        var drag = UseWindowDragMove();
+
+        return VStack(8,
+            TextBlock($"at {x}, {y}"),
+            Button("Drag window", drag));
+    }
+}
+// </snippet:placement>
+
+// <snippet:drag-regions>
+class PaletteChrome : Component
+{
+    public override Element Render() =>
+        HStack(
+            TextBlock("Palette"),
+            Button("Settings").Drag(false));
+}
+// </snippet:drag-regions>
+
+static class WindowPlacementPersistence
+{
+    // <snippet:persistence>
+    public static WindowSpec ShellSpec { get; } =
+        new WindowSpec { Title = "Shell" }
+            .WithPersistence("main-window", fallback: WindowStartPosition.CenterOnCurrent);
+
+    public static void FlushPlacement(ReactorWindow window)
+    {
+        window.SavePlacement(); // manual best-effort flush
+    }
+    // </snippet:persistence>
+}
+
+// <snippet:z-order>
+class FloatingPalette : Component
+{
+    public static WindowSpec Spec => new()
+    {
+        Title = "Palette",
+        Level = WindowLevel.Floating,
+        ShowInTaskbar = false,
+        ShowInSwitcher = true,
+    };
+
+    public override Element Render()
+    {
+        var isCovered = UseIsCovered(); // hint from ZOrderChanged
+        return TextBlock(isCovered ? "(covered)" : "(visible)");
+    }
+}
+// </snippet:z-order>
+
+static class WindowChrome
+{
+    // <snippet:chrome>
+    public static WindowSpec HudSpec { get; } = new()
+    {
+        Title = "HUD",
+        Style = WindowStyle.None,
+        IsMovableByBackground = true,
+        CornerStyle = WindowCornerStyle.Rounded,
+        Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic),
+    };
+    // </snippet:chrome>
+}
+
+// <snippet:title-bar>
+class TitleBarWindow : Component
+{
+    public override Element Render() =>
+        VStack(
+            TitleBar("My app"),
+            TextBlock("Body"));
+}
+// </snippet:title-bar>
+
+class TitleBarContentWindow : Component
+{
+    private static void OnSettings() { }
+
+    public override Element Render() =>
+        // <snippet:title-bar-content>
+        (TitleBar("Gallery") with
+        {
+            Content = HStack(8,
+                AutoSuggestBox("", _ => {}).Width(200),
+                Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
+                    .AutomationName("Settings").IsDragRegion(false)),
+        }).AutoRefreshDragRegions();
+        // </snippet:title-bar-content>
+}
+
+class TallTitleBarWindow : Component
+{
+    public override Element Render()
+    {
+        var nav = UseNavigation("home");
+
+        // <snippet:title-bar-tall>
+        var titleBar = TitleBar("My app")
+            .WithNavigation(nav)
+            .PaneToggleButtonVisible(true)
+            .Tall();                                  // or .HeightOption(WindowTitleBarHeight.Tall)
+        // </snippet:title-bar-tall>
+
+        return VStack(titleBar, NavigationHost(nav, route => TextBlock(route)));
+    }
+}
+
+static class TallTitleBarSpec
+{
+    // <snippet:title-bar-height-spec>
+    public static WindowSpec Spec { get; } = new()
+    {
+        Title = "My app",
+        ExtendsContentIntoTitleBar = true,
+        TitleBarHeight = WindowTitleBarHeight.Tall,
+    };
+    // </snippet:title-bar-height-spec>
+}
+
+// <snippet:title-bar-tall-legacy>
+class LegacyTallTitleBar : Component
+{
+    public override Element Render()
+    {
+        // Don't do this any more.
+        var window = UseWindow();
+        UseEffect(() =>
+        {
+            if (window is not { } win) return;
+            win.NativeWindow?.DispatcherQueue.TryEnqueue(() =>
+                win.AppWindow.TitleBar.PreferredHeightOption =
+                    Microsoft.UI.Windowing.TitleBarHeightOption.Tall);
+        });
+
+        return TitleBar("My app");
+    }
+}
+// </snippet:title-bar-tall-legacy>
+
+class TaskbarDemo : Component
+{
+    private static void Pause() { }
+
+    public override Element Render()
+    {
+        // <snippet:taskbar>
+        var taskbar = UseWindow()!.TaskbarItem;
+        taskbar.Description = "Build in progress";
+        taskbar.Progress.State = TaskbarProgressState.Normal;
+        taskbar.Progress.Value = 0.42;
+        taskbar.SetThumbnailToolbar([
+            new ThumbnailToolbarButton("pause", WindowIcon.FromPath("pause.ico"), "Pause", () => Pause())
+        ]);
+        // </snippet:taskbar>
+
+        return TextBlock("Building...");
+    }
+}
+
+static class AppJumpList
+{
+    // <snippet:jump-list>
+    // Unpackaged apps must set an AppUserModelId once, before the first
+    // UpdateAsync — the shell has no other stable identity to hang the
+    // jump list off. Packaged apps inherit it from the manifest.
+    public static async Task PublishAsync()
+    {
+        JumpList.AppUserModelId = "Contoso.Reactor.Demo";
+        JumpList.ShowRecent = true;
+
+        await JumpList.UpdateAsync([
+            JumpListItem.ForUri("New document", "contoso://new"),
+            JumpListItem.ForUri("Open dashboard", "contoso://dashboard",
+                description: "Jump straight to the dashboard"),
+            new JumpListItem("Report a bug", "contoso://bug",
+                Kind: JumpListItemKind.Custom, GroupCategory: "Help"),
+        ]);
+    }
+
+    // Entries come back as a plain process re-launch. Resolve the argument
+    // string through the same DeepLinkMap the app already uses for routes;
+    // never act on it unvalidated. DeepLinkResult.Routes is the resolved
+    // back stack, deepest route last.
+    public static void Start(DeepLinkMap<string> routes) =>
+        ReactorApp.Run(ctx =>
+        {
+            if (ctx.LaunchActivation.Kind == LaunchKind.JumpList &&
+                ctx.LaunchActivation.TryResolve(routes, out var deepLink))
+            {
+                ReactorApp.OpenWindow(
+                    new WindowSpec { Title = deepLink.Routes[^1] },
+                    () => new SettingsWindow());
+            }
+        });
+    // </snippet:jump-list>
+}
+
+class DisplayDemo : Component
+{
+    public override Element Render()
+    {
+        var window = UseWindow()!;
+
+        // <snippet:displays>
+        var displays = UseDisplays();
+        var nearest = ReactorDisplay.NearestTo(window.Position.X, window.Position.Y);
+        // </snippet:displays>
+
+        return TextBlock($"{displays.Count} display(s); nearest {nearest.Id}");
+    }
+}
+
+class PickerDemo : Component
+{
+    // <snippet:pickers>
+    // Both helpers return null when the user cancels the dialog.
+    async Task OpenAsync()
+    {
+        var file = await UseFilePickerAsync(new FilePickerOptions(
+            FileTypeFilter: [".txt", ".md"]));
+        if (file is null) return;
+
+        var folder = await UseFolderPickerAsync(new FolderPickerOptions());
+        if (folder is null) return;
+    }
+    // </snippet:pickers>
+
+    public override Element Render() =>
+        Button("Open...", () => _ = OpenAsync());
+}
+
+static class WindowRegistry
+{
+    // <snippet:enumerate>
+    public static void Inspect(WindowKey key)
+    {
+        IReadOnlyList<ReactorWindow> all = ReactorApp.Windows; // snapshot
+        ReactorWindow? primary = ReactorApp.PrimaryWindow;     // null after it closes
+        ReactorWindow? found = ReactorApp.FindWindow(key);     // look up by WindowKey
+    }
+    // </snippet:enumerate>
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  Spec 054 windowing migration. The "Before" halves name fields that no
+//  longer exist, so they stay as comments; the "After" halves compile.
+// ────────────────────────────────────────────────────────────────────
+
+static class Migration054
+{
+    // <snippet:migration-054-flags>
+    // Before
+    // new WindowSpec
+    // {
+    //     Title = "Tools",
+    //     IsResizable = false,
+    //     IsShownInSwitchers = false,
+    //     IsAlwaysOnTop = true,
+    // };
+
+    // After
+    public static WindowSpec Tools { get; } = new()
+    {
+        Title = "Tools",
+        ResizeMode = WindowResizeMode.NoResize,
+        ShowInTaskbar = false,
+        ShowInSwitcher = false,
+        Level = WindowLevel.AlwaysOnTop,
+    };
+    // </snippet:migration-054-flags>
+
+    // <snippet:migration-054-persistence>
+    // Before
+    // new WindowSpec
+    // {
+    //     Title = "Main",
+    //     PersistenceId = "main",
+    //     StartPosition = WindowStartPosition.RestoreFromPersistence,
+    // };
+
+    // After
+    public static WindowSpec Main { get; } =
+        new WindowSpec { Title = "Main" }.WithPersistence("main");
+    // </snippet:migration-054-persistence>
+}
