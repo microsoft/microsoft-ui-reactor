@@ -1645,6 +1645,13 @@ public sealed class ReactorWindow : IDisposable
         var resolved = _specTitleBarHeight ?? _elementTitleBarHeight;
         if (resolved is null)
         {
+            // No height is declared, so the invalid "height set on a
+            // non-extended window" combination cannot hold — re-arm, or
+            // re-declaring the height later would be a new invalid state that
+            // never warned. Must happen before the early return below: an
+            // invalid height is never applied, so _appliedTitleBarHeight stays
+            // null and that return is exactly the path a removal takes.
+            _warnedTitleBarHeightNotExtended = false;
             if (_appliedTitleBarHeight is null) return; // never declared — leave the app's value alone
             resolved = WindowTitleBarHeight.Standard;   // declaration removed — return to the default
         }

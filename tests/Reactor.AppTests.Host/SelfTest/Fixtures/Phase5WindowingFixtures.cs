@@ -266,6 +266,21 @@ internal static class Phase5WindowingFixtures
                 }
                 H.Check("TitleBarHeight_NoRewarnPerUnrelatedUpdate",
                     ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests == afterOpen);
+
+                // Removing the height clears the invalid combination. It was
+                // never applied (invalid), so this takes ApplyTitleBarHeight's
+                // "never declared" early return — the path that used to leave
+                // the latch set.
+                win.Update(spec with { Title = "TBH none", TitleBarHeight = null });
+                await Harness.Render(30);
+                H.Check("TitleBarHeight_RemovalDoesNotWarn",
+                    ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests == afterOpen);
+
+                // Re-declaring it is a new invalid state and must warn again.
+                win.Update(spec with { Title = "TBH again" });
+                await Harness.Render(30);
+                H.Check("TitleBarHeight_RedeclareWarnsAgain",
+                    ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests == afterOpen + 1);
             }
             finally { ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests = 0; await CloseAndSettle(win); }
         }
