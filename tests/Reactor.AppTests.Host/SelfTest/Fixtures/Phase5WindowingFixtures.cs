@@ -229,6 +229,49 @@ internal static class Phase5WindowingFixtures
     }
 
     /// <summary>
+    /// The title-bar-height warning must fire on entering the invalid
+    /// combination, not on every chrome re-apply. <c>ApplyChrome</c> runs on any
+    /// unequal spec, so an app that keeps <c>TitleBarHeight</c> set while
+    /// <c>ExtendsContentIntoTitleBar</c> stays false would otherwise emit one
+    /// release-visible warning per unrelated field change.
+    /// </summary>
+    internal class TitleBarHeightWarningIsEdgeTriggered(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests = 0;
+            // TitleBarHeight set while content-extension is explicitly false is
+            // the invalid combination the warning exists for.
+            var spec = new WindowSpec
+            {
+                Title = "TBH 0",
+                Width = 320,
+                Height = 240,
+                TitleBarHeight = WindowTitleBarHeight.Tall,
+                ExtendsContentIntoTitleBar = false,
+            };
+            var win = await OpenAndSettle(spec, () => new FixedContent(200, 120));
+            try
+            {
+                var afterOpen = ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests;
+                H.Check("TitleBarHeight_WarnedOnEntry", afterOpen >= 1);
+
+                // Change only an unrelated field, repeatedly. The invalid
+                // combination persists unchanged, so it must not re-warn.
+                for (var i = 1; i <= 4; i++)
+                {
+                    win.Update(spec with { Title = $"TBH {i}" });
+                    await Harness.Render(30);
+                }
+                H.Check("TitleBarHeight_NoRewarnPerUnrelatedUpdate",
+                    ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests == afterOpen);
+            }
+            finally { ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
     /// The no-drag-affordance warning must fire on entering the condition, not on
     /// every <c>Update</c>. <c>Update</c> validates ahead of its own equality
     /// check, so an app holding a chromeless, non-draggable window while changing

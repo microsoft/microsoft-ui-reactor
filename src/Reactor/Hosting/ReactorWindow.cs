@@ -1659,7 +1659,15 @@ public sealed class ReactorWindow : IDisposable
 
         if (!extended)
         {
-            if (warnWhenNotExtended)
+            // Warn on entering the invalid combination, not on every re-apply.
+            // ApplyChrome runs for any unequal spec, so an app that leaves
+            // TitleBarHeight set on a non-extended window would otherwise emit
+            // one release-visible warning per unrelated field change. Re-armed
+            // below once the window is content-extended again.
+            if (warnWhenNotExtended && !_warnedTitleBarHeightNotExtended)
+            {
+                _warnedTitleBarHeightNotExtended = true;
+                Interlocked.Increment(ref TitleBarHeightNotExtendedWarningCountForTests);
                 DiagnosticLog.Warning(
                     LogCategory.Hosting,
                     "ReactorWindow.TitleBarHeight",
@@ -1672,11 +1680,16 @@ public sealed class ReactorWindow : IDisposable
                           + "The height option was not applied."
                         : "TitleBarHeight requires a content-extended window; set WindowSpec.ExtendsContentIntoTitleBar = true "
                           + "or render a TitleBar(...) element. The height option was not applied.");
+            }
             // The caption stayed Standard, so the control must not go tall either.
             _effectiveTitleBarHeight = WindowTitleBarHeight.Standard;
             SyncTitleBarControlHeight();
             return;
         }
+
+        // Content-extended: the invalid combination is gone, so a later relapse
+        // is a new edge and warns again.
+        _warnedTitleBarHeightNotExtended = false;
 
         try
         {
@@ -1978,6 +1991,12 @@ public sealed class ReactorWindow : IDisposable
     }
 
     internal static int SizeToContentMaximizedWarningCountForTests;
+
+    // Edge-trigger for the title-bar-height "not extended" warning. ApplyChrome
+    // re-applies on any unequal spec, so without this an app that keeps the
+    // invalid combination would warn on every unrelated field change.
+    private bool _warnedTitleBarHeightNotExtended;
+    internal static int TitleBarHeightNotExtendedWarningCountForTests;
 
     internal void ApplySizeToContentForTests() => ApplySizeToContent();
 
