@@ -692,6 +692,111 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A type-changing modifier decides the chain's element, so a gated modifier after it is
+    /// judged against the type it produced.
+    /// </summary>
+    /// <remarks>
+    /// <c>Semantics</c> is the framework's only one. <c>Border(child).Semantics(...)</c> is a
+    /// <c>SemanticElement</c> mounting a <c>SemanticPanel</c> — a <c>Panel</c>, outside
+    /// <c>Padding</c>'s gate — so a trailing <c>.Padding(16)</c> really is dropped, even though the
+    /// head is a Border and a Border is a legal receiver. Walking through it resolved the wrong
+    /// element, reported nothing, and still counted the chain as resolved, which is the shape of
+    /// shortfall the floors are meant to expose.
+    /// </remarks>
+    [Fact]
+    public void A_Type_Changing_Modifier_Decides_The_Element()
+    {
+        Assert.Contains("Semantics", ReactorSurface.Instance.TypeChangingModifiers.Keys);
+
+        var scan = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/semantics.md", 1, "Border(child).Semantics(role: \"button\").Padding(16)"),
+        });
+
+        var finding = Assert.Single(scan.Of(AgentKitFindingKind.DroppedModifier));
+        Assert.Equal("Padding", finding.Modifier);
+        Assert.Equal("SemanticElement", finding.ElementName);
+
+        // Control: without the type change the same chain is sound, so this is not simply
+        // reporting every Border.
+        var plain = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/semantics.md", 1, "Border(child).Padding(16)"),
+        });
+
+        Assert.Empty(plain.Findings);
+    }
+
+    /// <summary>
+    /// An item that is not packed is not inspected.
+    /// </summary>
+    /// <remarks>
+    /// A <c>&lt;None&gt;</c> item ships only if it opts in with <c>Pack="true"</c>, so an
+    /// <c>agentkit/</c> path alone does not mean a consumer receives the file. Scanning one anyway
+    /// could fail the gate over a document nobody gets, breaking the property the whole corpus
+    /// rests on — that it is the same list the pack target consumes.
+    /// </remarks>
+    [Fact]
+    public void Only_Items_That_Actually_Pack_Are_Inspected()
+    {
+        const string Project = """
+            <Project>
+              <ItemGroup>
+                <None Include="a.md" Pack="true"  PackagePath="agentkit/skills/" />
+                <None Include="b.md" Pack="false" PackagePath="agentkit/skills/" />
+                <None Include="c.md"              PackagePath="agentkit/skills/" />
+              </ItemGroup>
+            </Project>
+            """;
+
+        Assert.Equal(new[] { "a.md" }, AgentKitDocCorpus.AgentKitIncludes(Project));
+    }
+
+    /// <summary>
+    /// A fence indented as a code block is literal text and must not open a region.
+    /// </summary>
+    /// <remarks>
+    /// Four spaces outside a list is an indented code block. Honouring a fence written there
+    /// swallowed everything up to the next close — including the genuine top-level
+    /// ```` ```csharp ```` opener below it, which then shipped uninspected. The differential probe
+    /// cannot catch this, because it derives its exclusions from the same scan.
+    /// </remarks>
+    [Fact]
+    public void An_Indented_Literal_Fence_Does_Not_Swallow_A_Real_Block()
+    {
+        const string Markdown = """
+            # Heading
+
+            Some prose, then an indented code block quoting a fence:
+
+                ```text
+                not a real fence
+
+            ```csharp
+            FlexColumn(children).FlexPadding(16)
+            ```
+            """;
+
+        var snippets = AgentKitDocCorpus.ExtractFences("fixture/indented.md", Markdown);
+
+        var real = Assert.Single(snippets);
+        Assert.Equal("FlexColumn(children).FlexPadding(16)", real.Text);
+
+        // Positive control: the same indentation *inside a list item* is a real fence, which is how
+        // the two blocks in typography-and-colors.md reach the corpus.
+        const string InList = """
+            10. **An item** — its block is indented to the item's content column:
+
+                ```csharp
+                TextBlock(p).TextWrapping(TextWrapping.WrapWholeWords)
+                ```
+            """;
+
+        var nested = Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/list.md", InList));
+        Assert.Equal("TextBlock(p).TextWrapping(TextWrapping.WrapWholeWords)", nested.Text);
+    }
+
+    /// <summary>
     /// Floors over the corpus and the reflection behind it. Each one turns a silent collapse — a
     /// glob that stopped matching, a factory map that resolved to nothing, a fence parser that
     /// stopped recognising ```` ```csharp ```` — into a failure.

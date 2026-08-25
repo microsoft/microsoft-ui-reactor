@@ -124,10 +124,27 @@ internal static class AgentKitDocCorpus
         XDocument.Parse(projectXml)
             .Descendants()
             .Where(e => e.Name.LocalName == "None")
-            .Select(e => (Path: (string?)e.Attribute("PackagePath"), Include: (string?)e.Attribute("Include")))
-            .Where(item => item.Path is not null && item.Include is not null && IsAgentKitPath(item.Path))
+            .Select(e => (
+                Path: (string?)e.Attribute("PackagePath"),
+                Include: (string?)e.Attribute("Include"),
+                Pack: (string?)e.Attribute("Pack")))
+            .Where(item => item.Path is not null && item.Include is not null
+                           && IsPacked(item.Pack) && IsAgentKitPath(item.Path))
             .Select(item => (item.Path!, item.Include!))
             .ToList();
+
+    /// <summary>
+    /// True when an item is actually shipped, i.e. carries <c>Pack="true"</c>.
+    /// </summary>
+    /// <remarks>
+    /// A <c>&lt;None&gt;</c> item is not packed unless it opts in, so an <c>agentkit/</c>
+    /// <c>PackagePath</c> alone does not mean the file reaches a consumer. Without this,
+    /// <c>&lt;None Include="draft.md" Pack="false" PackagePath="agentkit/" /&gt;</c> would be
+    /// scanned and could fail the gate over a document nobody receives — breaking the one property
+    /// this corpus is built on, that it is the same list the pack target consumes.
+    /// </remarks>
+    private static bool IsPacked(string? pack) =>
+        pack is not null && pack.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// True when an item's <c>PackagePath</c> puts it under <c>agentkit/</c>.
@@ -166,7 +183,7 @@ internal static class AgentKitDocCorpus
             if (packagePath is null || include is null)
                 continue;
 
-            if (!IsAgentKitPath(packagePath))
+            if (!IsPacked((string?)none.Attribute("Pack")) || !IsAgentKitPath(packagePath))
                 continue;
 
             // One entry per pattern. Aggregating an item's globs would let a dead one hide behind a
@@ -261,6 +278,16 @@ internal static class AgentKitDocCorpus
             if (!open.Success)
                 continue;
 
+            var indent = open.Groups["indent"].Value.Length;
+
+            // A run of four or more spaces outside a list is an *indented code block*, so a fence
+            // written there is literal text, not an opener. Honouring it swallowed everything up to
+            // the next close — including a genuine top-level ```csharp opener, which would then
+            // never be extracted. The differential probe cannot catch that, since it derives its
+            // exclusions from this same scan.
+            if (indent >= 4 && !IsInsideListItem(lines, i))
+                continue;
+
             var fenceChar = open.Groups["fence"].Value[0];
             var fenceLength = open.Groups["fence"].Value.Length;
 
@@ -281,6 +308,41 @@ internal static class AgentKitDocCorpus
         }
 
         return regions;
+    }
+
+    /// <summary>A markdown list item marker: <c>- </c>, <c>* </c>, <c>+ </c> or <c>10. </c>.</summary>
+    private static readonly Regex ListItemMarker = new(@"^(?<indent>[ \t]*)([-*+]|\d+[.)])\s", RegexOptions.Compiled);
+
+    /// <summary>
+    /// True when the deeply-indented line at <paramref name="index"/> is the content of a list item
+    /// rather than an indented code block.
+    /// </summary>
+    /// <remarks>
+    /// CommonMark measures a fence's indent relative to its container, so a fence inside a list item
+    /// legitimately sits at four or more absolute spaces — but the identical indentation outside a
+    /// list is a code block, where a fence is literal text. Distinguishing them is what lets the
+    /// corpus include the two real blocks under items 10 and 11 of
+    /// <c>skills/design-docs/typography-and-colors.md</c> without also honouring a quoted fence.
+    /// </remarks>
+    private static bool IsInsideListItem(string[] lines, int index)
+    {
+        for (var i = index - 1; i >= 0; i--)
+        {
+            var line = lines[i];
+            if (line.Trim().Length == 0)
+                continue;   // a blank line does not end a list item's content.
+
+            var marker = ListItemMarker.Match(line);
+            if (marker.Success)
+                return true;
+
+            // Any other line at lower indentation closes the container.
+            var indent = line.Length - line.TrimStart(' ', '\t').Length;
+            if (indent < 4)
+                return false;
+        }
+
+        return false;
     }
 
     /// <summary>

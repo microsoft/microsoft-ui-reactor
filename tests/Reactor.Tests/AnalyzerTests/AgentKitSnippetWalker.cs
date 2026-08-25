@@ -33,6 +33,7 @@ internal sealed class ReactorSurface
     private readonly Dictionary<string, HashSet<Type>> _factoriesByName = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, HashSet<Type>> _setControls = new();
     private readonly Dictionary<string, HashSet<Type>> _modifierArguments = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Type> _typeChangingModifiers = new(StringComparer.Ordinal);
 
     [UnconditionalSuppressMessage(
         "Trimming", "IL2026",
@@ -90,6 +91,32 @@ internal sealed class ReactorSurface
                 _modifierArguments[method.Name] = types = new HashSet<Type>();
 
             types.Add(argument);
+        }
+
+        // Type-changing modifiers: `M<T>(this T el, …)` that returns a concrete element rather than
+        // T. The chain's element is decided by the last of these, not by the head factory.
+        foreach (var method in elementExtensions.GetMethods(BindingFlags.Public | BindingFlags.Static))
+        {
+            if (!method.IsGenericMethodDefinition)
+                continue;
+
+            var parameters = method.GetParameters();
+            if (parameters.Length == 0 || !parameters[0].ParameterType.IsGenericParameter)
+                continue;
+
+            var returned = method.ReturnType;
+            if (returned.IsGenericParameter
+                || returned.ContainsGenericParameters
+                || !ElementType.IsAssignableFrom(returned))
+                continue;   // type-preserving (returns T) or not an element at all.
+
+            // Two overloads disagreeing would make the name unusable; none do today, and poisoning
+            // to "unknown" would silently restore the walk-through this exists to stop, so a
+            // disagreement removes the entry and ModifierTableIntegrity-style floors stay honest.
+            if (_typeChangingModifiers.TryGetValue(method.Name, out var existing) && existing != returned)
+                _typeChangingModifiers.Remove(method.Name);
+            else
+                _typeChangingModifiers[method.Name] = returned;
         }
 
         var factories = reactor.GetType("Microsoft.UI.Reactor.Factories")
@@ -176,6 +203,11 @@ internal sealed class ReactorSurface
     /// </remarks>
     public Type? Element(string factoryName, int typeArgumentCount)
     {
+        // A type-changing modifier is not a factory, but ResolveHead reports it in the same slot
+        // because it decides the chain's element the same way.
+        if (_typeChangingModifiers.TryGetValue(factoryName, out var changed))
+            return changed;
+
         if (_factories.TryGetValue(Key(factoryName, typeArgumentCount), out var exact))
             return exact;
 
@@ -319,6 +351,21 @@ internal sealed class ReactorSurface
         "int", "double", "float", "bool", "char", "byte", "sbyte",
         "short", "ushort", "uint", "long", "ulong", "decimal", "nint", "nuint",
     };
+
+    /// <summary>
+    /// Fluent modifiers that return a <em>different</em> element type than their receiver, mapped
+    /// to that type. <c>Semantics</c> is the framework's only one today.
+    /// </summary>
+    /// <remarks>
+    /// These break the assumption that a chain's element is decided by its head factory.
+    /// <c>Border(child).Semantics(...)</c> is a <c>SemanticElement</c> mounting a
+    /// <c>SemanticPanel</c>, which is a <c>Panel</c> and therefore outside <c>Padding</c>'s gate —
+    /// so a trailing <c>.Padding(16)</c> is dropped at runtime even though the head is a Border,
+    /// a perfectly legal receiver. Walking through them resolved the wrong element and reported
+    /// nothing, while still incrementing the resolution count that is supposed to detect exactly
+    /// that kind of silent shortfall.
+    /// </remarks>
+    public IReadOnlyDictionary<string, Type> TypeChangingModifiers => _typeChangingModifiers;
 
     /// <summary>
     /// The control's own name followed by every base type name, most derived first.</summary>
@@ -897,6 +944,13 @@ internal static class AgentKitSnippetWalker
                     return (identifier.Identifier.Text, 0, invocation.ArgumentList.Arguments);
 
                 case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access }:
+                    // A type-changing modifier decides the element outright: everything below it
+                    // describes what it wrapped, not what the chain now is. `Semantics` is the only
+                    // one today, and walking through it resolved `Border(child).Semantics(...)` as a
+                    // Border while the value really lands on a SemanticPanel.
+                    if (ReactorSurface.Instance.TypeChangingModifiers.ContainsKey(access.Name.Identifier.Text))
+                        return (access.Name.Identifier.Text, 0, default);
+
                     node = access.Expression;
                     continue;
 
