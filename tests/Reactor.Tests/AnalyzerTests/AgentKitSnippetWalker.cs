@@ -866,16 +866,24 @@ internal static class AgentKitSnippetWalker
     /// True when a modifier on the wrapper's chain would survive the wrapper being removed.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Two ways to qualify: it is a positional/identity modifier the inner element inherits when it
-    /// takes the wrapper's place, or it is inert. A constant-null argument makes a modifier do
-    /// nothing — the premise <see cref="HasConstantNullArgument"/> already rests on — so
-    /// <c>Border(inner).Padding(16).Background((Brush)null)</c> is still a Border supplying nothing
-    /// but padding. Without the second arm, a decorator that does nothing would hide the exact
-    /// workaround this rule exists to catch.
+    /// takes the wrapper's place, or it is a <em>gated common modifier</em> with a constant-null
+    /// argument, which does nothing at all.
+    /// </para>
+    /// <para>
+    /// The null arm is restricted to <see cref="ModifierTable.Properties"/> on purpose. "A null
+    /// argument makes it inert" holds for the gated modifiers <c>HasConstantNullArgument</c>
+    /// mirrors the analyzer over; it does not generalise. <c>.Stagger(delay, null)</c> still
+    /// installs a stagger configuration, and moving it onto the inner element changes which
+    /// children animate — so an unknown modifier taking a null must keep suppressing the finding,
+    /// like any other unknown.
+    /// </para>
     /// </remarks>
     private static bool IsRelocatable((string Name, InvocationExpressionSyntax Invocation) modifier) =>
         RelocatableModifiers.Contains(modifier.Name)
-        || HasConstantNullArgument(modifier.Invocation, modifier.Name);
+        || (ModifierTable.Properties.ContainsKey(modifier.Name)
+            && HasConstantNullArgument(modifier.Invocation, modifier.Name));
 
     /// <summary>
     /// True when any <c>with</c> expression appears on the fluent chain this invocation belongs to.

@@ -287,6 +287,7 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("- Wrong, and it costs a build-check cycle:", true)]
     // Explanations that merely contain a marker word.
     [InlineData("// avoid re-enumerating children", false)]
+    [InlineData("// Show ❌ when validation fails", false)]
     [InlineData("// Never hardcode hex on themed surfaces — reviewers reject it", false)]
     [InlineData("// Good: proper hierarchy", false)]
     [InlineData("- background reading: https://example.com/patterns/avoid", false)]
@@ -798,6 +799,9 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("Border(FlexColumn(children)).Padding(16).WithKey(\"k\")", true)]
     // Inert: does nothing, so it cannot be what the wrapper is for.
     [InlineData("Border(FlexColumn(children)).Padding(16).Background((Brush)null)", true)]
+    // A null argument to an *ungated* modifier proves nothing: `.Stagger(delay, null)` still
+    // installs a stagger, and moving it inward changes which children animate.
+    [InlineData("Border(FlexColumn(children)).Padding(16).Stagger(delay, null)", false)]
     // Behaviour-bearing or opaque: the wrapper is load-bearing, so no finding.
     [InlineData("Border(FlexColumn(children)).Padding(16).OnTapped((s, e) => Handle(e))", false)]
     [InlineData("Border(FlexColumn(children)).Padding(16).WithFlyout(menu)", false)]

@@ -56,8 +56,16 @@ public class AgentKitDocGateTests
         @"^(wrong|bad|don'?t|avoid|never|incorrect|anti-?pattern)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    /// <summary>An explicit cross, which is a counterexample label all by itself.</summary>
-    private static readonly Regex CrossMark = new("[❌✗✘]", RegexOptions.Compiled);
+    /// <summary>
+    /// An explicit cross <em>opening</em> the label, which is a counterexample marker by itself.
+    /// </summary>
+    /// <remarks>
+    /// Anchored, like every other marker here. Unanchored, an ordinary explanatory comment such as
+    /// <c>// Show ❌ when validation fails</c> exempted the sample beneath it — the same
+    /// incidental-occurrence defect the word list was tightened to avoid, reintroduced through the
+    /// symbol.
+    /// </remarks>
+    private static readonly Regex CrossMark = new("^[❌✗✘]", RegexOptions.Compiled);
 
     /// <summary>A bare URL, stripped from prose before the marker is matched against it.</summary>
     private static readonly Regex Urls = new(@"\b\w+://\S+", RegexOptions.Compiled);
