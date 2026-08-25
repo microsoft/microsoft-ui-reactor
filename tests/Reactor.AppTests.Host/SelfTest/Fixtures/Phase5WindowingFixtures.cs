@@ -33,6 +33,25 @@ internal static class Phase5WindowingFixtures
         }
     }
 
+    /// <summary>
+    /// Alternates the root control *type* on demand, so the reconciler hands
+    /// <c>OnHostContentRendered</c> a different <c>FrameworkElement</c> instance
+    /// and <c>AttachSizeToContentRoot</c> takes its root-replacement path.
+    /// </summary>
+    private sealed class SwappableRootContent : Component
+    {
+        public Action? Swap { get; private set; }
+
+        public override Element Render()
+        {
+            var (alt, setAlt) = UseState(false);
+            Swap = () => setAlt(!alt);
+            return alt
+                ? VStack(TextBlock("content")).Width(300).Height(200)
+                : Border(TextBlock("content")).Width(300).Height(200);
+        }
+    }
+
     private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
     {
         var win = ReactorApp.OpenWindow(spec, root);
@@ -204,6 +223,51 @@ internal static class Phase5WindowingFixtures
                 // `> 0` would pass either way.
                 H.Check("SizeToContent_NoOpWhenMaximized_Warning", ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
                 H.Check("SizeToContent_NoOpWhenMaximized_NoResize", win.SizeToContentApplyCountForTests == 0);
+            }
+            finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// The maximized warning must stay latched across a root replacement.
+    /// <c>OnHostContentRendered</c> runs per render and
+    /// <c>AttachSizeToContentRoot</c> detaches whenever the root instance
+    /// differs, then re-applies immediately — so re-arming the edge on detach
+    /// would emit one release-visible warning per render for an app that
+    /// alternates root controls while maximized, which is the unbounded ETW
+    /// stream the edge-trigger exists to prevent.
+    /// </summary>
+    internal class SizeToContentMaximizedWarningSurvivesRootSwap(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0;
+            var spec = new WindowSpec { Title = "STC Max Swap", Width = 360, Height = 240 };
+            SwappableRootContent? content = null;
+            var win = await OpenAndSettle(spec, () => content = new SwappableRootContent());
+            try
+            {
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+                win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
+                await Harness.Render(120);
+
+                H.Check("SizeToContent_RootSwap_Maximized", Native.IsZoomed(Hwnd(win)));
+                var afterEnable = ReactorWindow.SizeToContentMaximizedWarningCountForTests;
+                H.Check("SizeToContent_RootSwap_WarnedOnce", afterEnable == 1);
+
+                // Swap the root control type several times while still maximized.
+                for (var i = 0; i < 3; i++)
+                {
+                    content!.Swap!();
+                    await Harness.Render(120);
+                }
+
+                H.Check("SizeToContent_RootSwap_StillMaximized", Native.IsZoomed(Hwnd(win)));
+                // Still exactly one: the spell never ended, so no re-arm.
+                H.Check("SizeToContent_RootSwap_NoRewarnPerRender",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
             }
             finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
         }

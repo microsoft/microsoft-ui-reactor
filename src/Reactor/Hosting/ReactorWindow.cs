@@ -1924,6 +1924,12 @@ public sealed class ReactorWindow : IDisposable
         if (spec.SizeToContent == WindowSizeToContent.Manual || root is null)
         {
             DetachSizeToContentRoot();
+            // Size-to-content is off, which ends any ignored-while-maximized
+            // spell — re-arm so enabling it again reports. Deliberately here and
+            // not inside DetachSizeToContentRoot: that also runs when the
+            // reconciler merely swaps the root (below) while the window stays
+            // maximized, and re-arming there would emit one warning per render.
+            _sizeToContentMaximizedWarned = false;
             return;
         }
 
@@ -1954,12 +1960,6 @@ public sealed class ReactorWindow : IDisposable
         _sizeToContentRoot = null;
         _sizeToContentSizeChangedHandler = null;
         _sizeToContentLayoutUpdatedHandler = null;
-        // Re-arm the maximized warning. The edge is normally cleared by
-        // ApplySizeToContent observing a restored window, but that runs off
-        // LayoutUpdated — which is exactly what we just unhooked. Without this,
-        // disabling SizeToContent while maximized, restoring, then re-enabling
-        // and maximizing again would be a new ignored spell that never warned.
-        _sizeToContentMaximizedWarned = false;
     }
 
     private void OnBackgroundPointerPressed(object sender, PointerRoutedEventArgs args)

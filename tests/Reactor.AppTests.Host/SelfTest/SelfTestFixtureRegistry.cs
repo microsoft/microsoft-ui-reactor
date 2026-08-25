@@ -1263,6 +1263,7 @@ internal static class SelfTestFixtureRegistry
         "SizeToContent_WidthAndHeight",
         "SizeToContent_RespectsMinMax",
         "SizeToContent_NoOpWhenMaximized",
+        "SizeToContent_MaximizedWarningSurvivesRootSwap",
         "SizeToContent_AspectRatio_BothRejected",
         "SizeToContent_NoReentrancy",
         // Spec 054 Phase 6 — TaskbarItem facade.
@@ -2954,6 +2955,7 @@ internal static class SelfTestFixtureRegistry
         "SizeToContent_WidthAndHeight" => new Phase5WindowingFixtures.SizeToContentWidthAndHeight(harness),
         "SizeToContent_RespectsMinMax" => new Phase5WindowingFixtures.SizeToContentRespectsMinMax(harness),
         "SizeToContent_NoOpWhenMaximized" => new Phase5WindowingFixtures.SizeToContentNoOpWhenMaximized(harness),
+        "SizeToContent_MaximizedWarningSurvivesRootSwap" => new Phase5WindowingFixtures.SizeToContentMaximizedWarningSurvivesRootSwap(harness),
         "SizeToContent_AspectRatio_BothRejected" => new Phase5WindowingFixtures.SizeToContentAspectRatioBothRejected(harness),
         "SizeToContent_NoReentrancy" => new Phase5WindowingFixtures.SizeToContentNoReentrancy(harness),
         "SizeToContent_MinMaxInfoSuite" => new Phase5WindowingFixtures.SizeToContentMinMaxInfoSuite(harness),
