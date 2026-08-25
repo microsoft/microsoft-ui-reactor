@@ -40,8 +40,9 @@ permissions:
 #
 #   - Past tag `v0.1.0-preview.1` by N commits → `0.1.0-preview.1.N+<sha7>`
 #   - Exactly at a tag → that tag's version
-#   - No tags yet → `0.1.0-experimental.0.<height>+<sha7>` (defaults below;
-#     fallback only — see the `-p` flag note in "Resolve version")
+#   - Past a stable tag (e.g. `v0.1.0`) → patch bumped plus the `-p` identifiers,
+#     e.g. `0.1.1-experimental.0.N+<sha7>`
+#   - No tags yet → `0.1.0-experimental.0.<height>+<sha7>` (defaults below)
 #
 # Every commit gets a unique, ordered version with zero coordination — height
 # strictly increases as commits land. Bump to a new milestone by tagging the
@@ -94,12 +95,15 @@ jobs:
           } else {
             # MinVer flags:
             #   -t v                          tag prefix
-            #   -p experimental.0             fallback prerelease identifiers — used ONLY when no
-            #                                 `v*` tag is reachable. Shipped releases are tagged
-            #                                 `v0.1.0-preview.N` and this job checks out with
-            #                                 fetch-depth: 0, so a tag is always reachable and this
-            #                                 fallback never fires — no `experimental` version has
-            #                                 ever been published.
+            #   -p experimental.0             default prerelease identifiers. MinVer applies these
+            #                                 whenever it must invent a label: when no `v*` tag is
+            #                                 reachable, and also after a STABLE tag, where it bumps
+            #                                 the patch and adds them (`v0.1.0` → `0.1.1-experimental.0.N`).
+            #                                 Dormant on the current history — every tag so far is
+            #                                 itself a prerelease (`v0.1.0-preview.N`), which MinVer
+            #                                 carries forward with height instead, so no `experimental`
+            #                                 version has ever been published. It would activate after
+            #                                 the first stable tag.
             #   -m 0.1                        minimum major.minor when no tag (so untagged → 0.1.x)
             $version = (& minver -t v -p experimental.0 -m 0.1).Trim()
           }
