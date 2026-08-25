@@ -17,15 +17,28 @@
     before any bootstrapper has run.
   -->
   <PropertyGroup>
-    <WindowsAppSDKVersion>2.1.3</WindowsAppSDKVersion>
+    <!--
+      BLOCKED / PLACEHOLDER VERSIONS — see the pull request description.
+
+      This branch consumes the code-based DataTemplate constructor
+      (`new DataTemplate(DataTemplateElementFactory)`), which at time of writing
+      is still gated behind `[feature(Feature_ExperimentalApi)]` in
+      microsoft-ui-xaml and has not shipped in a public Windows App SDK release.
+      The versions below are the internal experimental build the change was
+      validated against; they do NOT resolve from public feeds, so CI cannot
+      restore this branch as-is.
+
+      When the API ships publicly, replace both values with the released
+      versions and delete this comment — no other change should be required.
+    -->
+    <WindowsAppSDKVersion>3.0.0-dev.experimental11</WindowsAppSDKVersion>
     <!--
       Windows App SDK 2.0 split the monolithic Microsoft.WindowsAppSDK metapackage
       into independently-versioned sub-packages. Framework-dependent projects
       reference only Microsoft.WindowsAppSDK.WinUI (see the injection rule in
-      Directory.Build.targets); the WinUI sub-package tracks its own version, which
-      currently trails the aggregate metapackage version (2.1.0 vs 2.1.3).
+      Directory.Build.targets); the WinUI sub-package tracks its own version.
     -->
-    <WindowsAppSDKWinUIVersion>2.1.0</WindowsAppSDKWinUIVersion>
+    <WindowsAppSDKWinUIVersion>3.0.0-experimental.260818.21</WindowsAppSDKWinUIVersion>
     <Win2DVersion>1.4.0</Win2DVersion>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
 
