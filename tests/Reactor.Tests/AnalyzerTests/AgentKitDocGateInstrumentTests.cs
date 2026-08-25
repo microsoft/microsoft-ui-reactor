@@ -491,13 +491,27 @@ public class AgentKitDocGateInstrumentTests
 
         var empty = entries
             .Where(entry => entry.Files.Count == 0)
-            .Select(entry => $"{entry.Include} → {entry.PackagePath}")
+            .Select(entry => $"{entry.Pattern} → {entry.PackagePath}")
             .ToList();
 
         Assert.True(
             empty.Count == 0,
-            "An agentkit/ pack item matches no file on disk, so the NuGet ships without it and this " +
+            "An agentkit/ pack glob matches no file on disk, so the NuGet ships without it and this " +
             "gate never inspects it:\n  " + string.Join("\n  ", empty));
+
+        // Granularity control. The guard above is per-glob, not per-item, and that difference is
+        // the whole point: an item's `*.md` half can go dead while its `*.cs` half still matches,
+        // and an item-level check stays green through it. Asserting no entry carries a `;` is what
+        // pins the split — comparing entry and item counts would not, because several agentkit
+        // items legitimately share one PackagePath.
+        Assert.DoesNotContain(entries, entry => entry.Pattern.Contains(';', StringComparison.Ordinal));
+
+        // ...and the assertion above is only meaningful while some item really does carry several
+        // globs. Today that is the recipes item, `skills\recipes\*.md;skills\recipes\*.cs`.
+        var repoRootPath = Path.Combine(AgentKitCorpus.RepoRoot, "src", "Reactor", "Reactor.csproj");
+        Assert.Contains(
+            AgentKitDocCorpus.AgentKitIncludes(File.ReadAllText(repoRootPath)),
+            include => include.Contains(';', StringComparison.Ordinal));
 
         var documents = AgentKitCorpus.Documents;
 

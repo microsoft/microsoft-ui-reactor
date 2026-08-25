@@ -10,10 +10,16 @@ using Microsoft.UI.Reactor.Cli.Pack;
 namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 
 /// <summary>
-/// One <c>&lt;None&gt;</c> item from <c>src/Reactor/Reactor.csproj</c> that packs into
+/// One glob from a <c>&lt;None&gt;</c> item in <c>src/Reactor/Reactor.csproj</c> that packs into
 /// <c>agentkit/</c>, resolved to the files it actually matches on disk.
 /// </summary>
-internal sealed record AgentKitPackEntry(string Include, string PackagePath, IReadOnlyList<string> Files);
+/// <remarks>
+/// One entry per <em>pattern</em>, not per item. An item's <c>Include</c> may carry several
+/// semicolon-separated globs — <c>skills\recipes\*.md;skills\recipes\*.cs</c> is packed that way —
+/// and aggregating them would let a dead glob hide behind a live sibling: the item still matches
+/// files, so an emptiness check on it stays false while half its content has stopped shipping.
+/// </remarks>
+internal sealed record AgentKitPackEntry(string Pattern, string PackagePath, IReadOnlyList<string> Files);
 
 /// <summary>
 /// One unit of C# taken from a shipped agent-kit document: a fenced block from a
@@ -106,12 +112,21 @@ internal static class AgentKitDocCorpus
     /// be tested against project XML directly rather than only through the working tree.
     /// </summary>
     internal static IReadOnlyList<string> AgentKitPackagePaths(string projectXml) =>
+        AgentKitItems(projectXml).Select(item => item.Path).ToList();
+
+    /// <summary>
+    /// The raw <c>Include</c> of every agentkit item, before it is split on <c>;</c>.
+    /// </summary>
+    internal static IReadOnlyList<string> AgentKitIncludes(string projectXml) =>
+        AgentKitItems(projectXml).Select(item => item.Include).ToList();
+
+    private static IEnumerable<(string Path, string Include)> AgentKitItems(string projectXml) =>
         XDocument.Parse(projectXml)
             .Descendants()
             .Where(e => e.Name.LocalName == "None")
             .Select(e => (Path: (string?)e.Attribute("PackagePath"), Include: (string?)e.Attribute("Include")))
             .Where(item => item.Path is not null && item.Include is not null && IsAgentKitPath(item.Path))
-            .Select(item => item.Path!)
+            .Select(item => (item.Path!, item.Include!))
             .ToList();
 
     /// <summary>
@@ -154,18 +169,24 @@ internal static class AgentKitDocCorpus
             if (!IsAgentKitPath(packagePath))
                 continue;
 
-            var files = new List<string>();
-
+            // One entry per pattern. Aggregating an item's globs would let a dead one hide behind a
+            // live sibling: `skills\recipes\*.md;skills\recipes\*.cs` still matches files if only
+            // the .cs half survives, so an item-level emptiness check would stay false while half
+            // the recipes stopped shipping.
             foreach (var pattern in include.Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
-                foreach (var file in Expand(projectDirectory, pattern.Trim()))
-                    files.Add(file);
-            }
+                var trimmed = pattern.Trim();
+                if (trimmed.Length == 0)
+                    continue;
 
-            entries.Add(new AgentKitPackEntry(
-                include,
-                packagePath,
-                files.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(f => f, StringComparer.Ordinal).ToList()));
+                entries.Add(new AgentKitPackEntry(
+                    trimmed,
+                    packagePath,
+                    Expand(projectDirectory, trimmed)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(f => f, StringComparer.Ordinal)
+                        .ToList()));
+            }
         }
 
         return entries;
