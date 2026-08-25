@@ -289,7 +289,7 @@ class InlineLiteralProvideDont : Component
 static class NullableUserContexts
 {
     // Static field default of `null`.
-    public static Context<CurrentUser?> User = new(null);
+    public static readonly Context<CurrentUser?> User = new(null);
 }
 
 class ReadsContextWithoutProvider : Component
@@ -310,7 +310,7 @@ class ReadsContextWithoutProvider : Component
 static class SelectionContexts
 {
     // Don't — a single-source-single-sink value belongs in a prop.
-    public static Context<int> SelectedIndex = new(0);
+    public static readonly Context<int> SelectedIndex = new(0);
 }
 
 class ContextForPropsDont : Component

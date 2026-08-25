@@ -222,13 +222,18 @@ public override Element Render()
     UseEffect(() =>
     {
         var cts = new CancellationTokenSource();
+        var token = cts.Token;   // capture once — cleanup disposes cts
         _ = Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            while (await timer.WaitForNextTickAsync(cts.Token))
-                updateSeconds(s => s + 1);   // auto-marshals to the UI thread
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                    updateSeconds(s => s + 1);   // auto-marshals to the UI thread
+            }
+            catch (OperationCanceledException) { /* expected on cleanup */ }
         });
-        return () => cts.Cancel();
+        return () => { cts.Cancel(); cts.Dispose(); };
     });
 
     return TextBlock($"Elapsed: {seconds}s");

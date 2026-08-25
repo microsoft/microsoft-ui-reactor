@@ -79,7 +79,7 @@ class BeforeUseResourceExample : Component
                     }
                 }
             });
-            return () => cts.Cancel();
+            return () => { cts.Cancel(); cts.Dispose(); };
         }, 42);
 
         if (loading) return (Element)TextBlock("Loading…").Padding(24);

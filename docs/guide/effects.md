@@ -130,12 +130,17 @@ class TimerCleanupExample : Component
             if (!isRunning) return () => { };
             var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             var cts = new CancellationTokenSource();
+            var token = cts.Token;   // capture once — cleanup disposes cts
             _ = Task.Run(async () =>
             {
-                while (await timer.WaitForNextTickAsync(cts.Token))
-                    updateSeconds(s => s + 1);
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateSeconds(s => s + 1);
+                }
+                catch (OperationCanceledException) { /* expected on cleanup */ }
             });
-            return () => { cts.Cancel(); timer.Dispose(); };
+            return () => { cts.Cancel(); timer.Dispose(); cts.Dispose(); };
         }, isRunning);
 
         return VStack(12,
@@ -243,8 +248,9 @@ changing value from the dependency array.
 > The same ordering applies on unmount: cleanup runs once, the effect body
 > never runs again. The concrete failure mode this prevents: a `PeriodicTimer`
 > that captures `cts` in the cleanup closure stops correctly when the dep
-> changes, but only if you return `() => { cts.Cancel(); timer.Dispose(); }`
-> from the body. Forget the cleanup and the old timer keeps firing alongside
+> changes, but only if you return
+> `() => { cts.Cancel(); timer.Dispose(); cts.Dispose(); }` from the body.
+> Forget the cleanup and the old timer keeps firing alongside
 > the new one. The scheduling internals — when each phase runs relative to
 > the reconciler — are documented in
 > [effects-scheduling](effects-scheduling.md).
@@ -281,7 +287,7 @@ class FetchCancellationExample : Component
                 }
                 catch (OperationCanceledException) { /* expected */ }
             });
-            return () => cts.Cancel();
+            return () => { cts.Cancel(); cts.Dispose(); };
         }, query);
 
         return VStack(8,
@@ -440,12 +446,17 @@ class MissingCleanupDoExample : Component
         {
             var cts = new CancellationTokenSource();
             var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            var token = cts.Token;   // capture once — cleanup disposes cts
             _ = Task.Run(async () =>
             {
-                while (await timer.WaitForNextTickAsync(cts.Token))
-                    updateTick(t => t + 1);
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateTick(t => t + 1);
+                }
+                catch (OperationCanceledException) { /* expected on unmount */ }
             });
-            return () => { cts.Cancel(); timer.Dispose(); };
+            return () => { cts.Cancel(); timer.Dispose(); cts.Dispose(); };
         }, Array.Empty<object>());
 
         return TextBlock($"Ticks: {tick}").Padding(24);

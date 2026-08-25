@@ -177,12 +177,17 @@ class EffectDemo : Component
             if (!running) return () => { };
             var cts = new CancellationTokenSource();
             var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            var token = cts.Token;   // capture once — cleanup disposes cts
             _ = Task.Run(async () =>
             {
-                while (await timer.WaitForNextTickAsync(cts.Token))
-                    updateSeconds(s => s + 1);
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateSeconds(s => s + 1);
+                }
+                catch (OperationCanceledException) { /* expected on cleanup */ }
             });
-            return () => { cts.Cancel(); timer.Dispose(); };
+            return () => { cts.Cancel(); timer.Dispose(); cts.Dispose(); };
         }, running);
 
         return VStack(8,
@@ -414,13 +419,18 @@ public override Element Render()
     UseEffect(() =>
     {
         var cts = new CancellationTokenSource();
+        var token = cts.Token;   // capture once — cleanup disposes cts
         _ = Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            while (await timer.WaitForNextTickAsync(cts.Token))
-                updateSeconds(s => s + 1);   // auto-marshals to the UI thread
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                    updateSeconds(s => s + 1);   // auto-marshals to the UI thread
+            }
+            catch (OperationCanceledException) { /* expected on cleanup */ }
         });
-        return () => cts.Cancel();
+        return () => { cts.Cancel(); cts.Dispose(); };
     });
 
     return TextBlock($"Elapsed: {seconds}s");
@@ -540,7 +550,7 @@ static class DebouncedTextHook
                 try { await Task.Delay(ms, cts.Token); setDebounced(value); }
                 catch (OperationCanceledException) { }
             });
-            return () => cts.Cancel();
+            return () => { cts.Cancel(); cts.Dispose(); };
         }, value);
 
         return (debounced, setValue);
