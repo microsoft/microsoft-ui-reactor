@@ -4,18 +4,25 @@ using Microsoft.UI.Xaml;
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
-/// Shared depth-first lookup over a <see cref="ResourceDictionary"/> and its
-/// <see cref="ResourceDictionary.MergedDictionaries"/>.
+/// Shared typed lookup over a <see cref="ResourceDictionary"/>.
 ///
 /// <para>
-/// <see cref="ResourceDictionary"/> implements <c>IDictionary</c>, so
-/// <c>TryGetValue</c> consults only the dictionary it is called on. WinUI's
-/// own resources arrive as merged dictionaries — <c>XamlControlsResources</c>
-/// merges the theme dictionaries that define the type ramp, and app authors
-/// merge their own — so a single non-recursive probe can miss a key that the
-/// XAML resource-lookup walk would find. Both theme-brush resolution and
-/// named-style resolution need the recursive form, so it lives here rather
-/// than being re-derived per call site.
+/// <see cref="ResourceDictionary.TryGetValue"/> performs the XAML resource walk
+/// itself — it traverses <see cref="ResourceDictionary.MergedDictionaries"/>
+/// (which is how <c>XamlControlsResources</c> and app-merged dictionaries
+/// resolve) and honours their last-merged-wins precedence. So this helper does
+/// not re-implement that walk; it exists to add the typed check that both
+/// theme-brush resolution and named-style resolution need, in one place rather
+/// than re-derived per call site.
+/// </para>
+///
+/// <para>
+/// That traversal is an assumption about WinUI rather than something this code
+/// controls, so it is pinned by the <c>NamedStyle_ResourceLookupHonoursPrecedence</c>
+/// selftest (a key reachable only through <c>MergedDictionaries</c>) and, for
+/// the brush path, by <c>Theme_BrushCacheNullMissNotCached</c>. If a future
+/// WinUI stops traversing, those fail and a manual own-entry-first,
+/// reverse-order walk has to come back here.
 /// </para>
 /// </summary>
 internal static class ResourceLookup

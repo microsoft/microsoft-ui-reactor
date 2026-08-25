@@ -12,39 +12,48 @@ Windows 11 defines a type ramp of semantic text styles. In Reactor, use the buil
 |---------|------|--------|----------|
 | `Caption("text")` | 12px | Regular (400) | Small labels, timestamps, metadata |
 | `TextBlock("text")` | 14px | Regular (400) | Default body text |
-| `SubHeading("text")` | 20px | SemiBold (600) | Section headers, card titles |
-| `Heading("text")` | 28px | Bold (700) | Page titles |
+| `Body("text")` | 14px | Regular | WinUI `BodyTextBlockStyle` body text |
+| `BodyStrong("text")` | 14px | SemiBold | Emphasized inline labels |
+| `BodyLarge("text")` | 18px | Regular | Prominent body text |
+| `Subtitle("text")` | 20px | SemiBold | WinUI `SubtitleTextBlockStyle` — section headings |
+| `SubHeading("text")` | 20px | SemiBold (600) | Section headers, card titles (Reactor preset) |
+| `Title("text")` | 28px | SemiBold | WinUI `TitleTextBlockStyle` — page titles |
+| `Heading("text")` | 28px | Bold (700) | Page titles (Reactor preset, slightly heavier) |
+| `TitleLarge("text")` | 40px | SemiBold | Primary titles on feature/landing pages |
+| `Display("text")` | 68px | SemiBold | Hero banners, at most one per page |
 
 #### Full WinUI Type Ramp
 
-For sizes not covered by the factories, apply a WinUI style:
+Every style in the ramp now has a matching factory:
 
 | WinUI Style | Size | Weight | Reactor Equivalent |
 |-------------|------|--------|-----------------|
 | `CaptionTextBlockStyle` | 12px | Regular | `Caption()` |
-| `BodyTextBlockStyle` | 14px | Regular | `TextBlock()` (default) |
-| `BodyStrongTextBlockStyle` | 14px | SemiBold | `TextBlock().SemiBold()` |
-| `BodyLargeTextBlockStyle` | 18px | Regular | Apply via `.Set()` |
-| `SubtitleTextBlockStyle` | 20px | SemiBold | `SubHeading()` |
-| `TitleTextBlockStyle` | 28px | SemiBold | `Heading()` |
-| `TitleLargeTextBlockStyle` | 40px | SemiBold | Apply via `.Set()` |
-| `DisplayTextBlockStyle` | 68px | SemiBold | Apply via `.Set()` |
+| `BodyTextBlockStyle` | 14px | Regular | `Body()` |
+| `BodyStrongTextBlockStyle` | 14px | SemiBold | `BodyStrong()` |
+| `BodyLargeTextBlockStyle` | 18px | Regular | `BodyLarge()` |
+| `SubtitleTextBlockStyle` | 20px | SemiBold | `Subtitle()` |
+| `TitleTextBlockStyle` | 28px | SemiBold | `Title()` |
+| `TitleLargeTextBlockStyle` | 40px | SemiBold | `TitleLarge()` |
+| `DisplayTextBlockStyle` | 68px | SemiBold | `Display()` |
 
 **Applying WinUI styles in Reactor:**
 
+Every entry in the ramp above has a factory — prefer it. For any other named
+style, use `.ApplyStyle()`, which resolves the key against the app's resources
+and, when it does not resolve, keeps the element's default appearance and
+reports the key on the `Microsoft-UI-Reactor` trace. Never assign
+`Application.Current.Resources[...]` through `.Set()`: the indexer throws on a
+missing key, and that exception escapes the mount action and fails the render.
+
 ```csharp
-// For styles not covered by factories
-TextBlock("Large title").Set(tb =>
-    tb.Style = (Style)Application.Current.Resources["TitleLargeTextBlockStyle"])
+TitleLarge("Large title")
+Display("Display text")
+BodyStrong("Body strong")
+BodyLarge("Prominent text")
 
-TextBlock("Display text").Set(tb =>
-    tb.Style = (Style)Application.Current.Resources["DisplayTextBlockStyle"])
-
-TextBlock("Body strong").SemiBold()
-
-// BodyLargeTextBlockStyle
-TextBlock("Prominent text").Set(tb =>
-    tb.Style = (Style)Application.Current.Resources["BodyLargeTextBlockStyle"])
+// Any other named style:
+TextBlock("Custom").ApplyStyle("MyAppTextBlockStyle")
 ```
 
 ### Typography Rules
