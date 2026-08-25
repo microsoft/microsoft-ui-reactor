@@ -52,6 +52,28 @@ internal static class Phase5WindowingFixtures
         }
     }
 
+    /// <summary>
+    /// Alternates the root between a real control and <c>Empty()</c>. The
+    /// reconciler returns <c>null</c> for an <c>EmptyElement</c> root
+    /// (Reconciler.cs — "if (newElement is null or EmptyElement) ... return null"),
+    /// so <c>OnHostContentRendered</c> receives <c>null</c> and
+    /// <c>AttachSizeToContentRoot</c> takes its null-root path while
+    /// size-to-content is still enabled.
+    /// </summary>
+    private sealed class VanishingRootContent : Component
+    {
+        public Action? Toggle { get; private set; }
+
+        public override Element Render()
+        {
+            var (gone, setGone) = UseState(false);
+            Toggle = () => setGone(!gone);
+            return gone
+                ? Empty()
+                : Border(TextBlock("content")).Width(300).Height(200);
+        }
+    }
+
     private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
     {
         var win = ReactorApp.OpenWindow(spec, root);
@@ -423,6 +445,55 @@ internal static class Phase5WindowingFixtures
                 H.Check("SizeToContent_RootSwap_StillMaximized", Native.IsZoomed(Hwnd(win)));
                 // Still exactly one: the spell never ended, so no re-arm.
                 H.Check("SizeToContent_RootSwap_NoRewarnPerRender",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+            }
+            finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// The maximized-warning edge must also survive the root rendering to
+    /// *nothing*. <c>Empty()</c> reconciles to a null control, which reaches
+    /// <c>AttachSizeToContentRoot</c> with <c>root is null</c> while
+    /// <c>SizeToContent</c> is still enabled — that is a detach, not the end of
+    /// the ignored-while-maximized spell, so it must not re-arm. Re-arming there
+    /// lets an app that alternates <c>Empty()</c> with a real root emit one
+    /// release-visible warning per render for a single maximized spell.
+    /// </summary>
+    internal class SizeToContentMaximizedWarningSurvivesEmptyRoot(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0;
+            var spec = new WindowSpec { Title = "STC Max Empty", Width = 360, Height = 240 };
+            VanishingRootContent? content = null;
+            var win = await OpenAndSettle(spec, () => content = new VanishingRootContent());
+            try
+            {
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+                win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
+                await Harness.Render(120);
+
+                H.Check("SizeToContent_EmptyRoot_Maximized", Native.IsZoomed(Hwnd(win)));
+                H.Check("SizeToContent_EmptyRoot_WarnedOnce",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+
+                // Vanish and restore the root repeatedly, still maximized and
+                // still size-to-content. Each restore re-enters the attach path
+                // with a real root; each vanish enters it with null.
+                for (var i = 0; i < 3; i++)
+                {
+                    content!.Toggle!();   // -> Empty(), null root
+                    await Harness.Render(120);
+                    content!.Toggle!();   // -> real root again
+                    await Harness.Render(120);
+                }
+
+                H.Check("SizeToContent_EmptyRoot_StillMaximized", Native.IsZoomed(Hwnd(win)));
+                // The spell never ended, so the latch must still be held.
+                H.Check("SizeToContent_EmptyRoot_NoRewarnPerRender",
                     ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
             }
             finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }

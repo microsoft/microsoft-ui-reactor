@@ -1948,7 +1948,7 @@ public sealed class ReactorWindow : IDisposable
 
     private void AttachSizeToContentRoot(WindowSpec spec, FrameworkElement? root)
     {
-        if (spec.SizeToContent == WindowSizeToContent.Manual || root is null)
+        if (spec.SizeToContent == WindowSizeToContent.Manual)
         {
             DetachSizeToContentRoot();
             // Size-to-content is off, which ends any ignored-while-maximized
@@ -1957,6 +1957,18 @@ public sealed class ReactorWindow : IDisposable
             // reconciler merely swaps the root (below) while the window stays
             // maximized, and re-arming there would emit one warning per render.
             _sizeToContentMaximizedWarned = false;
+            return;
+        }
+
+        if (root is null)
+        {
+            // Size-to-content is still on; the tree just rendered to nothing
+            // (an Empty() root reconciles to a null control, as does a root that
+            // is not a FrameworkElement). That is a detach, not the end of the
+            // spell, so the latch is deliberately preserved — exactly as for the
+            // root-replacement path below. Re-arming here would let a component
+            // alternating Empty() with a real root warn once per render.
+            DetachSizeToContentRoot();
             return;
         }
 
