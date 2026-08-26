@@ -1012,6 +1012,32 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A blockquoted fence ends when its container does, even if it is never closed.
+    /// </summary>
+    /// <remarks>
+    /// The close scan stripped up to the opening depth without requiring that depth to still be
+    /// present, so an unclosed <c>&gt; ```text</c> absorbed a following top-level
+    /// ```` ```csharp ```` block and that sample shipped unscanned. The completeness fact derives
+    /// its covered set from the same scan, so it could not have seen it either.
+    /// </remarks>
+    [Fact]
+    public void An_Unclosed_Blockquoted_Fence_Does_Not_Swallow_What_Follows()
+    {
+        const string Markdown = """
+            > ```text
+            > an unclosed quoted block
+
+            ```csharp
+            FlexColumn(children).FlexPadding(16)
+            ```
+            """;
+
+        var snippet = Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/exit.md", Markdown));
+
+        Assert.Equal("FlexColumn(children).FlexPadding(16)", snippet.Text);
+    }
+
+    /// <summary>
     /// Both facts require a marked counterexample to name its remedy.
     /// </summary>
     /// <remarks>

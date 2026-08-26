@@ -357,8 +357,29 @@ internal static class AgentKitDocCorpus
             // Find the close first, so a non-C# fence still advances past its own body instead
             // of letting the body's contents be re-read as markdown.
             var close = i + 1;
-            while (close < lines.Length && !IsClosingFence(lines[close], fenceChar, fenceLength, container, depth))
+            var containerExited = false;
+
+            while (close < lines.Length)
+            {
+                // A blockquoted fence also ends when its container does. Stripping *up to* the
+                // opening depth without requiring that depth to still be present let an unclosed
+                // `> ```text` swallow a following top-level ```csharp block, which then shipped
+                // unscanned — and the completeness fact derives its covered set from this same
+                // scan, so it could not have seen it. Blank lines do not end it; they are routinely
+                // written without the marker.
+                if (depth > 0
+                    && lines[close].Trim().Length > 0
+                    && BlockquoteDepth(lines[close]) < depth)
+                {
+                    containerExited = true;
+                    break;
+                }
+
+                if (IsClosingFence(lines[close], fenceChar, fenceLength, container, depth))
+                    break;
+
                 close++;
+            }
 
             regions.Add(new FenceRegion(
                 OpenLine: i + 1,
@@ -372,7 +393,9 @@ internal static class AgentKitDocCorpus
                 Indent: indent,
                 BlockquoteDepth: depth));
 
-            i = close;
+            // On container exit the terminating line belongs to whatever follows, so leave it for
+            // the outer loop to reconsider rather than consuming it as a closing fence.
+            i = containerExited ? close - 1 : close;
         }
 
         return regions;
