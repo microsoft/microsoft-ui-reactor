@@ -133,6 +133,49 @@ internal static class PhantomSymbolLint
         new("Optional.Of",
             new Regex(@"(?<![A-Za-z0-9_])Optional\.Of\s*\(", RegexOptions.Compiled),
             "Optional<T>.Of(...)"),
+
+        // VStack(...) and HStack(...) both return StackElement — there has never
+        // been a VStackElement or HStackElement type. The identifier lookbehind
+        // is load-bearing in the other direction here: LazyVStackElement<T> is
+        // real, and a pattern without it would flag every mention of the type
+        // that actually exists.
+        new("VStackElement",
+            new Regex(@"(?<![A-Za-z0-9_])VStackElement\b", RegexOptions.Compiled),
+            "StackElement"),
+        new("HStackElement",
+            new Regex(@"(?<![A-Za-z0-9_])HStackElement\b", RegexOptions.Compiled),
+            "StackElement"),
+
+        // RenderContext exposes no static Current: a component reaches its
+        // context through the ctx parameter it is handed, and inventing an
+        // ambient accessor is the single most plausible-looking wrong answer.
+        new("RenderContext.Current",
+            new Regex(@"(?<![A-Za-z0-9_])RenderContext\.Current\b", RegexOptions.Compiled),
+            "the ctx parameter passed to Render"),
+
+        // No ElementDescription type exists. Scoped to the `.Of(` call shape
+        // rather than the bare word so prose that describes "the element
+        // description" in English cannot trip it.
+        new("ElementDescription.Of",
+            new Regex(@"(?<![A-Za-z0-9_])ElementDescription\.Of\s*\(", RegexOptions.Compiled),
+            "ElementDescription(...) does not exist; use the accessibility modifiers"),
+
+        // Not a real diagnostic id. A fabricated REACTOR_/A11Y_ code is worse
+        // than a fabricated API: the reader greps for it, finds nothing, and has
+        // no way to tell a typo from a version skew.
+        new("A11Y_KEYBOARD_001",
+            new Regex(@"(?<![A-Za-z0-9_])A11Y_KEYBOARD_001\b", RegexOptions.Compiled),
+            "a real REACTOR_A11Y_* id"),
+
+        // There is no ProgressBar(...) factory — the factories are Progress(value)
+        // and ProgressIndeterminate(), both returning ProgressElement. Two
+        // exclusions keep the real WinUI type usable: the '.'/identifier
+        // lookbehind leaves qualified uses alone, and `new ProgressBar(` is
+        // legitimate interop. `Action<ProgressBar>` and `.Set<ProgressBar>(`
+        // never match because neither puts '(' straight after the name.
+        new("ProgressBar",
+            new Regex(@"(?<![A-Za-z0-9_.])(?<!new\s)ProgressBar\s*\(", RegexOptions.Compiled),
+            "Progress(value) / ProgressIndeterminate()"),
     ];
 
     // <!-- phantom:skip -->            → silence the rest of this doc region
@@ -157,9 +200,11 @@ internal static class PhantomSymbolLint
     /// <summary>What kind of text is being linted, which decides the gate.</summary>
     internal enum Surface
     {
-        /// <summary>A <c>.md.dt</c> template or an assembled guide body. Only
-        /// fenced code blocks are linted; ordinary prose is not, so a sentence
-        /// that names a phantom to warn against it stays silent.</summary>
+        /// <summary>A <c>.md.dt</c> template or an assembled guide body. Fenced code
+        /// blocks are linted in full, and outside a fence only inline code spans
+        /// (<c>`like this`</c>) are — ordinary prose is never linted, so a sentence
+        /// that names a phantom to warn against it stays silent unless it puts the
+        /// phantom in code formatting, which reads as an endorsement.</summary>
         Markdown,
 
         /// <summary>A C# file: only <c>///</c> doc-comment lines are linted.
@@ -222,7 +267,7 @@ internal static class PhantomSymbolLint
 
             var applicable = surface switch
             {
-                Surface.Markdown => inFence,
+                Surface.Markdown => true,
                 Surface.CSharpDocComments => isDocComment,
                 _ => true,
             };
@@ -231,6 +276,15 @@ internal static class PhantomSymbolLint
             // Blank out compiler-validated cref spans so `<see cref="Foo.Text"/>`
             // can never trip the rule. Same-length filler keeps columns stable.
             var masked = CrefSpan.Replace(raw, m => new string(' ', m.Length));
+
+            // Outside a fence, lint only what the author put in code formatting.
+            // Prose must stay immune: a case-sensitive `Text\(` still matches
+            // English like "Placeholder text (for TextBoxElement etc.)", so
+            // linting whole prose lines would resurrect that false-positive
+            // class wholesale. Blanking everything but the inline spans keeps
+            // the rule pointed at text that claims to be code.
+            if (surface == Surface.Markdown && !inFence)
+                masked = MaskOutsideInlineCode(masked);
 
             foreach (var phantom in Phantoms)
             {
@@ -250,5 +304,34 @@ internal static class PhantomSymbolLint
         }
 
         return findings;
+    }
+
+    /// <summary>
+    /// Blanks every character that is not inside a single-backtick inline code
+    /// span, preserving length so reported columns stay meaningful.
+    /// </summary>
+    /// <remarks>
+    /// An unpaired trailing backtick opens nothing: the span must close on the
+    /// same line, matching CommonMark and keeping a lone "`" in prose inert.
+    /// </remarks>
+    private static string MaskOutsideInlineCode(string line)
+    {
+        var buf = new char[line.Length];
+        for (int i = 0; i < buf.Length; i++) buf[i] = ' ';
+
+        int pos = 0;
+        while (pos < line.Length)
+        {
+            var open = line.IndexOf('`', pos);
+            if (open < 0) break;
+
+            var close = line.IndexOf('`', open + 1);
+            if (close < 0) break;
+
+            for (int i = open + 1; i < close; i++) buf[i] = line[i];
+            pos = close + 1;
+        }
+
+        return new string(buf);
     }
 }

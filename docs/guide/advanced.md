@@ -283,6 +283,7 @@ the value) or `Optional<double>.Unset` (the WinUI control owns the value).
 This distinction exists because C# records cannot tell "property
 omitted" from "property set to the default" the way JSX can.
 
+<!-- phantom:skip "Optional.Of" -->
 `Of` is a static member **on the generic struct**, so the type argument
 goes on `Optional<T>`, never on `Of` — `Optional<double>.Of(5.0)`, not
 `Optional.Of(5.0)` and not `Optional.Of<double>(5.0)`.

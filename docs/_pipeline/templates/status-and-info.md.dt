@@ -99,6 +99,7 @@ pick the ring for unknown-duration spinners next to a label
 ```csharp snippet="status-and-info/progress-ring"
 ```
 
+<!-- phantom:skip "ProgressBar" -->
 The `value` argument is 0–100 for `Progress(double)` and 0–1 for
 `ProgressRing(double)` — same convention as the underlying WinUI
 controls. There is no `ProgressBar(...)` factory: the linear bar is

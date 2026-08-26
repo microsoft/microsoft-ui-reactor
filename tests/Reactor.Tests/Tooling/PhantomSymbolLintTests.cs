@@ -193,12 +193,60 @@ public sealed class PhantomSymbolLintTests
     /// The warning-sentence problem, from a real page: charting.md.dt now says
     /// "no core Text(...) element factory exists" in order to inoculate the
     /// reader. A naive rule flags the very sentence that fixes the problem.
-    /// Markdown prose is outside every fence, so it is never linted.
+    /// Plain prose is never linted, so the warning stays silent.
     /// </summary>
     [Fact]
     public void Silent_OnProseThatNamesAPhantomToWarnAgainstIt()
     {
-        var body = "Reactor has no core `Text(\"x\")` element factory — use `TextBlock(...)`.\n";
+        var body = "Reactor has no core Text(\"x\") element factory — use TextBlock(...).\n";
+        Assert.Empty(LintMarkdown(body));
+    }
+
+    /// <summary>
+    /// Inline code spans in prose <b>are</b> linted. Fencing was never the only
+    /// way a doc endorses an API: <c>`Optional.Of(x)`</c> in a sentence reads as
+    /// real code to both a human and an assistant, and four such spans were
+    /// live in the docset while the fence-only rule reported clean.
+    /// </summary>
+    [Fact]
+    public void Fires_OnPhantomInsideInlineCodeSpanInProse()
+    {
+        var body = "Prefer the generic form; `Optional.Of(x)` will not bind.\n";
+        Assert.Contains(LintMarkdown(body), f => f.Message.Contains("'Optional.Of'"));
+    }
+
+    /// <summary>
+    /// …but only inside the span. The surrounding sentence must stay immune, or
+    /// the case-sensitive <c>Text\(</c> pattern starts matching English again —
+    /// the false-positive class the whole matcher was tuned to avoid.
+    /// </summary>
+    [Fact]
+    public void Silent_OnEnglishAroundAnInlineCodeSpan()
+    {
+        var body = "Placeholder text (for `TextBlock` etc.) is set separately.\n";
+        Assert.Empty(LintMarkdown(body));
+    }
+
+    /// <summary>
+    /// A prose span that must name the phantom takes the same scoped marker the
+    /// doc-comment surface uses — this is how the two live warning sentences in
+    /// advanced.md.dt and migration/050-optional-t.md.dt stay green.
+    /// </summary>
+    [Fact]
+    public void ScopedSkipMarker_SilencesAnInlineCodeSpanInProse()
+    {
+        var body = "<!-- phantom:skip \"Optional.Of\" -->\nThere is no `Optional.Of(x)`; use `Optional<int>.Of(-1)`.\n";
+        Assert.Empty(LintMarkdown(body));
+    }
+
+    /// <summary>
+    /// An unpaired backtick opens no span, so a lone "`" in prose cannot drag
+    /// the rest of the line into the linted region.
+    /// </summary>
+    [Fact]
+    public void Silent_OnUnpairedBacktickFollowedByProseText()
+    {
+        var body = "A stray ` tick then Text(\"x\") in plain prose.\n";
         Assert.Empty(LintMarkdown(body));
     }
 
@@ -236,6 +284,39 @@ public sealed class PhantomSymbolLintTests
     /// trivially only if it asserted non-null; they assert a named phantom, and
     /// this asserts the table is populated and each entry is distinct.
     /// </summary>
+    /// <summary>
+    /// The phantoms this PR fixed by hand. Without a table entry each one is
+    /// free to come back: the fix lives in a doc, and nothing but this rule
+    /// reads that doc again. Every spelling below was verified absent from
+    /// <c>skills/reactor.api.txt</c> at word-boundary precision — a substring
+    /// check reports <c>VStackElement</c> as present, because
+    /// <c>LazyVStackElement&lt;T&gt;</c> contains it.
+    /// </summary>
+    [Theory]
+    [InlineData("VStackElement", "var e = (VStackElement)tree;")]
+    [InlineData("HStackElement", "var e = (HStackElement)tree;")]
+    [InlineData("RenderContext.Current", "var c = RenderContext.Current;")]
+    [InlineData("ElementDescription.Of", "ElementDescription.Of(\"row\")")]
+    [InlineData("A11Y_KEYBOARD_001", "suppress A11Y_KEYBOARD_001 here")]
+    [InlineData("ProgressBar", "return ProgressBar(0.5);")]
+    public void Fires_OnPhantomsThisPrFixedByHand(string phantom, string line) =>
+        Assert.Contains(LintExample(line), f => f.Message.Contains($"'{phantom}'"));
+
+    /// <summary>
+    /// The real neighbours each of those patterns sits next to. These are the
+    /// spellings a careless pattern would take down with it, and every one of
+    /// them resolves in <c>reactor.api.txt</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("LazyVStackElement<T> e = LazyVStack(items, build);")]
+    [InlineData("StackElement s = VStack(a, b);")]
+    [InlineData("ProgressElement.Set(Action<ProgressBar> configure)")]
+    [InlineData("p.Set(pb => pb.IsIndeterminate = true);")]
+    [InlineData("var native = new ProgressBar();")]
+    [InlineData("ctx.UseState(0); // ctx, not an ambient accessor")]
+    public void Silent_OnTheRealNeighboursOfThosePhantoms(string line) =>
+        Assert.Empty(LintExample(line));
+
     [Fact]
     public void PhantomTable_IsPopulatedAndDistinct()
     {

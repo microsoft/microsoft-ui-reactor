@@ -173,6 +173,7 @@ class ProgressRingDemo : Component
 }
 ```
 
+<!-- phantom:skip "ProgressBar" -->
 The `value` argument is 0–100 for `Progress(double)` and 0–1 for
 `ProgressRing(double)` — same convention as the underlying WinUI
 controls. There is no `ProgressBar(...)` factory: the linear bar is

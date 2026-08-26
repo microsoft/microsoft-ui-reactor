@@ -23,6 +23,7 @@ Use `Optional<T>.Unset` when the native control should own the value.
 Use `Optional<T>.Of(value)` when Reactor should force-assert the value on
 Mount and Update.
 
+> <!-- phantom:skip "Optional.Of" -->
 > `Of` and `Unset` are static members of the generic struct itself — there is
 > no non-generic `Optional` helper class, so `Optional.Of(x)` does not compile.
 > Spell the type argument (`Optional<int>.Of(-1)`), or rely on the implicit
