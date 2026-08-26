@@ -40,8 +40,10 @@ dispatcher; if the ref's target has not mounted yet the call is a no-op.
 
 ### Examples
 
+```csharp
 var (inputRef, requestFocus) = ctx.UseElementFocus();
 ctx.UseEffect(() => requestFocus(), Array.Empty<object>()); // focus on first render
 return TextBox(value, setValue).Ref(inputRef);
+```
 
 

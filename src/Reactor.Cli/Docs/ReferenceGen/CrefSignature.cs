@@ -133,10 +133,20 @@ internal static class CrefSignature
         }
         sb.Append(name);
 
+        // `methodTypeParams` comes from <typeparam> tags, which are in XML
+        // comment order and omit undocumented parameters — it is NOT indexed by
+        // declaration ordinal, which is what ``N means. Documenting only the
+        // second parameter would otherwise label ``0 with the second one's name.
+        // Names are only trustworthy as a positional list when the documented
+        // set is complete; short of that, fall back to placeholders for all of
+        // them rather than emit a confidently wrong name.
+        var namesAreOrdinal = methodTypeParams.Count == parts.GenericArity
+            && methodTypeParams.All(n => !string.IsNullOrEmpty(n));
+
         var ownTypeParams = new List<string>(parts.GenericArity);
         for (int i = 0; i < parts.GenericArity; i++)
         {
-            ownTypeParams.Add(i < methodTypeParams.Count && !string.IsNullOrEmpty(methodTypeParams[i])
+            ownTypeParams.Add(namesAreOrdinal
                 ? methodTypeParams[i]
                 : "T" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
         }

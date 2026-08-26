@@ -131,4 +131,36 @@ public class CrefSignatureTests
         var b = CrefSignature.Anchor(CrefSignature.Format(M("M:Ns.C.UseEffect(System.Func{System.Action},System.Object[])")));
         Assert.NotEqual(a, b);
     }
+
+    /// <summary>
+    /// &lt;typeparam&gt; tags are in XML comment order and omit undocumented
+    /// parameters, so the list is not indexed by declaration ordinal. A partial
+    /// set must not be read positionally — documenting only the second
+    /// parameter would otherwise label ``0 with the second one's name.
+    /// </summary>
+    [Fact]
+    public void Format_UsesPlaceholders_WhenTypeParamDocsAreIncomplete()
+    {
+        var partial = M("M:Ns.C.UseMemoCells``2(System.Object)") with
+        {
+            TypeParams = new List<ParamDoc> { new("TValue", string.Empty) },
+        };
+
+        var formatted = CrefSignature.Format(partial);
+
+        Assert.Contains("<T1, T2>", formatted, StringComparison.Ordinal);
+        Assert.DoesNotContain("TValue", formatted, StringComparison.Ordinal);
+    }
+
+    /// <summary>A complete set is still used verbatim and in order.</summary>
+    [Fact]
+    public void Format_UsesDocumentedNames_WhenTypeParamDocsAreComplete()
+    {
+        var complete = M("M:Ns.C.UseMemoCells``2(System.Object)") with
+        {
+            TypeParams = new List<ParamDoc> { new("TKey", string.Empty), new("TValue", string.Empty) },
+        };
+
+        Assert.Contains("<TKey, TValue>", CrefSignature.Format(complete), StringComparison.Ordinal);
+    }
 }

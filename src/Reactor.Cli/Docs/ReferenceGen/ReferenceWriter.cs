@@ -186,7 +186,17 @@ internal static class ReferenceWriter
             sb.AppendLine();
             foreach (var ex in member.Examples)
             {
-                sb.AppendLine(resolver.Rewrite(ex, route.RelativePath, unresolved));
+                var body = resolver.Rewrite(ex, route.RelativePath, unresolved);
+
+                // An <example> whose author omitted the <code> wrapper arrives
+                // as bare lines, and Markdown then collapses them into one
+                // prose paragraph — unreadable and uncopyable. <example> is a
+                // code sample by convention, so fence whatever did not already
+                // come through as one.
+                if (!body.Contains("```", StringComparison.Ordinal))
+                    body = "```csharp\n" + body.Trim('\r', '\n') + "\n```";
+
+                sb.AppendLine(body);
                 sb.AppendLine();
             }
         }

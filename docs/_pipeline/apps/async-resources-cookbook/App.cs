@@ -56,13 +56,17 @@ class BeforeUseResourceExample : Component
         UseEffect(() =>
         {
             var cts = new CancellationTokenSource();
+            // Capture the token: the worker below outlives the cleanup, and
+            // CancellationTokenSource.Dispose is not safe alongside concurrent
+            // member access. Reading the captured token struct is.
+            var token = cts.Token;
             setLoading(true);
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    var u = await DemoApi.GetUserAsync(42, cts.Token);
-                    if (!cts.IsCancellationRequested)
+                    var u = await DemoApi.GetUserAsync(42, token);
+                    if (!token.IsCancellationRequested)
                     {
                         setData(u);
                         setError(null);
@@ -72,7 +76,7 @@ class BeforeUseResourceExample : Component
                 catch (OperationCanceledException) { /* swallow */ }
                 catch (Exception ex)
                 {
-                    if (!cts.IsCancellationRequested)
+                    if (!token.IsCancellationRequested)
                     {
                         setError(ex);
                         setLoading(false);
