@@ -89,6 +89,15 @@ internal static class AgentKitDocCorpus
     /// text rather than a list (<c>Md4cCommonMarkSpecTest.Example_0288</c>), so the marker is
     /// validated against its own container below instead of being taken from the line alone.
     /// </para>
+    /// <para>
+    /// One blockquote run then at most one list marker is the deliberate boundary. CommonMark
+    /// nests containers arbitrarily, so <c>- &gt; ```csharp</c> is a legal opener this does not
+    /// match. <see cref="CSharpFenceProbe"/> does not match it either, which is what makes the miss
+    /// safe rather than silent in the dangerous direction: the two agree, so the completeness fact
+    /// still means what it says, and the cost is an unscanned block rather than a finding on prose.
+    /// The shipped corpus contains no such opener — measured, with the single-container forms as
+    /// positive controls — so parsing containers recursively would guard nothing today.
+    /// </para>
     /// </remarks>
     private static readonly Regex FenceOpen = new(
         @"^(?<indent>[ \t]*)((?<marker>[-*+]|\d+[.)])(?<pad>[ \t]+))?(?<fence>`{3,}|~{3,})[ ]*(?<info>[^`\r\n]*)$",

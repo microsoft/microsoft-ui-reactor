@@ -684,6 +684,15 @@ internal static class AgentKitSnippetWalker
     /// arm's body. Numbering them flat instead reset to the unconditional arm at every inner
     /// <c>#endif</c>, and no variant then held both halves of such a chain.
     /// </para>
+    /// <para>
+    /// One arm at a time is the deliberate boundary. A chain split across two <em>independent</em>
+    /// blocks — its factory in one <c>#if</c> and its modifier in another — is present only in a
+    /// configuration that selects an arm from each, and no variant here holds both, so it is a
+    /// documented miss rather than an oversight. Covering it means combining arms across blocks,
+    /// which is exponential and needs a cap to stay safe; the shipped corpus contains a single
+    /// conditional block, unnested and single-armed, so that machinery would guard nothing and add
+    /// a failure mode of its own. If a second block ever appears, this is the thing to revisit.
+    /// </para>
     /// </remarks>
     private static IEnumerable<(string Text, bool IsPrimary)> ConditionalVariants(string text)
     {

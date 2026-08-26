@@ -1405,6 +1405,43 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// The container opener's boundary: the scanner and its probe agree about what they skip.
+    /// </summary>
+    /// <remarks>
+    /// CommonMark nests containers arbitrarily, so <c>- &gt; ```csharp</c> is a legal opener that
+    /// neither half matches. What makes that safe rather than silent is that they agree: the
+    /// completeness fact still means what it says, and the cost is an unscanned block rather than a
+    /// finding on prose. Pinned so the boundary is a decision, and so it cannot drift into the two
+    /// disagreeing — which would fail CI on a correct document.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void The_Container_Opener_Boundary_Is_Agreed_By_Both_Halves()
+    {
+        const string Nested = """
+            - > ```csharp
+              > FlexColumn(children).Padding(16)
+              > ```
+            """;
+
+        Assert.Empty(AgentKitDocCorpus.ExtractFences("fixture/nestedcontainer.md", Nested));
+        Assert.DoesNotMatch(AgentKitDocCorpus.CSharpFenceProbe, "- > ```csharp");
+
+        // Positive controls: each container on its own is matched by both, so the assertions above
+        // are the combination rather than either half having stopped working.
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "- ```csharp");
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "> ```csharp");
+
+        Assert.Single(AgentKitDocCorpus.ExtractFences(
+            "fixture/list.md",
+            "- ```csharp\n  FlexColumn(children).FlexPadding(16)\n  ```"));
+
+        Assert.Single(AgentKitDocCorpus.ExtractFences(
+            "fixture/quote.md",
+            "> ```csharp\n> FlexColumn(children).FlexPadding(16)\n> ```"));
+    }
+
+    /// <summary>
     /// A label in the preceding list item marks a sample in the next one — deliberately.
     /// </summary>
     /// <remarks>
