@@ -899,6 +899,35 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A nested blockquote inside a quoted fence does not close it.
+    /// </summary>
+    /// <remarks>
+    /// Stripping every <c>&gt;</c> level reduced <c>&gt; &gt; ```</c> to a bare <c>```</c>, which
+    /// closed the outer block early and left the rest of the sample unscanned. Only the opener's
+    /// depth is removed now. The differential probe computes its covered lines from the same scan,
+    /// so this truncation could not have been caught downstream.
+    /// </remarks>
+    [Fact]
+    public void A_Nested_Blockquote_Does_Not_Close_The_Outer_Fence()
+    {
+        const string Markdown = """
+            > ```csharp
+            > // the sample quotes a nested blockquote:
+            > > ```
+            > FlexColumn(children).Padding(16)
+            > ```
+            """;
+
+        var snippet = Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/nested.md", Markdown));
+
+        // Truncating at the nested line would drop this, leaving the sample uninspected.
+        Assert.Contains("FlexColumn(children).Padding(16)", snippet.Text, StringComparison.Ordinal);
+
+        // One level is still stripped, so the nested quote survives as content rather than syntax.
+        Assert.Contains("> ```", snippet.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Both facts require a marked counterexample to name its remedy.
     /// </summary>
     /// <remarks>

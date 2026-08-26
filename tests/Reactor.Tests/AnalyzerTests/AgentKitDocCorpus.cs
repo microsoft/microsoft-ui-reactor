@@ -103,11 +103,51 @@ internal static class AgentKitDocCorpus
     /// </remarks>
     private static readonly Regex BlockquotePrefix = new(@"^(?:[ \t]*(?:>[ \t]?)+)", RegexOptions.Compiled);
 
-    /// <summary>Splits a line into its blockquote container prefix and the content inside it.</summary>
-    internal static (int PrefixLength, string Content) StripBlockquote(string line)
+    /// <summary>A single blockquote level: optional indent, a <c>&gt;</c>, and optional space.</summary>
+    private static readonly Regex BlockquoteLevel = new(@"^[ \t]*>[ \t]?", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Splits a line into its blockquote container prefix and the content inside it, removing at
+    /// most <paramref name="maxDepth"/> levels.
+    /// </summary>
+    /// <remarks>
+    /// The depth bound is what keeps a nested quote from closing an outer fence. Stripping every
+    /// level reduced <c>&gt; &gt; ```</c> — a legitimate nested-blockquote line inside a
+    /// <c>&gt; ```csharp</c> block — to a bare <c>```</c>, which closed the block early and left
+    /// the rest of the sample unscanned. The differential probe computes its covered lines from the
+    /// same scan, so the truncation would have stayed green.
+    /// </remarks>
+    internal static (int PrefixLength, string Content) StripBlockquote(string line, int maxDepth = int.MaxValue)
     {
-        var match = BlockquotePrefix.Match(line);
-        return match.Success && match.Length > 0 ? (match.Length, line[match.Length..]) : (0, line);
+        var offset = 0;
+
+        for (var level = 0; level < maxDepth; level++)
+        {
+            var match = BlockquoteLevel.Match(line[offset..]);
+            if (!match.Success || match.Length == 0)
+                break;
+
+            offset += match.Length;
+        }
+
+        return (offset, line[offset..]);
+    }
+
+    /// <summary>Number of blockquote levels a line opens with.</summary>
+    private static int BlockquoteDepth(string line)
+    {
+        var offset = 0;
+        var depth = 0;
+
+        while (true)
+        {
+            var match = BlockquoteLevel.Match(line[offset..]);
+            if (!match.Success || match.Length == 0)
+                return depth;
+
+            offset += match.Length;
+            depth++;
+        }
     }
 
     /// <summary>
@@ -274,7 +314,7 @@ internal static class AgentKitDocCorpus
     /// <param name="BodyStartLine">1-based first line of the body.</param>
     /// <param name="BodyEndLine">1-based last line of the body; less than
     /// <paramref name="BodyStartLine"/> for an empty block.</param>
-    internal readonly record struct FenceRegion(int OpenLine, int BodyStartLine, int BodyEndLine, string Language, int Indent, int BlockquotePrefix);
+    internal readonly record struct FenceRegion(int OpenLine, int BodyStartLine, int BodyEndLine, string Language, int Indent, int BlockquoteDepth);
 
     /// <summary>
     /// Every fenced block in a markdown document, in source order, whatever its language.
@@ -293,7 +333,8 @@ internal static class AgentKitDocCorpus
 
         for (var i = 0; i < lines.Length; i++)
         {
-            var (prefix, content) = StripBlockquote(lines[i]);
+            var depth = BlockquoteDepth(lines[i]);
+            var content = StripBlockquote(lines[i]).Content;
 
             var open = FenceOpen.Match(content);
             if (!open.Success)
@@ -316,7 +357,7 @@ internal static class AgentKitDocCorpus
             // Find the close first, so a non-C# fence still advances past its own body instead
             // of letting the body's contents be re-read as markdown.
             var close = i + 1;
-            while (close < lines.Length && !IsClosingFence(lines[close], fenceChar, fenceLength, container))
+            while (close < lines.Length && !IsClosingFence(lines[close], fenceChar, fenceLength, container, depth))
                 close++;
 
             regions.Add(new FenceRegion(
@@ -325,7 +366,7 @@ internal static class AgentKitDocCorpus
                 BodyEndLine: close,          // 1-based last body line; == i+1 when empty.
                 Language: open.Groups["info"].Value.Trim().Split(' ', ',')[0],
                 Indent: indent,
-                BlockquotePrefix: prefix));
+                BlockquoteDepth: depth));
 
             i = close;
         }
@@ -393,7 +434,7 @@ internal static class AgentKitDocCorpus
                 string.Join(
                     "\n",
                     lines[(region.BodyStartLine - 1)..(region.BodyEndLine - 1 + 1)]
-                        .Select(line => StripIndent(StripBlockquote(line).Content, region.Indent)))))
+                        .Select(line => StripIndent(StripBlockquote(line, region.BlockquoteDepth).Content, region.Indent)))))
             .ToList();
     }
 
@@ -424,9 +465,9 @@ internal static class AgentKitDocCorpus
     /// demonstrating Markdown — truncate the block, so the rest of that sample was never scanned.
     /// The differential probe trusts <see cref="Fences"/> for block structure, so it cannot see it.
     /// </remarks>
-    private static bool IsClosingFence(string rawLine, char fenceChar, int openLength, int containerIndent)
+    private static bool IsClosingFence(string rawLine, char fenceChar, int openLength, int containerIndent, int blockquoteDepth)
     {
-        var line = StripBlockquote(rawLine).Content;
+        var line = StripBlockquote(rawLine, blockquoteDepth).Content;
         var text = line.TrimStart(' ', '\t');
 
         if (line.Length - text.Length - containerIndent > 3)
