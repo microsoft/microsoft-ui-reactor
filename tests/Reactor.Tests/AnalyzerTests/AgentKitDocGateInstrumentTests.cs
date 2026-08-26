@@ -759,6 +759,21 @@ public class AgentKitDocGateInstrumentTests
         Assert.Equal(
             "Border(child).Padding(8)",
             Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/shallow.md", ShallowItem)).Text);
+
+        // A continuation line between the marker and the fence must not be read as closing the
+        // list: `- ` has content column 2, so five spaces is three past it and still a fence.
+        const string Continuation = """
+            - item
+              explanation
+
+                 ```csharp
+                 FlexColumn(children).FlexPadding(16)
+                 ```
+            """;
+
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/continuation.md", Continuation)).Text);
     }
 
     /// <summary>

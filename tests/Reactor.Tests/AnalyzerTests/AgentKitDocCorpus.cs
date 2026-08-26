@@ -401,9 +401,13 @@ internal static class AgentKitDocCorpus
             if (marker.Success)
                 return marker.Length;   // through the marker and its trailing whitespace.
 
-            // Any other line at lower indentation closes the container.
+            // Only an unindented line closes the container. Comparing against a hard-coded 4 was
+            // wrong because content columns are marker-dependent: in `- item` / `  explanation`,
+            // the continuation sits at 2, so the old test read it as closing the list and measured
+            // a following fence against column 0 — rejecting a fence that is three spaces past the
+            // bullet's content column and therefore valid.
             var indent = line.Length - line.TrimStart(' ', '\t').Length;
-            if (indent < 4)
+            if (indent == 0)
                 return 0;
         }
 
