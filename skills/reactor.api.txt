@@ -2768,7 +2768,7 @@ GetHashCode() → int
 ToString() → string
 
 ### struct GridSize
-new(double value, GridUnitType type, double min = 0, double max = Infinity)
+new(double value, GridUnitType type, double? min = null, double? max = null)
 GridSize Auto { get; }
 GridUnitType Type { get; }
 double Max { get; }

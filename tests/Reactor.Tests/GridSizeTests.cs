@@ -334,6 +334,8 @@ public class GridSizeTests
         Assert.Equal(0, gs2.Min);
         Assert.Equal(double.PositiveInfinity, gs1.Max);
         Assert.Equal(double.PositiveInfinity, gs2.Max);
+
+        Assert.Equal(new GridSize(0, GridUnitType.Auto), gs2);
     }
 
     [Fact] void GridSize_Invalid_MinMax_Throws()

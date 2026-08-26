@@ -36,7 +36,7 @@ public readonly record struct GridSize
     public GridUnitType Type { get; }
     public double Min => _min ?? 0;
     public double Max => _max ?? double.PositiveInfinity;  
-    public GridSize(double value, GridUnitType type, double min = 0, double max = double.PositiveInfinity)
+    public GridSize(double value, GridUnitType type, double? min = null, double? max = null)
     {
         if (type == GridUnitType.Pixel && value < 0)
             throw new ArgumentOutOfRangeException(nameof(value), value, "Pixel size must be >= 0.");
@@ -44,10 +44,10 @@ public readonly record struct GridSize
         if (type == GridUnitType.Star && value <= 0)
             throw new ArgumentOutOfRangeException(nameof(value), value, "Star weight must be > 0.");
 
-        if (min < 0)
+        if (min is not null and < 0)
             throw new ArgumentOutOfRangeException(nameof(min), min, "Min size must be >= 0.");
         
-        if (max < 0)
+        if (max is not null and < 0)
             throw new ArgumentOutOfRangeException(nameof(max), max, "Max size must be >= 0.");
         
         if (max < min)
