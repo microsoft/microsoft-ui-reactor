@@ -36,6 +36,8 @@ internal sealed class ReactorSurface
     private readonly Dictionary<string, HashSet<Type>> _modifierArguments = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Modifier, string Parameter), HashSet<Type>> _modifierArgumentsByParameter = new();
     private readonly Dictionary<string, Type?> _typeChangingModifiers = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _identityModifiers = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _nonIdentityModifiers = new(StringComparer.Ordinal);
 
     [UnconditionalSuppressMessage(
         "Trimming", "IL2026",
@@ -103,6 +105,30 @@ internal sealed class ReactorSurface
 
             named.Add(argument);
         }
+
+        // Identity-preserving modifiers: the chain walk may step over a call only when its
+        // signature proves it hands back what it was given. An overload set that disagrees with
+        // itself is not proof, so a name is recorded as non-identity the moment one overload of it
+        // does anything else, and that verdict wins.
+        foreach (var method in elementExtensions.GetMethods(BindingFlags.Public | BindingFlags.Static))
+        {
+            var parameters = method.GetParameters();
+            if (parameters.Length == 0)
+                continue;
+
+            var receiver = parameters[0].ParameterType;
+
+            var preserves = method.IsGenericMethodDefinition
+                ? receiver.IsGenericParameter && method.ReturnType == receiver
+                : ElementType.IsAssignableFrom(receiver) && method.ReturnType == receiver;
+
+            if (preserves)
+                _identityModifiers.Add(method.Name);
+            else
+                _nonIdentityModifiers.Add(method.Name);
+        }
+
+        _identityModifiers.ExceptWith(_nonIdentityModifiers);
 
         // Type-changing modifiers: `M<T>(this T el, …)` that returns a concrete element rather than
         // T. The chain's element is decided by the last of these, not by the head factory.
@@ -455,6 +481,19 @@ internal sealed class ReactorSurface
     /// the chain is skipped, and nothing is claimed.
     /// </remarks>
     public bool IsTypeChanging(string name) => _typeChangingModifiers.ContainsKey(name);
+
+    /// <summary>
+    /// True when every <c>ElementExtensions</c> overload of this name provably returns the element
+    /// it was called on.
+    /// </summary>
+    /// <remarks>
+    /// The chain walk may only step over a call that hands back its receiver. Two shapes qualify:
+    /// <c>M&lt;T&gt;(this T el, …) → T</c>, and a non-generic <c>M(this FooElement el, …) →
+    /// FooElement</c>. Everything else — an unknown name, a sample's own helper, an overload set
+    /// that disagrees with itself — leaves the head unresolvable, and an unresolvable head is
+    /// skipped rather than attributed to whatever happened to be underneath it.
+    /// </remarks>
+    public bool PreservesElementType(string name) => _identityModifiers.Contains(name);
 
     /// <summary>
     /// Folds one overload's return type into the type-changing map, poisoning the name to
@@ -1218,6 +1257,15 @@ internal static class AgentKitSnippetWalker
                     // Border while the value really lands on a SemanticPanel.
                     if (ReactorSurface.Instance.IsTypeChanging(access.Name.Identifier.Text))
                         return (access.Name.Identifier.Text, 0, default);
+
+                    // Anything else is only safe to walk through if its signature proves it hands
+                    // back what it was given. Stepping over an unrecognised call assumed it did:
+                    // `FlexColumn(children).AsBorder().Padding(16)` resolved to a FlexElement and
+                    // was reported, though `AsBorder` returns a Border and `Padding` is legal
+                    // there — uncertainty creating a finding, against the walker's own rule, on
+                    // valid shipped guidance.
+                    if (!ReactorSurface.Instance.PreservesElementType(access.Name.Identifier.Text))
+                        return null;
 
                     node = access.Expression;
                     continue;

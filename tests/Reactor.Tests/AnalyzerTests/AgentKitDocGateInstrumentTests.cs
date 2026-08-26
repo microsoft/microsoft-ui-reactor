@@ -1331,6 +1331,40 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// An unrecognised intermediate call stops head resolution instead of being walked through.
+    /// </summary>
+    /// <remarks>
+    /// Stepping over any name not in the type-changing map assumed it returned its receiver, so
+    /// <c>FlexColumn(children).AsBorder().Padding(16)</c> resolved to a FlexElement and was
+    /// reported — though <c>AsBorder</c> returns a Border and <c>Padding</c> is legal there. That
+    /// is uncertainty creating a finding on valid guidance, which is the direction this walker is
+    /// built to avoid.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void An_Unknown_Intermediate_Call_Stops_Resolution()
+    {
+        var unknown = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/unknown.md", 1, "FlexColumn(children).AsBorder().Padding(16)"),
+        });
+
+        Assert.Empty(unknown.Findings);
+        Assert.Equal(0, unknown.ResolvedChains);
+
+        // Control: a modifier whose signature does prove it returns its receiver is still walked
+        // through, so the walk has not simply stopped at every member access.
+        Assert.True(ReactorSurface.Instance.PreservesElementType("WithKey"));
+
+        var known = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/known.md", 1, "FlexColumn(children).WithKey(\"k\").Padding(16)"),
+        });
+
+        Assert.Equal("FlexPadding", Assert.Single(known.Of(AgentKitFindingKind.DroppedModifier)).Replacement);
+    }
+
+    /// <summary>
     /// A label in the preceding list item marks a sample in the next one — deliberately.
     /// </summary>
     /// <remarks>
