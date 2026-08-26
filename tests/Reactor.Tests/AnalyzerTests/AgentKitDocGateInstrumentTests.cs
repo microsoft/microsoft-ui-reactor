@@ -1363,8 +1363,7 @@ public class AgentKitDocGateInstrumentTests
 
         // The case that makes this the right trade: same path, and it must keep reporting.
         Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Padding", "Thickness"));
-        Assert.Empty(ReactorSurface.Instance.SingleArgumentModifierTypes("Padding")
-            .Where(t => t.Name == "Thickness"));
+        Assert.DoesNotContain(ReactorSurface.Instance.SingleArgumentModifierTypes("Padding"), t => t.Name == "Thickness");
 
         // Control: a name that does resolve is still answered from the type.
         Assert.True(ReactorSurface.Instance.DefaultIsProvablyNull("Background", "Brush"));
