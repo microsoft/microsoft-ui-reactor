@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor.Cli.Loc;
 
 /// <summary>
-/// Entry point for `duct loc` subcommands: extract, translate, validate, status, prune.
+/// Entry point for `mur loc` subcommands: extract, translate, validate, status, prune.
 /// </summary>
 internal static class LocCommand
 {
@@ -36,9 +36,9 @@ internal static class LocCommand
 
     private static void ShowHelp()
     {
-        Console.WriteLine("duct loc — Localization CLI");
+        Console.WriteLine("mur loc — Localization CLI");
         Console.WriteLine();
-        Console.WriteLine("Usage: duct loc <command> [options]");
+        Console.WriteLine("Usage: mur loc <command> [options]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
         Console.WriteLine("  extract      Extract localizable strings from source files");
@@ -50,7 +50,7 @@ internal static class LocCommand
 
     private static int Unknown(string cmd)
     {
-        Console.Error.WriteLine($"Unknown command: duct loc {cmd}");
+        Console.Error.WriteLine($"Unknown command: mur loc {cmd}");
         Console.Error.WriteLine();
         ShowHelp();
         return 1;

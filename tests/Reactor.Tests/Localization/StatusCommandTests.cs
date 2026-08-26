@@ -11,7 +11,7 @@ public class StatusCommandTests : IDisposable
 
     public StatusCommandTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"duct-status-{Guid.NewGuid():N}");
+        _tempDir = Path.Combine(Path.GetTempPath(), $"reactor-status-{Guid.NewGuid():N}");
         _stringsDir = Path.Combine(_tempDir, "Strings");
         Directory.CreateDirectory(_stringsDir);
     }

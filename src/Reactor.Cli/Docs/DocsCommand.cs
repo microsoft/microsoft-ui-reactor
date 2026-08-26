@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
-/// Entry point for <c>duct docs</c> subcommands.
+/// Entry point for <c>mur docs</c> subcommands.
 /// </summary>
 internal static class DocsCommand
 {
@@ -35,9 +35,9 @@ internal static class DocsCommand
 
     private static void ShowHelp()
     {
-        Console.WriteLine("duct docs — Documentation CLI");
+        Console.WriteLine("mur docs — Documentation CLI");
         Console.WriteLine();
-        Console.WriteLine("Usage: duct docs <command> [options]");
+        Console.WriteLine("Usage: mur docs <command> [options]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
         Console.WriteLine("  compile           Compile documentation from templates and doc apps");
@@ -65,7 +65,7 @@ internal static class DocsCommand
 
     private static int Unknown(string cmd)
     {
-        Console.Error.WriteLine($"Unknown command: duct docs {cmd}");
+        Console.Error.WriteLine($"Unknown command: mur docs {cmd}");
         Console.Error.WriteLine();
         ShowHelp();
         return 1;

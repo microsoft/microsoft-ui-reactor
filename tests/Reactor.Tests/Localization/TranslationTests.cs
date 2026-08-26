@@ -194,7 +194,7 @@ public class TranslationProviderTests
     [Fact]
     public async Task MockProvider_WritesToReswCorrectly()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"duct-translate-{Guid.NewGuid():N}");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"reactor-translate-{Guid.NewGuid():N}");
         try
         {
             var enUsDir = Path.Combine(tempDir, "Strings", "en-US");

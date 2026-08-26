@@ -9,7 +9,7 @@ public class SourceRewriterTests : IDisposable
 
     public SourceRewriterTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"duct-rewrite-{Guid.NewGuid():N}");
+        _tempDir = Path.Combine(Path.GetTempPath(), $"reactor-rewrite-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 

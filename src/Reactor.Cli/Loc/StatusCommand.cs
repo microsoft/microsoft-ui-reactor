@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor.Cli.Loc;
 
 /// <summary>
-/// Implements `duct loc status`: shows translation coverage per locale as a table.
+/// Implements `mur loc status`: shows translation coverage per locale as a table.
 /// </summary>
 internal static class StatusCommand
 {
@@ -134,9 +134,9 @@ internal static class StatusCommand
 
     private static void ShowHelp()
     {
-        Console.WriteLine("duct loc status — Show translation coverage per locale");
+        Console.WriteLine("mur loc status — Show translation coverage per locale");
         Console.WriteLine();
-        Console.WriteLine("Usage: duct loc status [options]");
+        Console.WriteLine("Usage: mur loc status [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --resources <dir>      Strings directory (default: Strings/)");

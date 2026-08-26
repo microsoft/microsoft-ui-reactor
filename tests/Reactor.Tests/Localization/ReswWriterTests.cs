@@ -10,7 +10,7 @@ public class ReswWriterTests : IDisposable
 
     public ReswWriterTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"duct-test-{Guid.NewGuid():N}");
+        _tempDir = Path.Combine(Path.GetTempPath(), $"reactor-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 

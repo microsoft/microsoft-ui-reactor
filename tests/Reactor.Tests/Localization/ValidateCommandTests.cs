@@ -11,7 +11,7 @@ public class ValidateCommandTests : IDisposable
 
     public ValidateCommandTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"duct-validate-{Guid.NewGuid():N}");
+        _tempDir = Path.Combine(Path.GetTempPath(), $"reactor-validate-{Guid.NewGuid():N}");
         _stringsDir = Path.Combine(_tempDir, "Strings");
         Directory.CreateDirectory(_stringsDir);
     }

@@ -16,7 +16,7 @@ public class ExtractIntegrationTests : IDisposable
 
     public ExtractIntegrationTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"duct-integ-{Guid.NewGuid():N}");
+        _tempDir = Path.Combine(Path.GetTempPath(), $"reactor-integ-{Guid.NewGuid():N}");
         _sourceDir = Path.Combine(_tempDir, "src");
         _outputDir = Path.Combine(_tempDir, "Strings", "en-US");
         Directory.CreateDirectory(_sourceDir);

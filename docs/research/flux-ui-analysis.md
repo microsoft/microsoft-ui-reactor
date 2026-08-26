@@ -60,8 +60,8 @@ patch), Flux transforms UI at compile time (MSBuild code generation).
 11. [Event Handling](#11-event-handling)
 12. [Cross-Platform Story](#12-cross-platform-story)
 13. [Problems from Reactor's Critical Review That Flux Solves](#13-problems-from-ducts-critical-review-that-flux-solves)
-14. [Where Reactor Is Still Better](#14-where-duct-is-still-better)
-15. [Recommendations: What Reactor Should Adopt](#15-recommendations-what-duct-should-adopt)
+14. [Where Reactor Is Still Better](#14-where-reactor-is-still-better)
+15. [Recommendations: What Reactor Should Adopt](#15-recommendations-what-reactor-should-adopt)
 
 ---
 

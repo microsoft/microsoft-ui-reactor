@@ -148,12 +148,12 @@ is architecturally sound and gives us the best of both ecosystems.
 │                                    │  }                      │   │
 │                                    └─────────────────────────┘   │
 │                                                                  │
-│  ┌──────────────┐   duct-loc CLI   ┌────────────────────────┐   │
+│  ┌──────────────┐   mur loc CLI    ┌────────────────────────┐   │
 │  │ C# source    │ ──────────────►  │ en-US/Resources.resw   │   │
 │  │ (AST scan)   │   (extract)      │ (new keys added)       │   │
 │  └──────────────┘                  └────────────────────────┘   │
 │                                                                  │
-│  ┌──────────────┐   duct-loc CLI   ┌────────────────────────┐   │
+│  ┌──────────────┐   mur loc CLI    ┌────────────────────────┐   │
 │  │ en-US .resw  │ ──────────────►  │ fr-FR/Resources.resw   │   │
 │  │ (source)     │   (translate)    │ ar-SA/Resources.resw   │   │
 │  └──────────────┘                  │ (AI pre-filled)        │   │
@@ -193,8 +193,8 @@ is architecturally sound and gives us the best of both ecosystems.
 | **Type safety** | Compile-time key validation | C# Source Generator |
 | **Hook API** | Expose to components, trigger re-render | `UseIntl()` hook on `RenderContext` |
 | **Layout** | BiDi/RTL flow direction | `FlowDirection` on root + logical properties |
-| **Extraction** | Scan source → update .resw | CLI tool (`duct-loc extract`) |
-| **Translation** | AI pre-fill + human review | CLI tool (`duct-loc translate`) |
+| **Extraction** | Scan source → update .resw | CLI tool (`mur loc extract`) |
+| **Translation** | AI pre-fill + human review | CLI tool (`mur loc translate`) |
 
 ---
 
@@ -611,7 +611,7 @@ This happens in a single render cycle — no app restart needed.
 
 ---
 
-## 10. CLI Extraction Tool: `duct-loc`
+## 10. CLI Extraction Tool: `mur loc`
 
 ### 10.1 Overview
 
@@ -621,16 +621,16 @@ produces the same output.
 
 ### 10.2 Commands
 
-#### `duct-loc extract`
+#### `mur loc extract`
 
 Scans C# source files using Roslyn's syntax/semantic analysis to find localizable content.
 
 ```bash
 # Scan all .cs files under src/, update en-US .resw files
-duct-loc extract --source src/ --output Strings/en-US/
+mur loc extract --source src/ --output Strings/en-US/
 
 # Dry run — show what would change without writing
-duct-loc extract --source src/ --output Strings/en-US/ --dry-run
+mur loc extract --source src/ --output Strings/en-US/ --dry-run
 ```
 
 **What it finds:**
@@ -651,7 +651,7 @@ For each bare string found, the CLI:
 
 ```bash
 # Full extract + rewrite pass
-duct-loc extract --source src/ --output Strings/en-US/ --rewrite
+mur loc extract --source src/ --output Strings/en-US/ --rewrite
 
 # Before:
 #   Text("Welcome back!")
@@ -663,19 +663,19 @@ duct-loc extract --source src/ --output Strings/en-US/ --rewrite
 **Idempotency**: Running extract again finds no new bare strings (they've been rewritten)
 and the `.resw` file is unchanged.
 
-#### `duct-loc translate`
+#### `mur loc translate`
 
 Pre-fills translations for target locales using AI, with the English `.resw` as source.
 
 ```bash
 # Translate en-US to fr-FR and ar-SA using AI
-duct-loc translate --source Strings/en-US/ --target fr-FR,ar-SA
+mur loc translate --source Strings/en-US/ --target fr-FR,ar-SA
 
 # Only translate keys that are missing or marked as draft
-duct-loc translate --source Strings/en-US/ --target fr-FR --missing-only
+mur loc translate --source Strings/en-US/ --target fr-FR --missing-only
 
-# Use a specific AI provider
-duct-loc translate --source Strings/en-US/ --target ja-JP --provider azure-openai
+# Use a specific AI model
+mur loc translate --source Strings/en-US/ --target ja-JP --model gpt-5.4-mini
 ```
 
 **How it works:**
@@ -708,12 +708,12 @@ A human translator reviews and removes the `pending-review` marker:
 </data>
 ```
 
-#### `duct-loc status`
+#### `mur loc status`
 
 Reports translation coverage across locales:
 
 ```bash
-$ duct-loc status
+$ mur loc status
 
 Locale    Keys   Translated   AI-Draft   Missing   Coverage
 en-US     142    142          0          0         100.0%
@@ -722,12 +722,12 @@ ar-SA     142    95           40         7          66.9%
 ja-JP     142    0            0          142         0.0%
 ```
 
-#### `duct-loc validate`
+#### `mur loc validate`
 
 Checks ICU syntax validity and parameter consistency:
 
 ```bash
-$ duct-loc validate
+$ mur loc validate
 
 ERROR: fr-FR/Cart.resw:ItemCount — ICU parse error: unmatched brace at position 42
 WARN:  ar-SA/Settings.resw:LoggedInAs — parameter {name} in en-US but {nom} in ar-SA
@@ -820,7 +820,7 @@ class InboxPage : Component
 }
 ```
 
-**Step 2 — `duct-loc extract --rewrite` transforms to:**
+**Step 2 — `mur loc extract --rewrite` transforms to:**
 
 ```csharp
 class InboxPage : Component
@@ -877,7 +877,7 @@ a noun. This nudges the developer or localizer to add ICU plural forms.
 </data>
 ```
 
-**Step 4 — `duct-loc translate` produces ar-SA .resw (AI-assisted):**
+**Step 4 — `mur loc translate` produces ar-SA .resw (AI-assisted):**
 
 ```xml
 <data name="YouHaveMessages" xml:space="preserve">
@@ -1077,7 +1077,7 @@ class ProductCard : Component<ProductProps>
 ### 12.2 Run Extract
 
 ```bash
-$ duct-loc extract --source src/ --output Strings/en-US/ --rewrite
+$ mur loc extract --source src/ --output Strings/en-US/ --rewrite
 
   [NEW] Product.ReviewCount = "{count} reviews" (from interpolation)
   [NEW] Product.Price = "${price}" (from interpolation)
@@ -1121,7 +1121,7 @@ Developer reviews generated `.resw` and upgrades simple messages to use ICU feat
 ### 12.4 Run Translate
 
 ```bash
-$ duct-loc translate --source Strings/en-US/ --target fr-FR,ar-SA,ja-JP
+$ mur loc translate --source Strings/en-US/ --target fr-FR,ar-SA,ja-JP
 
   Translating 24 keys to fr-FR... done (24/24)
   Translating 24 keys to ar-SA... done (24/24)
@@ -1145,10 +1145,10 @@ Translator approves or corrects, removes the `pending-review` comment.
 ### 12.6 Validate & Ship
 
 ```bash
-$ duct-loc validate
+$ mur loc validate
   All 72 keys valid across 4 locales. 0 errors, 0 warnings.
 
-$ duct-loc status
+$ mur loc status
   Locale  Keys  Translated  AI-Draft  Missing  Coverage
   en-US   24    24          0         0        100.0%
   fr-FR   24    24          0         0        100.0%
@@ -1360,7 +1360,7 @@ qualification, or falls back to the unqualified path if no locale-specific asset
 
 **Decision**: The source generator reads `.resw` files and emits typed keys. It does
 **not** scan source code or rewrite files. Extraction and rewriting are CLI-only operations
-(`duct-loc extract --rewrite`).
+(`mur loc extract --rewrite`).
 
 Rationale:
 - Source generators should not have side effects (writing non-generated files)
@@ -1407,10 +1407,10 @@ Rationale:
 - AI provider abstraction (Azure OpenAI, OpenAI, Anthropic)
 - Batch translation with ICU-aware system prompts
 - `pending-review` comment markers in `.resw`
-- `duct-loc translate --missing-only` for incremental translation
-- `duct-loc validate` — ICU syntax, parameter consistency, encoding
-- `duct-loc status` — coverage report across locales
-- `duct-loc prune` — find and remove dead keys not referenced in source
+- `mur loc translate --missing-only` for incremental translation
+- `mur loc validate` — ICU syntax, parameter consistency, encoding
+- `mur loc status` — coverage report across locales
+- `mur loc prune` — find and remove dead keys not referenced in source
 
 ### Phase 6: Polish
 - Hot reload: file watcher on `.resw` files, cache invalidation, auto re-render
@@ -1479,14 +1479,14 @@ Developers can manually merge keys after extraction if they want shared translat
 
 ```bash
 # Find keys in .resw that are not referenced anywhere in source
-$ duct-loc prune --source src/ --resources Strings/en-US/ --dry-run
+$ mur loc prune --source src/ --resources Strings/en-US/ --dry-run
 
   UNUSED: Common.OldFeature (not referenced in any .cs file)
   UNUSED: Settings.DeprecatedOption (not referenced in any .cs file)
   2 unused keys found. Run without --dry-run to remove from all locale .resw files.
 
 # Actually remove them
-$ duct-loc prune --source src/ --resources Strings/en-US/
+$ mur loc prune --source src/ --resources Strings/en-US/
   Removed Common.OldFeature from 4 locale files
   Removed Settings.DeprecatedOption from 4 locale files
 ```
@@ -1499,18 +1499,18 @@ The prune command:
 
 ### 17.4 CI Enforcement via --dry-run
 
-`duct-loc extract --dry-run` exits with a non-zero exit code if unextracted strings are
+`mur loc extract --dry-run` exits with a non-zero exit code if unextracted strings are
 found, making it usable as a CI gate:
 
 ```yaml
 # Azure Pipelines / GitHub Actions example
-- script: duct-loc extract --source src/ --output Strings/en-US/ --dry-run
+- script: mur loc extract --source src/ --output Strings/en-US/ --dry-run
   displayName: 'Check for unextracted strings'
   # Fails the build if any bare strings exist in DSL calls
 ```
 
 ```bash
-$ duct-loc extract --source src/ --output Strings/en-US/ --dry-run
+$ mur loc extract --source src/ --output Strings/en-US/ --dry-run
 
   UNEXTRACTED: src/Components/NewFeature.cs:15 — Text("Beta Feature")
   UNEXTRACTED: src/Components/NewFeature.cs:22 — Button("Try It", ...)
@@ -1518,14 +1518,14 @@ $ duct-loc extract --source src/ --output Strings/en-US/ --dry-run
   Exit code: 1
 ```
 
-Similarly, `duct-loc prune --dry-run` can enforce no dead keys, and `duct-loc validate`
+Similarly, `mur loc prune --dry-run` can enforce no dead keys, and `mur loc validate`
 can enforce ICU syntax correctness and translation completeness in CI:
 
 ```yaml
 # Full localization CI gate
 - script: |
-    duct-loc extract --source src/ --output Strings/en-US/ --dry-run
-    duct-loc prune --source src/ --resources Strings/en-US/ --dry-run
-    duct-loc validate --resources Strings/
+    mur loc extract --source src/ --output Strings/en-US/ --dry-run
+    mur loc prune --source src/ --resources Strings/en-US/ --dry-run
+    mur loc validate --resources Strings/
   displayName: 'Localization checks'
 ```
