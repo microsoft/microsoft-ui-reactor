@@ -910,6 +910,22 @@ public class AgentKitDocGateInstrumentTests
 
         Assert.Empty(AgentKitDocCorpus.ExtractFences("fixture/tab.md", TabIndented.Replace("<TAB>", "\t")));
         Assert.DoesNotMatch(AgentKitDocCorpus.CSharpFenceProbe, "\t```csharp");
+
+        // The closing test measures columns too. A tab-indented ``` is four columns in, past the
+        // three CommonMark allows, so it is literal text inside the sample rather than the close —
+        // counting characters ended the block early and left the rest of it unscanned.
+        const string TabbedInnerFence = """
+            ```csharp
+            <TAB>```
+            FlexColumn(children).FlexPadding(16)
+            ```
+            """;
+
+        Assert.Equal(
+            "\t```\nFlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences(
+                "fixture/tabclose.md",
+                TabbedInnerFence.Replace("<TAB>", "\t"))).Text.Replace("\r\n", "\n"));
     }
 
     /// <summary>

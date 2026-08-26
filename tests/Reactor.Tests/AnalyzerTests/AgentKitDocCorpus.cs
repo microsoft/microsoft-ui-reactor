@@ -612,13 +612,16 @@ internal static class AgentKitDocCorpus
     /// indented <c>```</c> — literal text inside a C# sample, for instance in a raw string
     /// demonstrating Markdown — truncate the block, so the rest of that sample was never scanned.
     /// The differential probe trusts <see cref="Fences"/> for block structure, so it cannot see it.
+    /// Measured in visual columns like every other indentation here: counting characters made a
+    /// leading tab worth 1, so a tab-indented <c>```</c> closed a top-level block three columns
+    /// early and everything after it in that sample went unscanned.
     /// </remarks>
     private static bool IsClosingFence(string rawLine, char fenceChar, int openLength, int containerIndent, int blockquoteDepth)
     {
         var line = StripBlockquote(rawLine, blockquoteDepth).Content;
         var text = line.TrimStart(' ', '\t');
 
-        if (line.Length - text.Length - containerIndent > 3)
+        if (VisualWidth(line[..(line.Length - text.Length)]) - containerIndent > 3)
             return false;
 
         var run = 0;
