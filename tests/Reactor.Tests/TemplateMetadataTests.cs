@@ -1,6 +1,13 @@
-// Repository-content validation for project-template metadata.
+// Repository-content validation for the legacy project-template metadata.
 //
-// The bug this test was added against:
+// These guard `tools/Templates/` — the in-repo `Microsoft.UI.Reactor.ProjectTemplates`
+// pack that provides `dotnet new reactorapp`. That pack is still built by
+// `mur pack-local` and published by the release workflow, but as of the move to
+// the Windows App SDK template pack it is no longer installed by `bootstrap.ps1`.
+// `dotnet new reactor` (packaged, from Microsoft.WindowsAppSDK.WinUI.CSharp.Templates)
+// is the supported scaffolding path; see WinAppSdkTemplatesTests.
+//
+// The bug this file was originally added against:
 //   `tools/Templates/templates/WinUIApp-CSharp/.template.config/template.json`
 //   shipped with `identity` = "Micrsoft.UI.Reactor.CSharp" (missing the
 //   second 'o') from at least Phase 1 onward. The existing integration test
@@ -114,11 +121,11 @@ public sealed class TemplateMetadataTests
     [Fact]
     public void Bootstrap_packs_templates_with_latest_framework_version()
     {
-        // The local side of the same fix: bootstrap.ps1 must pack the templates with
-        // `--framework-version latest` so a fresh clone's `dotnet new reactorapp`
-        // tracks the newest published package instead of a hand-maintained csproj
-        // default. Fails the instant that wiring is dropped from either invocation
-        // path (installed `mur` or the `dotnet run` fallback).
+        // The local side of the same fix: bootstrap.ps1 must pack the legacy
+        // templates with `--framework-version latest` so the ProjectTemplates
+        // nupkg tracks the newest published package instead of a hand-maintained
+        // csproj default. Fails the instant that wiring is dropped from either
+        // invocation path (installed `mur` or the `dotnet run` fallback).
         var (path, text) = ReadRepoFile("bootstrap.ps1");
         var normalized = text.Replace("\r\n", "\n");
         var matches = global::System.Text.RegularExpressions.Regex.Matches(
@@ -126,8 +133,56 @@ public sealed class TemplateMetadataTests
         Assert.True(
             matches.Count >= 2,
             $"'{path}' must invoke `mur pack-local --framework-version latest` on both the installed-`mur` " +
-            $"and `dotnet run` fallback paths so local scaffolds track the latest published framework " +
+            $"and `dotnet run` fallback paths so the packed templates track the latest published framework " +
             $"(found {matches.Count}, expected >= 2). Dropping it re-introduces the drift fixed for issue #866.");
+    }
+
+    // ── Template-pack migration guard ──────────────────────────────────────
+    //
+    // Reactor's app templates moved into the Windows App SDK `dotnet new` pack
+    // (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`, short name `reactor`).
+    // bootstrap.ps1 installs *that* pack and deliberately no longer installs the
+    // in-repo `Microsoft.UI.Reactor.ProjectTemplates` one. These two tests pin
+    // both halves of that contract — the regression they guard is silent
+    // (a bootstrap that quietly re-registers `reactorapp` would hand new
+    // developers the unpackaged template the docs no longer describe).
+
+    [Fact]
+    public void Bootstrap_installs_the_windows_app_sdk_template_pack()
+    {
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        Assert.Contains("Microsoft.WindowsAppSDK.WinUI.CSharp.Templates", text, StringComparison.Ordinal);
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(
+                text.Replace("\r\n", "\n"), @"templates',\s*'install'"),
+            $"'{path}' must install the Reactor templates via `mur templates install`, which resolves the " +
+            "newest published version of the Windows App SDK template pack. `dotnet new install` has no " +
+            "--prerelease switch and resolves stable-only, so installing the bare package id fails while " +
+            "the pack is prerelease-only.");
+    }
+
+    [Fact]
+    public void Bootstrap_does_not_install_the_legacy_reactorapp_template()
+    {
+        // `mur pack-local` still *builds* Microsoft.UI.Reactor.ProjectTemplates
+        // and the release workflow still publishes it — but nothing in bootstrap
+        // may hand it to `dotnet new install`, or a fresh clone silently gets the
+        // legacy unpackaged `reactorapp` template back.
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        var normalized = text.Replace("\r\n", "\n");
+
+        // Strip comment lines: the step deliberately documents the manual
+        // opt-in command, and that mention must not trip this guard.
+        var code = string.Join('\n', normalized
+            .Split('\n')
+            .Where(line => !line.TrimStart().StartsWith("#", StringComparison.Ordinal)));
+
+        Assert.False(
+            global::System.Text.RegularExpressions.Regex.IsMatch(
+                code, @"new\s+install.*Microsoft\.UI\.Reactor\.ProjectTemplates"),
+            $"'{path}' must not `dotnet new install` Microsoft.UI.Reactor.ProjectTemplates — the Reactor " +
+            "templates now ship in the Windows App SDK template pack (`dotnet new reactor`). Install the " +
+            "legacy pack by hand if you specifically need the unpackaged `reactorapp` shape.");
     }
 
     // Returns the text of the YAML step whose `name:` equals stepName (the slice

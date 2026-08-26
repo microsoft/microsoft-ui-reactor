@@ -217,18 +217,24 @@ In selfhost the version is `0.0.0-local` (produced by `mur pack-local` —
 see "Which mode are you in?" above). Outside the source clone, replace it
 with whatever Microsoft.UI.Reactor version you depend on.
 
-**After `dotnet new reactorapp -n <Name>`, the workspace contains
-exactly two source files: `App.cs` (entry point + initial component)
-and `<Name>.csproj`.** There is no `Program.cs` and no
-`GlobalUsings.cs` — modify `App.cs` in place. The `.csproj` does
-**not** enable implicit usings; `App.cs` has its own `using`
-directives at the top — the canonical set (System + Reactor +
+**After `dotnet new reactor -n <Name>`, the entry point is `App.cs`**
+(entry point + initial component), next to `<Name>.csproj`. The template
+also emits packaging scaffolding you normally don't touch:
+`Package.appxmanifest`, `app.manifest`, `Assets/`, and
+`Properties/launchSettings.json` + `Properties/PublishProfiles/`. There is no
+`Program.cs` and no `GlobalUsings.cs` — modify `App.cs` in place. `App.cs` has
+its own `using` directives at the top — the canonical set (System + Reactor +
 Reactor.Core + Reactor.Layout + Xaml + Xaml.Controls + static
 Factories) — which is the only place you add new namespaces (e.g. `using System.Linq;` when
 you reach for `.Select(...)`). Don't probe the `.csproj` after
 scaffolding unless you're adding a `PackageReference` or changing a
 property — `Restore succeeded.` in the scaffold stdout is the only
 confirmation you need.
+
+Apps from `dotnet new reactor` are **packaged** (single-project MSIX), so
+`dotnet run` launches them with package identity and needs Developer Mode on.
+The other short names are `reactor-mvu`, `reactor-navview`, and
+`reactor-tabview`.
 
 **Verify your edits with `mur check`** before declaring done. From the
 project directory: `mur check` (no arguments) runs `dotnet build` and
@@ -258,8 +264,11 @@ next to it pointing at the clone's `local-nupkgs/` (absolute path):
 Inside the clone you don't need this — the repo-level `nuget.config`
 already configures the feed.
 
-`WindowsPackageType` MUST be `None` (unpackaged, no App.xaml). `UseWinUI`
-MUST be `true`. No XAML files of any kind.
+For a **hand-authored** csproj like the one above, `WindowsPackageType` MUST be
+`None` (unpackaged, no App.xaml) and `UseWinUI` MUST be `true`. Apps scaffolded
+by `dotnet new reactor` are packaged instead and omit `WindowsPackageType`
+entirely — leave their packaging properties alone. Either way: no XAML files of
+any kind.
 
 ### Required imports
 

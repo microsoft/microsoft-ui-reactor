@@ -2,6 +2,25 @@
 
 **`dotnet new` templates for scaffolding [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) apps — a ready-to-run WinUI 3 Reactor project in one command.**
 
+> [!IMPORTANT]
+> **This package is superseded.** The recommended way to scaffold a Reactor app
+> is now the official Windows App SDK template pack, which ships first-class
+> Reactor templates alongside the WinUI 3 XAML ones:
+>
+> ```shell
+> dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+> dotnet new reactor -n MyApp
+> ```
+>
+> Short names there: `reactor`, `reactor-mvu`, `reactor-navview`,
+> `reactor-tabview`. Those templates scaffold **packaged** (single-project MSIX)
+> apps, so `dotnet run` launches with full package identity.
+>
+> This package is still built and published for the **unpackaged**
+> (`WindowsPackageType=None`) shape, but `bootstrap.ps1` no longer installs it
+> and it is no longer the documented default. Prefer `dotnet new reactor` unless
+> you specifically need the unpackaged, zip-and-go project layout.
+
 ## About
 
 This package installs project templates for the .NET CLI and Visual Studio so you can create a new declarative WinUI 3 desktop app powered by Reactor without wiring up the project by hand.

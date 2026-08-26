@@ -4,7 +4,7 @@
 // depends on. Prints a one-line PASS / WARN / FAIL per check and exits non-zero
 // only when there are FAILs — WARNs (e.g. missing-template-enumeration or a
 // stale-looking checkout) still exit 0 since the install is usable. Designed
-// to be the first thing a confused user runs after `dotnet new reactorapp`
+// to be the first thing a confused user runs after `dotnet new reactor`
 // fails — every FAIL prints a copy-pasteable next step.
 //
 // Checks (in order):
@@ -17,13 +17,17 @@
 //   5. local-nupkgs/Microsoft.UI.Reactor.Advanced.<ver>.nupkg present
 //      (warn-only — opt-in Win2D canvas package)
 //   6. local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.<ver>.nupkg present
-//   7. `dotnet new` template list includes `reactorapp` (always runs — does
-//      not depend on the repo checkout being found)
+//      (warn-only — the legacy `dotnet new reactorapp` pack is still built and
+//      published, but nothing installs it automatically any more)
+//   7. The Windows App SDK `dotnet new` template pack is registered, which is
+//      what provides `dotnet new reactor` (always runs — does not depend on
+//      the repo checkout being found)
 //   8. Claude plugin at ~/.claude/plugins/reactor (informational only; not
 //      every developer uses Claude Code)
 
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Cli.Pack;
+using Microsoft.UI.Reactor.Cli.Templates;
 
 namespace Microsoft.UI.Reactor.Cli.Doctor;
 
@@ -125,10 +129,14 @@ public static class DoctorCommand
                 Pass("local Advanced nupkg", $"{Path.GetFileName(advancedNupkg)} ({FormatAge(File.GetLastWriteTimeUtc(advancedNupkg))})");
             }
 
+            // The legacy `dotnet new reactorapp` pack. `mur pack-local` still
+            // produces it and the release workflow still publishes it, but
+            // bootstrap no longer installs it — so a missing nupkg here means an
+            // incomplete pack-local, not a broken scaffolding story. Warn, don't fail.
             if (!File.Exists(templateNupkg))
             {
-                Fail("local template nupkg", $"missing {templateNupkg}. Run `mur pack-local`.");
-                failures++;
+                Warn("local template nupkg", $"missing {templateNupkg}. Run `mur pack-local` if you need the legacy `dotnet new reactorapp` package.");
+                warnings++;
             }
             else
             {
@@ -136,20 +144,20 @@ public static class DoctorCommand
             }
         }
 
-        // 4. dotnet new reactorapp template
-        var templates = ListInstalledTemplates();
-        if (templates is null)
+        // 4. `dotnet new reactor` templates (Windows App SDK template pack).
+        var templatePackInstalled = WinAppSdkTemplates.IsInstalled();
+        if (templatePackInstalled is null)
         {
-            Warn("dotnet new template", "could not enumerate `dotnet new` templates");
+            Warn("dotnet new template", "could not enumerate installed `dotnet new` template packages");
             warnings++;
         }
-        else if (templates.Any(t => t.IndexOf("reactorapp", StringComparison.OrdinalIgnoreCase) >= 0))
+        else if (templatePackInstalled.Value)
         {
-            Pass("dotnet new template", "reactorapp registered");
+            Pass("dotnet new template", $"{WinAppSdkTemplates.PackageId} registered (`dotnet new {WinAppSdkTemplates.BlankShortName}`)");
         }
         else
         {
-            Fail("dotnet new template", "reactorapp not registered. Run `mur upgrade` or `dotnet new install <repo>/local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg`.");
+            Fail("dotnet new template", $"{WinAppSdkTemplates.PackageId} not registered, so `dotnet new {WinAppSdkTemplates.BlankShortName}` is unavailable. Run `./bootstrap.ps1`, `mur upgrade`, or `dotnet new install {WinAppSdkTemplates.PackageId}`.");
             failures++;
         }
 
@@ -181,7 +189,7 @@ public static class DoctorCommand
             Console.WriteLine($"  OK — {warnings} warning(s). Your install is functional.");
             return 0;
         }
-        Console.WriteLine("  All checks passed. You're ready to `dotnet new reactorapp -n MyApp`.");
+        Console.WriteLine($"  All checks passed. You're ready to `dotnet new {WinAppSdkTemplates.BlankShortName} -n MyApp`.");
         return 0;
     }
 
@@ -308,31 +316,6 @@ public static class DoctorCommand
             var output = proc.StandardOutput.ReadToEnd();
             proc.WaitForExit();
             return proc.ExitCode == 0 ? output.Trim() : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    static List<string>? ListInstalledTemplates()
-    {
-        try
-        {
-            var psi = new ProcessStartInfo("dotnet")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                ArgumentList = { "new", "list" },
-            };
-            using var proc = Process.Start(psi);
-            if (proc is null) return null;
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit();
-            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                         .Select(s => s.TrimEnd())
-                         .ToList();
         }
         catch
         {

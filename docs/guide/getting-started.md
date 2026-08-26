@@ -19,17 +19,55 @@ the rest of the docset elaborates.
 <!-- /ai:lock -->
 
 > **Public preview package available.** Reactor ships `Microsoft.UI.Reactor`
-> `0.1.0-preview.13` on NuGet.org. The project template package is still
-> installed from source for now; `bootstrap.ps1` installs `mur`, packs/registers
-> the local `reactorapp` template, and stamps generated apps to reference the
-> public preview package by default. Broader signed distribution is tracked in
+> `0.1.0-preview.13` on NuGet.org, and the project templates ship in the
+> official Windows App SDK `dotnet new` pack
+> (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`) — so `dotnet new reactor`
+> works from a plain .NET SDK install, no source checkout required.
+> `bootstrap.ps1` is for *contributors*: it installs `mur`, packs source-built
+> framework snapshots, and registers those same templates. Broader signed
+> distribution is tracked in
 > [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md).
 
 Reactor is a declarative UI framework for building native Windows apps in pure C#.
 No XAML, no data binding, no view models. You describe your UI as a function of
 state and Reactor keeps the screen in sync.
 
-## Setup (one-time)
+## Setup
+
+If you just want to build an app, install the template pack and go — you do not
+need to clone this repo:
+
+```powershell
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+dotnet new reactor -n MyApp
+cd MyApp
+dotnet run
+```
+
+That gives you four starting points:
+
+| Template | What it scaffolds |
+|---|---|
+| `reactor` | Blank Reactor app. Start here if unsure. |
+| `reactor-mvu` | Model-View-Update counter built on `UseReducer` |
+| `reactor-navview` | `NavigationView` shell with multiple pages |
+| `reactor-tabview` | `TabView` shell whose tabs live in the title bar |
+
+Scaffolded apps are **packaged** (single-project MSIX), so `dotnet run`
+registers a loose-layout package and launches the app with full package
+identity — the same thing F5 does in Visual Studio. That means features
+requiring identity (notifications, background tasks, Windows AI APIs) work out
+of the box. See [Packaging](packaging.md) to switch to an unpackaged shape.
+
+> **Developer Mode must be on** for `dotnet run` to register the loose-layout
+> package: Settings → System → For developers → Developer Mode → On.
+
+Pin package versions at scaffold time with `--reactor-version` (the
+`Microsoft.UI.Reactor` package) or `--wasdk-version` (the Windows App SDK).
+
+## Contributor setup (one-time)
+
+Working *on* Reactor rather than with it? Clone and bootstrap:
 
 ```powershell
 git clone https://github.com/microsoft/microsoft-ui-reactor.git
@@ -37,30 +75,27 @@ cd microsoft-ui-reactor
 ./bootstrap.ps1
 ```
 
-That's it. `bootstrap.ps1` packs and installs `mur` as a `dotnet tool` global
-install (so it's on PATH cross-shell with no manual `$env:Path` edits), runs
-`mur pack-local` to produce local source-built framework snapshots and the
-matching `ProjectTemplates` nupkg, registers the `dotnet new reactorapp`
-template, and drops the Reactor agent plugin under `~/.claude/plugins/reactor`
-(symlink when allowed, copy otherwise). Apps created from that template reference
-`Microsoft.UI.Reactor` version `0.1.0-preview.13` from NuGet.org by default.
+`bootstrap.ps1` packs and installs `mur` as a `dotnet tool` global install (so
+it's on PATH cross-shell with no manual `$env:Path` edits), runs
+`mur pack-local` to produce local source-built framework snapshots, installs the
+Windows App SDK `dotnet new` template pack via `mur templates install`, and
+drops the Reactor agent plugin under `~/.claude/plugins/reactor` (symlink when
+allowed, copy otherwise).
 
-When it finishes you can immediately run:
+To test an unpublished build of the template pack, point bootstrap at a folder
+of nupkgs:
 
 ```powershell
-dotnet new reactorapp -n MyApp
-cd MyApp
-dotnet run
+./bootstrap.ps1 -WinAppSdkTemplatesSource ..\WindowsAppSDK\localpackages
 ```
 
 ### After `git pull`
 
-The source checkout changes — your local template package, CLI, plugin, and
-optional source-built framework snapshots do not, unless you repack them. Two
-options:
+The source checkout changes — your local framework snapshots, CLI, and plugin
+do not, unless you repack them. Two options:
 
 ```powershell
-mur upgrade           # repacks the framework + templates and refreshes plugin
+mur upgrade           # repacks the framework and refreshes templates + plugin
 ./bootstrap.ps1       # same, plus updates the `mur` global tool itself
 ```
 
@@ -74,23 +109,21 @@ mur doctor
 ```
 
 Lists every dependency the rest of this guide assumes — .NET 10+ SDK, `mur` on
-PATH, current `local-nupkgs/` developer feed, the `reactorapp` template
+PATH, current `local-nupkgs/` developer feed, the `dotnet new reactor` template
 registration, and the optional Claude plugin. Each line is PASS / WARN / FAIL
 with a one-line remediation for anything broken.
 
 > **What this gets you.** A globally-resolvable `mur` (via `~/.dotnet/tools`),
-> a locally installed `reactorapp` template that references
-> `<PackageReference Include="Microsoft.UI.Reactor"
-> Version="0.1.0-preview.13" />`, a local NuGet feed at `<repo>/local-nupkgs/`
-> for source-built smoke tests, and an agent plugin so AI assistants generate
-> against the real factories (`mur --skill` / `mur --api` print the same
-> content). Run `mur upgrade` whenever you pull new template, CLI, plugin, or
-> framework changes.
+> the `dotnet new reactor` templates, a local NuGet feed at
+> `<repo>/local-nupkgs/` for source-built smoke tests, and an agent plugin so AI
+> assistants generate against the real factories (`mur --skill` / `mur --api`
+> print the same content). Run `mur upgrade` whenever you pull new CLI, plugin,
+> or framework changes.
 
 > **Only need the framework package?** Reference the published
 > `Microsoft.UI.Reactor` package directly from NuGet.org. Run the bootstrap only
-> when you want the local project template, the `mur` CLI, or the agent plugin
-> from this source checkout.
+> when you want the `mur` CLI, source-built framework snapshots, or the agent
+> plugin from this source checkout.
 
 ### Manual setup
 
@@ -107,8 +140,8 @@ anything goes wrong.
 | 2 | `git clone` + `cd` | Local source checkout |
 | 3 | `dotnet pack src/Reactor.Cli` | `Microsoft.UI.Reactor.Cli.<ver>.nupkg` in `local-nupkgs/` |
 | 4 | `dotnet tool install -g` | `mur` resolvable cross-shell from `~/.dotnet/tools` |
-| 5 | `mur pack-local` | Source-built framework snapshots plus a local `ProjectTemplates` nupkg; generated apps default to the public Reactor preview |
-| 6 | `dotnet new uninstall` + `install` | `dotnet new reactorapp` template registered |
+| 5 | `mur pack-local` | Source-built framework snapshots in `local-nupkgs/` |
+| 6 | `dotnet new install` | `dotnet new reactor` templates registered |
 | 7 | Symlink/copy `plugins/reactor` | Reactor agent kit under `~/.claude/plugins/reactor` (optional) |
 | 8 | `mur doctor` | Verification that 1–7 all stuck |
 
@@ -168,19 +201,22 @@ $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
 
 New PowerShell windows pick up the user-PATH change on their own.
 
-**5. Pack local framework snapshots and project templates.** This produces the
-source-built `0.0.0-local` framework nupkgs for smoke tests plus the local
-`ProjectTemplates` nupkg that installs `dotnet new reactorapp`. The template's
-normal default references the public `Microsoft.UI.Reactor` `0.1.0-preview.13`
-package.
+**5. Pack local framework snapshots.** This produces the source-built
+`0.0.0-local` framework nupkgs so recipes and smoke tests in this clone can
+consume your working tree instead of the published package.
 
 ```powershell
 mur pack-local
 # Produces:
 #   local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg
 #   local-nupkgs/Microsoft.UI.Reactor.Advanced.0.0.0-local.nupkg
+#   local-nupkgs/Microsoft.UI.Reactor.Devtools.0.0.0-local.nupkg
 #   local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
 ```
+
+The last one is the legacy in-repo `dotnet new reactorapp` pack. It is still
+built and published, but nothing installs it automatically any more — see the
+caveat below.
 
 If you'd rather not depend on the freshly-installed `mur`, you can invoke
 the source project directly:
@@ -190,13 +226,22 @@ dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj `
     -c Release "-p:Platform=$hostArch" -- pack-local
 ```
 
-**6. Install the `dotnet new reactorapp` template.** The template engine
-caches by package id, so a same-version repack can lose to the cached copy.
-Always uninstall first.
+**6. Install the `dotnet new reactor` templates.** These come from the Windows
+App SDK template pack on NuGet.org, not from this checkout:
 
 ```powershell
-dotnet new uninstall Microsoft.UI.Reactor.ProjectTemplates 2>$null
-dotnet new install local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+```
+
+`mur templates install` does the same thing, but resolves the newest published
+version first — including prereleases, which a bare `dotnet new install` cannot
+reach because it has no `--prerelease` switch and resolves stable-only. Use
+`--source <folder>` to install an unpublished build:
+
+```powershell
+mur templates install
+mur templates install --source ..\WindowsAppSDK\localpackages
+mur templates status
 ```
 
 **7. (Optional) Install the Reactor agent plugin.** If you use Claude Code
@@ -231,9 +276,10 @@ mur doctor
 
 #### Refreshing after `git pull`
 
-Without the bootstrap script, repeat **steps 5 and 6** after every pull —
-the framework nupkg and the template both need to be regenerated against
-the new source. Repeat **steps 3 and 4** only when `src/Reactor.Cli/`
+Without the bootstrap script, repeat **step 5** after every pull — the framework
+nupkgs need to be regenerated against the new source. Step 6 is a one-time
+install: the templates come from NuGet.org, so pulling this repo never
+invalidates them. Repeat **steps 3 and 4** only when `src/Reactor.Cli/`
 itself changes (a running `mur` process cannot replace its own binary, so
 the install must happen from a shell that isn't already running `mur`).
 
@@ -244,42 +290,48 @@ the install must happen from a shell that isn't already running `mur`).
 > with no arch-aware PATH munging, and `dotnet tool update -g` becomes the
 > upgrade verb.
 
-> **Caveat:** The core framework package is public, but the `reactorapp` project-template
-> package is still source-installed. If `dotnet new reactorapp` is missing, run
-> `bootstrap.ps1` (or `mur upgrade` from an already bootstrapped checkout) to
-> repack and reinstall `Microsoft.UI.Reactor.ProjectTemplates` from
-> `local-nupkgs/`. The template installer caches by package id, so a same-version
-> repack can lose to the cached copy — `mur upgrade` handles this by running
-> `dotnet new uninstall` first.
+> **Caveat:** The Reactor templates ship in the Windows App SDK `dotnet new` pack
+> (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), so `dotnet new reactor` needs
+> no source checkout. If it's missing, run `dotnet new install
+> Microsoft.WindowsAppSDK.WinUI.CSharp.Templates` — or `mur templates install`,
+> which additionally resolves prerelease versions that a bare `dotnet new install`
+> cannot reach.
+> This repo also still builds and publishes a legacy
+> `Microsoft.UI.Reactor.ProjectTemplates` pack providing the older, **unpackaged**
+> `dotnet new reactorapp` template. `bootstrap.ps1` no longer installs it. Install
+> it explicitly if you need that shape:
+> `dotnet new install local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg`.
 
 ## Creating a Project
 
-With the template installed, scaffold a new app from anywhere on disk:
+With the templates installed, scaffold a new app from anywhere on disk:
 
 ```powershell
-dotnet new reactorapp -n MyApp
+dotnet new reactor -n MyApp
 cd MyApp
 dotnet run
 ```
 
 The template wires up the `Microsoft.UI.Reactor` package reference, the
-WinUI 3 target framework, and a working `App.cs` that mounts a single
-Reactor component. No `App.xaml`, no `MainWindow.xaml.cs` — just one C#
+WinUI 3 target framework, MSIX packaging, and a working `App.cs` that mounts a
+single Reactor component. No `App.xaml`, no `MainWindow.xaml.cs` — just one C#
 file.
 
-By default that package reference is
-`<PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.13" />`.
-For local framework smoke tests, generate with
-`dotnet new reactorapp -n MyLocalApp --MSUIReactorVersion 0.0.0-local` and run
+Swap `reactor` for `reactor-mvu`, `reactor-navview`, or `reactor-tabview` to
+start from a richer shell.
+
+By default the package reference tracks the current public preview. For local
+framework smoke tests, generate with
+`dotnet new reactor -n MyLocalApp --reactor-version 0.0.0-local` and run
 from inside the source checkout or another folder that has the local feed
 configured.
 
 > **Why a custom template?** A `dotnet new console` does not produce a WinUI
 > app — it builds a console target with no UI thread, no `OutputType=WinExe`,
-> no WindowsAppSDK reference, and no `[STAThread]` entry point. `reactorapp`
-> sets all of those plus the Reactor package reference and a backdrop-aware
-> root component, so you get a window on first `dotnet run` instead of a
-> console-host stub.
+> no WindowsAppSDK reference, and no `[STAThread]` entry point. `reactor`
+> sets all of those plus the Reactor package reference, MSIX packaging, and a
+> backdrop-aware root component, so you get a window on first `dotnet run`
+> instead of a console-host stub.
 
 ## Your First App
 

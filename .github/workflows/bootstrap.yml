@@ -2,7 +2,7 @@ name: Bootstrap
 
 # Exercises bootstrap.ps1 end-to-end on a fresh windows-latest runner to
 # validate the source-checkout developer flow (`git clone` → `bootstrap.ps1`
-# → `dotnet new reactorapp`). The script is invoked non-interactively via
+# → `dotnet new reactor`). The script is invoked non-interactively via
 # `-InstallWinAppSdk -SkipPlugin`, which also exercises the winget install
 # path for the Windows App Runtime when the runner image doesn't already
 # have it.
@@ -132,22 +132,42 @@ jobs:
           if ($cliPkgs.Count -eq 0) { throw "No Microsoft.UI.Reactor.Cli.*.nupkg found in local-nupkgs/" }
           Write-Host "  [ok] CLI tool nupkg: $($cliPkgs[0].Name)"
 
-      - name: Verify dotnet new reactorapp template registered
+      - name: Verify dotnet new reactor templates registered
         shell: pwsh
         run: |
-          $listing = dotnet new list reactorapp 2>&1
+          # Reactor's app templates ship in the Windows App SDK `dotnet new`
+          # pack, which bootstrap.ps1 §5 installs via `mur templates install`.
+          $listing = dotnet new list reactor 2>&1
           $rc = $LASTEXITCODE
           Write-Host $listing
-          if ($rc -ne 0) { throw "dotnet new list reactorapp exited $rc" }
+          if ($rc -ne 0) { throw "dotnet new list reactor exited $rc" }
           # `dotnet new list` writes a multi-line table; PowerShell stores the
           # output as a [string[]]. -match / -notmatch against an array filter
-          # element-wise, so `-notmatch 'reactorapp'` returns the non-matching
+          # element-wise, so `-notmatch 'reactor'` returns the non-matching
           # lines (header, separator) which evaluates truthy even when the
           # template is present. Join + match to do a whole-output substring
           # check instead.
-          if (($listing -join "`n") -notmatch 'reactorapp') {
-              throw "reactorapp template not found in `dotnet new list` output"
+          $joined = $listing -join "`n"
+          foreach ($shortName in @('reactor', 'reactor-mvu', 'reactor-navview', 'reactor-tabview')) {
+              if ($joined -notmatch [regex]::Escape($shortName)) {
+                  throw "$shortName template not found in ``dotnet new list reactor`` output"
+              }
+              Write-Host "  [ok] $shortName"
           }
+          # The pack itself must be the Windows App SDK one, not our legacy
+          # in-repo ProjectTemplates package.
+          $packages = dotnet new uninstall 2>&1 | Out-String
+          if ($packages -notmatch 'Microsoft\.WindowsAppSDK\.WinUI\.CSharp\.Templates') {
+              throw "Microsoft.WindowsAppSDK.WinUI.CSharp.Templates is not installed"
+          }
+          Write-Host "  [ok] Microsoft.WindowsAppSDK.WinUI.CSharp.Templates registered"
+          # bootstrap must NOT install the legacy pack any more. A stray install
+          # would silently hand new developers the unpackaged `reactorapp`
+          # template the docs no longer describe.
+          if ($packages -match 'Microsoft\.UI\.Reactor\.ProjectTemplates') {
+              throw "bootstrap installed the legacy Microsoft.UI.Reactor.ProjectTemplates pack; it should only be packed, not installed"
+          }
+          Write-Host "  [ok] legacy Microsoft.UI.Reactor.ProjectTemplates not installed"
 
       - name: Scaffold a TestApp and restore against the local feed
         shell: pwsh
@@ -168,9 +188,11 @@ jobs:
               # Bootstrap validates the local 0.0.0-local feed produced by
               # mur pack-local. The template's normal default may point at a
               # not-yet-published public preview while a release-prep PR is in
-              # flight, so opt into the local package version explicitly here.
-              dotnet new reactorapp -n TestApp --MSUIReactorVersion 0.0.0-local
-              if ($LASTEXITCODE -ne 0) { throw "dotnet new reactorapp exited $LASTEXITCODE" }
+              # flight, so opt into the local package version explicitly here
+              # (`--reactor-version` is the Windows App SDK template's knob;
+              # the legacy `reactorapp` template called it --MSUIReactorVersion).
+              dotnet new reactor -n TestApp --reactor-version 0.0.0-local
+              if ($LASTEXITCODE -ne 0) { throw "dotnet new reactor exited $LASTEXITCODE" }
               if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced" }
 
               dotnet restore TestApp/TestApp.csproj --nologo -v:m
@@ -179,14 +201,12 @@ jobs:
               Pop-Location
           }
 
-      - name: Build TestApp (template ships WindowsAppSDKSelfContained=true)
+      - name: Build TestApp (packaged single-project MSIX)
         shell: pwsh
         run: |
-          # The scaffolded template (tools/Templates/templates/WinUIApp-CSharp)
-          # explicitly sets WindowsAppSDKSelfContained=true so end users get a
-          # standalone deployable. SelfContained=true requires a concrete arch
-          # to embed the runtime under — AnyCPU is rejected by the
-          # SelfContained target. Pass the host arch explicitly.
+          # The Windows App SDK Reactor templates scaffold a *packaged*
+          # (single-project MSIX) app, which requires a concrete architecture —
+          # AnyCPU is rejected. Pass the host arch explicitly.
           $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
           dotnet build TestProjects/TestApp/TestApp.csproj `
               -c Release `
@@ -198,7 +218,8 @@ jobs:
         shell: pwsh
         run: |
           # `mur upgrade` should succeed against an already-bootstrapped tree:
-          # re-pack, re-install template (uninstall-first), refresh plugin.
+          # re-pack, ensure the `dotnet new reactor` templates are installed,
+          # refresh plugin.
           $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
           mur upgrade --skip-plugin
           if ($LASTEXITCODE -ne 0) { throw "mur upgrade exited $LASTEXITCODE" }

@@ -143,7 +143,7 @@ dotnet pack tools/Templates/Microsoft.UI.Reactor.Templates.csproj `
   -o local-nupkgs
 ```
 
-Create a throwaway app from the packed template and verify its `.csproj` references the chosen public version. Skip restore before the tag is published because the new package version will not exist on NuGet.org yet:
+Create a throwaway app from the packed **legacy** template (`Microsoft.UI.Reactor.ProjectTemplates`, `dotnet new reactorapp`) and verify its `.csproj` references the chosen public version. This package is still published even though `bootstrap.ps1` no longer installs it — the supported scaffolding path is now `dotnet new reactor` from the Windows App SDK template pack, which is versioned and released by the WindowsAppSDK repo, not here. Skip restore before the tag is published because the new package version will not exist on NuGet.org yet:
 
 ```powershell
 dotnet new uninstall Microsoft.UI.Reactor.ProjectTemplates

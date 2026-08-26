@@ -177,7 +177,8 @@ subcommands map one-to-one to the workflows below.
 | `mur loc` | Run the localization pipeline (extract strings, validate `.resw`, generate manifests) | `mur loc extract` |
 | `mur devtools` | Start the MCP server for VS Code or agent integration | `mur devtools serve` |
 | `mur check` | Repo-health checks (cref validity, namespace policy, "did you mean" suggestions) | `mur check` |
-| `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for source-built framework smoke tests; the app template defaults to the public Reactor preview unless `--MSUIReactorVersion` is supplied | `mur pack-local` |
+| `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for source-built framework smoke tests; scaffolded apps default to the public Reactor preview unless `--reactor-version` is supplied | `mur pack-local` |
+| `mur templates install` / `mur templates status` | Install or check the Windows App SDK `dotnet new` pack that provides `dotnet new reactor` (resolves prereleases that a bare `dotnet new install` can't reach) | `mur templates install` |
 
 `mur docs compile` is the workflow you reach for most often. See
 [the doc-pipeline contributor guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)

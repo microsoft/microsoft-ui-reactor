@@ -3,8 +3,9 @@
 // Re-runs the source-side steps of bootstrap.ps1:
 //   1. Re-pack the framework + ProjectTemplates into local-nupkgs/
 //      (delegates to `mur pack-local`).
-//   2. Reinstall the `dotnet new reactorapp` template (uninstall first so the
-//      template engine drops its cached copy).
+//   2. Make sure the Windows App SDK `dotnet new` template pack (which ships
+//      `dotnet new reactor`) is installed — self-healing for a checkout that
+//      was bootstrapped before the templates moved there.
 //   3. Refresh the Claude Code plugin install.
 //   4. Rebuild + reinstall the Reactor VS preview extension (best-effort —
 //      skipped if VS / the VSIX-dev workload aren't installed, same probe
@@ -17,6 +18,7 @@
 
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Cli.Pack;
+using Microsoft.UI.Reactor.Cli.Templates;
 
 namespace Microsoft.UI.Reactor.Cli.Upgrade;
 
@@ -44,25 +46,27 @@ public static class UpgradeCommand
             return rc;
         }
 
-        // 2. Reinstall the dotnet new template. Uninstall first so the template
-        //    engine drops the cached version by id (the installer otherwise wins
-        //    against a same-id repack — see getting-started.md caveat).
+        // 2. Make sure the `dotnet new reactor` templates are available. They ship
+        //    in the Windows App SDK template pack rather than being built from this
+        //    checkout, so `git pull` never invalidates them — this is a self-healing
+        //    install-if-missing, not a reinstall. Best-effort: a developer who
+        //    scaffolds by hand shouldn't have `mur upgrade` fail on a NuGet hiccup.
+        //
+        //    The legacy in-repo `Microsoft.UI.Reactor.ProjectTemplates` pack
+        //    (`dotnet new reactorapp`) is still repacked by step 1, but is
+        //    deliberately not installed. Install it manually if you want it:
+        //      dotnet new install local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
         Console.WriteLine();
-        Console.WriteLine("==> Reinstalling `dotnet new reactorapp` template");
-        var feed = Path.Combine(repoRoot, "local-nupkgs");
-        var templateNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{PackLocalCommand.DefaultLocalVersion}.nupkg");
-        if (!File.Exists(templateNupkg))
+        var templateSource = ParseFlag(args, "--templates-source");
+        var templateVersion = ParseFlag(args, "--templates-version");
+        Console.WriteLine($"==> Checking `dotnet new {WinAppSdkTemplates.BlankShortName}` templates ({WinAppSdkTemplates.PackageId})");
+        // Install() is a no-op when the resolved version is already installed, and
+        // deliberately leaves an existing install alone when it can't resolve a
+        // newer one — so this is safe to run on every upgrade.
+        var templateRc = WinAppSdkTemplates.Install(repoRoot, templateSource, templateVersion);
+        if (templateRc != 0)
         {
-            Console.Error.WriteLine($"mur upgrade: template nupkg not found at {templateNupkg} after pack-local.");
-            return 1;
-        }
-        // Uninstall is best-effort: non-zero exit just means it wasn't installed.
-        RunDotnet(repoRoot, ignoreExitCode: true, "new", "uninstall", CleanLocalCommand.TemplatePackageId);
-        rc = RunDotnet(repoRoot, ignoreExitCode: false, "new", "install", templateNupkg);
-        if (rc != 0)
-        {
-            Console.Error.WriteLine("mur upgrade: template install failed.");
-            return rc;
+            Console.Error.WriteLine($"  Could not install {WinAppSdkTemplates.PackageId} (exit {templateRc}); the rest of the upgrade completed.");
         }
 
         // 3. Refresh Claude plugin (best-effort; not every user has Claude Code).
@@ -129,6 +133,7 @@ public static class UpgradeCommand
         Console.WriteLine();
         Console.WriteLine("Upgrade complete.");
         Console.WriteLine();
+        var feed = Path.Combine(repoRoot, "local-nupkgs");
         Console.WriteLine("  To bump `mur` itself (which can't update its own running process), run:");
         Console.WriteLine($"    dotnet tool update -g --add-source \"{feed}\" Microsoft.UI.Reactor.Cli");
         Console.WriteLine("  Or just re-run ./bootstrap.ps1 from the repo root.");
@@ -278,38 +283,14 @@ public static class UpgradeCommand
         return null;
     }
 
-    static int RunDotnet(string workingDirectory, bool ignoreExitCode, params string[] arguments)
+    static string? ParseFlag(string[] args, string name)
     {
-        var psi = new ProcessStartInfo("dotnet")
+        for (var i = 0; i < args.Length - 1; i++)
         {
-            UseShellExecute = false,
-            WorkingDirectory = workingDirectory,
-        };
-        foreach (var a in arguments) psi.ArgumentList.Add(a);
-
-        Process? proc;
-        try
-        {
-            proc = Process.Start(psi);
+            if (string.Equals(args[i], name, StringComparison.Ordinal))
+                return args[i + 1];
         }
-        catch (Exception ex)
-        {
-            if (ignoreExitCode) return 0;
-            Console.Error.WriteLine($"mur upgrade: failed to start `dotnet {string.Join(' ', arguments)}`: {ex.Message}");
-            Console.Error.WriteLine("  Verify .NET 10+ is installed and `dotnet` resolves on PATH.");
-            return 1;
-        }
-        if (proc is null)
-        {
-            if (ignoreExitCode) return 0;
-            Console.Error.WriteLine($"mur upgrade: `dotnet {string.Join(' ', arguments)}` did not start (Process.Start returned null).");
-            return 1;
-        }
-        using (proc)
-        {
-            proc.WaitForExit();
-            return ignoreExitCode ? 0 : proc.ExitCode;
-        }
+        return null;
     }
 
     static void CopyDirectory(string src, string dst)

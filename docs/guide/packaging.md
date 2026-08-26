@@ -4,9 +4,9 @@
 A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK executable —
 `dotnet publish` produces the deployable artifact and the framework
 itself adds nothing exotic to the project file. What you choose at
-publish time is the **shape** of that artifact: an unpackaged folder
-(the [`dotnet new reactorapp`](getting-started.md) default), a signed
-MSIX, a single-file bundle, or a Native AOT native binary — each
+publish time is the **shape** of that artifact: a signed / loose MSIX
+(the [`dotnet new reactor`](getting-started.md) default), an unpackaged
+folder, a single-file bundle, or a Native AOT native binary — each
 combined with a `win-x64` or `win-arm64` runtime identifier. The
 trade-offs are the same ones any WinUI 3 app faces; the
 Reactor-specific notes on this page cover what changes when your
@@ -17,8 +17,8 @@ INPC walker).
 
 | Publish shape | Key properties | Runtime identifier | What you get |
 |---|---|---|---|
-| Unpackaged (template default) | `WindowsPackageType=None`, `WindowsAppSDKSelfContained=true` | `win-x64` / `win-arm64` | A folder with `MyApp.exe` and the WinUI 3 runtime alongside it. Run from anywhere; ship as a zip. |
-| MSIX | `WindowsPackageType=MSIX`, `GenerateAppxPackageOnBuild=true`, signed via `PackageCertificateThumbprint` or `PackageCertificateKeyFile` | `win-x64` / `win-arm64` | A signed `.msix`. Required for Microsoft Store; the cleanest sideload story for enterprise. |
+| MSIX (template default) | `EnableMsixTooling=true`, `Package.appxmanifest`, signed via `PackageCertificateThumbprint` or `PackageCertificateKeyFile` | `win-x64` / `win-arm64` | A signed `.msix` with package identity. Required for Microsoft Store; the cleanest sideload story for enterprise. `dotnet run` registers a loose layout so F5-equivalent debugging works. |
+| Unpackaged | `WindowsPackageType=None`, `WindowsAppSDKSelfContained=true` | `win-x64` / `win-arm64` | A folder with `MyApp.exe` and the WinUI 3 runtime alongside it. Run from anywhere; ship as a zip. No package identity. |
 | Single-file | `PublishSingleFile=true`, `IncludeNativeLibrariesForSelfExtract=true` | `win-x64` / `win-arm64` (must be set) | One `.exe` that self-extracts the WinUI runtime to `%TEMP%/.net/` on first launch. |
 | Native AOT | `PublishAot=true`, `InvariantGlobalization=true` (recommended) | `win-x64` / `win-arm64` (required) | A native binary with no JIT, no `Assembly.GetTypes()`, no `Reflection.Emit`. Fastest cold start; trim-only. |
 
@@ -29,10 +29,46 @@ folder or an MSIX. The decision is usually distribution-channel-first
 
 ![Reactor publish pipeline: dotnet publish takes a Reactor CSPROJ to one of three output shapes (unpackaged folder, single-file bundle, signed MSIX), with Native AOT layered on top of either the unpackaged or the MSIX form](images/packaging/publish-pipeline.svg)
 
+## The packaged shape (template default)
+
+`dotnet new reactor` scaffolds a **single-project MSIX** app: the CSPROJ sets
+`EnableMsixTooling=true`, the project carries a `Package.appxmanifest`, and
+`Microsoft.Windows.SDK.BuildTools.WinApp` hooks `dotnet run` so it registers a
+loose-layout package and launches the app by AUMID. The practical consequence
+is that the app has **package identity** from the very first `dotnet run`, so
+notifications, background tasks, share targets, and the Windows AI APIs all
+work without extra setup.
+
+Two things this requires that the unpackaged shape does not:
+
+- **Developer Mode must be enabled** (Settings → System → For developers) for
+  `dotnet run` to register the loose layout.
+- **A concrete architecture.** The template declares
+  `<Platforms>x86;x64;ARM64</Platforms>`; AnyCPU is rejected. `dotnet build`
+  on an x64 dev box picks x64, but CI and publish invocations should pass
+  `-p:Platform=<arch>` or `-a <arch>` explicitly.
+
+To ship it, sign the package with either a Microsoft Store-issued certificate
+(for Store submissions) or a self-signed certificate imported into
+`Cert:\CurrentUser\My` (for sideloading):
+
+```xml
+<PropertyGroup>
+  <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+  <PackageCertificateThumbprint>...</PackageCertificateThumbprint>
+</PropertyGroup>
+```
+
+`Package.appxmanifest` declares the package identity (Publisher,
+PackageFamilyName, capabilities, file-type associations). The
+[WinUI 3 packaging docs](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/packaging/)
+cover the manifest surface in full.
+
 ## The unpackaged shape
 
-`dotnet new reactorapp` scaffolds an unpackaged WinUI 3 project — the
-shape every sample in this repo also uses:
+Prefer a zip-and-go folder over an MSIX? Drop the packaging pieces and set
+`WindowsPackageType=None` — the shape every sample in this repo uses, and the
+one the legacy `dotnet new reactorapp` template produced:
 
 ```xml snippet="source:samples/TodoApp/TodoApp.csproj#unpackaged-shape"
 ```
@@ -41,9 +77,9 @@ The load-bearing properties are `UseWinUI=true` (pulls the WinUI 3
 XAML runtime), `WindowsPackageType=None` (no MSIX wrapper —
 `MyApp.exe` runs straight from the publish folder), and the explicit
 `<Platforms>x64;ARM64</Platforms>` (Windows App SDK self-contained
-builds reject the AnyCPU default — the template orders x64 first so
-unqualified `dotnet build` picks the right default on x64 dev
-machines, with ARM64 second for Snapdragon X). The
+builds reject the AnyCPU default — x64 first so unqualified
+`dotnet build` picks the right default on x64 dev machines, with
+ARM64 second for Snapdragon X). The
 [`Microsoft.WindowsAppSDK.WinUI`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK.WinUI)
 sub-package brings the WinUI 3 SDK — reference assemblies plus the MSBuild
 build/props/targets — while the native WinUI runtime is supplied by the
@@ -74,11 +110,11 @@ output `MyApp.xbf`, etc.), and the .NET runtime if
 `WindowsAppSDKSelfContained=true`. Zip it and you have a sideloadable
 build that runs on any matching-arch Windows 10 1809+ machine.
 
-## MSIX
+## MSIX details
 
 For Microsoft Store distribution and most enterprise sideloading,
-wrap the same publish output in an MSIX. The single-project MSIX
-shape adds three properties on top of the unpackaged CSPROJ:
+wrap the same publish output in an MSIX. Starting from the unpackaged
+CSPROJ, that means adding three properties:
 
 ```xml
 <PropertyGroup>
@@ -152,8 +188,8 @@ and any `System.Drawing.Common` / `TraceEvent` natives transitively
 pulled in by Reactor) ship per-RID, which is why the runtime
 identifier matters even for managed-only Reactor code. The repo's
 sample apps default to `<Platforms>x64;ARM64</Platforms>`; the
-`reactorapp` template uses `<Platforms>x64;ARM64;X86</Platforms>`
-(X86 retained for parity with the WinUI 3 templates), but Reactor
+`reactor` template uses `<Platforms>x86;x64;ARM64</Platforms>`
+(x86 retained for parity with the WinUI 3 templates), but Reactor
 itself is only tested on x64 / ARM64.
 
 ## Native AOT
@@ -168,14 +204,20 @@ and a runtime identifier:
 
 `dotnet publish -c Release -r win-x64` produces a native binary —
 no `coreclr.dll`, no JIT, ~50 ms cold start versus ~250 ms for the
-JIT-based build on the same hardware. The project template gates
-the same shape behind a `NativeAot` parameter:
+JIT-based build on the same hardware.
 
-```xml snippet="source:tools/Templates/templates/WinUIApp-CSharp/Company.ReactorApp1.csproj#template-shape"
+The `dotnet new reactor` template does **not** enable AOT — it ships
+`PublishReadyToRun` + `PublishTrimmed` for non-Debug configurations instead.
+To go all the way to AOT, add `PublishAot` to the scaffolded CSPROJ yourself:
+
+```xml
+<PropertyGroup Condition="'$(Configuration)' != 'Debug'">
+  <PublishAot>true</PublishAot>
+  <InvariantGlobalization>true</InvariantGlobalization>
+</PropertyGroup>
 ```
 
-Pass `dotnet new reactorapp --NativeAot true` to get the AOT-enabled
-variant. `InvariantGlobalization=true` is paired with `PublishAot`
+`InvariantGlobalization=true` is paired with `PublishAot`
 because the alternative — shipping the full ICU data — pulls in
 trim warnings that the AOT analyzer flags as actionable.
 
@@ -243,10 +285,11 @@ Trim-friendly deployments don't get any framework-side magic; the same trimmer
 configuration that works for any WinUI 3 app works here.
 
 **`Microsoft.WindowsAppSDK` is explicitly pinned in the template, not
-transitively inherited.** The `dotnet new reactorapp` CSPROJ
+transitively inherited.** The `dotnet new reactor` CSPROJ
 references both `Microsoft.UI.Reactor` and `Microsoft.WindowsAppSDK`
 side-by-side so the SDK version is an obvious knob — bump it in the
-scaffolded CSPROJ when you need a specific WinUI patch. The
+scaffolded CSPROJ, or pass `--wasdk-version` at scaffold time, when you
+need a specific WinUI patch. The
 repo-internal `WindowsAppSDKVersion` MSBuild property only governs
 projects under this clone (`Directory.Build.props`); consumer
 projects pick their version directly.
@@ -255,10 +298,13 @@ projects pick their version directly.
 `Microsoft.UI.Reactor.Devtools` package** (gated by a
 `Condition="'$(Configuration)' == 'Debug'"` ItemGroup that adds both
 the package and `RuntimeHostConfigurationOption
-Reactor.DevtoolsSupport=true`). F5 from Visual Studio or VS Code
-runs the app with `--devtools` (from the scaffolded
-`Properties/launchSettings.json`), lighting up the right-click
-devtools menu and the docked devtools window. The Reactor Visual
+Reactor.DevtoolsSupport=true`). The scaffolded
+`Properties/launchSettings.json` ships three profiles: a default
+**Package** profile (MSIX launch with package identity), an
+**Unpackaged** profile, and an **Unpackaged, Devtools** profile that passes
+`--devtools`. Pick the devtools profile in the Visual Studio / VS Code launch
+dropdown to light up the right-click devtools menu and the docked devtools
+window. The Reactor Visual
 Studio embedded-preview extension (spec 056) also relies on this
 Debug wiring — its `dotnet watch run -- --devtools run --embed
 --embed-host-pid <pid>` activation needs the devtools assembly
@@ -273,7 +319,7 @@ in Release too.
 ## Next Steps
 
 - **[Dev Tooling](dev-tooling.md)** — Previous: the inner-loop side of the build pipeline (`mur pack-local`, `dotnet watch`, hot reload).
-- **[Getting Started](getting-started.md)** — Where the `dotnet new reactorapp` template that produces the unpackaged shape comes from.
+- **[Getting Started](getting-started.md)** — Where the `dotnet new reactor` template that produces the packaged shape comes from.
 - **[Performance](performance.md)** — When you should reach for AOT (cold-start budgets, startup-perf benchmarks).
 - **[Perf Instrumentation](perf-instrumentation.md)** — The ETW / EventPipe pipeline that survives AOT publish unchanged.
 - **[Dev Tooling](dev-tooling.md)** — How the `Reactor.DevtoolsSupport` capability switch combines with `--devtools` activation.
