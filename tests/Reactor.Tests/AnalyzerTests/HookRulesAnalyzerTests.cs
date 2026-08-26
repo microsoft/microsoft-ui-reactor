@@ -1288,4 +1288,55 @@ namespace App
         };
         await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    /// <summary>
+    /// The exemption must not widen to "any lambda that takes a RenderContext". `RenderContext`
+    /// has a public constructor, so a helper accepting `Action&lt;RenderContext&gt;` is ordinary
+    /// user code, not a component boundary — hooks called there still break slot ordering and must
+    /// still be reported. Guards the false negative a review flagged on the first cut of this rule.
+    /// </summary>
+    [Fact]
+    public async Task Hook_On_A_Non_Render_Lambda_Taking_RenderContext_Is_Still_Reported()
+    {
+        var test = MemoStubs + @"
+    class C : Component
+    {
+        static void Helper(System.Action<RenderContext> body) { }
+
+        public override Element Render()
+        {
+            Helper(ctx => { var n = {|REACTOR_HOOKS_001:ctx.UseCounter()|}; });
+            return new Element();
+        }
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// An expression-bodied Memo lambda is the same boundary as a block-bodied one; the exemption
+    /// must not depend on the body form.
+    /// </summary>
+    [Fact]
+    public async Task Hook_On_Memo_Context_With_Expression_Body_Is_Not_Reported()
+    {
+        var test = MemoStubs + @"
+    class C : Component
+    {
+        public override Element Render()
+            => Factories.Memo(ctx => Wrap(ctx.UseCounter()));
+
+        static Element Wrap(int n) => new Element();
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
 }

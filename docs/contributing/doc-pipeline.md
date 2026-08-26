@@ -542,3 +542,66 @@ mur docs check-tier --topic <name>
 # toward Comprehensive):
 mur docs check-tier --tier solid
 ```
+
+## 9. Doc-snippet analyzer gate
+
+Every `snippet=` block in `docs/guide/` is extracted verbatim from a doc app
+under `docs/_pipeline/apps/`. A doc app is therefore not a scratch project —
+it is the code the guides tell readers to write, and it is held to the same
+analyzer rules those readers get from the NuGet package.
+
+Two gaps used to hide that:
+
+1. Only `win2d-canvas` was listed in `Reactor.slnx`, so CI never built the
+   other 52 doc apps at all.
+2. A `ProjectReference` to `src/Reactor` does **not** flow `Reactor.Analyzers`
+   — it ships as a packed `<None Pack="true">` item — so even that one app
+   compiled without the rules its own readers are subject to.
+
+`docs/_pipeline/apps/Directory.Build.props` now wires the consumer analyzer
+bundle into every doc app, and the `docs-snippet-gate` job in
+`.github/workflows/ci.yml` builds them all through
+`docs/_pipeline/apps/DocApps.proj`. Any `REACTOR_*` diagnostic fails the job
+and is echoed as a GitHub annotation with its `file:line`.
+
+Rules that fire most often here, and what they mean for a snippet:
+
+| Rule | Why it matters in a doc app |
+|------|-----------------------------|
+| `REACTOR_THEME_001/004` | A hard-coded colour ignores the reader's theme. Use a `Theme` token. |
+| `REACTOR_MOD_003` | The receiver silently drops the modifier — the snippet does not do what the prose says. |
+| `REACTOR_A11Y_001/002/003/004` | The sample teaches an inaccessible control. |
+| `REACTOR_HOOKS_001/005` | The sample violates the rules of hooks. |
+| `REACTOR_DSL_001/002` | The sample teaches unstable list keys. |
+
+### Fix at the source
+
+Fix the code in `docs/_pipeline/apps/<topic>/App.cs`. Do **not** add
+`<NoWarn>`, `#pragma warning disable`, or an `.editorconfig` severity
+downgrade — `DocAppGateWiringTests` rejects those, because a suppression ships
+the anti-pattern to every reader who copies the snippet.
+
+The one exception is a page whose subject *is* the thing the rule flags: the
+provisional-API pages acknowledge `REACTOR_V1_PREVIEW`, and
+`rules-of-reactor` deliberately shows hook and key violations under "Wrong:"
+labels. Those pairs live in the `AllowedSuppressions` ledger in
+`tests/Reactor.DocPipeline.Tests/DocAppGateWiringTests.cs`, each with the
+justification that earned it. Adding a suppression without a ledger entry
+fails the test; leaving a ledger entry whose suppression is gone also fails it.
+
+### Running the same check locally
+
+```powershell
+# All doc apps, exactly as CI runs them.
+dotnet build docs/_pipeline/apps/DocApps.proj -t:Rebuild -c Debug -p:Platform=x64 `
+  -p:TreatWarningsAsErrors=true -p:WarningsNotAsErrors=NU1900
+
+# A single app while iterating.
+dotnet build docs/_pipeline/apps/<topic>/<topic>.csproj -c Debug -p:Platform=x64 `
+  --no-restore -p:BuildProjectReferences=false -t:Rebuild
+```
+
+`-t:Rebuild` is load-bearing: without it an up-to-date build never re-runs
+`csc`, so the analyzers do not run and a dirty app reports zero warnings.
+`-p:BuildProjectReferences=false` keeps several single-app builds from racing
+on `src/Reactor`'s `obj/bin`.

@@ -172,6 +172,25 @@ public class DocAppGateWiringTests
     };
 
     /// <summary>
+    /// The suppression patterns, declared once. Every test that reasons about suppressions runs
+    /// through <see cref="EnumerateSuppressed"/> so the ledger check, the corpus scan, and the
+    /// positive control cannot drift apart — a re-declared copy in one of them was how the
+    /// <c>&lt;NoWarn&gt;</c> and <c>.editorconfig</c> arms ended up with no positive control at all.
+    /// </summary>
+    private static readonly Regex Pragma =
+        new(@"#pragma\s+warning\s+disable\s+(?<ids>[^\r\n/]+)", RegexOptions.Compiled);
+
+    private static readonly Regex NoWarnTag =
+        new(@"<NoWarn>(?<ids>[^<]*)</NoWarn>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex EditorConfigDowngrade = new(
+        @"dotnet_diagnostic\.(?<id>REACTOR_[A-Z0-9_]+)\.severity\s*=\s*(none|silent|suggestion)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ReactorId =
+        new(@"REACTOR_[A-Z0-9_]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
     /// A fix that silences a rule is not a fix. Doc apps are teaching material, so a suppression
     /// there ships the anti-pattern to every reader who copies the snippet.
     /// </summary>
@@ -182,34 +201,14 @@ public class DocAppGateWiringTests
         var appsDir = Path.Combine(repoRoot, AppsRelative.Replace('/', Path.DirectorySeparatorChar));
 
         var offenders = new List<string>();
-        var pragma = new Regex(@"#pragma\s+warning\s+disable\s+(?<ids>[^\r\n/]+)", RegexOptions.Compiled);
-        var noWarn = new Regex(@"<NoWarn>(?<ids>[^<]*)</NoWarn>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        var editorConfigNone = new Regex(
-            @"dotnet_diagnostic\.(?<id>REACTOR_[A-Z0-9_]+)\.severity\s*=\s*(none|silent|suggestion)",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        var reactorId = new Regex(@"REACTOR_[A-Z0-9_]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-        foreach (var file in Directory.EnumerateFiles(appsDir, "*", SearchOption.AllDirectories))
+        foreach (var file in SuppressionScannableFiles(appsDir))
         {
-            var name = Path.GetFileName(file);
-            var ext = Path.GetExtension(file);
-
-            // bin/obj carry generated copies; scanning them would double-report.
-            if (file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-                file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var isSource = ext is ".cs" or ".csproj" or ".props" or ".proj";
-            var isEditorConfig = name.Equals(".editorconfig", StringComparison.OrdinalIgnoreCase);
-            if (!isSource && !isEditorConfig) continue;
-
             var text = File.ReadAllText(file);
             var rel = Path.GetRelativePath(repoRoot, file);
             var app = OwningApp(appsDir, file);
 
-            foreach (var (kind, ids) in EnumerateSuppressed(text, pragma, noWarn, editorConfigNone, reactorId))
+            foreach (var (kind, ids) in EnumerateSuppressed(text))
             {
                 foreach (var id in ids)
                 {
@@ -251,42 +250,67 @@ public class DocAppGateWiringTests
             var appDir = Path.Combine(appsDir, app);
             Assert.True(Directory.Exists(appDir), $"AllowedSuppressions names '{app}', which no longer exists.");
 
-            var text = string.Concat(Directory
-                .EnumerateFiles(appDir, "*", SearchOption.AllDirectories)
-                .Where(f => Path.GetExtension(f) is ".cs" or ".csproj" or ".editorconfig")
-                .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                         && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-                .Select(File.ReadAllText));
+            // Parsed, not text-matched. A raw Contains() over the app's sources kept an entry
+            // alive on nothing more than a code comment mentioning the rule ID, so a suppression
+            // could be deleted while its permission silently survived to bless the next one.
+            var suppressed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in SuppressionScannableFiles(appDir))
+            {
+                foreach (var (_, ids) in EnumerateSuppressed(File.ReadAllText(file)))
+                {
+                    foreach (var id in ids) suppressed.Add(id);
+                }
+            }
 
             foreach (var rule in rules)
             {
-                if (!text.Contains(rule, StringComparison.OrdinalIgnoreCase))
+                if (!suppressed.Contains(rule))
                     stale.Add($"{app} -> {rule}");
             }
         }
 
         Assert.True(
             stale.Count == 0,
-            "These AllowedSuppressions entries are no longer present in the doc app. Remove them so "
-            + "the ledger keeps matching reality:\n  " + string.Join("\n  ", stale));
+            "These AllowedSuppressions entries no longer correspond to a real suppression in the doc "
+            + "app. Remove them so the ledger keeps matching reality:\n  " + string.Join("\n  ", stale));
     }
 
-    private static IEnumerable<(string Kind, List<string> Ids)> EnumerateSuppressed(
-        string text, Regex pragma, Regex noWarn, Regex editorConfigNone, Regex reactorId)
+    /// <summary>
+    /// The files a suppression can hide in. Shared so the corpus scan and the ledger check cannot
+    /// disagree about what was searched.
+    /// </summary>
+    private static IEnumerable<string> SuppressionScannableFiles(string root)
     {
-        foreach (Match m in pragma.Matches(text))
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         {
-            var ids = reactorId.Matches(m.Groups["ids"].Value).Select(x => x.Value).ToList();
+            // bin/obj carry generated copies; scanning them would double-report.
+            if (file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
+                file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var isSource = Path.GetExtension(file) is ".cs" or ".csproj" or ".props" or ".proj";
+            var isEditorConfig = Path.GetFileName(file).Equals(".editorconfig", StringComparison.OrdinalIgnoreCase);
+            if (isSource || isEditorConfig) yield return file;
+        }
+    }
+
+    private static IEnumerable<(string Kind, List<string> Ids)> EnumerateSuppressed(string text)
+    {
+        foreach (Match m in Pragma.Matches(text))
+        {
+            var ids = ReactorId.Matches(m.Groups["ids"].Value).Select(x => x.Value).ToList();
             if (ids.Count > 0) yield return ("#pragma warning disable", ids);
         }
 
-        foreach (Match m in noWarn.Matches(text))
+        foreach (Match m in NoWarnTag.Matches(text))
         {
-            var ids = reactorId.Matches(m.Groups["ids"].Value).Select(x => x.Value).ToList();
+            var ids = ReactorId.Matches(m.Groups["ids"].Value).Select(x => x.Value).ToList();
             if (ids.Count > 0) yield return ("<NoWarn>", ids);
         }
 
-        foreach (Match m in editorConfigNone.Matches(text))
+        foreach (Match m in EditorConfigDowngrade.Matches(text))
         {
             yield return (".editorconfig severity", [m.Groups["id"].Value]);
         }
@@ -324,38 +348,84 @@ public class DocAppGateWiringTests
             $"The suppression scan walked only {sources.Count} doc-app sources; it is no longer "
             + "measuring the corpus it claims to cover.");
 
-        // Positive control: the same patterns, applied to a planted violation, must fire. Without
-        // this, a regex broken by a future edit would report zero offenders and pass forever.
-        var pragma = new Regex(@"#pragma\s+warning\s+disable\s+(?<ids>[^\r\n/]+)", RegexOptions.Compiled);
-        var reactorId = new Regex(@"REACTOR_[A-Z0-9_]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        // Positive control: planted violations must come back out of the REAL scanner, one per
+        // arm. Replaying only the #pragma regex left <NoWarn> and .editorconfig with no control at
+        // all, so a break in either would have reported zero offenders and passed forever.
+        var planted = EnumerateSuppressed(
+                "#pragma warning disable REACTOR_THEME_001 // planted\n"
+                + "<NoWarn>$(NoWarn);REACTOR_HOOKS_001;CS0169</NoWarn>\n"
+                + "dotnet_diagnostic.REACTOR_DSL_001.severity = none\n")
+            .ToList();
 
-        var planted = pragma.Match("#pragma warning disable REACTOR_THEME_001 // planted");
-        Assert.True(planted.Success);
-        Assert.Equal("REACTOR_THEME_001", reactorId.Match(planted.Groups["ids"].Value).Value);
+        Assert.Equal(3, planted.Count);
+        Assert.Equal(
+            ["#pragma warning disable", "<NoWarn>", ".editorconfig severity"],
+            planted.Select(p => p.Kind));
+        Assert.Equal(
+            ["REACTOR_THEME_001", "REACTOR_HOOKS_001", "REACTOR_DSL_001"],
+            planted.SelectMany(p => p.Ids));
 
-        // ...and must not fire on a non-Reactor suppression, or the gate would be noise.
-        var unrelated = pragma.Match("#pragma warning disable CS0168");
-        Assert.True(unrelated.Success);
-        Assert.DoesNotMatch(reactorId, unrelated.Groups["ids"].Value);
+        // ...and must stay silent on non-Reactor suppressions, or the gate would be noise that
+        // someone eventually loosens.
+        Assert.Empty(EnumerateSuppressed(
+            "#pragma warning disable CS0168\n<NoWarn>$(NoWarn);CS0169;IDE0051</NoWarn>\n"));
     }
 
     /// <summary>
-    /// The gate has to actually run. A traversal project and wired analyzers are inert if no
-    /// workflow builds them.
+    /// The gate has to actually run, and has to fail closed. A traversal project and wired
+    /// analyzers are inert if no workflow builds them — or if the job that builds them is disabled,
+    /// or reports diagnostics without failing.
     /// </summary>
     [Fact]
     public void Ci_Runs_The_Doc_Snippet_Gate()
     {
         var repoRoot = FindRepoRoot();
-        var ci = File.ReadAllText(Path.Combine(repoRoot, ".github", "workflows", "ci.yml"));
+        var ci = File.ReadAllLines(Path.Combine(repoRoot, ".github", "workflows", "ci.yml"));
 
-        Assert.Contains("docs-snippet-gate:", ci, StringComparison.Ordinal);
-        Assert.Contains("DocApps.proj", ci, StringComparison.Ordinal);
+        var job = JobBlock(ci, "docs-snippet-gate");
+        Assert.True(job.Count > 0, "ci.yml no longer defines a `docs-snippet-gate` job.");
+
+        var body = string.Join("\n", job);
+
+        // Substring checks alone were theatre: a job left in place but switched off, or one that
+        // printed diagnostics and exited 0, still contained every string this used to assert.
+        Assert.DoesNotContain("if: false", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("continue-on-error: true", body, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("DocApps.proj", body, StringComparison.Ordinal);
+        Assert.Contains("REACTOR_", body, StringComparison.Ordinal);
+
+        // Fails closed: the diagnostic branch must terminate the job non-zero.
+        Assert.Contains("exit 1", body, StringComparison.Ordinal);
 
         // The scan must stay case-sensitive: an insensitive match also hits the restore's
         // "warning NU1900: Error occurred ...", turning the gate into a flaky failure that
         // someone would eventually "fix" by loosening it.
-        Assert.Contains("-CaseSensitive", ci, StringComparison.Ordinal);
+        Assert.Contains("-CaseSensitive", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Slices one job's lines out of a workflow file, from its <c>&lt;name&gt;:</c> key to the next
+    /// key at the same indent. Asserting against the whole file would let a match in an unrelated
+    /// job satisfy a check about this one.
+    /// </summary>
+    private static List<string> JobBlock(string[] lines, string jobName)
+    {
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == $"  {jobName}:");
+        if (start < 0) return [];
+
+        var block = new List<string>();
+        for (var i = start + 1; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var isNextJob = line.Length > 2
+                && line[0] == ' ' && line[1] == ' ' && line[2] != ' '
+                && line.TrimEnd().EndsWith(':');
+            if (isNextJob) break;
+            block.Add(line);
+        }
+
+        return block;
     }
 
     private static string FindRepoRoot()

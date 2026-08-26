@@ -396,12 +396,20 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The test is deliberately narrow: the invocation must be <c>receiver.UseXxx(…)</c> where
-    /// <c>receiver</c> binds to a lambda <b>parameter</b> whose type is
-    /// <c>Microsoft.UI.Reactor.Core.RenderContext</c>. That shape is exactly the inline function
-    /// component (<c>Memo(ctx =&gt; …)</c> and anything else taking
-    /// <c>Func&lt;RenderContext, Element&gt;</c>) — matching on the parameter type rather than on
-    /// the factory name keeps a future factory of the same shape working without another edit here.
+    /// Three conditions, all required: the invocation must be <c>receiver.UseXxx(…)</c> where
+    /// <c>receiver</c> binds to a lambda <b>parameter</b> of type
+    /// <c>Microsoft.UI.Reactor.Core.RenderContext</c>; that lambda must actually enclose the
+    /// invocation; and the lambda must be converted to a delegate <b>returning an
+    /// <c>Element</c></b> — the shape of an inline function component
+    /// (<c>Func&lt;RenderContext, Element&gt;</c>, as taken by <c>Memo</c>).
+    /// </para>
+    /// <para>
+    /// The return-type condition is what keeps this from becoming a false-negative machine.
+    /// <c>RenderContext</c> has a public constructor, so without it any helper taking a
+    /// <c>Action&lt;RenderContext&gt;</c> — including something deferred like
+    /// <c>Task.Run(() =&gt; …)</c> wrapped around a captured context — would silently exempt hooks
+    /// that HOOKS_005 exists to catch. A lambda that returns an <c>Element</c> is a render
+    /// function; one that returns anything else is not.
     /// </para>
     /// <para>
     /// What it deliberately does <em>not</em> exempt: a bare <c>UseState()</c> written inside a
@@ -426,11 +434,15 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
         {
             if (node is not (SimpleLambdaExpressionSyntax or ParenthesizedLambdaExpressionSyntax)) continue;
 
-            if (context.SemanticModel.GetSymbolInfo(node).Symbol is IMethodSymbol lambda
-                && lambda.Parameters.Any(p => SymbolEqualityComparer.Default.Equals(p, parameter)))
-            {
-                return node;
-            }
+            if (context.SemanticModel.GetSymbolInfo(node).Symbol is not IMethodSymbol lambda) continue;
+            if (!lambda.Parameters.Any(p => SymbolEqualityComparer.Default.Equals(p, parameter))) continue;
+
+            // A render function returns an Element. Anything else taking a RenderContext is an
+            // ordinary callback and gets no exemption.
+            return lambda.ReturnType is INamedTypeSymbol returned
+                && IsOrDerivesFrom(returned, "Microsoft.UI.Reactor.Core.Element")
+                    ? node
+                    : null;
         }
 
         return null;

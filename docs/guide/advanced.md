@@ -474,8 +474,11 @@ component when items are added, removed, or the collection resets:
 ```csharp
 class ObservableCollectionDemo : Component
 {
-    private static readonly ObservableCollection<string> _tasks = new()
-        { "Review pull request", "Update documentation" };
+    private record TaskItem(int Id, string Title);
+
+    private static int _nextId = 3;
+    private static readonly ObservableCollection<TaskItem> _tasks = new()
+        { new TaskItem(1, "Review pull request"), new TaskItem(2, "Update documentation") };
 
     public override Element Render()
     {
@@ -490,15 +493,17 @@ class ObservableCollectionDemo : Component
                     .Width(200),
                 Button("Add", () => {
                     if (!string.IsNullOrWhiteSpace(input))
-                    { _tasks.Add(input.Trim()); setInput(""); }
+                    { _tasks.Add(new TaskItem(_nextId++, input.Trim())); setInput(""); }
                 })
             ),
             TextBlock($"{tasks.Count} tasks:").SemiBold(),
             VStack(4, tasks.Select((task, i) =>
                 HStack(8,
-                    TextBlock($"{i + 1}. {task}"),
-                    Button("Remove", () => _tasks.RemoveAt(i))
-                ).WithKey($"task-{i}-{task}")
+                    // The index is fine for display; it must not become the key.
+                    TextBlock($"{i + 1}. {task.Title}"),
+                    Button("Remove", () => _tasks.Remove(task))
+                        .AutomationName($"Remove {task.Title}")
+                ).WithKey(task.Id.ToString())   // stable identity survives removal
             ).ToArray())
         ).Padding(24);
     }

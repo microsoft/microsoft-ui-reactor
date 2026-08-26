@@ -669,13 +669,15 @@ jobs:
       # does nothing the surrounding prose claims (REACTOR_MOD_003 inert modifiers,
       # REACTOR_HOOKS_001 conditional hooks).
       #
-      # Warnings are scanned rather than promoted with -warnaserror because the
-      # restore in this environment also emits unrelated NU1900 noise, and a
-      # blanket promotion would fail on that instead of on snippet quality.
+      # Warnings are promoted with MSBuild's own mechanism so the build itself fails on a
+      # diagnostic -- the scan below only turns that into readable annotations. Relying on the
+      # scan alone would make the gate depend on MSBuild's output text, which is not a contract.
+      # NU1900 ("Error occurred while getting package vulnerability data") is exempted rather than
+      # NoWarn'd, because NoWarn would replace each project's own list instead of adding to it.
       - name: Build doc apps with consumer analyzers
         shell: pwsh
         run: |
-          $log = dotnet build docs/_pipeline/apps/DocApps.proj -c Debug -p:Platform=x64 --no-restore -v:minimal -nologo 2>&1
+          $log = dotnet build docs/_pipeline/apps/DocApps.proj -c Debug -p:Platform=x64 --no-restore -v:minimal -nologo -p:TreatWarningsAsErrors=true -p:WarningsNotAsErrors=NU1900 2>&1
           $log | ForEach-Object { $_.ToString() }
           $exit = $LASTEXITCODE
 

@@ -78,8 +78,7 @@ class InputTypesDemo : Component
                 header: "Email"),
             PasswordBox(password, setPassword,
                 placeholderText: "Enter password")
-                .Header("Password")
-                .AutomationName("Password"),
+                .Header("Password"),
             Slider(volume, 0, 100, setVolume).Header("Volume"),
             NumberBox(count, setCount, header: "Quantity"),
             CheckBox(agree, setAgree, label: "I agree to the terms"),
@@ -319,7 +318,6 @@ class ValidationContextDemo : Component
             PasswordBox(password, v => { setPassword(v); ctx.NotifyValueChanged("password", v); },
                 placeholderText: "Min 8 characters")
                 .Header("Password")
-                .AutomationName("Password")
                 .Validate("password", password,
                     Validate.Required(),
                     Validate.MinLength(8)),
@@ -518,7 +516,6 @@ class AutoSuggestDemo : Component
             AutoSuggestBox(text, setText,
                 onQuerySubmitted: q => setText(q))
                 .Header("Animal")
-                .AutomationName("Animal")
                 .QueryIcon(SymbolIcon("Find"))
                 .Width(280),
             // Suggestion list — bind to AutoSuggestBox.ItemsSource via .Set
