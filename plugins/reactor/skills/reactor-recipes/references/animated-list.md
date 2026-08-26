@@ -131,7 +131,7 @@ Animations.Animate(AnimationKind.Spring, () => setColor(Red));
 `Animate` only tags `Add` / `Move` / `Remove` ops on keyed lists and
 mount / move / unmount on `ChildReconciler`. A property change (color,
 size, text) on a *surviving* leaf does **not** animate — that's the job
-of per-element modifiers like `.WithImplicitTransition(...)` or
+of per-element modifiers like `.OpacityTransition(...)` or
 `AnimationScope.WithAnimation(...)`. The two channels are deliberately
 independent. (Spec 042 §6 — scope discipline.)
 

@@ -133,7 +133,7 @@ visual has been requested (typically for an `.Animate()` modifier),
 the control can no longer use XAML implicit transitions and is
 permanently un-poolable. `ElementPool.MarkCompositorTainted` records
 this; the next `Return` for that instance silently drops it. Reach for
-`.WithOpacityTransition()` and friends before `.Animate()` when both
+`.OpacityTransition()` and friends before `.Animate()` when both
 work.
 
 **The cap is 32 per type.** A burst of 100 list items mounts 32 from

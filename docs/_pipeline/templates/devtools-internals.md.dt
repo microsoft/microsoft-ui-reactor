@@ -127,7 +127,7 @@ project path. The path hash is a truncated SHA-256 of the
 canonicalized `.csproj` path — `C:\foo\bar.csproj` and
 `c:/foo/bar.csproj` collide deliberately, so re-launching the same
 project from a different shell finds the existing session rather
-than starting a second one. The CLI's `mur devtools serve` command
+than starting a second one. The `mur devtools` supervisor
 checks for a live lockfile before binding a new port; if one exists
 and the process is still alive, the second invocation exits with the
 running session's information instead of starting a new server.

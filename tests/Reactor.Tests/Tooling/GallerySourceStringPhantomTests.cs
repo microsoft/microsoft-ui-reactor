@@ -28,6 +28,15 @@ public sealed class GallerySourceStringPhantomTests(ITestOutputHelper output)
     const string GalleryRoot = "samples/ReactorGallery";
 
     /// <summary>
+    /// Shipped agent-kit Markdown. These files are packed into the NuGet under
+    /// <c>agentkit/</c> and are what an AI assistant reads when writing Reactor
+    /// code, so a phantom here propagates straight into generated apps — but
+    /// nothing compiled or linted them: <c>docs compile</c> only scans guide
+    /// templates. Several of this PR's headline phantoms were still live here.
+    /// </summary>
+    static readonly string[] AgentKitRoots = ["plugins", "skills"];
+
+    /// <summary>
     /// Verbatim literal, honouring the doubled-quote escape: @"...""..." .
     /// Gallery snippets are multi-line, so this must not stop at a newline.
     /// </summary>
@@ -110,11 +119,43 @@ public sealed class GallerySourceStringPhantomTests(ITestOutputHelper output)
         Assert.Contains(hits, f => f.Message.Contains("'Text'", global::System.StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void AgentKitMarkdown_NamesNoPhantomApis()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.False(string.IsNullOrEmpty(root), "repo root not found — the sweep is broken, not clean.");
+
+        var findings = new List<string>();
+        int files = 0;
+
+        foreach (var relRoot in AgentKitRoots)
+        {
+            var dir = global::System.IO.Path.Combine(root!, relRoot);
+            if (!global::System.IO.Directory.Exists(dir)) continue;
+
+            foreach (var file in global::System.IO.Directory.EnumerateFiles(dir, "*.md", global::System.IO.SearchOption.AllDirectories))
+            {
+                files++;
+                var rel = global::System.IO.Path.GetRelativePath(root!, file).Replace('\\', '/');
+                foreach (var f in PhantomSymbolLint.Lint(rel, global::System.IO.File.ReadAllText(file), PhantomSymbolLint.Surface.Markdown))
+                    findings.Add("  " + f.Format());
+            }
+        }
+
+        _output.WriteLine($"scanned {files} agent-kit markdown file(s)");
+        Assert.True(files > 0, "No agent-kit markdown found — the sweep is broken, not clean.");
+
+        Assert.True(findings.Count == 0,
+            "REACTOR_DOC_PHANTOM_001: a phantom API is named in shipped agent-kit markdown.\n" +
+            "These files are packed into the NuGet under agentkit/ and are what an AI\n" +
+            "assistant reads when writing Reactor code, so a phantom here propagates\n" +
+            "into generated apps.\n" + string.Join("\n", findings));
+    }
+
     static IEnumerable<(string Path, string Literal)> EnumerateVerbatimLiterals(ref int fileCount)
     {
         var root = RepoRootFinder.FindRepoRoot();
         if (string.IsNullOrEmpty(root)) return [];
-
         var dir = global::System.IO.Path.Combine(root, GalleryRoot.Replace('/', global::System.IO.Path.DirectorySeparatorChar));
         if (!global::System.IO.Directory.Exists(dir)) return [];
 
