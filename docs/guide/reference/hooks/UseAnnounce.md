@@ -30,12 +30,12 @@ Creates an [AnnounceHandle](AnnounceHandle.md) ([guide](../../hooks.md)) for mak
 The handle persists across re-renders.
 
 You must include [Region](Region.md) ([guide](../../hooks.md)) in your rendered tree:
-<code>
+```csharp
 var announce = UseAnnounce();
 return VStack(
 announce.Region,
-Button("Save", () =&gt; { Save(); announce.Announce("Document saved"); }),
+Button("Save", () => { Save(); announce.Announce("Document saved"); }),
 );
-</code>
+```
 
 

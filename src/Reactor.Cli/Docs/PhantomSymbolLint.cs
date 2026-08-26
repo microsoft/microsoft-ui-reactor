@@ -99,8 +99,14 @@ internal static class PhantomSymbolLint
         // a C# string literal — the docking defect), and doubled `""` (the same
         // inside a verbatim string). Matching only the plain form would blind the
         // rule to the exact surface it was written for.
+        //
+        // The second alternative covers the dynamic-argument form
+        // `Text(statusMessage)` — a real phantom fixed in ElementExtensions.cs
+        // that (b) alone missed, so the budget gate did not hold it. A lone
+        // identifier argument cannot be D3Charts.Text, which takes x, y and
+        // text positionally, so requiring the closing paren keeps that excluded.
         new("Text",
-            new Regex(@"(?<![A-Za-z0-9_.])Text\s*\(\s*(?:\$|@)?(?:\\""|""""|"")", RegexOptions.Compiled),
+            new Regex(@"(?<![A-Za-z0-9_.])Text\s*\(\s*(?:(?:\$|@)?(?:\\""|""""|"")|[A-Za-z_][A-Za-z0-9_.]*\s*\))", RegexOptions.Compiled),
             "TextBlock(...)"),
 
         // UseTheme: no such hook. Theme values are read from the Theme statics.

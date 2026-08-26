@@ -16,9 +16,9 @@ enabled (build-time capability gate).</item><item>The process was launched with 
 The value is frozen for the session; this call does not consume a hook
 slot and does not cause re-renders. Components use it to gate dev-only
 UX so the subtree is never constructed in retail sessions:
-<code>
+```csharp
 var dev = ctx.UseDevtools();
 return VStack(Content(), dev ? DebugOverlay() : null);
-</code>
+```
 
 

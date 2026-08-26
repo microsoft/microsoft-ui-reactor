@@ -19,10 +19,10 @@ with `Object.ReferenceEquals` is safe.
 
 ## Examples
 
-<code>
-var btn = ctx.UseElementRef&lt;Button&gt;();
-ctx.UseEffect(() =&gt; btn.Current?.Focus(FocusState.Programmatic), Array.Empty&lt;object&gt;());
+```csharp
+var btn = ctx.UseElementRef<Button>();
+ctx.UseEffect(() => btn.Current?.Focus(FocusState.Programmatic), Array.Empty<object>());
 return Button("Press me", onPress).Ref(btn);
-</code>
+```
 
 

@@ -29,15 +29,15 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseFocusTrapExtensions.UseFocusTrap(Micros
 Creates a focus trap handle that traps keyboard focus within a container
 when active. Use with the .FocusTrap() element modifier.
 
-<code>
+```csharp
 var trap = UseFocusTrap(isDialogOpen);
 return Border(
 VStack(
 TextBlock("Confirm delete?"),
-Button("Cancel", () =&gt; setOpen(false)),
+Button("Cancel", () => setOpen(false)),
 Button("Delete", onDelete)
 )
 ).FocusTrap(trap);
-</code>
+```
 
 

@@ -136,9 +136,33 @@ internal sealed class CrefResolver
         // sentence entirely. Emit them as inline code, then convert the
         // remaining inline formatting tags that would otherwise reach the
         // page as raw markup. (<para>/<list> are block-level and left alone.)
-        rewritten = ParamRefPattern.Replace(rewritten, m => $"`{m.Groups["name"].Value}`");
-        rewritten = InlineCodePattern.Replace(rewritten, m => $"`{m.Groups["text"].Value}`");
-        return BoldPattern.Replace(rewritten, m => $"**{m.Groups["text"].Value}**");
+        rewritten = ParamRefPattern.Replace(rewritten, m => $"`{DecodeXmlEntities(m.Groups["name"].Value)}`");
+        rewritten = InlineCodePattern.Replace(rewritten, m => $"`{DecodeXmlEntities(m.Groups["text"].Value)}`");
+        rewritten = BoldPattern.Replace(rewritten, m => $"**{m.Groups["text"].Value}**");
+
+        // Block-level <code> from an <example>. Left raw it published the tag
+        // itself plus entity-escaped source, so a generic or lambda rendered as
+        // `UseElementRef&lt;Button&gt;()`. Emit a fenced block instead.
+        return CodeBlockPattern.Replace(rewritten, m =>
+            "```csharp\n" + DecodeXmlEntities(m.Groups["text"].Value).Trim('\r', '\n') + "\n```");
+    }
+
+    /// <summary>
+    /// XML-doc text arrives entity-escaped, but a Markdown code span is literal —
+    /// entities are not decoded inside backticks, so an escaped generic or lambda
+    /// would publish as <c>UseNavigation&amp;lt;TRoute&amp;gt;()</c>. Decode before
+    /// wrapping.
+    /// </summary>
+    internal static string DecodeXmlEntities(string text)
+    {
+        if (text.IndexOf('&') < 0) return text;
+        return text
+            .Replace("&lt;", "<", StringComparison.Ordinal)
+            .Replace("&gt;", ">", StringComparison.Ordinal)
+            .Replace("&quot;", "\"", StringComparison.Ordinal)
+            .Replace("&apos;", "'", StringComparison.Ordinal)
+            // Ampersand last so a literal "&amp;lt;" does not become "<".
+            .Replace("&amp;", "&", StringComparison.Ordinal);
     }
 
     private static string MakeRelativeLink(string fromDir, string targetRelativePath)
@@ -210,6 +234,9 @@ internal sealed class CrefResolver
 
     internal static readonly Regex BoldPattern = new(
         @"<b>(?<text>.*?)</b>", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    internal static readonly Regex CodeBlockPattern = new(
+        @"<code>(?<text>.*?)</code>", RegexOptions.Compiled | RegexOptions.Singleline);
 
     internal static readonly Regex SeeCrefPattern = new(
         @"<(?:see|seealso)\s+cref=""(?<cref>[^""]+)""\s*/?>(?:\s*</(?:see|seealso)>)?",

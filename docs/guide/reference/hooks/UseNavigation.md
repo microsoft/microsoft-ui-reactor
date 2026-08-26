@@ -32,6 +32,6 @@ Root mode: creates a navigation stack with the given initial route.
 Returns a stable `NavigationHandle` across re-renders.
 Wire this handle to a `NavigationHost` in the DSL to render route content.
 The handle is automatically provided to descendants via context so child components
-can call `UseNavigation&lt;TRoute&gt;()` (parameterless) to access it.
+can call `UseNavigation<TRoute>()` (parameterless) to access it.
 
 

@@ -62,12 +62,12 @@ Spec 034 §C.
 
 ### Examples
 
-<code>
+```csharp
 var scheme = ctx.UseColorScheme();
 var children = ctx.UseMemoCells(
 stocks,
-(item, i) =&gt; Cell(item, scheme),
+(item, i) => Cell(item, scheme),
 scheme);   // ← deps; framework invalidates on change
-</code>
+```
 
 

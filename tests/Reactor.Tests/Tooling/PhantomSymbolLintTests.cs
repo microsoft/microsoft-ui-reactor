@@ -140,6 +140,30 @@ public sealed class PhantomSymbolLintTests
         Assert.Empty(LintCSharpDoc("/// Text(16, 16, \"hi\") draws at a canvas coordinate."));
 
     /// <summary>
+    /// ElementExtensions.cs carried <c>Text(statusMessage).LiveRegion(…)</c> — a
+    /// real phantom fixed on this branch that the string-literal discriminator
+    /// alone did not match, so nothing would have caught its reintroduction.
+    /// A single identifier argument cannot be D3Charts.Text, which is positional.
+    /// </summary>
+    [Fact]
+    public void Fires_OnDynamicArgumentText() =>
+        Assert.Contains(
+            LintCSharpDoc("/// <example>Text(statusMessage).LiveRegion(AutomationLiveSetting.Polite)</example>"),
+            f => f.Message.Contains("'Text'"));
+
+    /// <summary>
+    /// The dynamic-argument arm must stay anchored to the unqualified spelling
+    /// and to a *single* argument, or it would swallow the qualified renderers
+    /// and D3's positional overload.
+    /// </summary>
+    [Fact]
+    public void Silent_OnQualifiedOrMultiArgDynamicText()
+    {
+        Assert.Empty(LintCSharpDoc("/// CellRenderers.Text(row) renders a cell."));
+        Assert.Empty(LintCSharpDoc("/// Text(x, y, label) draws at a coordinate."));
+    }
+
+    /// <summary>
     /// The opening quote of an embedded example takes three spellings depending
     /// on how the example is carried. All three must fire — matching only the
     /// plain form would miss the escaped spelling, which is the exact form the

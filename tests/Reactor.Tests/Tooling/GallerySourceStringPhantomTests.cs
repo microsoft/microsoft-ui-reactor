@@ -34,6 +34,14 @@ public sealed class GallerySourceStringPhantomTests(ITestOutputHelper output)
     static readonly Regex VerbatimString = new(@"@""((?:[^""]|"""")*)""",
         global::System.Text.RegularExpressions.RegexOptions.Singleline);
 
+    /// <summary>
+    /// C# raw string literal: three-or-more quotes, same count to close.
+    /// Newer gallery pages (ScrollViewPage, GridPage, …) use these instead of
+    /// verbatim strings, so a verbatim-only sweep silently skipped them.
+    /// </summary>
+    static readonly Regex RawString = new("(?<q>\"{3,})(?<text>.*?)\\k<q>",
+        global::System.Text.RegularExpressions.RegexOptions.Singleline);
+
     [Fact]
     public void GallerySourceStrings_NameNoPhantomApis()
     {
@@ -84,6 +92,24 @@ public sealed class GallerySourceStringPhantomTests(ITestOutputHelper output)
         Assert.Contains(hits, f => f.Message.Contains("'Text'", global::System.StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Extractor_HandlesRawStringLiterals()
+    {
+        // Newer gallery pages use raw strings rather than verbatim literals
+        // (ScrollViewPage, GridPage, …). A verbatim-only extractor skipped them
+        // entirely, so this is the positive control for that half of the sweep.
+        var q = new string('"', 3);
+        var sample = "SampleCard(\"Demo\", ScrollView(),\n" + q + "\nScrollView(\n    Text(\"Item\")\n)\n" + q + ")";
+
+        var literals = RawString.Matches(sample).Select(m => m.Groups["text"].Value).ToList();
+        Assert.NotEmpty(literals);
+        Assert.Contains(literals, l => l.Contains("ScrollView(", global::System.StringComparison.Ordinal));
+
+        var hits = literals.SelectMany(l =>
+            PhantomSymbolLint.Lint("probe.cs", l, PhantomSymbolLint.Surface.ExampleText)).ToList();
+        Assert.Contains(hits, f => f.Message.Contains("'Text'", global::System.StringComparison.Ordinal));
+    }
+
     static IEnumerable<(string Path, string Literal)> EnumerateVerbatimLiterals(ref int fileCount)
     {
         var root = RepoRootFinder.FindRepoRoot();
@@ -99,10 +125,21 @@ public sealed class GallerySourceStringPhantomTests(ITestOutputHelper output)
         {
             n++;
             var text = global::System.IO.File.ReadAllText(file);
+            var rel = global::System.IO.Path.GetRelativePath(root, file).Replace('\\', '/');
+
+            // Raw strings first: a raw literal can contain @" sequences, and
+            // matching verbatim inside one would split it into nonsense.
+            var consumed = new List<(int Start, int End)>();
+            foreach (Match m in RawString.Matches(text))
+            {
+                consumed.Add((m.Index, m.Index + m.Length));
+                results.Add((rel, m.Groups["text"].Value));
+            }
+
             foreach (Match m in VerbatimString.Matches(text))
             {
-                var literal = m.Groups[1].Value.Replace("\"\"", "\"");
-                results.Add((global::System.IO.Path.GetRelativePath(root, file).Replace('\\', '/'), literal));
+                if (consumed.Any(c => m.Index >= c.Start && m.Index < c.End)) continue;
+                results.Add((rel, m.Groups[1].Value.Replace("\"\"", "\"")));
             }
         }
         fileCount = n;
