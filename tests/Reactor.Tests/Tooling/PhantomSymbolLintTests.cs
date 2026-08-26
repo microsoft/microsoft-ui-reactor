@@ -317,6 +317,44 @@ public sealed class PhantomSymbolLintTests
     public void Silent_OnTheRealNeighboursOfThosePhantoms(string line) =>
         Assert.Empty(LintExample(line));
 
+    /// <summary>
+    /// A prose marker must not leak into a later fenced block. It previously
+    /// survived until the next <i>closing</i> fence, so a marker written above a
+    /// paragraph also silenced the whole unrelated snippet after it — the gate
+    /// reported clean on code it had stopped reading. Scoping is per paragraph.
+    /// </summary>
+    [Fact]
+    public void ScopedSkipMarker_DoesNotLeakIntoALaterFencedBlock()
+    {
+        var body =
+            "<!-- phantom:skip \"Optional.Of\" -->\n" +
+            "There is no `Optional.Of(x)`; spell the type argument.\n" +
+            "\n" +
+            "```csharp\n" +
+            "var v = Optional.Of(5.0);\n" +
+            "```\n";
+
+        var findings = LintMarkdown(body);
+        Assert.Contains(findings, f => f.Line == 5);
+        Assert.DoesNotContain(findings, f => f.Line == 2);
+    }
+
+    /// <summary>
+    /// The documented use still works: a marker attached directly above a fence,
+    /// with no blank line between, annotates that fence.
+    /// </summary>
+    [Fact]
+    public void ScopedSkipMarker_StillAnnotatesTheFenceItSitsOn()
+    {
+        var body =
+            "<!-- phantom:skip \"Optional.Of\" -->\n" +
+            "```csharp\n" +
+            "var v = Optional.Of(5.0);\n" +
+            "```\n";
+
+        Assert.Empty(LintMarkdown(body));
+    }
+
     [Fact]
     public void PhantomTable_IsPopulatedAndDistinct()
     {

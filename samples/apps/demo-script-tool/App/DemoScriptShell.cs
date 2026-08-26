@@ -170,15 +170,22 @@ public sealed class DemoScriptShell : Component
         void ScheduleSave()
         {
             if (projectRoot is null) return;
+            // Cancel the pending save, but do not dispose it: the previous
+            // worker may not have read its token yet, and disposing underneath
+            // it throws ObjectDisposedException from cts.Token -- which is not
+            // an OperationCanceledException, so it would escape to the generic
+            // handler below and toast a "Save failed" the user never caused.
+            // A CTS with no timer holds no unmanaged resource to reclaim.
             saveDebounceRef.Current?.Cancel();
-            saveDebounceRef.Current?.Dispose();
             var cts = new CancellationTokenSource();
             saveDebounceRef.Current = cts;
+            // Read once here so the worker never touches the shared CTS object.
+            var token = cts.Token;
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await Task.Delay(500, cts.Token).ConfigureAwait(false);
+                    await Task.Delay(500, token).ConfigureAwait(false);
                     // Serialize once so we can hash the exact bytes we're about
                     // to write; the watcher's reload compares to this hash and
                     // skips the (caret-resetting) reload for our own save.
@@ -186,13 +193,12 @@ public sealed class DemoScriptShell : Component
                     var bytes = System.Text.Encoding.UTF8.GetBytes(serialized);
                     lastSyncedHashRef.Current = HashBytes(bytes);
                     var path = IoPath.Combine(projectRoot, DemoScriptStore.FileName);
-                    await File.WriteAllBytesAsync(path + ".tmp", bytes, cts.Token).ConfigureAwait(false);
+                    await File.WriteAllBytesAsync(path + ".tmp", bytes, token).ConfigureAwait(false);
                     File.Move(path + ".tmp", path, overwrite: true);
                 }
-                // Expected on teardown: the debounced save races the effect cleanup,
-                // so an in-flight write is cancelled deliberately. Reporting it as a
-                // failed save would be wrong -- nothing was lost that the next save
-                // will not rewrite.
+                // Expected: a newer edit scheduled another save and cancelled this
+                // one inside the debounce window. The newer save writes the same
+                // model, so nothing is lost and there is nothing to report.
                 catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {

@@ -246,6 +246,19 @@ internal static class PhantomSymbolLint
                     if (!inFence) { skipAll = false; skipNames.Clear(); }
                     continue;
                 }
+
+                // A blank line outside a fence ends the region too, scoping a
+                // prose marker to its own paragraph. Without this, a marker set
+                // in prose survived until the *next closing* fence — so it also
+                // silenced the whole unrelated code block in between, and an
+                // accidental phantom in that block would have passed the gate.
+                // Attaching the marker directly above a fence with no blank line
+                // still annotates that fence, which is the documented use.
+                if (!inFence && trimmed.Length == 0)
+                {
+                    skipAll = false;
+                    skipNames.Clear();
+                }
             }
             else if (surface == Surface.CSharpDocComments && !isDocComment)
             {
