@@ -230,7 +230,6 @@ try {
     Assert-Equal '-g|--add-source|C:\repo\local-nupkgs|--add-source|https://packagefeedproxy.microsoft.io/nuget/v3/index.json|Microsoft.UI.Reactor.Cli|--no-cache|--ignore-failed-sources' `
         ($toolArgs -join '|') 'tool arguments include both local and automatic proxy sources'
 
-<<<<<<< HEAD
     # Resolve-ReactorNuGetFeedOverride is what scripts a developer runs directly
     # (Build-Vsix.ps1) use: explicit arguments first, then the same user-config
     # discovery, and no network probe. $profile still carries `profile-proxy`

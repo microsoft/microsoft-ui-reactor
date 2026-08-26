@@ -74,7 +74,16 @@
 
   <ItemGroup>
     <PackageReference Include="GitHub.Copilot.SDK" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <!-- No PrivateAssets here. `mur check` *executes* Roslyn at runtime
+         (Check/CompilationLoader.cs, Check/FactoryIndex.cs,
+         Check/SuggesterOrchestrator.cs, Loc/InterpolationConverter.cs).
+         PrivateAssets="all" is the correct idiom for an analyzer project,
+         which must not flow Roslyn to consumers — but this is a PackAsTool
+         global tool, and it excluded Microsoft.CodeAnalysis{,.CSharp}.dll
+         from the packed tools/ payload. The assemblies were present in bin/,
+         so every local `dotnet run` worked, while every bootstrap-installed
+         `mur check` died at startup with FileNotFoundException. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator">
