@@ -199,7 +199,7 @@ public sealed class DemoScriptShell : Component
                 // Expected: a newer edit scheduled another save and cancelled this
                 // one inside the debounce window. The newer save writes the same
                 // model, so nothing is lost and there is nothing to report.
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException) { return; }
                 catch (Exception ex)
                 {
                     _status.ShowToast($"Save failed: {ex.Message}", StatusSeverity.Error);

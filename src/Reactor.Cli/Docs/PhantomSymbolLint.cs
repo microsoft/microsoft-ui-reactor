@@ -441,10 +441,12 @@ internal static class PhantomSymbolLint
     /// </remarks>
     internal static bool LooksLikeSingleArgTextCall(string text, int firstLineLength)
     {
-        foreach (var open in TextCallOpener.Matches(text)
-                     .Cast<Match>()
-                     .Where(m => m.Index < firstLineLength)
-                     .Select(m => m.Index + m.Length - 1))
+        var openerIndices = TextCallOpener.Matches(text)
+            .Cast<Match>()
+            .Where(m => m.Index < firstLineLength)
+            .Select(m => m.Index + m.Length - 1);
+
+        foreach (var open in openerIndices)
         {
             var arg = ExtractSingleArgument(text, open);
             if (arg is null) continue;
@@ -558,12 +560,12 @@ internal static class PhantomSymbolLint
             stripped.Append(arg[i]);
         }
 
-        foreach (Match m in AdjacentIdentifiers.Matches(stripped.ToString()))
-            if (!CSharpWordTokens.Contains(m.Groups["a"].Value) &&
-                !CSharpWordTokens.Contains(m.Groups["b"].Value))
-                return true;
+        var proseAdjacency = AdjacentIdentifiers.Matches(stripped.ToString())
+            .Cast<Match>()
+            .Where(m => !CSharpWordTokens.Contains(m.Groups["a"].Value) &&
+                        !CSharpWordTokens.Contains(m.Groups["b"].Value));
 
-        return false;
+        return proseAdjacency.Any();
     }
 
     private static readonly Regex AdjacentIdentifiers = new(

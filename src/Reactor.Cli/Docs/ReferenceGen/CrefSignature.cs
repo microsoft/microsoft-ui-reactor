@@ -137,10 +137,16 @@ internal static class CrefSignature
         // comment order and omit undocumented parameters — it is NOT indexed by
         // declaration ordinal, which is what ``N means. Documenting only the
         // second parameter would otherwise label ``0 with the second one's name.
-        // Names are only trustworthy as a positional list when the documented
-        // set is complete; short of that, fall back to placeholders for all of
-        // them rather than emit a confidently wrong name.
+        //
+        // Completeness is necessary but NOT sufficient: XML preserves authoring
+        // order, so a method declared <TKey, TValue> whose TValue tag is written
+        // first yields [TValue, TKey] — a complete set in the wrong slots, which
+        // then propagates into parameter types and the anchor. Order is only
+        // provable when there is nothing to order, so names are used at arity 1
+        // and placeholders stand in beyond it. A placeholder is merely less
+        // informative; a swapped name is wrong, and wrong silently.
         var namesAreOrdinal = methodTypeParams.Count == parts.GenericArity
+            && parts.GenericArity <= 1
             && methodTypeParams.All(n => !string.IsNullOrEmpty(n));
 
         var ownTypeParams = new List<string>(parts.GenericArity);

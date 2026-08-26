@@ -425,7 +425,7 @@ class RegeditApp : Component
                 // only cancellation path here -- there is no unmount cleanup).
                 // The status text now belongs to that newer search, so writing
                 // to it here would clobber the newer search's message.
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException) { return; }
             });
         }
 

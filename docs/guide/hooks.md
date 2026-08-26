@@ -551,7 +551,7 @@ static class DebouncedTextHook
                 // Expected: the cleanup below cancels this delay whenever `value`
                 // changes again inside the debounce window. Cancelling is how the
                 // stale result is discarded, so there is nothing to report.
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException) { return; }
             });
             return () => { cts.Cancel(); };
         }, value);

@@ -152,15 +152,61 @@ public class CrefSignatureTests
         Assert.DoesNotContain("TValue", formatted, StringComparison.Ordinal);
     }
 
-    /// <summary>A complete set is still used verbatim and in order.</summary>
+    /// <summary>
+    /// A complete set is <b>not</b> sufficient: XML preserves authoring order,
+    /// not declaration order, so a method declared <c>&lt;TKey, TValue&gt;</c>
+    /// whose <c>TValue</c> tag happens to be written first would render
+    /// <c>Method&lt;TValue, TKey&gt;</c> — a complete set of real names in the
+    /// wrong slots, which then propagates into parameter types and the anchor.
+    /// Nothing in the cref carries declaration ordinals, so the order cannot be
+    /// recovered; placeholders are used from arity 2 upward.
+    /// </summary>
     [Fact]
-    public void Format_UsesDocumentedNames_WhenTypeParamDocsAreComplete()
+    public void Format_UsesPlaceholders_ForMultipleTypeParams_BecauseOrderIsUnprovable()
     {
         var complete = M("M:Ns.C.UseMemoCells``2(System.Object)") with
         {
             TypeParams = new List<ParamDoc> { new("TKey", string.Empty), new("TValue", string.Empty) },
         };
 
-        Assert.Contains("<TKey, TValue>", CrefSignature.Format(complete), StringComparison.Ordinal);
+        var formatted = CrefSignature.Format(complete);
+
+        Assert.Contains("<T1, T2>", formatted, StringComparison.Ordinal);
+        Assert.DoesNotContain("TKey", formatted, StringComparison.Ordinal);
+        Assert.DoesNotContain("TValue", formatted, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The swapped-order case the rule exists for. It must render identically to
+    /// the in-order one — if these two ever differ, order is leaking through.
+    /// </summary>
+    [Fact]
+    public void Format_IsOrderInsensitive_WhenTypeParamTagsAreAuthoredOutOfOrder()
+    {
+        var inOrder = M("M:Ns.C.UseMemoCells``2(System.Object)") with
+        {
+            TypeParams = new List<ParamDoc> { new("TKey", string.Empty), new("TValue", string.Empty) },
+        };
+        var swapped = M("M:Ns.C.UseMemoCells``2(System.Object)") with
+        {
+            TypeParams = new List<ParamDoc> { new("TValue", string.Empty), new("TKey", string.Empty) },
+        };
+
+        Assert.Equal(CrefSignature.Format(inOrder), CrefSignature.Format(swapped));
+    }
+
+    /// <summary>
+    /// At arity 1 there is nothing to order, so the documented name is safe and
+    /// is used — the rule gives up only where it genuinely cannot know.
+    /// </summary>
+    [Fact]
+    public void Format_UsesTheDocumentedName_ForASingleTypeParam()
+    {
+        var one = M("M:Ns.C.UseResource``1(System.Object)") with
+        {
+            TypeParams = new List<ParamDoc> { new("TResult", string.Empty) },
+        };
+
+        Assert.Contains("<TResult>", CrefSignature.Format(one), StringComparison.Ordinal);
     }
 }
