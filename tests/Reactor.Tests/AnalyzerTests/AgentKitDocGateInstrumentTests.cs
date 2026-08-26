@@ -1288,6 +1288,20 @@ public class AgentKitDocGateInstrumentTests
         // The directive lines are blanked rather than removed, so the reported line is still the
         // line the sample is on — without that, a finding would point one line short.
         Assert.Equal(2, finding.Line);
+
+        // Each arm is parsed on its own. Concatenating them puts two valid alternatives in adjacent
+        // expression positions, where Roslyn can place the later one in skipped trivia and the
+        // violation in it is never seen.
+        var branches = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet(
+                "fixture/branches.md",
+                1,
+                "#if DEBUG\nvar a = FlexColumn(children).FlexPadding(16);\n#else\nvar a = FlexColumn(children).Padding(16);\n#endif"),
+        });
+
+        var inElse = Assert.Single(branches.Of(AgentKitFindingKind.DroppedModifier));
+        Assert.Equal(4, inElse.Line);
     }
 
     /// <summary>

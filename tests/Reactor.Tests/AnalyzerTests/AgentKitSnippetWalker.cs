@@ -618,6 +618,73 @@ internal static class AgentKitSnippetWalker
         @"^[ \t]*#[ \t]*(if|elif|else|endif|define|undef)\b[^\r\n]*",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
+    /// <summary>
+    /// One parse variant per conditional arm, plus the arm-free configuration, each preserving
+    /// every line's original index.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The first variant keeps no arm, so it is the snippet's unconditional code and is the one the
+    /// chain count is taken from. Each further variant keeps exactly one arm and blanks the rest,
+    /// which is a configuration that arm really occurs in. Arms are enumerated rather than
+    /// combined: an expression written <c>#if A x #else y #endif</c> has two valid alternatives
+    /// that concatenate into adjacent expressions, and Roslyn may put the second in skipped trivia,
+    /// so the violation in it would go unreported exactly as it did before.
+    /// </para>
+    /// <para>
+    /// Linear in the number of arms rather than exponential in the number of blocks, so a snippet
+    /// cannot make this expensive. Nesting is not modelled: an inner block's arms are treated as
+    /// arms of the enclosing one, which over-produces variants but never drops a line from all of
+    /// them, and unparseable text yields no resolvable chain rather than a finding.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<(string Text, bool IsPrimary)> ConditionalVariants(string text)
+    {
+        if (!Preprocessor.IsMatch(text))
+        {
+            yield return (text, true);
+            yield break;
+        }
+
+        var lines = text.Split('\n');
+        var arm = new int[lines.Length];
+        var current = 0;
+        var arms = 0;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var directive = Preprocessor.Match(lines[i]);
+            if (directive.Success)
+            {
+                var kind = directive.Groups[1].Value;
+                current = kind is "endif" or "define" or "undef" ? 0 : ++arms;
+                arm[i] = -1;    // the directive line itself belongs to no arm.
+                continue;
+            }
+
+            arm[i] = current;
+        }
+
+        yield return (Keep(lines, arm, 0), true);
+
+        for (var a = 1; a <= arms; a++)
+            yield return (Keep(lines, arm, a), false);
+    }
+
+    /// <summary>
+    /// The snippet with only <paramref name="keep"/>'s arm retained, other arms and all directive
+    /// lines blanked so each remaining line keeps its index.
+    /// </summary>
+    private static string Keep(string[] lines, int[] arm, int keep)
+    {
+        var kept = new string[lines.Length];
+
+        for (var i = 0; i < lines.Length; i++)
+            kept[i] = arm[i] == 0 || arm[i] == keep ? lines[i] : string.Empty;
+
+        return string.Join("\n", kept);
+    }
+
     public static AgentKitScan Scan(IEnumerable<AgentKitSnippet> snippets)
     {
         var findings = new List<AgentKitFinding>();
@@ -640,53 +707,64 @@ internal static class AgentKitSnippetWalker
             // Conditional compilation: `ParseText` uses the default symbol set, so an inactive
             // branch survives only as DisabledTextTrivia and never reaches DescendantNodes — a
             // sample inside `#if DEBUG` would ship unscanned, and the corpus already contains one
-            // (`skills/devtools.md`). Blanking the directive lines makes every branch ordinary
-            // text while keeping each remaining line at its original index, so reported line
-            // numbers stay right. Concatenated `#else` arms may not parse; that costs nothing,
-            // because an unresolvable chain is skipped rather than reported.
-            var text = Preprocessor.IsMatch(snippet.Text)
-                ? Preprocessor.Replace(snippet.Text, string.Empty)
-                : snippet.Text;
+            // (`skills/devtools.md`). Each arm is parsed on its own, with the other arms blanked,
+            // because concatenating them does not make both independently parseable: two valid
+            // alternatives in an expression position become adjacent expressions, and Roslyn may
+            // put the later one in skipped trivia, so a violation there would still be missed.
+            // Blanking keeps every remaining line at its original index, so findings report the
+            // line they are really on.
+            var seen = new HashSet<(string, int, string?, string?)>();
 
-            var tree = CSharpSyntaxTree.ParseText(text);
-            var root = tree.GetRoot();
-
-            foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            foreach (var (text, isPrimary) in ConditionalVariants(snippet.Text))
             {
-                if (invocation.Expression is not MemberAccessExpressionSyntax access)
-                    continue;
+                var tree = CSharpSyntaxTree.ParseText(text);
+                var root = tree.GetRoot();
 
-                var modifier = access.Name.Identifier.Text;
-                if (!ModifierTable.Properties.TryGetValue(modifier, out var info))
-                    continue;
-
-                var head = ResolveHead(access.Expression);
-                if (head is null)
-                    continue;
-
-                var element = ReactorSurface.Instance.Element(head.Value.Factory, head.Value.TypeArgumentCount);
-                if (element is null)
-                    continue;
-
-                resolvedChains++;
-
-                // Mirrors NoOpModifierAnalyzer's constant-null gate (its line 232). Reporting here
-                // would let this gate reject a sample the packaged analyzer accepts, which is worse
-                // than the drift it exists to catch.
-                if (HasConstantNullArgument(invocation, modifier))
-                    continue;
-
-                var line = LineOf(tree, snippet, access.Name);
-                var chainStart = LineOf(tree, snippet, invocation);
-
-                if (DroppedModifier(element, modifier, info) is { } dropped)
+                foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
                 {
-                    findings.Add(dropped with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
-                    continue;
-                }
+                    if (invocation.Expression is not MemberAccessExpressionSyntax access)
+                        continue;
 
-                if (WrapperWorkaround(element, head.Value.Factory, head.Value.Arguments, modifier, invocation) is { } wrapper)
-                    findings.Add(wrapper with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
+                    var modifier = access.Name.Identifier.Text;
+                    if (!ModifierTable.Properties.TryGetValue(modifier, out var info))
+                        continue;
+
+                    var head = ResolveHead(access.Expression);
+                    if (head is null)
+                        continue;
+
+                    var element = ReactorSurface.Instance.Element(head.Value.Factory, head.Value.TypeArgumentCount);
+                    if (element is null)
+                        continue;
+
+                    // Counted once per snippet. Every variant contains the unconditional code, so
+                    // counting them all would inflate the floors the corpus is measured against and
+                    // make a shortfall easier to pass rather than harder.
+                    if (isPrimary)
+                        resolvedChains++;
+
+                    // Mirrors NoOpModifierAnalyzer's constant-null gate (its line 232). Reporting here
+                    // would let this gate reject a sample the packaged analyzer accepts, which is worse
+                    // than the drift it exists to catch.
+                    if (HasConstantNullArgument(invocation, modifier))
+                        continue;
+
+                    var line = LineOf(tree, snippet, access.Name);
+                    var chainStart = LineOf(tree, snippet, invocation);
+
+                    // The same unconditional line is reached by every variant; report it once.
+                    if (!seen.Add((snippet.Path, line, modifier, element.FullName)))
+                        continue;
+
+                    if (DroppedModifier(element, modifier, info) is { } dropped)
+                    {
+                        findings.Add(dropped with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
+                        continue;
+                    }
+
+                    if (WrapperWorkaround(element, head.Value.Factory, head.Value.Arguments, modifier, invocation) is { } wrapper)
+                        findings.Add(wrapper with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
+                }
             }
         }
 
