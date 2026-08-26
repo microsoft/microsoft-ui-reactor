@@ -345,25 +345,53 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
 
     private static string RunWindowsPowerShell(string script)
     {
+        // A hung child must not hang the whole suite: a machine-execution-policy
+        // prompt or a broken profile can leave powershell.exe waiting on input
+        // forever. Generous enough that a slow cold start cannot trip it.
+        const int TimeoutMs = 120_000;
+
         var psi = new global::System.Diagnostics.ProcessStartInfo("powershell.exe")
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = true,
             UseShellExecute = false,
         };
         psi.ArgumentList.Add("-NoLogo");
         psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-NonInteractive");
         psi.ArgumentList.Add("-ExecutionPolicy");
         psi.ArgumentList.Add("Bypass");
         psi.ArgumentList.Add("-Command");
         psi.ArgumentList.Add(script);
 
         using var proc = global::System.Diagnostics.Process.Start(psi)!;
-        // Read stdout and stderr concurrently: a child that fills one pipe's buffer while
+        // Close stdin so anything that does try to read gets EOF instead of blocking.
+        proc.StandardInput.Close();
+        // Read both pipes concurrently: a child that fills one pipe's buffer while
         // the parent blocks on the other deadlocks.
         var stdoutTask = proc.StandardOutput.ReadToEndAsync();
         var stderrTask = proc.StandardError.ReadToEndAsync();
+
+        if (!proc.WaitForExit(TimeoutMs))
+        {
+            try
+            {
+                proc.Kill(entireProcessTree: true);
+            }
+            catch (global::System.Exception)
+            {
+                // Racing a process that just exited on its own is not a failure.
+            }
+
+            Assert.Fail(
+                $"PowerShell probe did not exit within {TimeoutMs / 1000}s and was terminated. Script:\n{script}");
+        }
+
+        // WaitForExit(int) returns as soon as the process ends; the parameterless
+        // overload is what guarantees the redirected streams have drained.
         proc.WaitForExit();
+
         var stdout = stdoutTask.GetAwaiter().GetResult();
         var stderr = stderrTask.GetAwaiter().GetResult();
 
