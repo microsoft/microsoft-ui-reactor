@@ -287,7 +287,7 @@ reference prop such as `TeachingTip.Target`, `.LabeledBy(...)`, or
 unmounts, or is recreated.
 
 ```csharp
-var target = UseElementRef<FrameworkElement>();
+var target = this.UseElementRef<FrameworkElement>();
 
 return HStack(
     Button("Show tip", () => setOpen(true)).Ref(target),

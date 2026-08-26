@@ -180,7 +180,7 @@ Border(child)
 ### UseElementFocus
 
 ```csharp
-var focusRef = UseElementFocus();
+var focusRef = this.UseElementFocus();
 
 return VStack(12,
     TextBox(text, setText).Ref(focusRef.Ref),
@@ -198,7 +198,7 @@ on a `TextBox`, `Focus(FocusState.Programmatic)`, etc.), use the typed variant.
 `.Current` is already typed as `T` — no cast at the call site:
 
 ```csharp
-var inputRef = UseElementRef<TextBox>();
+var inputRef = this.UseElementRef<TextBox>();
 
 UseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());
 
@@ -217,8 +217,8 @@ WinUI `UIElement.XYFocus*` property when the referenced element becomes
 available and clears it when that element unmounts.
 
 ```csharp
-var left = UseElementRef<FrameworkElement>();
-var right = UseElementRef<FrameworkElement>();
+var left = this.UseElementRef<FrameworkElement>();
+var right = this.UseElementRef<FrameworkElement>();
 
 return HStack(8,
     Button("Left").Ref(left).XYFocusRight(right),

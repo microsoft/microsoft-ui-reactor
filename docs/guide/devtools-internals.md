@@ -279,7 +279,7 @@ the dispatcher trampoline every built-in tool uses — see the
 // Don't:
 public override Element Render()
 {
-    var (dev, _) = UseState(UseDevtools());  // captures once, never refreshes
+    var (dev, _) = UseState(this.UseDevtools());  // captures once, never refreshes
     return dev ? VStack(...) : VStack(...);
 }
 ```
