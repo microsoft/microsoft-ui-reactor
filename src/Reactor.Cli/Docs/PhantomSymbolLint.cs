@@ -446,18 +446,19 @@ internal static class PhantomSymbolLint
             .Where(m => m.Index < firstLineLength)
             .Select(m => m.Index + m.Length - 1);
 
-        foreach (var open in openerIndices)
+        var candidateArguments = openerIndices
+            .Select(open => ExtractSingleArgument(text, open))
+            .Where(arg => arg is not null && arg.Trim().Length > 0);
+
+        foreach (var arg in candidateArguments)
         {
-            var arg = ExtractSingleArgument(text, open);
-            if (arg is null) continue;
-            if (arg.Trim().Length == 0) continue;
             // `Text(...)` / `Text(…)` is the universal "arguments elided" doc
             // convention, not a call — it is the shape prose uses to *name* a
             // signature. Treating it as an invocation would fire on every
             // signature mention in the docset, including the sentences warning
             // against this very phantom.
-            if (IsElidedArgument(arg)) continue;
-            if (HasAdjacentIdentifiers(arg)) continue;
+            if (IsElidedArgument(arg!)) continue;
+            if (HasAdjacentIdentifiers(arg!)) continue;
             return true;
         }
         return false;

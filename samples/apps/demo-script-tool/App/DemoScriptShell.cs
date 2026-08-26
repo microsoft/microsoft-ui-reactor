@@ -170,10 +170,12 @@ public sealed class DemoScriptShell : Component
         void ScheduleSave()
         {
             if (projectRoot is null) return;
-            // Cancel the pending save, but do not dispose it: the previous
-            // worker may not have read its token yet, and disposing underneath
-            // it throws ObjectDisposedException from cts.Token -- which is not
-            // an OperationCanceledException, so it would escape to the generic
+            // Cancel the pending save, but do not dispose it. The token is read
+            // synchronously below, so the worker never touches the source after
+            // this point -- but Task.Delay and WriteAllBytesAsync each register
+            // a callback on it, and disposing underneath a live registration
+            // throws ObjectDisposedException. That is not an
+            // OperationCanceledException, so it would escape to the generic
             // handler below and toast a "Save failed" the user never caused.
             // A CTS with no timer holds no unmanaged resource to reclaim.
             saveDebounceRef.Current?.Cancel();

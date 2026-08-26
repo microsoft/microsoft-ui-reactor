@@ -76,12 +76,20 @@ internal sealed class ReferenceGenerator
         // Documented <typeparam> names, keyed by type cref, so a method's
         // `N markers can be rendered with the declaring type's own parameter
         // names rather than positional placeholders.
+        // <typeparam> tags arrive in authoring order, not declaration order, and
+        // this list is then indexed positionally against `0/`1 in FormatType.
+        // A type documented <TResult> before <TInput> would therefore rename
+        // every parameter into the wrong slot — and the heading it produces
+        // feeds the anchor, so the damage outlives the signature. Same rule as
+        // CrefSignature applies to method type parameters: a single name has no
+        // order to get wrong, so it is used; past that, placeholders. See
+        // TypeParamNamesOrPlaceholders.
         var typeParamsByType = members
             .Where(m => m.Kind == MemberKind.Type && m.TypeParams.Count > 0)
             .GroupBy(m => m.Cref, StringComparer.Ordinal)
             .ToDictionary(
                 g => g.Key,
-                g => (IReadOnlyList<string>)g.First().TypeParams.Select(p => p.Name).ToList(),
+                g => TypeParamNamesOrPlaceholders(g.Key, g.First().TypeParams),
                 StringComparer.Ordinal);
 
         // 1) Route each member and bucket by output path. Every member that
@@ -234,6 +242,33 @@ internal sealed class ReferenceGenerator
                 ? parts.Name
                 : parts.DeclaringName + "." + parts.Name;
         return string.IsNullOrEmpty(parts.DeclaringName) ? parts.Name : parts.DeclaringName;
+    }
+
+    /// <summary>
+    /// Positional type-parameter names for a generic type, or placeholders when
+    /// the documented order cannot be proven.
+    /// </summary>
+    /// <remarks>
+    /// <c>&lt;typeparam&gt;</c> tags are returned in the order the author wrote
+    /// them; nothing in the cref carries declaration ordinals. A single
+    /// documented name has no order to get wrong and is used as-is. From two
+    /// upward the list is only <i>plausibly</i> ordered, and a wrong name is
+    /// worse than a placeholder here because it is silently plausible — it
+    /// renames real parameters into each other's slots and then feeds the
+    /// heading, and therefore the anchor.
+    /// </remarks>
+    private static IReadOnlyList<string> TypeParamNamesOrPlaceholders(
+        string cref, IReadOnlyList<ParamDoc> documented)
+    {
+        var arity = CrefSignature.Parse(cref).GenericArity;
+        if (arity <= 0) arity = documented.Count;
+
+        if (arity == 1 && documented.Count == 1 && !string.IsNullOrEmpty(documented[0].Name))
+            return new[] { documented[0].Name };
+
+        return Enumerable.Range(1, arity)
+            .Select(i => "T" + i.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
     }
 
     /// <summary>

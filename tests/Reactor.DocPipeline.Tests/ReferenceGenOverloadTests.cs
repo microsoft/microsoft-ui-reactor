@@ -372,4 +372,68 @@ defaults:
         Assert.Contains("```csharp", examples, StringComparison.Ordinal);
         Assert.Contains("var (value, setValue) = ctx.UseState(0);", examples, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A generic type documented with its <c>typeparam</c> tags in reverse order
+    /// must render identically to the in-order one.
+    ///
+    /// <para>XML preserves authoring order and nothing in a cref carries
+    /// declaration ordinals, so any difference between these two means
+    /// authoring order is leaking into member signatures — and from there into
+    /// anchors, silently renaming real parameters into each other's slots.</para>
+    ///
+    /// <para>The overloads are load-bearing, not decoration: a page with a
+    /// single member renders only <c>#&#32;Swap</c>, so the per-member signature
+    /// heading — the only place declaring type parameters appear — is never
+    /// emitted and the assertion would hold no matter what the generator did.
+    /// The first version of this test was vacuous for exactly that reason and
+    /// survived a mutation that reverted the fix.</para>
+    /// </summary>
+    [Fact]
+    public void TypeParamTagOrder_DoesNotChangeMemberSignatures()
+    {
+        const string body = """
+<member name="M:Microsoft.UI.Reactor.Hooks.Pair`2.Swap(`0,`1)">
+  <summary>Swap.</summary>
+</member>
+<member name="M:Microsoft.UI.Reactor.Hooks.Pair`2.Swap(`1,`0)">
+  <summary>Swap the other way.</summary>
+</member>
+</members></doc>
+""";
+        const string head = """
+<doc><assembly><name>P</name></assembly><members>
+<member name="T:Microsoft.UI.Reactor.Hooks.Pair`2">
+  <summary>A pair.</summary>
+""";
+
+        var inOrder = HeadingsFor(head +
+            "  <typeparam name=\"TKey\">k</typeparam>\n  <typeparam name=\"TValue\">v</typeparam>\n</member>\n" + body);
+        var reversed = HeadingsFor(head +
+            "  <typeparam name=\"TValue\">v</typeparam>\n  <typeparam name=\"TKey\">k</typeparam>\n</member>\n" + body);
+
+        // Non-vacuity floor: the signature headings must actually be present,
+        // otherwise the comparison below is between two empty sets.
+        Assert.Contains(inOrder, h => h.Contains("Swap(", StringComparison.Ordinal));
+
+        Assert.Equal(inOrder, reversed);
+
+        // And an order that cannot be proven is not asserted as fact.
+        Assert.DoesNotContain(inOrder, h => h.Contains("TKey", StringComparison.Ordinal));
+    }
+
+    private static List<string> HeadingsFor(string xml)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "refgen-" + Guid.NewGuid().ToString("N") + ".xml");
+        File.WriteAllText(path, xml);
+        try
+        {
+            return Generate(path).Pages
+                .SelectMany(p => p.Body.Replace("\r\n", "\n").Split('\n'))
+                .Where(l => l.StartsWith("#", StringComparison.Ordinal))
+                .OrderBy(h => h, StringComparer.Ordinal)
+                .ToList();
+        }
+        finally { File.Delete(path); }
+    }
 }
