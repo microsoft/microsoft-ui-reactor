@@ -51,7 +51,7 @@ public class DocAppGateWiringTests
     public void Every_Doc_App_Is_Reachable_From_The_Traversal_Project()
     {
         var repoRoot = FindRepoRoot();
-        var appsDir = Path.Combine(repoRoot, AppsRelative.Replace('/', Path.DirectorySeparatorChar));
+        var appsDir = AppsDir(repoRoot);
 
         var onDisk = Directory
             .EnumerateDirectories(appsDir)
@@ -66,7 +66,7 @@ public class DocAppGateWiringTests
             $"Expected the doc-app corpus to still be ~53 projects; found {onDisk.Count}. "
             + "If doc apps were intentionally removed, lower this floor deliberately.");
 
-        var proj = XDocument.Load(Path.Combine(appsDir, "DocApps.proj"));
+        var proj = XDocument.Load(RepoPath(appsDir, "DocApps.proj"));
         var includes = proj.Descendants()
             .Where(e => e.Name.LocalName == "DocApp")
             .Select(e => (string?)e.Attribute("Include"))
@@ -79,10 +79,12 @@ public class DocAppGateWiringTests
         // real listing (rather than asserting "the glob is non-empty") is what makes this fail if
         // someone replaces the wildcard with a hand-maintained list that misses a new app.
         var matched = new List<string>();
-        foreach (var include in includes)
+        var patterns = includes.Select(include =>
+            include!.Replace("$(MSBuildThisFileDirectory)", string.Empty)
+                    .Replace('/', Path.DirectorySeparatorChar));
+
+        foreach (var pattern in patterns)
         {
-            var pattern = include!.Replace("$(MSBuildThisFileDirectory)", string.Empty)
-                                  .Replace('/', Path.DirectorySeparatorChar);
             var dirPart = Path.GetDirectoryName(pattern) ?? "*";
             var filePart = Path.GetFileName(pattern);
 
@@ -112,8 +114,7 @@ public class DocAppGateWiringTests
     public void Doc_Apps_Import_The_Consumer_Analyzer_Bundle()
     {
         var repoRoot = FindRepoRoot();
-        var propsPath = Path.Combine(
-            repoRoot, AppsRelative.Replace('/', Path.DirectorySeparatorChar), "Directory.Build.props");
+        var propsPath = RepoPath(repoRoot, AppsRelative, "Directory.Build.props");
 
         var props = XDocument.Load(propsPath);
 
@@ -198,7 +199,7 @@ public class DocAppGateWiringTests
     public void No_Doc_App_Suppresses_A_Reactor_Rule()
     {
         var repoRoot = FindRepoRoot();
-        var appsDir = Path.Combine(repoRoot, AppsRelative.Replace('/', Path.DirectorySeparatorChar));
+        var appsDir = AppsDir(repoRoot);
 
         var offenders = new List<string>();
 
@@ -242,12 +243,12 @@ public class DocAppGateWiringTests
     public void Allowed_Suppressions_Are_All_Still_Used()
     {
         var repoRoot = FindRepoRoot();
-        var appsDir = Path.Combine(repoRoot, AppsRelative.Replace('/', Path.DirectorySeparatorChar));
+        var appsDir = AppsDir(repoRoot);
 
         var stale = new List<string>();
         foreach (var (app, rules) in AllowedSuppressions)
         {
-            var appDir = Path.Combine(appsDir, app);
+            var appDir = RepoPath(appsDir, app);
             Assert.True(Directory.Exists(appDir), $"AllowedSuppressions names '{app}', which no longer exists.");
 
             // Parsed, not text-matched. A raw Contains() over the app's sources kept an entry
@@ -262,11 +263,9 @@ public class DocAppGateWiringTests
                 }
             }
 
-            foreach (var rule in rules)
-            {
-                if (!suppressed.Contains(rule))
-                    stale.Add($"{app} -> {rule}");
-            }
+            stale.AddRange(rules
+                .Where(rule => !suppressed.Contains(rule))
+                .Select(rule => $"{app} -> {rule}"));
         }
 
         Assert.True(
@@ -335,7 +334,7 @@ public class DocAppGateWiringTests
     public void Suppression_Scan_Actually_Reads_The_Doc_Apps()
     {
         var repoRoot = FindRepoRoot();
-        var appsDir = Path.Combine(repoRoot, AppsRelative.Replace('/', Path.DirectorySeparatorChar));
+        var appsDir = AppsDir(repoRoot);
 
         var sources = Directory
             .EnumerateFiles(appsDir, "*.cs", SearchOption.AllDirectories)
@@ -380,7 +379,7 @@ public class DocAppGateWiringTests
     public void Ci_Runs_The_Doc_Snippet_Gate()
     {
         var repoRoot = FindRepoRoot();
-        var ci = File.ReadAllLines(Path.Combine(repoRoot, ".github", "workflows", "ci.yml"));
+        var ci = File.ReadAllLines(RepoPath(repoRoot, ".github/workflows/ci.yml"));
 
         var job = JobBlock(ci, "docs-snippet-gate");
         Assert.True(job.Count > 0, "ci.yml no longer defines a `docs-snippet-gate` job.");
@@ -427,6 +426,40 @@ public class DocAppGateWiringTests
 
         return block;
     }
+
+    /// <summary>
+    /// Combines repo-relative segments onto a trusted base, rejecting any segment that is rooted
+    /// or escapes the base.
+    /// </summary>
+    /// <remarks>
+    /// <c>Path.Combine</c> silently discards everything before a rooted segment, so
+    /// <c>Path.Combine(repoRoot, x)</c> quietly becomes <c>x</c> if <c>x</c> ever turns absolute.
+    /// Every path in this file is assembled from a repo-relative constant or an
+    /// <see cref="AllowedSuppressions"/> key, so the guard should never fire — it exists so that a
+    /// later edit which makes one of those absolute fails loudly here instead of silently walking
+    /// a different tree and reporting a clean result.
+    /// </remarks>
+    private static string RepoPath(string root, params string[] relativeSegments)
+    {
+        var combined = root;
+        foreach (var segment in relativeSegments)
+        {
+            var normalized = segment.Replace('/', Path.DirectorySeparatorChar);
+
+            Assert.False(
+                Path.IsPathRooted(normalized),
+                $"'{segment}' must be repo-relative; a rooted segment would silently discard '{combined}'.");
+
+            combined = Path.Combine(combined, normalized);
+        }
+
+        var resolved = Path.GetFullPath(combined);
+        Assert.StartsWith(Path.GetFullPath(root), resolved, StringComparison.OrdinalIgnoreCase);
+        return resolved;
+    }
+
+    /// <summary>The doc-app corpus root, assembled through <see cref="RepoPath"/>.</summary>
+    private static string AppsDir(string repoRoot) => RepoPath(repoRoot, AppsRelative);
 
     private static string FindRepoRoot()
     {
