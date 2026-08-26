@@ -427,6 +427,37 @@ public sealed class PhantomSymbolLintTests
         Assert.Empty(LintExample(line));
 
     /// <summary>
+    /// Word-shaped C# operators are not English. <c>value is null</c> and
+    /// <c>value as string</c> are adjacent identifier pairs by a purely lexical
+    /// reading, so the prose discriminator dismissed them and the phantom
+    /// passed. Only a pair where <i>both</i> sides are ordinary identifiers is
+    /// prose.
+    /// </summary>
+    [Theory]
+    [InlineData("var e = Text(value is null ? \"\" : value);")]
+    [InlineData("var e = Text(value as string);")]
+    [InlineData("var e = Text(item switch { _ => \"x\" });")]
+    [InlineData("var e = Text(new string('a', 3));")]
+    public void Fires_OnWordOperatorExpressions(string line) =>
+        Assert.Contains(LintExample(line), f => f.Message.Contains("'Text'"));
+
+    /// <summary>
+    /// A doc example routinely wraps a call across lines, and a per-line
+    /// scanner never finds the closing paren — so the whole invocation went
+    /// unreported. The finding must land on the opening line, and must not be
+    /// duplicated by the lines the lookahead window also covers.
+    /// </summary>
+    [Fact]
+    public void Fires_OnceOnAMultilineTextCall()
+    {
+        var body = "var a = Compute(x);\nvar e = Text(\n    BuildLabel(item));\nvar b = 1;\n";
+        var findings = LintExample(body).Where(f => f.Message.Contains("'Text'")).ToList();
+
+        Assert.Single(findings);
+        Assert.Equal(2, findings[0].Line);
+    }
+
+    /// <summary>
     /// CommonMark delimits an inline span with a <i>run</i> of backticks and
     /// closes it on a run of equal length, so a phantom can hide inside a
     /// multi-backtick span. Toggling on each individual backtick mis-parses

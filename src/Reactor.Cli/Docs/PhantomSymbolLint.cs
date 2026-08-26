@@ -38,16 +38,23 @@ internal sealed record PhantomFinding(
 /// <c>Text</c>, whose argument is an arbitrary C# expression: enumerating
 /// argument prefixes is open-ended by construction and kept missing shapes
 /// (a ternary, a concatenation, a cast). Balanced scanning ends that.
+/// <para>
+/// Receives a lookahead window — the current line plus following code lines, so
+/// an invocation wrapped across lines can still be closed — and the length of
+/// the first line. It must only accept invocations that <i>start</i> within the
+/// first line, otherwise every earlier line whose window reaches this call
+/// would report it too.
+/// </para>
 /// </param>
 internal sealed record PhantomSymbol(
     string Name,
     Regex Pattern,
     string Suggestion,
-    global::System.Func<string, bool>? Scanner = null)
+    global::System.Func<string, int, bool>? Scanner = null)
 {
-    /// <summary>Whether this phantom appears on the (already masked) line.</summary>
-    internal bool Matches(string line) =>
-        Scanner is not null ? Scanner(line) : Pattern.IsMatch(line);
+    /// <summary>Whether this phantom appears in the (already masked) text.</summary>
+    internal bool Matches(string text, int firstLineLength) =>
+        Scanner is not null ? Scanner(text, firstLineLength) : Pattern.IsMatch(text);
 }
 
 /// <summary>
@@ -349,11 +356,40 @@ internal static class PhantomSymbolLint
             if (surface == Surface.Markdown && !inFence)
                 masked = MaskOutsideInlineCode(masked);
 
-            foreach (var phantom in Phantoms)
-            {
-                if (skipNames.Contains(phantom.Name)) continue;
-                if (!phantom.Matches(masked)) continue;
+            // A structural scanner needs the whole invocation, and a doc example
+            // routinely wraps one across lines:
+            //     Text(
+            //         BuildLabel(item))
+            // Per-line scanning never finds the closing paren and reports
+            // nothing. Give the scanner a bounded lookahead window instead.
+            // Only where every line is genuinely code — inside a fence, or on
+            // an all-code surface — because joining prose lines could let an
+            // unbalanced "Text (" in one sentence close against a ')' in the
+            // next and manufacture a false positive.
+            var scannerInput = masked;
+            bool wholeLineIsCode = surface == Surface.ExampleText
+                || (surface == Surface.Markdown && inFence)
+                || (surface == Surface.CSharpDocComments && isDocComment);
 
+            if (wholeLineIsCode && masked.Contains('(', StringComparison.Ordinal))
+            {
+                var window = new global::System.Text.StringBuilder(masked);
+                for (int k = i + 1; k < lines.Length && k <= i + ScannerLookaheadLines; k++)
+                {
+                    var next = lines[k];
+                    if (surface == Surface.Markdown &&
+                        next.Trim().StartsWith("```", StringComparison.Ordinal)) break;
+                    if (surface == Surface.CSharpDocComments &&
+                        !next.Trim().StartsWith("///", StringComparison.Ordinal)) break;
+                    window.Append('\n').Append(CrefSpan.Replace(next, m => new string(' ', m.Length)));
+                }
+                scannerInput = window.ToString();
+            }
+
+            foreach (var phantom in Phantoms.Where(p =>
+                         !skipNames.Contains(p.Name) &&
+                         p.Matches(p.Scanner is not null ? scannerInput : masked, masked.Length)))
+            {
                 findings.Add(new PhantomFinding(
                     Code,
                     $"'{phantom.Name}' does not exist; use {phantom.Suggestion}. " +
@@ -368,6 +404,12 @@ internal static class PhantomSymbolLint
 
         return findings;
     }
+
+    /// <summary>
+    /// How many following lines a structural scanner may consume to close an
+    /// invocation. Bounded so a stray '(' cannot drag the scan to end of file.
+    /// </summary>
+    private const int ScannerLookaheadLines = 8;
 
     /// <summary>
     /// Blanks every character that is not inside a single-backtick inline code
@@ -397,12 +439,14 @@ internal static class PhantomSymbolLint
     /// That single test admits every expression shape — ternary, concatenation,
     /// cast, call, indexer, null-coalesce — without enumerating any of them.</para>
     /// </remarks>
-    internal static bool LooksLikeSingleArgTextCall(string line)
+    internal static bool LooksLikeSingleArgTextCall(string text, int firstLineLength)
     {
-        foreach (Match m in TextCallOpener.Matches(line))
+        foreach (var open in TextCallOpener.Matches(text)
+                     .Cast<Match>()
+                     .Where(m => m.Index < firstLineLength)
+                     .Select(m => m.Index + m.Length - 1))
         {
-            var open = m.Index + m.Length - 1;   // index of '('
-            var arg = ExtractSingleArgument(line, open);
+            var arg = ExtractSingleArgument(text, open);
             if (arg is null) continue;
             if (arg.Trim().Length == 0) continue;
             // `Text(...)` / `Text(…)` is the universal "arguments elided" doc
@@ -424,12 +468,8 @@ internal static class PhantomSymbolLint
     /// An argument made only of ellipsis punctuation — the documentation
     /// placeholder for elided arguments, never valid C#.
     /// </summary>
-    private static bool IsElidedArgument(string arg)
-    {
-        foreach (var c in arg)
-            if (c != '.' && c != '\u2026' && !char.IsWhiteSpace(c)) return false;
-        return true;
-    }
+    private static bool IsElidedArgument(string arg) =>
+        !arg.Any(c => c != '.' && c != '\u2026' && !char.IsWhiteSpace(c));
 
     /// <summary>
     /// Returns the argument text when the parenthesis at <paramref name="open"/>
@@ -489,11 +529,19 @@ internal static class PhantomSymbolLint
     }
 
     /// <summary>
-    /// True when the argument contains two identifier tokens separated only by
-    /// whitespace — the shape of English prose, never of a C# expression.
-    /// Literals are collapsed first so "Save the file" inside a string cannot
-    /// make a real call look like prose.
+    /// True when the argument contains two <i>non-keyword</i> identifier tokens
+    /// separated only by whitespace — the shape of English prose, never of a C#
+    /// expression. Literals are collapsed first so "Save the file" inside a
+    /// string cannot make a real call look like prose.
     /// </summary>
+    /// <remarks>
+    /// The keyword exemption is load-bearing: C# has word-shaped operators, so
+    /// <c>value is null</c> and <c>value as string</c> are adjacent identifier
+    /// pairs by a purely lexical reading and would be dismissed as prose. Only
+    /// a pair where <i>both</i> sides are ordinary identifiers is English —
+    /// "the element" has no operator between the words, an expression always
+    /// does, even when that operator is spelled with letters.
+    /// </remarks>
     private static bool HasAdjacentIdentifiers(string arg)
     {
         var stripped = new global::System.Text.StringBuilder();
@@ -510,11 +558,32 @@ internal static class PhantomSymbolLint
             stripped.Append(arg[i]);
         }
 
-        return AdjacentIdentifiers.IsMatch(stripped.ToString());
+        foreach (Match m in AdjacentIdentifiers.Matches(stripped.ToString()))
+            if (!CSharpWordTokens.Contains(m.Groups["a"].Value) &&
+                !CSharpWordTokens.Contains(m.Groups["b"].Value))
+                return true;
+
+        return false;
     }
 
     private static readonly Regex AdjacentIdentifiers = new(
-        @"[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
+        @"(?<a>[A-Za-z_][A-Za-z0-9_]*)\s+(?<b>[A-Za-z_][A-Za-z0-9_]*)",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// C# tokens that are spelled like identifiers but are operators, literals
+    /// or type names — none of which can be an English word pair.
+    /// </summary>
+    private static readonly global::System.Collections.Generic.HashSet<string> CSharpWordTokens =
+        new(global::System.StringComparer.Ordinal)
+        {
+            "is", "as", "not", "and", "or", "with", "when", "switch",
+            "new", "null", "true", "false", "default", "this", "base",
+            "typeof", "nameof", "sizeof", "await", "ref", "out", "in",
+            "string", "int", "bool", "double", "float", "decimal", "long",
+            "short", "byte", "char", "object", "var", "dynamic", "uint",
+            "ulong", "ushort", "sbyte", "delegate", "static", "readonly",
+        };
 
     private static string MaskOutsideInlineCode(string line)
     {
