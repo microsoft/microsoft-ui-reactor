@@ -257,10 +257,10 @@ can't ship; treat the warning as an error in CI.
 ### Light-only test missing the dark regression
 
 A common review mistake: the screenshot in the PR is light-mode, the
-reviewer signs off, and the dark-mode breakage lands on main. The
-[testing](testing.md) page covers the fixture pattern that mounts the
-same component twice — once with `RequestedTheme(Light)`, once with
-`(Dark)` — and snapshots both.
+reviewer signs off, and the dark-mode breakage lands on main.
+
+The trap is reaching for a headless test to cover it. This one looks
+like it checks both themes and cannot:
 
 ```csharp
 [Theory]
@@ -268,14 +268,24 @@ same component twice — once with `RequestedTheme(Light)`, once with
 [InlineData(ElementTheme.Dark)]
 public void StatusBanner_renders_in_both_themes(ElementTheme theme)
 {
-    // Build the element tree directly — the scanner walks Elements, so
-    // no WinUI controls need to be materialized and the test stays headless.
     var tree = StatusBanner("Saved", InfoBarSeverity.Success)
         .RequestedTheme(theme);
 
+    // Vacuous: the scanner inspects accessibility metadata — names,
+    // roles, labels — and never resolves a brush. Both cases return
+    // the same findings, so a banner hardcoded to a light-only colour
+    // passes just as happily as a correct one. The `theme` parameter
+    // does not reach anything this assertion reads.
     Assert.Empty(AccessibilityScanner.Scan(tree));
 }
 ```
+
+A colour regression is only observable once the tree is materialized
+and the resource lookup runs against the effective theme, so it needs a
+[selftest](testing.md) against real WinUI controls — a headless test
+cannot construct them at all. Assert on the resolved brush under each
+theme, or snapshot the rendered control; asserting on the element
+record proves only that you built the element you built.
 
 ### Resolving a non-themed key as a ThemeRef
 

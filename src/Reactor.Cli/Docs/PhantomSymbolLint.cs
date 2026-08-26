@@ -373,11 +373,28 @@ internal static class PhantomSymbolLint
             var open = line.IndexOf('`', pos);
             if (open < 0) break;
 
-            var close = line.IndexOf('`', open + 1);
+            // CommonMark delimits an inline span with a RUN of backticks, and
+            // closes it on a run of the same length. Matching one backtick at a
+            // time mis-parses ``Optional.Of(`x`)`` — the span would be read as
+            // the empty string between the first two ticks, and the phantom
+            // inside would be masked away as prose.
+            int openLen = 0;
+            while (open + openLen < line.Length && line[open + openLen] == '`') openLen++;
+
+            int close = -1;
+            for (int i = open + openLen; i < line.Length; i++)
+            {
+                if (line[i] != '`') continue;
+                int runLen = 0;
+                while (i + runLen < line.Length && line[i + runLen] == '`') runLen++;
+                if (runLen == openLen) { close = i; break; }
+                i += runLen - 1;
+            }
+
             if (close < 0) break;
 
-            for (int i = open + 1; i < close; i++) buf[i] = line[i];
-            pos = close + 1;
+            for (int i = open + openLen; i < close; i++) buf[i] = line[i];
+            pos = close + openLen;
         }
 
         return new string(buf);

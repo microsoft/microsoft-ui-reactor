@@ -406,6 +406,23 @@ public sealed class PhantomSymbolLintTests
     public void Silent_OnProseAndQualifiedMembersAfterWidening(string line) =>
         Assert.Empty(LintExample(line));
 
+    /// <summary>
+    /// CommonMark delimits an inline span with a <i>run</i> of backticks and
+    /// closes it on a run of equal length, so a phantom can hide inside a
+    /// multi-backtick span. Toggling on each individual backtick mis-parses
+    /// these and masks the phantom away as prose.
+    /// </summary>
+    [Theory]
+    [InlineData("Write ``Optional.Of(`x`)`` to see it fail.")]
+    [InlineData("Write ```Optional.Of(y)``` in a triple span.")]
+    public void Fires_OnPhantomInsideAMultiBacktickSpan(string body) =>
+        Assert.Contains(LintMarkdown(body + "\n"), f => f.Message.Contains("'Optional.Of'"));
+
+    /// <summary>An unterminated run opens nothing, so prose after it stays inert.</summary>
+    [Fact]
+    public void Silent_OnUnterminatedBacktickRun() =>
+        Assert.Empty(LintMarkdown("A stray ``run then Text(\"x\") in prose.\n"));
+
     [Fact]
     public void PhantomTable_IsPopulatedAndDistinct()
     {
