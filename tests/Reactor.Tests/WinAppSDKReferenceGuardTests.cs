@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Microsoft.UI.Reactor.Cli.Pack;
 using Xunit;
@@ -114,6 +115,153 @@ public class WinAppSDKReferenceGuardTests
 
         Assert.Contains(winAppSdk, k => k.StartsWith("Microsoft.WindowsAppSDK.WinUI/", StringComparison.Ordinal));
         Assert.DoesNotContain(winAppSdk, k => k.StartsWith("Microsoft.WindowsAppSDK/", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The Windows App Runtime that <c>bootstrap.ps1</c> installs must be able to load
+    /// what this repo builds. Windows App SDK 2.x ships ONE framework package per major
+    /// (<c>Microsoft.WindowsAppRuntime.2</c>, named by the SDK's own
+    /// <c>WindowsAppSDK-VersionInfo.json</c>), serviced 2.0 → 2.1 → 2.3 in place, and the
+    /// major-only winget id tracks that servicing. The major.minor ids are *separate*
+    /// winget packages pinned to a single servicing line: <c>…WindowsAppRuntime.2.0</c>
+    /// still installs 2.0.1, which cannot satisfy an app built against 2.1.3. Hardcoding
+    /// one let the id drift a whole minor behind <c>WindowsAppSDKVersion</c>, so bootstrap
+    /// now derives it — and this test is what keeps the derivation honest, because the
+    /// PowerShell script suites do not run when only Directory.Build.props changes.
+    /// </summary>
+    [Fact]
+    public void Bootstrap_derives_the_WindowsAppRuntime_winget_id_from_the_pinned_SDK_version()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+
+        var props = File.ReadAllText(Path.Join(root!, "Directory.Build.props"));
+        var pinned = Regex.Match(
+            props, @"<WindowsAppSDKVersion>\s*([^<\s]+)\s*</WindowsAppSDKVersion>");
+        Assert.True(pinned.Success, "WindowsAppSDKVersion not found in Directory.Build.props");
+
+        var version = Regex.Match(pinned.Groups[1].Value, @"^(\d+)\.(\d+)");
+        Assert.True(version.Success, $"Unparseable WindowsAppSDKVersion '{pinned.Groups[1].Value}'");
+
+        var major = int.Parse(version.Groups[1].Value);
+        var expectedId = major >= 2
+            ? $"Microsoft.WindowsAppRuntime.{major}"
+            : $"Microsoft.WindowsAppRuntime.{major}.{version.Groups[2].Value}";
+
+        var bootstrap = Path.Join(root!, "bootstrap.ps1");
+        var probe = InspectBootstrapRuntimeId(bootstrap, pinned.Groups[1].Value);
+
+        // A literal id is the drift this test exists to prevent: it is what silently
+        // decays when WindowsAppSDKVersion moves. Comments are excluded (the probe
+        // filters them out via the PowerShell tokenizer) because bootstrap.ps1
+        // deliberately *explains* the 1.x/2.x id shapes; documenting the trap is not
+        // falling into it. Anything the script would actually execute must match.
+        var literals = probe.Literals
+            .Where(v => v != expectedId)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            literals.Count == 0,
+            $"bootstrap.ps1 must derive the Windows App Runtime winget id from "
+                + $"WindowsAppSDKVersion ({pinned.Groups[1].Value} -> {expectedId}), not hardcode it. "
+                + "Found in executable code:\n  " + string.Join("\n  ", literals));
+
+        // ...and the derivation itself has to produce that id. Run the shipped function
+        // rather than restating its logic, so a broken edit to bootstrap.ps1 fails here.
+        Assert.Equal(expectedId, probe.DerivedId);
+    }
+
+    /// <summary>
+    /// The mapping rule itself, exercised directly against the shipped function.
+    ///
+    /// This is separate from the test above because that one can only ever see the version
+    /// this repo currently pins: raising <c>WindowsAppSDKVersion</c> to an unreleased value
+    /// to prove the derivation follows it fails the *restore*, not the assertion, so it
+    /// measures nothing. These cases pin the two branches that matter — 1.x shipped a
+    /// side-by-side framework package per minor, 2.x ships one per major and services it in
+    /// place — without needing any of them to be restorable.
+    /// </summary>
+    [Theory]
+    [InlineData("2.1.3", "Microsoft.WindowsAppRuntime.2")]   // what this repo pins today
+    [InlineData("2.0.1", "Microsoft.WindowsAppRuntime.2")]   // older 2.x -> same framework package
+    [InlineData("2.3.1", "Microsoft.WindowsAppRuntime.2")]   // newer 2.x -> same framework package
+    [InlineData("3.0.0", "Microsoft.WindowsAppRuntime.3")]   // next major -> follows automatically
+    [InlineData("1.7.250909003", "Microsoft.WindowsAppRuntime.1.7")] // 1.x stays major.minor
+    [InlineData("1.8.251003001", "Microsoft.WindowsAppRuntime.1.8")]
+    public void Bootstrap_maps_an_SDK_version_to_the_matching_runtime_winget_id(string sdkVersion, string expectedId)
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+
+        var probe = InspectBootstrapRuntimeId(Path.Join(root!, "bootstrap.ps1"), sdkVersion);
+        Assert.Equal(expectedId, probe.DerivedId);
+    }
+
+    private sealed record BootstrapRuntimeIdProbe(string DerivedId, IReadOnlyList<string> Literals);
+
+    /// <summary>
+    /// Runs <c>Get-WindowsAppRuntimeWingetId</c> out of bootstrap.ps1 and reports every
+    /// <c>Microsoft.WindowsAppRuntime.&lt;n&gt;</c> token the script would execute.
+    /// bootstrap.ps1 cannot simply be dot-sourced — that would run the whole install — so
+    /// the function is lifted out by name. The literal scan uses the PowerShell tokenizer
+    /// rather than a regex over raw text so comments are excluded properly, including a
+    /// <c>#</c> that appears inside a string.
+    /// </summary>
+    private static BootstrapRuntimeIdProbe InspectBootstrapRuntimeId(string bootstrapPath, string sdkVersion)
+    {
+        var script = $@"
+$ErrorActionPreference = 'Stop'
+$text = [System.IO.File]::ReadAllText('{bootstrapPath.Replace("\\", "\\\\")}', [System.Text.Encoding]::UTF8)
+$errors = $null
+$tokens = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors)
+if (@($errors).Count -ne 0) {{ throw 'bootstrap.ps1 does not parse' }}
+$fn = $ast.Find({{ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-WindowsAppRuntimeWingetId' }}, $true)
+if (-not $fn) {{ throw 'Get-WindowsAppRuntimeWingetId not found in bootstrap.ps1' }}
+. ([scriptblock]::Create($fn.Extent.Text))
+$literals = New-Object System.Collections.Generic.List[string]
+foreach ($t in $tokens) {{
+    if ($t.Kind -eq 'Comment') {{ continue }}
+    foreach ($m in [regex]::Matches($t.Text, 'Microsoft\.WindowsAppRuntime\.[0-9][0-9.]*')) {{
+        $literals.Add($m.Value) | Out-Null
+    }}
+}}
+[pscustomobject]@{{
+    derivedId = [string](Get-WindowsAppRuntimeWingetId -SdkVersion '{sdkVersion}')
+    literals  = @($literals | Sort-Object -Unique)
+}} | ConvertTo-Json -Compress
+";
+        var psi = new global::System.Diagnostics.ProcessStartInfo("powershell.exe")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("-NoLogo");
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-Command");
+        psi.ArgumentList.Add(script);
+
+        using var proc = global::System.Diagnostics.Process.Start(psi)!;
+        var stdout = proc.StandardOutput.ReadToEnd();
+        var stderr = proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
+
+        Assert.True(proc.ExitCode == 0, $"Derivation probe failed (exit {proc.ExitCode}): {stderr}");
+
+        using var json = JsonDocument.Parse(stdout);
+        var derived = json.RootElement.GetProperty("derivedId").GetString() ?? string.Empty;
+        var literals = json.RootElement.TryGetProperty("literals", out var arr) && arr.ValueKind == JsonValueKind.Array
+            ? arr.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToList()
+            : arr.ValueKind == JsonValueKind.String
+                ? new List<string> { arr.GetString() ?? string.Empty }
+                : new List<string>();
+
+        return new BootstrapRuntimeIdProbe(derived, literals);
     }
 
     private static bool ReferencesMetapackage(XDocument doc)

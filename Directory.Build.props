@@ -7,8 +7,9 @@
 
     WindowsAppSDKSelfContained default is `false` — the framework, its
     samples, and the perf benches all consume the *installed* Windows App
-    Runtime (`Microsoft.WindowsAppRuntime.2.0`, installed via
-    bootstrap.ps1 / winget) rather than bundling a copy of the runtime
+    Runtime (the `Microsoft.WindowsAppRuntime.<major>` winget package,
+    installed via bootstrap.ps1, which derives the id from the version
+    below) rather than bundling a copy of the runtime
     into every build output. Projects that genuinely need a standalone
     deployable set `WindowsAppSDKSelfContained=true` explicitly in their
     own csproj — the user-facing scaffolded template, the AOT publish
