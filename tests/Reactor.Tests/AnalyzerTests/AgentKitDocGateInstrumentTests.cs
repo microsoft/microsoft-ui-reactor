@@ -287,6 +287,8 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("- Wrong, and it costs a build-check cycle:", true)]
     // Explanations that merely contain a marker word.
     [InlineData("// avoid re-enumerating children", false)]
+    [InlineData("// avoid allocations", false)]
+    [InlineData("// never cache", false)]
     [InlineData("// Show ❌ when validation fails", false)]
     [InlineData("// Never hardcode hex on themed surfaces — reviewers reject it", false)]
     [InlineData("// Good: proper hierarchy", false)]
@@ -774,6 +776,16 @@ public class AgentKitDocGateInstrumentTests
         Assert.Equal(
             "FlexColumn(children).FlexPadding(16)",
             Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/continuation.md", Continuation)).Text);
+
+        // An info string separates the language from its attributes with any whitespace, so a
+        // tab-delimited attribute must not be read as part of the language name.
+        const string Tabbed = "```csharp\tlinenos\nFlexColumn(children).FlexPadding(16)\n```";
+
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/tab.md", Tabbed)).Text);
+
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "```csharp\tlinenos");
     }
 
     /// <summary>

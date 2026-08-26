@@ -116,7 +116,18 @@ public class AgentKitDocGateTests
 
         var words = head.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
 
-        return words.Length is > 0 and <= 2 && MarkerWord.IsMatch(words[0]);
+        if (words.Length == 0 || !MarkerWord.IsMatch(words[0]))
+            return false;
+
+        // The marker word alone is a label: `/* Wrong */`, `// Bad`.
+        if (words.Length == 1)
+            return true;
+
+        // Otherwise it must read as a label rather than a sentence — at most one more word, and
+        // punctuation introducing what follows. Without the delimiter requirement, ordinary short
+        // comments such as `// avoid allocations` and `// never cache` were treated as labels and
+        // silently exempted the sample beneath them.
+        return words.Length == 2 && cut >= 0;
     }
 
     /// <summary>

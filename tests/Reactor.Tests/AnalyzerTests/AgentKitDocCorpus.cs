@@ -162,7 +162,7 @@ internal static class AgentKitDocCorpus
     /// independently.
     /// </remarks>
     internal static readonly Regex CSharpFenceProbe = new(
-        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(`{3,}|~{3,})[ ]*(csharp|cs|c\#)[ ]*$",
+        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t][^\r\n]*)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -364,7 +364,11 @@ internal static class AgentKitDocCorpus
                 OpenLine: i + 1,
                 BodyStartLine: i + 2,
                 BodyEndLine: close,          // 1-based last body line; == i+1 when empty.
-                Language: open.Groups["info"].Value.Trim().Split(' ', ',')[0],
+                // Info strings separate the language from its attributes with any whitespace, not
+                // just a space: `csharp\tlinenos` is a C# block. Splitting on spaces alone read the
+                // whole run as the language, so the body never reached the gate — and the probe
+                // accepted only spaces too, so the completeness fact stayed green over it.
+                Language: open.Groups["info"].Value.Trim().Split(' ', '\t', ',')[0],
                 Indent: indent,
                 BlockquoteDepth: depth));
 
