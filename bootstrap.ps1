@@ -313,13 +313,17 @@ if (-not $winAppRuntimeId) {
     $winAppRuntimeLabel = "Windows App Runtime (for Windows App SDK $winAppSdkVersion)"
     Write-Dbg "Windows App Runtime winget id derived from WindowsAppSDKVersion=$($winAppSdkVersion): $winAppRuntimeId"
 
-    # Returns 'satisfied' | 'outdated' | 'missing' | 'unknown'.
+    # Returns 'satisfied' | 'outdated' | 'missing' | 'unreadable' | 'nowinget'.
     #
     # 'outdated' is a real state, not a theoretical one: the 2.x id is
     # major-wide, so a machine carrying 2.0.1 reports the package as installed
     # even though it cannot load an app built against 2.1.3. Treating presence
     # as sufficient would print [ok] over exactly the mismatch this check exists
     # to catch.
+    #
+    # 'nowinget' and 'unreadable' are kept apart because the remedy differs:
+    # one needs App Installer before any winget advice is actionable, the other
+    # already has winget and just needs the install run.
     function Get-WindowsAppRuntimeState {
         param(
             [Parameter(Mandatory)][string]$Id,
@@ -327,7 +331,7 @@ if (-not $winAppRuntimeId) {
         )
         if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
             Write-Dbg "winget not on PATH; cannot probe WindowsAppRuntime"
-            return 'unknown'
+            return 'nowinget'
         }
         # --accept-source-agreements is needed even for `list` on a winget that
         # hasn't been used before (e.g. a fresh CI runner). Without it, winget
@@ -348,7 +352,7 @@ if (-not $winAppRuntimeId) {
             # Present, but the version column could not be read. Do not claim it
             # is too old on the strength of a parse failure.
             Write-Dbg "winget reported $Id installed but no version could be parsed"
-            return 'unknown'
+            return 'unreadable'
         }
         Write-Dbg "installed $Id version: $installed (need >= $RequiredSdkVersion)"
         if (Test-WindowsAppRuntimeSatisfied -Installed $installed -RequiredSdkVersion $RequiredSdkVersion) {
@@ -358,19 +362,27 @@ if (-not $winAppRuntimeId) {
     }
 
     $winAppRuntimeState = Get-WindowsAppRuntimeState -Id $winAppRuntimeId -RequiredSdkVersion $winAppSdkVersion
+    $winAppRuntimeUnverified = @('unreadable', 'nowinget') -contains $winAppRuntimeState
     if ($winAppRuntimeState -eq 'satisfied') {
         Write-Ok "$winAppRuntimeLabel installed"
-    } elseif ($winAppRuntimeState -eq 'unknown' -and -not $InstallWinAppSdk) {
+    } elseif ($winAppRuntimeUnverified -and -not $InstallWinAppSdk) {
         # Not proven missing, so do not nag an interactive user or fail -NoWinAppSdk.
         # -InstallWinAppSdk is handled below instead: an explicit force-install must
         # not become a no-op just because the probe could not read winget's output.
-        Write-Host "    [warn] Could not verify $winAppRuntimeLabel (winget unavailable or its output could not be read)." -ForegroundColor Yellow
-        Write-Host "           If samples fail to launch, install it with: winget install $winAppRuntimeId"
+        if ($winAppRuntimeState -eq 'nowinget') {
+            Write-Host "    [warn] Could not verify $winAppRuntimeLabel - winget is not on PATH." -ForegroundColor Yellow
+            Write-Host "           Install App Installer from the Microsoft Store, then re-run ./bootstrap.ps1."
+            Write-Host "           Or install the runtime by hand: https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads"
+        } else {
+            Write-Host "    [warn] Could not verify $winAppRuntimeLabel - winget's output could not be read." -ForegroundColor Yellow
+            Write-Host "           If samples fail to launch, install it with: winget install $winAppRuntimeId"
+        }
     } else {
         $problem = switch ($winAppRuntimeState) {
-            'outdated' { "$winAppRuntimeLabel is installed but too old for Windows App SDK $winAppSdkVersion." }
-            'unknown'  { "$winAppRuntimeLabel could not be verified." }
-            default    { "$winAppRuntimeLabel is not installed on this machine." }
+            'outdated'   { "$winAppRuntimeLabel is installed but too old for Windows App SDK $winAppSdkVersion." }
+            'unreadable' { "$winAppRuntimeLabel could not be verified." }
+            'nowinget'   { "$winAppRuntimeLabel could not be verified (winget is not on PATH)." }
+            default      { "$winAppRuntimeLabel is not installed on this machine." }
         }
         if ($InstallWinAppSdk) {
             # winget exits 'no applicable update' when the runtime is already current,

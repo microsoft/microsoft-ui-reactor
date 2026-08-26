@@ -376,28 +376,38 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         if (!proc.WaitForExit(TimeoutMs))
         {
             // Every documented failure of Kill(entireProcessTree: true) is tolerable
-            // here — we are already reporting the timeout, and a probe we could not
-            // reap is not more informative than one we could. Caught individually
-            // rather than as Exception so a genuinely unexpected type still surfaces:
+            // here — the timeout is already the failure being reported, and a probe we
+            // could not reap is not more informative than one we could. Caught
+            // individually rather than as Exception so a genuinely unexpected type
+            // still surfaces, and recorded rather than swallowed so the assertion can
+            // say whether a stray process was left behind:
             //   InvalidOperationException — already exited, or no associated process
             //   Win32Exception           — could not be terminated, or is terminating
             //   AggregateException       — part of the tree survived
+            global::System.Exception? killFailure = null;
             try
             {
                 proc.Kill(entireProcessTree: true);
             }
-            catch (global::System.InvalidOperationException)
+            catch (global::System.InvalidOperationException ex)
             {
+                killFailure = ex;
             }
-            catch (global::System.ComponentModel.Win32Exception)
+            catch (global::System.ComponentModel.Win32Exception ex)
             {
+                killFailure = ex;
             }
-            catch (global::System.AggregateException)
+            catch (global::System.AggregateException ex)
             {
+                killFailure = ex;
             }
 
+            var outcome = killFailure is null
+                ? "and was terminated"
+                : $"and could not be terminated ({killFailure.GetType().Name}: {killFailure.Message}) — a stray process may remain";
+
             Assert.Fail(
-                $"PowerShell probe did not exit within {TimeoutMs / 1000}s and was terminated. Script:\n{script}");
+                $"PowerShell probe did not exit within {TimeoutMs / 1000}s {outcome}. Script:\n{script}");
         }
 
         // WaitForExit(int) returns as soon as the process ends; the parameterless
