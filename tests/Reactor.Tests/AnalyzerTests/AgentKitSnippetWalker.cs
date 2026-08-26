@@ -237,21 +237,49 @@ internal sealed class ReactorSurface
     /// <see langword="null"/> when that cannot be established.
     /// </summary>
     /// <remarks>
-    /// Prefers the <c>Set</c> overload because that is the signal the shipped analyzer uses — the
-    /// generator attributes live in <c>Reactor.Wrappers.Abstractions</c> and are referenced with
-    /// <c>PrivateAssets="all"</c>, so they are unresolvable in a consumer compilation. The
-    /// attribute is the fallback for elements that declare no <c>Set</c> overload;
-    /// <c>ModifierTableIntegrityTests.Every_Element_Set_Overload_Names_The_Control_Its_Descriptor_Mounts</c>
-    /// pins the two to each other, so the fallback cannot disagree with the primary.
+    /// <para>
+    /// Read from the <c>Set(this TElement, Action&lt;TControl&gt;)</c> overload, and <b>only</b>
+    /// from there — no generator-attribute fallback. <c>NoOpModifierAnalyzer.TryGetMountedControl</c>
+    /// resolves the same way and stays silent when an element declares no <c>Set</c> overload
+    /// (pinned by its <c>Does_Not_Fire_For_An_Element_With_No_Set_Overload</c> test), because the
+    /// generator attributes live in <c>Reactor.Wrappers.Abstractions</c> and do not flow to
+    /// consumers.
+    /// </para>
+    /// <para>
+    /// An earlier revision fell back to the attribute, which made this gate report on receivers the
+    /// packaged analyzer cannot resolve — <c>SemanticElement</c> among them. A documentation gate
+    /// stricter than the rule it enforces produces findings a reader cannot act on, so the two
+    /// resolve identically or the claim "this mirrors REACTOR_MOD_003" is not true.
+    /// </para>
     /// </remarks>
     public Type? MountedControl(Type element)
     {
         var fromSet = SetControls(element);
-        if (fromSet.Count == 1)
-            return fromSet.Single();
-
-        return fromSet.Count == 0 ? DeclaredControl(element) : null;
+        return fromSet.Count == 1 ? fromSet.Single() : null;
     }
+
+    /// <summary>
+    /// True when <paramref name="modifier"/> resolves as a method on <paramref name="element"/> —
+    /// either a type-specific overload or a generic one.
+    /// </summary>
+    /// <remarks>
+    /// The analyzer offers a replacement only once it resolves as an invocable member on the
+    /// receiver, which is why <c>LineElement</c> — having no <c>Fill</c> — falls through to
+    /// <c>Stroke</c>. Naming a replacement that does not exist would hand the reader a remedy that
+    /// does not compile, and would reject a Line counterexample that correctly documents
+    /// <c>.Stroke(...)</c>.
+    /// </remarks>
+    [UnconditionalSuppressMessage(
+        "Trimming", "IL2075",
+        Justification = "Test-only surface reader: reflects the public static methods of ElementExtensions, resolved by name from the Reactor assembly. Intentional and JIT-only; behaviour-neutral.")]
+    public bool HasModifier(Type element, string modifier) =>
+        ElementExtensionsType
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(m => m.Name == modifier)
+            .Select(m => m.GetParameters())
+            .Any(p => p.Length > 0
+                      && (p[0].ParameterType.IsGenericParameter
+                          || p[0].ParameterType.IsAssignableFrom(element)));
 
     /// <summary>
     /// The control named by an element's <c>[GenerateReactorWrapper]</c> /
@@ -869,7 +897,13 @@ internal static class AgentKitSnippetWalker
         if (control is not null
             && ReactorSurface.ControlBaseChain(control).Contains("Shape", StringComparer.Ordinal)
             && NoOpModifierAnalyzer.ShapeReplacements.TryGetValue(modifier, out var shape))
-            return shape.FirstOrDefault();
+        {
+            // In order, and only if it exists on this element — the analyzer's rule, and the reason
+            // LineElement falls through from Fill to Stroke. Taking the first candidate blindly
+            // would name a remedy that does not compile, and would reject a Line counterexample
+            // that correctly documents `.Stroke(...)`.
+            return shape.FirstOrDefault(candidate => ReactorSurface.Instance.HasModifier(element, candidate));
+        }
 
         return null;
     }

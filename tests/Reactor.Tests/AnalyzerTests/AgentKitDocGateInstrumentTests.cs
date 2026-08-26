@@ -616,23 +616,65 @@ public class AgentKitDocGateInstrumentTests
     {
         Assert.Contains("Semantics", ReactorSurface.Instance.TypeChangingModifiers.Keys);
 
+        // The chain's element is the SemanticElement, not the Border that opened it.
+        Assert.Equal(
+            ReactorSurface.Instance.TypeChangingModifiers["Semantics"],
+            ReactorSurface.Instance.Element("Semantics", 0));
+
+        // ...and because SemanticElement declares no `Set` overload, the receiver is unresolvable,
+        // so the chain is skipped rather than attributed to the Border. That matches the analyzer,
+        // which is silent on receivers it cannot resolve the same way. The value of the stop is
+        // therefore *non*-attribution: without it the walk would judge a SemanticPanel against
+        // Border's gate.
         var scan = AgentKitSnippetWalker.Scan(new[]
         {
             new AgentKitSnippet("fixture/semantics.md", 1, "Border(child).Semantics(role: \"button\").Padding(16)"),
         });
 
-        var finding = Assert.Single(scan.Of(AgentKitFindingKind.DroppedModifier));
-        Assert.Equal("Padding", finding.Modifier);
-        Assert.Equal("SemanticElement", finding.ElementName);
+        Assert.Empty(scan.Findings);
+        Assert.Null(ReactorSurface.Instance.MountedControl(ReactorSurface.Instance.Element("Semantics", 0)!));
+    }
 
-        // Control: without the type change the same chain is sound, so this is not simply
-        // reporting every Border.
-        var plain = AgentKitSnippetWalker.Scan(new[]
-        {
-            new AgentKitSnippet("fixture/semantics.md", 1, "Border(child).Padding(16)"),
-        });
+    /// <summary>
+    /// A shape replacement is only named once it exists on that element.
+    /// </summary>
+    /// <remarks>
+    /// The analyzer resolves candidates in order and skips any that is not an invocable member on
+    /// the receiver, which is why <c>LineElement</c> — having no <c>Fill</c> — falls through to
+    /// <c>Stroke</c>. Taking the first candidate blindly named a remedy that does not compile, and
+    /// would reject a Line counterexample correctly documenting <c>.Stroke(...)</c>.
+    /// </remarks>
+    [Theory]
+    [InlineData("Rectangle().Background(brush)", "Fill")]
+    [InlineData("Line().Background(brush)", "Stroke")]
+    public void A_Shape_Replacement_Must_Exist_On_That_Element(string snippet, string expected)
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/shape.md", 1, snippet) });
 
-        Assert.Empty(plain.Findings);
+        Assert.Equal(expected, Assert.Single(scan.Of(AgentKitFindingKind.DroppedModifier)).Replacement);
+    }
+
+    /// <summary>
+    /// The mounted control comes from the <c>Set</c> overload alone, as the analyzer's does.
+    /// </summary>
+    /// <remarks>
+    /// An earlier revision fell back to the generator attribute, which made this gate report on
+    /// receivers <c>NoOpModifierAnalyzer.TryGetMountedControl</c> cannot resolve — a documentation
+    /// gate stricter than the rule it enforces, producing findings a reader cannot act on.
+    /// </remarks>
+    [Fact]
+    public void An_Element_With_No_Set_Overload_Is_Unresolvable()
+    {
+        var semantic = ReactorSurface.Instance.Element("Semantics", 0);
+
+        Assert.NotNull(semantic);
+        Assert.Empty(ReactorSurface.Instance.SetControls(semantic!));
+        Assert.Null(ReactorSurface.Instance.MountedControl(semantic!));
+
+        // Control: an element that *does* declare Set still resolves, so this is not passing
+        // because MountedControl stopped working.
+        var border = ReactorSurface.Instance.Element("Border", 0);
+        Assert.NotNull(ReactorSurface.Instance.MountedControl(border!));
     }
 
     /// <summary>
