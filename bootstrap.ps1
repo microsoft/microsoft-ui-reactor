@@ -473,11 +473,40 @@ Write-Dbg "Local nupkg feed: $feed"
 # apphost) succeeds. The packed IL itself is platform-portable.
 Write-Dbg "Host arch resolved to: $hostArch"
 
+# Stamp a monotonically-increasing local version.
+#
+# Without an explicit -p:Version the SDK defaults to 1.0.0 on *every* commit,
+# so re-running bootstrap packed a byte-new binary under a version NuGet had
+# already seen. `dotnet tool update` then compared 1.0.0 to 1.0.0, decided
+# nothing was newer, no-opped, and exited 0 — leaving a months-stale `mur` on
+# PATH while bootstrap reported success.
+#
+# The scheme has to clear three constraints simultaneously, and the two
+# obvious encodings each fail one of them:
+#   * AssemblyVersion/FileVersion derive from the numeric components and cap
+#     each at 65534 (UInt16), so a date-based minor such as 1.260826.1511
+#     fails the build outright with CS7034.
+#   * `dotnet tool update` refuses to move to a *lower* version even when the
+#     version is pinned with --version, and a prerelease label such as
+#     1.0.0-local.<stamp> sorts BELOW the stable 1.0.0 that is already
+#     installed — it fails with "is lower than existing version 1.0.0".
+# So: a stable (non-prerelease) version, strictly greater than 1.0.0, with
+# every component inside UInt16. Minor = days since 2020-01-01 (~2400 today,
+# and good for ~179 years); patch = minute of day (0-1439). Both roll over
+# correctly: the last minute of a day is 1.N.1439 and the first minute of the
+# next is 1.N+1.0, which compares higher.
+$nowUtc = (Get-Date).ToUniversalTime()
+$cliLocalVersion = '1.{0}.{1}' -f `
+    [int]($nowUtc.Date - [datetime]'2020-01-01').TotalDays, `
+    [int]$nowUtc.TimeOfDay.TotalMinutes
+Write-Dbg "Local mur version stamp: $cliLocalVersion"
+
 $cliPackArgs = @(
     'pack',
     (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj'),
     '-c', $Configuration,
     "-p:Platform=$hostArch",
+    "-p:Version=$cliLocalVersion",
     '-o', $feed,
     '--nologo', '-v:m'
 )
@@ -510,7 +539,8 @@ if ($SkipMurInstall) {
     $toolArgs = Get-ReactorToolArguments `
         -Feed $feed `
         -NuGetConfig $effectiveNuGetConfig `
-        -NuGetSource $effectiveNuGetSource
+        -NuGetSource $effectiveNuGetSource `
+        -Version $cliLocalVersion
     if ($existing) {
         Write-Dbg "Existing global tool detected ($($existing.Line.Trim())); using 'dotnet tool update'"
         & dotnet tool update @toolArgs
@@ -533,6 +563,30 @@ if ($SkipMurInstall) {
             Write-Dbg "$dotnetTools already on current-process PATH"
         }
     }
+
+    # Prove the binary on PATH is the one we just built.
+    #
+    # The exit-code check above cannot detect a stale tool: a no-op `dotnet
+    # tool update` exits 0. That is exactly how installs drifted months behind
+    # HEAD while every bootstrap run reported success. The SDK appends the
+    # source revision to AssemblyInformationalVersion, so `mur --version`
+    # prints `mur <ver>+<40-hex-sha>` — compare that against HEAD.
+    $expectedSha = & git -C $repoRoot rev-parse HEAD 2>$null
+    if ($LASTEXITCODE -ne 0) { $expectedSha = $null }
+    $murVersionLine = & mur --version 2>$null | Select-Object -First 1
+    if ($expectedSha -and $murVersionLine -match '\+([0-9a-fA-F]{40})') {
+        $installedSha = $Matches[1]
+        if ($installedSha -ne $expectedSha) {
+            Fail ("Installed mur reports revision $($installedSha.Substring(0,8)) but HEAD is $($expectedSha.Substring(0,8)). " +
+                  "The global tool was not replaced. Run: dotnet tool uninstall -g Microsoft.UI.Reactor.Cli, then re-run ./bootstrap.ps1.")
+        }
+        Write-Ok "mur verified at revision $($expectedSha.Substring(0,8)) (version $cliLocalVersion)"
+    } else {
+        # Non-fatal: a shallow/exported tree has no git, and a consumer build
+        # may strip the revision suffix. Say so rather than implying success.
+        Write-Host "    [warn] Could not verify the installed mur revision (mur --version returned '$murVersionLine')." -ForegroundColor Yellow
+    }
+
     Write-Ok "mur installed as global tool (also on this shell's PATH)"
 }
 

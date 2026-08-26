@@ -249,7 +249,8 @@ function Get-ReactorToolArguments {
     param(
         [Parameter(Mandatory)][string]$Feed,
         [string]$NuGetConfig,
-        [string]$NuGetSource
+        [string]$NuGetSource,
+        [string]$Version
     )
 
     $arguments = New-Object System.Collections.Generic.List[string]
@@ -261,6 +262,17 @@ function Get-ReactorToolArguments {
         $arguments.Add($NuGetSource)
     }
     $arguments.Add('Microsoft.UI.Reactor.Cli')
+    # Pin the exact version we just packed. Without this, `dotnet tool update`
+    # resolves the highest version in the feed and compares it to what is
+    # installed — and because the pack used to produce a constant `1.0.0` on
+    # every commit, that comparison said "already up to date" and silently
+    # no-opped with exit 0. An explicit --version removes the dependency on
+    # version ordering entirely: the requested version is installed whether it
+    # sorts higher, lower, or equal.
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        $arguments.Add('--version')
+        $arguments.Add($Version)
+    }
     $arguments.Add('--no-cache')
     $arguments.Add('--ignore-failed-sources')
     if (-not [string]::IsNullOrWhiteSpace($NuGetConfig)) {

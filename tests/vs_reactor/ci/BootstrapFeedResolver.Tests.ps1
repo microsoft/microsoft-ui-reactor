@@ -230,6 +230,7 @@ try {
     Assert-Equal '-g|--add-source|C:\repo\local-nupkgs|--add-source|https://packagefeedproxy.microsoft.io/nuget/v3/index.json|Microsoft.UI.Reactor.Cli|--no-cache|--ignore-failed-sources' `
         ($toolArgs -join '|') 'tool arguments include both local and automatic proxy sources'
 
+<<<<<<< HEAD
     # Resolve-ReactorNuGetFeedOverride is what scripts a developer runs directly
     # (Build-Vsix.ps1) use: explicit arguments first, then the same user-config
     # discovery, and no network probe. $profile still carries `profile-proxy`
@@ -266,6 +267,22 @@ try {
     New-Item -ItemType Directory -Path $emptyHome | Out-Null
     Assert-Equal $null (Resolve-ReactorNuGetFeedOverride -AppData $emptyHome -UserProfile $emptyHome) `
         'no configured proxy yields no override, preserving the repo public default'
+
+    # An omitted -Version must not emit a --version flag (back-compat with the
+    # pre-existing call shape asserted above).
+    Assert-True ($toolArgs -notcontains '--version') `
+        'tool arguments omit --version when no version is supplied'
+
+    # Regression guard for the stale-global-tool bug: bootstrap packs a per-run
+    # version stamp and must pin it explicitly, because `dotnet tool update`
+    # silently no-ops (exit 0) when the resolved version equals the installed
+    # one. Sample value matches the shipped stamp shape: 1.<days since
+    # 2020-01-01>.<minute of day>.
+    $toolArgs = Get-ReactorToolArguments `
+        -Feed 'C:\repo\local-nupkgs' `
+        -Version '1.2429.1352'
+    Assert-Equal '-g|--add-source|C:\repo\local-nupkgs|Microsoft.UI.Reactor.Cli|--version|1.2429.1352|--no-cache|--ignore-failed-sources' `
+        ($toolArgs -join '|') 'tool arguments pin the explicitly supplied version'
 
     $env:RestoreConfigFile = 'before.config'
     $env:RestoreSources = 'before-source'
