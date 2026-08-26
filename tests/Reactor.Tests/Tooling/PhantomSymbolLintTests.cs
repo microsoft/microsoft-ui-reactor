@@ -381,29 +381,49 @@ public sealed class PhantomSymbolLintTests
         Assert.Empty(LintExample(line));
 
     /// <summary>
-    /// Expression-shaped single arguments. The identifier arm demands a ')'
-    /// straight after the name, so every one of these slipped through on the
-    /// uncompiled surfaces the gate exists to protect.
+    /// Expression-shaped single arguments. Enumerating argument prefixes was
+    /// open-ended by construction — each new shape needed another arm, and
+    /// three (ternary, concatenation, cast) were still missing when the
+    /// enumeration was replaced by balanced scanning.
     /// </summary>
     [Theory]
     [InlineData("var e = Text(GetLabel());")]
     [InlineData("var e = Text(items[0]);")]
     [InlineData("var e = Text(model.Name ?? \"\");")]
     [InlineData("return Text(vm.Title());")]
+    [InlineData("var e = Text(enabled ? \"On\" : \"Off\");")]
+    [InlineData("var e = Text(prefix + value);")]
+    [InlineData("var e = Text((string)value);")]
+    [InlineData("var e = Text($\"{count} items\");")]
     public void Fires_OnExpressionShapedArguments(string line) =>
         Assert.Contains(LintExample(line), f => f.Message.Contains("'Text'"));
 
     /// <summary>
-    /// …and the widening must not reopen the prose class. Each of these is
-    /// identifier-led only in the English sense; none is followed by '(', '['
-    /// or '??', which is exactly what the new arms require.
+    /// …and the structural rule must not reopen the prose class. A C# argument
+    /// never has two identifier tokens separated by only whitespace, which is
+    /// exactly what English does — that one test replaces every prefix arm.
+    /// The multi-argument cases pin the other exclusion: a single top-level
+    /// argument, so the positional D3Charts shape stays out even unqualified.
     /// </summary>
     [Theory]
     [InlineData("Text (the element) is set separately.")]
     [InlineData("Placeholder text (for TextBoxElement etc.) is set separately.")]
+    [InlineData("Text (a single line) wraps by default.")]
     [InlineData("var e = D3Charts.Text(16, 16, \"hi\");")]
     [InlineData("var e = CellRenderers.Text(row);")]
-    public void Silent_OnProseAndQualifiedMembersAfterWidening(string line) =>
+    [InlineData("var e = Text(16, 16, \"hi\");")]
+    public void Silent_OnProseAndMultiArgCalls(string line) =>
+        Assert.Empty(LintExample(line));
+
+    /// <summary>
+    /// The elided-argument placeholder is how prose names a signature, so it
+    /// must stay silent — including in the sentences that warn against this
+    /// very phantom (charting.md.dt says "no core `Text(...)` element factory").
+    /// </summary>
+    [Theory]
+    [InlineData("There is no core Text(...) element factory.")]
+    [InlineData("The Text(…) members that exist are positional.")]
+    public void Silent_OnElidedArgumentPlaceholder(string line) =>
         Assert.Empty(LintExample(line));
 
     /// <summary>

@@ -28,7 +28,27 @@ internal sealed record PhantomFinding(
 /// discriminators — see the table in <see cref="PhantomSymbolLint.Phantoms"/>.
 /// </param>
 /// <param name="Suggestion">The correct spelling to steer the author to.</param>
-internal sealed record PhantomSymbol(string Name, Regex Pattern, string Suggestion);
+/// <param name="Name">Reported identifier.</param>
+/// <param name="Pattern">
+/// Line matcher. Ignored when <paramref name="Scanner"/> is supplied.
+/// </param>
+/// <param name="Suggestion">What to write instead.</param>
+/// <param name="Scanner">
+/// Optional structural matcher for shapes a regex cannot express. Supplied for
+/// <c>Text</c>, whose argument is an arbitrary C# expression: enumerating
+/// argument prefixes is open-ended by construction and kept missing shapes
+/// (a ternary, a concatenation, a cast). Balanced scanning ends that.
+/// </param>
+internal sealed record PhantomSymbol(
+    string Name,
+    Regex Pattern,
+    string Suggestion,
+    global::System.Func<string, bool>? Scanner = null)
+{
+    /// <summary>Whether this phantom appears on the (already masked) line.</summary>
+    internal bool Matches(string line) =>
+        Scanner is not null ? Scanner(line) : Pattern.IsMatch(line);
+}
 
 /// <summary>
 /// Documentation-surface phantom-API lint (<c>REACTOR_DOC_PHANTOM_001</c>).
@@ -107,22 +127,17 @@ internal static class PhantomSymbolLint
         // identifier argument cannot be D3Charts.Text, which takes x, y and
         // text positionally, so requiring the closing paren keeps that excluded.
         //
-        // The last three alternatives cover expression-shaped single arguments
-        // — `Text(GetLabel())`, `Text(items[0])`, `Text(model.Name ?? "")` —
-        // which the identifier arm misses because it demands a ')' immediately
-        // after the identifier. Every one of them is still identifier-led, which
-        // is what keeps English prose out: "Text (the element)" fails all three
-        // because "the" is followed by a space, not '(', '[' or '??'.
+        // The scanner replaces what used to be an enumeration of argument
+        // prefixes (literal / bare identifier / call / indexer / null-coalesce).
+        // That enumeration was open-ended by construction and kept missing
+        // shapes — `Text(enabled ? "On" : "Off")`, `Text(prefix + value)`,
+        // `Text((string)value)` — each of which needed another arm. Balanced
+        // scanning asks the structural question instead: an unqualified `Text`
+        // invoked with exactly one top-level argument.
         new("Text",
-            new Regex(
-                @"(?<![A-Za-z0-9_.])Text\s*\(\s*(?:" +
-                @"(?:\$|@)?(?:\\""|""""|"")" +          // "s", \"s\", ""s""
-                @"|[A-Za-z_][A-Za-z0-9_.]*\s*\)" +      // Text(statusMessage)
-                @"|[A-Za-z_][A-Za-z0-9_.]*\s*\(" +      // Text(GetLabel())
-                @"|[A-Za-z_][A-Za-z0-9_.]*\s*\[" +      // Text(items[0])
-                @"|[A-Za-z_][A-Za-z0-9_.]*\s*\?\?" +    // Text(model.Name ?? "")
-                @")", RegexOptions.Compiled),
-            "TextBlock(...)"),
+            new Regex(@"(?<![A-Za-z0-9_.])Text\s*\(", RegexOptions.Compiled),
+            "TextBlock(...)",
+            LooksLikeSingleArgTextCall),
 
         // UseTheme: no such hook. Theme values are read from the Theme statics.
         new("UseTheme",
@@ -337,7 +352,7 @@ internal static class PhantomSymbolLint
             foreach (var phantom in Phantoms)
             {
                 if (skipNames.Contains(phantom.Name)) continue;
-                if (!phantom.Pattern.IsMatch(masked)) continue;
+                if (!phantom.Matches(masked)) continue;
 
                 findings.Add(new PhantomFinding(
                     Code,
@@ -362,6 +377,145 @@ internal static class PhantomSymbolLint
     /// An unpaired trailing backtick opens nothing: the span must close on the
     /// same line, matching CommonMark and keeping a lone "`" in prose inert.
     /// </remarks>
+    /// <summary>
+    /// Structural matcher for the <c>Text</c> phantom: an <b>unqualified</b>
+    /// <c>Text</c> invoked with exactly <b>one</b> top-level argument.
+    /// </summary>
+    /// <remarks>
+    /// <para>Two exclusions carry the whole rule.</para>
+    /// <para><b>Multi-argument calls are not this phantom.</b> The real members
+    /// named Text that take more than one argument — notably
+    /// <c>D3Charts.Text(x, y, text)</c> — are already excluded by the
+    /// unqualified check, and requiring a single top-level argument keeps a bare
+    /// <c>Text(16, 16, "hi")</c> out too.</para>
+    /// <para><b>English prose is not an expression.</b> A case-sensitive
+    /// <c>Text\(</c> matches sentences like "Text (the element) is set
+    /// separately", and a naive one-argument rule would fire on every one of
+    /// them. The discriminator is that a C# expression never contains two
+    /// identifier tokens separated by nothing but whitespace: <c>prefix +
+    /// value</c> has an operator between them, <c>the element</c> does not.
+    /// That single test admits every expression shape — ternary, concatenation,
+    /// cast, call, indexer, null-coalesce — without enumerating any of them.</para>
+    /// </remarks>
+    internal static bool LooksLikeSingleArgTextCall(string line)
+    {
+        foreach (Match m in TextCallOpener.Matches(line))
+        {
+            var open = m.Index + m.Length - 1;   // index of '('
+            var arg = ExtractSingleArgument(line, open);
+            if (arg is null) continue;
+            if (arg.Trim().Length == 0) continue;
+            // `Text(...)` / `Text(…)` is the universal "arguments elided" doc
+            // convention, not a call — it is the shape prose uses to *name* a
+            // signature. Treating it as an invocation would fire on every
+            // signature mention in the docset, including the sentences warning
+            // against this very phantom.
+            if (IsElidedArgument(arg)) continue;
+            if (HasAdjacentIdentifiers(arg)) continue;
+            return true;
+        }
+        return false;
+    }
+
+    private static readonly Regex TextCallOpener = new(
+        @"(?<![A-Za-z0-9_.])Text\s*\(", RegexOptions.Compiled);
+
+    /// <summary>
+    /// An argument made only of ellipsis punctuation — the documentation
+    /// placeholder for elided arguments, never valid C#.
+    /// </summary>
+    private static bool IsElidedArgument(string arg)
+    {
+        foreach (var c in arg)
+            if (c != '.' && c != '\u2026' && !char.IsWhiteSpace(c)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Returns the argument text when the parenthesis at <paramref name="open"/>
+    /// closes on the same line and holds exactly one top-level argument;
+    /// otherwise null. String and char literals are skipped so a comma or paren
+    /// inside them cannot break the scan.
+    /// </summary>
+    private static string? ExtractSingleArgument(string line, int open)
+    {
+        int depth = 0;
+        for (int i = open; i < line.Length; i++)
+        {
+            var c = line[i];
+
+            if (c == '"' || c == '\'')
+            {
+                i = SkipLiteral(line, i);
+                if (i < 0) return null;
+                continue;
+            }
+
+            if (c is '(' or '[' or '{') depth++;
+            else if (c is ')' or ']' or '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return line.Substring(open + 1, i - open - 1);
+                if (depth < 0) return null;
+            }
+            // A top-level comma means more than one argument.
+            else if (c == ',' && depth == 1) return null;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Index of the literal's closing quote, or -1 if unterminated.
+    /// </summary>
+    /// <remarks>
+    /// <!-- phantom:skip "Text" -->
+    /// A backslash is deliberately <b>not</b> treated as an escape. On these
+    /// surfaces a quote is spelled three ways — <c>"</c>, <c>\"</c> (example
+    /// code embedded in a C# string literal, the real docking defect) and
+    /// <c>""</c> (the same inside a verbatim string) — so a backslash before a
+    /// quote is part of the quote's spelling, not an escape of it. Honouring it
+    /// as an escape swallows the closing quote and the whole call scans as
+    /// unterminated, which is exactly how <c>Text(\"Hello\")</c> slipped past.
+    /// The cost is a missed detection on the rare genuinely-escaped quote
+    /// inside a string; that direction is safe, a false positive is not.
+    /// </remarks>
+    private static int SkipLiteral(string line, int start)
+    {
+        var quote = line[start];
+        for (int i = start + 1; i < line.Length; i++)
+            if (line[i] == quote) return i;
+        return -1;
+    }
+
+    /// <summary>
+    /// True when the argument contains two identifier tokens separated only by
+    /// whitespace — the shape of English prose, never of a C# expression.
+    /// Literals are collapsed first so "Save the file" inside a string cannot
+    /// make a real call look like prose.
+    /// </summary>
+    private static bool HasAdjacentIdentifiers(string arg)
+    {
+        var stripped = new global::System.Text.StringBuilder();
+        for (int i = 0; i < arg.Length; i++)
+        {
+            if (arg[i] == '"' || arg[i] == '\'')
+            {
+                var end = SkipLiteral(arg, i);
+                if (end < 0) break;
+                stripped.Append('0');       // literals stand in as a value token
+                i = end;
+                continue;
+            }
+            stripped.Append(arg[i]);
+        }
+
+        return AdjacentIdentifiers.IsMatch(stripped.ToString());
+    }
+
+    private static readonly Regex AdjacentIdentifiers = new(
+        @"[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
+
     private static string MaskOutsideInlineCode(string line)
     {
         var buf = new char[line.Length];
