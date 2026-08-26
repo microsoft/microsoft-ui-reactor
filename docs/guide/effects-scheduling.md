@@ -234,7 +234,7 @@ UseEffect(() =>
         }
         catch (OperationCanceledException) { /* expected on cleanup */ }
     });
-    return () => { cts.Cancel(); cts.Dispose(); };
+    return () => { cts.Cancel(); };
 }, Array.Empty<object>());
 ```
 

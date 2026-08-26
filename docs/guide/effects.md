@@ -140,7 +140,7 @@ class TimerCleanupExample : Component
                 }
                 catch (OperationCanceledException) { /* expected on cleanup */ }
             });
-            return () => { cts.Cancel(); timer.Dispose(); cts.Dispose(); };
+            return () => { cts.Cancel(); timer.Dispose(); };
         }, isRunning);
 
         return VStack(12,
@@ -249,7 +249,7 @@ changing value from the dependency array.
 > never runs again. The concrete failure mode this prevents: a `PeriodicTimer`
 > that captures `cts` in the cleanup closure stops correctly when the dep
 > changes, but only if you return
-> `() => { cts.Cancel(); timer.Dispose(); cts.Dispose(); }` from the body.
+> `() => { cts.Cancel(); timer.Dispose(); }` from the body.
 > Forget the cleanup and the old timer keeps firing alongside
 > the new one. The scheduling internals — when each phase runs relative to
 > the reconciler — are documented in
@@ -287,7 +287,7 @@ class FetchCancellationExample : Component
                 }
                 catch (OperationCanceledException) { /* expected */ }
             });
-            return () => { cts.Cancel(); cts.Dispose(); };
+            return () => { cts.Cancel(); };
         }, query);
 
         return VStack(8,
@@ -456,7 +456,13 @@ class MissingCleanupDoExample : Component
                 }
                 catch (OperationCanceledException) { /* expected on unmount */ }
             });
-            return () => { cts.Cancel(); timer.Dispose(); cts.Dispose(); };
+            // Cancel the source and dispose the timer; do NOT dispose the
+            // source. The fire-and-forget worker shares ownership of it, and
+            // CancellationTokenSource.Dispose is not safe alongside concurrent
+            // member access — a call still registering against the token would
+            // see ObjectDisposedException. A CTS with no timer holds no
+            // unmanaged resource, so dropping the reference is enough.
+            return () => { cts.Cancel(); timer.Dispose(); };
         }, Array.Empty<object>());
 
         return TextBlock($"Ticks: {tick}").Padding(24);

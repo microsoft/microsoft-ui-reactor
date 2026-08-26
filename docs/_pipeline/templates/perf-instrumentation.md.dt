@@ -82,7 +82,7 @@ render timing and the effect-flush boundary; `State` (0x4) covers
 mount and unmount; `Errors` (0x20) is severity-Error events;
 `EventDispatch` (0x40)
 covers the trampoline that fans WinUI routed events out to the
-Reactor element callbacks. Spec 044 added seven more for the
+Reactor element callbacks. Spec 044 added six more for the
 subsystems outside that loop — `Hosting` (0x80, window / HWND / DPI /
 backdrop), `Persistence` (0x100), `Navigation` (0x200), `Intl` (0x400,
 missing keys and format fallback), `Theme` (0x800), `Shell` (0x1000,

@@ -233,7 +233,7 @@ public override Element Render()
             }
             catch (OperationCanceledException) { /* expected on cleanup */ }
         });
-        return () => { cts.Cancel(); cts.Dispose(); };
+        return () => { cts.Cancel(); };
     });
 
     return TextBlock($"Elapsed: {seconds}s");

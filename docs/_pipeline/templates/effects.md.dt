@@ -147,7 +147,7 @@ The same ordering applies on unmount: cleanup runs once, the effect body
 never runs again. The concrete failure mode this prevents: a `PeriodicTimer`
 that captures `cts` in the cleanup closure stops correctly when the dep
 changes, but only if you return
-`() => { cts.Cancel(); timer.Dispose(); cts.Dispose(); }` from the body.
+`() => { cts.Cancel(); timer.Dispose(); }` from the body.
 Forget the cleanup and the old timer keeps firing alongside
 the new one. The scheduling internals — when each phase runs relative to
 the reconciler — are documented in

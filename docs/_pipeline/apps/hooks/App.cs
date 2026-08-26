@@ -111,7 +111,7 @@ class EffectDemo : Component
                 }
                 catch (OperationCanceledException) { /* expected on cleanup */ }
             });
-            return () => { cts.Cancel(); timer.Dispose(); cts.Dispose(); };
+            return () => { cts.Cancel(); timer.Dispose(); };
         }, running);
 
         return VStack(8,
@@ -258,7 +258,7 @@ static class DebouncedTextHook
                 try { await Task.Delay(ms, cts.Token); setDebounced(value); }
                 catch (OperationCanceledException) { }
             });
-            return () => { cts.Cancel(); cts.Dispose(); };
+            return () => { cts.Cancel(); };
         }, value);
 
         return (debounced, setValue);

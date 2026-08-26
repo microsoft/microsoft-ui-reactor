@@ -290,7 +290,7 @@ public static (string Value, Action<string> Set) UseDebouncedText(
         _ = Task.Delay(delay, cts.Token).ContinueWith(
             _ => setDebounced(value),
             TaskContinuationOptions.OnlyOnRanToCompletion);
-        return () => { cts.Cancel(); cts.Dispose(); };
+        return () => { cts.Cancel(); };
     }, value);
     return (debounced, setValue);
 }

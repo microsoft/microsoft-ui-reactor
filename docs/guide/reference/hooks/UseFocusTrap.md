@@ -30,7 +30,9 @@ Creates a focus trap handle that traps keyboard focus within a container
 when active. Use with the .FocusTrap() element modifier.
 
 ```csharp
-var trap = UseFocusTrap(isDialogOpen);
+// UseFocusTrap is an extension on Component / RenderContext, so it needs
+// an explicit receiver — there is no unqualified Component wrapper.
+var trap = this.UseFocusTrap(isDialogOpen);
 return Border(
 VStack(
 TextBlock("Confirm delete?"),

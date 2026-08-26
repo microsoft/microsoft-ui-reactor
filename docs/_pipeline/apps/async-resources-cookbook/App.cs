@@ -56,17 +56,13 @@ class BeforeUseResourceExample : Component
         UseEffect(() =>
         {
             var cts = new CancellationTokenSource();
-            // Capture the token: the worker below outlives the cleanup, and
-            // CancellationTokenSource.Dispose is not safe alongside concurrent
-            // member access. Reading the captured token struct is.
-            var token = cts.Token;
             setLoading(true);
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    var u = await DemoApi.GetUserAsync(42, token);
-                    if (!token.IsCancellationRequested)
+                    var u = await DemoApi.GetUserAsync(42, cts.Token);
+                    if (!cts.IsCancellationRequested)
                     {
                         setData(u);
                         setError(null);
@@ -76,14 +72,21 @@ class BeforeUseResourceExample : Component
                 catch (OperationCanceledException) { /* swallow */ }
                 catch (Exception ex)
                 {
-                    if (!token.IsCancellationRequested)
+                    if (!cts.IsCancellationRequested)
                     {
                         setError(ex);
                         setLoading(false);
                     }
                 }
             });
-            return () => { cts.Cancel(); cts.Dispose(); };
+            // Cancel only. The fire-and-forget worker shares ownership of the
+            // source, and CancellationTokenSource.Dispose is not safe alongside
+            // concurrent member access — a cancellation-aware call still
+            // registering against the token would see ObjectDisposedException.
+            // Nothing leaks: a CTS with no timer holds no unmanaged resource, so
+            // dropping the reference is enough. Dispose only when a single owner
+            // can prove the worker has finished.
+            return () => cts.Cancel();
         }, 42);
 
         if (loading) return (Element)TextBlock("Loading…").Padding(24);

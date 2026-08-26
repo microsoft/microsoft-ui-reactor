@@ -32,6 +32,7 @@ internal sealed record CrefTarget(
 internal sealed class CrefResolver
 {
     private readonly Dictionary<string, RouterResult> _byCref;
+    private readonly HashSet<string> _routedShortNames;
     private readonly Dictionary<string, string> _anchorsByCref;
 
     /// <param name="routedMembers">Every cref that has a page, mapped to it.
@@ -43,6 +44,13 @@ internal sealed class CrefResolver
         IReadOnlyDictionary<string, string>? anchorsByCref = null)
     {
         _byCref = routedMembers.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+        // Short names that already own a page. A fallback that shortens an
+        // unresolved cref to one of these would point the reader at a different,
+        // documented type — e.g. Input.FocusManager.Focus rendering as
+        // `FocusManager.Focus` next to the routed Hooks.FocusManager, which has
+        // no Focus at all.
+        _routedShortNames = new HashSet<string>(
+            _byCref.Values.Select(r => r.ShortName), StringComparer.Ordinal);
         _anchorsByCref = anchorsByCref is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : new Dictionary<string, string>(anchorsByCref, StringComparer.Ordinal);
@@ -127,7 +135,7 @@ internal sealed class CrefResolver
             // and record an unresolved entry so the caller can choose between
             // warn / fail.
             unresolved?.Add(cref);
-            var name = ShortNameFallback(cref);
+            var name = ShortNameFallback(cref, _routedShortNames);
             return $"`{name}`";
         });
 
@@ -185,7 +193,7 @@ internal sealed class CrefResolver
         return combined.Length == 0 ? "." : combined;
     }
 
-    private static string ShortNameFallback(string cref)
+    internal static string ShortNameFallback(string cref, IReadOnlySet<string>? routedShortNames = null)
     {
         var stem = cref;
         var kind = cref.Length >= 2 && cref[1] == ':' ? cref[0] : '\0';
@@ -206,6 +214,20 @@ internal sealed class CrefResolver
             var head = stem[..dot];
             var headDot = head.LastIndexOf('.');
             var declaring = headDot >= 0 ? head[(headDot + 1)..] : head;
+
+            // If that short type name already belongs to a *different* routed
+            // page, shortening would point at the wrong documented type. Keep
+            // one more namespace segment so the reader can tell them apart.
+            if (routedShortNames is not null
+                && routedShortNames.Contains(StripArity(declaring))
+                && headDot >= 0)
+            {
+                var ns = head[..headDot];
+                var nsDot = ns.LastIndexOf('.');
+                var nsTail = nsDot >= 0 ? ns[(nsDot + 1)..] : ns;
+                if (nsTail.Length > 0) declaring = nsTail + "." + declaring;
+            }
+
             if (declaring.Length > 0) name = declaring + "." + name;
         }
 

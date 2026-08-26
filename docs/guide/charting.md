@@ -541,7 +541,7 @@ class LiveChartDemo : Component
         {
             var cts = new CancellationTokenSource();
             _ = PumpAsync(cts.Token);
-            return () => { cts.Cancel(); cts.Dispose(); };
+            return () => { cts.Cancel(); };
         }, Array.Empty<object>());
 
         return VStack(12,

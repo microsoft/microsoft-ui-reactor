@@ -35,7 +35,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementFocusExtensions.UseElementFocus(
 
 Creates (or retrieves) a component-scoped `ElementRef` and pairs it
 with a `RequestFocus` action. Bind the ref to an element via `.Ref(ref)`.
-Calling `RequestFocus` schedules `FocusManager.Focus` on the UI
+Calling `RequestFocus` schedules `Input.FocusManager.Focus` on the UI
 dispatcher; if the ref's target has not mounted yet the call is a no-op.
 
 ### Examples
