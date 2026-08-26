@@ -133,8 +133,12 @@ internal sealed class CrefResolver
 
         // <paramref name="x"/> and <typeparamref name="T"/> carry no visible
         // text, so leaving them intact drops the word from the rendered
-        // sentence entirely. Emit them as inline code.
-        return ParamRefPattern.Replace(rewritten, m => $"`{m.Groups["name"].Value}`");
+        // sentence entirely. Emit them as inline code, then convert the
+        // remaining inline formatting tags that would otherwise reach the
+        // page as raw markup. (<para>/<list> are block-level and left alone.)
+        rewritten = ParamRefPattern.Replace(rewritten, m => $"`{m.Groups["name"].Value}`");
+        rewritten = InlineCodePattern.Replace(rewritten, m => $"`{m.Groups["text"].Value}`");
+        return BoldPattern.Replace(rewritten, m => $"**{m.Groups["text"].Value}**");
     }
 
     private static string MakeRelativeLink(string fromDir, string targetRelativePath)
@@ -160,22 +164,52 @@ internal sealed class CrefResolver
     private static string ShortNameFallback(string cref)
     {
         var stem = cref;
-        if (stem.Length >= 2 && stem[1] == ':') stem = stem[2..];
+        var kind = cref.Length >= 2 && cref[1] == ':' ? cref[0] : '\0';
+        if (kind != '\0') stem = stem[2..];
         var paren = stem.IndexOf('(');
         if (paren >= 0) stem = stem[..paren];
+
         var dot = stem.LastIndexOf('.');
         var name = dot >= 0 ? stem[(dot + 1)..] : stem;
+
+        // For a *member* cref keep the declaring type: `AppContexts.QueryCache`
+        // rather than a bare `QueryCache`, which produced sentences like
+        // "the ambient QueryCache from QueryCache" and hid which context key
+        // is actually being read. Types stay unqualified — the namespace adds
+        // noise without disambiguating.
+        if (kind is 'M' or 'P' or 'F' or 'E' && dot > 0)
+        {
+            var head = stem[..dot];
+            var headDot = head.LastIndexOf('.');
+            var declaring = headDot >= 0 ? head[(headDot + 1)..] : head;
+            if (declaring.Length > 0) name = declaring + "." + name;
+        }
 
         // Strip the CLR metadata arity suffix (`1, ``2) — rendering
         // `NavigationHandle`1` inside backticks both reads as noise and
         // terminates the code span early in Markdown.
+        return StripArity(name);
+    }
+
+    private static string StripArity(string name)
+    {
         var tick = name.IndexOf('`');
-        return tick >= 0 ? name[..tick] : name;
+        if (tick < 0) return name;
+        // Arity can appear on the declaring type as well as the member.
+        var dot = name.IndexOf('.', tick);
+        return dot > 0 ? name[..tick] + name[dot..] : name[..tick];
     }
 
     internal static readonly Regex ParamRefPattern = new(
         @"<(?:paramref|typeparamref)\s+name=""(?<name>[^""]+)""\s*/?>(?:\s*</(?:paramref|typeparamref)>)?",
         RegexOptions.Compiled);
+
+    // Inline XML-doc formatting that otherwise reaches the page as raw markup.
+    internal static readonly Regex InlineCodePattern = new(
+        @"<c>(?<text>.*?)</c>", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    internal static readonly Regex BoldPattern = new(
+        @"<b>(?<text>.*?)</b>", RegexOptions.Compiled | RegexOptions.Singleline);
 
     internal static readonly Regex SeeCrefPattern = new(
         @"<(?:see|seealso)\s+cref=""(?<cref>[^""]+)""\s*/?>(?:\s*</(?:see|seealso)>)?",

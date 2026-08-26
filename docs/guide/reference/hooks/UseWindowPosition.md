@@ -7,7 +7,7 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowPosition`
 
 ## Summary
 
-Subscribes to the host window's <c>PositionChanged</c> event and re-renders
-on change. Returns <c>(0, 0)</c> outside a window. (spec 054 §5.5)
+Subscribes to the host window's `PositionChanged` event and re-renders
+on change. Returns `(0, 0)` outside a window. (spec 054 §5.5)
 
 

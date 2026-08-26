@@ -269,8 +269,11 @@ combine:
 
 `UseDevtools()` returns `true` only when **both** are present. It is a
 `RenderContext` extension, so you call it from a
-[function component](components.md)'s `ctx` — or from any helper you
-hand the `ctx` to — and gate the dev-only element with a ternary:
+[function component](components.md)'s `ctx` — or from a helper you hand
+the `ctx` to, provided that helper is itself named `Use*`, since
+[`REACTOR_HOOKS_005`](rules-of-reactor.md) only permits hook calls from
+`Render()` or a `Use*` method — and gate the dev-only element with a
+ternary:
 
 ```csharp snippet="dev-tooling/devtools-gate"
 ```

@@ -18,7 +18,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseMutationExtensions.UseMutation``2(Micro
 ### Summary
 
 Overload that reads the ambient `QueryCache` from
-`QueryCache`.
+`AppContexts.QueryCache`.
 
 ## `UseMutation<T1, T2>(RenderContext, Func<T1, CancellationToken, Task<T2>>, QueryCache, MutationOptions<T1, T2>, IHookDispatcher)`
 
@@ -39,6 +39,6 @@ fires on unmount. Rethrow `OperationCanceledException` to honour it.
 invalidation regardless of [InvalidateKeys](MutationOptions.md).
 - **options** — Optional lifecycle callbacks; null uses defaults (no callbacks).
 - **dispatcher** — Optional dispatcher override; null captures the current
-<c>DispatcherQueue</c> at registration time (same convention as <c>UseResource</c>).
+`DispatcherQueue` at registration time (same convention as `UseResource`).
 
 

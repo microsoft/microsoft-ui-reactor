@@ -121,8 +121,14 @@ The legacy Element-record + `MountXxx`/`UpdateXxx` dispatch-switch path is gone.
    To register a third-party control or override a built-in globally, call
    `ControlRegistry.Register<TElement, TControl>` (or `RegisterDecorator`,
    `RegisterForDerivedTypes`) at startup. `ReactorApp.RegisterAllBuiltIns()` is the
-   opt-in bulk path for direct-record/AOT callers. Note `new MyElement(...)` alone
-   registers nothing — the factory call is what latches it.
+   opt-in bulk path for direct-record/AOT callers. Note the two latches differ:
+   for a **hand-authored built-in** the `Reg<>` touch lives in the factory body,
+   so `new MyElement(...)` alone registers nothing and the factory call is what
+   latches it; a **`[GenerateReactorWrapper]`** element registers from its
+   generated static constructor, so constructing one is already enough
+   (`UnregisteredHandlerAndRegisterAllBuiltInsTests` depends on that, and the
+   "unregistered handler" message deliberately never names
+   `GenerateReactorWrapper` as a cause).
 4. **Selftest fixture** in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`.
 
 See [`docs/guide/extending-reactor-controls.md`](docs/guide/extending-reactor-controls.md) for the authoring-shape decision tree (prop/engine shapes, children strategies, echo handling, pooling).

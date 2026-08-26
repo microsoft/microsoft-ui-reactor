@@ -19,7 +19,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementFocusExtensions.UseElementFocus(
 
 Component-extension overload of [UseElementFocus](UseElementFocus.md#useelementfocusrendercontext-focusstate).
 Equivalent to calling the `RenderContext`-extension form against
-<c>component.Context</c>; see that overload for the full contract.
+`component.Context`; see that overload for the full contract.
 
 ### Parameters
 
@@ -34,8 +34,8 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementFocusExtensions.UseElementFocus(
 ### Summary
 
 Creates (or retrieves) a component-scoped `ElementRef` and pairs it
-with a <c>RequestFocus</c> action. Bind the ref to an element via <c>.Ref(ref)</c>.
-Calling <c>RequestFocus</c> schedules `Focus` on the UI
+with a `RequestFocus` action. Bind the ref to an element via `.Ref(ref)`.
+Calling `RequestFocus` schedules `FocusManager.Focus` on the UI
 dispatcher; if the ref's target has not mounted yet the call is a no-op.
 
 ### Examples

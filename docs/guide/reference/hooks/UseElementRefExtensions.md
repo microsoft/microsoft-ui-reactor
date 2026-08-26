@@ -8,14 +8,14 @@ _cref_: `T:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions`
 ## Summary
 
 Hook that returns a strongly-typed `ElementRef` for binding to a
-concrete WinUI control via the <c>.Ref(...)</c> modifier. The typed ref removes
-the <c>(Button)ref.Current</c> cast at consumers (Composition, Ink, focus, …).
+concrete WinUI control via the `.Ref(...)` modifier. The typed ref removes
+the `(Button)ref.Current` cast at consumers (Composition, Ink, focus, …).
 
 ## Discussion
 
 Spec 033 §3. The same `ElementRef` instance is returned across
 re-renders (identity stable), so storing the ref in a deps array or comparing
-with `ReferenceEquals` is safe.
+with `Object.ReferenceEquals` is safe.
 
 ## Examples
 

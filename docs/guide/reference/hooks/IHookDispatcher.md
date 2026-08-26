@@ -13,7 +13,7 @@ completion thread (tests and headless hosts).
 
 ## Discussion
 
-The production implementation wraps <c>DispatcherQueue.TryEnqueue</c>; tests typically
+The production implementation wraps `DispatcherQueue.TryEnqueue`; tests typically
 install a synchronous stub that records invocations.
 
 

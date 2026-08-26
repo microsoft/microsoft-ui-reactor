@@ -21,7 +21,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCel
 
 Component-extension shim for [UseMemoCellsByIndex](UseMemoCellsByIndex.md#usememocellsbyindext1rendercontext-ireadonlylistt1-ireadonlylistint-funct1-int-element-object).
 Same semantics as the `RenderContext`-extension form;
-dispatches against <c>component.Context</c>.
+dispatches against `component.Context`.
 
 ### Parameters
 
@@ -39,7 +39,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions.UseMemoCellsByIndex
 ### Summary
 
 Memoize cell construction when the data source already knows which
-indices changed. Skips the per-cell `Equals`
+indices changed. Skips the per-cell `Object.Equals`
 scan entirely; the builder runs only for indices in
 `changedIndices`. When the item count changes
 between renders the overload falls back to a full rebuild
@@ -70,14 +70,14 @@ reconciler to skip the mutated cell.
 - **ctx** — The render context.
 - **items** — Source items.
 - **changedIndices** — Indices whose item differs from the
-previous render. Negative indices and indices >= <c>items.Count</c>
+previous render. Negative indices and indices >= `items.Count`
 throw `ArgumentOutOfRangeException`. Duplicate indices are a
 caller-contract violation but are tolerated: they are de-duplicated
 before the named cells are rebuilt, so each cell is rebuilt exactly once
 and the structural-skip hint's theme tally stays exact.
 - **builder** — Cell builder; same contract as
 [UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object).
-- **dependencies** — Trailing-<c>params</c> deps.
+- **dependencies** — Trailing-`params` deps.
 
 ### Discussion
 

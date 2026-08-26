@@ -18,9 +18,9 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseInfiniteResourceExtensions.UseInfiniteR
 ### Summary
 
 Overload that reads the ambient `QueryCache` from
-`QueryCache`. `ReactorHost` installs a
+`AppContexts.QueryCache`. `ReactorHost` installs a
 process-wide default cache at startup; tests or subtrees may override it via
-<c>.Provide(AppContexts.QueryCache, customCache)</c>.
+`.Provide(AppContexts.QueryCache, customCache)`.
 
 ## `UseInfiniteResource<T1, T2>(RenderContext, Func<T2, CancellationToken, Task<Page<T1, T2>>>, QueryCache, object[], InfiniteResourceOptions, IHookDispatcher, Func<int, T2>)`
 

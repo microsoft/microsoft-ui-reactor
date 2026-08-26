@@ -14,9 +14,9 @@ When `threadSafe` is true, reads and writes are synchronized
 with a per-hook lock so concurrent setter calls from many threads serialize.
 When false (default), cross-thread setter calls are auto-marshaled onto the
 captured UI dispatcher — the write and the rerender both run on the UI thread,
-so background-thread setters from <c>Task.Run</c>, <c>PeriodicTimer</c>, or
-callbacks after <c>await … ConfigureAwait(false)</c> work correctly without
-any extra opt-in. Use `threadSafe`: <c>true</c> when you need
+so background-thread setters from `Task.Run`, `PeriodicTimer`, or
+callbacks after `await … ConfigureAwait(false)` work correctly without
+any extra opt-in. Use `threadSafe`: `true` when you need
 many concurrent setters to apply in-place (i.e., without an intervening UI
 thread hop) or when the setter result must be visible to its caller before
 the next UI tick.

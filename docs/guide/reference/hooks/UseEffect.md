@@ -43,8 +43,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``1(System.Action,``
 
 ### Summary
 
-Single-dependency <c>UseEffect</c> overload that avoids the
-<c>params object[]</c> allocation (and value-type boxing) on the
+Single-dependency `UseEffect` overload that avoids the
+`params object[]` allocation (and value-type boxing) on the
 deps-unchanged path. Semantically identical to the params overload called
 with one dependency: the effect re-runs only when `d1`
 changes.
@@ -52,8 +52,8 @@ changes.
 ### Discussion
 
 If `d1`'s compile-time type is an array of reference types
-(e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
-element-wise — matching the <c>params object[]</c> overload — not as a single
+(e.g. `string[]`), it is treated as a dependency <em>list</em> and compared
+element-wise — matching the `params object[]` overload — not as a single
 reference-compared value. A dependency whose static type is not an array is
 always compared as one value, even if its runtime value happens to be an array.
 
@@ -64,15 +64,15 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``1(System.Func{Syst
 
 ### Summary
 
-Single-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
-<c>params object[]</c> allocation on the deps-unchanged path. Semantically
+Single-dependency cleanup-flavor `UseEffect` overload that avoids the
+`params object[]` allocation on the deps-unchanged path. Semantically
 identical to the params overload called with one dependency.
 
 ### Discussion
 
 If `d1`'s compile-time type is an array of reference types
-(e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
-element-wise — matching the <c>params object[]</c> overload — not as a single
+(e.g. `string[]`), it is treated as a dependency <em>list</em> and compared
+element-wise — matching the `params object[]` overload — not as a single
 reference-compared value. A dependency whose static type is not an array is
 always compared as one value, even if its runtime value happens to be an array.
 
@@ -83,8 +83,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``2(System.Action,``
 
 ### Summary
 
-Two-dependency <c>UseEffect</c> overload that avoids the
-<c>params object[]</c> allocation on the deps-unchanged path. Re-runs when
+Two-dependency `UseEffect` overload that avoids the
+`params object[]` allocation on the deps-unchanged path. Re-runs when
 either dependency changes.
 
 ## `UseEffect<T1, T2>(Func<Action>, T1, T2)`
@@ -94,8 +94,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``2(System.Func{Syst
 
 ### Summary
 
-Two-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
-<c>params object[]</c> allocation on the deps-unchanged path.
+Two-dependency cleanup-flavor `UseEffect` overload that avoids the
+`params object[]` allocation on the deps-unchanged path.
 
 ## `UseEffect<T1, T2, T3>(Action, T1, T2, T3)`
 
@@ -104,8 +104,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``3(System.Action,``
 
 ### Summary
 
-Three-dependency <c>UseEffect</c> overload that avoids the
-<c>params object[]</c> allocation on the deps-unchanged path. Re-runs when
+Three-dependency `UseEffect` overload that avoids the
+`params object[]` allocation on the deps-unchanged path. Re-runs when
 any dependency changes.
 
 ## `UseEffect<T1, T2, T3>(Func<Action>, T1, T2, T3)`
@@ -115,8 +115,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``3(System.Func{Syst
 
 ### Summary
 
-Three-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
-<c>params object[]</c> allocation on the deps-unchanged path.
+Three-dependency cleanup-flavor `UseEffect` overload that avoids the
+`params object[]` allocation on the deps-unchanged path.
 
 ## Featured in
 

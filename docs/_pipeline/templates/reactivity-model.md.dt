@@ -177,8 +177,12 @@ the same shape doesn't propagate. `Component<TProps>` overrides the
 props-aware sibling, `ShouldUpdate(TProps? old, TProps? next)`, with
 `!Equals(old, next)`: record props get structural comparison for free,
 so a parent that re-renders with equal props does not re-render the
-child. Class-typed props need their own `Equals` override or every
-parent render propagates.
+child. Class-typed props fall back to `Object.Equals`, which tries
+reference equality first: pass the *same* instance and the child is
+still skipped, but a freshly allocated instance — the usual case when
+props are built inline each render — compares unequal and propagates.
+Give a class-typed props type its own `Equals` override if you want
+structural comparison rather than identity.
 
 Override `ShouldUpdate()` to opt a propless component back in (rare —
 the typical reason is a context value the component implicitly reads

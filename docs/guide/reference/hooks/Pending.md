@@ -9,8 +9,8 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.PendingFactory.Pending(Microsoft.UI.Reacto
 
 Wraps `child` with a fresh [PendingScope](PendingScope.md) ([guide](../../hooks.md)). Renders
 `fallback` instead of `child` while any
-<c>UseResource</c>/<c>UseInfiniteResource</c> in the subtree is in the
-<c>Loading</c> state. <c>Reloading(previous)</c> does <b>not</b> trigger the
+`UseResource`/`UseInfiniteResource` in the subtree is in the
+`Loading` state. `Reloading(previous)` does **not** trigger the
 fallback — spec §10.1.
 
 ## Discussion

@@ -8,8 +8,8 @@ _cref_: `T:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions`
 ## Summary
 
 `Component`-class shims for [UseMemoCellsExtensions](UseMemoCellsExtensions.md) ([guide](../../hooks.md))
-so subclasses can call <c>UseMemoCells</c> without going through
-<c>this.Context</c>. Same semantics as the `RenderContext`
+so subclasses can call `UseMemoCells` without going through
+`this.Context`. Same semantics as the `RenderContext`
 extension methods.
 
 ## Discussion

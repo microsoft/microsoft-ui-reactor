@@ -28,15 +28,15 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseMemo``2(System.Func{``0},`
 
 ### Summary
 
-Single-dependency <c>UseMemo</c> overload that avoids the
-<c>params object[]</c> allocation (and value-type boxing) on the
+Single-dependency `UseMemo` overload that avoids the
+`params object[]` allocation (and value-type boxing) on the
 deps-unchanged path. Recomputes only when `d1` changes.
 
 ### Discussion
 
 If `d1`'s compile-time type is an array of reference types
-(e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
-element-wise — matching the <c>params object[]</c> overload — not as a single
+(e.g. `string[]`), it is treated as a dependency <em>list</em> and compared
+element-wise — matching the `params object[]` overload — not as a single
 reference-compared value. A dependency whose static type is not an array is
 always compared as one value, even if its runtime value happens to be an array.
 
@@ -47,8 +47,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseMemo``3(System.Func{``0},`
 
 ### Summary
 
-Two-dependency <c>UseMemo</c> overload that avoids the
-<c>params object[]</c> allocation on the deps-unchanged path.
+Two-dependency `UseMemo` overload that avoids the
+`params object[]` allocation on the deps-unchanged path.
 
 ## `UseMemo<T1, T2, T3, T4>(Func<T1>, T2, T3, T4)`
 
@@ -57,8 +57,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseMemo``4(System.Func{``0},`
 
 ### Summary
 
-Three-dependency <c>UseMemo</c> overload that avoids the
-<c>params object[]</c> allocation on the deps-unchanged path.
+Three-dependency `UseMemo` overload that avoids the
+`params object[]` allocation on the deps-unchanged path.
 
 ## Featured in
 

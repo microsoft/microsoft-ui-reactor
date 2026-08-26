@@ -289,8 +289,11 @@ combine:
 
 `UseDevtools()` returns `true` only when **both** are present. It is a
 `RenderContext` extension, so you call it from a
-[function component](components.md)'s `ctx` — or from any helper you
-hand the `ctx` to — and gate the dev-only element with a ternary:
+[function component](components.md)'s `ctx` — or from a helper you hand
+the `ctx` to, provided that helper is itself named `Use*`, since
+[`REACTOR_HOOKS_005`](rules-of-reactor.md) only permits hook calls from
+`Render()` or a `Use*` method — and gate the dev-only element with a
+ternary:
 
 ```csharp
 static class DevGate
@@ -299,7 +302,11 @@ static class DevGate
     // function component's ctx (or any helper you hand the ctx to) — there is
     // no Component-level forwarder. It returns true only when BOTH the
     // Reactor.DevtoolsSupport build switch and `--devtools app` are present.
-    public static Element Shell(RenderContext ctx)
+    //
+    // The helper is named Use* because it consumes a hook slot: REACTOR_HOOKS_005
+    // only permits hook calls from Render() or a Use*-named method, so a helper
+    // called `Shell` here would warn in any project that copies this.
+    public static Element UseShell(RenderContext ctx)
     {
         var dev = ctx.UseDevtools();
 
@@ -327,11 +334,15 @@ titlebar item only when `UseDevtools()` is true:
 ```csharp
 static class DevMenu
 {
-    public static Element TitleBar(RenderContext ctx)
+    public static Element UseTitleBar(RenderContext ctx)
     {
         // Subscribe during render — not inside the menu builder. The builder
         // lambda runs when the flyout opens, which is not a render pass, so a
         // hook call in there would break hook ordering.
+        //
+        // Named Use* for the same reason as DevGate.UseShell: it consumes a
+        // hook slot, which REACTOR_HOOKS_005 requires be done from Render() or
+        // a Use*-named helper.
         var debugUI = ctx.UseObservable(AppFlags.DebugUI).Value;
 
         return HStack(8,

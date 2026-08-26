@@ -18,8 +18,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigation``1`
 ### Summary
 
 Child mode: retrieves an ancestor's `NavigationHandle`
-from context. Throws if no ancestor provides one (i.e., no root <c>UseNavigation</c>
-with a <c>NavigationHost</c> exists above this component in the tree).
+from context. Throws if no ancestor provides one (i.e., no root `UseNavigation`
+with a `NavigationHost` exists above this component in the tree).
 
 ## `UseNavigation<T1>(T1)`
 
@@ -30,8 +30,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigation``1(``0)`
 
 Root mode: creates a navigation stack with the given initial route.
 Returns a stable `NavigationHandle` across re-renders.
-Wire this handle to a <c>NavigationHost</c> in the DSL to render route content.
+Wire this handle to a `NavigationHost` in the DSL to render route content.
 The handle is automatically provided to descendants via context so child components
-can call <c>UseNavigation&lt;TRoute&gt;()</c> (parameterless) to access it.
+can call `UseNavigation&lt;TRoute&gt;()` (parameterless) to access it.
 
 

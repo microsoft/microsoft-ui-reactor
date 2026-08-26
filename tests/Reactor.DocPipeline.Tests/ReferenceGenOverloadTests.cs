@@ -266,13 +266,16 @@ defaults:
         var result = GenerateFixture();
         var page = Page(result, "UseMutation");
 
-        // A member of an unrouted type.
-        Assert.Contains("`Focus`", page.Body, StringComparison.Ordinal);
+        // A member of an unrouted type. The fallback keeps the declaring type
+        // so the sentence still says *which* Focus — an unqualified `Focus`
+        // produced sentences like "the ambient QueryCache from QueryCache".
+        Assert.Contains("`FocusManager.Focus`", page.Body, StringComparison.Ordinal);
         Assert.DoesNotContain("[Focus](", page.Body, StringComparison.Ordinal);
         Assert.Contains(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_001"
             && f.Message.Contains("M:Microsoft.UI.Reactor.Input.FocusManager.Focus", StringComparison.Ordinal));
 
-        // And a plain type cref outside the category.
+        // And a plain type cref outside the category — types stay unqualified,
+        // since the namespace adds noise without disambiguating.
         Assert.Contains("`OperationCanceledException`", page.Body, StringComparison.Ordinal);
         Assert.Contains(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_001"
             && f.Message.Contains("T:System.OperationCanceledException", StringComparison.Ordinal));

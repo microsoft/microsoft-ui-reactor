@@ -21,7 +21,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCel
 
 Component-extension shim for [UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object).
 Same semantics as the `RenderContext`-extension form;
-dispatches against <c>component.Context</c>.
+dispatches against `component.Context`.
 
 ### Parameters
 
@@ -39,7 +39,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions.UseMemoCells``1(Mic
 
 Memoize cell construction for `items`. On the first
 render the builder runs for every index; on subsequent renders, an
-item that compares `Equals`
+item that compares `Object.Equals`
 against the previous render's value at the same index reuses the
 previous element. Any change to `dependencies`
 invalidates the entire cache and rebuilds every cell.
@@ -49,11 +49,11 @@ invalidates the entire cache and rebuilds every cell.
 - **ctx** — The render context.
 - **items** — Source items, one cell per item.
 - **builder** — Builder for a single cell. Must be a pure
-function of <c>(item, index)</c> plus `dependencies`.
+function of `(item, index)` plus `dependencies`.
 Closure captures missing from the deps list are flagged by the
-<c>REACTOR_HOOKS_007</c> analyzer.
-- **dependencies** — Trailing-<c>params</c> list of values
-the builder closes over. Equivalent semantics to <c>UseMemo</c>:
+`REACTOR_HOOKS_007` analyzer.
+- **dependencies** — Trailing-`params` list of values
+the builder closes over. Equivalent semantics to `UseMemo`:
 any change invalidates the entire memo.
 
 ### Discussion

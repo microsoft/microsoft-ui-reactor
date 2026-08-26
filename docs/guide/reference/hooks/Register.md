@@ -29,6 +29,6 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.PendingScope.Register(System.Object,System
 ### Summary
 
 Start tracking `token` with the given initial `isLoading`
-state. A hook typically uses its own <c>this</c>-equivalent as the token.
+state. A hook typically uses its own `this`-equivalent as the token.
 
 
