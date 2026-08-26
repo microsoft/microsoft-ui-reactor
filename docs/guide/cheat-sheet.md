@@ -167,7 +167,7 @@ out of the tree when `cond` is false — see the
 **List with stable keys.** `ForEach(items, x => Card(x).WithKey(x.Id))`
 so the reconciler can move rows rather than rebuild them.
 
-**Reference prop.** `var target = UseElementRef<FrameworkElement>()` →
+**Reference prop.** `var target = this.UseElementRef<FrameworkElement>()` →
 `Button("Open", show).Ref(target)` →
 `TeachingTip("Tip", target: target)`. Use reference props, not
 `target.Current`, for relationships that must survive late mount or

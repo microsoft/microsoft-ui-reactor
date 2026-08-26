@@ -52,6 +52,19 @@ public sealed class ReceiverRequiredHookDocTests
         global::System.IO.Path.Combine("docs", "_pipeline", "templates"),
     ];
 
+    /// <summary>A single-backtick inline code span.</summary>
+    static readonly Regex InlineCodeSpan = new(@"`[^`]+`", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Whether an inline span reads as an executable statement rather than a
+    /// bare signature mention. An assignment or a terminator is the tell:
+    /// <c>`var t = UseElementRef&lt;T&gt;()`</c> is code a reader will copy,
+    /// while <c>`UseFocusTrap(isActive)`</c> is naming the API.
+    /// </summary>
+    static bool IsStatementShaped(string span) =>
+        span.Contains('=', global::System.StringComparison.Ordinal) ||
+        span.Contains(';', global::System.StringComparison.Ordinal);
+
     [Fact]
     public void AgentKitAndTemplates_CallReceiverRequiredHooksWithAReceiver()
     {
@@ -84,8 +97,13 @@ public sealed class ReceiverRequiredHookDocTests
                 var relPath = global::System.IO.Path.GetRelativePath(root!, file).Replace('\\', '/');
                 var lines = global::System.IO.File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
 
-                // Only fenced code blocks. Prose naming `UseFocusTrap(isActive)`
-                // to describe the signature is not a call and must not fire.
+                // Fenced blocks are linted whole. Outside a fence only inline
+                // code spans are, and only when the span is statement-shaped —
+                // it assigns or terminates. That discriminator is what keeps
+                // the 51 prose mentions that merely name a signature (e.g.
+                // `UseFocusTrap(isActive)` in a reference table) silent while
+                // still catching `var target = UseElementRef<T>()` written as
+                // prose, which is every bit as uncompilable as the fenced form.
                 var inFence = false;
                 for (int i = 0; i < lines.Length; i++)
                 {
@@ -95,10 +113,22 @@ public sealed class ReceiverRequiredHookDocTests
                         inFence = !inFence;
                         continue;
                     }
-                    if (!inFence) continue;
+
+                    var haystacks = new List<string>();
+                    if (inFence)
+                    {
+                        haystacks.Add(lines[i]);
+                    }
+                    else
+                    {
+                        foreach (Match span in InlineCodeSpan.Matches(lines[i]))
+                            if (IsStatementShaped(span.Value))
+                                haystacks.Add(span.Value);
+                    }
+                    if (haystacks.Count == 0) continue;
 
                     foreach (var (name, rx) in patterns.Select(kv => (kv.Key, kv.Value)))
-                        if (rx.IsMatch(lines[i]))
+                        if (haystacks.Any(h => rx.IsMatch(h)))
                             findings.Add($"  {relPath}:{i + 1} '{name}' needs an explicit receiver " +
                                          $"(this.{name}(...) or ctx.{name}(...)) — it is an extension method " +
                                          $"with no protected Component wrapper, so this does not compile.");
