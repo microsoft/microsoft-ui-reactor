@@ -38,9 +38,11 @@ function Assert-True {
     else { $script:Fail++; $script:Failures.Add($Message) }
 }
 
-# These files are BOM-less UTF-8. Windows PowerShell 5.1 decodes such files as
-# ANSI, which corrupts every non-ASCII comment character and yields spurious
-# parse errors, so read them with an explicit encoding rather than -Raw.
+# These files are BOM-less UTF-8. Windows PowerShell 5.1 decodes them as ANSI,
+# which mangles every non-ASCII character. In a comment that is cosmetic, but a
+# mis-decoded byte inside a string literal can close the literal early and
+# desynchronize the parse, so read them with an explicit encoding rather than
+# -Raw: an AST assertion built on a corrupted tree can pass vacuously.
 function Get-Utf8Text {
     param([string]$Path)
     return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)

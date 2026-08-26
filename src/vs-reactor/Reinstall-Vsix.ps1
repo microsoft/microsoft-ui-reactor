@@ -15,9 +15,11 @@
 
 .PARAMETER NuGetSource
     Restore the VSIX through an explicit NuGet source. Forwarded to
-    Build-Vsix.ps1; ignored when -NuGetConfig is supplied. When neither is
-    given, Build-Vsix.ps1 detects a user-configured Microsoft package proxy
-    on its own.
+    Build-Vsix.ps1; when -NuGetConfig is also supplied that one wins and this is
+    ignored. Both are forwarded verbatim rather than being pre-filtered here, so
+    the precedence lives in exactly one place (Resolve-ReactorNuGetFeedOverride)
+    instead of being restated by every caller. When neither is given,
+    Build-Vsix.ps1 detects a user-configured package mirror on its own.
 
 .OUTPUTS
     Exit codes:

@@ -7,7 +7,8 @@
 
 .PARAMETER NuGetSource
     Restore through an explicit NuGet source instead of the repo's public
-    config. Ignored when -NuGetConfig is supplied.
+    config. Ignored when -NuGetConfig is supplied; see .NOTES for why that
+    precedence is resolved here rather than by callers.
 
 .PARAMETER MSBuildPath
     Use a specific MSBuild.exe instead of asking vswhere for the latest one.
@@ -158,7 +159,7 @@ try {
     }
 
     if (-not (Test-Path -LiteralPath $vsix)) {
-        Write-Error "Expected VSIX was not produced at '$vsix'. Ensure Visual Studio 2022 has the 'Visual Studio extension development' workload and VSSDK targets installed."
+        Write-Error "Expected VSIX was not produced at '$vsix'. Ensure Visual Studio 2022 or later has the 'Visual Studio extension development' workload and VSSDK targets installed."
         exit 1
     }
 } finally {

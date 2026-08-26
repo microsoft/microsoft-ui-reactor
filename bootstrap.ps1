@@ -360,16 +360,22 @@ if (-not $winAppRuntimeId) {
     $winAppRuntimeState = Get-WindowsAppRuntimeState -Id $winAppRuntimeId -RequiredSdkVersion $winAppSdkVersion
     if ($winAppRuntimeState -eq 'satisfied') {
         Write-Ok "$winAppRuntimeLabel installed"
-    } elseif ($winAppRuntimeState -eq 'unknown') {
+    } elseif ($winAppRuntimeState -eq 'unknown' -and -not $InstallWinAppSdk) {
+        # Not proven missing, so do not nag an interactive user or fail -NoWinAppSdk.
+        # -InstallWinAppSdk is handled below instead: an explicit force-install must
+        # not become a no-op just because the probe could not read winget's output.
         Write-Host "    [warn] Could not verify $winAppRuntimeLabel (winget unavailable or its output could not be read)." -ForegroundColor Yellow
         Write-Host "           If samples fail to launch, install it with: winget install $winAppRuntimeId"
     } else {
-        $problem = if ($winAppRuntimeState -eq 'outdated') {
-            "$winAppRuntimeLabel is installed but too old for Windows App SDK $winAppSdkVersion."
-        } else {
-            "$winAppRuntimeLabel is not installed on this machine."
+        $problem = switch ($winAppRuntimeState) {
+            'outdated' { "$winAppRuntimeLabel is installed but too old for Windows App SDK $winAppSdkVersion." }
+            'unknown'  { "$winAppRuntimeLabel could not be verified." }
+            default    { "$winAppRuntimeLabel is not installed on this machine." }
         }
         if ($InstallWinAppSdk) {
+            # winget exits 'no applicable update' when the runtime is already current,
+            # which Install-WithWinget already treats as success -- so installing on an
+            # unverifiable state is safe, and safer than skipping.
             Install-WithWinget -Id $winAppRuntimeId -Reason $winAppRuntimeLabel
         } elseif ($NoWinAppSdk) {
             Write-Host "    [skip] $problem (skipped per -NoWinAppSdk)." -ForegroundColor Yellow
