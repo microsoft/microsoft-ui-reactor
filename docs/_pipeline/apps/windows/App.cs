@@ -80,6 +80,7 @@ class NotePadWindow : Component
                 ? "(no owning window)"
                 : $"id={window.Id}  state={state}  dpi={window.Dpi}"),
             TextBox(text, setText, placeholderText: "Type something...")
+                .AutomationName("Document text")
                 .Width(360),
             Button("Close", () => window?.Close())
         ).Padding(16);
@@ -299,7 +300,9 @@ class TitleBarContentWindow : Component
         (TitleBar("Gallery") with
         {
             Content = HStack(8,
-                AutoSuggestBox("", _ => {}).Width(200),
+                AutoSuggestBox("", _ => {})
+                    .AutomationName("Search gallery")
+                    .Width(200),
                 Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
                     .AutomationName("Settings").IsDragRegion(false)),
         }).AutoRefreshDragRegions();
@@ -430,21 +433,24 @@ class DisplayDemo : Component
 
 class PickerDemo : Component
 {
-    // <snippet:pickers>
-    // Both helpers return null when the user cancels the dialog.
-    async Task OpenAsync()
+    public override Element Render()
     {
-        var file = await UseFilePickerAsync(new FilePickerOptions(
-            FileTypeFilter: [".txt", ".md"]));
-        if (file is null) return;
+        // <snippet:pickers>
+        // Both helpers return null when the user cancels the dialog.
+        var pickFile = UseFilePickerAsync;
+        var pickFolder = UseFolderPickerAsync;
 
-        var folder = await UseFolderPickerAsync(new FolderPickerOptions());
-        if (folder is null) return;
+        return Button("Open...", async () =>
+        {
+            var file = await pickFile(new FilePickerOptions(
+                FileTypeFilter: [".txt", ".md"]));
+            if (file is null) return;
+
+            var folder = await pickFolder(new FolderPickerOptions());
+            if (folder is null) return;
+        });
+        // </snippet:pickers>
     }
-    // </snippet:pickers>
-
-    public override Element Render() =>
-        Button("Open...", () => _ = OpenAsync());
 }
 
 static class WindowRegistry

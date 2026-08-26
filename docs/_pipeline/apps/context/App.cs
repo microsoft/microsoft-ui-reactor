@@ -145,9 +145,11 @@ static class AppContexts
 
 class UserContextExample : Component
 {
+    private static readonly CurrentUser InitialUser = new("u1", "Alice", IsAdmin: true);
+
     public override Element Render()
     {
-        var (user, setUser) = UseState(new CurrentUser("u1", "Alice", IsAdmin: true));
+        var (user, setUser) = UseState(InitialUser);
 
         return VStack(12,
             HStack(8,

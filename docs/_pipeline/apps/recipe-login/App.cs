@@ -67,14 +67,16 @@ class LoginForm : Component
             Heading("Sign in"),
             TextBox(email, setEmail, placeholderText: "you@example.com",
                 header: "Email").Width(280),
-            PasswordBox(pwd, setPwd, placeholderText: "8+ characters"),
+            PasswordBox(pwd, setPwd, placeholderText: "8+ characters")
+                .AutomationName("Password"),
             signIn.Error is null
                 ? Empty()
-                : TextBlock(signIn.Error.Message).Foreground("#C42B1C"),
+                : TextBlock(signIn.Error.Message).Foreground(Theme.SystemCritical),
             // SubmitAsync swallows the fault above, so this discard cannot
             // leave anything unobserved.
             Button(signIn.IsPending ? "Signing in…" : "Sign in",
                     () => _ = SubmitAsync())
+                .AutomationName("Sign in")
                 .IsEnabled(canSubmit)
         ).Padding(20).Width(320);
         // </snippet:render>

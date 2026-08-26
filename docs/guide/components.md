@@ -52,6 +52,7 @@ class Greeting : Component
         return VStack(12,
             TextBlock($"Hello, {name}!").FontSize(20).Bold(),
             TextBox(name, setName, placeholderText: "Your name")
+                .AutomationName("Name")
                 .Width(200)
         ).Padding(16);
     }
@@ -80,9 +81,9 @@ class Alert : Component<AlertProps>
     {
         var bg = Props.Severity switch
         {
-            "error" => "#FDE7E9",
-            "warning" => "#FFF4CE",
-            _ => "#DFF6DD"
+            "error" => Theme.SystemCriticalBackground,
+            "warning" => Theme.SystemCautionBackground,
+            _ => Theme.SystemSuccessBackground
         };
 
         return Border(

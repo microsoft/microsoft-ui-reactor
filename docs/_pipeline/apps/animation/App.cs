@@ -17,7 +17,8 @@ class OpacityDemo : Component
         return VStack(12,
             SubHeading("Opacity Transition"),
             Button(visible ? "Fade Out" : "Fade In",
-                () => setVisible(!visible)),
+                () => setVisible(!visible))
+                .AutomationName(visible ? "Fade out text" : "Fade in text"),
             TextBlock("This text fades in and out")
                 .FontSize(18).Bold()
                 .Opacity(visible ? 1.0 : 0.0)
@@ -37,12 +38,13 @@ class ScaleDemo : Component
         return VStack(12,
             SubHeading("Scale Transition"),
             Button(enlarged ? "Shrink" : "Enlarge",
-                () => setEnlarged(!enlarged)),
+                () => setEnlarged(!enlarged))
+                .AutomationName(enlarged ? "Shrink sample" : "Enlarge sample"),
             Border(
                 TextBlock("Scales up and down").FontSize(18).Bold()
             ).Padding(12)
              .CornerRadius(8)
-             .Background("#e8e8e8")
+             .Background(Theme.CardBackground)
              .Scale(enlarged ? 1.5f : 1.0f)
              .ScaleTransition()
         ).Padding(24);
@@ -60,7 +62,8 @@ class TranslationDemo : Component
         return VStack(12,
             SubHeading("Translation Transition"),
             Button(moved ? "Slide Back" : "Slide Right",
-                () => setMoved(!moved)),
+                () => setMoved(!moved))
+                .AutomationName(moved ? "Slide sample back" : "Slide sample right"),
             TextBlock("Slides horizontally")
                 .FontSize(18).Bold()
                 .Translation(moved ? 120f : 0f, 0f, 0f)
@@ -80,13 +83,14 @@ class BackgroundDemo : Component
         return VStack(12,
             SubHeading("Background Transition"),
             Button(warm ? "Cool Colors" : "Warm Colors",
-                () => setWarm(!warm)),
+                () => setWarm(!warm))
+                .AutomationName(warm ? "Switch to cool colors" : "Switch to warm colors"),
             VStack(8,
                 TextBlock("Background animates between colors")
-                    .Foreground("#ffffff").Bold()
+                    .Foreground(Theme.AccentText).Bold()
             ).Padding(16)
              .CornerRadius(8)
-             .Background(warm ? "#da3b01" : "#0078d4")
+             .Background(warm ? Theme.SystemCaution : Theme.Accent)
              .BackgroundTransition(TimeSpan.FromMilliseconds(600))
         ).Padding(24);
     }
@@ -103,13 +107,14 @@ class CombinedDemo : Component
         return VStack(12,
             SubHeading("Combined Transitions"),
             Button(active ? "Reset" : "Animate",
-                () => setActive(!active)),
+                () => setActive(!active))
+                .AutomationName(active ? "Reset combined transitions" : "Run combined transitions"),
             Border(
                 TextBlock("All at once").FontSize(16).Bold()
-                    .Foreground("#ffffff")
+                    .Foreground(Theme.AccentText)
             ).Padding(16)
              .CornerRadius(8)
-             .Background("#7b2ab5")
+             .Background(Theme.Accent)
              .Opacity(active ? 1.0 : 0.4)
              .Scale(active ? 1.2f : 1.0f)
              .Translation(active ? 40f : 0f, 0f, 0f)
@@ -137,14 +142,16 @@ class LayoutAnimationDemo : Component
                 {
                     nextId.Current++;
                     updateItems(l => [$"Item {nextId.Current}", .. l]);
-                }),
+                }).AutomationName("Add layout animation item"),
                 Button("Remove First", () =>
                     updateItems(l => l.Count > 0 ? l[1..] : l))
+                    .AutomationName("Remove first layout animation item")
             ),
             VStack(4, items.Select(item =>
-                TextBlock(item)
-                    .Padding(horizontal: 8, vertical: 12)
-                    .Background("#f0f0f0")
+                Border(
+                    TextBlock(item)
+                ).Padding(horizontal: 8, vertical: 12)
+                    .Background(Theme.CardBackground)
                     .CornerRadius(4)
                     .LayoutAnimation()
                     .WithKey($"item-{item}")
@@ -163,7 +170,8 @@ class ConnectedAnimationDemo : Component
 
         if (selected is not null)
             return VStack(12,
-                Button("Back to list", () => setSelected(null)),
+                Button("Back to list", () => setSelected(null))
+                    .AutomationName("Return to animation list"),
                 TextBlock(selected)
                     .FontSize(28).Bold()
                     .ConnectedAnimation($"title-{selected}")
@@ -175,7 +183,9 @@ class ConnectedAnimationDemo : Component
             VStack(4,
                 items.Select(item =>
                     Button(item, () => setSelected(item))
+                        .AutomationName($"Open {item}")
                         .ConnectedAnimation($"title-{item}")
+                        .WithKey($"source-{item}")
                 ).ToArray()
             )
         ).Padding(24);
@@ -199,7 +209,7 @@ class WithAnimationDemo : Component
                     {
                         setOpacity(opacity > 0.5 ? 0.2 : 1.0);
                     });
-            }),
+            }).AutomationName(opacity > 0.5 ? "Fade out with animation" : "Fade in with animation"),
             TextBlock("Compositor-animated via WithAnimation scope")
                 .FontSize(18).Bold()
                 .Opacity(opacity)
@@ -217,10 +227,11 @@ class AnimateDemo : Component
 
         return VStack(12,
             SubHeading(".Animate() Modifier"),
-            Button(active ? "Reset" : "Animate", () => setActive(!active)),
+            Button(active ? "Reset" : "Animate", () => setActive(!active))
+                .AutomationName(active ? "Reset animate modifier" : "Run animate modifier"),
             Border(
                 TextBlock("Spring-animated").FontSize(18).Bold()
-            ).Padding(12).CornerRadius(8).Background("#e8e8e8")
+            ).Padding(12).CornerRadius(8).Background(Theme.CardBackground)
              .Opacity(active ? 0.5 : 1.0)
              .Animate(Microsoft.UI.Reactor.Animation.Curve.Spring(0.65f))
         ).Padding(24);
@@ -240,14 +251,14 @@ class InteractionStatesDemo : Component
                 Border(
                     TextBlock("Hover me").FontSize(16).Bold()
                         .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
-                ).Padding(16).CornerRadius(8).Size(150, 60).Background("#50C878")
+                ).Padding(16).CornerRadius(8).Size(150, 60).Background(Theme.SystemSuccess)
                  .InteractionStates(s => s
                     .PointerOver(opacity: 0.85f, scale: 1.05f)
                     .Pressed(scale: 0.95f, opacity: 0.7f)),
                 Border(
                     TextBlock("Press me").FontSize(16).Bold()
                         .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
-                ).Padding(16).CornerRadius(8).Size(150, 60).Background("#9B59B6")
+                ).Padding(16).CornerRadius(8).Size(150, 60).Background(Theme.AccentSecondary)
                  .InteractionStates(s => s
                     .PointerOver(scale: 1.03f)
                     .Pressed(scale: 0.97f, opacity: 0.8f),
@@ -267,12 +278,13 @@ class TransitionDemo : Component
 
         return VStack(12,
             SubHeading("Enter/Exit Transition"),
-            Button(visible ? "Hide" : "Show", () => setVisible(!visible)),
+            Button(visible ? "Hide" : "Show", () => setVisible(!visible))
+                .AutomationName(visible ? "Hide transition sample" : "Show transition sample"),
             visible
                 ? Border(
                     TextBlock("Fade + Slide").FontSize(16).Bold()
                         .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
-                ).Padding(12).CornerRadius(8).Size(200, 60).Background("#E74C3C")
+                ).Padding(12).CornerRadius(8).Size(200, 60).Background(Theme.SystemCritical)
                  .Transition(Microsoft.UI.Reactor.Animation.Transition.Fade + Microsoft.UI.Reactor.Animation.Transition.Slide(Microsoft.UI.Reactor.Animation.Edge.Bottom))
                 : (Element)TextBlock("(removed from tree)")
         ).Padding(24);
@@ -285,13 +297,15 @@ class StaggerDemo : Component
 {
     public override Element Render()
     {
-        var (items, setItems) = UseState(new[] { "One", "Two", "Three", "Four", "Five" });
+        var initialItems = UseMemo(() => new[] { "One", "Two", "Three", "Four", "Five" });
+        var (items, setItems) = UseState(initialItems);
 
         return VStack(12,
             SubHeading("Staggered Animation"),
-            Button("Shuffle", () => setItems(items.OrderBy(_ => Random.Shared.Next()).ToArray())),
+            Button("Shuffle", () => setItems(items.OrderBy(_ => Random.Shared.Next()).ToArray()))
+                .AutomationName("Shuffle staggered items"),
             VStack(4, items.Select(item =>
-                TextBlock(item).Padding(horizontal: 8, vertical: 12).Background("#f0f0f0")
+                Border(TextBlock(item)).Padding(horizontal: 8, vertical: 12).Background(Theme.CardBackground)
                     .CornerRadius(4).LayoutAnimation()
                     .WithKey(item)
             ).ToArray()).Stagger(TimeSpan.FromMilliseconds(40))
@@ -309,11 +323,12 @@ class KeyframeDemo : Component
 
         return VStack(12,
             SubHeading("Keyframe Animation"),
-            Button("Pulse!", () => setCount(count + 1)),
+            Button("Pulse!", () => setCount(count + 1))
+                .AutomationName("Run pulse keyframe animation"),
             Border(
                 TextBlock("Pulse target").FontSize(16).Bold()
                     .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
-            ).Padding(12).CornerRadius(8).Size(200, 60).Background("#9B59B6")
+            ).Padding(12).CornerRadius(8).Size(200, 60).Background(Theme.AccentSecondary)
              .Keyframes("pulse", count, kf => kf
                 .Duration(600)
                 .At(0.0f, scale: global::System.Numerics.Vector3.One)
@@ -340,7 +355,7 @@ class ChoreographyDemo : Component
                     Microsoft.UI.Reactor.Animation.Curve.Ease(200), () => setPhase(1));
                 await Microsoft.UI.Reactor.Animation.AnimationScope.WithAnimationAsync(
                     Microsoft.UI.Reactor.Animation.Curve.Spring(0.7f), () => setPhase(2));
-            }),
+            }).AutomationName("Run choreography sequence"),
             TextBlock($"Phase: {phase}").FontSize(18).Bold()
                 .Opacity(phase == 0 ? 1.0 : phase == 1 ? 0.3 : 1.0)
         ).Padding(24);
@@ -361,8 +376,9 @@ class TransactionalAnimateDemo : Component
 {
     public override Element Render()
     {
-        var (items, setItems) = UseState<IReadOnlyList<Todo>>(
+        var initialItems = UseMemo<IReadOnlyList<Todo>>(() =>
             [new Todo("seed-1", "First"), new Todo("seed-2", "Second")]);
+        var (items, setItems) = UseState(initialItems);
 
         return VStack(12,
             SubHeading("Animations.Animate — structural changes"),
@@ -371,7 +387,8 @@ class TransactionalAnimateDemo : Component
             // with a spring. No per-element modifier needed.
             Button("Add", () =>
                 Animations.Animate(AnimationKind.Spring, () =>
-                    setItems([.. items, new Todo(Guid.NewGuid().ToString(), "New")]))),
+                    setItems([.. items, new Todo(Guid.NewGuid().ToString(), "New")])))
+                .AutomationName("Add animated todo"),
 
             ListView<Todo>(items, (t, _) => TextBlock(t.Title).Padding(8))
                 .Height(200)

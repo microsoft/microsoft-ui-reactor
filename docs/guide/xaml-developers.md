@@ -148,9 +148,9 @@ class GridTranslationPage : Component
             columns: [GridSize.Auto, GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Auto],
             TextBlock("First name").Bold().Grid(row: 0, column: 0),
-            TextBox("", _ => { }).Grid(row: 0, column: 1),
+            TextBox("", _ => { }).AutomationName("First name").Grid(row: 0, column: 1),
             TextBlock("Last name").Bold().Grid(row: 1, column: 0),
-            TextBox("", _ => { }).Grid(row: 1, column: 1)
+            TextBox("", _ => { }).AutomationName("Last name").Grid(row: 1, column: 1)
         ) with
         {
             ColumnSpacing = 12,
@@ -320,7 +320,8 @@ class ObservableTreeDemo : Component
                 header: "User Name"),
             ToggleSwitch(vm.DarkMode, v => vm.DarkMode = v,
                 header: "Dark Mode"),
-            Slider(vm.FontSize, 10, 32, v => vm.FontSize = (int)v),
+            Slider(vm.FontSize, 10, 32, v => vm.FontSize = (int)v)
+                .AutomationName("Font size"),
             TextBlock($"Preview: {vm.UserName}")
                 .FontSize(vm.FontSize).Bold()
         ).Padding(24);

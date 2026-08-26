@@ -79,8 +79,7 @@ class DialogGatedPrimaryDemo : Component
             ContentDialog(
                 "Rename file",
                 VStack(8,
-                    TextBlock("New filename:"),
-                    TextBox(name, setName, placeholderText: "untitled.txt")
+                    TextBox(name, setName, placeholderText: "untitled.txt", header: "New filename")
                         .Width(280)),
                 primaryButtonText: "Rename") with
             {
@@ -166,12 +165,13 @@ class PopupDemo : Component
                 TextBlock("This is a Popup.").Bold(),
                 TextBlock("Click outside to dismiss.")
             ).Padding(12)
-        ).Background("#FFFFFF").WithBorder("#888888").CornerRadius(6);
+        ).Background(Theme.SolidBackground).WithBorder(Theme.ControlStroke).CornerRadius(6);
 
         return VStack(8,
             SubHeading("Popup"),
             Button(open ? "Hide popup" : "Show popup",
-                () => setOpen(!open)),
+                () => setOpen(!open))
+                .AutomationName(open ? "Hide popup" : "Show popup"),
             Popup(popupContent, isOpen: open,
                 onClosed: () => setOpen(false))
                 .IsLightDismissEnabled()
@@ -265,7 +265,8 @@ class ModalPopupDemo : Component
                         TextBlock("Focus stays inside this popup."),
                         Button("Close", () => setOpen(false))
                     ).Padding(16)
-                ).FocusTrap(trap),
+                ).FocusTrap(trap)
+                 .Semantics(role: "dialog"),
                 isOpen: open,
                 onClosed: () => setOpen(false))
         ).Padding(24);

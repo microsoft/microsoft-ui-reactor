@@ -49,7 +49,8 @@ class StateVignette : Component
     public override Element Render()
     {
         var (count, setCount) = UseState(0);
-        return Button($"clicked {count}×", () => setCount(count + 1));
+        return Button($"clicked {count}×", () => setCount(count + 1))
+            .AutomationName($"Increment counter; clicked {count} times");
     }
 }
 ```
@@ -59,14 +60,14 @@ class EffectVignette : Component
 {
     public override Element Render()
     {
-        var (tick, setTick) = UseState(0);
+        var (tick, incrementTick) = UseReducer(0, threadSafe: true);
         UseEffect(() =>
         {
             var timer = new System.Timers.Timer(1000);
-            timer.Elapsed += (_, _) => setTick(tick + 1);
+            timer.Elapsed += (_, _) => incrementTick(t => t + 1);
             timer.Start();
             return () => timer.Dispose();
-        });
+        }, []);
         return TextBlock($"Tick: {tick}");
     }
 }
@@ -157,8 +158,8 @@ Full token catalog on [Theming Tokens](theming-tokens.md).
 **Controlled input.** `var (v, set) = UseState("")` →
 `TextBox(v, set)`.
 
-**Effect with cleanup.** Return a `Func<void>` from the effect lambda;
-Reactor calls it before the next run and on unmount.
+**Effect with cleanup.** Return a cleanup lambda from the effect lambda;
+Reactor calls it before the next run (when deps change) and on unmount.
 
 **Conditional render.** `cond ? Element1 : Empty()` keeps the element
 out of the tree when `cond` is false — see the

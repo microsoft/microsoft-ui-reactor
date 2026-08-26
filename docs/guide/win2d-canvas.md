@@ -29,7 +29,8 @@ class ManualCanvasDemo : Component
 
         return VStack(12,
             SubHeading("Manual canvas"),
-            Button($"Redraw with count {count}", () => setCount(count + 1)),
+            Button($"Redraw with count {count}", () => setCount(count + 1))
+                .AutomationName("Redraw manual canvas"),
             Win2DCanvas((session, _) =>
             {
                 session.Clear(Colors.White);
@@ -366,7 +367,8 @@ class DrawCommandDemo : Component
                 deps: [count]);
 
             return VStack(12,
-                Button($"Redraw with count {count}", () => setCount(count + 1)),
+                Button($"Redraw with count {count}", () => setCount(count + 1))
+                    .AutomationName("Redraw draw command canvas"),
                 Win2DCanvas(draw, redrawKey: count)
                     .ClearColor(Colors.White)
                     .Width(240)

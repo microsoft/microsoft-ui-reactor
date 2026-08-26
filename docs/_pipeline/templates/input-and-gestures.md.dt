@@ -163,6 +163,7 @@ lifts.
 
 ```csharp
 Image(imageUrl)
+    .AutomationName("Photo preview")
     .OnPinch(
         onChanged: g => Scale(g.Scale),
         withInertia: true)
@@ -346,7 +347,7 @@ visibility via `DragTargetArgs.UIOverride` — Reactor writes the changes back
 onto WinUI's `DragUIOverride` after your callback returns.
 
 ```csharp
-VStack(children)
+VStack(children.ToArray())
     .OnDragOver(args =>
     {
         args.UIOverride.Caption = "Move to Inbox";
@@ -439,9 +440,8 @@ see [recipes/drag-reorder](recipes/drag-reorder.md).
 
 ### Pinch-to-zoom on an image
 
-Combine `.OnPinch` with a `Translation` scale modifier driven from
-state. Scale is cumulative since `Began` — apply it directly to the
-element's `Scale` compositor property in `onChanged` for 60 Hz
+Combine `.OnPinch` with the element's `Scale` compositor property driven from
+state. Scale is cumulative since `Began` — apply it directly in `onChanged` for 60 Hz
 behavior (same pattern as pan above), then commit to `UseState` in
 `onEnded`. The reconciler unions `ManipulationModes` so adding
 `.OnRotate` on the same element is free.

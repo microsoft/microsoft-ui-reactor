@@ -463,13 +463,14 @@ handler that explicitly transitions the parent. See
 ```csharp snippet="advanced/wrong-this-capture"
 ```
 
-`.Set(control => ...)` runs on every mount and update — every event
-subscription accumulates. The `this` inside the lambda is the parent
-component, captured at the lambda's closure site, which keeps a strong
-reference to a stale render's component instance after the parent has
-re-rendered. Two fixes: lift the handler to a stable `UseCallback`
-in the parent and pass it via [props](components.md), or use
-`.OnMount(...)` for a one-shot subscription with explicit cleanup.
+The commented `.Set(control => ...)` line is the bug: `.Set` runs on
+every mount and update, so every render would add another event
+subscription. The `this` inside the lambda is the parent component,
+captured at the lambda's closure site, which keeps a strong reference
+to a stale render's component instance after the parent has re-rendered.
+Two fixes: lift the handler to a stable `UseCallback` in the parent and
+pass it via [props](components.md), or use `.OnMount(...)` for a one-shot
+subscription with explicit cleanup.
 
 (`.Set` is generated per control-backed element — `ButtonElement.Set(Action<Button>)`,
 `TextBoxElement.Set(Action<TextBox>)`, and so on. Component elements returned by

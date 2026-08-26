@@ -262,7 +262,9 @@ visual clickable or `.IsDragRegion(true)` to force it draggable, and set
 (TitleBar("Gallery") with
 {
     Content = HStack(8,
-        AutoSuggestBox("", _ => {}).Width(200),
+        AutoSuggestBox("", _ => {})
+            .AutomationName("Search gallery")
+            .Width(200),
         Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
             .AutomationName("Settings").IsDragRegion(false)),
 }).AutoRefreshDragRegions();
@@ -505,15 +507,18 @@ HWND interop.
 
 ```csharp
 // Both helpers return null when the user cancels the dialog.
-async Task OpenAsync()
+var pickFile = UseFilePickerAsync;
+var pickFolder = UseFolderPickerAsync;
+
+return Button("Open...", async () =>
 {
-    var file = await UseFilePickerAsync(new FilePickerOptions(
+    var file = await pickFile(new FilePickerOptions(
         FileTypeFilter: [".txt", ".md"]));
     if (file is null) return;
 
-    var folder = await UseFolderPickerAsync(new FolderPickerOptions());
+    var folder = await pickFolder(new FolderPickerOptions());
     if (folder is null) return;
-}
+});
 ```
 
 Caveats:

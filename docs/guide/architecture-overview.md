@@ -278,6 +278,13 @@ public UIElement? Reconcile(
         DebugElementsSkipped = 0;
         DebugUIElementsCreated = 0;
         DebugUIElementsModified = 0;
+        // Drop destination references a previous pass queued but never flushed. Every
+        // shipped host flushes at the end of each render, but a pass that threw
+        // mid-reconcile — or a Reconcile() caller that never flushes (tests,
+        // embedders) — must not accumulate strong UIElement refs. A list clear, so
+        // nothing here can throw and strand the depth counter incremented just above.
+        _pendingConnectedAnimationStarts.Clear();
+        _preparedConnectedAnimationKeys.Clear();
         if (ReactorFeatureFlags.HighlightReconcileChanges)
         {
             (_highlightMounted ??= new()).Clear();

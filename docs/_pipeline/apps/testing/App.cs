@@ -45,7 +45,8 @@ class EffectfulCounter : Component
             Log.Add($"effect:{count}");
             return () => Log.Add($"cleanup:{count}");
         }, count);
-        return Button($"count={count}", () => setCount(count + 1));
+        return Button($"count={count}", () => setCount(count + 1))
+            .AutomationName($"Counter is {count}");
     }
 }
 // </snippet:effectful>
@@ -57,7 +58,7 @@ class EffectfulCounter : Component
 class IconOnlyButton : Component
 {
     public override Element Render() =>
-        Button(TextBlock("🔍"), null);      // icon content, no accessible name
+        Button(TextBlock("🔍"));            // icon content, no accessible name
 }
 
 class NamedButton : Component

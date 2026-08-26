@@ -49,7 +49,7 @@ class Tier2Demo : Component
             ).FullDescription(
                 "Bar chart showing Q1 revenue: East $4.2M, " +
                 "West $3.8M, Central $2.1M")
-             .Padding(16).Background("#f5f5f5").CornerRadius(8),
+             .Padding(16).Background(Theme.CardBackground).CornerRadius(8),
             TextBlock("Decorative divider")
                 .Opacity(0.2)
                 .AccessibilityHidden()
@@ -151,21 +151,21 @@ class FocusTrapDemo : Component
         return VStack(12,
             SubHeading("Focus Trapping"),
             Button("Open Modal", () => setShowModal(true)),
-            When(showModal, () =>
-                Border(
-                    VStack(12,
-                        TextBlock("Modal Dialog").FontSize(18).Bold(),
-                        TextBlock("Tab/Shift+Tab stays inside this panel."),
-                        TextBox("", _ => { }, placeholderText: "Name")
-                            .TabIndex(0),
-                        Button("Close", () => setShowModal(false))
-                            .TabIndex(1)
-                    ).Padding(24)
-                ).WithBorder("#888", 1)
-                 .CornerRadius(8)
-                 .Background("#ffffff")
-                 .FocusTrap(trap)
-            )
+            Border(
+                VStack(12,
+                    TextBlock("Modal Dialog").FontSize(18).Bold(),
+                    TextBlock("Tab/Shift+Tab stays inside this panel."),
+                    TextBox("", _ => { }, placeholderText: "Name")
+                        .AutomationName("Name")
+                        .TabIndex(0),
+                    Button("Close", () => setShowModal(false))
+                        .TabIndex(1)
+                ).Padding(24)
+            ).WithBorder(Theme.CardStroke, 1)
+             .CornerRadius(8)
+             .Background(Theme.SolidBackground)
+             .FocusTrap(trap)
+             .IsVisible(showModal)
         ).Padding(24);
     }
 }
@@ -210,6 +210,8 @@ class SemanticPanelDemo : Component
                 Button(i <= rating ? "\u2605" : "\u2606",
                     () => setRating(i))
                     .AutomationName($"{i} star{(i == 1 ? "" : "s")}")
+                    .AccessibilityHidden()
+                    .WithKey($"star-{i}")
             ).ToArray())
             .Semantics(
                 role: "slider",

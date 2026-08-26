@@ -70,7 +70,7 @@ class KeyboardDemo : Component
         // Tab/Shift+Tab cycles through Reactor controls normally.
         // Tab out of the last Reactor control returns focus to WinForms.
         return VStack(12,
-            TextBox(text, setText, placeholderText: "Type here...")
+            TextBox(text, setText, placeholderText: "Type here...", header: "Message")
                 .TabIndex(0),
             Button("Submit", () => { })
                 .TabIndex(1)
@@ -115,11 +115,13 @@ class BackgroundDemo : Component
         // Always set an explicit background on root content.
         // XAML Islands have no default background — without this,
         // content renders on a transparent surface.
-        return VStack(12,
-            TextBlock("Theme-aware background").Bold(),
-            TextBlock($"Count: {count}"),
-            Button("Increment", () => setCount(count + 1))
-        ).Padding(24).Background(SolidBackground);
+        return Grid([GridSize.Star()], [GridSize.Star()],
+            VStack(12,
+                TextBlock("Theme-aware background").Bold(),
+                TextBlock($"Count: {count}"),
+                Button("Increment", () => setCount(count + 1))
+            ).Padding(24)
+        ).Background(SolidBackground);
     }
 }
 // </snippet:background>

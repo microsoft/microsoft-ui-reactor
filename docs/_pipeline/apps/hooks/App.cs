@@ -18,10 +18,13 @@ class StateDemo : Component
             SubHeading("UseState"),
             TextBlock("Sample text").FontSize(size).Foreground(color),
             TextBox(color, setColor, placeholderText: "#hex color")
+                .AutomationName("Sample text color")
                 .Width(150),
             HStack(8,
                 TextBlock("Size:"),
-                Slider(size, 10, 48, setSize).Width(200)
+                Slider(size, 10, 48, setSize)
+                    .AutomationName("Sample text size")
+                    .Width(200)
             )
         );
     }
@@ -40,6 +43,7 @@ class ReducerDemo : Component
             SubHeading("UseReducer"),
             HStack(8,
                 TextBox(input, setInput, placeholderText: "Add item")
+                    .AutomationName("Item text")
                     .Width(180),
                 Button("Add", () =>
                 {
@@ -79,9 +83,11 @@ class ReduxReducerDemo : Component
             TextBlock($"Count: {state.Count}  (last: {state.LastAction})")
                 .FontSize(18).Bold(),
             HStack(8,
-                Button("-", () => dispatch(new Decrement())),
+                Button("-", () => dispatch(new Decrement()))
+                    .AutomationName("Decrement count"),
                 Button("Reset", () => dispatch(new Reset())),
                 Button("+", () => dispatch(new Increment()))
+                    .AutomationName("Increment count")
             )
         );
     }
@@ -118,7 +124,8 @@ class EffectDemo : Component
             SubHeading("UseEffect"),
             TextBlock($"Elapsed: {seconds}s").FontSize(18),
             HStack(8,
-                Button(running ? "Stop" : "Start", () => setRunning(!running)),
+                Button(running ? "Stop" : "Start", () => setRunning(!running))
+                    .AutomationName(running ? "Stop timer" : "Start timer"),
                 Button("Reset", () => updateSeconds(_ => 0))
             )
         );
@@ -143,7 +150,9 @@ class MemoDemo : Component
 
         return VStack(8,
             SubHeading("UseMemo"),
-            TextBox(input, setInput).Width(250),
+            TextBox(input, setInput)
+                .AutomationName("Text to analyze")
+                .Width(250),
             TextBlock($"Characters: {stats.Chars}, Words: {stats.Words}"),
             Caption($"Uppercased: {stats.Upper}")
         );
@@ -164,6 +173,7 @@ class RefDemo : Component
             SubHeading("UseRef"),
             TextBlock($"Render count: {renderCount.Current}").SemiBold(),
             TextBox(value, setValue, placeholderText: "Type to trigger renders")
+                .AutomationName("Render trigger text")
                 .Width(250),
             Caption("UseRef persists across renders without causing them")
         );
@@ -186,8 +196,10 @@ class CallbackDemo : Component
             SubHeading("UseCallback"),
             TextBlock($"Count: {count}").FontSize(18),
             TextBox(label, setLabel, placeholderText: "Button label")
+                .AutomationName("Button label")
                 .Width(200),
-            Button(label, stableIncrement),
+            Button(label, stableIncrement)
+                .AutomationName("Increment count"),
             Caption("The callback identity stays stable across renders")
         );
     }
@@ -275,7 +287,9 @@ class CustomHookDemo : Component
         var (debounced, setText) = ctx.UseDebouncedText("", 300);
         return VStack(8,
             SubHeading("Custom hook: UseDebouncedText"),
-            TextBox(debounced, setText, placeholderText: "Type…").Width(250),
+            TextBox(debounced, setText, placeholderText: "Type…")
+                .AutomationName("Text to debounce")
+                .Width(250),
             Caption($"Debounced: {debounced}")
         );
     });

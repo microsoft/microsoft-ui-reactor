@@ -10,7 +10,7 @@ is one `UseState` for the selected id and two slots in an `HStack`.
 | Slot | API |
 |---|---|
 | Selection state | `UseState<int?>` |
-| List render | `VStack` + `Select(...).ToArray()` |
+| List render | `VStack` + keyed `Select(...).ToArray()` |
 | Selected highlight | Per-row `.Background(...)` |
 | Detail branch | `Element` typed local for null case |
 | Layout split | `HStack(0, list, detail)` |
@@ -52,6 +52,8 @@ the selection actually changes.
 var list = VStack(2,
     Notes.Select(n =>
         Button(n.Title, () => setSelectedId(n.Id))
+            .WithKey(n.Id.ToString())
+            .AutomationName(n.Title)
             .HAlign(Microsoft.UI.Xaml.HorizontalAlignment.Stretch)
             .Background(n.Id == selectedId ? "#E5F1FB" : "#FFFFFF")
     ).ToArray()
@@ -69,7 +71,7 @@ return HStack(0, list, detail);
 
 ![Master-detail layout](../images/recipe-master-detail/layout.png)
 
-The list is a `VStack` of full-width buttons; the selected row gets a
+The list is a keyed `VStack` of full-width buttons; the selected row gets a
 distinct background. The detail pane is conditional — `selected is null`
 renders the empty state, otherwise the title + body. Both sides are
 plain elements; no intermediate component is needed.

@@ -101,14 +101,16 @@ return VStack(12,
     Heading("Sign in"),
     TextBox(email, setEmail, placeholderText: "you@example.com",
         header: "Email").Width(280),
-    PasswordBox(pwd, setPwd, placeholderText: "8+ characters"),
+    PasswordBox(pwd, setPwd, placeholderText: "8+ characters")
+        .AutomationName("Password"),
     signIn.Error is null
         ? Empty()
-        : TextBlock(signIn.Error.Message).Foreground("#C42B1C"),
+        : TextBlock(signIn.Error.Message).Foreground(Theme.SystemCritical),
     // SubmitAsync swallows the fault above, so this discard cannot
     // leave anything unobserved.
     Button(signIn.IsPending ? "Signing in…" : "Sign in",
             () => _ = SubmitAsync())
+        .AutomationName("Sign in")
         .IsEnabled(canSubmit)
 ).Padding(20).Width(320);
 ```
@@ -120,10 +122,9 @@ disabling the button is enough; an analyzer-flagged guard inside the
 mutator would double-fire on a re-render race. `signIn.IsPending` owns
 both the spinner label ("Signing in…") and the disabled state, so an
 in-flight submit can't be re-triggered by an Enter press.
-`() => _ = signIn.RunAsync((email, pwd))` is the standard fire-and-
-forget shape: the returned task carries the same fault that
-`signIn.Error` already holds, so the UI reads the handle rather than
-awaiting.
+`SubmitAsync` observes the task returned by `signIn.RunAsync((email, pwd))`
+while letting the mutation own the rendered error state, so the UI reads the
+handle instead of duplicating error flags.
 
 ## Tips
 

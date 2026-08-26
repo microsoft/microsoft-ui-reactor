@@ -88,10 +88,11 @@ class GridDemo : Component
                 rows: [GridSize.Auto, GridSize.Auto],
                 TextBlock("Label").Bold().Grid(row: 0, column: 0),
                 TextBox("", _ => { }, placeholderText: "Input...")
+                    .AutomationName("Input")
                     .Grid(row: 0, column: 1),
                 Button("Go").Grid(row: 0, column: 2),
                 TextBlock("Status").Grid(row: 1, column: 0),
-                TextBlock("Ready").Foreground("#0078D4")
+                TextBlock("Ready").Foreground(Theme.Accent)
                     .Grid(row: 1, column: 1, columnSpan: 2)
             ).Height(80)
         );
@@ -210,7 +211,7 @@ class ScrollBorderDemo : Component
                             i => TextBlock($"Scrollable item {i}"))
                     ).Padding(8)
                 ).Height(120)
-            ).CornerRadius(4).Background("#F5F5F5")
+            ).CornerRadius(4).Background(Theme.CardBackground)
         );
     }
 }
@@ -256,7 +257,7 @@ class ExpanderCanvasDemo : Component
                         Microsoft.UI.Xaml.Controls.Canvas.SetTop((UIElement)c, 40);
                     })
                 ).Height(90).Width(300)
-            ).Background("#F5F5F5").CornerRadius(4)
+            ).Background(Theme.CardBackground).CornerRadius(4)
         );
     }
 }
@@ -287,11 +288,11 @@ class ResponsiveDemo : Component
         var content = new Element[]
         {
             Border(TextBlock("Panel A").Padding(16))
-                .Background("#E3F2FD").CornerRadius(4),
+                .Background(Theme.SystemNeutralBackground).CornerRadius(4),
             Border(TextBlock("Panel B").Padding(16))
-                .Background("#FFF3E0").CornerRadius(4),
+                .Background(Theme.SystemCautionBackground).CornerRadius(4),
             Border(TextBlock("Panel C").Padding(16))
-                .Background("#E8F5E9").CornerRadius(4),
+                .Background(Theme.SystemSuccessBackground).CornerRadius(4),
         };
 
         return VStack(8,
@@ -338,12 +339,14 @@ class AlignmentSizingDemo : Component
         SubHeading("Alignment and sizing"),
 
         TextBlock("Centered").HAlign(HorizontalAlignment.Center),
-        TextBlock("Fixed width").Width(200).Height(40).Background("#E5F1FB"),
+        Border(TextBlock("Fixed width"))
+            .Width(200).Height(40)
+            .Background(Theme.ControlFillSecondary),
 
         VStack(8,
             TextBlock("Item A"),
             TextBlock("Item B")
-        ).Margin(24).Padding(16).Background("#F3F3F3")
+        ).Margin(24).Padding(16).Background(Theme.ControlFillSecondary)
     );
 }
 ```
@@ -375,6 +378,7 @@ class ContentAlignmentDemo : Component
         // stretches too — without HorizontalContentAlignment the label
         // would stay centered in an otherwise full-width button.
         Button(TextBlock("Open"), () => { })
+            .AutomationName("Open")
             .HAlign(HorizontalAlignment.Stretch)
             .HorizontalContentAlignment(HorizontalAlignment.Stretch)
     ).Width(320);
@@ -459,15 +463,17 @@ class AutoGridExample : Component
 {
     public override Element Render()
     {
-        return WrapGrid(maxRowsOrColumns: 4,
-            children: Enumerable.Range(1, 11)
-                .Select(i =>
-                    Border(TextBlock($"Tile {i}").Padding(12))
-                        .Background(Theme.CardBackground)
-                        .CornerRadius(6)
-                        .Width(110).Height(60))
-                .Cast<Element?>()
-                .ToArray()
+        return Border(
+            WrapGrid(maxRowsOrColumns: 4,
+                children: Enumerable.Range(1, 11)
+                    .Select(i =>
+                        Border(TextBlock($"Tile {i}").Padding(12))
+                            .Background(Theme.CardBackground)
+                            .CornerRadius(6)
+                            .Width(110).Height(60))
+                    .Cast<Element?>()
+                    .ToArray()
+            )
         ).Padding(24);
     }
 }

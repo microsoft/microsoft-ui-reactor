@@ -178,8 +178,7 @@ class DialogGatedPrimaryDemo : Component
             ContentDialog(
                 "Rename file",
                 VStack(8,
-                    TextBlock("New filename:"),
-                    TextBox(name, setName, placeholderText: "untitled.txt")
+                    TextBox(name, setName, placeholderText: "untitled.txt", header: "New filename")
                         .Width(280)),
                 primaryButtonText: "Rename") with
             {
@@ -403,12 +402,13 @@ class PopupDemo : Component
                 TextBlock("This is a Popup.").Bold(),
                 TextBlock("Click outside to dismiss.")
             ).Padding(12)
-        ).Background("#FFFFFF").WithBorder("#888888").CornerRadius(6);
+        ).Background(Theme.SolidBackground).WithBorder(Theme.ControlStroke).CornerRadius(6);
 
         return VStack(8,
             SubHeading("Popup"),
             Button(open ? "Hide popup" : "Show popup",
-                () => setOpen(!open)),
+                () => setOpen(!open))
+                .AutomationName(open ? "Hide popup" : "Show popup"),
             Popup(popupContent, isOpen: open,
                 onClosed: () => setOpen(false))
                 .IsLightDismissEnabled()
@@ -506,9 +506,10 @@ close.
 
 The exception is `Popup`. The popup has none of the above; it is a
 positioning primitive. For a popup that should behave like a modal,
-wrap its content with `UseFocusTrap` and apply the dialog role
-explicitly. `UseFocusTrap(bool isActive)` takes the active flag, and the
-handle attaches with the `.FocusTrap(handle)` element modifier — inside a
+wrap its content with `UseFocusTrap` and apply dialog semantics
+explicitly. `UseFocusTrap(bool isActive)` takes the active flag, the
+handle attaches with the `.FocusTrap(handle)` element modifier, and
+`.Semantics(role: "dialog")` supplies the screen-reader role — inside a
 `Component`, call the hook as `this.UseFocusTrap(...)` because it is an
 extension method:
 
@@ -532,7 +533,8 @@ class ModalPopupDemo : Component
                         TextBlock("Focus stays inside this popup."),
                         Button("Close", () => setOpen(false))
                     ).Padding(16)
-                ).FocusTrap(trap),
+                ).FocusTrap(trap)
+                 .Semantics(role: "dialog"),
                 isOpen: open,
                 onClosed: () => setOpen(false))
         ).Padding(24);

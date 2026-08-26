@@ -46,7 +46,7 @@ class SettingsPage : Component
     private static Element SettingsRow(string label, Element control) =>
         HStack(16,
             TextBlock(label).Width(120),
-            control
+            control.AutomationName(label)
         );
     // </snippet:row-helper>
 }

@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
@@ -101,7 +102,7 @@ class ProgressRingDemo : Component
     public override Element Render() => VStack(12,
         SubHeading("ProgressRing"),
         // Determinate ring at 60%.
-        ProgressRing(0.6).Width(48).Height(48),
+        ProgressRing(60).Width(48).Height(48),
         // Indeterminate spinner.
         ProgressRing().IsActive().Width(48).Height(48)
     ).Padding(24);
@@ -114,12 +115,14 @@ class TeachingTipDemo : Component
     public override Element Render()
     {
         var (show, setShow) = UseState(false);
+        var target = this.UseElementRef<FrameworkElement>();
 
         return VStack(12,
             SubHeading("TeachingTip"),
-            Button("Show tip", () => setShow(true)),
+            Button("Show tip", () => setShow(true)).Ref(target),
             TeachingTip("Try the new sort menu",
-                "Sort across multiple columns by holding Shift.") with
+                "Sort across multiple columns by holding Shift.",
+                target: target) with
             {
                 IsOpen = show,
                 OnClosed = () => setShow(false),

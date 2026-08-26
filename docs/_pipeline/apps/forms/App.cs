@@ -19,7 +19,8 @@ class ControlledInputDemo : Component
 
         return VStack(12,
             SubHeading("Controlled Input"),
-            TextBox(name, setName, placeholderText: "Type your name"),
+            TextBox(name, setName, placeholderText: "Type your name",
+                header: "Name"),
             TextBlock($"You typed: {name}").Opacity(0.6)
         ).Padding(24);
     }
@@ -44,16 +45,18 @@ class InputTypesDemo : Component
             TextBox(text, setText, placeholderText: "Email",
                 header: "Email"),
             PasswordBox(password, setPassword,
-                placeholderText: "Enter password"),
-            Slider(volume, 0, 100, setVolume),
+                placeholderText: "Enter password")
+                .Header("Password")
+                .AutomationName("Password"),
+            Slider(volume, 0, 100, setVolume).Header("Volume"),
             NumberBox(count, setCount, header: "Quantity"),
             CheckBox(agree, setAgree, label: "I agree to the terms"),
             ToggleSwitch(notify, setNotify,
                 header: "Notifications"),
             ComboBox(["Admin", "Editor", "Viewer"],
                 role, setRole).Header("Role"),
-            RadioButtons(["Low", "Medium", "High"],
-                priority, setPriority)
+            (RadioButtons(["Low", "Medium", "High"],
+                priority, setPriority) with { Header = "Priority" })
         ).Padding(24);
     }
 }
@@ -149,6 +152,8 @@ class ValidationContextDemo : Component
                     .Foreground(Theme.SystemCritical).FontSize(12)),
             PasswordBox(password, v => { setPassword(v); ctx.NotifyValueChanged("password", v); },
                 placeholderText: "Min 8 characters")
+                .Header("Password")
+                .AutomationName("Password")
                 .Validate("password", password,
                     Validate.Required(),
                     Validate.MinLength(8)),
@@ -181,12 +186,14 @@ class FormFieldDemo : Component
             SubHeading("FormField Helper"),
             FormField(
                 TextBox(name, v => { setName(v); ctx.NotifyValueChanged("name", v); })
+                    .AutomationName("Full Name")
                     .Validate("name", name, Validate.Required()),
                 label: "Full Name",
                 required: true,
                 description: "As it appears on your ID"),
             FormField(
                 TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); })
+                    .AutomationName("Email Address")
                     .Validate("email", email,
                         Validate.Required(), Validate.Email()),
                 label: "Email Address",
@@ -264,7 +271,8 @@ class TextBoxConfigDemo : Component
                 .UrlInput(),
             TextBox(phone, setPhone, header: "Phone")
                 .PhoneInput(),
-            TextBox(search, setSearch, placeholderText: "Search…")
+            TextBox(search, setSearch, placeholderText: "Search…",
+                header: "Search")
                 .SearchInput(),
             TextBox(note, setNote, header: "Reference code")
                 .MaxLength(8)
@@ -301,6 +309,7 @@ class AutoSuggestDemo : Component
             AutoSuggestBox(text, setText,
                 onQuerySubmitted: q => setText(q))
                 .Header("Animal")
+                .AutomationName("Animal")
                 .QueryIcon(SymbolIcon("Find"))
                 .Width(280),
             // Suggestion list — bind to AutoSuggestBox.ItemsSource via .Set
@@ -310,7 +319,7 @@ class AutoSuggestDemo : Component
                 VStack(2,
                     ForEach(matches, m =>
                         TextBlock(m).Padding(8, 4))
-                ).Background("#F5F5F5").Width(280))
+                ).Background(Theme.CardBackground).Width(280))
         ).Padding(24);
     }
 }
@@ -396,12 +405,9 @@ class ColorPickerDemo : Component
                 .HexInputVisible(true)
                 .ColorSpectrumShape(
                     Microsoft.UI.Xaml.Controls.ColorSpectrumShape.Ring),
-            // Preview swatch driven by the picker.
-            Border(Empty())
-                .Background(
-                    new Microsoft.UI.Xaml.Media.SolidColorBrush(color))
-                .Width(80).Height(40)
-                .WithBorder("#888888")
+            TextBlock($"Selected: #{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}")
+                .FontSize(12)
+                .Foreground(Theme.SecondaryText)
         ).Padding(24);
     }
 }

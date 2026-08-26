@@ -25,7 +25,9 @@ class NotesEditor : Component
 
         return VStack(8,
             SubHeading("Notes"),
-            TextBox(text, setText, placeholderText: "Start typing…").Width(380),
+            TextBox(text, setText, placeholderText: "Start typing…")
+                .AutomationName("Notes body")
+                .Width(380),
             TextBlock($"{text.Length} characters").Opacity(0.6)
         ).Padding(16);
     }
@@ -108,16 +110,19 @@ class VersionedNotesEditor : Component
 {
     public override Element Render()
     {
+        var initialState = UseMemo(
+            () => new NotesStateV2("", DateTimeOffset.Now, ""),
+            Array.Empty<object>());
         var (state, setState) = UsePersisted(
             "notes/state-v2",
-            initialValue: new NotesStateV2("", DateTimeOffset.Now, ""),
+            initialValue: initialState,
             scope: PersistedScope.Application);
 
         return VStack(8,
             TextBox(state.Title, t => setState(state with { Title = t }),
-                placeholderText: "Title"),
+                placeholderText: "Title", header: "Title"),
             TextBox(state.Body, b => setState(state with { Body = b, LastEdit = DateTimeOffset.Now }),
-                placeholderText: "Body")
+                placeholderText: "Body", header: "Body")
         );
     }
 

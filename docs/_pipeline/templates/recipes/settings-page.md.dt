@@ -33,9 +33,9 @@ moves. The row layout is a single helper.
 ```csharp snippet="recipe-settings-page/persisted-state"
 ```
 
-Three preferences, three keys. Each pref renders + persists
-independently, so adding a fourth is one line in `Render()` + one
-matching control. The `PersistedScope.Window` scope keeps the values
+Three preferences, three keys. Each pref persists independently, so
+adding a fourth is one line in `Render()` + one matching control. The
+`PersistedScope.Window` scope keeps the values
 inside the host window — flip to `PersistedScope.Application` for
 process-wide preferences (auth, locale, theme) per the
 [persistence](../persistence.md) page.
@@ -47,18 +47,20 @@ process-wide preferences (auth, locale, theme) per the
 
 ![Settings page](screenshot://recipe-settings-page/settings)
 
-A `VStack` of `SettingsRow`s; each row is a label + control. Reactor
-re-renders only the row whose state changed — the slider doesn't
-re-mount when you toggle notifications.
+A `VStack` of `SettingsRow`s; each row is a label + control. The page
+re-renders from the changed hook state, and the reconciler patches the
+existing controls in place — the slider doesn't re-mount when you toggle
+notifications.
 
 ### Row helper
 
 ```csharp snippet="recipe-settings-page/row-helper"
 ```
 
-A fixed-width label keeps the controls aligned across rows. The helper
-is a private static method, not a `Component` — it has no state, so a
-function returning an `Element` is the right shape.
+A fixed-width label keeps the controls aligned across rows, and the
+control receives the same text as its automation name. The helper is a
+private static method, not a `Component` — it has no state, so a function
+returning an `Element` is the right shape.
 
 ## Tips
 

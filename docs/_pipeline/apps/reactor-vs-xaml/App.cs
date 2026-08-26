@@ -37,11 +37,12 @@ class ReactorVsXamlApp : Component
 
     // <snippet:style-as-composition>
     // A XAML `Style` is a keyed bag of setters matched by TargetType. The
-    // Reactor analogue is a plain method that applies modifiers — no static
-    // registration, no runtime TargetType check, just composition.
+    // Reactor analogue is a plain method that composes a wrapper element — no
+    // static registration, no runtime TargetType check, just composition.
     static Element CardSurface(Element child) =>
-        child.Background(Theme.CardBackground)
-             .CornerRadius(8)
-             .Padding(16);
+        Border(child)
+            .Background(Theme.CardBackground)
+            .CornerRadius(8)
+            .Padding(16);
     // </snippet:style-as-composition>
 }

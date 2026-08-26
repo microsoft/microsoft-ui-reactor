@@ -114,8 +114,8 @@ class TaskList : Component
                     TextBlock(item.Title)
                 )
                 .Padding(10)
-                .Background(isFocused ? "#EEF4FB" : "#FFFFFF")
-                .WithBorder(isHover ? "#0078D4" : "#E1E1E1", isHover ? 2 : 1)
+                .Background(isFocused ? Theme.SubtleFill : Theme.CardBackground)
+                .WithBorder(isHover ? Theme.Accent : Theme.ControlStroke, isHover ? 2 : 1)
                 .Opacity(isDragging ? 0.4 : 1.0)
                 .IsTabStop(true)
                 .OnGotFocus((_, _) => setFocusedId(item.Id))
@@ -128,6 +128,11 @@ class TaskList : Component
                 {
                     if (args.Data.TryGetTypedPayload<int>(out var srcId) && srcId != item.Id)
                         setHoverId(item.Id);
+                })
+                .OnDragLeave(_ =>
+                {
+                    if (hoverId == item.Id)
+                        setHoverId(null);
                 })
                 .OnDrop<StackElement, int>(srcId =>
                 {
@@ -142,7 +147,7 @@ class TaskList : Component
             TextBlock("Drag a row, or focus one and press Alt+Up / Alt+Down.")
                 .Opacity(0.7),
             VStack(4,
-                items.Select(Row).ToArray()
+                items.Select(item => Row(item).WithKey(item.Id.ToString())).ToArray()
             )
         ).Padding(16).Width(320);
         // </snippet:render>

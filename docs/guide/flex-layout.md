@@ -52,16 +52,16 @@ class FlexDirectionDemo : Component
         return VStack(16,
             SubHeading("Row (default)"),
             FlexRow(
-                TextBlock("A").Padding(12).Background("#e0e0ff"),
-                TextBlock("B").Padding(12).Background("#ffe0e0"),
-                TextBlock("C").Padding(12).Background("#e0ffe0")
+                Border("A").Padding(12).Background(Theme.AccentTertiary),
+                Border("B").Padding(12).Background(Theme.SystemCriticalBackground),
+                Border("C").Padding(12).Background(Theme.SystemSuccessBackground)
             ) with { ColumnGap = 8 },
 
             SubHeading("Column"),
             FlexColumn(
-                TextBlock("A").Padding(12).Background("#e0e0ff"),
-                TextBlock("B").Padding(12).Background("#ffe0e0"),
-                TextBlock("C").Padding(12).Background("#e0ffe0")
+                Border("A").Padding(12).Background(Theme.AccentTertiary),
+                Border("B").Padding(12).Background(Theme.SystemCriticalBackground),
+                Border("C").Padding(12).Background(Theme.SystemSuccessBackground)
             ) with { RowGap = 8 }
         ).Padding(24);
     }
@@ -88,16 +88,16 @@ class JustifyAlignDemo : Component
         return VStack(16,
             SubHeading("JustifyContent: SpaceBetween"),
             FlexRow(
-                TextBlock("Left").Padding(8).Background("#e0e0ff"),
-                TextBlock("Center").Padding(8).Background("#ffe0e0"),
-                TextBlock("Right").Padding(8).Background("#e0ffe0")
+                Border("Left").Padding(8).Background(Theme.AccentTertiary),
+                Border("Center").Padding(8).Background(Theme.SystemCriticalBackground),
+                Border("Right").Padding(8).Background(Theme.SystemSuccessBackground)
             ) with { JustifyContent = FlexJustify.SpaceBetween },
 
             SubHeading("AlignItems: Center"),
             FlexRow(
-                TextBlock("Short").Padding(8).Background("#e0e0ff"),
-                TextBlock("Tall\nItem").Padding(8).Background("#ffe0e0"),
-                TextBlock("Med").Padding(8).Background("#e0ffe0")
+                Border("Short").Padding(8).Background(Theme.AccentTertiary),
+                Border("Tall\nItem").Padding(8).Background(Theme.SystemCriticalBackground),
+                Border("Med").Padding(8).Background(Theme.SystemSuccessBackground)
             ) with {
                 AlignItems = FlexAlign.Center,
                 ColumnGap = 8
@@ -147,10 +147,11 @@ class WrapGapDemo : Component
             SubHeading("Wrapping Tags"),
             FlexRow(
                 tags.Select(tag =>
-                    TextBlock(tag)
+                    Border(tag)
                         .Padding(horizontal: 6, vertical: 12)
-                        .Background("#e8e8e8")
+                        .Background(Theme.ControlFillSecondary)
                         .CornerRadius(12)
+                        .WithKey(tag)
                 ).ToArray()
             ) with {
                 Wrap = FlexWrap.Wrap,
@@ -194,19 +195,19 @@ class GrowShrinkDemo : Component
         return VStack(16,
             SubHeading("Grow: sidebar + content"),
             FlexRow(
-                TextBlock("Sidebar")
-                    .Padding(16).Background("#e0e0ff")
+                Border("Sidebar")
+                    .Padding(16).Background(Theme.AccentTertiary)
                     .Flex(basis: 200, shrink: 0),
-                TextBlock("Main content area")
-                    .Padding(16).Background("#f0f0f0")
+                Border("Main content area")
+                    .Padding(16).Background(Theme.CardBackground)
                     .Flex(grow: 1)
             ) with { ColumnGap = 8 },
 
             SubHeading("Equal columns"),
             FlexRow(
-                TextBlock("Column 1").Padding(16).Background("#ffe0e0").Flex(grow: 1),
-                TextBlock("Column 2").Padding(16).Background("#e0ffe0").Flex(grow: 1),
-                TextBlock("Column 3").Padding(16).Background("#e0e0ff").Flex(grow: 1)
+                Border("Column 1").Padding(16).Background(Theme.SystemCriticalBackground).Flex(grow: 1),
+                Border("Column 2").Padding(16).Background(Theme.SystemSuccessBackground).Flex(grow: 1),
+                Border("Column 3").Padding(16).Background(Theme.AccentTertiary).Flex(grow: 1)
             ) with { ColumnGap = 8 }
         ).Padding(24);
     }
@@ -261,23 +262,23 @@ class MinSizingDemo : Component
         SubHeading("Default — items keep their min-content size"),
         FlexRow(
             Border("Long text that won't truncate").Flex(shrink: 1)
-                .Background("#e0e0ff").Padding(8),
+                .Background(Theme.AccentTertiary).Padding(8),
             Border("Short").Flex(shrink: 1)
-                .Background("#ffe0e0").Padding(8)
+                .Background(Theme.SystemCriticalBackground).Padding(8)
         ) with { ColumnGap = 8 },
 
         SubHeading("Opt out — minWidth: 0 lets items shrink below content"),
         FlexRow(
             Border("Long text that may be clipped").Flex(shrink: 1, minWidth: 0)
-                .Background("#e0e0ff").Padding(8),
+                .Background(Theme.AccentTertiary).Padding(8),
             Border("Short").Flex(shrink: 1, minWidth: 0)
-                .Background("#ffe0e0").Padding(8)
+                .Background(Theme.SystemCriticalBackground).Padding(8)
         ) with { ColumnGap = 8 },
 
         SubHeading("Explicit floor — never below 80px regardless of content"),
         FlexRow(
             Border("Hard floor").Flex(shrink: 1, minWidth: 80)
-                .Background("#e0ffe0").Padding(8)
+                .Background(Theme.SystemSuccessBackground).Padding(8)
         ) with { ColumnGap = 8 }
     ).Width(360);
 }
@@ -411,7 +412,7 @@ class AppShellDemo : Component
                 TextBlock("Inbox").Padding(8),
                 TextBlock("Drafts").Padding(8),
                 TextBlock("Sent").Padding(8)
-            ).Background("#f3f3f3")
+            ).Background(Theme.CardBackground)
              .Flex(basis: 220, shrink: 0),
 
             // Content — explicit basis: 0 + grow: 1 gives a single distribution
@@ -445,13 +446,13 @@ class ResponsiveNavDemo : Component
         // Wrap kicks in when the narrow viewport can no longer fit one row.
         // RowGap and ColumnGap apply between wrapped lines too — no manual margin.
         return FlexRow(
-            TextBlock("Home").Padding(8).Background("#e0e0ff"),
-            TextBlock("Catalog").Padding(8).Background("#e0e0ff"),
-            TextBlock("Pricing").Padding(8).Background("#e0e0ff"),
-            TextBlock("Docs").Padding(8).Background("#e0e0ff"),
-            TextBlock("About").Padding(8).Background("#e0e0ff"),
-            TextBlock("Contact").Padding(8).Background("#e0e0ff"),
-            TextBlock("Status").Padding(8).Background("#e0e0ff")
+            Border("Home").Padding(8).Background(Theme.AccentTertiary),
+            Border("Catalog").Padding(8).Background(Theme.AccentTertiary),
+            Border("Pricing").Padding(8).Background(Theme.AccentTertiary),
+            Border("Docs").Padding(8).Background(Theme.AccentTertiary),
+            Border("About").Padding(8).Background(Theme.AccentTertiary),
+            Border("Contact").Padding(8).Background(Theme.AccentTertiary),
+            Border("Status").Padding(8).Background(Theme.AccentTertiary)
         ) with {
             Wrap = FlexWrap.Wrap,
             ColumnGap = 8,
@@ -505,10 +506,10 @@ class WidthVsGrowWrong : Component
         // child sizing is governed by Flex(basis/grow/shrink). The 200 is
         // silently ignored when grow > 0 fills available space.
         return FlexRow(
-            TextBlock("Stays 200?")
+            Border("Stays 200?")
                 .Width(200)              // ignored — grow wins
                 .Flex(grow: 1)
-                .Background("#ffe0e0")
+                .Background(Theme.SystemCriticalBackground)
         ) with { ColumnGap = 8 };
     }
 }
@@ -528,9 +529,9 @@ class WidthVsGrowRight : Component
         // Do: encode the intended size as basis with shrink: 0 — Flex
         // owns the sizing math, so no surprise overrides.
         return FlexRow(
-            TextBlock("Exactly 200")
+            Border("Exactly 200")
                 .Flex(basis: 200, shrink: 0)
-                .Background("#e0ffe0")
+                .Background(Theme.SystemSuccessBackground)
                 .Padding(8)
         ) with { ColumnGap = 8 };
     }
@@ -555,7 +556,7 @@ container when total child width exceeds available space. Set
 vary. The cost is zero on rows that don't actually need to wrap — Yoga
 short-circuits when one line fits.
 
-### Reaching for `FlexPadding` when you wanted `.Padding`
+### Using `.Padding` when you wanted `FlexPadding`
 
 `FlexPadding` is a property on the FlexPanel itself, measured by Yoga
 inside the same algorithm that distributes children. The `.Padding(...)`

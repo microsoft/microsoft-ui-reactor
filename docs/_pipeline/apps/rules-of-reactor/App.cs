@@ -4,9 +4,8 @@ using static Microsoft.UI.Reactor.Factories;
 
 // Doc app for `rules-of-reactor.md`. Each snippet is a "before / after"
 // pair — the bad shape and the corrected shape — so the page can show
-// the analyzer's catch and the fix side by side. Analyzers are
-// suppressed in the csproj because these examples deliberately violate
-// the rules (the comment in each snippet names the analyzer code).
+// the analyzer's catch and the fix side by side. Deliberate
+// counterexamples name the analyzer code in their comments.
 ReactorApp.Run<RulesApp>("Rules of Reactor", width: 360, height: 220
 );
 
@@ -106,9 +105,16 @@ class TodoListBad : Component
     public override Element Render() => VStack(4,
         Items.Select(i =>
             // No .WithKey — reorder is destructive.
-            TextBox(i.Title, _ => { }, header: i.Id.ToString())
+            TextBox(i.Title, title => Rename(i, title), header: i.Id.ToString())
         ).ToArray()
     );
+
+    void Rename(TodoItem item, string title)
+    {
+        var index = System.Array.IndexOf(Items, item);
+        if (index >= 0)
+            Items[index] = item with { Title = title };
+    }
 }
 public record TodoItem(int Id, string Title);
 // </snippet:keys-bad>
@@ -120,10 +126,17 @@ class TodoListGood : Component
 
     public override Element Render() => VStack(4,
         Items.Select(i =>
-            TextBox(i.Title, _ => { }, header: i.Id.ToString())
+            TextBox(i.Title, title => Rename(i, title), header: i.Id.ToString())
                 .WithKey(i.Id.ToString())                  // stable identity
         ).ToArray()
     );
+
+    void Rename(TodoItem item, string title)
+    {
+        var index = System.Array.IndexOf(Items, item);
+        if (index >= 0)
+            Items[index] = item with { Title = title };
+    }
 }
 // </snippet:keys-good>
 

@@ -86,7 +86,9 @@ class Wizard : Component
             HStack(8,
                 Button("Back", () => setStep(step - 1)).IsEnabled(step != 0),
                 Button(step == 2 ? "Submit" : "Next",
-                    () => setStep(step + 1)).IsEnabled(canAdvance && step != 2)
+                    () => setStep(step + 1))
+                    .AutomationName(step == 2 ? "Submit form" : "Next step")
+                    .IsEnabled(canAdvance && step != 2)
             )
         ).Padding(20).Width(380);
         // </snippet:render>

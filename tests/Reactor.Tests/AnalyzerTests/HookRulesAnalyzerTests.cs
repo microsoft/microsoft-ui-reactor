@@ -1142,4 +1142,150 @@ class C : Microsoft.UI.Reactor.Core.Component
         };
         await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    // ── Inline function components (Memo) ──────────────────────────────
+    //
+    // Memo(ctx => …) is a component boundary, not an ordinary closure: MountMemoComponent
+    // allocates a RenderContext, hangs a ComponentNode off it and calls ctx.BeginRender(),
+    // so the lambda owns its hook slots. The analyzer used to treat that lambda like any
+    // nested lambda and reported correct code — including the documented Win2D
+    // ctx.UseCanvasResources pattern, whose entire purpose is device-lost recovery.
+
+    private const string MemoStubs = @"
+namespace Microsoft.UI.Reactor.Core
+{
+    public class RenderContext { }
+    public class Element { }
+
+    public abstract class Component
+    {
+        protected internal RenderContext Context { get; } = new RenderContext();
+        public abstract Element Render();
+        protected (int, System.Action<int>) UseState(int initial) => (0, _ => { });
+    }
+}
+
+namespace Microsoft.UI.Reactor
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public static class Factories
+    {
+        public static Element Memo(System.Func<RenderContext, Element> render, params object[] deps)
+            => new Element();
+    }
+
+    public static class CtxHooks
+    {
+        public static int UseCounter(this RenderContext ctx) => 0;
+    }
+}
+
+namespace App
+{
+    using Microsoft.UI.Reactor;
+    using Microsoft.UI.Reactor.Core;
+";
+
+    [Fact]
+    public async Task Hook_On_Memo_Own_Context_Is_Not_Reported()
+    {
+        var test = MemoStubs + @"
+    class C : Component
+    {
+        public override Element Render()
+            => Factories.Memo(ctx =>
+            {
+                var n = ctx.UseCounter();
+                return new Element();
+            });
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The exemption is scoped to the lambda's own context, not to "anything inside a Memo".
+    /// A conditional between the lambda and the hook still breaks slot ordering for that
+    /// inline component, exactly as it would inside Render().
+    /// </summary>
+    [Fact]
+    public async Task Conditional_Hook_Inside_Memo_Is_Still_Reported()
+    {
+        var test = MemoStubs + @"
+    class C : Component
+    {
+        public override Element Render()
+            => Factories.Memo(ctx =>
+            {
+                if (System.DateTime.Now.Ticks > 0)
+                {
+                    var n = {|REACTOR_HOOKS_001:ctx.UseCounter()|};
+                }
+                return new Element();
+            });
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The regression this exemption must not cause. A receiver-less <c>UseState()</c> written
+    /// inside a Memo lambda is the <em>enclosing</em> component's hook running from a nested
+    /// closure — it does not bind to the inline component's slots and is still the real bug.
+    /// </summary>
+    [Fact]
+    public async Task Enclosing_Components_Hook_Inside_Memo_Is_Still_Reported()
+    {
+        var test = MemoStubs + @"
+    class C : Component
+    {
+        public override Element Render()
+            => Factories.Memo(ctx =>
+            {
+                var (count, setCount) = {|REACTOR_HOOKS_001:UseState(0)|};
+                return new Element();
+            });
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// A RenderContext parameter on an ordinary helper method is not an inline component, so a
+    /// hook there is still reported. Guards the exemption against widening to "any parameter
+    /// that happens to be a RenderContext".
+    /// </summary>
+    [Fact]
+    public async Task Hook_On_A_Plain_RenderContext_Parameter_Is_Still_Reported()
+    {
+        var test = MemoStubs + @"
+    class C : Component
+    {
+        public override Element Render() => new Element();
+
+        void NotARender(RenderContext ctx)
+        {
+            var n = {|REACTOR_HOOKS_005:ctx.UseCounter()|};
+        }
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
 }

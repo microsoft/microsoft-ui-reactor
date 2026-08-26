@@ -211,9 +211,9 @@ even after deep-linked entry.
 ```csharp snippet="navigation/deep-link-query"
 ```
 
-This example shows query parameters and optional path segments. The resolver
-parses `/users/42/posts?sort=date&page=2` into typed values you can use
-directly in route constructors.
+This example shows typed path parameters and query values. The resolver
+parses `/users/42/posts/7?sort=date` into typed values you can use directly
+in route constructors.
 
 ## Page Caching
 

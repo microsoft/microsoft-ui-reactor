@@ -8,6 +8,22 @@ palette, drag-to-reorder. The recipes here are not exhaustive apps;
 each is a single screen showing the pattern, and each ships a tiny
 doc app you can clone and adapt.
 
+## Gallery
+
+| Recipe | What it shows |
+|---|---|
+| [Login](login.md) | Per-keystroke validation, `UseMutation`-owned submit state, error display. |
+| [Master-detail](master-detail.md) | Two-pane selection-driven layout from a list and a record. |
+| [Settings page](settings-page.md) | Per-key `UsePersisted` for `Toggle` / `ComboBox` / `Slider`. |
+| [Paginated list](paginated-list.md) | `UseInfiniteResource` with empty / loading / error states and a load-more sentinel. |
+| [Modal dialog](modal-dialog.md) | Confirmation pattern with scrim and conditional render. |
+| [Multi-step form](multi-step-form.md) | Wizard navigation with per-step validation. |
+| [Search with suggestions](search-with-suggestions.md) | `UseMemo`-filtered suggestion list against a static catalog. |
+| [Command palette](command-palette.md) | Keyboard accelerator opening an overlay with a filtered command list. |
+| [Drag-reorder](drag-reorder.md) | Identity-preserving reorder of a keyed list, with a keyboard path. |
+
+## The gallery app
+
 ```csharp
 class RecipesIndexApp : Component
 {
@@ -15,19 +31,34 @@ class RecipesIndexApp : Component
         Heading("Recipes"),
         TextBlock("Real-world compositions made of Reactor primitives.")
             .Opacity(0.7),
-        HStack(8,
-            Tile("Login", "Validation + async submit"),
-            Tile("Master-detail", "Selection-driven layout"),
-            Tile("Settings", "Persisted preferences")
+        VStack(8,
+            HStack(8,
+                Tile("Login", "Validation + async submit"),
+                Tile("Master-detail", "Selection-driven layout"),
+                Tile("Settings", "Persisted preferences")),
+            HStack(8,
+                Tile("Paginated list", "Loading + empty + error states"),
+                Tile("Modal dialog", "Scrim + confirmation flow"),
+                Tile("Multi-step form", "Wizard validation")),
+            HStack(8,
+                Tile("Search", "Memoized suggestions"),
+                Tile("Command palette", "Keyboard-opened overlay"),
+                Tile("Drag-reorder", "Keyed list reordering"))
         )
     ).Padding(20);
+
+    private static Element Tile(string title, string sub) => VStack(4,
+        TextBlock(title).Bold(),
+        TextBlock(sub).Opacity(0.6)
+    ).Padding(12);
+}
 ```
 
 ![Recipes gallery preview](../images/recipes-index/gallery.png)
 
 The gallery uses the same primitives every recipe page does — a
-`VStack` for the column layout, `TextBlock` for descriptions, `HStack`
-for the tile row. The tile helper is a private static method, not a
+`VStack` for the column layout, `TextBlock` for descriptions, and
+`HStack` for each tile row. The tile helper is a private static method, not a
 component, so it has no hook scope:
 
 ```csharp
@@ -49,20 +80,6 @@ class GalleryShape : Component
     public override Element Render() => TextBlock("see docs/_pipeline/apps/recipe-*");
 }
 ```
-
-## Gallery
-
-| Recipe | What it shows |
-|---|---|
-| [Login](login.md) | Per-keystroke validation, `UseMutation`-owned submit state, error display. |
-| [Master-detail](master-detail.md) | Two-pane selection-driven layout from a list and a record. |
-| [Settings page](settings-page.md) | Per-key `UsePersisted` for `Toggle` / `ComboBox` / `Slider`. |
-| [Paginated list](paginated-list.md) | `UseInfiniteResource` with empty / loading / error states and a load-more sentinel. |
-| [Modal dialog](modal-dialog.md) | Confirmation pattern with scrim and conditional render. |
-| [Multi-step form](multi-step-form.md) | Wizard navigation with per-step validation. |
-| [Search with suggestions](search-with-suggestions.md) | `UseMemo`-filtered suggestion list against a static catalog. |
-| [Command palette](command-palette.md) | Keyboard accelerator opening an overlay with a filtered command list. |
-| [Drag-reorder](drag-reorder.md) | Identity-preserving reorder of a keyed list, with a keyboard path. |
 
 ## How to read a recipe
 

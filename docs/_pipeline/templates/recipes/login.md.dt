@@ -83,10 +83,9 @@ disabling the button is enough; an analyzer-flagged guard inside the
 mutator would double-fire on a re-render race. `signIn.IsPending` owns
 both the spinner label ("Signing in…") and the disabled state, so an
 in-flight submit can't be re-triggered by an Enter press.
-`() => _ = signIn.RunAsync((email, pwd))` is the standard fire-and-
-forget shape: the returned task carries the same fault that
-`signIn.Error` already holds, so the UI reads the handle rather than
-awaiting.
+`SubmitAsync` observes the task returned by `signIn.RunAsync((email, pwd))`
+while letting the mutation own the rendered error state, so the UI reads the
+handle instead of duplicating error flags.
 
 ## Tips
 

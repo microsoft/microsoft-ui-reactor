@@ -45,19 +45,19 @@ collection and accessor functions for X and Y:
 ```csharp
 class LineChartDemo : Component
 {
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 120), new(2, 180), new(3, 150),
+        new(4, 220), new(5, 310), new(6, 280),
+        new(7, 350), new(8, 400), new(9, 380),
+        new(10, 420), new(11, 460), new(12, 510)
+    ];
+
     public override Element Render()
     {
-        var data = new SalesPoint[]
-        {
-            new(1, 120), new(2, 180), new(3, 150),
-            new(4, 220), new(5, 310), new(6, 280),
-            new(7, 350), new(8, 400), new(9, 380),
-            new(10, 420), new(11, 460), new(12, 510)
-        };
-
         return VStack(12,
             SubHeading("Line Chart"),
-            LineChart(data, d => d.Month, d => d.Revenue)
+            LineChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Monthly Revenue — Line")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
@@ -84,16 +84,16 @@ maps to the Y value:
 ```csharp
 class BarChartDemo : Component
 {
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 340), new(2, 420), new(3, 510), new(4, 380)
+    ];
+
     public override Element Render()
     {
-        var data = new SalesPoint[]
-        {
-            new(1, 340), new(2, 420), new(3, 510), new(4, 380)
-        };
-
         return VStack(12,
             SubHeading("Bar Chart"),
-            BarChart(data, d => d.Month, d => d.Revenue)
+            BarChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Quarterly Revenue — Bar")
                 .SeriesName("Revenue")
                 .Units("quarters", "USD")
@@ -121,19 +121,19 @@ combines a filled area with a line overlay:
 ```csharp
 class AreaChartDemo : Component
 {
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 50), new(2, 120), new(3, 200),
+        new(4, 350), new(5, 480), new(6, 600),
+        new(7, 720), new(8, 850), new(9, 1020),
+        new(10, 1150), new(11, 1300), new(12, 1500)
+    ];
+
     public override Element Render()
     {
-        var data = new SalesPoint[]
-        {
-            new(1, 50), new(2, 120), new(3, 200),
-            new(4, 350), new(5, 480), new(6, 600),
-            new(7, 720), new(8, 850), new(9, 1020),
-            new(10, 1150), new(11, 1300), new(12, 1500)
-        };
-
         return VStack(12,
             SubHeading("Area Chart"),
-            AreaChart(data, d => d.Month, d => d.Revenue)
+            AreaChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Monthly Revenue — Area")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
@@ -161,19 +161,19 @@ for a donut chart:
 ```csharp
 class PieChartDemo : Component
 {
+    private static readonly CategoryData[] Data =
+    [
+        new("Engineering", 42),
+        new("Marketing", 18),
+        new("Sales", 25),
+        new("Support", 15)
+    ];
+
     public override Element Render()
     {
-        var data = new CategoryData[]
-        {
-            new("Engineering", 42),
-            new("Marketing", 18),
-            new("Sales", 25),
-            new("Support", 15)
-        };
-
         return VStack(12,
             SubHeading("Pie Chart"),
-            PieChart(data, d => d.Value, d => d.Name)
+            PieChart(Data, d => d.Value, d => d.Name)
                 .Title("Team Distribution")
                 .Description("Pie chart showing team size across Engineering, Marketing, Sales, and Support.")
                 .Width(300).Height(300)
@@ -218,27 +218,28 @@ with the new data:
 ```csharp
 class CombinedChartDemo : Component
 {
+    private static readonly SalesPoint[] Data2024 =
+    [
+        new(1, 100), new(2, 140), new(3, 180),
+        new(4, 200), new(5, 260), new(6, 300)
+    ];
+
+    private static readonly SalesPoint[] Data2025 =
+    [
+        new(1, 160), new(2, 220), new(3, 280),
+        new(4, 320), new(5, 390), new(6, 450)
+    ];
+
+    private static readonly string[] Years = ["2024", "2025"];
+
     public override Element Render()
     {
         var (year, setYear) = UseState(0);
-        var years = new[] { "2024", "2025" };
-
-        var data2024 = new SalesPoint[]
-        {
-            new(1, 100), new(2, 140), new(3, 180),
-            new(4, 200), new(5, 260), new(6, 300)
-        };
-        var data2025 = new SalesPoint[]
-        {
-            new(1, 160), new(2, 220), new(3, 280),
-            new(4, 320), new(5, 390), new(6, 450)
-        };
-
-        var data = year == 0 ? data2024 : data2025;
+        var data = year == 0 ? Data2024 : Data2025;
 
         return VStack(12,
             SubHeading("Interactive Chart"),
-            ComboBox(years, year, setYear),
+            ComboBox(Years, year, setYear),
             AreaChart(data, d => d.Month, d => d.Revenue)
                 .Title("Revenue by Year")
                 .SeriesName("Revenue")
@@ -268,12 +269,14 @@ diffs the old and new element trees and patches only what changed:
 ```csharp
 class DynamicDataDemo : Component
 {
+    private static readonly List<SalesPoint> InitialPoints =
+        Enumerable.Range(1, 8)
+            .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
+            .ToList();
+
     public override Element Render()
     {
-        var (points, updatePoints) = UseReducer(
-            Enumerable.Range(1, 8)
-                .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
-                .ToList());
+        var (points, updatePoints) = UseReducer(InitialPoints);
 
         return VStack(12,
             SubHeading("Dynamic Data"),
@@ -317,13 +320,13 @@ geometry, and returns any Element:
 ```csharp
 // Percent rendered inside the slice. The string label accessor
 // is still passed so screen readers describe the slice.
-PieChart(data, d => d.Value, d => d.Name)
+PieChart(Data, d => d.Value, d => d.Name)
     .Title("Team Distribution")
     .Width(300).Height(300)
     .InnerRadius(50).PadAngle(0.02)
     .LabelView((d, layout) =>
         TextBlock($"{layout.Fraction:P0}")
-            .FontSize(12).Bold().Foreground("White"))
+            .FontSize(12).Bold().Foreground(Theme.AccentText))
 ```
 
 ![Pie chart with the percent rendered inside each slice](images/charting/pie-label-view.png)
@@ -340,14 +343,14 @@ any Element. Each delegate receives the tick's domain value:
 
 ```csharp
 // X axis ticks: render month name plus a caption per tick.
-LineChart(data, d => d.Month, d => d.Revenue)
+LineChart(Data, d => d.Month, d => d.Revenue)
     .Title("Revenue by Month")
     .SeriesName("Revenue")
     .Width(600).Height(220)
     .Stroke("#0078D4").StrokeWidth(2.5)
     .ShowGrid(true).ShowAxes(true)
     .XTickLabelView(t => VStack(2,
-        TextBlock(months[Math.Clamp((int)t - 1, 0, months.Length - 1)])
+        TextBlock(Months[Math.Clamp((int)t - 1, 0, Months.Length - 1)])
             .FontSize(11).SemiBold(),
         TextBlock("month").FontSize(8).Opacity(0.6)))
 ```
@@ -400,19 +403,19 @@ annotations, and `.Interactive()` for keyboard navigation:
 /// </summary>
 class AccessibleChartDemo : Component
 {
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 120), new(2, 180), new(3, 150),
+        new(4, 220), new(5, 310), new(6, 280)
+    ];
+
     public override Element Render()
     {
-        var data = new SalesPoint[]
-        {
-            new(1, 120), new(2, 180), new(3, 150),
-            new(4, 220), new(5, 310), new(6, 280)
-        };
-
         return VStack(12,
             SubHeading("Accessible Chart"),
 
             // Static accessible chart: Title + SeriesName + Units
-            LineChart(data, d => d.Month, d => d.Revenue)
+            LineChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Monthly Revenue 2024")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
@@ -423,7 +426,7 @@ class AccessibleChartDemo : Component
                 .ShowGrid(true).ShowAxes(true),
 
             // Interactive accessible chart: adds keyboard nav and point invocation
-            BarChart(data, d => d.Month, d => d.Revenue)
+            BarChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Monthly Revenue — Interactive")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
@@ -691,12 +694,14 @@ public override Element Render()
 ```csharp
 class DynamicDataDemo : Component
 {
+    private static readonly List<SalesPoint> InitialPoints =
+        Enumerable.Range(1, 8)
+            .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
+            .ToList();
+
     public override Element Render()
     {
-        var (points, updatePoints) = UseReducer(
-            Enumerable.Range(1, 8)
-                .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
-                .ToList());
+        var (points, updatePoints) = UseReducer(InitialPoints);
 
         return VStack(12,
             SubHeading("Dynamic Data"),

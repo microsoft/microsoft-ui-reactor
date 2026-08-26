@@ -1,15 +1,15 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Text Controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/text-controls).
 
-Text and media controls are the read-only-display half of the Microsoft.UI.Reactor (Reactor)
+Text and media controls are the display, rich-text, and media half of the Microsoft.UI.Reactor (Reactor)
 catalog: surfaces that show content the user is reading, watching, or
-inspecting rather than editing. Most of them are thin wrappers over the
+inspecting, plus `RichEditBox` for rich-text editing. Most of them are thin wrappers over the
 WinUI text and media surface, so the modifier names and accessibility
 behavior match what a WinUI developer already knows. The two outliers are
 [`Markdown(string)`](#markdown-reactor-original) — a Reactor-original
 renderer that parses GFM-style Markdown into the same element tree the
 rest of your UI uses, no WebView round trip — and the semantic text
-variants [`Heading`](#text-variants) / [`SubHeading`](#text-variants) /
-[`Caption`](#text-variants), which preset typography so that accessibility
+variants [`Heading`](#text-variants) / [`SubHeading`](#text-variants),
+which preset typography so that accessibility
 tooling can infer document outline without manually setting
 `AutomationProperties`. The trade-off the catalog makes here is bias
 toward composition: rich layouts come from many small text elements in a
@@ -19,22 +19,22 @@ prose, then jump to the control you need.
 
 # Text and Media
 
-This page covers every read-only-display and inline-rich-text control in
-Reactor. For input controls (`TextBox`, `PasswordBox`, `RichEditBox`),
+This page covers display text, inline rich text, rich-text editing, and media controls in
+Reactor. For single-line input controls (`TextBox`, `PasswordBox`),
 see [Forms](forms.md). For data-bound collections, see
 [Collections](collections.md).
 
 ## Text variants
 
 ```csharp
-Title(string)           // largest variant, ~40pt
-Heading(string)         // section title, ~28pt
+Title(string)           // WinUI title text style, ~28pt
+Heading(string)         // semantic heading, ~28pt
 SubHeading(string)      // sub-section header, ~20pt
 Subtitle(string)        // supporting line under a heading
 BodyLarge(string)       // lead paragraph
 TextBlock(string)       // body prose
 BodyStrong(string)      // body prose, semibold
-Caption(string)         // ~12pt, dimmed
+Caption(string)         // ~12pt metadata text
 ```
 
 ```csharp
@@ -56,7 +56,8 @@ class TextVariantsDemo : Component
 ![Heading / SubHeading / TextBlock / Caption stacked](images/text-and-media/text-variants.png)
 
 `Heading`, `SubHeading`, and `Caption` return [`TextBlockElement`](components.md)
-with preset `FontSize`, weight, and `Foreground` from the active theme.
+with preset text sizing; `Heading` and `SubHeading` also set heading
+automation levels.
 They are the right tool for document outline — screen readers and the
 [accessibility scanner](accessibility.md) treat them as hierarchical
 landmarks, where a bare `TextBlock` styled with `.FontSize(24).Bold()` is
@@ -66,14 +67,14 @@ match the visual weight you want.
 
 | Factory | Default size | Use when |
 |---|---|---|
-| `Title` | ~40pt, semibold | The largest thing on a landing or hero surface. |
-| `Heading` | ~28pt, bold | One per page — the document title. |
+| `Title` | ~28pt, semibold | WinUI title-ramp text without heading semantics. |
+| `Heading` | ~28pt, bold | One per page — the semantic document title. |
 | `SubHeading` | ~20pt, semibold | Section header inside a long page. |
 | `Subtitle` | ~20pt, regular | Supporting line directly under a heading. |
 | `BodyLarge` | ~18pt | Lead paragraph or callout prose. |
 | `TextBlock` | Body | Paragraphs, labels, inline help. |
 | `BodyStrong` | Body, semibold | Emphasis inside body copy without a size jump. |
-| `Caption` | ~12pt, dimmed | Timestamps, metadata, helper text under a field. |
+| `Caption` | ~12pt | Timestamps, metadata, helper text under a field. |
 
 WinUI design page: [Typography in Windows 11](https://learn.microsoft.com/en-us/windows/apps/design/style/typography).
 
@@ -319,6 +320,8 @@ class ImageDemo : Component
         // Resource Uri — ms-appx:// for packaged assets, file:// for disk,
         // https:// for remote.
         Image("ms-appx:///Assets/StoreLogo.png")
+            .AutomationName("Reactor app logo")
+            .Set(img => img.Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill)
             .Width(96).Height(96),
         TextBlock("Stretch.UniformToFill for cover art; " +
                   "ImageFailed to detect missing assets.").Opacity(0.6)
@@ -365,8 +368,7 @@ class MediaPlayerDemo : Component
     public override Element Render() => VStack(8,
         SubHeading("MediaPlayerElement"),
         MediaPlayerElement(
-            "https://learn.microsoft.com/en-us/windows/apps/design/" +
-            "controls/images/ic_fluent_play_24_regular.svg")
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4")
             .Width(420).Height(240)
             .Set(m =>
             {

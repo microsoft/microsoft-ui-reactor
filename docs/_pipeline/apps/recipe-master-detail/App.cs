@@ -37,6 +37,8 @@ class NoteBrowser : Component
         var list = VStack(2,
             Notes.Select(n =>
                 Button(n.Title, () => setSelectedId(n.Id))
+                    .WithKey(n.Id.ToString())
+                    .AutomationName(n.Title)
                     .HAlign(Microsoft.UI.Xaml.HorizontalAlignment.Stretch)
                     .Background(n.Id == selectedId ? "#E5F1FB" : "#FFFFFF")
             ).ToArray()

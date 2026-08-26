@@ -16,6 +16,7 @@ overlay, layered over the page the same way the
 | Open / query / selection state | `UseState<bool>` / `UseState<string>` / `UseState<int>` |
 | Command catalog | [`Command`](../commanding.md) records — same shape used by `Button`, `MenuItem`, `AppBarButton` |
 | Filter | LINQ `Where(...Contains(query, OrdinalIgnoreCase))` |
+| Open focus | `UseElementFocus()` + `UseEffect` when `open` changes |
 | Open accelerator | [`.OnKeyDown`](../input-and-gestures.md) on the root surface |
 | List navigation | [`.OnPreviewKeyDown`](../input-and-gestures.md) on the palette container |
 | Overlay composition | `Group(page, palette)` — same shape as [Recipe: Modal dialog](modal-dialog.md) |
@@ -53,17 +54,21 @@ same record with a toolbar button or a context menu entry.
 
 ```csharp
 // Three pieces of state run the palette: whether it's open, the
-// typed query, and the highlighted row in the filtered list.
+// typed query, and the highlighted row in the filtered list. The
+// focus helper is separate; it moves focus into the query box on open.
 var (open, setOpen) = UseState(false);
 var (query, setQuery) = UseState("");
 var (index, setIndex) = UseState(0);
 var (last, setLast) = UseState<string?>(null);
+var (queryRef, requestQueryFocus) = this.UseElementFocus();
 ```
 
-Three hooks own the palette: `open` toggles the overlay, `query`
+Three state hooks own the palette: `open` toggles the overlay, `query`
 drives the filter, and `index` is the highlighted row. A fourth
 `last` hook just echoes the most recently executed command for the
-demo — it's not part of the palette pattern.
+demo — it's not part of the palette pattern. The focus helper is
+separate from palette state; it moves focus into the query box when
+the overlay opens.
 
 ### Filter
 
@@ -153,21 +158,32 @@ var page = VStack(12,
         : TextBlock($"Last command: {last}").Opacity(0.6)
 ).Padding(24);
 
+UseEffect(() =>
+{
+    if (open)
+        requestQueryFocus();
+    return () => { };
+}, open);
+
 Element palette = Border(
     VStack(0,
         TextBox(query, v => { setQuery(v); setIndex(0); },
-            placeholderText: "Type a command…").Width(420),
+            placeholderText: "Type a command…")
+            .AutomationName("Command search")
+            .Width(420)
+            .Ref(queryRef),
         matches.Length == 0
-            ? TextBlock("No commands match.").Padding(12).Opacity(0.6)
+            ? (Element)TextBlock("No commands match.").Padding(12).Opacity(0.6)
             : VStack(0,
                 matches.Select((c, i) =>
-                    TextBlock(c.Label)
-                        .Padding(10)
-                        .Background(i == safeIndex ? "#E5F1FB" : "#FFFFFF")
+                    Border(
+                        TextBlock(c.Label).Padding(10)
+                    ).Background(i == safeIndex ? Theme.AccentTertiary : Theme.CardBackground)
+                     .WithKey(c.Label)
                 ).ToArray<Element>()
             )
-    ).Background("#FFFFFF").CornerRadius(8).Width(440)
-).Background("#80000000").Padding(60)
+    ).Background(Theme.CardBackground).CornerRadius(8).Width(440)
+).Background(Theme.SmokeFill).Padding(60)
  .OnPreviewKeyDown(OnPaletteKey);
 
 var root = (open ? Group(page, palette) : page)
@@ -193,7 +209,7 @@ return root;
 
 The page renders normally; the palette is a `Border` wrapping a
 `VStack` returned alongside it in a `Group(page, palette)`. The
-scrim background `#80000000` dims the page underneath. The root
+theme smoke-fill scrim dims the page underneath. The root
 surface's `.OnKeyDown` watches for Ctrl+K and toggles `open`, which
 is the cheapest "global accelerator" that works from any focus state
 on the page.

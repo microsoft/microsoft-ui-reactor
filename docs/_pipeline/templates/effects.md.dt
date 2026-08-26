@@ -78,7 +78,7 @@ change:
 ```csharp snippet="effects/dependency-effect"
 ```
 
-![Search with debounced query](screenshot://effects/dependency-effect)
+![Search reacting to query changes](screenshot://effects/dependency-effect)
 
 Every time `query` changes, the effect runs again. Reactor compares the current
 dependencies to the previous ones using structural equality. If nothing
@@ -221,10 +221,10 @@ stable across renders.
 ```csharp snippet="effects/missing-cleanup-dont"
 ```
 
-The component unmounts, the timer keeps firing, the setter is called on a
-dead [`RenderContext`](hooks-internals.md), and the setter throws (or worse,
-silently leaks the closure tree the timer captured). Always return a
-cleanup that cancels the producer:
+If you leave the commented effect active, the component unmounts, the timer
+keeps firing, the setter is called on a dead [`RenderContext`](hooks-internals.md),
+and the setter throws (or worse, silently leaks the closure tree the timer
+captured). Always return a cleanup that cancels the producer:
 
 ```csharp snippet="effects/missing-cleanup-do"
 ```

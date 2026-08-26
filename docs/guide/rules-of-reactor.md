@@ -213,9 +213,16 @@ class TodoListBad : Component
     public override Element Render() => VStack(4,
         Items.Select(i =>
             // No .WithKey — reorder is destructive.
-            TextBox(i.Title, _ => { }, header: i.Id.ToString())
+            TextBox(i.Title, title => Rename(i, title), header: i.Id.ToString())
         ).ToArray()
     );
+
+    void Rename(TodoItem item, string title)
+    {
+        var index = System.Array.IndexOf(Items, item);
+        if (index >= 0)
+            Items[index] = item with { Title = title };
+    }
 }
 public record TodoItem(int Id, string Title);
 ```
@@ -229,10 +236,17 @@ class TodoListGood : Component
 
     public override Element Render() => VStack(4,
         Items.Select(i =>
-            TextBox(i.Title, _ => { }, header: i.Id.ToString())
+            TextBox(i.Title, title => Rename(i, title), header: i.Id.ToString())
                 .WithKey(i.Id.ToString())                  // stable identity
         ).ToArray()
     );
+
+    void Rename(TodoItem item, string title)
+    {
+        var index = System.Array.IndexOf(Items, item);
+        if (index >= 0)
+            Items[index] = item with { Title = title };
+    }
 }
 ```
 

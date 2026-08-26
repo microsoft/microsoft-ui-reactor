@@ -84,7 +84,7 @@ class GridViewDemo : Component
                         TextBlock(contact.Name).Bold(),
                         TextBlock(contact.Email).FontSize(12).Opacity(0.6)
                     ).Padding(12)
-                     .Background("#f5f5f5")
+                     .Background(Theme.CardBackground)
                      .CornerRadius(8)
                      .Width(160).Height(80)
             ).Height(300)
@@ -128,7 +128,8 @@ class VirtualListRefDemo : Component
             SubHeading("VirtualListRef — Imperative Scroll"),
             HStack(8,
                 TextBox(targetIndex, setTargetIndex,
-                    placeholderText: "Index"),
+                    placeholderText: "Index")
+                    .AutomationName("Target index"),
                 Button("Scroll To", () =>
                 {
                     if (int.TryParse(targetIndex, out var idx))
@@ -155,17 +156,19 @@ class ForEachDemo : Component
     {
         var colors = new[]
         {
-            ("Red", "#ff4444"), ("Green", "#44ff44"),
-            ("Blue", "#4444ff"), ("Yellow", "#ffff44")
+            ("Primary", Theme.Accent), ("Secondary", Theme.AccentSecondary),
+            ("Tertiary", Theme.AccentTertiary), ("Subtle", Theme.SubtleFill)
         };
 
         return VStack(12,
             SubHeading("ForEach (non-virtualized)"),
             HStack(8,
-                ForEach(colors, ((string Name, string Hex) color) =>
-                    TextBlock(color.Name)
-                        .Padding(horizontal: 8, vertical: 16)
-                        .Background(color.Hex)
+                ForEach(colors, ((string Name, ThemeRef Brush) color) =>
+                    Border(
+                        TextBlock(color.Name)
+                            .Padding(horizontal: 8, vertical: 16)
+                    )
+                        .Background(color.Brush)
                         .CornerRadius(4)
                         .WithKey(color.Name)
                 )
@@ -181,7 +184,8 @@ class MultiSelectDemo : Component
     public override Element Render()
     {
         var contacts = SampleData.Contacts.Take(10).ToList();
-        var (selectedIds, setSelectedIds) = UseState(new List<string>());
+        var initialSelectedIds = UseMemo(() => new List<string>());
+        var (selectedIds, setSelectedIds) = UseState(initialSelectedIds);
 
         return VStack(12,
             SubHeading($"{selectedIds.Count} selected"),
@@ -207,29 +211,42 @@ class MultiSelectDemo : Component
 // <snippet:withkey>
 class WithKeyDemo : Component
 {
+    record FruitItem(string Id, string Name);
+
     public override Element Render()
     {
+        var initialItems = UseMemo(() => new List<FruitItem>
+        {
+            new("fruit-1", "Apple"),
+            new("fruit-2", "Banana"),
+            new("fruit-3", "Cherry")
+        });
         var (items, updateItems) = UseReducer(
-            new List<string> { "Apple", "Banana", "Cherry" });
+            initialItems);
         var (newItem, setNewItem) = UseState("");
+        var (nextId, setNextId) = UseState(4);
 
         return VStack(12,
             SubHeading("Stable Identity with WithKey"),
             HStack(8,
-                TextBox(newItem, setNewItem, placeholderText: "New item"),
+                TextBox(newItem, setNewItem, placeholderText: "New item")
+                    .AutomationName("New item"),
                 Button("Add", () => {
                     if (!string.IsNullOrWhiteSpace(newItem)) {
-                        updateItems(l => [.. l, newItem.Trim()]);
+                        var name = newItem.Trim();
+                        updateItems(l => [.. l, new FruitItem($"fruit-{nextId}", name)]);
+                        setNextId(nextId + 1);
                         setNewItem("");
                     }
                 })
             ),
-            VStack(4, items.Select((item, i) =>
+            VStack(4, items.Select((item, _) =>
                 HStack(8,
-                    TextBlock(item),
+                    TextBlock(item.Name),
                     Button("Remove", () => updateItems(
-                        l => l.Where((_, idx) => idx != i).ToList()))
-                ).WithKey($"item-{item}-{i}")
+                        l => l.Where(x => x.Id != item.Id).ToList()))
+                        .AutomationName($"Remove {item.Name}")
+                ).WithKey(item.Id)
             ).ToArray())
         ).Padding(24);
     }
@@ -278,15 +295,15 @@ class DragReorderDemo : Component
 {
     public override Element Render()
     {
-        var (items, setItems) = UseState(
-            new List<string> { "Alpha", "Bravo", "Charlie",
-                "Delta", "Echo", "Foxtrot" });
+        var initialItems = UseMemo(() => new List<string> { "Alpha", "Bravo", "Charlie",
+            "Delta", "Echo", "Foxtrot" });
+        var (items, setItems) = UseState(initialItems);
 
         // Reactor surfaces drag-reorder through the underlying WinUI
         // ListView's CanReorderItems / AllowDrop / CanDragItems. The
         // .Set passthrough is the supported escape hatch until a
-        // first-class fluent ships. The user's reorder is mirrored
-        // back into state via the ListView's reorder event.
+        // first-class fluent ships. The recipe linked below shows
+        // how to mirror a drop back into app state.
         return VStack(8,
             SubHeading("Drag to reorder"),
             ListView<string>(
@@ -398,6 +415,7 @@ class NoteEditor : Component<Note>
         return HStack(8,
             TextBlock(Props.Title).SemiBold(),
             Button(dirty ? "Dirty" : "Clean", () => setDirty(!dirty))
+                .AutomationName($"Mark {Props.Title} {(dirty ? "clean" : "dirty")}")
         );
     }
 }
@@ -516,7 +534,7 @@ class LetterJump : Component<IReadOnlyList<Person>>
                     {
                         if (groupStarts.TryGetValue(letter, out var start))
                             listRef.Current?.ScrollToIndex(start);
-                    })))
+                    }).AutomationName($"Jump to {letter}")))
         );
     }
 }

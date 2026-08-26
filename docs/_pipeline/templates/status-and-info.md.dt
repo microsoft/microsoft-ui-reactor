@@ -100,8 +100,8 @@ pick the ring for unknown-duration spinners next to a label
 ```
 
 <!-- phantom:skip "ProgressBar" -->
-The `value` argument is 0–100 for `Progress(double)` and 0–1 for
-`ProgressRing(double)` — same convention as the underlying WinUI
+The `value` argument is 0–100 for both `Progress(double)` and
+`ProgressRing(double)` — the same convention as the underlying WinUI
 controls. There is no `ProgressBar(...)` factory: the linear bar is
 reached through `Progress` / `ProgressIndeterminate`, which is what the
 element record `ProgressElement` binds to (spec 039 §5).

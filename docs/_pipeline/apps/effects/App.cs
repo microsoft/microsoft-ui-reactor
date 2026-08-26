@@ -43,7 +43,7 @@ class DependencyEffectExample : Component
         }, query);
 
         return VStack(12,
-            TextBox(query, setQuery, placeholderText: "Search...").Width(300),
+            TextBox(query, setQuery, placeholderText: "Search...", header: "Search query").Width(300),
             TextBlock(results).Foreground(Theme.SecondaryText)
         ).Padding(24);
     }
@@ -79,7 +79,8 @@ class TimerCleanupExample : Component
         return VStack(12,
             TextBlock($"Elapsed: {seconds}s").FontSize(24).Bold(),
             HStack(8,
-                Button(isRunning ? "Stop" : "Start", () => setIsRunning(!isRunning)),
+                Button(isRunning ? "Stop" : "Start", () => setIsRunning(!isRunning))
+                    .AutomationName(isRunning ? "Stop timer" : "Start timer"),
                 Button("Reset", () => updateSeconds(_ => 0))
             )
         ).Padding(24);
@@ -108,7 +109,7 @@ class AsyncLoadingExample : Component
 
         return VStack(8,
             Heading("Loaded Users"),
-            VStack(4, items.Select(name => TextBlock(name)).ToArray())
+            VStack(4, items.Select(name => TextBlock(name).WithKey(name)).ToArray())
         ).Padding(24);
     }
 }
@@ -162,7 +163,7 @@ class FetchCancellationExample : Component
         }, query);
 
         return VStack(8,
-            TextBox(query, setQuery).Width(250),
+            TextBox(query, setQuery, header: "Search query").Width(250),
             ForEach(items, i => TextBlock(i))
         ).Padding(24);
     }
@@ -213,7 +214,7 @@ class DepsLiteralDontExample : Component
         var options = new { Url = url, Limit = 10 };
         UseEffect(() => FetchAsync(options), options);
 
-        return TextBox(url, setUrl).Width(250).Padding(24);
+        return TextBox(url, setUrl, header: "Request URL").Width(250).Padding(24);
     }
 }
 // </snippet:deps-literal-dont>
@@ -230,7 +231,7 @@ class DepsLiteralDoExample : Component
         // Do — pass the primitives, which compare by value.
         UseEffect(() => FetchAsync(url, 10), url);
 
-        return TextBox(url, setUrl).Width(250).Padding(24);
+        return TextBox(url, setUrl, header: "Request URL").Width(250).Padding(24);
     }
 }
 // </snippet:deps-literal-do>
@@ -243,15 +244,15 @@ class MissingCleanupDontExample : Component
         var (tick, updateTick) = UseReducer(0);
 
         // Don't — no cleanup, so the timer fires forever after unmount.
-        UseEffect(() =>
-        {
-            var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            _ = Task.Run(async () =>
-            {
-                while (await timer.WaitForNextTickAsync())
-                    updateTick(t => t + 1);
-            });
-        }, Array.Empty<object>());
+        // UseEffect(() =>
+        // {
+        //     var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        //     _ = Task.Run(async () =>
+        //     {
+        //         while (await timer.WaitForNextTickAsync())
+        //             updateTick(t => t + 1);
+        //     });
+        // }, Array.Empty<object>());
 
         return TextBlock($"Ticks: {tick}").Padding(24);
     }
@@ -306,8 +307,8 @@ class EffectVsMemoDontExample : Component
         UseEffect(() => setFull($"{first} {last}"), first, last);
 
         return VStack(8,
-            TextBox(first, setFirst).Width(150),
-            TextBox(last, setLast).Width(150),
+            TextBox(first, setFirst, header: "First name").Width(150),
+            TextBox(last, setLast, header: "Last name").Width(150),
             TextBlock(full)
         ).Padding(24);
     }
@@ -328,8 +329,8 @@ class EffectVsMemoDoExample : Component
         var stats = UseMemo(() => Compute(full), full);      // memoized when expensive
 
         return VStack(8,
-            TextBox(first, setFirst).Width(150),
-            TextBox(last, setLast).Width(150),
+            TextBox(first, setFirst, header: "First name").Width(150),
+            TextBox(last, setLast, header: "Last name").Width(150),
             TextBlock(full),
             TextBlock(stats)
         ).Padding(24);

@@ -379,10 +379,10 @@ travel with the items.
 WinUI `ListView` and `GridView` ship drag-reorder, and Reactor exposes
 the relevant properties through the `.Set` passthrough until a
 first-class fluent ships. Three properties switch the surface on —
-`CanReorderItems`, `AllowDrop`, and `CanDragItems` — and the list
-mutates its internal `ItemsSource` order on drop. Mirror the new order
-back into your state via the underlying `ItemsSource` collection or a
-`DragItemsCompleted` handler:
+`CanReorderItems`, `AllowDrop`, and `CanDragItems`. The compact snippet
+below shows those WinUI switches; for a state-backed list, mirror the
+new order back into your state via the underlying `ItemsSource`
+collection or a `DragItemsCompleted` handler:
 
 ```csharp snippet="collections/drag-reorder"
 ```

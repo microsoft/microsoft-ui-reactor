@@ -33,7 +33,7 @@ of mode.
 |---|---|---|
 | `Theme.Accent`, `Theme.PrimaryText`, etc. | Typed token | Always — these are the canonical brush references. |
 | `Theme.Ref("AnyResourceKey")` | String token | The brush isn't surfaced as a typed accessor (rare). |
-| `.Background(token)` / `.Foreground(token)` | Color modifier | Apply a token to any element. |
+| `.Background(token)` / `.Foreground(token)` | Color modifier | Apply a token to elements that expose that property (for example `Border` for backgrounds, `TextBlock` for foregrounds). |
 | `.Background("#RRGGBB")` | Color modifier | Brand colors that must stay constant across themes. |
 | `.AccentButton()`, `.SubtleButton()`, `.TextLink()` | Named-style fluent | The four canonical button shapes. No `.Resources` needed. |
 | `.Informational()` / `.Success()` / `.Warning()` / `.Error()` | Named-style fluent | InfoBar severity. |
@@ -55,11 +55,12 @@ class ThemeTokensExample : Component
             TextBlock("Primary Text").Foreground(Theme.PrimaryText),
             TextBlock("Secondary Text").Foreground(Theme.SecondaryText),
             TextBlock("Accent Text").Foreground(Theme.AccentText).SemiBold(),
-            TextBlock("On Accent Background")
-                .Foreground("#FFFFFF")
-                .Padding(horizontal: 8, vertical: 4)
-                .Background(Theme.Accent)
-                .CornerRadius(4)
+            Border(
+                TextBlock("On Accent Background")
+                    .Foreground(Theme.AccentText)
+                    .Padding(horizontal: 8, vertical: 4)
+            ).Background(Theme.Accent)
+             .CornerRadius(4)
         ).Padding(24);
     }
 }
@@ -115,7 +116,8 @@ that looks native in both light and dark mode.
 
 ## Color modifiers
 
-`.Background()` and `.Foreground()` accept three input shapes:
+`.Background()` and `.Foreground()` accept typed tokens and `Theme.Ref`
+tokens for theme-aware colors:
 
 ```csharp
 class ColorModifiersExample : Component
@@ -123,10 +125,14 @@ class ColorModifiersExample : Component
     public override Element Render()
     {
         return VStack(8,
-            TextBlock("Theme token").Background(Theme.SubtleFill).Padding(8),
-            TextBlock("Hex string").Background("#E8F5E9").Padding(8),
-            TextBlock("Mixed").Foreground(Theme.PrimaryText)
-                .Background("#1E1E2E").Padding(8)
+            Border(TextBlock("Typed token").Padding(8))
+                .Background(Theme.SubtleFill),
+            Border(TextBlock("Theme.Ref token").Padding(8))
+                .Background(Theme.Ref("AcrylicBackgroundFillColorDefaultBrush")),
+            Border(TextBlock("Token foreground + token background")
+                .Foreground(Theme.PrimaryText)
+                .Padding(8))
+                .Background(Theme.ControlFill)
         ).Padding(24);
     }
 }
@@ -136,10 +142,10 @@ class ColorModifiersExample : Component
 |---|---|---|
 | Typed token | `.Background(Theme.Accent)` | yes |
 | `Theme.Ref` | `.Background(Theme.Ref("MyCustomBrush"))` | yes |
-| Hex string | `.Background("#FF5733")` | no — frozen |
-| `Windows.UI.Color` | `.Background(Colors.Blue)` | no — frozen |
+| Hex string | `.Background("#FF5733")` | no — frozen; reserve for brand colors |
+| `Brush` | `.Background(new SolidColorBrush(...))` | no — frozen; avoid unless the color must not follow theme |
 
-Tokens are the right default. Reserve hex and `Color` for brand colors
+Tokens are the right default. Reserve hex and `Brush` for brand colors
 that should stay constant regardless of mode.
 
 ## Signal colors
@@ -160,12 +166,13 @@ class SignalColorsExample : Component
     }
 
     static Element Badge(string label, ThemeRef color) =>
-        TextBlock(label)
-            .FontSize(12).SemiBold()
-            .Foreground(color)
-            .Padding(horizontal: 8, vertical: 4)
-            .Background(Theme.SubtleFill)
-            .CornerRadius(4);
+        Border(
+            TextBlock(label)
+                .FontSize(12).SemiBold()
+                .Foreground(color)
+                .Padding(horizontal: 8, vertical: 4)
+        ).Background(Theme.SubtleFill)
+         .CornerRadius(4);
 }
 ```
 

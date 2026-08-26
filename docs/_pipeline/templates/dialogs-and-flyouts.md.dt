@@ -309,9 +309,10 @@ close.
 
 The exception is `Popup`. The popup has none of the above; it is a
 positioning primitive. For a popup that should behave like a modal,
-wrap its content with `UseFocusTrap` and apply the dialog role
-explicitly. `UseFocusTrap(bool isActive)` takes the active flag, and the
-handle attaches with the `.FocusTrap(handle)` element modifier — inside a
+wrap its content with `UseFocusTrap` and apply dialog semantics
+explicitly. `UseFocusTrap(bool isActive)` takes the active flag, the
+handle attaches with the `.FocusTrap(handle)` element modifier, and
+`.Semantics(role: "dialog")` supplies the screen-reader role — inside a
 `Component`, call the hook as `this.UseFocusTrap(...)` because it is an
 extension method:
 

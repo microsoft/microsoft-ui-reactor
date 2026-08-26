@@ -62,15 +62,17 @@ clears the input is essential.
 
 ```csharp
 return VStack(8,
-    TextBox(query, setQuery, placeholderText: "Search topics…").Width(300),
+    TextBox(query, setQuery, placeholderText: "Search topics…")
+        .AutomationName("Search topics")
+        .Width(300),
     suggestions.Length == 0
         ? Empty()
         : Border(
             VStack(2,
                 suggestions.Select(s =>
-                    TextBlock(s).Padding(8)).ToArray()
-            ).Background("#FFFFFF")
-        ).WithBorder("#E0E0E0").Width(300)
+                    TextBlock(s).Padding(8).WithKey(s)).ToArray()
+            ).Background(Theme.SolidBackground)
+        ).WithBorder(Theme.ControlStroke).Width(300)
 ).Padding(20);
 ```
 

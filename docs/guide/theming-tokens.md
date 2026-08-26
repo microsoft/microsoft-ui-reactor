@@ -84,14 +84,14 @@ class SwatchGrid : Component
     private static Element SwatchSection(string title, (string Name, ThemeRef Ref)[] tokens) =>
         VStack(8,
             SubHeading(title),
-            VStack(4, tokens.Select(t => Row(t.Name, t.Ref)).ToArray())
+            VStack(4, tokens.Select(t => Row(t.Name, t.Ref).WithKey(t.Name)).ToArray())
         );
 
     private static Element Row(string name, ThemeRef token) => HStack(12,
         new BorderElement(Empty())
             .Background(token)
             .Size(40, 24)
-            .WithBorder("#DDDDDD"),
+            .WithBorder(Theme.ControlStroke),
         TextBlock(name).Width(220),
         TextBlock(token.ResourceKey).Opacity(0.6)
     );

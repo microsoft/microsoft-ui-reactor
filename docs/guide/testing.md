@@ -36,13 +36,26 @@ class Counter : Component
 | Self-test | `tests/Reactor.SelfTests/` (fixtures in `Reactor.AppTests.Host`) | MSTest wrapping a TAP subprocess | Component renders into a real WinUI tree; assertions via `VisualTreeHelper`. |
 | App E2E | `tests/Reactor.AppTests/` | MSTest + winapp ui | Real user input, UIA properties as seen by assistive tech, cross-process behavior. |
 
-One command per suite — there are no filters to remember:
+Every suite runs on **Microsoft.Testing.Platform**. Full-suite commands are
+plain:
 
 <!-- ai:lock -->
 ```
 dotnet test tests/Reactor.Tests -p:Platform=x64
 dotnet test tests/Reactor.SelfTests
 dotnet test tests/Reactor.AppTests
+```
+<!-- /ai:lock -->
+
+For targeted runs, use the runner's current filter syntax: xUnit suites
+prefer MTP's `--filter-class` / `--filter-method` family, while the MSTest
+self-test and E2E suites keep VSTest-style `--filter` expressions:
+
+<!-- ai:lock -->
+```
+dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
+dotnet test tests/Reactor.SelfTests --filter "ClassName~SkipReportingTests"
+dotnet test tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
 ```
 <!-- /ai:lock -->
 
@@ -129,7 +142,8 @@ class EffectfulCounter : Component
             Log.Add($"effect:{count}");
             return () => Log.Add($"cleanup:{count}");
         }, count);
-        return Button($"count={count}", () => setCount(count + 1));
+        return Button($"count={count}", () => setCount(count + 1))
+            .AutomationName($"Counter is {count}");
     }
 }
 ```
@@ -194,7 +208,7 @@ control, so it runs in the headless unit suite:
 class IconOnlyButton : Component
 {
     public override Element Render() =>
-        Button(TextBlock("🔍"), null);      // icon content, no accessible name
+        Button(TextBlock("🔍"));            // icon content, no accessible name
 }
 
 class NamedButton : Component

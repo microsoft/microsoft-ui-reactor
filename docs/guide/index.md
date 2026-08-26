@@ -81,7 +81,7 @@ class StyledText : Component
             Heading("Heading element"),
             SubHeading("SubHeading element"),
             TextBlock("Regular text with modifiers")
-                .FontSize(14).Foreground("#0078D4"),
+                .FontSize(14).Foreground(Theme.Accent),
             Caption("Caption for fine print")
         ).Padding(24);
     }

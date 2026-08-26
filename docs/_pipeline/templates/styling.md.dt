@@ -48,7 +48,7 @@ of mode.
 |---|---|---|
 | `Theme.Accent`, `Theme.PrimaryText`, etc. | Typed token | Always — these are the canonical brush references. |
 | `Theme.Ref("AnyResourceKey")` | String token | The brush isn't surfaced as a typed accessor (rare). |
-| `.Background(token)` / `.Foreground(token)` | Color modifier | Apply a token to any element. |
+| `.Background(token)` / `.Foreground(token)` | Color modifier | Apply a token to elements that expose that property (for example `Border` for backgrounds, `TextBlock` for foregrounds). |
 | `.Background("#RRGGBB")` | Color modifier | Brand colors that must stay constant across themes. |
 | `.AccentButton()`, `.SubtleButton()`, `.TextLink()` | Named-style fluent | The four canonical button shapes. No `.Resources` needed. |
 | `.Informational()` / `.Success()` / `.Warning()` / `.Error()` | Named-style fluent | InfoBar severity. |
@@ -89,7 +89,8 @@ that looks native in both light and dark mode.
 
 ## Color modifiers
 
-`.Background()` and `.Foreground()` accept three input shapes:
+`.Background()` and `.Foreground()` accept typed tokens and `Theme.Ref`
+tokens for theme-aware colors:
 
 ```csharp snippet="styling/color-modifiers"
 ```
@@ -98,10 +99,10 @@ that looks native in both light and dark mode.
 |---|---|---|
 | Typed token | `.Background(Theme.Accent)` | yes |
 | `Theme.Ref` | `.Background(Theme.Ref("MyCustomBrush"))` | yes |
-| Hex string | `.Background("#FF5733")` | no — frozen |
-| `Windows.UI.Color` | `.Background(Colors.Blue)` | no — frozen |
+| Hex string | `.Background("#FF5733")` | no — frozen; reserve for brand colors |
+| `Brush` | `.Background(new SolidColorBrush(...))` | no — frozen; avoid unless the color must not follow theme |
 
-Tokens are the right default. Reserve hex and `Color` for brand colors
+Tokens are the right default. Reserve hex and `Brush` for brand colors
 that should stay constant regardless of mode.
 
 ## Signal colors

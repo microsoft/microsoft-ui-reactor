@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <NoWarn>$(NoWarn);REACTOR_HOOKS_001;REACTOR_HOOKS_004;REACTOR_HOOKS_005;REACTOR_THEME_001;CS0169;CS0414;CS0649</NoWarn>
+    <NoWarn>$(NoWarn);REACTOR_HOOKS_001;REACTOR_HOOKS_004;REACTOR_HOOKS_005;REACTOR_DSL_001;CS0169;CS0414;CS0649</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\src\Reactor\Reactor.csproj" />

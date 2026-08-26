@@ -25,11 +25,17 @@ class PointerModifiersExample : Component
             Border(TextBlock(hover ? "hovered" : "hover me")
                 .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                 .Width(240).Height(120)
-                .Background(hover ? "#BFE3FF" : "#E5F1FB")
+                .Background(hover ? Theme.AccentTertiary : Theme.ControlFillSecondary)
                 .CornerRadius(8)
+                .IsTabStop(true)
                 .OnPointerEntered((_, _) => setHover(true))
                 .OnPointerExited((_, _) => setHover(false))
                 .OnTapped((_, _) => setTapCount(tapCount + 1))
+                .OnKeyDown((_, e) =>
+                {
+                    if (e.Key is VirtualKey.Enter or VirtualKey.Space)
+                        setTapCount(tapCount + 1);
+                })
                 .OnDoubleTap(() => setTapCount(0)),
 
             TextBlock($"Tapped {tapCount} time(s) — double-tap to reset")
@@ -48,6 +54,7 @@ class KeyboardEventsExample : Component
 
         return VStack(12,
             TextBox(value, setValue, placeholderText: "type here").Width(280)
+                .AutomationName("Text to submit")
                 // Tunnels first — the right spot to intercept before bubbling.
                 .OnPreviewKeyDown((_, _) => setLog("preview"))
                 // Bubbles — fires after the preview pair.
@@ -74,6 +81,7 @@ class FocusEventsExample : Component
 
         return VStack(12,
             TextBox(value, setValue, placeholderText: "email").Width(280)
+                .AutomationName("Email")
                 .OnGotFocus((_, _) => setHint("We never share your address."))
                 .OnLostFocus((_, _) => setHint("")),
 
@@ -129,7 +137,9 @@ class SearchBoxExample : Component
 
         return VStack(12,
             TextBlock("Text is pre-selected on mount via UseElementRef<TextBox>()."),
-            TextBox(query, setQuery).Width(280).Ref(inputRef)
+            TextBox(query, setQuery).Width(280)
+                .AutomationName("Search query")
+                .Ref(inputRef)
         ).Padding(24);
     }
 }
@@ -163,10 +173,10 @@ class PanGestureExample : Component
         return VStack(8,
             Border(
                 Border(TextBlock("drag me")
-                    .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                    .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
+                    .Foreground(Theme.AccentText))
                     .Width(120).Height(120)
-                    .Background("#3A7BD5")
-                    .Foreground("#ffffff")
+                    .Background(Theme.Accent)
                     .CornerRadius(8)
                     .Translation(offset.X, offset.Y, 0)
                     .OnMount(fe => cardRef.Current = fe)
@@ -184,7 +194,7 @@ class PanGestureExample : Component
                             setOffset(committedRef.Current);
                         },
                         withInertia: true)
-            ).Height(260).Background("#f3f3f3").CornerRadius(8).Padding(16),
+            ).Height(260).Background(Theme.CardBackground).CornerRadius(8).Padding(16),
 
             Button("Reset position", Reset)
         );
@@ -202,7 +212,7 @@ class LongPressExample : Component
         return VStack(12,
             Border(TextBlock("Hold me")
                 .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
-                .Height(80).Background("#FFF4CE").CornerRadius(6).Padding(12)
+                .Height(80).Background(Theme.SystemCautionBackground).CornerRadius(6).Padding(12)
                 .OnLongPress(
                     g => setLog($"long-press after {g.Duration.TotalMilliseconds:F0}ms"),
                     enableMouseEmulation: true),
@@ -224,7 +234,9 @@ class UseElementFocusExample : Component
 
         return VStack(12,
             TextBlock("The field below auto-focuses on mount via UseElementFocus()."),
-            TextBox(name, setName, placeholderText: "name").Width(280).Ref(inputRef)
+            TextBox(name, setName, placeholderText: "name").Width(280)
+                .AutomationName("Name")
+                .Ref(inputRef)
         ).Padding(24);
     }
 }
@@ -237,11 +249,12 @@ class KanbanDndExample : Component
 {
     public override Element Render()
     {
-        var (todo, setTodo) = UseState<IReadOnlyList<KanbanCard>>(new KanbanCard[]
+        var initialTodo = UseMemo(() => new KanbanCard[]
         {
             new("k1", "Write docs"),
             new("k2", "Ship feature"),
-        });
+        }, Array.Empty<object>());
+        var (todo, setTodo) = UseState<IReadOnlyList<KanbanCard>>(initialTodo);
         var (done, setDone) = UseState<IReadOnlyList<KanbanCard>>(Array.Empty<KanbanCard>());
 
         Element Column(string label,
@@ -253,8 +266,8 @@ class KanbanDndExample : Component
             {
                 var captured = card;
                 children.Add(
-                    Border(TextBlock(captured.Title).Foreground("#ffffff"))
-                        .Background("#4B7BEC").CornerRadius(6).Padding(10)
+                    Border(TextBlock(captured.Title).Foreground(Theme.AccentText))
+                        .Background(Theme.Accent).CornerRadius(6).Padding(10)
                         .OnDragStart<BorderElement, KanbanCard>(
                             getPayload: () => captured,
                             allowedOperations: DragOperations.Move,
@@ -276,9 +289,9 @@ class KanbanDndExample : Component
 
         return HStack(12,
             Border(Column("Todo", todo, setTodo))
-                .Width(240).Background("#F7F7F7").CornerRadius(6).Padding(10),
+                .Width(240).Background(Theme.CardBackground).CornerRadius(6).Padding(10),
             Border(Column("Done", done, setDone))
-                .Width(240).Background("#F1FFF4").CornerRadius(6).Padding(10)
+                .Width(240).Background(Theme.SystemSuccessBackground).CornerRadius(6).Padding(10)
         ).Padding(24);
     }
 }

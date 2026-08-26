@@ -637,6 +637,70 @@ jobs:
       - name: Tier-lint
         run: dotnet run --project src/Reactor.Cli -- docs check-tier
 
+  docs-snippet-gate:
+    name: Doc snippet analyzer gate
+    needs: changes
+    if: needs.changes.outputs.non-md == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore docs/_pipeline/apps/DocApps.proj -p:Platform=x64
+
+      # Every `snippet=` block in docs/guide/ is extracted verbatim from a doc app
+      # under docs/_pipeline/apps/, so a doc app IS the code we tell users to write.
+      # Two gaps let 276 analyzer diagnostics reach the published guides:
+      #
+      #   1. Only win2d-canvas was listed in Reactor.slnx, so the other 52 doc apps
+      #      were never compiled by CI at all.
+      #   2. A ProjectReference to src/Reactor does not flow Reactor.Analyzers —
+      #      it ships as a packed <None Pack="true"> item — so even that one app
+      #      compiled without the rules its own readers are subject to.
+      #
+      # Directory.Build.props now wires the consumer analyzer bundle in, and this
+      # job builds every app through it. The failure mode being prevented is a
+      # snippet that compiles yet warns (hard-coded colours), or worse, silently
+      # does nothing the surrounding prose claims (REACTOR_MOD_003 inert modifiers,
+      # REACTOR_HOOKS_001 conditional hooks).
+      #
+      # Warnings are scanned rather than promoted with -warnaserror because the
+      # restore in this environment also emits unrelated NU1900 noise, and a
+      # blanket promotion would fail on that instead of on snippet quality.
+      - name: Build doc apps with consumer analyzers
+        shell: pwsh
+        run: |
+          $log = dotnet build docs/_pipeline/apps/DocApps.proj -c Debug -p:Platform=x64 --no-restore -v:minimal -nologo 2>&1
+          $log | ForEach-Object { $_.ToString() }
+          $exit = $LASTEXITCODE
+
+          # Case-sensitive: an insensitive match also hits the restore's
+          # "warning NU1900: Error occurred while getting package vulnerability
+          # data", which would make this gate fail for reasons unrelated to docs.
+          # MSBuild prints each diagnostic twice (inline + summary), hence -Unique.
+          $diags = $log |
+            Select-String ': (warning|error) REACTOR_' -CaseSensitive |
+            ForEach-Object { ($_.Line -replace '\s*\[[^\]]*\]\s*$', '').Trim() } |
+            Sort-Object -Unique
+
+          if ($diags.Count -gt 0) {
+            Write-Host "::error::$($diags.Count) Reactor analyzer diagnostic(s) in doc-app snippets."
+            $diags | ForEach-Object { Write-Host "::error::$_" }
+            Write-Host ''
+            Write-Host 'These snippets are extracted verbatim into docs/guide/, so every one of'
+            Write-Host 'these warns in a reader''s project too. Fix them at the source in'
+            Write-Host 'docs/_pipeline/apps/<topic>/App.cs -- do not add NoWarn or #pragma.'
+            exit 1
+          }
+
+          if ($exit -ne 0) { throw "Doc apps failed to build (exit $exit)." }
+          Write-Host "OK: all doc apps built clean under the consumer analyzer bundle."
+
   docs-build:
     name: Docs build
     needs: changes

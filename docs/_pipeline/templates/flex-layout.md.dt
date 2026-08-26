@@ -336,7 +336,7 @@ container when total child width exceeds available space. Set
 vary. The cost is zero on rows that don't actually need to wrap — Yoga
 short-circuits when one line fits.
 
-### Reaching for `FlexPadding` when you wanted `.Padding`
+### Using `.Padding` when you wanted `FlexPadding`
 
 `FlexPadding` is a property on the FlexPanel itself, measured by Yoga
 inside the same algorithm that distributes children. The `.Padding(...)`

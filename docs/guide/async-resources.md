@@ -136,20 +136,21 @@ class InfiniteScrollExample : Component
             },
             deps: new object[] { "repo-main" });
 
-        // With a real virtualizer, drive fetches from ItemAt inside VirtualList's
-        // renderItem. The important bit: null return = placeholder row.
         return VStack(4,
             Heading($"Commits ({commits.TotalCount ?? 0})").FontSize(14),
-            VStack(2,
-                Enumerable.Range(0, Math.Min(commits.Items.Count, 6))
-                    .Select(i =>
-                    {
-                        var commit = commits.ItemAt(i);
-                        return commit is null
-                            ? TextBlock("…").Opacity(0.4).Padding(4)
-                            : TextBlock($"{commit.Sha} — {commit.Message}").Padding(4);
-                    })
-                    .ToArray())
+            VirtualList(
+                itemCount: commits.TotalCount ?? Math.Max(commits.Items.Count, 20),
+                renderItem: i =>
+                {
+                    var commit = commits.ItemAt(i);
+                    return commit is null
+                        ? TextBlock("…").Opacity(0.4).Padding(4)
+                        : TextBlock($"{commit.Sha} — {commit.Message}").Padding(4);
+                },
+                getItemKey: i => commits.ItemAt(i)?.Sha ?? $"placeholder-{i}",
+                itemHeight: 32,
+                onVisibleRangeChanged: (first, last) => commits.EnsureRange(first, last))
+                .Height(200)
         ).Padding(24);
     }
 }
@@ -227,7 +228,8 @@ class UseMutationExample : Component
             Heading($"Todos ({todos.Count})").FontSize(14),
             VStack(2, todos.Select(t =>
                 TextBlock(t.Title + (t.IsTemporary ? " (saving…)" : ""))
-                    .Opacity(t.IsTemporary ? 0.5 : 1.0)).ToArray()),
+                    .Opacity(t.IsTemporary ? 0.5 : 1.0)
+                    .WithKey(t.Title)).ToArray()),
             Button("Add Todo",
                 () => _ = mutation.RunAsync(new DemoApi.TodoInput($"Item {todos.Count + 1}")))
         ).Padding(24);

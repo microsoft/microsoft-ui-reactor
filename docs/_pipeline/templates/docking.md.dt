@@ -62,7 +62,8 @@ matches panes by `Key` and preserves the element subtree (and its
 `UseState` slots) across tree rebuilds. There is no implicit
 `Title`-as-key fallback; always supply one.
 
-The `DockNode` algebra has three node kinds (all immutable records):
+The `DockNode` algebra has three core node families (all immutable
+records), plus the document/tool leaf specializations:
 
 | Type | Purpose |
 |------|---------|

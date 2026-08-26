@@ -27,7 +27,7 @@ class BasicCommandExample : Component
         };
 
         return VStack(12,
-            TextBox(text, v => { setText(v); setSaved(false); })
+            TextBox(text, v => { setText(v); setSaved(false); }, header: "Document")
                 .Width(400),
             HStack(8,
                 Button(saveCmd),
@@ -113,7 +113,7 @@ class CommandBarExample : Component
                 secondaryCommands: new[] {
                     AppBarButton(delete) }
             ),
-            TextBox(text, setText).Margin(16)
+            TextBox(text, setText, header: "Document").Margin(16)
         );
     }
 }
@@ -181,7 +181,7 @@ class ParameterizedCommandExample : Component
     public override Element Render()
     {
         var (items, setItems) = UseState<IReadOnlyList<TodoItem>>(
-            new[] { new TodoItem(1, "Buy milk"), new TodoItem(2, "Walk dog"), new TodoItem(3, "Ship doc") });
+            UseMemo(() => new[] { new TodoItem(1, "Buy milk"), new TodoItem(2, "Walk dog"), new TodoItem(3, "Ship doc") }, []));
 
         // One Command<TodoItem> drives every row.
         var delete = new Command<TodoItem>
@@ -198,6 +198,7 @@ class ParameterizedCommandExample : Component
                     // Inline button — Command<T> doesn't have a Button(cmd, arg) overload
                     // by design, so call .Execute(arg) directly from the click handler.
                     Button(delete.Label, () => delete.Execute?.Invoke(item))
+                        .AutomationName($"Delete {item.Title}")
                         .IsEnabled(delete.IsEnabled)))
         ).Padding(24);
     }
@@ -433,7 +434,7 @@ class CanExecuteDontExample : Component
             Execute = () => { if (text.Length > 0) Save(); },
         };
 
-        return VStack(12, TextBox(text, setText).Width(300), Button(save))
+        return VStack(12, TextBox(text, setText, header: "Document").Width(300), Button(save))
             .Padding(24);
 
         void Save() { }
@@ -457,7 +458,7 @@ class CanExecuteDoExample : Component
             CanExecute = text.Length > 0,
         };
 
-        return VStack(12, TextBox(text, setText).Width(300), Button(save))
+        return VStack(12, TextBox(text, setText, header: "Document").Width(300), Button(save))
             .Padding(24);
 
         void Save() { }

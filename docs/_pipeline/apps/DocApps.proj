@@ -1,0 +1,56 @@
+<!--
+  Builds every doc app under docs/_pipeline/apps/ in one pass.
+
+  Doc apps are the source of truth for every `snippet=` block in docs/guide/, but
+  only one of them (win2d-canvas) was ever listed in Reactor.slnx, so the other 52
+  were never compiled by CI. Combined with the fact that a ProjectReference to
+  src/Reactor does not flow the packed Reactor.Analyzers bundle (it is a
+  <None Pack="true"> item), a snippet could ship hard-coded colours, inert
+  modifiers, or conditional hook calls and still look green to everyone working on
+  the guides. Directory.Build.props next to this file wires the analyzers in; this
+  project is what gives CI a single thing to build.
+
+  Plain MSBuild rather than Microsoft.Build.Traversal: the repo does not already
+  depend on that SDK, and a doc-only gate is not worth a new package pin.
+
+  The glob is deliberate. A hand-maintained project list would reproduce the very
+  defect this gate exists to close, letting the *next* new doc app escape unbuilt,
+  so DocAppGateWiringTests floors the matched count against the directory count,
+  making a glob that silently stops matching a test failure in its own right.
+-->
+<Project DefaultTargets="Build">
+
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <DocApp Include="$(MSBuildThisFileDirectory)*\*.csproj" />
+  </ItemGroup>
+
+  <Target Name="Build">
+    <Message Importance="high" Text="Building doc apps ($(Configuration)|$(Platform))" />
+    <MSBuild Projects="@(DocApp)"
+             BuildInParallel="true"
+             Properties="Configuration=$(Configuration);Platform=$(Platform)" />
+  </Target>
+
+  <Target Name="Restore">
+    <MSBuild Projects="@(DocApp)"
+             Targets="Restore"
+             BuildInParallel="true"
+             Properties="Configuration=$(Configuration);Platform=$(Platform)" />
+  </Target>
+
+  <!-- CI always builds a fresh checkout, so Build re-runs the analyzers there. Locally the
+       incremental build is up-to-date and csc never re-runs, which reports zero diagnostics for
+       an app that is still dirty. Verifying a fix locally therefore has to go through Rebuild. -->
+  <Target Name="Rebuild">
+    <MSBuild Projects="@(DocApp)"
+             Targets="Rebuild"
+             BuildInParallel="true"
+             Properties="Configuration=$(Configuration);Platform=$(Platform)" />
+  </Target>
+
+</Project>

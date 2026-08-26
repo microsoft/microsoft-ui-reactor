@@ -233,8 +233,17 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
         // </snippet:hook-rules-shape>
 
         // REACTOR_HOOKS_005: must be called from a Render() override or a Use* method.
+        //
+        // ...or from an inline function component. Memo(ctx => …) is a real component
+        // boundary, not an ordinary closure: MountMemoComponent allocates its own
+        // RenderContext, hangs a ComponentNode off it, and calls ctx.BeginRender(), so the
+        // lambda gets its own hook slots and re-runs as a unit. Treating that lambda like
+        // any other nested lambda reported correct code -- including the documented
+        // ctx.UseCanvasResources / ctx.UseDrawState Win2D pattern, whose whole point is
+        // device-lost recovery -- and pushed authors to hand-roll a weaker equivalent.
+        var inlineComponent = FindInlineComponentBoundary(context, invocation);
         var enclosing = FindEnclosingMethod(invocation);
-        if (!IsRenderOrCustomHook(enclosing))
+        if (inlineComponent is null && !IsRenderOrCustomHook(enclosing))
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 HookOutsideRenderRule,
@@ -245,8 +254,11 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        // REACTOR_HOOKS_001: conditional hook.
-        if (FindConditionalAncestor(invocation, enclosing!) is { } kind)
+        // REACTOR_HOOKS_001: conditional hook. Inside an inline function component the
+        // lambda IS the boundary, so an `if` between it and the hook still counts, while
+        // the lambda itself no longer does.
+        SyntaxNode? boundary = inlineComponent ?? (SyntaxNode?)enclosing;
+        if (boundary is not null && FindConditionalAncestor(invocation, boundary) is { } kind)
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 ConditionalHookRule,
@@ -378,6 +390,52 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
     private static MethodDeclarationSyntax? FindEnclosingMethod(SyntaxNode node)
         => node.FirstAncestorOrSelf<MethodDeclarationSyntax>();
 
+    /// <summary>
+    /// Returns the lambda of the inline function component this hook belongs to, or
+    /// <see langword="null"/> if the hook is not called on such a lambda's own context.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The test is deliberately narrow: the invocation must be <c>receiver.UseXxx(…)</c> where
+    /// <c>receiver</c> binds to a lambda <b>parameter</b> whose type is
+    /// <c>Microsoft.UI.Reactor.Core.RenderContext</c>. That shape is exactly the inline function
+    /// component (<c>Memo(ctx =&gt; …)</c> and anything else taking
+    /// <c>Func&lt;RenderContext, Element&gt;</c>) — matching on the parameter type rather than on
+    /// the factory name keeps a future factory of the same shape working without another edit here.
+    /// </para>
+    /// <para>
+    /// What it deliberately does <em>not</em> exempt: a bare <c>UseState()</c> written inside a
+    /// <c>Memo</c> lambda. That call has no receiver, so it is the <em>enclosing</em> component's
+    /// hook running from a nested closure — still the real bug HOOKS_005 exists to catch. Only the
+    /// lambda's own context is blessed.
+    /// </para>
+    /// </remarks>
+    private static SyntaxNode? FindInlineComponentBoundary(
+        SyntaxNodeAnalysisContext context, InvocationExpressionSyntax invocation)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax member) return null;
+
+        var receiver = context.SemanticModel.GetSymbolInfo(member.Expression).Symbol;
+        if (receiver is not IParameterSymbol parameter) return null;
+        if (parameter.Type is not INamedTypeSymbol parameterType) return null;
+        if (!IsOrDerivesFrom(parameterType, "Microsoft.UI.Reactor.Core.RenderContext")) return null;
+
+        // The parameter must belong to a lambda that actually encloses this invocation, so a
+        // context captured from an unrelated sibling lambda cannot launder a bad hook site.
+        for (var node = (SyntaxNode?)invocation.Parent; node is not null; node = node.Parent)
+        {
+            if (node is not (SimpleLambdaExpressionSyntax or ParenthesizedLambdaExpressionSyntax)) continue;
+
+            if (context.SemanticModel.GetSymbolInfo(node).Symbol is IMethodSymbol lambda
+                && lambda.Parameters.Any(p => SymbolEqualityComparer.Default.Equals(p, parameter)))
+            {
+                return node;
+            }
+        }
+
+        return null;
+    }
+
     private static bool IsRenderOrCustomHook(MethodDeclarationSyntax? method)
     {
         if (method is null) return false;
@@ -389,10 +447,11 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// Walks ancestors from the invocation up to (but not past) the enclosing method's body.
-    /// If any ancestor is a conditional/loop/try construct, returns its human-readable name.
+    /// Walks ancestors from the invocation up to (but not past) the enclosing boundary — a method
+    /// body, or the lambda of an inline function component. If any ancestor is a conditional/loop/try
+    /// construct, returns its human-readable name.
     /// </summary>
-    private static string? FindConditionalAncestor(InvocationExpressionSyntax invocation, MethodDeclarationSyntax boundary)
+    private static string? FindConditionalAncestor(InvocationExpressionSyntax invocation, SyntaxNode boundary)
     {
         for (var node = (SyntaxNode?)invocation.Parent; node is not null && node != boundary; node = node.Parent)
         {

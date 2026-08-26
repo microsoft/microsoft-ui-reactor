@@ -120,20 +120,20 @@ class LifecyclePage : Component
         UseNavigationLifecycle(
             onNavigatedTo: ctx =>
                 updateLog(l => [.. l,
-                    $"Arrived from {ctx.PreviousRoute}"]),
+                    $"{l.Count + 1}: Arrived from {ctx.PreviousRoute}"]),
             onNavigatingFrom: ctx =>
                 updateLog(l => [.. l,
-                    $"Leaving to {ctx.TargetRoute}"]),
+                    $"{l.Count + 1}: Leaving to {ctx.TargetRoute}"]),
             onNavigatedFrom: ctx =>
                 updateLog(l => [.. l,
-                    $"Left for {ctx.TargetRoute}"])
+                    $"{l.Count + 1}: Left for {ctx.TargetRoute}"])
         );
 
         return VStack(8,
             SubHeading("Lifecycle Events"),
             VStack(4,
                 log.TakeLast(5).Select(entry =>
-                    TextBlock(entry).FontSize(12).Opacity(0.7)
+                    TextBlock(entry).FontSize(12).Opacity(0.7).WithKey(entry)
                 ).ToArray()
             )
         ).Padding(16);
@@ -161,7 +161,7 @@ class PageTransitionsDemo : Component
             {
                 Route.Home => VStack(8,
                     TextBlock("Home").FontSize(24).Bold(),
-                    TextBlock("Slide transition on navigate")).Padding(16),
+                    TextBlock("DrillIn transition on navigate")).Padding(16),
                 Route.Settings => VStack(8,
                     TextBlock("Settings").FontSize(24).Bold(),
                     TextBlock("DrillIn transition to detail")).Padding(16),
@@ -284,9 +284,9 @@ class DiagnosticsDemo : Component
         UseEffect(() =>
         {
             EventHandler<NavigationDiagnosticEvent> onRequested =
-                (_, e) => updateLog(l => [.. l, $"Requested: {e.From} → {e.To}"]);
+                (_, e) => updateLog(l => [.. l, $"{l.Count + 1}: Requested {e.From} → {e.To}"]);
             EventHandler<NavigationDiagnosticEvent> onCompleted =
-                (_, e) => updateLog(l => [.. l, $"Completed: {e.To}"]);
+                (_, e) => updateLog(l => [.. l, $"{l.Count + 1}: Completed {e.To}"]);
 
             NavigationDiagnostics.NavigationRequested += onRequested;
             NavigationDiagnostics.NavigationCompleted += onCompleted;
@@ -304,7 +304,7 @@ class DiagnosticsDemo : Component
                 Button("Settings", () => nav.Navigate(Route.Settings))
             ),
             VStack(4, log.TakeLast(6).Select(
-                entry => TextBlock(entry).FontSize(11).Opacity(0.6)
+                entry => TextBlock(entry).FontSize(11).Opacity(0.6).WithKey(entry)
             ).ToArray()),
             NavigationHost(nav, route =>
                 TextBlock($"Page: {route}").Padding(16))
@@ -346,6 +346,7 @@ class PageCachingDemo : Component
         VStack(8,
             TextBlock(name).FontSize(20).Bold(),
             TextBox("", _ => { }, placeholderText: "Type here — state persists")
+                .AutomationName($"{name} page note")
         ).Padding(16);
 }
 // </snippet:page-caching>
@@ -423,6 +424,7 @@ class PaneOpenChangedDemo : Component
                 TextBlock(isPaneOpen ? "Pane is open" : "Pane is closed").Opacity(0.6),
                 Button(isPaneOpen ? "Close pane" : "Open pane",
                     () => setIsPaneOpen(!isPaneOpen))
+                    .AutomationName(isPaneOpen ? "Close pane" : "Open pane")
             ).Padding(24)
         ) with
         {
@@ -449,7 +451,9 @@ class ControlledPaneDemo : Component
                 NavItem("Settings", icon: "Setting", tag: "Settings")
             ],
             content: Button(isPaneOpen ? "Close pane" : "Open pane",
-                () => setIsPaneOpen(!isPaneOpen)).Padding(24)
+                () => setIsPaneOpen(!isPaneOpen))
+                .AutomationName(isPaneOpen ? "Close pane" : "Open pane")
+                .Padding(24)
         )
         // One call sets the pane state and wires the change handler, so the two
         // cannot drift apart.
@@ -530,14 +534,14 @@ class FrameEventsDemo : Component
             SubHeading("Frame events"),
             Frame(sourcePageType: typeof(DocsFrameDemoPage))
                 .Navigating(target =>
-                    updateLog(l => [.. l, $"Navigating to {target.Name}"]))
+                    updateLog(l => [.. l, $"{l.Count + 1}: Navigating to {target.Name}"]))
                 .Navigated(target =>
-                    updateLog(l => [.. l, $"Arrived at {target.Name}"]))
+                    updateLog(l => [.. l, $"{l.Count + 1}: Arrived at {target.Name}"]))
                 .NavigationFailed((target, ex) =>
-                    updateLog(l => [.. l, $"Failed {target.Name}: {ex.Message}"]))
+                    updateLog(l => [.. l, $"{l.Count + 1}: Failed {target.Name}: {ex.Message}"]))
                 .Height(300),
             VStack(4, log.TakeLast(6).Select(
-                entry => TextBlock(entry).FontSize(11).Opacity(0.6)
+                entry => TextBlock(entry).FontSize(11).Opacity(0.6).WithKey(entry)
             ).ToArray())
         ).Padding(24);
     }

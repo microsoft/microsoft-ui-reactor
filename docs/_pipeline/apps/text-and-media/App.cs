@@ -111,6 +111,8 @@ class ImageDemo : Component
         // Resource Uri — ms-appx:// for packaged assets, file:// for disk,
         // https:// for remote.
         Image("ms-appx:///Assets/StoreLogo.png")
+            .AutomationName("Reactor app logo")
+            .Set(img => img.Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill)
             .Width(96).Height(96),
         TextBlock("Stretch.UniformToFill for cover art; " +
                   "ImageFailed to detect missing assets.").Opacity(0.6)
@@ -124,8 +126,7 @@ class MediaPlayerDemo : Component
     public override Element Render() => VStack(8,
         SubHeading("MediaPlayerElement"),
         MediaPlayerElement(
-            "https://learn.microsoft.com/en-us/windows/apps/design/" +
-            "controls/images/ic_fluent_play_24_regular.svg")
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4")
             .Width(420).Height(240)
             .Set(m =>
             {

@@ -19,24 +19,6 @@ palette, drag-to-reorder. The recipes here are not exhaustive apps;
 each is a single screen showing the pattern, and each ships a tiny
 doc app you can clone and adapt.
 
-```csharp snippet="recipes-index/app"
-```
-
-![Recipes gallery preview](screenshot://recipes-index/gallery)
-
-The gallery uses the same primitives every recipe page does — a
-`VStack` for the column layout, `TextBlock` for descriptions, `HStack`
-for the tile row. The tile helper is a private static method, not a
-component, so it has no hook scope:
-
-```csharp snippet="recipes-index/tile"
-```
-
-Every page in this folder follows the same shape:
-
-```csharp snippet="recipes-index/rendering-shape"
-```
-
 ## Gallery
 
 | Recipe | What it shows |
@@ -50,6 +32,26 @@ Every page in this folder follows the same shape:
 | [Search with suggestions](search-with-suggestions.md) | `UseMemo`-filtered suggestion list against a static catalog. |
 | [Command palette](command-palette.md) | Keyboard accelerator opening an overlay with a filtered command list. |
 | [Drag-reorder](drag-reorder.md) | Identity-preserving reorder of a keyed list, with a keyboard path. |
+
+## The gallery app
+
+```csharp snippet="recipes-index/app"
+```
+
+![Recipes gallery preview](screenshot://recipes-index/gallery)
+
+The gallery uses the same primitives every recipe page does — a
+`VStack` for the column layout, `TextBlock` for descriptions, and
+`HStack` for each tile row. The tile helper is a private static method, not a
+component, so it has no hook scope:
+
+```csharp snippet="recipes-index/tile"
+```
+
+Every page in this folder follows the same shape:
+
+```csharp snippet="recipes-index/rendering-shape"
+```
 
 ## How to read a recipe
 

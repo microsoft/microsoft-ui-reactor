@@ -138,8 +138,8 @@ Full token catalog on [Theming Tokens](theming-tokens.md).
 **Controlled input.** `var (v, set) = UseState("")` →
 `TextBox(v, set)`.
 
-**Effect with cleanup.** Return a `Func<void>` from the effect lambda;
-Reactor calls it before the next run and on unmount.
+**Effect with cleanup.** Return a cleanup lambda from the effect lambda;
+Reactor calls it before the next run (when deps change) and on unmount.
 
 **Conditional render.** `cond ? Element1 : Empty()` keeps the element
 out of the tree when `cond` is false — see the

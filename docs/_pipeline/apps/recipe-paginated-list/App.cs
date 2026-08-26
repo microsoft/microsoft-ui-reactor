@@ -78,7 +78,7 @@ class CommitFeed : Component
         {
             body = VStack(8,
                 TextBlock($"Couldn't load commits: {error.Exception.Message}")
-                    .Foreground("#C42B1C"),
+                    .Foreground(Theme.SystemCritical),
                 Button("Retry", () => commits.Retry())
             ).Padding(20);
         }
@@ -94,6 +94,7 @@ class CommitFeed : Component
                         TextBlock(c.Sha).Opacity(0.5).Width(72),
                         TextBlock(c.Message)
                     ).Padding(6)
+                     .WithKey(c.Sha)
                 ).ToArray()
             );
         }
@@ -103,11 +104,16 @@ class CommitFeed : Component
         Element footer = atEnd
             ? TextBlock("— end of list —").Opacity(0.5).Padding(12)
             : error is not null && loadedItems.Length > 0
-                ? Button($"Retry — {error.Exception.Message}", () => commits.Retry()).Padding(8)
+                ? Button($"Retry — {error.Exception.Message}", () => commits.Retry())
+                    .AutomationName("Retry loading the next page")
+                    .Padding(8)
                 : Button(
                     loadingMore ? "Loading more…" : $"Load more ({commits.EstimatedRemaining} remaining)",
                     () => commits.FetchNext()
-                  ).IsEnabled(!loadingMore).Padding(8);
+                  )
+                    .AutomationName(loadingMore ? "Loading more commits" : "Load more commits")
+                    .IsEnabled(!loadingMore)
+                    .Padding(8);
 
         return VStack(0,
             Heading($"Commits ({commits.TotalCount ?? loadedItems.Length})").Padding(20),

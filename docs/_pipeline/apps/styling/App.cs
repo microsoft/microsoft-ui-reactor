@@ -15,11 +15,12 @@ class ThemeTokensExample : Component
             TextBlock("Primary Text").Foreground(Theme.PrimaryText),
             TextBlock("Secondary Text").Foreground(Theme.SecondaryText),
             TextBlock("Accent Text").Foreground(Theme.AccentText).SemiBold(),
-            TextBlock("On Accent Background")
-                .Foreground("#FFFFFF")
-                .Padding(horizontal: 8, vertical: 4)
-                .Background(Theme.Accent)
-                .CornerRadius(4)
+            Border(
+                TextBlock("On Accent Background")
+                    .Foreground(Theme.AccentText)
+                    .Padding(horizontal: 8, vertical: 4)
+            ).Background(Theme.Accent)
+             .CornerRadius(4)
         ).Padding(24);
     }
 }
@@ -59,10 +60,14 @@ class ColorModifiersExample : Component
     public override Element Render()
     {
         return VStack(8,
-            TextBlock("Theme token").Background(Theme.SubtleFill).Padding(8),
-            TextBlock("Hex string").Background("#E8F5E9").Padding(8),
-            TextBlock("Mixed").Foreground(Theme.PrimaryText)
-                .Background("#1E1E2E").Padding(8)
+            Border(TextBlock("Typed token").Padding(8))
+                .Background(Theme.SubtleFill),
+            Border(TextBlock("Theme.Ref token").Padding(8))
+                .Background(Theme.Ref("AcrylicBackgroundFillColorDefaultBrush")),
+            Border(TextBlock("Token foreground + token background")
+                .Foreground(Theme.PrimaryText)
+                .Padding(8))
+                .Background(Theme.ControlFill)
         ).Padding(24);
     }
 }
@@ -82,12 +87,13 @@ class SignalColorsExample : Component
     }
 
     static Element Badge(string label, ThemeRef color) =>
-        TextBlock(label)
-            .FontSize(12).SemiBold()
-            .Foreground(color)
-            .Padding(horizontal: 8, vertical: 4)
-            .Background(Theme.SubtleFill)
-            .CornerRadius(4);
+        Border(
+            TextBlock(label)
+                .FontSize(12).SemiBold()
+                .Foreground(color)
+                .Padding(horizontal: 8, vertical: 4)
+        ).Background(Theme.SubtleFill)
+         .CornerRadius(4);
 }
 // </snippet:signal-colors>
 
