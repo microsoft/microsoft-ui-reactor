@@ -88,7 +88,7 @@ internal static class AgentKitDocCorpus
     /// </para>
     /// </remarks>
     private static readonly Regex FenceOpen = new(
-        @"^(?<indent>[ \t]*)(?<marker>([-*+]|\d+[.)])[ \t]+)?(?<fence>`{3,}|~{3,})[ ]*(?<info>[^`\r\n]*)$",
+        @"^(?<indent>[ \t]*)((?<marker>[-*+]|\d+[.)])(?<pad>[ \t]+))?(?<fence>`{3,}|~{3,})[ ]*(?<info>[^`\r\n]*)$",
         RegexOptions.Compiled);
 
     /// <summary>
@@ -159,10 +159,12 @@ internal static class AgentKitDocCorpus
     /// <remarks>
     /// Deliberately a different mechanism from <see cref="FenceOpen"/> rather than a second call to
     /// it: two derivations of the same number only corroborate each other when they can fail
-    /// independently.
+    /// independently. The one structural rule it does share is the marker's padding limit — five or
+    /// more spaces after a list marker make the rest indented code rather than a fence, and a probe
+    /// that accepted those would report literal text as an unscanned sample.
     /// </remarks>
     internal static readonly Regex CSharpFenceProbe = new(
-        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(?:([-*+]|\d+[.)])[ \t]+)?(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
+        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(?:([-*+]|\d+[.)])[ \t]{1,4})?(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -344,13 +346,24 @@ internal static class AgentKitDocCorpus
 
             // A fence may open as the content of a list item on the marker's own line
             // (`- ```csharp`). The marker establishes the content column, so measure — and strip —
-            // against that rather than the line's leading whitespace.
+            // against that rather than the line's leading whitespace. The column follows the same
+            // padding rule as an ordinary item: five or more spaces after the marker put content
+            // one space along and make the rest indented code, so `-     ```csharp` is literal
+            // text, not a fence. Treating all the padding as list padding scanned it as a sample
+            // and could fail the gate on prose.
             var inlineMarker = open.Groups["marker"];
             var container = inlineMarker.Success
-                ? indent + inlineMarker.Length
+                ? ContentColumn(open)
                 : ContainerIndent(lines, i);
 
-            if (!inlineMarker.Success && indent - container > 3)
+            // Where the fence characters actually start. Equal to the line's indentation unless a
+            // marker precedes them, and what the three-column limit and body de-indentation are
+            // both measured with.
+            var fenceColumn = inlineMarker.Success
+                ? indent + inlineMarker.Length + open.Groups["pad"].Length
+                : indent;
+
+            if (fenceColumn - container > 3)
                 continue;
 
             var fenceChar = open.Groups["fence"].Value[0];
@@ -392,7 +405,7 @@ internal static class AgentKitDocCorpus
                 // the nearest list above the line, which for a block that has already de-indented
                 // out of the list is a container it is not in; applying the rule there ended the
                 // region on its own first body line and emptied it.
-                if (container > 0 && indent >= container)
+                if (container > 0 && fenceColumn >= container)
                 {
                     var outside = StripBlockquote(lines[close], depth).Content;
                     if (outside.Trim().Length > 0 && LeadingWidth(outside) < container)
@@ -414,9 +427,10 @@ internal static class AgentKitDocCorpus
                 // whole run as the language, so the body never reached the gate — and the probe
                 // accepted only spaces too, so the completeness fact stayed green over it.
                 Language: open.Groups["info"].Value.Trim().Split(' ', '\t', ',')[0],
-                // Body lines have the opening fence's own offset removed. For an inline marker that
-                // offset includes the marker; otherwise it is just the leading whitespace.
-                Indent: inlineMarker.Success ? container : indent,
+                // Body lines have the opening fence's own offset removed, which for a fence opened
+                // on a list marker's line is the column the fence characters start at, not the
+                // line's leading whitespace.
+                Indent: fenceColumn,
                 BlockquoteDepth: depth));
 
             // On container exit the terminating line belongs to whatever follows, so leave it for

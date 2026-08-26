@@ -626,16 +626,31 @@ public class AgentKitDocGateInstrumentTests
             ReactorSurface.Instance.Element("Semantics", 0));
 
         // ...and because SemanticElement declares no `Set` overload, the receiver is unresolvable,
-        // so the chain is skipped rather than attributed to the Border. That matches the analyzer,
-        // which is silent on receivers it cannot resolve the same way. The value of the stop is
-        // therefore *non*-attribution: without it the walk would judge a SemanticPanel against
-        // Border's gate.
+        // so the chain is skipped rather than attributed to the element that opened it. That
+        // matches the analyzer, which is silent on receivers it cannot resolve the same way. The
+        // value of the stop is therefore *non*-attribution: without it the walk would judge a
+        // SemanticPanel against the opening element's gate.
+        //
+        // The head has to be one that would produce a finding when misattributed, or the assertion
+        // proves nothing. A `Border` head cannot: Border is a legal `Padding` receiver, so deleting
+        // the stop leaves this silent for the wrong reason and the test passes either way. A
+        // FlexColumn mounts a FlexPanel, outside Padding's gate, so misattribution is visible.
         var scan = AgentKitSnippetWalker.Scan(new[]
         {
-            new AgentKitSnippet("fixture/semantics.md", 1, "Border(child).Semantics(role: \"button\").Padding(16)"),
+            new AgentKitSnippet("fixture/semantics.md", 1, "FlexColumn(children).Semantics(role: \"button\").Padding(16)"),
         });
 
         Assert.Empty(scan.Findings);
+
+        // Positive control: the same chain without the type-changing modifier does report, so the
+        // emptiness above is the stop working rather than the walker being unable to see the shape.
+        var withoutStop = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet("fixture/semantics.md", 1, "FlexColumn(children).Padding(16)"),
+        });
+
+        Assert.NotEmpty(withoutStop.Findings);
+
         Assert.Null(ReactorSurface.Instance.MountedControl(ReactorSurface.Instance.Element("Semantics", 0)!));
     }
 
@@ -827,6 +842,31 @@ public class AgentKitDocGateInstrumentTests
             Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/inline.md", InlineMarker)).Text);
 
         Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "- ```csharp");
+
+        // Five or more spaces after the marker put the item's content one space along and make the
+        // rest indented code, so this is literal text rather than a fence. Treating all the padding
+        // as list padding scanned it as a sample, and the gate can fail on prose that way. The
+        // probe has to agree, or the completeness fact reports the same literal text as unscanned.
+        const string OverPaddedMarker = """
+            -     ```csharp
+                  FlexColumn(children).Padding(16)
+                  ```
+            """;
+
+        Assert.Empty(AgentKitDocCorpus.ExtractFences("fixture/overpadded.md", OverPaddedMarker));
+        Assert.DoesNotMatch(AgentKitDocCorpus.CSharpFenceProbe, "-     ```csharp");
+
+        // Four is still list padding, and both halves must still see it.
+        const string MaxPaddedMarker = """
+            -    ```csharp
+                 FlexColumn(children).FlexPadding(16)
+                 ```
+            """;
+
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/maxpadded.md", MaxPaddedMarker)).Text);
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "-    ```csharp");
     }
 
     /// <summary>
