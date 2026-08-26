@@ -1864,7 +1864,7 @@ public static partial class Factories
     /// <summary>
     /// Creates a new AcrylicBrush. This allocates a WinRT DependencyObject on every call.
     /// On hot paths (e.g., inside Render methods), cache the result with <c>UseMemo</c>:
-    /// <code>var brush = ctx.UseMemo(() => UI.AcrylicBrush(color, 0.8), color);</code>
+    /// <code>var brush = ctx.UseMemo(() => AcrylicBrush(color, 0.8), color);</code>
     /// </summary>
     public static Microsoft.UI.Xaml.Media.AcrylicBrush AcrylicBrush(
         global::Windows.UI.Color tintColor,

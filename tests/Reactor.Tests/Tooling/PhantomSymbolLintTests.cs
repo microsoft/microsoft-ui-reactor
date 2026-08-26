@@ -355,6 +355,31 @@ public sealed class PhantomSymbolLintTests
         Assert.Empty(LintMarkdown(body));
     }
 
+    /// <summary>
+    /// The member-qualified blind spot. Every other pattern excludes a leading
+    /// '.' so real members like <c>D3Charts.Text(</c> survive, which meant a
+    /// phantom <i>receiver</i> — <c>UI.Text()</c> in <c>skills/design.md</c> —
+    /// passed the agent-kit sweep while it reported clean. Matching on the
+    /// receiver is what closes it.
+    /// </summary>
+    [Theory]
+    [InlineData("compose with UI.Text(\"hi\") and UI.VStack(a, b)")]
+    [InlineData("UI.Button(\"ok\")")]
+    public void Fires_OnThePhantomUiFacade(string line) =>
+        Assert.Contains(LintExample(line), f => f.Message.Contains("'UI.'"));
+
+    /// <summary>
+    /// The real namespaces this must not touch. Both put a '.' before <c>UI</c>
+    /// and continue with another segment, so neither can match.
+    /// </summary>
+    [Theory]
+    [InlineData("using Microsoft.UI.Xaml.Controls;")]
+    [InlineData("var t = new Microsoft.UI.Xaml.Controls.TextBlock();")]
+    [InlineData("using static Microsoft.UI.Reactor.Factories;")]
+    [InlineData("Microsoft.UI.Reactor.Core.RenderContext ctx")]
+    public void Silent_OnRealMicrosoftUiNamespaces(string line) =>
+        Assert.Empty(LintExample(line));
+
     [Fact]
     public void PhantomTable_IsPopulatedAndDistinct()
     {

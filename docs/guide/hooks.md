@@ -9,8 +9,8 @@ replace what classic XAML / WPF apps build with `DependencyProperty`,
 `INotifyPropertyChanged`, view models, and lifecycle methods — instead of
 those four mechanisms, you keep state with `UseState`, derive values with
 `UseMemo`, run side effects with [`UseEffect`](effects.md), share data
-without prop drilling via [`UseContext`](context.md), and persist values
-across launches with [`UsePersisted`](persistence.md). Every hook on this
+without prop drilling via [`UseContext`](context.md), and keep values
+across unmount/remount with [`UsePersisted`](persistence.md). Every hook on this
 page reads as a function call inside `Render()` and writes back through a
 setter closure; understanding that single shape makes the rest of Reactor
 fall out as composition.
@@ -35,7 +35,7 @@ lifecycle methods.
 | [UseObservable](reference/hooks/UseObservable.md) | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
 | [UseExternalStore](reference/hooks/UseExternalStore.md) | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
 | [UseResource](reference/hooks/UseResource.md) | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
-| [UsePersisted](reference/hooks/UsePersisted.md) | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
+| [UsePersisted](reference/hooks/UsePersisted.md) | `(T, Action<T>)` | `UseState` that survives unmount/remount within the process — in-memory, cleared on exit (see [Persistence](persistence.md)). |
 
 Every hook on this page is summarized again in the auto-generated
 [hooks reference](reference/hooks/index.md); the rest of the page is the
@@ -782,5 +782,5 @@ own dependency arrays. See [Effects and Lifecycle](effects.md) for advanced patt
 - **[Effects and Lifecycle](effects.md)** — Advanced UseEffect patterns, cleanup, and async work
 - **[Context](context.md)** — Share state across the tree without prop drilling
 - **[Hooks Internals](hooks-internals.md)** — How the slot table actually works under the surface
-- **[Persistence](persistence.md)** — `UsePersisted` for state that survives launches
+- **[Persistence](persistence.md)** — `UsePersisted` for state that survives unmount/remount in-process
 - **[Rules of Reactor](rules-of-reactor.md)** — Hook rules, idioms, and anti-patterns in one place

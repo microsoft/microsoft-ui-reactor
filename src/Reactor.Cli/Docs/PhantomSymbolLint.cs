@@ -177,6 +177,21 @@ internal static class PhantomSymbolLint
         new("ProgressBar",
             new Regex(@"(?<![A-Za-z0-9_.])(?<!new\s)ProgressBar\s*\(", RegexOptions.Compiled),
             "Progress(value) / ProgressIndeterminate()"),
+
+        // There is no `UI` facade class: factories are imported with
+        // `using static Microsoft.UI.Reactor.Factories;` and called bare. This
+        // is the one phantom shape the other patterns are structurally blind to
+        // — they all exclude member-qualified calls in order to spare real
+        // members like D3Charts.Text(, so `UI.Text(` slipped past the agent-kit
+        // sweep while it reported clean. Matching the *receiver* instead of the
+        // member is what closes that hole.
+        //
+        // `Microsoft.UI.Xaml...` and `Microsoft.UI.Reactor...` cannot match:
+        // the lookbehind excludes a preceding '.', and the trailing `\(`
+        // requires the call to be on the segment straight after `UI.`.
+        new("UI.",
+            new Regex(@"(?<![A-Za-z0-9_.])UI\.[A-Z][A-Za-z0-9_]*\s*\(", RegexOptions.Compiled),
+            "the bare factory (using static Microsoft.UI.Reactor.Factories)"),
     ];
 
     // <!-- phantom:skip -->            → silence the rest of this doc region
