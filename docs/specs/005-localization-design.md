@@ -1404,7 +1404,7 @@ Rationale:
 - `UseLocalizedAsset()` hook for locale-qualified images (MRT-backed)
 
 ### Phase 5: CLI — Translate & Validate
-- AI provider abstraction (Azure OpenAI, OpenAI, Anthropic)
+- AI provider abstraction (`ITranslationProvider`), implemented by a single GitHub Copilot provider
 - Batch translation with ICU-aware system prompts
 - `pending-review` comment markers in `.resw`
 - `mur loc translate --missing-only` for incremental translation

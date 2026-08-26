@@ -50,7 +50,7 @@ Pay special attention to these components:
 | Component | Why It Matters |
 |-----------|---------------|
 | **PreviewCaptureServer** | HTTP server that serves preview content. This is the #1 attack surface. Check: What address does it bind to? Does it validate request paths? Can it serve arbitrary files? Does it accept POST data? Is there authentication? Can a malicious webpage make requests to it (CORS)? |
-| **Reactor.Cli** | Command-line tool that performs file I/O, launches processes, and communicates with Azure OpenAI. Check: Does it sanitize file paths from arguments? Does it validate Azure OpenAI responses before using them? Does it store credentials securely? |
+| **Reactor.Cli** | Command-line tool that performs file I/O, launches processes, and communicates with the GitHub Copilot API (via the `gh` CLI). Check: Does it sanitize file paths from arguments? Does it validate Copilot responses before using them? Does it store credentials securely? |
 | **ReactorApp** | Application bootstrap. Check: Does it load assemblies from user-writable directories? Does it read configuration from untrusted sources? Does it elevate privileges? |
 
 ## Context Access

@@ -50,7 +50,7 @@ internal sealed class TranslationResult
 /// </summary>
 internal interface ITranslationProvider
 {
-    /// <summary>Display name (e.g., "Azure OpenAI", "Anthropic").</summary>
+    /// <summary>Display name (e.g., "GitHub Copilot").</summary>
     string Name { get; }
 
     /// <summary>Translates a batch of strings to the target locale.</summary>
