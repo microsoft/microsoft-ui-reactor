@@ -878,7 +878,7 @@ Caption("Detail").HeadingLevel(AutomationHeadingLevel.Level4) // skipped 2 and 3
 Use `UseFocusTrap` to keep focus inside a modal:
 
 ```csharp
-var trap = UseFocusTrap(isActive: true);
+var trap = this.UseFocusTrap(isActive: true);
 
 return Border(
     VStack(12,

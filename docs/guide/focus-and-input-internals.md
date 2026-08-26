@@ -345,7 +345,7 @@ or `Border` layered over the page rather than hosted in a popup:
 
 ```csharp
 var (open, setOpen) = UseState(false);
-var trap = UseFocusTrap(isActive: open);
+var trap = this.UseFocusTrap(isActive: open);
 
 return VStack(
     Button("Edit…", () => setOpen(true)),

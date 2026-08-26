@@ -90,8 +90,11 @@ the reconciler skips slots that didn't change.
 // above — so awaiting here is purely about observing the task.
 async Task SubmitAsync()
 {
+    // Narrow: this is the credential failure the mutator above throws for
+    // "wrongpassword", and signIn.Error (rendered below) is its display
+    // path. Catching Exception here would also hide unrelated faults.
     try { await signIn.RunAsync((email, pwd)); }
-    catch (Exception) { /* displayed via signIn.Error */ }
+    catch (InvalidOperationException) { /* displayed via signIn.Error */ }
 }
 
 return VStack(12,
