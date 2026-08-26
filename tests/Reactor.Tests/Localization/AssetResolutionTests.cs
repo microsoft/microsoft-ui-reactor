@@ -23,7 +23,7 @@ public class AssetResolutionTests
     public void Asset_WithLocaleFile_ReturnsLocalePath()
     {
         // Create temp directory structure for the test
-        var tempDir = Path.Combine(Path.GetTempPath(), "reactor-asset-test-" + Guid.NewGuid().ToString("N")[..8]);
+        var tempDir = Path.Join(Path.GetTempPath(), "reactor-asset-test-" + Guid.NewGuid().ToString("N")[..8]);
         var localeDir = Path.Combine(tempDir, "Assets", "ja-JP");
         Directory.CreateDirectory(localeDir);
         File.WriteAllText(Path.Combine(localeDir, "hero-banner.png"), "test");
@@ -44,7 +44,7 @@ public class AssetResolutionTests
     [Fact]
     public void Asset_FallsBackToBaseLanguage()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "reactor-asset-test-" + Guid.NewGuid().ToString("N")[..8]);
+        var tempDir = Path.Join(Path.GetTempPath(), "reactor-asset-test-" + Guid.NewGuid().ToString("N")[..8]);
         var baseDir = Path.Combine(tempDir, "Assets", "fr");
         Directory.CreateDirectory(baseDir);
         File.WriteAllText(Path.Combine(baseDir, "banner.png"), "test");

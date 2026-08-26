@@ -14,7 +14,7 @@ public class PruneCommandTests : IDisposable
 
     public PruneCommandTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"reactor-prune-{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"reactor-prune-{Guid.NewGuid():N}");
         _sourceDir = Path.Combine(_tempDir, "src");
         _stringsDir = Path.Combine(_tempDir, "Strings");
         _enUsDir = Path.Combine(_stringsDir, "en-US");
