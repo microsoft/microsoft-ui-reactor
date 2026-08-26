@@ -148,6 +148,15 @@ internal sealed class CrefResolver
         rewritten = InlineCodePattern.Replace(rewritten, m => $"`{DecodeXmlEntities(m.Groups["text"].Value)}`");
         rewritten = BoldPattern.Replace(rewritten, m => $"**{m.Groups["text"].Value}**");
 
+        // Block-level wrappers first. CommonMark treats an unknown tag as a raw
+        // HTML block and stops parsing Markdown inside it, so leaving <para> or
+        // <list> in place would make every rewrite above render literally —
+        // links, backticks and ** all emitted as source text.
+        rewritten = ListItemPattern.Replace(rewritten, m =>
+            "\n- " + m.Groups["text"].Value.Trim());
+        rewritten = ListPattern.Replace(rewritten, m => "\n" + m.Groups["items"].Value.Trim() + "\n");
+        rewritten = ParaPattern.Replace(rewritten, m => "\n\n" + m.Groups["text"].Value.Trim() + "\n\n");
+
         // Block-level <code> from an <example>. Left raw it published the tag
         // itself plus entity-escaped source, so a generic or lambda rendered as
         // `UseElementRef&lt;Button&gt;()`. Emit a fenced block instead.
@@ -259,6 +268,18 @@ internal sealed class CrefResolver
 
     internal static readonly Regex CodeBlockPattern = new(
         @"<code>(?<text>.*?)</code>", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    // Block wrappers. CommonMark stops parsing Markdown inside an unknown tag,
+    // so these have to become real Markdown rather than survive as raw HTML.
+    internal static readonly Regex ParaPattern = new(
+        @"<para>(?<text>.*?)</para>", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    internal static readonly Regex ListItemPattern = new(
+        @"<item>\s*(?:<description>)?(?<text>.*?)(?:</description>)?\s*</item>",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+
+    internal static readonly Regex ListPattern = new(
+        @"<list\b[^>]*>(?<items>.*?)</list>", RegexOptions.Compiled | RegexOptions.Singleline);
 
     internal static readonly Regex SeeCrefPattern = new(
         @"<(?:see|seealso)\s+cref=""(?<cref>[^""]+)""\s*/?>(?:\s*</(?:see|seealso)>)?",

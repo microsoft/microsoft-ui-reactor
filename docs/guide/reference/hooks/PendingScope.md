@@ -14,12 +14,24 @@ the owning `Pending` element renders its fallback instead of the child subtree.
 
 ## Discussion
 
-<para>**Semantics.** Only `Loading` triggers the fallback — spec §10.1. A
+
+
+**Semantics.** Only `Loading` triggers the fallback — spec §10.1. A
 `Reloading(previous)` is "we already have something to show" and the subtree
-continues to render normally.</para><para>**Threading.** All members are thread-safe. [Changed](Changed.md) ([guide](../../hooks.md)) fires on the
+continues to render normally.
+
+
+
+**Threading.** All members are thread-safe. [Changed](Changed.md) ([guide](../../hooks.md)) fires on the
 thread that caused the mutation — consumers (typically `Pending`'s re-render
-trigger) marshal it to the dispatcher themselves.</para><para>**Scope nesting.** Each `Pending` provides a fresh scope to its subtree,
+trigger) marshal it to the dispatcher themselves.
+
+
+
+**Scope nesting.** Each `Pending` provides a fresh scope to its subtree,
 so nested `Pending`s are independent. A hook registers only with its nearest
-ancestor scope.</para>
+ancestor scope.
+
+
 
 

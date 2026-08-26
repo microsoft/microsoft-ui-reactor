@@ -15,7 +15,8 @@ so reused cells skip diffing entirely.
 
 ## Discussion
 
-<para>
+
+
 Spec 034 §C. The signature deliberately matches `UseMemo` /
 `UseEffect` / `UseCallback`: deps are trailing
 `params`. The closure-capture correctness problem (a builder that
@@ -24,14 +25,21 @@ deps and silently renders stale) is caught at compile time by the
 `REACTOR_HOOKS_007` Roslyn analyzer that ships with the framework.
 Indirect captures through helper methods are a documented blind spot —
 no static fix is available without whole-program analysis.
-</para><para>**When to use:** tickers, log tables, observability dashboards, file
+
+
+
+**When to use:** tickers, log tables, observability dashboards, file
 lists, and other large readonly grids whose cell content is a pure
 function of each item value plus a small set of declared
 deps. **When not to use:** rows whose chrome depends on focus /
 drag / selection / hover state that you aren't capturing in deps.
-</para><para>**gen2 trade-off:** memo trades short-lived gen0 churn for
+
+
+
+**gen2 trade-off:** memo trades short-lived gen0 churn for
 longer-lived gen1/gen2 retention. Many memoized lists across an app
 can compound gen2 pressure. Profile before deciding.
-</para>
+
+
 
 

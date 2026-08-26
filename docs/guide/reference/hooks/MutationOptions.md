@@ -15,9 +15,17 @@ very next frame without a dispatcher hop.
 
 ## Discussion
 
-<para>**InvalidateKeys.** On success, each key is passed to
+
+
+**InvalidateKeys.** On success, each key is passed to
 `QueryCache.Invalidate`. Sibling `UseResource` hooks subscribed to
-those keys will observe the invalidation and refetch on their next render.</para><para>Error path: [OnError](MutationOptions.md) fires but [InvalidateKeys](MutationOptions.md) does
-**not** — the assumption is the server state didn't change, so the cache is still valid.</para>
+those keys will observe the invalidation and refetch on their next render.
+
+
+
+Error path: [OnError](MutationOptions.md) fires but [InvalidateKeys](MutationOptions.md) does
+**not** — the assumption is the server state didn't change, so the cache is still valid.
+
+
 
 

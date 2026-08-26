@@ -340,11 +340,20 @@ defaults:
         Assert.Contains("ctx.UseElementRef<Button>()", page.Body, StringComparison.Ordinal);
         Assert.Contains("Array.Empty<object>()", page.Body, StringComparison.Ordinal);
 
+        // <para>/<list> become real Markdown. Left as raw HTML blocks,
+        // CommonMark would stop parsing and emit the inline rewrites literally.
+        Assert.Contains("A wrapped paragraph with a `code span` and **bold**.", page.Body, StringComparison.Ordinal);
+        Assert.Contains("- First item with `inline code`.", page.Body, StringComparison.Ordinal);
+        Assert.Contains("- Second item.", page.Body, StringComparison.Ordinal);
+
         // No raw markup or entities survive anywhere on the page.
         Assert.DoesNotContain("<c>", page.Body, StringComparison.Ordinal);
         Assert.DoesNotContain("<code>", page.Body, StringComparison.Ordinal);
         Assert.DoesNotContain("<b>", page.Body, StringComparison.Ordinal);
         Assert.DoesNotContain("<paramref", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<para>", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<list", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<item>", page.Body, StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;", page.Body, StringComparison.Ordinal);
         Assert.DoesNotContain("&gt;", page.Body, StringComparison.Ordinal);
     }

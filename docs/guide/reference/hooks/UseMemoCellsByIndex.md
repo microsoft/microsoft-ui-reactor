@@ -50,7 +50,8 @@ will get better incremental reuse from [UseMemoCells](UseMemoCells.md#usememocel
 or [UseMemoCellsByKey](UseMemoCellsByKey.md#usememocellsbykeyt1-t2rendercontext-ireadonlylistt1-funct1-t2-funct1-int-element-object), both of which can
 short-circuit per-cell on value or key equality across length
 changes.
-<para>
+
+
 On the steady-state path (unchanged count) the returned array reuses
 the previous render's element instance for every index NOT named in
 `changedIndices`, and publishes a positional
@@ -63,7 +64,8 @@ and declare every change through a subsequent render's
 AGENTS.md "Never mutate"). Mutating an unchanged slot in place both
 corrupts the memo's view of the previous render and can cause the
 reconciler to skip the mutated cell.
-</para>
+
+
 
 ### Parameters
 

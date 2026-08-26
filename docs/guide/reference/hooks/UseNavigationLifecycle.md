@@ -8,7 +8,11 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigationLifecycle(System
 ## Summary
 
 Registers lifecycle callbacks that fire during navigation events.
-<list type="bullet"><item>`onNavigatedTo` — fires after this page becomes active.</item><item>`onNavigatingFrom` — fires before navigating away. Call `ctx.Cancel()` to block.</item><item>`onNavigatedFrom` — fires after this page is no longer active.</item></list>
+
+- `onNavigatedTo` — fires after this page becomes active.
+- `onNavigatingFrom` — fires before navigating away. Call `ctx.Cancel()` to block.
+- `onNavigatedFrom` — fires after this page is no longer active.
+
 Callbacks are always updated to the latest references on every render.
 
 

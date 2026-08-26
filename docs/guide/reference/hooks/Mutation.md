@@ -12,12 +12,20 @@ the pending/error/last-result state and the [RunAsync](RunAsync.md) ([guide](../
 
 ## Discussion
 
-<para>**Concurrency.** Overlapping [RunAsync](RunAsync.md) ([guide](../../hooks.md)) calls each get their own
+
+
+**Concurrency.** Overlapping [RunAsync](RunAsync.md) ([guide](../../hooks.md)) calls each get their own
 cancellation token; both complete and fire their callbacks in completion order.
 [LastResult](LastResult.md) ([guide](../../hooks.md)) is whichever finishes last. If you want strictly-serialized
 mutations, wrap [RunAsync](RunAsync.md) ([guide](../../hooks.md)) behind your own gate (or disable the trigger
-control while [IsPending](IsPending.md) ([guide](../../hooks.md)) is true).</para><para>**Reset.**[Reset](Reset.md) ([guide](../../hooks.md)) clears [Error](Error.md) ([guide](../../hooks.md)) and
+control while [IsPending](IsPending.md) ([guide](../../hooks.md)) is true).
+
+
+
+**Reset.**[Reset](Reset.md) ([guide](../../hooks.md)) clears [Error](Error.md) ([guide](../../hooks.md)) and
 [LastResult](LastResult.md) ([guide](../../hooks.md)) but does **not** cancel in-flight work — this is an explicit
-choice so a "dismiss the error banner" action doesn't abort the user's retry.</para>
+choice so a "dismiss the error banner" action doesn't abort the user's retry.
+
+
 
 

@@ -83,6 +83,11 @@
         <paramref name="factory"/>.
       </summary>
       <remarks>
+        <para>A wrapped paragraph with a <c>code span</c> and <b>bold</b>.</para>
+        <list type="number">
+          <item>First item with <c>inline code</c>.</item>
+          <item>Second item.</item>
+        </list>
         <code>
         var btn = ctx.UseElementRef&lt;Button&gt;();
         ctx.UseEffect(() =&gt; btn.Current?.Focus(), Array.Empty&lt;object&gt;());

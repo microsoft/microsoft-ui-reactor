@@ -36,12 +36,18 @@ and re-renders when new results land.
 
 ### Discussion
 
-<para>**Sync-complete fast path.** If `fetcher` returns an
+
+
+**Sync-complete fast path.** If `fetcher` returns an
 already-completed task, this call returns `Data(result)` on the same render,
-with no transient `Loading` flash.</para><para>**Dispatcher.** The hook captures the dispatcher at registration time
+with no transient `Loading` flash.
+
+
+
+**Dispatcher.** The hook captures the dispatcher at registration time
 (`DispatcherQueue.GetForCurrentThread()`). In unit tests without a WinUI
 dispatcher, continuations run inline on the thread-pool thread that completed
-the fetch.</para>
+the fetch.
 
 ## Featured in
 
