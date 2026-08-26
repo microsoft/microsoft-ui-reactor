@@ -189,6 +189,10 @@ public sealed class DemoScriptShell : Component
                     await File.WriteAllBytesAsync(path + ".tmp", bytes, cts.Token).ConfigureAwait(false);
                     File.Move(path + ".tmp", path, overwrite: true);
                 }
+                // Expected on teardown: the debounced save races the effect cleanup,
+                // so an in-flight write is cancelled deliberately. Reporting it as a
+                // failed save would be wrong -- nothing was lost that the next save
+                // will not rewrite.
                 catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {

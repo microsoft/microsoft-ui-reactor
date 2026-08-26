@@ -256,6 +256,9 @@ static class DebouncedTextHook
             _ = Task.Run(async () =>
             {
                 try { await Task.Delay(ms, cts.Token); setDebounced(value); }
+                // Expected: the cleanup below cancels this delay whenever `value`
+                // changes again inside the debounce window. Cancelling is how the
+                // stale result is discarded, so there is nothing to report.
                 catch (OperationCanceledException) { }
             });
             return () => { cts.Cancel(); };

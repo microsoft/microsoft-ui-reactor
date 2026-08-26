@@ -40,7 +40,7 @@ Doc apps inherit `Reactor.DevtoolsSupport=true` from `docs/_pipeline/apps/Direct
 | `UseRef<T>(initial)` | `Ref<T>` | Mutable value that does *not* trigger re-render. |
 | `UseContext<T>(ctx)` | `T` | Read a [context](context.md) value. |
 | `UsePersisted<T>(key, initial, scope)` | `(T, Action<T>)` | Survive re-mount via [LRU cache](persistence.md). |
-| `UseColorScheme()` | `ColorScheme` | Reactive light/dark/HighContrast. |
+| `UseColorScheme()` | `ColorScheme` | Reactive app-global light/dark. Forced colors: `UseHighContrast()`. |
 | `UseResource(fetcher, cache, deps, opts?)` | `AsyncValue<T>` | [`async-resources`](async-resources.md). |
 | `UseFocusTrap(isActive)` | `FocusTrapHandle` | Trap Tab inside a sub-tree. |
 | `UseAnnounce()` | `AnnounceHandle` | Push a screen-reader announcement (via `.Announce(string)` method). |

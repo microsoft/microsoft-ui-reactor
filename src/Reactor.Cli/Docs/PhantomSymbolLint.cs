@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace Microsoft.UI.Reactor.Cli.Docs;
@@ -258,9 +259,14 @@ internal static class PhantomSymbolLint
 
             // Honor skip markers wherever they appear, including immediately
             // before a fence, so an author can annotate the block from prose.
-            foreach (Match sk in SkipMarker.Matches(raw))
+            // Projected first so the "match -> argument" mapping is one step and
+            // the loop below only decides scope (all phantoms vs. one).
+            var skipArgs = SkipMarker.Matches(raw)
+                .Cast<Match>()
+                .Select(sk => sk.Groups[1].Success ? sk.Groups[1].Value.Trim() : "");
+
+            foreach (var arg in skipArgs)
             {
-                var arg = sk.Groups[1].Success ? sk.Groups[1].Value.Trim() : "";
                 if (arg.Length == 0) skipAll = true;
                 else skipNames.Add(arg);
             }

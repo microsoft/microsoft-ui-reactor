@@ -54,11 +54,22 @@ internal class ReconcileTraceDepth_TopLevelSpansSurviveNestedPasses(Harness h) :
 
         await Harness.Render();
 
+        // NativeAOT strips EventSource unless EventSourceSupport=true, and the
+        // AOT selftest publish does not set it. With no event source there is no
+        // increment either, so *every* tracing assertion below -- including the
+        // depth counter -- reads identically whether the bug is present or not.
+        // Report that honestly as a skip: a vacuous `ok` here would claim the
+        // regression is guarded on a configuration where nothing is watching.
+        bool tracing = ReactorEventSource.Log.IsEnabled(
+            EventLevel.Informational, ReactorEventSource.Keywords.Reconcile);
+        Console.WriteLine($"# trace diag: eventSourceEnabled={tracing}");
+
         // The mount pass must have produced a span at all; if this is zero the
         // listener/keyword wiring is wrong and the rest of the fixture would
         // pass vacuously.
         int afterMount = listener.StartCount;
-        H.Check("ReconcileTrace_MountEmittedSpan", afterMount > 0);
+        if (tracing) H.Check("ReconcileTrace_MountEmittedSpan", afterMount > 0);
+        else H.Skip("ReconcileTrace_MountEmittedSpan", "EventSource disabled (NativeAOT)");
         Console.WriteLine($"# trace diag: afterMount starts={afterMount} stops={listener.StopCount}");
 
         // Second and third top-level passes. Before the fix these emitted
@@ -76,9 +87,19 @@ internal class ReconcileTraceDepth_TopLevelSpansSurviveNestedPasses(Harness h) :
             t => t.Text.StartsWith("count", StringComparison.Ordinal))?.Text;
 
         // Guard: if the tree did not actually advance, the span counts below
-        // would be comparing passes that never happened.
+        // would be comparing passes that never happened. This one is real on
+        // every configuration -- rendering does not depend on tracing.
         H.Check("ReconcileTrace_TreeAdvancedPass2", text1 == "count 1");
         H.Check("ReconcileTrace_TreeAdvancedPass3", text2 == "count 2");
+
+        if (!tracing)
+        {
+            H.Skip("ReconcileTrace_DepthReturnedToZero", "EventSource disabled (NativeAOT)");
+            H.Skip("ReconcileTrace_SecondTopLevelPassEmitted", "EventSource disabled (NativeAOT)");
+            H.Skip("ReconcileTrace_ThirdTopLevelPassEmitted", "EventSource disabled (NativeAOT)");
+            H.Skip("ReconcileTrace_StartStopBalanced", "EventSource disabled (NativeAOT)");
+            return;
+        }
 
         // The direct invariant: the depth counter must be back at zero between
         // passes. With the decrement gated on `emitTrace` this reads 3 here,

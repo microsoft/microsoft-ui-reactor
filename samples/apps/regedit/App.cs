@@ -413,6 +413,9 @@ class RegeditApp : Component
                         }
                     }, null);
                 }
+                // Expected: a new search (or unmount) cancels the running one. The
+                // status text is owned by whoever cancelled us, so overwriting it
+                // here would clobber the newer search's message.
                 catch (OperationCanceledException) { }
             });
         }

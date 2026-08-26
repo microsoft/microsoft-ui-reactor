@@ -80,10 +80,11 @@ that branch on the scheme use [`UseColorScheme`](hooks.md):
 ```csharp snippet="theming-tokens/use-color-scheme"
 ```
 
-`UseColorScheme()` returns the current `ColorScheme` (Light / Dark /
-HighContrast) and re-runs render when the value changes. Reach for it
+`UseColorScheme()` returns the app-global `ColorScheme` (Light or Dark) and
+re-runs render when the value changes. Reach for it
 only when the branch can't be expressed as a token (e.g. a
-non-color decision like which icon to render).
+non-color decision like which icon to render). It does not report forced
+colors — use [`UseHighContrast()`](hooks.md) for that.
 
 ## Token catalog
 
@@ -306,7 +307,7 @@ scheme actually changes.
 
 | Concept | API | Notes |
 |---|---|---|
-| Token | `Theme.<Name>` | 35 typed accessors in `src/Reactor/Core/Theme.cs`. |
+| Token | `Theme.<Name>` | 36 typed accessors in `src/Reactor/Core/Theme.cs`. |
 | Escape hatch | `Theme.Ref(key)` | Any XAML resource key, including app-level overrides. |
 | Reactive read | `UseColorScheme()` | Returns `ColorScheme`; triggers re-render on swap. |
 | Per-element override | `.RequestedTheme(ElementTheme)` | Walks visual tree, resolves nearest override. |

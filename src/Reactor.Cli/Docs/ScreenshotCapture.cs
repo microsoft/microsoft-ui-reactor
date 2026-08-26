@@ -612,6 +612,9 @@ internal static class ScreenshotCapture
                 }
             }
         }
+        // Expected: the handshake read is bounded by a timeout token. A cancel just
+        // means the child never announced its port/token, which the `port >= 0 &&
+        // token is not null` check below already treats as a failed handshake.
         catch (OperationCanceledException) { }
 
         if (port >= 0 && token is not null)
