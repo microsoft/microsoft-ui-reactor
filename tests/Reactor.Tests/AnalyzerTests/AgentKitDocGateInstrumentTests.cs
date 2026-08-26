@@ -813,6 +813,20 @@ public class AgentKitDocGateInstrumentTests
         Assert.Equal(
             "FlexColumn(children).FlexPadding(16)",
             Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/padded.md", PaddedMarker)).Text);
+
+        // A fence may also open on a list marker's own line (`- ```csharp`); the marker sets the
+        // content column, and the probe accepts the shape too so the oracle is not blind to it.
+        const string InlineMarker = """
+            - ```csharp
+              FlexColumn(children).FlexPadding(16)
+              ```
+            """;
+
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/inline.md", InlineMarker)).Text);
+
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "- ```csharp");
     }
 
     /// <summary>

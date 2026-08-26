@@ -88,7 +88,7 @@ internal static class AgentKitDocCorpus
     /// </para>
     /// </remarks>
     private static readonly Regex FenceOpen = new(
-        @"^(?<indent>[ \t]*)(?<fence>`{3,}|~{3,})[ ]*(?<info>[^`\r\n]*)$",
+        @"^(?<indent>[ \t]*)(?<marker>([-*+]|\d+[.)])[ \t]+)?(?<fence>`{3,}|~{3,})[ ]*(?<info>[^`\r\n]*)$",
         RegexOptions.Compiled);
 
     /// <summary>
@@ -162,7 +162,7 @@ internal static class AgentKitDocCorpus
     /// independently.
     /// </remarks>
     internal static readonly Regex CSharpFenceProbe = new(
-        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
+        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(?:([-*+]|\d+[.)])[ \t]+)?(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -342,13 +342,15 @@ internal static class AgentKitDocCorpus
 
             var indent = open.Groups["indent"].Value.Length;
 
-            // CommonMark measures a fence's indent against its *container*: at most three spaces
-            // past the content column. Beyond that it is an indented code block, where a fence is
-            // literal text — and honouring one swallowed everything to the next close, including a
-            // genuine ```csharp opener below it, which then shipped uninspected. The differential
-            // probe cannot catch that, since it derives its exclusions from this same scan.
-            var container = ContainerIndent(lines, i);
-            if (indent - container > 3)
+            // A fence may open as the content of a list item on the marker's own line
+            // (`- ```csharp`). The marker establishes the content column, so measure — and strip —
+            // against that rather than the line's leading whitespace.
+            var inlineMarker = open.Groups["marker"];
+            var container = inlineMarker.Success
+                ? indent + inlineMarker.Length
+                : ContainerIndent(lines, i);
+
+            if (!inlineMarker.Success && indent - container > 3)
                 continue;
 
             var fenceChar = open.Groups["fence"].Value[0];
@@ -390,7 +392,9 @@ internal static class AgentKitDocCorpus
                 // whole run as the language, so the body never reached the gate — and the probe
                 // accepted only spaces too, so the completeness fact stayed green over it.
                 Language: open.Groups["info"].Value.Trim().Split(' ', '\t', ',')[0],
-                Indent: indent,
+                // Body lines have the opening fence's own offset removed. For an inline marker that
+                // offset includes the marker; otherwise it is just the leading whitespace.
+                Indent: inlineMarker.Success ? container : indent,
                 BlockquoteDepth: depth));
 
             // On container exit the terminating line belongs to whatever follows, so leave it for
