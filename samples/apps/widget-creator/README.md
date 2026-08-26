@@ -69,7 +69,7 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
    in your browser. You can also install it up front:
 
    ```pwsh
-   winget install Microsoft.WindowsAppRuntime.2.1
+   winget install Microsoft.WindowsAppRuntime.2
    ```
 
    To check without opening the window:

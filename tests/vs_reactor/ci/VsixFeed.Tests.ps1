@@ -74,6 +74,9 @@ function Invoke-HostScript {
     param([string[]]$Arguments)
     $ErrorActionPreference = 'Continue'
     & $hostExe @Arguments 2>&1 | Out-Null
+    # Surface the child's status to the caller: `| Out-Null` does not disturb
+    # $LASTEXITCODE, and the -MSBuildPath case below asserts on it.
+    $global:LASTEXITCODE = $LASTEXITCODE
 }
 
 # Invokes the real Build-Vsix.ps1 against a fake MSBuild and returns the
@@ -184,6 +187,26 @@ try {
         Assert-True ($sourceLine -match [regex]::Escape('/p:RestoreSources=https://contoso.example.test/nuget/v3/index.json')) `
             '-NuGetSource reaches MSBuild as RestoreSources'
     }
+
+    # -- 3b. A bad -MSBuildPath fails before anything is invoked. --
+    # The discriminating part is that the stub is NOT reached: without the guard the
+    # script would try to execute a nonexistent program instead of reporting it.
+    $missingMsBuild = Join-Path $tmp 'no-such-msbuild.cmd'
+    $badPathCapture = Join-Path $tmp ("msbuild-args-badpath-" + [Guid]::NewGuid().ToString('N') + ".txt")
+    $env:REACTOR_TEST_ARGS_FILE = $badPathCapture
+    try {
+        Invoke-HostScript -Arguments @(
+            '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-File', $buildVsix,
+            '-MSBuildPath', $missingMsBuild
+        )
+        $badPathExit = $LASTEXITCODE
+    } finally {
+        $env:REACTOR_TEST_ARGS_FILE = $originalArgsFile
+    }
+    Assert-Equal 1 $badPathExit '-MSBuildPath pointing at a missing file exits 1'
+    Assert-Equal $false (Test-Path -LiteralPath $badPathCapture) `
+        '-MSBuildPath validation rejects before invoking any build'
 
     # -- 4. Reinstall-Vsix.ps1 forwards the feed to Build-Vsix.ps1. --
     # Run a copy of the shipped script beside a stub Build-Vsix.ps1 that records

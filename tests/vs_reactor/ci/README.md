@@ -19,6 +19,13 @@ pins down.
 | `BootstrapFeedResolver.Tests.ps1` | Behavioural tests for user-scoped Microsoft npm/NuGet proxy discovery, public-default preservation, explicit overrides, and generated internal-only NuGet config. |
 | `VsixFeed.Tests.ps1` | Behavioural tests for the NuGet feed plumbing on the VSIX path (`bootstrap.ps1` → `Reinstall-Vsix.ps1` → `Build-Vsix.ps1` → MSBuild), driven through a stub MSBuild that records its own command line. |
 
+The Windows App Runtime identity rule (`tools/WindowsAppRuntimeId.ps1`) is guarded from
+C# instead, in `tests/Reactor.Tests/WinAppSDKReferenceGuardTests.cs`, because it is keyed
+to `Directory.Build.props` — a file that does not appear in this workflow's trigger paths,
+so a version bump alone would not run these suites. Those mutations are recorded there:
+making the version comparison always pass, or making the props reader return `null`, each
+redden 2.
+
 The library under test lives in `src/vs-reactor/`, not here, because
 `Reinstall-Vsix.ps1` dot-sources it at runtime — it ships with the script rather
 than with the tests.
@@ -44,6 +51,7 @@ red.
 | re-inject an em dash into a **double**-quoted `Write-Host` string in `bootstrap.ps1` | 1 fail — the file stops loading under Windows PowerShell 5.1 |
 | re-inject an arrow into a **single**-quoted `Write-Host` string in `bootstrap.ps1` | 1 fail — different character, different quote style, same defect |
 | re-inject an em dash into a **single**-quoted string | 0 fail — correctly ignored; `U+201D` does not close a single-quoted literal |
+| `Build-Vsix.ps1` stops validating a missing `-MSBuildPath` | 1 fail |
 
 The AST mutations were re-run under **Windows PowerShell 5.1** as well, not just
 `pwsh`, because a 5.1 leg that cannot fail is worse than no 5.1 leg: it reports

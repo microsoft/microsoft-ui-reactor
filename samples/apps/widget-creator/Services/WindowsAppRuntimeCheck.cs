@@ -111,9 +111,27 @@ public static class WindowsAppRuntimeCheck
         $"https://aka.ms/windowsappsdk/{SdkRelease.Major}.{SdkRelease.Minor}" +
         $"/latest/windowsappruntimeinstall-{ArchitectureMoniker}.exe";
 
-    /// <summary>winget id for the SDK's release band, e.g. <c>Microsoft.WindowsAppRuntime.2.1</c>.</summary>
+    /// <summary>
+    /// winget id for the runtime the SDK binds, e.g. <c>Microsoft.WindowsAppRuntime.2</c>.
+    /// <para>The shape differs by generation, and getting it wrong points the user at a
+    /// package that either does not exist or cannot load these widgets. 1.x shipped a
+    /// side-by-side framework package per minor (<c>...WindowsAppRuntime.1.7</c>), but 2.x
+    /// ships one package for the whole major, serviced in place — which is why
+    /// <see cref="PackageFamilyName"/> resolves to <c>Microsoft.WindowsAppRuntime.2_...</c>
+    /// and not <c>.2.1_...</c>. There is no <c>Microsoft.WindowsAppRuntime.2.1</c> winget
+    /// package, and <c>...WindowsAppRuntime.2.0</c> is a separate one pinned to 2.0.x.</para>
+    /// <para>Same rule as <c>tools/WindowsAppRuntimeId.ps1</c>, which bootstrap.ps1 uses.
+    /// Note <see cref="InstallerUrl"/> is deliberately NOT this shape: the aka.ms
+    /// release-band URL really is major.minor.</para>
+    /// </summary>
     public static string WingetCommand =>
-        $"winget install Microsoft.WindowsAppRuntime.{SdkRelease.Major}.{SdkRelease.Minor}";
+        $"winget install {WingetPackageId}";
+
+    /// <summary>Package id used by <see cref="WingetCommand"/>.</summary>
+    public static string WingetPackageId =>
+        SdkRelease.Major >= 2
+            ? $"Microsoft.WindowsAppRuntime.{SdkRelease.Major}"
+            : $"Microsoft.WindowsAppRuntime.{SdkRelease.Major}.{SdkRelease.Minor}";
 
     /// <summary>Architecture moniker used by the installer URLs (<c>x64</c> / <c>arm64</c> / <c>x86</c>).</summary>
     public static string ArchitectureMoniker => RuntimeInformation.ProcessArchitecture switch

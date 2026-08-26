@@ -61,6 +61,7 @@ $reinstall = Join-Path $repoRoot 'src\vs-reactor\Reinstall-Vsix.ps1'
 $vsProcessLib = Join-Path $repoRoot 'src\vs-reactor\VsProcessLib.ps1'
 $buildVsix = Join-Path $repoRoot 'src\vs-reactor\Build-Vsix.ps1'
 $feedResolver = Join-Path $repoRoot 'tools\BootstrapFeedResolver.ps1'
+$runtimeIdLib = Join-Path $repoRoot 'tools\WindowsAppRuntimeId.ps1'
 $testingDoc = Join-Path $repoRoot 'src\vs-reactor\TESTING.md'
 
 # These files are BOM-less UTF-8. Windows PowerShell 5.1 decodes such files as
@@ -291,7 +292,7 @@ try {
     # Decoding is modelled explicitly rather than inferred from the host, so the
     # check is identical on both legs of the matrix and on any locale.
     $ansi = [System.Text.Encoding]::GetEncoding(1252)
-    foreach ($f in @($bootstrap, $reinstall, $vsProcessLib, $buildVsix, $feedResolver)) {
+    foreach ($f in @($bootstrap, $reinstall, $vsProcessLib, $buildVsix, $feedResolver, $runtimeIdLib)) {
         $asAnsi = $ansi.GetString([System.IO.File]::ReadAllBytes($f))
         $ansiErrors = $null
         $ansiTokens = $null

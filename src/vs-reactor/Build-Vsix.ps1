@@ -11,18 +11,23 @@
 
 .PARAMETER MSBuildPath
     Use a specific MSBuild.exe instead of asking vswhere for the latest one.
-    An escape hatch for non-standard Visual Studio layouts, and the seam the
-    headless argument tests in tests/vs_reactor/ci drive.
+    An escape hatch for non-standard Visual Studio layouts.
 
 .NOTES
     Feed selection matters here in a way it does not elsewhere in the repo.
     Not every network can reach nuget.org, and this is the one restore that
-    bootstrap.ps1 does not run itself: it shells out to Reinstall-Vsix.ps1, so
-    the child process never sees the restore environment bootstrap sets up for
-    its own commands. bootstrap.ps1 therefore forwards the feed it already
-    resolved, and a direct run of this script re-detects the same mirror from
-    the user's NuGet.Config, so "re-run Build-Vsix.ps1" is not advice that only
-    works on an unrestricted network.
+    bootstrap.ps1 does not run itself: it shells out to Reinstall-Vsix.ps1, and
+    the restore environment bootstrap sets up around its own commands is scoped
+    to those commands, so this build never sees it. bootstrap.ps1 therefore
+    passes the feed it already resolved as an argument.
+
+    Explicit arguments rather than inherited RestoreSources/RestoreConfigFile
+    environment variables, because this script also detects a mirror on its own
+    for direct runs -- and an MSBuild /p: switch outranks an environment
+    variable, so self-detection would silently override an explicit
+    -NuGetConfig handed down from bootstrap. Resolve-ReactorNuGetFeedOverride
+    gives explicit arguments precedence over detection, which keeps the two
+    entry points consistent.
 #>
 [CmdletBinding()]
 param(

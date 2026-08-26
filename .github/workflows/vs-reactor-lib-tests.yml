@@ -24,6 +24,7 @@ on:
     paths:
       - 'bootstrap.ps1'
       - 'tools/BootstrapFeedResolver.ps1'
+      - 'tools/WindowsAppRuntimeId.ps1'
       - 'src/vs-reactor/VsProcessLib.ps1'
       - 'src/vs-reactor/Reinstall-Vsix.ps1'
       - 'src/vs-reactor/Build-Vsix.ps1'
@@ -35,6 +36,7 @@ on:
     paths:
       - 'bootstrap.ps1'
       - 'tools/BootstrapFeedResolver.ps1'
+      - 'tools/WindowsAppRuntimeId.ps1'
       - 'src/vs-reactor/VsProcessLib.ps1'
       - 'src/vs-reactor/Reinstall-Vsix.ps1'
       - 'src/vs-reactor/Build-Vsix.ps1'

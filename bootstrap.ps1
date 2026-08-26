@@ -286,84 +286,96 @@ function Get-VsExtensionSkipReason {
 #
 # So we prompt by default. `-InstallWinAppSdk` to force-install,
 # `-InstallWinAppSdk:$false` to skip the prompt non-interactively.
-
-# Derive the winget id from the pinned SDK version instead of hardcoding it, so
-# a WindowsAppSDKVersion bump cannot leave bootstrap installing a runtime that
-# is too old to load what the repo builds.
 #
-# The mapping is not "major.minor" for both generations:
-#
-#   1.x  shipped a side-by-side framework package per minor, so the winget ids
-#        are Microsoft.WindowsAppRuntime.1.6, .1.7, .1.8 and an app built
-#        against 1.7 genuinely needs the 1.7 runtime.
-#   2.x  ships ONE framework package for the whole major -- the SDK's own
-#        WindowsAppSDK-VersionInfo.json names Microsoft.WindowsAppRuntime.2 as
-#        the framework family for 2.1.3 -- serviced 2.0 -> 2.1 -> 2.3 in place.
-#        The major-only winget id (Microsoft.WindowsAppRuntime.2) tracks that
-#        servicing; the major.minor ids are pinned to one servicing line and
-#        fall behind. Microsoft.WindowsAppRuntime.2.0 is still 2.0.1, which
-#        cannot satisfy an app built against 2.1.3.
-#
-# tests/Reactor.Tests/WinAppSDKReferenceGuardTests.cs pins this agreement.
-function Get-PinnedWindowsAppSdkVersion {
-    param([string]$PropsPath)
-    if (-not (Test-Path -LiteralPath $PropsPath -PathType Leaf)) { return $null }
-    $text = [System.IO.File]::ReadAllText($PropsPath, [System.Text.Encoding]::UTF8)
-    if ($text -match '<WindowsAppSDKVersion>\s*([^<\s]+)\s*</WindowsAppSDKVersion>') { return $Matches[1] }
-    return $null
+# The runtime identity and the version comparison live in
+# tools/WindowsAppRuntimeId.ps1 -- see that file for why the 2.x winget id is
+# major-only and why its presence alone does not prove the runtime is new
+# enough. bootstrap.yml and WinAppSDKReferenceGuardTests.cs load the same file.
+$winAppRuntimeLib = Join-Path $repoRoot 'tools\WindowsAppRuntimeId.ps1'
+if (-not (Test-Path -LiteralPath $winAppRuntimeLib -PathType Leaf)) {
+    Write-Host "ERROR: Missing Windows App Runtime helper: $winAppRuntimeLib" -ForegroundColor Red
+    exit 1
 }
+. $winAppRuntimeLib
 
-function Get-WindowsAppRuntimeWingetId {
-    param([string]$SdkVersion)
-    if ([string]::IsNullOrWhiteSpace($SdkVersion)) { return $null }
-    if ($SdkVersion -notmatch '^(\d+)\.(\d+)') { return $null }
-    $major = [int]$Matches[1]
-    $minor = [int]$Matches[2]
-    if ($major -ge 2) { return "Microsoft.WindowsAppRuntime.$major" }
-    return "Microsoft.WindowsAppRuntime.$major.$minor"
-}
-
-$winAppSdkVersion = Get-PinnedWindowsAppSdkVersion (Join-Path $repoRoot 'Directory.Build.props')
+$winAppSdkVersion = Get-PinnedWindowsAppSdkVersion -PropsPath (Join-Path $repoRoot 'Directory.Build.props')
 $winAppRuntimeId = Get-WindowsAppRuntimeWingetId $winAppSdkVersion
 if (-not $winAppRuntimeId) {
     # Guessing an id here risks installing a runtime that cannot load what this
-    # checkout builds, which is worse than saying nothing.
-    Write-Host "    [warn] Could not read WindowsAppSDKVersion from Directory.Build.props; skipping the Windows App Runtime check." -ForegroundColor Yellow
+    # checkout builds, which is worse than saying nothing. Loud rather than
+    # silent when the caller explicitly asked for the install.
+    $msg = "Could not read WindowsAppSDKVersion from Directory.Build.props, so the Windows App Runtime could not be identified."
+    if ($InstallWinAppSdk) {
+        Fail "$msg -InstallWinAppSdk cannot be honored."
+    }
+    Write-Host "    [warn] $msg Skipping the runtime check." -ForegroundColor Yellow
 } else {
     $winAppRuntimeLabel = "Windows App Runtime (for Windows App SDK $winAppSdkVersion)"
     Write-Dbg "Windows App Runtime winget id derived from WindowsAppSDKVersion=$($winAppSdkVersion): $winAppRuntimeId"
 
-    function Test-WindowsAppRuntime {
-        param([Parameter(Mandatory)][string]$Id)
+    # Returns 'satisfied' | 'outdated' | 'missing' | 'unknown'.
+    #
+    # 'outdated' is a real state, not a theoretical one: the 2.x id is
+    # major-wide, so a machine carrying 2.0.1 reports the package as installed
+    # even though it cannot load an app built against 2.1.3. Treating presence
+    # as sufficient would print [ok] over exactly the mismatch this check exists
+    # to catch.
+    function Get-WindowsAppRuntimeState {
+        param(
+            [Parameter(Mandatory)][string]$Id,
+            [Parameter(Mandatory)][string]$RequiredSdkVersion
+        )
         if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Dbg "winget not on PATH; skipping WindowsAppRuntime probe"
-            return $true  # nothing we can check without winget
+            Write-Dbg "winget not on PATH; cannot probe WindowsAppRuntime"
+            return 'unknown'
         }
         # --accept-source-agreements is needed even for `list` on a winget that
         # hasn't been used before (e.g. a fresh CI runner). Without it, winget
         # prompts for msstore terms and fails on a non-interactive shell with
         # exit -1978335166.
         Write-Dbg "winget list --id $Id --exact --accept-source-agreements"
-        if ($script:VerboseOn) {
-            & winget list --id $Id --exact --accept-source-agreements 2>&1 |
-                ForEach-Object { Write-Dbg "  winget> $_" }
-        } else {
-            & winget list --id $Id --exact --accept-source-agreements 2>$null | Out-Null
-        }
+        $output = & winget list --id $Id --exact --accept-source-agreements 2>$null | Out-String
         $rc = $LASTEXITCODE
         Write-Dbg "winget list exit code: $rc"
         $global:LASTEXITCODE = 0  # don't let winget's status leak out of the probe
-        return ($rc -eq 0)
+        if ($script:VerboseOn) {
+            $output -split "`r?`n" | ForEach-Object { if ($_) { Write-Dbg "  winget> $_" } }
+        }
+        if ($rc -ne 0) { return 'missing' }
+
+        $installed = Get-WindowsAppRuntimeVersionFromWingetOutput -Output $output
+        if ($null -eq $installed) {
+            # Present, but the version column could not be read. Do not claim it
+            # is too old on the strength of a parse failure.
+            Write-Dbg "winget reported $Id installed but no version could be parsed"
+            return 'unknown'
+        }
+        Write-Dbg "installed $Id version: $installed (need >= $RequiredSdkVersion)"
+        if (Test-WindowsAppRuntimeSatisfied -Installed $installed -RequiredSdkVersion $RequiredSdkVersion) {
+            return 'satisfied'
+        }
+        return 'outdated'
     }
 
-    if (-not (Test-WindowsAppRuntime -Id $winAppRuntimeId)) {
+    $winAppRuntimeState = Get-WindowsAppRuntimeState -Id $winAppRuntimeId -RequiredSdkVersion $winAppSdkVersion
+    if ($winAppRuntimeState -eq 'satisfied') {
+        Write-Ok "$winAppRuntimeLabel installed"
+    } elseif ($winAppRuntimeState -eq 'unknown') {
+        Write-Host "    [warn] Could not verify $winAppRuntimeLabel (winget unavailable or its output could not be read)." -ForegroundColor Yellow
+        Write-Host "           If samples fail to launch, install it with: winget install $winAppRuntimeId"
+    } else {
+        $problem = if ($winAppRuntimeState -eq 'outdated') {
+            "$winAppRuntimeLabel is installed but too old for Windows App SDK $winAppSdkVersion."
+        } else {
+            "$winAppRuntimeLabel is not installed on this machine."
+        }
         if ($InstallWinAppSdk) {
             Install-WithWinget -Id $winAppRuntimeId -Reason $winAppRuntimeLabel
         } elseif ($NoWinAppSdk) {
-            Write-Host "    [skip] $winAppRuntimeLabel not installed (skipped per -NoWinAppSdk)." -ForegroundColor Yellow
+            Write-Host "    [skip] $problem (skipped per -NoWinAppSdk)." -ForegroundColor Yellow
         } else {
             Write-Host ''
-            Write-Host "    $winAppRuntimeLabel is not installed on this machine." -ForegroundColor Yellow
+            Write-Host "    $problem" -ForegroundColor Yellow
             Write-Host '    The Reactor repo defaults to WindowsAppSDKSelfContained=false, so most'
             Write-Host '    samples, perf benches, and apps in this repo need the machine-wide runtime'
             Write-Host '    installed to launch. Skip only if you know your projects override'
@@ -375,8 +387,6 @@ if (-not $winAppRuntimeId) {
                 Write-Host "    Skipped. Re-run later with: winget install $winAppRuntimeId" -ForegroundColor Cyan
             }
         }
-    } else {
-        Write-Ok "$winAppRuntimeLabel installed"
     }
 }
 
