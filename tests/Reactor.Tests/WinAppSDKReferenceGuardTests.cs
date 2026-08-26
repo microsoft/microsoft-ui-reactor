@@ -139,13 +139,28 @@ public class WinAppSDKReferenceGuardTests
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
 
-        var props = File.ReadAllText(Path.Join(root!, "Directory.Build.props"));
-        var pinned = Regex.Match(
-            props, @"<WindowsAppSDKVersion>\s*([^<\s]+)\s*</WindowsAppSDKVersion>");
-        Assert.True(pinned.Success, "WindowsAppSDKVersion not found in Directory.Build.props");
+        // Read the pinned version independently of the PowerShell helper — the point of
+        // this test is that the two can disagree. Parsed as XML rather than regex-scraped
+        // so a commented-out definition cannot false-match, and asserted to be
+        // unambiguous rather than reimplementing the helper's precedence rule: if this
+        // repo ever pins more than one unconditional version, that is a decision a human
+        // should make, not something for two parsers to silently agree about. The
+        // comment / conditional / missing semantics themselves are covered against
+        // synthetic fixtures in Bootstrap_reads_the_pinned_SDK_version_from_props.
+        var propsDoc = XDocument.Load(Path.Join(root!, "Directory.Build.props"));
+        var pinnedNodes = propsDoc.Descendants()
+            .Where(e => e.Name.LocalName == "WindowsAppSDKVersion")
+            .Where(e => e.AncestorsAndSelf().All(a => a.Attribute("Condition") is null))
+            .ToList();
 
-        var version = Regex.Match(pinned.Groups[1].Value, @"^(\d+)\.(\d+)");
-        Assert.True(version.Success, $"Unparseable WindowsAppSDKVersion '{pinned.Groups[1].Value}'");
+        Assert.True(
+            pinnedNodes.Count == 1,
+            $"Expected exactly one unconditional <WindowsAppSDKVersion> in Directory.Build.props, found {pinnedNodes.Count}. "
+                + "If that is intentional, this guard needs to learn the new precedence.");
+
+        var pinnedVersion = pinnedNodes[0].Value.Trim();
+        var version = Regex.Match(pinnedVersion, @"^(\d+)\.(\d+)");
+        Assert.True(version.Success, $"Unparseable WindowsAppSDKVersion '{pinnedVersion}'");
 
         var major = int.Parse(version.Groups[1].Value);
         var expectedId = major >= 2
@@ -161,7 +176,7 @@ public class WinAppSDKReferenceGuardTests
         // what fails if Get-PinnedWindowsAppSdkVersion regresses, which the id
         // comparison alone would not catch (a null version yields a null id, and a
         // null id makes bootstrap SKIP the runtime check rather than misreport it).
-        Assert.Equal(pinned.Groups[1].Value, probe.RootElement.GetProperty("sdkVersion").GetString());
+        Assert.Equal(pinnedVersion, probe.RootElement.GetProperty("sdkVersion").GetString());
         Assert.Equal(expectedId, probe.RootElement.GetProperty("derivedId").GetString());
 
         // A literal id anywhere in bootstrap.ps1's executable code is the drift this
@@ -178,7 +193,7 @@ public class WinAppSDKReferenceGuardTests
         Assert.True(
             literals.Count == 0,
             $"bootstrap.ps1 must derive the Windows App Runtime winget id from "
-                + $"WindowsAppSDKVersion ({pinned.Groups[1].Value} -> {expectedId}), not hardcode it. "
+                + $"WindowsAppSDKVersion ({pinnedVersion} -> {expectedId}), not hardcode it. "
                 + "Found in executable code:\n  " + string.Join("\n  ", literals));
     }
 
@@ -247,7 +262,7 @@ public class WinAppSDKReferenceGuardTests
     /// convention puts <c>Condition</c> on the enclosing <c>PropertyGroup</c>.
     /// </summary>
     [Fact]
-    public void Bootstrap_reads_the_pinned_SDK_version_from_props_ignoring_comments()
+    public void Bootstrap_reads_the_pinned_SDK_version_from_props()
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
