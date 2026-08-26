@@ -1058,6 +1058,65 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A lead-in above a fence opened on a list marker's own line still marks that sample.
+    /// </summary>
+    /// <remarks>
+    /// The extractor accepts <c>- ```csharp</c>, so the marker walk has to as well. Recognising a
+    /// fence only by a trimmed line starting with the delimiter read that opener as C# code and
+    /// abandoned the search, turning a deliberately labelled counterexample into a CI failure —
+    /// the two halves disagreeing about the same document.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void A_Label_Marks_A_Sample_In_An_Inline_List_Fence()
+    {
+        var marked = new[]
+        {
+            "Avoid this:",
+            "",
+            "- ```csharp",
+            "  FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(marked, 4));
+
+        // Negative control: the same shape with ordinary prose must not exempt, so the assertion
+        // above is failing on the label rather than on the walk reaching further than it should.
+        var unmarked = new[]
+        {
+            "Here is the layout:",
+            "",
+            "- ```csharp",
+            "  FlexColumn(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(unmarked, 4));
+    }
+
+    /// <summary>
+    /// The remedy must be named at identifier boundaries, not as a substring of a longer name.
+    /// </summary>
+    /// <remarks>
+    /// This is the clause that <em>permits</em> an otherwise-invalid snippet, so a loose match
+    /// exempts the sample it was meant to hold to account: a document mentioning only
+    /// <c>FillColor</c> counted as having named <c>Fill</c>.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void A_Remedy_Named_Only_Inside_A_Longer_Identifier_Does_Not_Count()
+    {
+        Assert.False(AgentKitDocGateTests.NamesRemedy("use the FillColorDefaultBrush resource", "Fill"));
+        Assert.False(AgentKitDocGateTests.NamesRemedy("see FlexPaddingThickness", "FlexPadding"));
+
+        // Positive controls: the bare name, and the name in the shapes documents actually use.
+        Assert.True(AgentKitDocGateTests.NamesRemedy("reach for Fill instead", "Fill"));
+        Assert.True(AgentKitDocGateTests.NamesRemedy("write `.FlexPadding(16)`", "FlexPadding"));
+
+        // No replacement to name is not a failure to name it.
+        Assert.True(AgentKitDocGateTests.NamesRemedy("anything", null));
+    }
+
+    /// <summary>
     /// A nested blockquote inside a quoted fence does not close it.
     /// </summary>
     /// <remarks>
@@ -1110,6 +1169,49 @@ public class AgentKitDocGateInstrumentTests
         var snippet = Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/exit.md", Markdown));
 
         Assert.Equal("FlexColumn(children).FlexPadding(16)", snippet.Text);
+    }
+
+    /// <summary>
+    /// An unclosed fence inside a list item does not swallow the block that follows the list.
+    /// </summary>
+    /// <remarks>
+    /// The counterpart of the blockquote rule above. Ending a region only at a closing fence let an
+    /// unclosed indented <c>```text</c> under a bullet absorb the next top-level C# block, which
+    /// then shipped unscanned — and <c>Every_CSharp_Fence_In_The_Corpus_Is_Extracted</c> derives
+    /// its covered set from this same scan, so it could not have reported the gap either.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void An_Unclosed_Fence_In_A_List_Item_Does_Not_Swallow_What_Follows()
+    {
+        const string Markdown = """
+            - a bullet
+
+              ```text
+              an unclosed block inside the item
+
+            ```csharp
+            FlexColumn(children).FlexPadding(16)
+            ```
+            """;
+
+        var snippet = Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/listexit.md", Markdown));
+
+        Assert.Equal("FlexColumn(children).FlexPadding(16)", snippet.Text);
+
+        // Negative control: a *closed* block in the same position must keep its body intact, so
+        // the rule above is ending unterminated regions rather than truncating every indented one.
+        const string Closed = """
+            - a bullet
+
+              ```csharp
+              FlexColumn(children).FlexPadding(16)
+              ```
+            """;
+
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/listclosed.md", Closed)).Text);
     }
 
     /// <summary>

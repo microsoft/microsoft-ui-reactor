@@ -380,6 +380,28 @@ internal static class AgentKitDocCorpus
                 if (IsClosingFence(lines[close], fenceChar, fenceLength, container, depth))
                     break;
 
+                // A fence inside a list item ends when that item does, for the same reason the
+                // blockquote rule above exists: an unclosed indented ```text under a bullet
+                // otherwise swallowed the next top-level ```csharp block, which then shipped
+                // unscanned — and the completeness fact derives its covered set from this same
+                // scan, so it could not have reported the gap. A non-blank line left of the item's
+                // content column has left the container. Checked after the close so a properly
+                // terminated block is never truncated by it.
+                //
+                // Only when the fence itself sits at or past that column. `ContainerIndent` reports
+                // the nearest list above the line, which for a block that has already de-indented
+                // out of the list is a container it is not in; applying the rule there ended the
+                // region on its own first body line and emptied it.
+                if (container > 0 && indent >= container)
+                {
+                    var outside = StripBlockquote(lines[close], depth).Content;
+                    if (outside.Trim().Length > 0 && LeadingWidth(outside) < container)
+                    {
+                        containerExited = true;
+                        break;
+                    }
+                }
+
                 close++;
             }
 
@@ -409,6 +431,32 @@ internal static class AgentKitDocCorpus
     private static readonly Regex ListItemMarker = new(
         @"^(?<indent>[ \t]*)(?<marker>[-*+]|\d+[.)])(?<pad>[ \t]+)",
         RegexOptions.Compiled);
+
+    /// <summary>
+    /// Width of a line's leading whitespace, counting a tab as one column.
+    /// </summary>
+    /// <remarks>
+    /// One column per character is what every other measurement here uses — the indent groups are
+    /// <c>[ \t]*</c> matched by length — so widths stay comparable across the scanner.
+    /// </remarks>
+    private static int LeadingWidth(string line) =>
+        line.Length - line.TrimStart(' ', '\t').Length;
+
+    /// <summary>
+    /// A line with any leading list marker removed, leaving the item's content.
+    /// </summary>
+    /// <remarks>
+    /// The fence scanner accepts a fence opening on the marker's own line (<c>- ```csharp</c>), so
+    /// anything else that has to recognise a fence must strip the marker the same way or the two
+    /// disagree about the same document — which, in the counterexample walk, read the opener as
+    /// code and failed a deliberately marked sample.
+    /// </remarks>
+    internal static string StripListMarker(string line)
+    {
+        var marker = ListItemMarker.Match(line);
+
+        return marker.Success ? line[marker.Length..] : line;
+    }
 
     /// <summary>
     /// The content column a list item establishes, per CommonMark's padding rule.

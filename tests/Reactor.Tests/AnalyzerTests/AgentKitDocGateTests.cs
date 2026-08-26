@@ -242,14 +242,23 @@ public class AgentKitDocGateTests
     /// framework offers no replacement to name.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Both facts apply this, and it matters most on the wrapper one: that is the #1119 shape, and
     /// no other check can cover for it, because the wrapper really is a legal receiver so nothing
     /// else objects. A document showing the workaround under a <c>// Wrong:</c> label while never
     /// mentioning <c>FlexPadding</c> would ship exactly the half-guidance that caused the
     /// contradiction.
+    /// </para>
+    /// <para>
+    /// The name must appear at identifier boundaries. A plain substring test let an unrelated
+    /// compound satisfy it — a document mentioning <c>FillColor</c> counted as naming <c>Fill</c> —
+    /// and because this is the clause that <em>permits</em> an otherwise-invalid snippet, a loose
+    /// match silently exempts the sample it was supposed to hold to account.
+    /// </para>
     /// </remarks>
     internal static bool NamesRemedy(string documentText, string? replacement) =>
-        replacement is null || documentText.Contains(replacement, StringComparison.Ordinal);
+        replacement is null
+        || Regex.IsMatch(documentText, $@"\b{Regex.Escape(replacement)}\b");
 
     /// <summary>
     /// True when the sample is marked as deliberately wrong — on the offending line itself, or in
@@ -318,7 +327,13 @@ public class AgentKitDocGateTests
             if (text.Length == 0)
                 continue;
 
-            if (text.StartsWith("```", StringComparison.Ordinal) || text.StartsWith("~~~", StringComparison.Ordinal))
+            // The extractor accepts a fence opening on a list marker's own line (`- ```csharp`),
+            // so strip the marker before testing for one. Without this the walk read that opener
+            // as C# code, abandoned the search, and failed a counterexample the extractor had
+            // happily scanned — the two disagreeing about the same document.
+            var fenceText = AgentKitDocCorpus.StripListMarker(text);
+
+            if (fenceText.StartsWith("```", StringComparison.Ordinal) || fenceText.StartsWith("~~~", StringComparison.Ordinal))
             {
                 // The second fence encountered closes an earlier, unrelated block; anything above it
                 // introduces that block, not this one.
