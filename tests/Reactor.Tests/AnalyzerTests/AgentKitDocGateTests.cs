@@ -111,6 +111,16 @@ public class AgentKitDocGateTests
         if (CrossMark.IsMatch(stripped))
             return true;
 
+        // A trailing period or semicolon terminates a comment; it does not introduce a label body.
+        // Counting one let `// avoid allocations.` split into the two-word head `avoid allocations`
+        // and qualify, while the identical `// avoid allocations` — named below as exactly what the
+        // safeguard exists to reject — did not. A mid-comment period still delimits, so `// Bad.
+        // This allocates.` keeps its label.
+        stripped = stripped.TrimEnd('.', ';', ' ', '\t');
+
+        if (stripped.Length == 0)
+            return false;
+
         var cut = stripped.IndexOfAny(new[] { ':', '—', '–', ',', '!', '.', ';' });
         var head = (cut >= 0 ? stripped[..cut] : stripped).Trim();
 

@@ -896,6 +896,20 @@ public class AgentKitDocGateInstrumentTests
         // Positive control at three columns, where both are still container syntax.
         Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "   - ```csharp");
         Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "   > ```csharp");
+
+        // A tab advances to the next four-column tab stop (`Md4cFixtures/spec.txt`, "Tabs"), so a
+        // tab-indented fence at top level is an indented code block. Measuring one column per
+        // character read it as width 1 and scanned the literal as a sample.
+        const string TabIndented = """
+            Some prose.
+
+            <TAB>```csharp
+            <TAB>FlexColumn(children).Padding(16)
+            <TAB>```
+            """;
+
+        Assert.Empty(AgentKitDocCorpus.ExtractFences("fixture/tab.md", TabIndented.Replace("<TAB>", "\t")));
+        Assert.DoesNotMatch(AgentKitDocCorpus.CSharpFenceProbe, "\t```csharp");
     }
 
     /// <summary>
@@ -1170,6 +1184,49 @@ public class AgentKitDocGateInstrumentTests
         Assert.False(AgentKitDocGateTests.IsMarkedAt(unmarked, 4));
     }
 
+    /// <summary>
+    /// A terminal period does not turn an ordinary short comment into a counterexample label.
+    /// </summary>
+    /// <remarks>
+    /// The two-word safeguard names `// avoid allocations` as exactly what it must reject, but the
+    /// period was counted as a delimiter, so the punctuated form split into a two-word head and
+    /// qualified. Identical text, opposite verdicts.
+    /// </remarks>
+    [Theory]
+    [Trait("Category", "AgentKitDocGate")]
+    [InlineData("// avoid allocations", false)]
+    [InlineData("// avoid allocations.", false)]
+    [InlineData("// never cache;", false)]
+    // A mid-comment period still delimits, so a real label keeps its meaning.
+    [InlineData("// Bad. This allocates.", true)]
+    [InlineData("// Wrong.", true)]
+    [InlineData("// Wrong: no effect", true)]
+    [InlineData("// Wrong", true)]
+    public void A_Terminal_Period_Does_Not_Make_A_Label(string comment, bool label)
+    {
+        Assert.Equal(label, AgentKitDocGateTests.IsCounterexampleLabel(AgentKitDocGateTests.CommentText(comment)));
+    }
+
+    /// <summary>
+    /// A named argument selects the overload before <c>default</c> is judged.
+    /// </summary>
+    /// <remarks>
+    /// `.Background(brush: default)` binds only to the Brush overload, so it is provably null.
+    /// Judging it against the ambiguous string/Brush/ThemeRef set answered a question the call did
+    /// not ask, which would make this gate stricter than the analyzer it mirrors.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void A_Named_Argument_Narrows_The_Overload_Set()
+    {
+        Assert.True(ReactorSurface.Instance.DefaultIsProvablyNull("Background", null, "brush"));
+
+        // Control: the same modifier without the name, and an unrecognised name, both fall back to
+        // the full set — so the assertion above is the narrowing rather than a blanket true.
+        Assert.Equal(
+            ReactorSurface.Instance.DefaultIsProvablyNull("Background"),
+            ReactorSurface.Instance.DefaultIsProvablyNull("Background", null, "notAParameter"));
+    }
     /// <summary>
     /// A label in the preceding list item marks a sample in the next one — deliberately.
     /// </summary>

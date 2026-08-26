@@ -171,7 +171,7 @@ internal static class AgentKitDocCorpus
     /// unscanned sample and fail the completeness fact on prose.
     /// </remarks>
     internal static readonly Regex CSharpFenceProbe = new(
-        @"^(?:[ ]{0,3}(?:>[ \t]?)+)?(?:[ ]{0,3}([-*+]|\d+[.)])[ \t]{1,4}|[ \t]*)(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
+        @"^(?:[ ]{0,3}(?:>[ \t]?)+)?(?:[ ]{0,3}([-*+]|\d+[.)])[ \t]{1,4}|[ ]*)(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -349,7 +349,7 @@ internal static class AgentKitDocCorpus
             if (!open.Success)
                 continue;
 
-            var indent = open.Groups["indent"].Value.Length;
+            var indent = VisualWidth(open.Groups["indent"].Value);
 
             // A fence may open as the content of a list item on the marker's own line
             // (`- ```csharp`). The marker establishes the content column, so measure — and strip —
@@ -375,7 +375,7 @@ internal static class AgentKitDocCorpus
             // marker precedes them, and what the three-column limit and body de-indentation are
             // both measured with.
             var fenceColumn = inlineMarker.Success
-                ? indent + inlineMarker.Length + open.Groups["pad"].Length
+                ? indent + inlineMarker.Length + VisualWidth(open.Groups["pad"].Value)
                 : indent;
 
             if (fenceColumn - container > 3)
@@ -462,14 +462,30 @@ internal static class AgentKitDocCorpus
         RegexOptions.Compiled);
 
     /// <summary>
-    /// Width of a line's leading whitespace, counting a tab as one column.
+    /// Visual width of a run of leading whitespace, with tabs advancing to four-column tab stops.
     /// </summary>
     /// <remarks>
-    /// One column per character is what every other measurement here uses — the indent groups are
-    /// <c>[ \t]*</c> matched by length — so widths stay comparable across the scanner.
+    /// The block rules this scanner implements are stated in columns, and CommonMark advances a tab
+    /// to the next multiple of four (<c>Md4cFixtures/spec.txt</c>, "Tabs"). Counting one column per
+    /// character made a single leading tab measure 1, so a tab-indented <c>```csharp</c> at top
+    /// level read as a fence when it is really an indented code block — the gate could then fail on
+    /// quoted, code-like prose. Every indentation measurement here goes through this.
     /// </remarks>
+    private static int VisualWidth(string whitespace)
+    {
+        var column = 0;
+
+        foreach (var c in whitespace)
+            column = c == '\t' ? (column / 4 * 4) + 4 : column + 1;
+
+        return column;
+    }
+
+    /// <summary>
+    /// Width of a line's leading whitespace in columns.
+    /// </summary>
     private static int LeadingWidth(string line) =>
-        line.Length - line.TrimStart(' ', '\t').Length;
+        VisualWidth(line[..(line.Length - line.TrimStart(' ', '\t').Length)]);
 
     /// <summary>
     /// A line with any leading list marker removed, leaving the item's content.
@@ -499,8 +515,8 @@ internal static class AgentKitDocCorpus
     /// </remarks>
     private static int ContentColumn(Match marker)
     {
-        var beforePad = marker.Groups["indent"].Length + marker.Groups["marker"].Length;
-        var padding = marker.Groups["pad"].Length;
+        var beforePad = VisualWidth(marker.Groups["indent"].Value) + marker.Groups["marker"].Length;
+        var padding = VisualWidth(marker.Groups["pad"].Value);
 
         return beforePad + (padding <= 4 ? padding : 1);
     }

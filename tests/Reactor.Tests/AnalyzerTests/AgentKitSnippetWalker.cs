@@ -33,6 +33,7 @@ internal sealed class ReactorSurface
     private readonly Dictionary<string, HashSet<Type>> _factoriesByName = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, HashSet<Type>> _setControls = new();
     private readonly Dictionary<string, HashSet<Type>> _modifierArguments = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Modifier, string Parameter), HashSet<Type>> _modifierArgumentsByParameter = new();
     private readonly Dictionary<string, Type?> _typeChangingModifiers = new(StringComparer.Ordinal);
 
     [UnconditionalSuppressMessage(
@@ -91,6 +92,15 @@ internal sealed class ReactorSurface
                 _modifierArguments[method.Name] = types = new HashSet<Type>();
 
             types.Add(argument);
+
+            // Indexed by parameter name too, because a named argument picks the overload:
+            // `.Background(brush: default)` binds only to the Brush one, so judging `default`
+            // against the whole ambiguous set answers a question the call did not ask.
+            var key = (method.Name, parameters[1].Name ?? string.Empty);
+            if (!_modifierArgumentsByParameter.TryGetValue(key, out var named))
+                _modifierArgumentsByParameter[key] = named = new HashSet<Type>();
+
+            named.Add(argument);
         }
 
         // Type-changing modifiers: `M<T>(this T el, …)` that returns a concrete element rather than
@@ -344,9 +354,18 @@ internal sealed class ReactorSurface
     /// costs nothing. Unprovable never exempts.
     /// </para>
     /// </remarks>
-    public bool DefaultIsProvablyNull(string modifier, string? explicitTypeName = null)
+    public bool DefaultIsProvablyNull(string modifier, string? explicitTypeName = null, string? parameterName = null)
     {
-        var types = SingleArgumentModifierTypes(modifier);
+        // A named argument selects the overload, so narrow to it before deciding. Judging
+        // `.Background(brush: default)` against the ambiguous string/Brush/ThemeRef set answered a
+        // question the call did not ask and could refuse to exempt a sample the analyzer accepts —
+        // this gate being stricter than the analyzer it mirrors is worse than the drift it catches.
+        // An unrecognised name falls back to the full set rather than to an empty one.
+        var types = parameterName is not null
+                    && _modifierArgumentsByParameter.TryGetValue((modifier, parameterName), out var named)
+            ? named
+            : SingleArgumentModifierTypes(modifier);
+
         if (types.Count == 0)
             return false;
 
@@ -720,7 +739,10 @@ internal static class AgentKitSnippetWalker
                 var written = (expression as DefaultExpressionSyntax)?.Type.ToString() ?? castType;
 
                 if (invocation.ArgumentList.Arguments.Count == 1
-                    && ReactorSurface.Instance.DefaultIsProvablyNull(modifier, written))
+                    && ReactorSurface.Instance.DefaultIsProvablyNull(
+                        modifier,
+                        written,
+                        invocation.ArgumentList.Arguments[0].NameColon?.Name.Identifier.Text))
                     return true;
             }
         }
