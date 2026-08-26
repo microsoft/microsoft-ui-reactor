@@ -67,5 +67,31 @@
     <member name="M:Microsoft.UI.Reactor.Hooks.FocusManager.Register(System.String)">
       <summary>Registers a focusable field.</summary>
     </member>
+
+    <!--
+      XML-doc formatting that reaches the page as markup unless rewritten.
+      Every piece here is entity-escaped exactly as Roslyn emits it, because
+      a Markdown code span is literal: wrapping the serialized text without
+      decoding published `UseElementRef&lt;Button&gt;()`. The <example> also
+      deliberately omits a <code> wrapper, which Markdown would otherwise
+      collapse into one prose paragraph.
+    -->
+    <member name="M:Microsoft.UI.Reactor.Hooks.FormattingProbe.Probe``1(System.Func{``0})">
+      <summary>
+        Inline <c>UseNavigation&lt;TRoute&gt;()</c> and a lambda
+        <c>() =&gt; items.ToArray()</c>, plus <b>bold</b> and
+        <paramref name="factory"/>.
+      </summary>
+      <remarks>
+        <code>
+        var btn = ctx.UseElementRef&lt;Button&gt;();
+        ctx.UseEffect(() =&gt; btn.Current?.Focus(), Array.Empty&lt;object&gt;());
+        </code>
+      </remarks>
+      <example>
+        var (value, setValue) = ctx.UseState(0);
+        return TextBlock($"{value}");
+      </example>
+    </member>
   </members>
 </doc>

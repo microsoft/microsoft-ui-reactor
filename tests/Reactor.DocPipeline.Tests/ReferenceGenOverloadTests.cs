@@ -316,4 +316,51 @@ defaults:
             "T:Microsoft.UI.Reactor.Core.RenderContext",
             CrefSignature.DeclaringTypeCref("M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``2(System.Action,``0,``1)"));
     }
+
+    /// <summary>
+    /// XML-doc markup must not reach the page. Roslyn entity-escapes doc text,
+    /// and a Markdown code span is literal, so wrapping the serialized text
+    /// without decoding published <c>UseElementRef&amp;lt;Button&amp;gt;()</c>.
+    /// The overload and link assertions elsewhere stay green through that
+    /// defect, so it needs its own gate.
+    /// </summary>
+    [Fact]
+    public void XmlDocFormatting_IsRewrittenToMarkdown()
+    {
+        var page = Page(GenerateFixture(), "Probe");
+
+        // Inline <c> and <paramref> become code spans, with entities decoded.
+        Assert.Contains("`UseNavigation<TRoute>()`", page.Body, StringComparison.Ordinal);
+        Assert.Contains("`() => items.ToArray()`", page.Body, StringComparison.Ordinal);
+        Assert.Contains("`factory`", page.Body, StringComparison.Ordinal);
+        Assert.Contains("**bold**", page.Body, StringComparison.Ordinal);
+
+        // Block <code> becomes a fenced block, also decoded.
+        Assert.Contains("```csharp", page.Body, StringComparison.Ordinal);
+        Assert.Contains("ctx.UseElementRef<Button>()", page.Body, StringComparison.Ordinal);
+        Assert.Contains("Array.Empty<object>()", page.Body, StringComparison.Ordinal);
+
+        // No raw markup or entities survive anywhere on the page.
+        Assert.DoesNotContain("<c>", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<code>", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<b>", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<paramref", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("&gt;", page.Body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An &lt;example&gt; without a &lt;code&gt; wrapper would otherwise be
+    /// emitted as bare lines and collapsed into one prose paragraph, leaving the
+    /// sample unreadable and uncopyable.
+    /// </summary>
+    [Fact]
+    public void UnwrappedExample_IsStillFenced()
+    {
+        var page = Page(GenerateFixture(), "Probe");
+        var examples = page.Body[page.Body.IndexOf("Examples", StringComparison.Ordinal)..];
+
+        Assert.Contains("```csharp", examples, StringComparison.Ordinal);
+        Assert.Contains("var (value, setValue) = ctx.UseState(0);", examples, StringComparison.Ordinal);
+    }
 }
