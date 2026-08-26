@@ -278,9 +278,17 @@ internal static class ReferenceLinkInjector
     /// <summary>
     /// Detect inline <c>[Name](path.md)</c> links so the dual-link
     /// post-processor can append a guide pointer.
+    /// <para>
+    /// The fragment is optional and must stay optional: once overloaded members
+    /// got their own anchors, every cref to an overloaded page started emitting
+    /// <c>Foo.md#foobar</c>, and a pattern ending at <c>.md)</c> silently stopped
+    /// matching them — dropping the guide annotation from exactly those pages
+    /// rather than failing. <c>m.Value</c> carries the fragment through, so the
+    /// rewritten link keeps its anchor.
+    /// </para>
     /// </summary>
     internal static readonly Regex InlineDualLinkPattern = new(
-        @"\[(?<name>[A-Za-z_][A-Za-z0-9_]*)\]\((?<path>(?:[^()\s]+/)?[A-Za-z_][A-Za-z0-9_]*\.md)\)(?!\s*\(\[guide\])",
+        @"\[(?<name>[A-Za-z_][A-Za-z0-9_]*)\]\((?<path>(?:[^()\s]+/)?[A-Za-z_][A-Za-z0-9_]*\.md)(?<frag>#[A-Za-z0-9_.-]*)?\)(?!\s*\(\[guide\])",
         RegexOptions.Compiled);
 }
 

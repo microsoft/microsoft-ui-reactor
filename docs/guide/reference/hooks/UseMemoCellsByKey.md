@@ -19,7 +19,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCel
 
 ### Summary
 
-Component-extension shim for [UseMemoCellsByKey](UseMemoCellsByKey.md#usememocellsbykeyt1-t2rendercontext-ireadonlylistt1-funct1-t2-funct1-int-element-object).
+Component-extension shim for [UseMemoCellsByKey](UseMemoCellsByKey.md#usememocellsbykeyt1-t2rendercontext-ireadonlylistt1-funct1-t2-funct1-int-element-object) ([guide](../../hooks.md)).
 Same semantics as the `RenderContext`-extension form;
 dispatches against `component.Context`.
 
@@ -52,7 +52,7 @@ children path keeps the underlying control without unmount/remount).
 keys collapse to last-write-wins (later items overwrite earlier
 items in the lookup table).
 - **builder** — Cell builder; same contract as
-[UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object).
+[UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object) ([guide](../../hooks.md)).
 - **dependencies** — Trailing-`params` deps.
 
 ### Discussion

@@ -19,7 +19,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCel
 
 ### Summary
 
-Component-extension shim for [UseMemoCellsByIndex](UseMemoCellsByIndex.md#usememocellsbyindext1rendercontext-ireadonlylistt1-ireadonlylistint-funct1-int-element-object).
+Component-extension shim for [UseMemoCellsByIndex](UseMemoCellsByIndex.md#usememocellsbyindext1rendercontext-ireadonlylistt1-ireadonlylistint-funct1-int-element-object) ([guide](../../hooks.md)).
 Same semantics as the `RenderContext`-extension form;
 dispatches against `component.Context`.
 
@@ -46,8 +46,8 @@ between renders the overload falls back to a full rebuild
 (`changedIndices` is treated as
 "rebuild everything") because the index space no longer matches
 the prior render. Callers whose lists grow or shrink frequently
-will get better incremental reuse from [UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object)
-or [UseMemoCellsByKey](UseMemoCellsByKey.md#usememocellsbykeyt1-t2rendercontext-ireadonlylistt1-funct1-t2-funct1-int-element-object), both of which can
+will get better incremental reuse from [UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object) ([guide](../../hooks.md))
+or [UseMemoCellsByKey](UseMemoCellsByKey.md#usememocellsbykeyt1-t2rendercontext-ireadonlylistt1-funct1-t2-funct1-int-element-object) ([guide](../../hooks.md)), both of which can
 short-circuit per-cell on value or key equality across length
 changes.
 
@@ -78,7 +78,7 @@ caller-contract violation but are tolerated: they are de-duplicated
 before the named cells are rebuilt, so each cell is rebuilt exactly once
 and the structural-skip hint's theme tally stays exact.
 - **builder** — Cell builder; same contract as
-[UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object).
+[UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object) ([guide](../../hooks.md)).
 - **dependencies** — Trailing-`params` deps.
 
 ### Discussion

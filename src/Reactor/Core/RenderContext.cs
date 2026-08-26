@@ -1322,8 +1322,10 @@ public sealed class RenderContext
     }
 
     /// <summary>
-    /// Convenience wrapper — returns <c>true</c> when the effective color
-    /// scheme is <see cref="ColorScheme.Dark"/>.
+    /// Convenience wrapper — returns <c>true</c> when the app-global color
+    /// scheme is <see cref="ColorScheme.Dark"/>. Exactly
+    /// <c>UseColorScheme() == ColorScheme.Dark</c>, so it inherits that hook's
+    /// semantics: it does not observe per-element <c>RequestedTheme</c>.
     /// </summary>
     public bool UseIsDarkTheme() => UseColorScheme() == ColorScheme.Dark;
 

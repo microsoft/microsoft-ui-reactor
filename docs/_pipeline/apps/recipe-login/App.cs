@@ -50,6 +50,16 @@ class LoginForm : Component
         // </snippet:validation>
 
         // <snippet:render>
+        // RunAsync returns a task that faults when the mutator throws, so
+        // discarding it directly would leave that fault unobserved. The hook
+        // has already captured the exception into signIn.Error — rendered
+        // above — so awaiting here is purely about observing the task.
+        async Task SubmitAsync()
+        {
+            try { await signIn.RunAsync((email, pwd)); }
+            catch (Exception) { /* displayed via signIn.Error */ }
+        }
+
         return VStack(12,
             Heading("Sign in"),
             TextBox(email, setEmail, placeholderText: "you@example.com",
@@ -58,8 +68,10 @@ class LoginForm : Component
             signIn.Error is null
                 ? Empty()
                 : TextBlock(signIn.Error.Message).Foreground("#C42B1C"),
+            // SubmitAsync swallows the fault above, so this discard cannot
+            // leave anything unobserved.
             Button(signIn.IsPending ? "Signing in…" : "Sign in",
-                    () => _ = signIn.RunAsync((email, pwd)))
+                    () => _ = SubmitAsync())
                 .IsEnabled(canSubmit)
         ).Padding(20).Width(320);
         // </snippet:render>

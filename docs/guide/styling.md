@@ -39,7 +39,7 @@ of mode.
 | `.Informational()` / `.Success()` / `.Warning()` / `.Error()` | Named-style fluent | InfoBar severity. |
 | `.Resources(r => r.Set(key, value))` | Lightweight styling | Override individual WinUI resource keys for a subtree. |
 | `.RequestedTheme(ElementTheme.Dark)` | Region root | Pin a subtree to a specific scheme. |
-| `UseColorScheme()` / `UseIsDarkTheme()` | Hook | Branch logic (not just colors) on the effective theme. |
+| `UseColorScheme()` / `UseIsDarkTheme()` | Hook | Branch logic (not just colors) on the app-global theme. |
 | `.Set(control => control.Foreground = ...)` | Escape hatch | The control has a property neither tokens nor `.Resources` reach. |
 
 ## Theme tokens
@@ -231,9 +231,9 @@ colors.
 
 ## Reactive theme hooks
 
-`UseColorScheme()` returns the effective scheme at the component's
-position in the tree. `UseIsDarkTheme()` is a convenience wrapper that
-narrows it to a boolean:
+`UseColorScheme()` returns the app-global scheme; it does not observe
+per-element `RequestedTheme` overrides. `UseIsDarkTheme()` is a
+convenience wrapper that narrows it to a boolean:
 
 ```csharp
 class ColorSchemeHookExample : Component

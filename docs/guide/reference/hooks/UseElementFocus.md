@@ -17,7 +17,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementFocusExtensions.UseElementFocus(
 
 ### Summary
 
-Component-extension overload of [UseElementFocus](UseElementFocus.md#useelementfocusrendercontext-focusstate).
+Component-extension overload of [UseElementFocus](UseElementFocus.md#useelementfocusrendercontext-focusstate) ([guide](../../hooks.md)).
 Equivalent to calling the `RenderContext`-extension form against
 `component.Context`; see that overload for the full contract.
 

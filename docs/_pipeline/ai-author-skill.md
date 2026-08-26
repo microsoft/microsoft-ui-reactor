@@ -605,7 +605,7 @@ Apply with `.FocusTrap(handle)` modifier on a container element.
 | Hook | Signature | Purpose |
 |------|-----------|---------|
 | `UseColorScheme` | `ColorScheme UseColorScheme()` | App-global color scheme (Light/Dark); use `UseHighContrast()` for forced colors |
-| `UseIsDarkTheme` | `bool UseIsDarkTheme()` | True when effective scheme is Dark |
+| `UseIsDarkTheme` | `bool UseIsDarkTheme()` | True when the app-global scheme is Dark (exactly `UseColorScheme() == Dark`) |
 
 **Framework integration:**
 

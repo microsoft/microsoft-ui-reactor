@@ -19,7 +19,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCel
 
 ### Summary
 
-Component-extension shim for [UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object).
+Component-extension shim for [UseMemoCells](UseMemoCells.md#usememocellstrendercontext-ireadonlylistt-funct-int-element-object) ([guide](../../hooks.md)).
 Same semantics as the `RenderContext`-extension form;
 dispatches against `component.Context`.
 

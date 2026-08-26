@@ -39,7 +39,7 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCommand``1(Microsoft.UI.Re
 ### Summary
 
 Processes a parameterized Command for use in a component. Consumes the same
-**stable hook shape** as the non-generic [UseCommand](UseCommand.md#usecommandcommand) and applies
+**stable hook shape** as the non-generic [UseCommand](UseCommand.md#usecommandcommand) ([guide](../../hooks.md)) and applies
 the same async tracking and leading-edge `Command.DebounceMs` debounce.
 
 

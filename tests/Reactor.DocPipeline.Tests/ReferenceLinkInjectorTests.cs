@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Cli.Docs;
 using Microsoft.UI.Reactor.Cli.Docs.ReferenceGen;
 using Xunit;
@@ -167,6 +168,42 @@ defaults:
         // The CrefResolver only writes a See Also section for <seealso>
         // entries; verify the resulting link carries the guide annotation.
         Assert.Contains("[UseState](UseState.md) ([guide](../../hooks.md))", injected);
+    }
+
+    /// <summary>
+    /// The dual-link pass must also match a link carrying a member anchor.
+    /// Overloaded members get their own anchors, so every cref to an overloaded
+    /// page emits <c>Foo.md#foobar</c>; a pattern anchored on <c>.md)</c> stops
+    /// matching exactly those pages and drops the guide annotation silently
+    /// rather than failing. Observed on <c>AnnounceHandle.md</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("[UseState](UseState.md)")]
+    [InlineData("[UseState](UseState.md#usestate)")]
+    [InlineData("[UseState](UseState.md#usestatet-t-rendercontext)")]
+    [InlineData("[UseState](../hooks/UseState.md#usestate)")]
+    public void InlineDualLinkPattern_MatchesWithAndWithoutAnAnchor(string link)
+    {
+        var m = ReferenceLinkInjector.InlineDualLinkPattern.Match(link);
+        Assert.True(m.Success, $"pattern did not match {link}");
+        // The whole link is what gets re-emitted, so the anchor must round-trip.
+        Assert.Equal(link, m.Value);
+    }
+
+    /// <summary>
+    /// An already-annotated link must not be annotated twice. Note the inner
+    /// <c>[guide](../../hooks.md)</c> is itself shaped like a candidate and does
+    /// match; that is harmless because no page has the short name "guide", so
+    /// the replace callback returns it unchanged. The invariant that matters is
+    /// that the <i>outer</i> link is skipped.
+    /// </summary>
+    [Theory]
+    [InlineData("[UseState](UseState.md) ([guide](../../hooks.md))")]
+    [InlineData("[UseState](UseState.md#usestate) ([guide](../../hooks.md))")]
+    public void InlineDualLinkPattern_SkipsTheAlreadyAnnotatedOuterLink(string link)
+    {
+        foreach (Match m in ReferenceLinkInjector.InlineDualLinkPattern.Matches(link))
+            Assert.NotEqual("UseState", m.Groups["name"].Value);
     }
 
     [Fact]

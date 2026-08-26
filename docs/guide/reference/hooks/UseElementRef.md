@@ -17,7 +17,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(M
 
 ### Summary
 
-Component-extension overload of [UseElementRef](UseElementRef.md#useelementreftrendercontext).
+Component-extension overload of [UseElementRef](UseElementRef.md#useelementreftrendercontext) ([guide](../../hooks.md)).
 Equivalent to calling the `RenderContext`-extension form against
 `component.Context`.
 
