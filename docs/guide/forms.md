@@ -741,9 +741,9 @@ concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 ### Letting the control hold its own state
 
 ```csharp
-// Don't — there is no `initial:` parameter. The bare string binds an
-// explicit value with no `onChanged`, so the framework re-asserts it on
-// every render and the user's edits are overwritten:
+// Don't — there is no `initial:` parameter. The bare string binds a value
+// with no `onChanged`, so it seeds the box and then nothing reads it back:
+// the user's typing lives only in the native control:
 TextBox("default value")
 ```
 
@@ -766,11 +766,18 @@ class ControlledInputDemo : Component
 The distinction that matters is not "controlled vs. uncontrolled" but
 whether the binding is *complete*. Omit the value entirely and the
 control owns its own state, which the parent cannot read, reset, or
-pre-fill. Pass a value without `onChanged` — as above — and you get the
-opposite failure: the value is pre-filled and the parent can replace it,
-but every keystroke is reverted on the next render, because a `string`
-implicitly becomes an explicit `Optional<string>` the reconciler
-re-applies. Reactor inputs take `(value, onChanged)` together; supply
+pre-fill. Pass a value without `onChanged` — as above — and you get a
+*half* binding: the value is pre-filled and the parent can still replace
+it by passing a different one, but nothing flows back. The user's edits
+stay in the native control and never reach application state, so a later
+read of your state returns the original string as if nothing was typed.
+
+Note this does **not** fight the user keystroke-by-keystroke: the element
+is unchanged between renders, so the reconciler's shallow-equality skip
+fires and never re-writes the box. That is what makes the bug quiet — the
+text looks accepted and is simply never collected. If the text really is
+fixed, say so with `.IsReadOnly(true)`; otherwise supply both halves.
+Reactor inputs take `(value, onChanged)` together; supply
 both and the control is a passive view of state.
 
 ### Validating in the click handler
