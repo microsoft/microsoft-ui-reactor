@@ -145,6 +145,8 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("Rectangle().Background(default(Microsoft.UI.Xaml.Media.Brush))")]
     [InlineData("Rectangle().Background(default(global::Microsoft.UI.Xaml.Media.Brush))")]
     [InlineData("Rectangle().Background(default(Brush?))")]
+    [InlineData("Rectangle().Background((Brush)default)")]
+    [InlineData("Rectangle().Background(((Brush)default)!)")]
     [InlineData("FlexColumn(children).Padding(null)")]
     public void Walker_Mirrors_The_Analyzers_Constant_Null_Gate(string snippet)
     {
@@ -786,6 +788,16 @@ public class AgentKitDocGateInstrumentTests
             Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/tab.md", Tabbed)).Text);
 
         Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "```csharp\tlinenos");
+
+        // The probe must accept every info-string syntax the extractor does, or the differential
+        // oracle is blind to exactly the blocks it is meant to police.
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "```csharp,linenos");
+
+        const string CommaInfo = "```csharp,linenos\nFlexColumn(children).FlexPadding(16)\n```";
+
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/comma.md", CommaInfo)).Text);
 
         // Marker padding sets the content column: `-    item` puts content at 5, so a fence eight
         // spaces in is three past it and valid. Consuming a single space read the column as 2 and

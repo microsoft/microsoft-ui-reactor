@@ -678,17 +678,20 @@ internal static class AgentKitSnippetWalker
         foreach (var argument in invocation.ArgumentList.Arguments)
         {
             var expression = argument.Expression;
+            string? castType = null;
 
             // (Brush)null, ((Brush)null), null! — unwrap to whatever is really passed. The cast's
-            // own type is deliberately ignored: `(Brush)null` and `(object)null` are both null, and
-            // reading the cast would only re-introduce the guesswork DefaultIsProvablyNull exists
-            // to avoid. `!` is unwrapped for the same reason the chain walkers treat it as
-            // transparent — it changes nullability analysis, never the value.
+            // type is remembered rather than discarded, because for `(Brush)default` it is the only
+            // statement of the target type: reduced to a bare `default`, `Background` looks
+            // unprovable thanks to its ThemeRef overload and the call would be reported even though
+            // the analyzer skips it. `!` is unwrapped for the same reason the chain walkers treat it
+            // as transparent — it changes nullability analysis, never the value.
             while (true)
             {
                 switch (expression)
                 {
                     case CastExpressionSyntax cast:
+                        castType = cast.Type.ToString();
                         expression = cast.Expression;
                         continue;
                     case ParenthesizedExpressionSyntax parenthesized:
@@ -713,7 +716,8 @@ internal static class AgentKitSnippetWalker
             // from the modifier's overload set otherwise; unprovable never exempts.
             if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) || expression is DefaultExpressionSyntax)
             {
-                var written = (expression as DefaultExpressionSyntax)?.Type.ToString();
+                // `default(T)` states its own type; `(T)default` states it on the cast.
+                var written = (expression as DefaultExpressionSyntax)?.Type.ToString() ?? castType;
 
                 if (invocation.ArgumentList.Arguments.Count == 1
                     && ReactorSurface.Instance.DefaultIsProvablyNull(modifier, written))

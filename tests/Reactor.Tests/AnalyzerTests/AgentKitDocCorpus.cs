@@ -162,7 +162,7 @@ internal static class AgentKitDocCorpus
     /// independently.
     /// </remarks>
     internal static readonly Regex CSharpFenceProbe = new(
-        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t][^\r\n]*)?$",
+        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
