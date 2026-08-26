@@ -1445,16 +1445,11 @@ public sealed partial class Reconciler : IDisposable
             DebugElementsSkipped = 0;
             DebugUIElementsCreated = 0;
             DebugUIElementsModified = 0;
-            // Drop anything a previous pass queued but never flushed, cancelling snapshots
-            // it still holds rather than just forgetting them. Every shipped host flushes
-            // at the end of each render, but a pass that threw mid-reconcile — or a
-            // Reconcile() caller that never flushes (tests, embedders) — must not leak
-            // strong UIElement refs or leave live snapshots the service still owns.
-            // Drop anything a previous pass queued but never flushed. Every shipped host
-            // flushes at the end of each render, but a pass that threw mid-reconcile — or
-            // a Reconcile() caller that never flushes (tests, embedders) — must not
-            // accumulate strong UIElement refs. A list clear, so nothing here can throw
-            // and strand the depth counter incremented just above.
+            // Drop destination references a previous pass queued but never flushed. Every
+            // shipped host flushes at the end of each render, but a pass that threw
+            // mid-reconcile — or a Reconcile() caller that never flushes (tests,
+            // embedders) — must not accumulate strong UIElement refs. A list clear, so
+            // nothing here can throw and strand the depth counter incremented just above.
             _pendingConnectedAnimationStarts.Clear();
             if (ReactorFeatureFlags.HighlightReconcileChanges)
             {
@@ -2387,6 +2382,19 @@ public sealed partial class Reconciler : IDisposable
 
         if (transition?.GetExitTransition() is not null)
         {
+            // KNOWN LIMITATION — connected animation does not compose with an exit
+            // transition on the SAME element. UnmountAndPool (and therefore
+            // PrepareToAnimate) is deferred into the completion callback below, which
+            // runs long after both hosts have called FlushConnectedAnimations, so the
+            // destination's lookup finds nothing and the connected animation silently
+            // no-ops. Preparing the source eagerly here looks like the obvious fix and
+            // is not: PrepareToAnimate on a control mid-replace throws a non-teardown
+            // exception that escapes this method and aborts the entire reconcile, losing
+            // the whole UI update — strictly worse than the animation not playing.
+            // Fixing it properly needs a way to hand the snapshot over without preparing
+            // against a control the exit transition still owns. Until then, put the
+            // connected-animation key and the exit transition on different elements.
+            //
             // Replace immediately with the new control so the UI updates.
             children.Replace(index, newControl);
             // Re-insert the old control after the new one for exit animation.

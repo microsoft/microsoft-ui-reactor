@@ -171,6 +171,12 @@ each of those painted at its old position for about a second before expiring it.
 Keep the keyed set small — key the rows you actually navigate between — if that
 overlap is distracting.
 
+Connected animation does not compose with an exit `.Transition(...)` on the
+**same** element: the exit transition defers the element's teardown, and with it
+the snapshot, past the point where the destination looks for it, so the
+animation silently does not play. Put the key and the exit transition on
+different elements.
+
 Use connected animations for list-to-detail [navigation](navigation.md)
 where an element "flies" from the list into the detail view.
 

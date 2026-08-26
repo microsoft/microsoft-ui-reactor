@@ -64,6 +64,8 @@ This document lists WinUI Gallery controls, features, and XAML concepts that **c
 
 One caveat: the reconciler cannot know which of several keyed siblings you activated, so it snapshots them all. The unpicked ones expire on WinUI's own timeout (about a second), during which they briefly overlap the new view. Keep the keyed set to the rows you actually navigate between if that overlap is distracting.
 
+Connected animation also does not compose with an exit `.Transition(...)` on the *same* element — the exit defers the snapshot past the point where the destination looks for it, so the animation silently does not play. Put the key and the exit transition on different elements.
+
 ### ThemeAnimation / Storyboard
 **WinUI:** Declarative animations via `Storyboard`, `DoubleAnimation`, and theme transitions.
 **Reactor Alternative:** **Limited.** Reactor supports implicit theme transitions on supported properties. For custom animations, use `.Set()` to access the composition layer directly. No declarative animation DSL exists.
