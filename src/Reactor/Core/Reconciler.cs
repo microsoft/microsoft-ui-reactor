@@ -1451,6 +1451,7 @@ public sealed partial class Reconciler : IDisposable
             // embedders) — must not accumulate strong UIElement refs. A list clear, so
             // nothing here can throw and strand the depth counter incremented just above.
             _pendingConnectedAnimationStarts.Clear();
+            _preparedConnectedAnimationKeys.Clear();
             if (ReactorFeatureFlags.HighlightReconcileChanges)
             {
                 (_highlightMounted ??= new()).Clear();
@@ -3665,6 +3666,24 @@ public sealed partial class Reconciler : IDisposable
     // start count is the only non-vacuous oracle available to an automated test.
     internal int ConnectedAnimationStartCount;
 
+    // Keys this reconcile pass actually published a snapshot for. The flush resolves
+    // queued destinations only against these, because ConnectedAnimationService is
+    // view-wide and unclaimed preparations are deliberately left to expire on their own
+    // (~1s): in principle a LATER render mounting the same key could consume one of those
+    // and animate unrelated UI from wherever the old source sat.
+    //
+    // Carried as defence-in-depth, and honestly so: I could not build a NON-VACUOUS
+    // regression test for it. A fixture that unmounts a keyed source in one pass and
+    // mounts the same key in a later pass reads green with this guard disabled, i.e. WinUI
+    // did not hand the stale snapshot over anyway — so the hazard may be theoretical in
+    // this WinUI build. The guard is a strict narrowing (it can only prevent starts, never
+    // cause one) and costs a hash lookup, so it stays; but it is NOT test-proven, and a
+    // future change here should not assume a test would catch a regression.
+    //
+    // Bookkeeping only. Nothing is invoked on the service, which is what made the
+    // withdrawn Cancel()-based cleanup crash.
+    private readonly HashSet<string> _preparedConnectedAnimationKeys = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Publishes the source snapshot for an unmounting element, so a destination mounting
     /// under the same key in this pass can travel from it.
@@ -3690,6 +3709,7 @@ public sealed partial class Reconciler : IDisposable
         try
         {
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
+            _preparedConnectedAnimationKeys.Add(key);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {
@@ -3740,9 +3760,13 @@ public sealed partial class Reconciler : IDisposable
             {
                 try
                 {
-                    // Null when nothing unmounted under this key during the pass —
-                    // e.g. the very first mount of a keyed element, which has no source
-                    // to travel from.
+                    // Scoped to this pass on purpose: the service is view-wide and holds
+                    // unclaimed snapshots for ~1s, so an unscoped lookup could let a
+                    // later render travel from a stale one. Defence-in-depth — see the
+                    // note on _preparedConnectedAnimationKeys about the missing test.
+                    if (!_preparedConnectedAnimationKeys.Contains(key))
+                        continue;
+
                     if (service.GetAnimation(key) is { } anim && anim.TryStart(target))
                         ConnectedAnimationStartCount++;
                 }
@@ -3760,6 +3784,7 @@ public sealed partial class Reconciler : IDisposable
         }
 
         _pendingConnectedAnimationStarts.Clear();
+        _preparedConnectedAnimationKeys.Clear();
     }
 
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers m, Action requestRerender)

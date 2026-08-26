@@ -2375,7 +2375,7 @@
         {
           "header": "ScaleTransition",
           "language": "csharp",
-          "code": "var (enlarged, setEnlarged) = UseState(false);\n\nBorder(TextBlock(\"Scales from its centre\"))\n    .Scale(enlarged ? 1.4f : 1.0f)\n    .ScaleTransition()\n// Scale is a compositor transform, not a layout change: siblings do not reflow, so a\n// growing element overlaps them rather than pushing them aside."
+          "code": "var (enlarged, setEnlarged) = UseState(false);\n\nVStack(12,\n    Button(enlarged ? \"Shrink\" : \"Enlarge\", () => setEnlarged(!enlarged)),\n    Border(TextBlock(\"Scales from its centre\"))\n        .Scale(enlarged ? 1.4f : 1.0f)\n        .ScaleTransition())\n// Something has to change the value: the transition animates Scale whenever it changes,\n// so without the button this renders a static element and nothing ever runs.\n// Scale is a compositor transform, not a layout change: siblings do not reflow, so a\n// growing element overlaps them rather than pushing them aside."
         }
       ]
     },

@@ -95,9 +95,13 @@ TextBlock(""Opacity is animated, not toggled"")
                 sourceCode: @"
 var (enlarged, setEnlarged) = UseState(false);
 
-Border(TextBlock(""Scales from its centre""))
-    .Scale(enlarged ? 1.4f : 1.0f)
-    .ScaleTransition()
+VStack(12,
+    Button(enlarged ? ""Shrink"" : ""Enlarge"", () => setEnlarged(!enlarged)),
+    Border(TextBlock(""Scales from its centre""))
+        .Scale(enlarged ? 1.4f : 1.0f)
+        .ScaleTransition())
+// Something has to change the value: the transition animates Scale whenever it changes,
+// so without the button this renders a static element and nothing ever runs.
 // Scale is a compositor transform, not a layout change: siblings do not reflow, so a
 // growing element overlaps them rather than pushing them aside.
 ");

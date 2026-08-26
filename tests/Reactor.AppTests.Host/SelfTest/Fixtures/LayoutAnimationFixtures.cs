@@ -285,7 +285,6 @@ internal static class LayoutAnimationFixtures
         }
     }
 
-
     /// <summary>
     /// Regression for a native access violation in Microsoft.UI.Xaml.dll (0xC0000005),
     /// reproduced by hand in the ReactorGallery "Both ends need the same key" card:
