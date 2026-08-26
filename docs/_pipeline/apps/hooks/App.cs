@@ -101,7 +101,7 @@ class EffectDemo : Component
             if (!running) return () => { };
             var cts = new CancellationTokenSource();
             var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            var token = cts.Token;   // capture once — cleanup disposes cts
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
             _ = Task.Run(async () =>
             {
                 try

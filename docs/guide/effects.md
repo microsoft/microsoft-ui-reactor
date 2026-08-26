@@ -130,7 +130,7 @@ class TimerCleanupExample : Component
             if (!isRunning) return () => { };
             var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             var cts = new CancellationTokenSource();
-            var token = cts.Token;   // capture once — cleanup disposes cts
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
             _ = Task.Run(async () =>
             {
                 try
@@ -446,7 +446,7 @@ class MissingCleanupDoExample : Component
         {
             var cts = new CancellationTokenSource();
             var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            var token = cts.Token;   // capture once — cleanup disposes cts
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
             _ = Task.Run(async () =>
             {
                 try
