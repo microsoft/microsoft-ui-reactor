@@ -56,11 +56,11 @@ class CmdPerfApp : Component
         }, Array.Empty<object>());
 
         // Build Command records for all 500 commands
-        var ductCommands = new Command[CommandSet.All.Length];
+        var reactorCommands = new Command[CommandSet.All.Length];
         for (int i = 0; i < CommandSet.All.Length; i++)
         {
             var cmd = CommandSet.All[i];
-            ductCommands[i] = new Command
+            reactorCommands[i] = new Command
             {
                 Label = cmd.Label,
                 Icon = cmd.IconGlyph is not null ? new SymbolIconData(cmd.IconGlyph) : null,
@@ -70,9 +70,9 @@ class CmdPerfApp : Component
         }
 
         // Build a lookup from command id to Command
-        var ductCmdById = new Dictionary<string, Command>(CommandSet.All.Length);
+        var reactorCmdById = new Dictionary<string, Command>(CommandSet.All.Length);
         for (int i = 0; i < CommandSet.All.Length; i++)
-            ductCmdById[CommandSet.All[i].Id] = ductCommands[i];
+            reactorCmdById[CommandSet.All[i].Id] = reactorCommands[i];
 
         // Build MenuBar
         var menuBarDef = MenuLayout.GetMenuBar();
@@ -80,7 +80,7 @@ class CmdPerfApp : Component
         for (int m = 0; m < menuBarDef.Length; m++)
         {
             var (title, items) = menuBarDef[m];
-            menuBarItems[m] = Menu(title, MapMenuItems(items, ductCmdById));
+            menuBarItems[m] = Menu(title, MapMenuItems(items, reactorCmdById));
         }
 
         // Build CommandBar primary commands from toolbar layout
@@ -88,7 +88,7 @@ class CmdPerfApp : Component
         for (int t = 0; t < MenuLayout.ToolbarCommandIds.Length; t++)
         {
             var id = MenuLayout.ToolbarCommandIds[t];
-            if (ductCmdById.TryGetValue(id, out var dc))
+            if (reactorCmdById.TryGetValue(id, out var dc))
                 toolbarItems[t] = AppBarButton(dc);
             else
                 toolbarItems[t] = AppBarButton(id, null);

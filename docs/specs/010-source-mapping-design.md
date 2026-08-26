@@ -386,6 +386,6 @@ menu item that reads this property and navigates.
 ### Source map file (out-of-band)
 
 For scenarios where embedded metadata is undesirable, emit a
-`{assembly}.ductsourcemap.json` file at build time (via a Source Generator)
+`{assembly}.reactorsourcemap.json` file at build time (via a Source Generator)
 mapping element type + key → source location. Similar to JavaScript source maps
 or PDB files.

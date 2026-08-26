@@ -289,7 +289,8 @@ internal static class TranslateCommand
         Console.WriteLine("Options:");
         Console.WriteLine("  --source <dir>     Source locale directory (default: Strings/en-US/)");
         Console.WriteLine("  --target <locales>  Comma-separated target locales (e.g., fr-FR,ar-SA)");
-        Console.WriteLine("  --missing-only     Only translate missing or AI-draft keys");
+        Console.WriteLine("  --missing-only     Only translate keys with no existing translation");
+        Console.WriteLine("                     (default: also re-translate AI drafts awaiting review)");
         Console.WriteLine("  --model <name>     Model to use (default: gpt-5.4-mini, or COPILOT_MODEL env var)");
         Console.WriteLine();
         Console.WriteLine("Requires GitHub CLI (gh) to be installed and authenticated with a");

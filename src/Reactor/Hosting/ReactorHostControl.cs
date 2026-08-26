@@ -17,13 +17,13 @@ namespace Microsoft.UI.Reactor.Hosting;
 ///
 /// Usage in XAML:
 ///   <![CDATA[
-///   <local:ReactorHostControl x:Name="ductHost" />
+///   <local:ReactorHostControl x:Name="reactorHost" />
 ///   ]]>
 ///
 /// Usage in code-behind:
-///   ductHost.Mount(new MyComponent());
+///   reactorHost.Mount(new MyComponent());
 ///   — or —
-///   ductHost.Mount(ctx => VStack(TextBlock("Hello from Reactor!")));
+///   reactorHost.Mount(ctx => VStack(TextBlock("Hello from Reactor!")));
 ///   — or via XAML property —
 ///   <![CDATA[
 ///   <local:ReactorHostControl ComponentFactory="{x:Bind CreateMyComponent}" />

@@ -671,7 +671,8 @@ Pre-fills translations for target locales using AI, with the English `.resw` as 
 # Translate en-US to fr-FR and ar-SA using AI
 mur loc translate --source Strings/en-US/ --target fr-FR,ar-SA
 
-# Only translate keys that are missing or marked as draft
+# Only translate keys that have no translation yet
+# (without this flag, AI drafts awaiting review are re-translated too)
 mur loc translate --source Strings/en-US/ --target fr-FR --missing-only
 
 # Use a specific AI model
