@@ -33,6 +33,15 @@ None yet. Phase 2 adds a Tools → Options page for Reactor Preview settings.
 - **Tool window shows error: VS is elevated** — restart Visual Studio non-elevated. Elevated VS can silently drop input to a non-elevated child due to UIPI.
 - **Tool window stuck on "Launching…"** — check the **Reactor Preview** output channel for `dotnet watch`, port/token, and handshake errors.
 - **Build fails with "VSCT not compiled"** — use desktop MSBuild through `Build-Vsix.ps1`; plain `dotnet build` only creates a structural CI VSIX.
+- **Build fails with `NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json`** — the restore could not reach nuget.org. This is the one restore `bootstrap.ps1` does not run itself (it shells out to `Reinstall-Vsix.ps1`), so it has to be told which feed to use. `Build-Vsix.ps1` picks up a package mirror already configured in your user NuGet.Config; if you use a different one, pass it explicitly:
+
+  ```powershell
+  pwsh -File src\vs-reactor\Build-Vsix.ps1 -NuGetSource https://your.mirror/nuget/v3/index.json
+  # ...or point at a whole config
+  pwsh -File src\vs-reactor\Build-Vsix.ps1 -NuGetConfig C:\path\to\NuGet.Config
+  ```
+
+  `Reinstall-Vsix.ps1` takes the same two parameters and forwards them; `bootstrap.ps1` passes whichever feed it already resolved for its own restores.
 
 ## Architecture
 

@@ -9,6 +9,16 @@
     Visual Studio 18.8 never returns from this call (issue #1074), so the
     timeout is the normal path there, not an error.
 
+.PARAMETER NuGetConfig
+    Restore the VSIX through an explicit NuGet.Config. Forwarded to
+    Build-Vsix.ps1; bootstrap.ps1 passes the feed it already resolved.
+
+.PARAMETER NuGetSource
+    Restore the VSIX through an explicit NuGet source. Forwarded to
+    Build-Vsix.ps1; ignored when -NuGetConfig is supplied. When neither is
+    given, Build-Vsix.ps1 detects a user-configured Microsoft package proxy
+    on its own.
+
 .OUTPUTS
     Exit codes:
       0  VSIX installed and `devenv /updateconfiguration` completed.
@@ -34,6 +44,8 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
     [string]$VsInstanceId,
+    [string]$NuGetConfig,
+    [string]$NuGetSource,
     # Upper bound is a sanity rail, not a policy: anything past an hour is a
     # typo. 0 or negative would make the very first WaitForExit time out and
     # kill devenv instantly.
@@ -49,6 +61,8 @@ $ErrorActionPreference = 'Stop'
 if (-not $SkipBuild) {
     $buildArgs = @{ Configuration = $Configuration }
     if ($NoRestore) { $buildArgs.NoRestore = $true }
+    if ($NuGetConfig) { $buildArgs.NuGetConfig = $NuGetConfig }
+    if ($NuGetSource) { $buildArgs.NuGetSource = $NuGetSource }
     & (Join-Path $PSScriptRoot 'Build-Vsix.ps1') @buildArgs
     if ($LASTEXITCODE -ne 0) { Write-Error "Build-Vsix.ps1 failed."; exit $LASTEXITCODE }
 }
@@ -225,7 +239,7 @@ if (-not $skipUpdateConfig) {
     Write-Host ""
     Write-Host "Running 'devenv /updateconfiguration' to force the menu/pkgdef merge synchronously."
     Write-Host "Without this step, the first VS launch on VS 2026 sometimes silently skips the merge"
-    Write-Host "and our menu entry never appears. This step blocks until the merge completes — 27-99s on"
+    Write-Host "and our menu entry never appears. This step blocks until the merge completes - 27-99s on"
     Write-Host "a healthy VS. VS 18.8 never returns (issue #1074), so it is bounded by -UpdateConfigurationTimeoutSec."
     $devenv = Join-Path $installationPath 'Common7\IDE\devenv.exe'
     if (Test-Path -LiteralPath $devenv) {

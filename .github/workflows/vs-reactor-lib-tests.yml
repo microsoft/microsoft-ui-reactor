@@ -26,6 +26,7 @@ on:
       - 'tools/BootstrapFeedResolver.ps1'
       - 'src/vs-reactor/VsProcessLib.ps1'
       - 'src/vs-reactor/Reinstall-Vsix.ps1'
+      - 'src/vs-reactor/Build-Vsix.ps1'
       - 'src/vs-reactor/TESTING.md'
       - 'src/Reactor.Cli/Upgrade/UpgradeCommand.cs'
       - 'tests/vs_reactor/ci/**'
@@ -36,6 +37,7 @@ on:
       - 'tools/BootstrapFeedResolver.ps1'
       - 'src/vs-reactor/VsProcessLib.ps1'
       - 'src/vs-reactor/Reinstall-Vsix.ps1'
+      - 'src/vs-reactor/Build-Vsix.ps1'
       - 'src/vs-reactor/TESTING.md'
       - 'src/Reactor.Cli/Upgrade/UpgradeCommand.cs'
       - 'tests/vs_reactor/ci/**'
@@ -69,6 +71,10 @@ jobs:
         shell: pwsh
         run: ./tests/vs_reactor/ci/BootstrapFeedResolver.Tests.ps1
 
+      - name: Run VSIX feed plumbing tests (PowerShell 7)
+        shell: pwsh
+        run: ./tests/vs_reactor/ci/VsixFeed.Tests.ps1
+
       # `shell: powershell` is Windows PowerShell 5.1 — the host `mur upgrade`
       # falls back to. Its Process type has no Kill(bool) and it has no
       # $IsWindows, so this step is what keeps the shipped scripts 5.1-clean.
@@ -83,3 +89,7 @@ jobs:
       - name: Run bootstrap feed resolver tests (Windows PowerShell 5.1)
         shell: powershell
         run: ./tests/vs_reactor/ci/BootstrapFeedResolver.Tests.ps1
+
+      - name: Run VSIX feed plumbing tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./tests/vs_reactor/ci/VsixFeed.Tests.ps1

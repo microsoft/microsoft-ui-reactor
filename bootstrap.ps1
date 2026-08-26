@@ -608,7 +608,7 @@ if ($SkipVsExtension) {
 
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {
-        Write-Host '    [skip] vswhere.exe not found — Visual Studio is not installed. The framework + mur + template + plugin are still ready.' -ForegroundColor Yellow
+        Write-Host '    [skip] vswhere.exe not found - Visual Studio is not installed. The framework + mur + template + plugin are still ready.' -ForegroundColor Yellow
         Write-Host "           To install the preview extension later, install VS 2022/2026 with the 'Visual Studio extension development' workload, then re-run ./bootstrap.ps1."
     } else {
         # `-requires Microsoft.VisualStudio.Workload.VisualStudioExtension` filters to
@@ -642,8 +642,19 @@ if ($SkipVsExtension) {
                     # the VSIXInstaller against the per-user data dir, plus a synchronous
                     # `devenv /updateconfiguration` to merge the pkgdef so menus appear on
                     # the next launch. -VsInstanceId pins to the same instance we probed.
+                    # The feed resolved above has to be forwarded explicitly. This step
+                    # runs in a child process, so it never sees the restore environment
+                    # the rest of the bootstrap sets up for its own commands, and would
+                    # otherwise fall through to the repo's public nuget.config -- which
+                    # not every network can reach.
+                    $vsixFeedArgs = @()
+                    if ($effectiveNuGetConfig) {
+                        $vsixFeedArgs = @('-NuGetConfig', $effectiveNuGetConfig)
+                    } elseif ($effectiveNuGetSource) {
+                        $vsixFeedArgs = @('-NuGetSource', $effectiveNuGetSource)
+                    }
                     $powerShellExe = (Get-Process -Id $PID).Path
-                    & $powerShellExe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $reinstall -Configuration $Configuration -VsInstanceId $target.instanceId
+                    & $powerShellExe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $reinstall -Configuration $Configuration -VsInstanceId $target.instanceId @vsixFeedArgs
                     $vsixExit = $LASTEXITCODE
                     # Reinstall-Vsix.ps1's exit-code contract (see its .OUTPUTS):
                     # 3 == VSIX installed but `devenv /updateconfiguration`
@@ -658,8 +669,9 @@ if ($SkipVsExtension) {
                         # so users debugging install issues see it.
                         Write-Host ''
                         Write-Host "    [warn] VS extension install reported a non-zero exit code ($vsixExit). The rest of the bootstrap completed; re-run src\vs-reactor\Reinstall-Vsix.ps1 directly to retry." -ForegroundColor Yellow
+                        Write-Host "           If the log shows NU1301 against nuget.org, the restore had no reachable feed: re-run with -NuGetSource <url> or -NuGetConfig <path>." -ForegroundColor Yellow
                     } else {
-                        Write-Ok "VS extension installed into $($target.displayName) — launch VS, then View -> Other Windows -> Reactor Preview."
+                        Write-Ok "VS extension installed into $($target.displayName) - launch VS, then View -> Other Windows -> Reactor Preview."
                     }
                     # Write-Host does NOT clear $LASTEXITCODE, so without this
                     # the child's non-zero code survives to the end of the

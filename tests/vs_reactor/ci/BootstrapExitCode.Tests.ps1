@@ -59,6 +59,8 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $bootstrap = Join-Path $repoRoot 'bootstrap.ps1'
 $reinstall = Join-Path $repoRoot 'src\vs-reactor\Reinstall-Vsix.ps1'
 $vsProcessLib = Join-Path $repoRoot 'src\vs-reactor\VsProcessLib.ps1'
+$buildVsix = Join-Path $repoRoot 'src\vs-reactor\Build-Vsix.ps1'
+$feedResolver = Join-Path $repoRoot 'tools\BootstrapFeedResolver.ps1'
 $testingDoc = Join-Path $repoRoot 'src\vs-reactor\TESTING.md'
 
 # These files are BOM-less UTF-8. Windows PowerShell 5.1 decodes such files as
@@ -268,6 +270,35 @@ try {
             if (($i + 1) -ge $bytes.Length -or $bytes[$i + 1] -ne 10) { $loneCr++ }
         }
         Assert-Equal 0 $loneCr "$(Split-Path $f -Leaf): no carriage return outside a CRLF pair"
+    }
+
+    # -- 8. The shipped scripts still load under Windows PowerShell 5.1. --
+    # These files are BOM-less UTF-8 and 5.1 decodes them as the system ANSI
+    # codepage. In a comment that corruption is harmless, but inside a string
+    # literal the trailing byte can decode to a CP1252 smart quote that
+    # PowerShell accepts as a delimiter, closing the literal early and cascading
+    # into parse errors — so 5.1 cannot load the file at all. Which characters
+    # bite depends on the quote style: an em dash yields U+201D and breaks a
+    # double-quoted string; an arrow yields U+2019 and breaks a single-quoted
+    # one. Re-parsing the decoded bytes catches every combination without
+    # banning non-ASCII from comments.
+    #
+    # bootstrap.ps1 re-launches Reinstall-Vsix.ps1 with the *current* host and
+    # `mur upgrade` falls back to powershell.exe, so this is a shipped path: two
+    # em dashes in Write-Host arguments once made `powershell.exe -File
+    # bootstrap.ps1` die on "Missing closing '}'" before it executed a line.
+    #
+    # Decoding is modelled explicitly rather than inferred from the host, so the
+    # check is identical on both legs of the matrix and on any locale.
+    $ansi = [System.Text.Encoding]::GetEncoding(1252)
+    foreach ($f in @($bootstrap, $reinstall, $vsProcessLib, $buildVsix, $feedResolver)) {
+        $asAnsi = $ansi.GetString([System.IO.File]::ReadAllBytes($f))
+        $ansiErrors = $null
+        $ansiTokens = $null
+        [System.Management.Automation.Language.Parser]::ParseInput(
+            $asAnsi, [ref]$ansiTokens, [ref]$ansiErrors) | Out-Null
+        Assert-Equal 0 @($ansiErrors).Count `
+            "$(Split-Path $f -Leaf): loads under Windows PowerShell 5.1 (BOM-less UTF-8 decoded as CP1252)"
     }
 }
 finally {

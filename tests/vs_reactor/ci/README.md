@@ -17,6 +17,7 @@ pins down.
 | `VsProcessLib.Tests.ps1` | Behavioural tests for `src/vs-reactor/VsProcessLib.ps1` against a real, genuinely-hanging, two-level process tree: tree kill, attributed sweep, drain poll, pid-reuse guards, `$LASTEXITCODE` hygiene. |
 | `BootstrapExitCode.Tests.ps1` | Contract tests for the `bootstrap.ps1` ↔ `Reinstall-Vsix.ps1` exit-code handshake: the `$LASTEXITCODE` leak, the guarded `exit 1` / `exit 3` paths, and agreement between the code and both documented exit tables. |
 | `BootstrapFeedResolver.Tests.ps1` | Behavioural tests for user-scoped Microsoft npm/NuGet proxy discovery, public-default preservation, explicit overrides, and generated internal-only NuGet config. |
+| `VsixFeed.Tests.ps1` | Behavioural tests for the NuGet feed plumbing on the VSIX path (`bootstrap.ps1` → `Reinstall-Vsix.ps1` → `Build-Vsix.ps1` → MSBuild), driven through a stub MSBuild that records its own command line. |
 
 The library under test lives in `src/vs-reactor/`, not here, because
 `Reinstall-Vsix.ps1` dot-sources it at runtime — it ships with the script rather
@@ -31,12 +32,18 @@ red.
 | Mutation | Result |
 |---|---|
 | `taskkill /T` → bare `$Process.Kill()` (the original defect) | 2 fail — the inner fake survives |
+| `Build-Vsix.ps1` stops emitting a feed property (the VSIX-feed defect) | 3 fail — proxy, `-NuGetConfig`, and `-NuGetSource` all stop reaching MSBuild |
+| `Reinstall-Vsix.ps1` stops forwarding `-NuGetConfig` | 1 fail |
+| `bootstrap.ps1` stops forwarding the resolved source | 1 fail |
 | attributed sweep → name-based sweep (kills any same-named process) | 2 fail — the unrelated tree is killed, `Drained` lies |
 | `if ($updateConfigTimedOut) { exit 3 }` → `if ($false) { ... }` | 1 fail — the code is bound to its guard, not merely present |
 | drop the trailing `exit 0` from `bootstrap.ps1` | 2 fail |
 | drop the `$global:LASTEXITCODE = 0` reset | 1 fail |
 | drift the `TESTING.md` exit table (`3` → `4`) | 1 fail |
 | re-inject a mid-line `CR` into `Reinstall-Vsix.ps1` | 1 fail |
+| re-inject an em dash into a **double**-quoted `Write-Host` string in `bootstrap.ps1` | 1 fail — the file stops loading under Windows PowerShell 5.1 |
+| re-inject an arrow into a **single**-quoted `Write-Host` string in `bootstrap.ps1` | 1 fail — different character, different quote style, same defect |
+| re-inject an em dash into a **single**-quoted string | 0 fail — correctly ignored; `U+201D` does not close a single-quoted literal |
 
 The AST mutations were re-run under **Windows PowerShell 5.1** as well, not just
 `pwsh`, because a 5.1 leg that cannot fail is worse than no 5.1 leg: it reports
@@ -47,10 +54,22 @@ half of the CI matrix is load-bearing.
 That leg only works because both suites read source files with
 `[System.IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)`. These files are
 BOM-less UTF-8 containing em dashes, and 5.1 decodes such files as the system
-ANSI codepage: measured on `bootstrap.ps1`, `ParseFile` and
-`ParseInput(Get-Content -Raw)` both yield **6 parse errors** under 5.1 and 0
-under `pwsh`, while the explicit-UTF8 read yields 0 on both. An AST assertion
+ANSI codepage, so every non-ASCII character arrives mangled. An AST assertion
 built on that corrupted tree can pass vacuously. Do not "simplify" those reads.
+
+The same decoding is a *product* bug whenever the non-ASCII sits inside a string
+literal rather than a comment: CP1252 renders the trailing byte as a smart quote,
+which PowerShell accepts as a delimiter, so the literal closes early and
+cascades. Which characters bite depends on the quote style — an em dash yields
+`U+201D` and breaks a *double*-quoted string, an arrow yields `U+2019` and breaks
+a *single*-quoted one. Two em dashes in `Write-Host` arguments used to give
+`bootstrap.ps1` **6 parse errors** under 5.1 and 0 under `pwsh` — meaning
+`powershell.exe -File bootstrap.ps1` could not execute a single line, on a path
+5.1 genuinely ships (bootstrap re-launches `Reinstall-Vsix.ps1` with the
+*current* host, and `mur upgrade` falls back to `powershell.exe`). Those literals
+are ASCII now, and section 8 re-parses every shipped script through CP1252 so
+they stay that way. Non-ASCII in comments is still fine, and the guard says so:
+it re-parses rather than banning bytes.
 
 That last row earns its place: a bare `LF` inserted into a `CRLF` file leaves a
 mid-line carriage return that merges the next statement onto the brace line. It
@@ -81,10 +100,14 @@ Two known limits, recorded rather than papered over:
 ```pwsh
 pwsh       -File tests/vs_reactor/ci/VsProcessLib.Tests.ps1
 pwsh       -File tests/vs_reactor/ci/BootstrapExitCode.Tests.ps1
+pwsh       -File tests/vs_reactor/ci/BootstrapFeedResolver.Tests.ps1
+pwsh       -File tests/vs_reactor/ci/VsixFeed.Tests.ps1
 
 # ...and the host `mur upgrade` falls back to:
 powershell -File tests/vs_reactor/ci/VsProcessLib.Tests.ps1
 powershell -File tests/vs_reactor/ci/BootstrapExitCode.Tests.ps1
+powershell -File tests/vs_reactor/ci/BootstrapFeedResolver.Tests.ps1
+powershell -File tests/vs_reactor/ci/VsixFeed.Tests.ps1
 ```
 
 Each script prints `<n> passed, <n> failed` and exits non-zero on any failure.
@@ -98,10 +121,11 @@ with an explicit UTF-8 encoding.
 
 ## Workflow
 
-`.github/workflows/vs-reactor-lib-tests.yml` runs both suites under both hosts
-on `windows-latest`, triggered by changes to `bootstrap.ps1`, the two
-`src/vs-reactor/` scripts, `src/Reactor.Cli/Upgrade/UpgradeCommand.cs` (the
-third consumer of the exit-code contract), or anything under this directory.
+`.github/workflows/vs-reactor-lib-tests.yml` runs every suite under both hosts
+on `windows-latest`, triggered by changes to `bootstrap.ps1`, the
+`src/vs-reactor/` scripts, `tools/BootstrapFeedResolver.ps1`,
+`src/Reactor.Cli/Upgrade/UpgradeCommand.cs` (the third consumer of the
+exit-code contract), or anything under this directory.
 
 The tests spawn real processes and kill them by pid. They are safe to run on a
 developer machine, and safe to run concurrently with each other: the fake is

@@ -230,6 +230,43 @@ try {
     Assert-Equal '-g|--add-source|C:\repo\local-nupkgs|--add-source|https://packagefeedproxy.microsoft.io/nuget/v3/index.json|Microsoft.UI.Reactor.Cli|--no-cache|--ignore-failed-sources' `
         ($toolArgs -join '|') 'tool arguments include both local and automatic proxy sources'
 
+    # Resolve-ReactorNuGetFeedOverride is what scripts a developer runs directly
+    # (Build-Vsix.ps1) use: explicit arguments first, then the same user-config
+    # discovery, and no network probe. $profile still carries `profile-proxy`
+    # from the discovery cases above.
+    $override = Resolve-ReactorNuGetFeedOverride -AppData $appData -UserProfile $profile
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/nuget/profile/v3/index.json' $override.Source `
+        'feed override falls back to the Microsoft proxy in user configuration'
+    Assert-Equal $null $override.ConfigPath 'detected override selects a source, not a config file'
+    Assert-Equal 'user configuration (profile-proxy)' $override.Origin `
+        'detected override reports which configured source it picked'
+
+    $override = Resolve-ReactorNuGetFeedOverride `
+        -NuGetConfig $explicitConfig `
+        -NuGetSource 'https://ignored.example.test/nuget' `
+        -AppData $appData -UserProfile $profile
+    Assert-Equal (Resolve-Path $explicitConfig).Path $override.ConfigPath `
+        'explicit config wins over both an explicit source and discovery'
+    Assert-Equal $null $override.Source 'explicit config suppresses any source override'
+    Assert-Equal 'explicit config' $override.Origin 'explicit config reports its origin'
+
+    $override = Resolve-ReactorNuGetFeedOverride `
+        -NuGetSource 'https://contoso.example.test/nuget/v3/index.json/' `
+        -AppData $appData -UserProfile $profile
+    Assert-Equal 'https://contoso.example.test/nuget/v3/index.json' $override.Source `
+        'explicit source wins over discovery and is normalized'
+    Assert-Equal 'explicit source' $override.Origin 'explicit source reports its origin'
+
+    Assert-Throws { Resolve-ReactorNuGetFeedOverride -NuGetSource 'http://contoso.example.test/nuget' } `
+        'explicit source over plain HTTP to a remote host is rejected'
+    Assert-Throws { Resolve-ReactorNuGetFeedOverride -NuGetConfig (Join-Path $tmp 'missing.config') } `
+        'missing explicit config is rejected by the override resolver too'
+
+    $emptyHome = Join-Path $tmp 'no-user-config'
+    New-Item -ItemType Directory -Path $emptyHome | Out-Null
+    Assert-Equal $null (Resolve-ReactorNuGetFeedOverride -AppData $emptyHome -UserProfile $emptyHome) `
+        'no configured proxy yields no override, preserving the repo public default'
+
     $env:RestoreConfigFile = 'before.config'
     $env:RestoreSources = 'before-source'
     $script:ObservedRestoreConfig = 'not-run'

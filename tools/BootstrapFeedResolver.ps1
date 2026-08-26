@@ -153,6 +153,54 @@ function Resolve-ReactorNuGetFeed {
     return $null
 }
 
+# Feed selection for scripts a developer runs directly (the VSIX build), where
+# bootstrap.ps1's probe-and-fall-back is neither available nor wanted. Explicit
+# arguments win; otherwise we reuse the same user-configuration discovery
+# bootstrap does, without the network probe — the probe asks whether the feed
+# carries GitHub.Copilot.SDK, which is a bootstrap concern, not a VSIX one.
+#
+# Returns $null when nothing is configured, which is the public-contributor
+# path: no restore override, repo nuget.config stays in effect.
+function Resolve-ReactorNuGetFeedOverride {
+    param(
+        [string]$NuGetConfig,
+        [string]$NuGetSource,
+        [string]$AppData = $env:APPDATA,
+        [string]$UserProfile = $env:USERPROFILE
+    )
+
+    # A config file is the more complete statement of intent than a bare source,
+    # so it wins when both are supplied — matching Get-ReactorRestoreArguments.
+    if (-not [string]::IsNullOrWhiteSpace($NuGetConfig)) {
+        $explicit = Resolve-ReactorNuGetFeed -ExplicitConfig $NuGetConfig
+        return [pscustomobject]@{
+            ConfigPath = $explicit.ConfigPath
+            Source     = $null
+            Origin     = 'explicit config'
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($NuGetSource)) {
+        if (-not (Test-ReactorPackageFeedUrl $NuGetSource)) {
+            throw "-NuGetSource must be an HTTPS URL without credentials, query, or fragment (HTTP is allowed only for loopback): '$NuGetSource'"
+        }
+        return [pscustomobject]@{
+            ConfigPath = $null
+            Source     = $NuGetSource.Trim().TrimEnd('/')
+            Origin     = 'explicit source'
+        }
+    }
+
+    $detected = Resolve-ReactorNuGetFeed -AppData $AppData -UserProfile $UserProfile
+    if (-not $detected) { return $null }
+
+    return [pscustomobject]@{
+        ConfigPath = $null
+        Source     = $detected.Source
+        Origin     = "user configuration ($($detected.SourceKey))"
+    }
+}
+
 function Test-ReactorNuGetSourceAccess {
     param(
         [Parameter(Mandatory)][string]$Source,
