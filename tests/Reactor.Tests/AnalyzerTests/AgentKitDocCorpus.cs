@@ -375,7 +375,7 @@ internal static class AgentKitDocCorpus
             // marker precedes them, and what the three-column limit and body de-indentation are
             // both measured with.
             var fenceColumn = inlineMarker.Success
-                ? indent + inlineMarker.Length + VisualWidth(open.Groups["pad"].Value)
+                ? indent + inlineMarker.Length + VisualWidth(open.Groups["pad"].Value, indent + inlineMarker.Length)
                 : indent;
 
             if (fenceColumn - container > 3)
@@ -471,14 +471,20 @@ internal static class AgentKitDocCorpus
     /// level read as a fence when it is really an indented code block — the gate could then fail on
     /// quoted, code-like prose. Every indentation measurement here goes through this.
     /// </remarks>
-    private static int VisualWidth(string whitespace)
+    /// <remarks>
+    /// The width a tab contributes depends on where it starts, so a run measured mid-line must say
+    /// where: in <c>10.\t```csharp</c> the tab advances from column 3 to 4 and is worth one column,
+    /// not four. Measuring it from zero put the content column at 7 and read the block's own body
+    /// as having left the list.
+    /// </remarks>
+    private static int VisualWidth(string whitespace, int startColumn = 0)
     {
-        var column = 0;
+        var column = startColumn;
 
         foreach (var c in whitespace)
             column = c == '\t' ? (column / 4 * 4) + 4 : column + 1;
 
-        return column;
+        return column - startColumn;
     }
 
     /// <summary>
@@ -516,7 +522,7 @@ internal static class AgentKitDocCorpus
     private static int ContentColumn(Match marker)
     {
         var beforePad = VisualWidth(marker.Groups["indent"].Value) + marker.Groups["marker"].Length;
-        var padding = VisualWidth(marker.Groups["pad"].Value);
+        var padding = VisualWidth(marker.Groups["pad"].Value, beforePad);
 
         return beforePad + (padding <= 4 ? padding : 1);
     }

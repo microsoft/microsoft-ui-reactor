@@ -926,6 +926,24 @@ public class AgentKitDocGateInstrumentTests
             Assert.Single(AgentKitDocCorpus.ExtractFences(
                 "fixture/tabclose.md",
                 TabbedInnerFence.Replace("<TAB>", "\t"))).Text.Replace("\r\n", "\n"));
+
+        // A tab after a list marker advances from the marker's column, not from zero: in
+        // `10.<TAB>```csharp` it moves column 3 to 4 and is worth one column, so the content column
+        // is 4. Measuring it from zero reported 7, and the closing bound is measured against that —
+        // a ``` eight columns in is literal text inside the block at 4 but reads as the close at 7,
+        // truncating the sample. The inner fence is what makes this observable.
+        const string TabPaddedMarker = """
+            10.<TAB>```csharp
+                FlexColumn(children).FlexPadding(16)
+                    ```
+                ```
+            """;
+
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)\n    ```",
+            Assert.Single(AgentKitDocCorpus.ExtractFences(
+                "fixture/tabmarker.md",
+                TabPaddedMarker.Replace("<TAB>", "\t"))).Text.Replace("\r\n", "\n"));
     }
 
     /// <summary>
@@ -1243,6 +1261,35 @@ public class AgentKitDocGateInstrumentTests
             ReactorSurface.Instance.DefaultIsProvablyNull("Background"),
             ReactorSurface.Instance.DefaultIsProvablyNull("Background", null, "notAParameter"));
     }
+    /// <summary>
+    /// A sample inside an inactive <c>#if</c> branch is still scanned.
+    /// </summary>
+    /// <remarks>
+    /// <c>ParseText</c> uses the default symbol set, so an inactive branch survives only as
+    /// DisabledTextTrivia and never reaches <c>DescendantNodes</c> — a violation written inside
+    /// <c>#if DEBUG</c> would have shipped unchecked, and the corpus already contains conditional
+    /// C# (<c>skills/devtools.md</c>).
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void A_Sample_In_An_Inactive_Conditional_Branch_Is_Scanned()
+    {
+        var scan = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet(
+                "fixture/conditional.md",
+                1,
+                "#if DEBUG\nFlexColumn(children).Padding(16)\n#endif"),
+        });
+
+        var finding = Assert.Single(scan.Of(AgentKitFindingKind.DroppedModifier));
+        Assert.Equal("FlexPadding", finding.Replacement);
+
+        // The directive lines are blanked rather than removed, so the reported line is still the
+        // line the sample is on — without that, a finding would point one line short.
+        Assert.Equal(2, finding.Line);
+    }
+
     /// <summary>
     /// A label in the preceding list item marks a sample in the next one — deliberately.
     /// </summary>

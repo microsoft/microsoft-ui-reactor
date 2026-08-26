@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -606,6 +607,17 @@ internal static class AgentKitSnippetWalker
     private static readonly HashSet<string> PassiveWrapperFactories =
         new(StringComparer.Ordinal) { "Border" };
 
+    /// <summary>
+    /// A preprocessor directive line, matched so it can be blanked without moving any other line.
+    /// </summary>
+    /// <remarks>
+    /// The directive text is replaced with nothing rather than the line being removed, so every
+    /// following line keeps its index and a finding still reports the line it is really on.
+    /// </remarks>
+    private static readonly Regex Preprocessor = new(
+        @"^[ \t]*#[ \t]*(if|elif|else|endif|define|undef)\b[^\r\n]*",
+        RegexOptions.Compiled | RegexOptions.Multiline);
+
     public static AgentKitScan Scan(IEnumerable<AgentKitSnippet> snippets)
     {
         var findings = new List<AgentKitFinding>();
@@ -625,7 +637,18 @@ internal static class AgentKitSnippetWalker
             if (!MentionsAGatedModifier(snippet.Text))
                 continue;
 
-            var tree = CSharpSyntaxTree.ParseText(snippet.Text);
+            // Conditional compilation: `ParseText` uses the default symbol set, so an inactive
+            // branch survives only as DisabledTextTrivia and never reaches DescendantNodes — a
+            // sample inside `#if DEBUG` would ship unscanned, and the corpus already contains one
+            // (`skills/devtools.md`). Blanking the directive lines makes every branch ordinary
+            // text while keeping each remaining line at its original index, so reported line
+            // numbers stay right. Concatenated `#else` arms may not parse; that costs nothing,
+            // because an unresolvable chain is skipped rather than reported.
+            var text = Preprocessor.IsMatch(snippet.Text)
+                ? Preprocessor.Replace(snippet.Text, string.Empty)
+                : snippet.Text;
+
+            var tree = CSharpSyntaxTree.ParseText(text);
             var root = tree.GetRoot();
 
             foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
