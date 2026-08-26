@@ -14,10 +14,6 @@ This document lists WinUI Gallery controls, features, and XAML concepts that **c
 **WinUI:** System-level toast notifications via `AppNotificationManager`.
 **Reactor Alternative:** None. Toast notifications are OS-level APIs outside the UI tree. Call the `AppNotificationManager` API directly from hook callbacks or event handlers.
 
-### ConnectedAnimation
-**WinUI:** Fluid page-to-page element transitions using `ConnectedAnimationService`.
-**Reactor Alternative:** None. Connected animations require coordination between XAML pages and the composition layer. Not expressible in the current Reactor model.
-
 ### XamlDirect
 **WinUI:** Low-level API for high-performance XAML object creation bypassing the type system.
 **Reactor Alternative:** None. Reactor's reconciler already optimizes element creation; XamlDirect's perf benefits are subsumed by the virtual element tree.
@@ -62,6 +58,12 @@ This document lists WinUI Gallery controls, features, and XAML concepts that **c
 
 ## Visual Effects (Partial Support)
 
+### ConnectedAnimation
+**WinUI:** Fluid page-to-page element transitions using `ConnectedAnimationService`.
+**Reactor Alternative:** **Supported via `.ConnectedAnimation(key)`.** Put the same key on the element leaving the tree and the one entering it, in the same render; the reconciler snapshots the outgoing element and plays it into the incoming one. See the **Motion → Connected Animation** gallery page.
+
+One caveat: the reconciler cannot know which of several keyed siblings you activated, so it snapshots them all. The unpicked ones expire on WinUI's own timeout (about a second), during which they briefly overlap the new view. Keep the keyed set to the rows you actually navigate between if that overlap is distracting.
+
 ### ThemeAnimation / Storyboard
 **WinUI:** Declarative animations via `Storyboard`, `DoubleAnimation`, and theme transitions.
 **Reactor Alternative:** **Limited.** Reactor supports implicit theme transitions on supported properties. For custom animations, use `.Set()` to access the composition layer directly. No declarative animation DSL exists.
@@ -81,11 +83,11 @@ This document lists WinUI Gallery controls, features, and XAML concepts that **c
 | AppWindow (Multi-Window) | ❌ Not available | Multiple `ReactorHost` instances |
 | Clipboard APIs | ❌ Not available | Call `Clipboard` API directly |
 | FilePicker / FolderPicker | ❌ Not available | Call picker API directly |
-| ConnectedAnimation | ❌ Not available | No equivalent |
 | XamlDirect | ❌ Not needed | Reconciler handles perf |
 | DataTemplate | ✅ Replaced | C# functions |
 | x:Bind / {Binding} | ✅ Replaced | Hooks (`UseState`) |
 | VisualStateManager | ✅ Replaced | C# conditionals |
 | Styles / ResourceDictionary | ✅ Replaced | `Theme` API + `.Set()` |
 | ThemeAnimation / Storyboard | ⚠️ Limited | Implicit transitions, `.Set()` |
+| ConnectedAnimation | ✅ Supported | `.ConnectedAnimation(key)` |
 | Reveal / Composition | ⚠️ Partial | `AcrylicBrush()`, `.Set()` |
