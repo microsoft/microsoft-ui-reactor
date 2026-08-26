@@ -242,7 +242,9 @@ public class WinAppSDKReferenceGuardTests
     /// The version bootstrap reads out of <c>Directory.Build.props</c>. A regression here
     /// is silent in the worst way: a null version yields a null id, and a null id makes
     /// bootstrap skip the runtime check rather than misreport it. The commented-out case
-    /// is why this is parsed as XML rather than scraped with a regex.
+    /// is why this is parsed as XML rather than scraped with a regex; the conditional
+    /// case is why "unconditional" has to mean the whole ancestor chain, since MSBuild
+    /// convention puts <c>Condition</c> on the enclosing <c>PropertyGroup</c>.
     /// </summary>
     [Fact]
     public void Bootstrap_reads_the_pinned_SDK_version_from_props_ignoring_comments()
@@ -263,6 +265,21 @@ public class WinAppSDKReferenceGuardTests
                 </Project>
                 """);
 
+            // The decoy is unconditional on the element but sits in a conditional
+            // PropertyGroup, and comes last — so anything that only inspects the
+            // element's own attributes picks it.
+            var conditional = Path.Join(dir.FullName, "conditional.props");
+            File.WriteAllText(conditional, """
+                <Project>
+                  <PropertyGroup>
+                    <WindowsAppSDKVersion>2.1.3</WindowsAppSDKVersion>
+                  </PropertyGroup>
+                  <PropertyGroup Condition="'$(UseExperimental)' == 'true'">
+                    <WindowsAppSDKVersion>9.9.9</WindowsAppSDKVersion>
+                  </PropertyGroup>
+                </Project>
+                """);
+
             var missing = Path.Join(dir.FullName, "missing.props");
             File.WriteAllText(missing, "<Project><PropertyGroup /></Project>");
 
@@ -270,11 +287,13 @@ public class WinAppSDKReferenceGuardTests
                 root!,
                 $"[pscustomobject]@{{ "
                     + $"commented = [string](Get-PinnedWindowsAppSdkVersion -PropsPath '{withComment.Replace("\\", "\\\\")}'); "
+                    + $"conditional = [string](Get-PinnedWindowsAppSdkVersion -PropsPath '{conditional.Replace("\\", "\\\\")}'); "
                     + $"missing = [string](Get-PinnedWindowsAppSdkVersion -PropsPath '{missing.Replace("\\", "\\\\")}'); "
                     + $"absent = [string](Get-PinnedWindowsAppSdkVersion -PropsPath '{Path.Join(dir.FullName, "nope.props").Replace("\\", "\\\\")}') "
                     + "} | ConvertTo-Json -Compress");
 
             Assert.Equal("2.1.3", probe.RootElement.GetProperty("commented").GetString());
+            Assert.Equal("2.1.3", probe.RootElement.GetProperty("conditional").GetString());
             Assert.Equal(string.Empty, probe.RootElement.GetProperty("missing").GetString());
             Assert.Equal(string.Empty, probe.RootElement.GetProperty("absent").GetString());
         }

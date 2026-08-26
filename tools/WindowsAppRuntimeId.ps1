@@ -44,11 +44,13 @@ function Get-PinnedWindowsAppSdkVersion {
         definition cannot be mistaken for the live one, and so reformatting the
         element does not break the read.
 
-        Prefers the last definition that carries no Condition, falling back to
-        the last one seen. MSBuild's last-write-wins applies only among
-        assignments whose Condition evaluates true, and nothing here can
-        evaluate a Condition -- so an unconditional definition is the only one
-        this can be sure takes effect.
+        Prefers the last definition that carries no Condition -- on itself or on
+        any ancestor, since Condition is usually written on the enclosing
+        PropertyGroup rather than the property -- and falls back to the last one
+        seen. MSBuild's last-write-wins applies only among assignments whose
+        Condition evaluates true, and nothing here can evaluate a Condition, so
+        an unconditional definition is the only one this can be sure takes
+        effect.
 
         bootstrap.ps1 runs before the .NET SDK is guaranteed to be present, so
         evaluating the property with `dotnet msbuild -getProperty:` is not an
@@ -63,7 +65,15 @@ function Get-PinnedWindowsAppSdkVersion {
         $xml.Load($PropsPath)
         $nodes = @($xml.SelectNodes('//*[local-name()="WindowsAppSDKVersion"]'))
         if ($nodes.Count -gt 0) {
-            $unconditional = @($nodes | Where-Object { -not $_.GetAttribute('Condition') })
+            $unconditional = @($nodes | Where-Object {
+                $ancestor = $_
+                $conditional = $false
+                while ($null -ne $ancestor -and $ancestor.NodeType -eq [System.Xml.XmlNodeType]::Element) {
+                    if ($ancestor.GetAttribute('Condition')) { $conditional = $true; break }
+                    $ancestor = $ancestor.ParentNode
+                }
+                -not $conditional
+            })
             $chosen = if ($unconditional.Count -gt 0) { $unconditional[-1] } else { $nodes[-1] }
             $value = ([string]$chosen.InnerText).Trim()
             # An unexpanded $(...) reference cannot be resolved without a full
