@@ -273,7 +273,7 @@ public class AgentKitDocGateTests
         if (index < 0 || index >= lines.Count)
             return false;
 
-        if (IsCounterexampleLabel(CommentText(lines[index])))
+        if (IsCounterexampleLabel(CommentText(AgentKitDocCorpus.StripBlockquote(lines[index]).Content)))
             return true;
 
         // Walk up: first through the code above, then — once the opening fence is crossed — through
@@ -286,7 +286,12 @@ public class AgentKitDocGateTests
 
         for (var i = index - 1; i >= 0 && index - i <= 8; i--)
         {
-            var text = lines[i].Trim();
+            // Strip the blockquote container prefix, exactly as the fence scanner does. Without
+            // this the walk saw a raw `>` on `> ```csharp`, failed the fence test, and treated the
+            // opener as code — so `> Avoid this:` above a blockquoted sample stopped exempting it
+            // and a deliberately-marked counterexample failed CI. Adding blockquote support to the
+            // extractor without adding it here left the two disagreeing about the same document.
+            var text = AgentKitDocCorpus.StripBlockquote(lines[i]).Content.Trim();
             if (text.Length == 0)
                 continue;
 

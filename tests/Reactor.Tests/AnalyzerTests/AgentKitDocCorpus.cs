@@ -104,7 +104,7 @@ internal static class AgentKitDocCorpus
     private static readonly Regex BlockquotePrefix = new(@"^(?:[ \t]*(?:>[ \t]?)+)", RegexOptions.Compiled);
 
     /// <summary>Splits a line into its blockquote container prefix and the content inside it.</summary>
-    private static (int PrefixLength, string Content) StripBlockquote(string line)
+    internal static (int PrefixLength, string Content) StripBlockquote(string line)
     {
         var match = BlockquotePrefix.Match(line);
         return match.Success && match.Length > 0 ? (match.Length, line[match.Length..]) : (0, line);

@@ -713,6 +713,18 @@ internal static class AgentKitSnippetWalker
             return null;
 
         // A type-specific overload writes the element record directly and is always sound.
+        //
+        // Known imprecision, in the safe direction. This exempts the *element*, not the *call*, so
+        // it also covers a call that actually binds the generic modifier because no type-specific
+        // overload accepts its argument: RichTextBlockElement declares Foreground(string) and
+        // Foreground(Brush) but no ThemeRef overload, so `RichTextBlock(...).Foreground(Theme.X)`
+        // binds the generic one and REACTOR_MOD_003 does report it, while this returns null.
+        //
+        // Narrowing it needs the argument's type, which a syntax-only walk cannot have: refusing to
+        // exempt would report `RichTextBlock(...).Foreground("#fff")`, which binds type-specific and
+        // is correct. That trades a latent missed finding for a live false positive on valid
+        // documentation — the one outcome this gate must not produce. The shape does not occur in
+        // the corpus today; if it ever does, the fix is a semantic model, not a sharper guess.
         if (info.ElementTypes is { } elementTypes && elementTypes.Contains(element.Name, StringComparer.Ordinal))
             return null;
 

@@ -855,6 +855,50 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A counterexample label inside a blockquote marks the blockquoted sample below it.
+    /// </summary>
+    /// <remarks>
+    /// The extractor learned about blockquotes before the marker walk did, so the walk saw a raw
+    /// <c>&gt;</c> on <c>&gt; ```csharp</c>, failed its fence test and treated the opener as code —
+    /// meaning a deliberately marked counterexample failed CI. Two readers of the same document
+    /// disagreeing about its structure is its own defect class, so both sides strip the prefix now.
+    /// </remarks>
+    [Fact]
+    public void A_Blockquoted_Label_Marks_The_Blockquoted_Sample()
+    {
+        var marked = new[]
+        {
+            "> Avoid this:",
+            ">",
+            "> ```csharp",
+            "> FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(marked, 4));
+
+        // Negative control: the same blockquoted shape with ordinary prose must not exempt.
+        var unmarked = new[]
+        {
+            "> Here is how spacing works:",
+            ">",
+            "> ```csharp",
+            "> FlexColumn(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(unmarked, 4));
+
+        // And a blockquoted comment label works too.
+        var comment = new[]
+        {
+            "> ```csharp",
+            "> // Wrong: no effect",
+            "> FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(comment, 3));
+    }
+
+    /// <summary>
     /// Both facts require a marked counterexample to name its remedy.
     /// </summary>
     /// <remarks>
