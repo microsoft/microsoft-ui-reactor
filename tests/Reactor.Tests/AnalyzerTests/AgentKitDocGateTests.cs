@@ -364,6 +364,14 @@ public class AgentKitDocGateTests
                 continue;
             }
 
+            // Prose introducing the block, including a sibling list item's text. `- Avoid this:`
+            // above a `- ```csharp` item is one list making one point, and it is how these
+            // documents are actually written, so the label marks the sample. Stopping at the item
+            // boundary would report a deliberately labelled counterexample and fail CI on correct
+            // documentation — the failure mode this gate cannot afford. Over-reaching costs a
+            // missed finding instead, and it stays bounded: the walk gives up after eight lines or
+            // at the previous block's fence, whichever comes first, and an exemption still requires
+            // the document to name the remedy, so half-guidance is caught either way.
             if (IsCounterexampleLabel(Urls.Replace(text, " ")))
                 return true;
         }

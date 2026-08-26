@@ -1171,6 +1171,61 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A label in the preceding list item marks a sample in the next one — deliberately.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// `- Avoid this:` above a `- ```csharp` item is one list making one point, and it is how these
+    /// documents are written. Treating the item boundary as a barrier would report a labelled
+    /// counterexample and fail CI on correct documentation, which is the failure mode this gate
+    /// cannot afford; over-reaching costs a missed finding instead.
+    /// </para>
+    /// <para>
+    /// Pinned as a test rather than left implicit so the trade-off is a decision, not an accident.
+    /// It stays bounded by the eight-line budget and the previous block's fence, and an exemption
+    /// still requires the document to name the remedy.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void A_Label_In_The_Preceding_List_Item_Marks_The_Next_One()
+    {
+        var siblings = new[]
+        {
+            "- Avoid this:",
+            "- ```csharp",
+            "  FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(siblings, 3));
+
+        // The reach is bounded, not unlimited: an earlier block's fence ends the walk, so a label
+        // introducing *that* block cannot be borrowed by this one.
+        var previousBlock = new[]
+        {
+            "- Avoid this:",
+            "- ```csharp",
+            "  FlexColumn(children).Padding(16)",
+            "  ```",
+            "- ```csharp",
+            "  FlexRow(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(previousBlock, 6));
+
+        // Negative control: ordinary sibling prose must not exempt, or the first assertion is
+        // passing on reachability rather than on the label matching.
+        var unlabelled = new[]
+        {
+            "- Here is the layout:",
+            "- ```csharp",
+            "  FlexColumn(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(unlabelled, 3));
+    }
+
+    /// <summary>
     /// The remedy must be named at identifier boundaries, not as a substring of a longer name.
     /// </summary>
     /// <remarks>
