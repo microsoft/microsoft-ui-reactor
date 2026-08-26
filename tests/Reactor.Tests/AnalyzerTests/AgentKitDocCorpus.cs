@@ -379,7 +379,27 @@ internal static class AgentKitDocCorpus
     }
 
     /// <summary>A markdown list item marker: <c>- </c>, <c>* </c>, <c>+ </c> or <c>10. </c>.</summary>
-    private static readonly Regex ListItemMarker = new(@"^(?<indent>[ \t]*)([-*+]|\d+[.)])\s", RegexOptions.Compiled);
+    private static readonly Regex ListItemMarker = new(
+        @"^(?<indent>[ \t]*)(?<marker>[-*+]|\d+[.)])(?<pad>[ \t]+)",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// The content column a list item establishes, per CommonMark's padding rule.
+    /// </summary>
+    /// <remarks>
+    /// One to four spaces after the marker put the content at the marker's end plus that padding —
+    /// so <c>-    item</c> has content column 5, not 2. Five or more means the item's content
+    /// starts one space after the marker and the rest is indented code within it. Consuming a
+    /// single whitespace character reported column 2 for that item and rejected a fence three
+    /// spaces past its real content column as though it were literal.
+    /// </remarks>
+    private static int ContentColumn(Match marker)
+    {
+        var beforePad = marker.Groups["indent"].Length + marker.Groups["marker"].Length;
+        var padding = marker.Groups["pad"].Length;
+
+        return beforePad + (padding <= 4 ? padding : 1);
+    }
 
     /// <summary>
     /// The content column of the innermost list item containing <paramref name="index"/>, or
@@ -403,7 +423,7 @@ internal static class AgentKitDocCorpus
 
             var marker = ListItemMarker.Match(line);
             if (marker.Success)
-                return marker.Length;   // through the marker and its trailing whitespace.
+                return ContentColumn(marker);
 
             // Only an unindented line closes the container. Comparing against a hard-coded 4 was
             // wrong because content columns are marker-dependent: in `- item` / `  explanation`,

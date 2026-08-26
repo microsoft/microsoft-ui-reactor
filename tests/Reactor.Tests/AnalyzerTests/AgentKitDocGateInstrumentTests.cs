@@ -786,6 +786,21 @@ public class AgentKitDocGateInstrumentTests
             Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/tab.md", Tabbed)).Text);
 
         Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "```csharp\tlinenos");
+
+        // Marker padding sets the content column: `-    item` puts content at 5, so a fence eight
+        // spaces in is three past it and valid. Consuming a single space read the column as 2 and
+        // rejected it.
+        const string PaddedMarker = """
+            -    item
+
+                    ```csharp
+                    FlexColumn(children).FlexPadding(16)
+                    ```
+            """;
+
+        Assert.Equal(
+            "FlexColumn(children).FlexPadding(16)",
+            Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/padded.md", PaddedMarker)).Text);
     }
 
     /// <summary>
