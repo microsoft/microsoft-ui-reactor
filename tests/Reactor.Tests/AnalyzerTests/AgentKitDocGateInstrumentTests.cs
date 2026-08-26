@@ -867,6 +867,35 @@ public class AgentKitDocGateInstrumentTests
             "FlexColumn(children).FlexPadding(16)",
             Assert.Single(AgentKitDocCorpus.ExtractFences("fixture/maxpadded.md", MaxPaddedMarker)).Text);
         Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "-    ```csharp");
+
+        // A container marker four columns past its own container is indented code, not container
+        // syntax — the repository's CommonMark fixtures pin `    > # Foo` (Example_0230) and
+        // `    1.  A paragraph` (Example_0288) as literal text. Scanning those as samples can fail
+        // the gate on quoted prose, and the probe has to agree or it corroborates the same
+        // misclassification and the completeness fact reddens on a document that is correct.
+        const string DeepMarker = """
+            Some prose.
+
+                - ```csharp
+                  FlexColumn(children).Padding(16)
+                  ```
+            """;
+
+        Assert.Empty(AgentKitDocCorpus.ExtractFences("fixture/deepmarker.md", DeepMarker));
+        Assert.DoesNotMatch(AgentKitDocCorpus.CSharpFenceProbe, "    - ```csharp");
+        Assert.DoesNotMatch(AgentKitDocCorpus.CSharpFenceProbe, "    > ```csharp");
+
+        const string DeepQuote = """
+                > ```csharp
+                > FlexColumn(children).Padding(16)
+                > ```
+            """;
+
+        Assert.Empty(AgentKitDocCorpus.ExtractFences("fixture/deepquote.md", DeepQuote));
+
+        // Positive control at three columns, where both are still container syntax.
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "   - ```csharp");
+        Assert.Matches(AgentKitDocCorpus.CSharpFenceProbe, "   > ```csharp");
     }
 
     /// <summary>

@@ -81,10 +81,13 @@ internal static class AgentKitDocCorpus
     /// rather than trusting a floor.
     /// </para>
     /// <para>
-    /// Accepting arbitrary indentation slightly over-reads: four-space text outside any list is an
-    /// indented code block, so a literal <c>```csharp</c> there is content, not a fence. That
-    /// direction is the safe one — it inspects an extra snippet rather than skipping a real one —
-    /// and the corpus contains no such construct today.
+    /// Accepting arbitrary indentation before a bare fence slightly over-reads: four-space text
+    /// outside any list is an indented code block, so a literal <c>```csharp</c> there is content,
+    /// not a fence. That direction is the safe one — it inspects an extra snippet rather than
+    /// skipping a real one — and the corpus contains no such construct today. A leading <em>list
+    /// marker</em> is different: it is container syntax, and four columns of indent make it literal
+    /// text rather than a list (<c>Md4cCommonMarkSpecTest.Example_0288</c>), so the marker is
+    /// validated against its own container below instead of being taken from the line alone.
     /// </para>
     /// </remarks>
     private static readonly Regex FenceOpen = new(
@@ -94,17 +97,19 @@ internal static class AgentKitDocCorpus
     /// <summary>
     /// A blockquote container prefix: any run of <c>&gt;</c> markers with optional spacing.
     /// </summary>
+    /// <summary>
+    /// A single blockquote level: up to three columns of indent, a <c>&gt;</c>, and optional space.
+    /// </summary>
     /// <remarks>
-    /// Fences are legal inside a blockquote, and the prefix is container syntax rather than
-    /// content. Matching only whitespace before the delimiter skipped <c>&gt; ```csharp</c>
-    /// entirely — and <see cref="CSharpFenceProbe"/> shared the restriction, so the differential
-    /// oracle stayed green while the block went uninspected. The corpus has four blockquoted
-    /// fences today, all untagged shell, so this closes the gap before a C# one appears.
+    /// Four columns is an indented code block, not a container: the repository's own CommonMark
+    /// conformance fixture pins <c>    &gt; # Foo</c> as literal <c>&gt; # Foo</c> text
+    /// (<c>Md4cCommonMarkSpecTest.Example_0230</c>). Accepting any leading whitespace stripped that
+    /// prefix and scanned the literal as a real fence, so a gated modifier quoted inside one would
+    /// have failed the gate on text that is not a sample. <see cref="CSharpFenceProbe"/> shares the
+    /// limit, or it would corroborate the same misclassification. Zero instances in the corpus
+    /// today, measured; this closes the hole before one lands.
     /// </remarks>
-    private static readonly Regex BlockquotePrefix = new(@"^(?:[ \t]*(?:>[ \t]?)+)", RegexOptions.Compiled);
-
-    /// <summary>A single blockquote level: optional indent, a <c>&gt;</c>, and optional space.</summary>
-    private static readonly Regex BlockquoteLevel = new(@"^[ \t]*>[ \t]?", RegexOptions.Compiled);
+    private static readonly Regex BlockquoteLevel = new(@"^[ ]{0,3}>[ \t]?", RegexOptions.Compiled);
 
     /// <summary>
     /// Splits a line into its blockquote container prefix and the content inside it, removing at
@@ -159,12 +164,14 @@ internal static class AgentKitDocCorpus
     /// <remarks>
     /// Deliberately a different mechanism from <see cref="FenceOpen"/> rather than a second call to
     /// it: two derivations of the same number only corroborate each other when they can fail
-    /// independently. The one structural rule it does share is the marker's padding limit — five or
-    /// more spaces after a list marker make the rest indented code rather than a fence, and a probe
-    /// that accepted those would report literal text as an unscanned sample.
+    /// independently. The structural rules it does share are the container limits: a list marker
+    /// carries at most four columns of padding and sits at most three columns past its container,
+    /// and a blockquote prefix likewise — beyond those a line is indented code rather than a
+    /// container. A probe that accepted what the scanner rejects would report literal text as an
+    /// unscanned sample and fail the completeness fact on prose.
     /// </remarks>
     internal static readonly Regex CSharpFenceProbe = new(
-        @"^(?:[ \t]*(?:>[ \t]?)+)?[ \t]*(?:([-*+]|\d+[.)])[ \t]{1,4})?(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
+        @"^(?:[ ]{0,3}(?:>[ \t]?)+)?(?:[ ]{0,3}([-*+]|\d+[.)])[ \t]{1,4}|[ \t]*)(`{3,}|~{3,})[ ]*(csharp|cs|c\#)([ \t,][^\r\n]*)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -352,6 +359,14 @@ internal static class AgentKitDocCorpus
             // text, not a fence. Treating all the padding as list padding scanned it as a sample
             // and could fail the gate on prose.
             var inlineMarker = open.Groups["marker"];
+
+            // A marker four columns past its own container is indented code, not list syntax, so
+            // `    - ```csharp` at top level is literal text. Deriving the content column from the
+            // line alone read it as a list item and scanned the literal as a sample, which can fail
+            // the gate on quoted prose. Validate the marker against its container first.
+            if (inlineMarker.Success && indent - ContainerIndent(lines, i) > 3)
+                continue;
+
             var container = inlineMarker.Success
                 ? ContentColumn(open)
                 : ContainerIndent(lines, i);
