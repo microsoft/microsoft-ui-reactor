@@ -375,13 +375,25 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
 
         if (!proc.WaitForExit(TimeoutMs))
         {
+            // Every documented failure of Kill(entireProcessTree: true) is tolerable
+            // here — we are already reporting the timeout, and a probe we could not
+            // reap is not more informative than one we could. Caught individually
+            // rather than as Exception so a genuinely unexpected type still surfaces:
+            //   InvalidOperationException — already exited, or no associated process
+            //   Win32Exception           — could not be terminated, or is terminating
+            //   AggregateException       — part of the tree survived
             try
             {
                 proc.Kill(entireProcessTree: true);
             }
-            catch (global::System.Exception)
+            catch (global::System.InvalidOperationException)
             {
-                // Racing a process that just exited on its own is not a failure.
+            }
+            catch (global::System.ComponentModel.Win32Exception)
+            {
+            }
+            catch (global::System.AggregateException)
+            {
             }
 
             Assert.Fail(
