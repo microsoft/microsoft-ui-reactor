@@ -1305,6 +1305,32 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// An unresolvable written type stays unprovable, and unprovable does not exempt.
+    /// </summary>
+    /// <remarks>
+    /// Review proposed reading "matches no reflected parameter type" as "reference type, therefore
+    /// null", to cover an aliased <c>default(BrushAlias)</c>. It is declined: <c>Thickness</c> is
+    /// not among <c>Padding</c>'s reflected single-argument types either, so
+    /// <c>.Padding(default(Thickness))</c> takes the same path, and exempting it would lose a
+    /// value-typed-default finding that is real and already pinned. The alias shape does not occur
+    /// in documentation; the value-typed one does.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void An_Unresolvable_Written_Type_Stays_Unprovable()
+    {
+        Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Background", "BrushAlias"));
+
+        // The case that makes this the right trade: same path, and it must keep reporting.
+        Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Padding", "Thickness"));
+        Assert.Empty(ReactorSurface.Instance.SingleArgumentModifierTypes("Padding")
+            .Where(t => t.Name == "Thickness"));
+
+        // Control: a name that does resolve is still answered from the type.
+        Assert.True(ReactorSurface.Instance.DefaultIsProvablyNull("Background", "Brush"));
+    }
+
+    /// <summary>
     /// A label in the preceding list item marks a sample in the next one — deliberately.
     /// </summary>
     /// <remarks>

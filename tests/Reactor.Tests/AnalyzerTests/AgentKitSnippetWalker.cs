@@ -388,6 +388,13 @@ internal sealed class ReactorSurface
             return true;
 
         var matches = types.Where(t => string.Equals(t.Name, simpleName, StringComparison.Ordinal)).ToList();
+
+        // A name matching none of them stays unprovable, and unprovable never exempts. Review
+        // proposed reading "no match" as "reference type, therefore null", to cover an aliased
+        // `default(BrushAlias)`. That trades a tested true positive for a shape documentation does
+        // not contain: `Thickness` is not among Padding's reflected single-argument types, so
+        // `.Padding(default(Thickness))` reaches here too, and exempting it loses the very
+        // value-typed-default finding `Walker_Still_Reports_A_Value_Typed_Default` pins.
         return matches.Count > 0 && matches.All(IsNullable);
     }
 
