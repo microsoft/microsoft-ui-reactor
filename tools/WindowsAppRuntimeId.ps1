@@ -42,8 +42,13 @@ function Get-PinnedWindowsAppSdkVersion {
     .DESCRIPTION
         Parsed as XML rather than scraped with a regex so a commented-out
         definition cannot be mistaken for the live one, and so reformatting the
-        element does not break the read. MSBuild is last-write-wins, so the last
-        unconditional definition is the effective one.
+        element does not break the read.
+
+        Prefers the last definition that carries no Condition, falling back to
+        the last one seen. MSBuild's last-write-wins applies only among
+        assignments whose Condition evaluates true, and nothing here can
+        evaluate a Condition -- so an unconditional definition is the only one
+        this can be sure takes effect.
 
         bootstrap.ps1 runs before the .NET SDK is guaranteed to be present, so
         evaluating the property with `dotnet msbuild -getProperty:` is not an

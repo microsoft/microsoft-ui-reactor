@@ -7,15 +7,18 @@
 
     WindowsAppSDKSelfContained default is `false` — the framework, its
     samples, and the perf benches all consume the *installed* Windows App
-    Runtime (the `Microsoft.WindowsAppRuntime.<major>` winget package,
-    installed via bootstrap.ps1, which derives the id from the version
-    below) rather than bundling a copy of the runtime
+    Runtime rather than bundling a copy of the runtime
     into every build output. Projects that genuinely need a standalone
     deployable set `WindowsAppSDKSelfContained=true` explicitly in their
     own csproj — the user-facing scaffolded template, the AOT publish
     proofs, and the in-process test hosts (Reactor.Tests,
     Reactor.AppTests.Host, etc.) that load WinUI activation factories
     before any bootstrapper has run.
+
+    bootstrap.ps1 installs that runtime, deriving its winget id from the
+    version below via tools/WindowsAppRuntimeId.ps1. Which package that is
+    depends on the SDK generation, so see that file rather than assuming a
+    shape here.
   -->
   <PropertyGroup>
     <WindowsAppSDKVersion>2.1.3</WindowsAppSDKVersion>

@@ -75,8 +75,20 @@ function Invoke-HostScript {
     $ErrorActionPreference = 'Continue'
     & $hostExe @Arguments 2>&1 | Out-Null
     # Surface the child's status to the caller: `| Out-Null` does not disturb
-    # $LASTEXITCODE, and the -MSBuildPath case below asserts on it.
+    # $LASTEXITCODE, and the -MSBuildPath cases below assert on it.
     $global:LASTEXITCODE = $LASTEXITCODE
+}
+
+# Same, but returns what the child wrote. Needed where the exit code alone
+# cannot discriminate: a rejected -MSBuildPath and a -MSBuildPath that was
+# wrongly accepted and then failed on invocation both exit 1, so only the
+# validation message distinguishes them.
+function Invoke-HostScriptCapturingOutput {
+    param([string[]]$Arguments)
+    $ErrorActionPreference = 'Continue'
+    $out = & $hostExe @Arguments 2>&1 | Out-String
+    $global:LASTEXITCODE = $LASTEXITCODE
+    return $out
 }
 
 # Invokes the real Build-Vsix.ps1 against a fake MSBuild and returns the
@@ -188,25 +200,39 @@ try {
             '-NuGetSource reaches MSBuild as RestoreSources'
     }
 
-    # -- 3b. A bad -MSBuildPath fails before anything is invoked. --
-    # The discriminating part is that the stub is NOT reached: without the guard the
-    # script would try to execute a nonexistent program instead of reporting it.
-    $missingMsBuild = Join-Path $tmp 'no-such-msbuild.cmd'
-    $badPathCapture = Join-Path $tmp ("msbuild-args-badpath-" + [Guid]::NewGuid().ToString('N') + ".txt")
-    $env:REACTOR_TEST_ARGS_FILE = $badPathCapture
-    try {
-        Invoke-HostScript -Arguments @(
-            '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-            '-File', $buildVsix,
-            '-MSBuildPath', $missingMsBuild
-        )
-        $badPathExit = $LASTEXITCODE
-    } finally {
-        $env:REACTOR_TEST_ARGS_FILE = $originalArgsFile
+    # -- 3b. A bad -MSBuildPath is rejected by validation, not by failing later. --
+    # The exit code alone proves nothing here: an accepted-then-uninvokable path also
+    # exits 1. The discriminating oracle is the validation message plus the stub never
+    # being reached. The directory case is separate because a bare Test-Path accepts a
+    # directory, which would then be invoked as a command and fail far less legibly.
+    foreach ($case in @(
+            @{ Label = 'missing file'; Path = (Join-Path $tmp 'no-such-msbuild.cmd') },
+            @{ Label = 'directory';    Path = $tmp })) {
+        $badPathCapture = Join-Path $tmp ("msbuild-args-badpath-" + [Guid]::NewGuid().ToString('N') + ".txt")
+        $env:REACTOR_TEST_ARGS_FILE = $badPathCapture
+        try {
+            $badPathOutput = Invoke-HostScriptCapturingOutput -Arguments @(
+                '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                '-File', $buildVsix,
+                '-MSBuildPath', $case.Path
+            )
+            $badPathExit = $LASTEXITCODE
+        } finally {
+            $env:REACTOR_TEST_ARGS_FILE = $originalArgsFile
+        }
+        Assert-Equal 1 $badPathExit "-MSBuildPath rejects a $($case.Label) with exit 1"
+        # Compare with whitespace and box-drawing pipes stripped: pwsh renders
+        # Write-Error inside a wrapped `|` gutter that can split the sentence at any
+        # column, and 5.1 uses a different layout again. Matching the raw text would
+        # be a test of the host's formatter, not of the validation.
+        $compactOutput = $badPathOutput -replace '[\s|]+', ''
+        Assert-True ($compactOutput -match 'isnotanexistingfile') `
+            "-MSBuildPath rejects a $($case.Label) in validation, not by failing later"
+        Assert-True ($compactOutput -match [regex]::Escape(($case.Path -replace '[\s|]+', ''))) `
+            "-MSBuildPath validation names the offending path for a $($case.Label)"
+        Assert-Equal $false (Test-Path -LiteralPath $badPathCapture) `
+            "-MSBuildPath rejects a $($case.Label) before invoking any build"
     }
-    Assert-Equal 1 $badPathExit '-MSBuildPath pointing at a missing file exits 1'
-    Assert-Equal $false (Test-Path -LiteralPath $badPathCapture) `
-        '-MSBuildPath validation rejects before invoking any build'
 
     # -- 4. Reinstall-Vsix.ps1 forwards the feed to Build-Vsix.ps1. --
     # Run a copy of the shipped script beside a stub Build-Vsix.ps1 that records

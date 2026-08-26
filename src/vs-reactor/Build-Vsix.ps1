@@ -43,8 +43,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ($MSBuildPath) {
-    if (-not (Test-Path -LiteralPath $MSBuildPath)) {
-        Write-Error "-MSBuildPath '$MSBuildPath' does not exist."
+    # -PathType Leaf: a directory satisfies a bare Test-Path and would then be
+    # invoked as a command, failing later with something far less obvious.
+    if (-not (Test-Path -LiteralPath $MSBuildPath -PathType Leaf)) {
+        Write-Error "-MSBuildPath '$MSBuildPath' is not an existing file."
         exit 1
     }
     $msbuild = $MSBuildPath
