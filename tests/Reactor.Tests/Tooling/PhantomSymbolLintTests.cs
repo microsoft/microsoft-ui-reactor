@@ -380,6 +380,32 @@ public sealed class PhantomSymbolLintTests
     public void Silent_OnRealMicrosoftUiNamespaces(string line) =>
         Assert.Empty(LintExample(line));
 
+    /// <summary>
+    /// Expression-shaped single arguments. The identifier arm demands a ')'
+    /// straight after the name, so every one of these slipped through on the
+    /// uncompiled surfaces the gate exists to protect.
+    /// </summary>
+    [Theory]
+    [InlineData("var e = Text(GetLabel());")]
+    [InlineData("var e = Text(items[0]);")]
+    [InlineData("var e = Text(model.Name ?? \"\");")]
+    [InlineData("return Text(vm.Title());")]
+    public void Fires_OnExpressionShapedArguments(string line) =>
+        Assert.Contains(LintExample(line), f => f.Message.Contains("'Text'"));
+
+    /// <summary>
+    /// …and the widening must not reopen the prose class. Each of these is
+    /// identifier-led only in the English sense; none is followed by '(', '['
+    /// or '??', which is exactly what the new arms require.
+    /// </summary>
+    [Theory]
+    [InlineData("Text (the element) is set separately.")]
+    [InlineData("Placeholder text (for TextBoxElement etc.) is set separately.")]
+    [InlineData("var e = D3Charts.Text(16, 16, \"hi\");")]
+    [InlineData("var e = CellRenderers.Text(row);")]
+    public void Silent_OnProseAndQualifiedMembersAfterWidening(string line) =>
+        Assert.Empty(LintExample(line));
+
     [Fact]
     public void PhantomTable_IsPopulatedAndDistinct()
     {

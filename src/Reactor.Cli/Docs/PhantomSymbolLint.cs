@@ -106,8 +106,22 @@ internal static class PhantomSymbolLint
         // that (b) alone missed, so the budget gate did not hold it. A lone
         // identifier argument cannot be D3Charts.Text, which takes x, y and
         // text positionally, so requiring the closing paren keeps that excluded.
+        //
+        // The last three alternatives cover expression-shaped single arguments
+        // — `Text(GetLabel())`, `Text(items[0])`, `Text(model.Name ?? "")` —
+        // which the identifier arm misses because it demands a ')' immediately
+        // after the identifier. Every one of them is still identifier-led, which
+        // is what keeps English prose out: "Text (the element)" fails all three
+        // because "the" is followed by a space, not '(', '[' or '??'.
         new("Text",
-            new Regex(@"(?<![A-Za-z0-9_.])Text\s*\(\s*(?:(?:\$|@)?(?:\\""|""""|"")|[A-Za-z_][A-Za-z0-9_.]*\s*\))", RegexOptions.Compiled),
+            new Regex(
+                @"(?<![A-Za-z0-9_.])Text\s*\(\s*(?:" +
+                @"(?:\$|@)?(?:\\""|""""|"")" +          // "s", \"s\", ""s""
+                @"|[A-Za-z_][A-Za-z0-9_.]*\s*\)" +      // Text(statusMessage)
+                @"|[A-Za-z_][A-Za-z0-9_.]*\s*\(" +      // Text(GetLabel())
+                @"|[A-Za-z_][A-Za-z0-9_.]*\s*\[" +      // Text(items[0])
+                @"|[A-Za-z_][A-Za-z0-9_.]*\s*\?\?" +    // Text(model.Name ?? "")
+                @")", RegexOptions.Compiled),
             "TextBlock(...)"),
 
         // UseTheme: no such hook. Theme values are read from the Theme statics.

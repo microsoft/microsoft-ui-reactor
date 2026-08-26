@@ -344,9 +344,17 @@ internal static partial class CompileCommand
         // inlined each snippet= block, so one pass covers both the bare
         // ```csharp blocks that live in the template and the example code that
         // comes from a doc app's App.cs (including code carried inside string
-        // literals, which the C# compiler never validates). Only fenced code is
-        // linted, so prose that names a phantom in order to warn against it
-        // stays silent. Same Warning-on-roll-out staging as the cross-link lint.
+        // literals, which the C# compiler never validates). Fenced blocks are
+        // linted whole; outside a fence only inline code spans are, since code
+        // formatting in prose reads as an endorsement. Plain prose is never
+        // linted, so a sentence that names a phantom in order to warn against it
+        // stays silent — and where it must show the phantom in code formatting,
+        // <!-- phantom:skip "Name" --> scopes an opt-out to that paragraph.
+        // Unlike the cross-link lint this reports at Error and fails --ci:
+        // Warning was tried first and did not gate CI, which let new rot land
+        // green. The pre-existing backlog stays passing through the
+        // per-(file, phantom) ceiling budget in Reactor.Tests, not a blanket
+        // suppression.
         Console.WriteLine();
         Console.WriteLine("═══ Phantom API Lint ═══");
         var phantomFindings = new List<PhantomFinding>();
