@@ -870,6 +870,17 @@ internal static class AgentKitSnippetWalker
             if (HasWithMutation(invocation))
                 continue;
 
+            // The remedy deletes the wrapper, which reparents the inner element. Modifiers on the
+            // *inner* chain that are interpreted by the parent — `.Flex`, `.Grid`, `.Dock` and the
+            // alignment family — then resolve against a different container than they were written
+            // for: in `Border(FlexColumn(children).Flex(grow: 1)).Padding(16)` the `.Flex` is inert
+            // inside the Border and starts driving layout once it is gone. Suppress rather than
+            // recommend a fix that is not behaviour-preserving. Reusing the relocation allowlist
+            // keeps one table for "modifiers whose meaning depends on the parent", and the #1119
+            // shape is unaffected — its inner chain carries a `with` initializer, not modifiers.
+            if (ModifiersFrom(wrapperArguments[0].Expression).Any(IsRelocatable))
+                continue;
+
             return new AgentKitFinding(
                 AgentKitFindingKind.WrapperWorkaround,
                 Path: string.Empty,
@@ -977,9 +988,21 @@ internal static class AgentKitSnippetWalker
 
     /// <summary>Every modifier applied anywhere on the fluent chain this invocation belongs to.</summary>
     private static IEnumerable<(string Name, InvocationExpressionSyntax Invocation)> ChainModifiers(
-        InvocationExpressionSyntax invocation)
+        InvocationExpressionSyntax invocation) =>
+        ModifiersFrom(Outermost(invocation));
+
+    /// <summary>
+    /// Every modifier from <paramref name="start"/> inward, without first climbing out of the chain.
+    /// </summary>
+    /// <remarks>
+    /// The inner expression of a wrapper is already the outermost node of its own chain, and
+    /// <see cref="Outermost"/> would walk straight back out of it into the wrapper's chain — so a
+    /// check meant to inspect the wrapped element would have re-read the wrapper's modifiers.
+    /// </remarks>
+    private static IEnumerable<(string Name, InvocationExpressionSyntax Invocation)> ModifiersFrom(
+        SyntaxNode? start)
     {
-        for (var node = Outermost(invocation); node is not null;)
+        for (var node = start; node is not null;)
         {
             if (node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access } chained)
             {

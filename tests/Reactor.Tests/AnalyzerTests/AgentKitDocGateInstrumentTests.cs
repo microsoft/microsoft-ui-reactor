@@ -961,6 +961,14 @@ public class AgentKitDocGateInstrumentTests
     [InlineData("Border(FlexColumn(children)).Padding(16).OnMount(fe => Configure(fe))", false)]
     [InlineData("Border(FlexColumn(children)).Padding(16).Ref(borderRef)", false)]
     [InlineData("Border(FlexColumn(children)).Padding(16).ApplyStyle(\"CardStyle\")", false)]
+    // Parent-relative modifiers on the *inner* chain: deleting the wrapper reparents that element,
+    // so a `.Flex` that is inert inside the Border starts driving layout once it is gone. The
+    // remedy is not behaviour-preserving, so it is not recommended.
+    [InlineData("Border(FlexColumn(children).Flex(grow: 1)).Padding(16)", false)]
+    [InlineData("Border(FlexColumn(children).Dock(Dock.Top)).Padding(16)", false)]
+    [InlineData("Border(FlexColumn(children).Margin(8)).Padding(16)", false)]
+    // ...but an inner modifier the parent does not interpret leaves the remedy sound.
+    [InlineData("Border(FlexColumn(children).Background(brush)).Padding(16)", true)]
     public void Only_Relocatable_Modifiers_Leave_A_Wrapper_Removable(string snippet, bool reported)
     {
         var scan = AgentKitSnippetWalker.Scan(new[] { new AgentKitSnippet("fixture/relocatable.md", 1, snippet) });
