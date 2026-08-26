@@ -446,22 +446,16 @@ internal static class PhantomSymbolLint
             .Where(m => m.Index < firstLineLength)
             .Select(m => m.Index + m.Length - 1);
 
-        var candidateArguments = openerIndices
+        // `Text(...)` / `Text(…)` is the universal "arguments elided" doc
+        // convention, not a call — it is the shape prose uses to *name* a
+        // signature. Treating it as an invocation would fire on every signature
+        // mention in the docset, including the sentences warning against this
+        // very phantom. Prose is excluded by the adjacency rule below it.
+        return openerIndices
             .Select(open => ExtractSingleArgument(text, open))
-            .Where(arg => arg is not null && arg.Trim().Length > 0);
-
-        foreach (var arg in candidateArguments)
-        {
-            // `Text(...)` / `Text(…)` is the universal "arguments elided" doc
-            // convention, not a call — it is the shape prose uses to *name* a
-            // signature. Treating it as an invocation would fire on every
-            // signature mention in the docset, including the sentences warning
-            // against this very phantom.
-            if (IsElidedArgument(arg!)) continue;
-            if (HasAdjacentIdentifiers(arg!)) continue;
-            return true;
-        }
-        return false;
+            .Where(arg => arg is not null && arg.Trim().Length > 0)
+            .Where(arg => !IsElidedArgument(arg!))
+            .Any(arg => !HasAdjacentIdentifiers(arg!));
     }
 
     private static readonly Regex TextCallOpener = new(
