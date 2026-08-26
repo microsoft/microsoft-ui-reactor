@@ -327,7 +327,7 @@
       "id": "security-batch-2",
       "agent": "security",
       "files": [
-        "Reactor.Cli/Loc/AzureOpenAiProvider.cs",
+        "Reactor.Cli/Loc/CopilotTranslationProvider.cs",
         "Reactor.Cli/Loc/ExtractCommand.cs",
         "Reactor.Cli/Loc/TranslateCommand.cs",
         "Reactor.Cli/Loc/TranslationPrompt.cs",
@@ -1064,7 +1064,7 @@
         "Reactor.Cli/Loc/ExtractCommand.cs",
         "Reactor.Cli/Loc/TranslateCommand.cs",
         "Reactor.Cli/Loc/TranslationPrompt.cs",
-        "Reactor.Cli/Loc/AzureOpenAiProvider.cs",
+        "Reactor.Cli/Loc/CopilotTranslationProvider.cs",
         "Reactor.Cli/Loc/ITranslationProvider.cs"
       ],
       "description": "CLI entry point and localization commands"
