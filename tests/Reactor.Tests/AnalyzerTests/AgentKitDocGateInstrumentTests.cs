@@ -1009,6 +1009,55 @@ public class AgentKitDocGateInstrumentTests
     }
 
     /// <summary>
+    /// A label in a <em>deeper</em> blockquote does not mark a sample in the container around it.
+    /// </summary>
+    /// <remarks>
+    /// The walk stripped every quote level before matching, so <c>&gt; &gt; Avoid this:</c> read as
+    /// an ordinary label and exempted the parent quote's sample below it. That nested line belongs
+    /// to its own container and introduces its own example; borrowing it silently suppressed a real
+    /// finding one level out — the mirror of the depth bookkeeping the fence scanner already does.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "AgentKitDocGate")]
+    public void A_Deeper_Blockquoted_Label_Does_Not_Mark_The_Enclosing_Sample()
+    {
+        var nested = new[]
+        {
+            "> > Avoid this:",
+            ">",
+            "> ```csharp",
+            "> FlexColumn(children).Padding(16)",
+        };
+
+        Assert.False(AgentKitDocGateTests.IsMarkedAt(nested, 4));
+
+        // Positive control: the identical shape with the label at the sample's own depth must
+        // exempt, so the assertion above fails on the depth test rather than on the walk being
+        // unable to reach that line at all.
+        var sameDepth = new[]
+        {
+            "> Avoid this:",
+            ">",
+            "> ```csharp",
+            "> FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(sameDepth, 4));
+
+        // A shallower label still counts: it encloses the quote, so it does introduce what is
+        // inside it. Exempting is the safe direction for an ambiguous container boundary.
+        var shallower = new[]
+        {
+            "Avoid this:",
+            "",
+            "> ```csharp",
+            "> FlexColumn(children).Padding(16)",
+        };
+
+        Assert.True(AgentKitDocGateTests.IsMarkedAt(shallower, 4));
+    }
+
+    /// <summary>
     /// A nested blockquote inside a quoted fence does not close it.
     /// </summary>
     /// <remarks>

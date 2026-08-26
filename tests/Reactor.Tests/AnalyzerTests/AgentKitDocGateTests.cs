@@ -287,6 +287,10 @@ public class AgentKitDocGateTests
         if (IsCounterexampleLabel(CommentText(AgentKitDocCorpus.StripBlockquote(lines[index]).Content)))
             return true;
 
+        // The sample's own blockquote depth. A marker speaks for it only from the same container or
+        // one enclosing it; `> > Avoid this:` introduces the nested quote's example, not the parent's.
+        var depth = AgentKitDocCorpus.BlockquoteDepth(lines[index]);
+
         // Walk up: first through the code above, then — once the opening fence is crossed — through
         // the markdown that introduces the block. Whether the fence has been crossed is tracked
         // rather than inferred from each line's shape, because a lead-in is often an ordinary
@@ -302,7 +306,15 @@ public class AgentKitDocGateTests
             // opener as code — so `> Avoid this:` above a blockquoted sample stopped exempting it
             // and a deliberately-marked counterexample failed CI. Adding blockquote support to the
             // extractor without adding it here left the two disagreeing about the same document.
-            var text = AgentKitDocCorpus.StripBlockquote(lines[i]).Content.Trim();
+            //
+            // Depth is part of that agreement. Stripping every level made a line in a *deeper*
+            // quote readable as a label for a shallower sample, so nested guidance could silently
+            // exempt an unrelated finding one container out. Skip those; a shallower line still
+            // counts, because a lead-in outside the quote does introduce the sample inside it.
+            if (AgentKitDocCorpus.BlockquoteDepth(lines[i]) > depth)
+                continue;
+
+            var text = AgentKitDocCorpus.StripBlockquote(lines[i], depth).Content.Trim();
             if (text.Length == 0)
                 continue;
 

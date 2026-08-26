@@ -134,7 +134,7 @@ internal static class AgentKitDocCorpus
     }
 
     /// <summary>Number of blockquote levels a line opens with.</summary>
-    private static int BlockquoteDepth(string line)
+    internal static int BlockquoteDepth(string line)
     {
         var offset = 0;
         var depth = 0;
