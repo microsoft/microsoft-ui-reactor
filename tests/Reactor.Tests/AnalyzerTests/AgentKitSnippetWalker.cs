@@ -679,9 +679,10 @@ internal static class AgentKitSnippetWalker
     /// </para>
     /// <para>
     /// Linear in the number of arms rather than exponential in the number of blocks, so a snippet
-    /// cannot make this expensive. Nesting is not modelled: an inner block's arms are treated as
-    /// arms of the enclosing one, which over-produces variants but never drops a line from all of
-    /// them, and unparseable text yields no resolvable chain rather than a finding.
+    /// cannot make this expensive. Nesting is tracked with a parent chain: a variant keeps its own
+    /// arm and every arm enclosing it, so an outer arm's chain head stays together with an inner
+    /// arm's body. Numbering them flat instead reset to the unconditional arm at every inner
+    /// <c>#endif</c>, and no variant then held both halves of such a chain.
     /// </para>
     /// </remarks>
     private static IEnumerable<(string Text, bool IsPrimary)> ConditionalVariants(string text)
@@ -693,40 +694,69 @@ internal static class AgentKitSnippetWalker
         }
 
         var lines = text.Split('\n');
-        var arm = new int[lines.Length];
-        var current = 0;
-        var arms = 0;
+        var lineArm = new int[lines.Length];
+        var parent = new List<int> { 0 };
+        var open = new Stack<int>();
 
         for (var i = 0; i < lines.Length; i++)
         {
             var directive = Preprocessor.Match(lines[i]);
             if (directive.Success)
             {
-                var kind = directive.Groups[1].Value;
-                current = kind is "endif" or "define" or "undef" ? 0 : ++arms;
-                arm[i] = -1;    // the directive line itself belongs to no arm.
+                switch (directive.Groups[1].Value)
+                {
+                    case "if":
+                        parent.Add(open.Count > 0 ? open.Peek() : 0);
+                        open.Push(parent.Count - 1);
+                        break;
+
+                    case "elif":
+                    case "else":
+                        // A sibling arm of the same block: same parent, new identity.
+                        var enclosing = open.Count > 0 ? parent[open.Pop()] : 0;
+                        parent.Add(enclosing);
+                        open.Push(parent.Count - 1);
+                        break;
+
+                    case "endif":
+                        if (open.Count > 0)
+                            open.Pop();
+
+                        break;
+                }
+
+                lineArm[i] = -1;    // the directive line itself belongs to no arm.
                 continue;
             }
 
-            arm[i] = current;
+            lineArm[i] = open.Count > 0 ? open.Peek() : 0;
         }
 
-        yield return (Keep(lines, arm, 0), true);
+        yield return (Keep(lines, lineArm, parent, 0), true);
 
-        for (var a = 1; a <= arms; a++)
-            yield return (Keep(lines, arm, a), false);
+        for (var a = 1; a < parent.Count; a++)
+            yield return (Keep(lines, lineArm, parent, a), false);
     }
 
     /// <summary>
-    /// The snippet with only <paramref name="keep"/>'s arm retained, other arms and all directive
-    /// lines blanked so each remaining line keeps its index.
+    /// The snippet with <paramref name="keep"/>'s arm and every arm enclosing it retained, other
+    /// arms and all directive lines blanked so each remaining line keeps its index.
     /// </summary>
-    private static string Keep(string[] lines, int[] arm, int keep)
+    private static string Keep(string[] lines, int[] lineArm, List<int> parent, int keep)
     {
+        var selected = new HashSet<int>();
+
+        for (var a = keep; ; a = parent[a])
+        {
+            selected.Add(a);
+            if (a == 0)
+                break;
+        }
+
         var kept = new string[lines.Length];
 
         for (var i = 0; i < lines.Length; i++)
-            kept[i] = arm[i] == 0 || arm[i] == keep ? lines[i] : string.Empty;
+            kept[i] = lineArm[i] >= 0 && selected.Contains(lineArm[i]) ? lines[i] : string.Empty;
 
         return string.Join("\n", kept);
     }
@@ -798,17 +828,20 @@ internal static class AgentKitSnippetWalker
                     var line = LineOf(tree, snippet, access.Name);
                     var chainStart = LineOf(tree, snippet, invocation);
 
-                    // The same unconditional line is reached by every variant; report it once.
-                    if (!seen.Add((snippet.Path, line, modifier, element.FullName)))
-                        continue;
-
+                    // The same unconditional line is reached by every variant; report it once. Recorded
+                    // only when something is actually emitted — keying it here regardless let a
+                    // silent variant reserve the key and mask a real finding at the same line in a
+                    // later arm.
                     if (DroppedModifier(element, modifier, info) is { } dropped)
                     {
-                        findings.Add(dropped with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
+                        if (seen.Add((snippet.Path, line, modifier, element.FullName)))
+                            findings.Add(dropped with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
+
                         continue;
                     }
 
-                    if (WrapperWorkaround(element, head.Value.Factory, head.Value.Arguments, modifier, invocation) is { } wrapper)
+                    if (WrapperWorkaround(element, head.Value.Factory, head.Value.Arguments, modifier, invocation) is { } wrapper
+                        && seen.Add((snippet.Path, line, modifier, element.FullName)))
                         findings.Add(wrapper with { Path = snippet.Path, Line = line, ChainStartLine = chainStart });
                 }
             }

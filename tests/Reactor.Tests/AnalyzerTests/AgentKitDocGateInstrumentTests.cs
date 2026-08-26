@@ -1302,6 +1302,46 @@ public class AgentKitDocGateInstrumentTests
 
         var inElse = Assert.Single(branches.Of(AgentKitFindingKind.DroppedModifier));
         Assert.Equal(4, inElse.Line);
+
+        // A silent arm must not reserve the de-duplication key for a later one. Here the same
+        // outer line resolves to a Border in the first arm — legal, no finding — and to a
+        // FlexColumn in the `#else`, where it is a real violation.
+        var masked = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet(
+                "fixture/masked.md",
+                1,
+                "#if DEBUG\nvar a = Border(child).Padding(16);\n#else\nvar a = FlexColumn(children).Padding(16);\n#endif"),
+        });
+
+        Assert.Equal(4, Assert.Single(masked.Of(AgentKitFindingKind.DroppedModifier)).Line);
+
+        // Nesting keeps an outer arm's chain head together with an inner arm's body. The chain only
+        // resolves if both are present: the wrapper opens in the outer arm, its child is in the
+        // inner one, and the modifier follows the inner `#endif`. Numbering arms flat reset to the
+        // unconditional arm there, so no variant held all three.
+        var nested = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet(
+                "fixture/nested.md",
+                1,
+                "#if OUTER\nvar a = Border(\n#if INNER\n    FlexColumn(children)\n#endif\n).Padding(16);\n#endif"),
+        });
+
+        Assert.Single(nested.Of(AgentKitFindingKind.WrapperWorkaround));
+
+        // An unconditional line is scanned by every variant, so it must still be reported once.
+        // Without de-duplication this snippet yields the same finding twice — once for the
+        // arm-free variant and once for the arm.
+        var shared = AgentKitSnippetWalker.Scan(new[]
+        {
+            new AgentKitSnippet(
+                "fixture/shared.md",
+                1,
+                "var a = FlexColumn(children).Padding(16);\n#if DEBUG\nvar b = 1;\n#endif"),
+        });
+
+        Assert.Equal(1, Assert.Single(shared.Of(AgentKitFindingKind.DroppedModifier)).Line);
     }
 
     /// <summary>
