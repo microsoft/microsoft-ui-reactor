@@ -115,8 +115,10 @@ public class CliHelpNamingTests
     {
         var origOut = Console.Out;
         var origErr = Console.Error;
-        var outWriter = new StringWriter();
-        var errWriter = new StringWriter();
+        // Disposed at method exit, i.e. after the finally below has already
+        // restored Console — so the console never holds a disposed writer.
+        using var outWriter = new StringWriter();
+        using var errWriter = new StringWriter();
         Console.SetOut(outWriter);
         Console.SetError(errWriter);
         try
