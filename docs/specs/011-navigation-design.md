@@ -704,34 +704,49 @@ public abstract record NavigationTransition
     public static NavigationTransition Entrance()
         => new EntranceTransition();
 
-    /// <summary>Slide in from a direction.</summary>
+    /// <summary>
+    /// Slide in from a direction. With no arguments this is WinUI's slide specification;
+    /// supplying duration, easing, or distance selects Reactor's customizable slide.
+    /// </summary>
     public static NavigationTransition Slide(
         SlideDirection direction = SlideDirection.FromBottom,
         TimeSpan? duration = null,
-        CompositionEasingFunction? easing = null)
-        => new SlideTransition(direction, duration, easing);
+        CompositionEasingFunction? easing = null,
+        float? distance = null)
+        => new SlideTransition
+        {
+            Direction = direction,
+            Duration = duration,
+            Easing = easing,
+            Distance = distance,
+        };
 
     /// <summary>Crossfade between old and new content.</summary>
     public static NavigationTransition Fade(TimeSpan? duration = null)
-        => new FadeTransition(duration);
+        => new FadeTransition { Duration = duration };
 
     /// <summary>Drill in (scale up from center) for hierarchical navigation.</summary>
     public static NavigationTransition DrillIn(TimeSpan? duration = null)
-        => new DrillInTransition(duration);
+        => new DrillInTransition { Duration = duration };
 
     /// <summary>Connected animation: shared element transitions between pages.</summary>
     public static NavigationTransition Connected(string animationKey)
-        => new ConnectedTransition(animationKey);
+        => new ConnectedTransition { AnimationKey = animationKey };
 
     /// <summary>
     /// Spring-based slide with configurable physics. A Reactor extension with no WinUI
     /// counterpart, so it keeps a horizontal default rather than following Slide's.
     /// </summary>
     public static NavigationTransition Spring(
-        float dampingRatio = 0.7f,
-        float period = 0.15f,
+        float dampingRatio = 0.6f,
+        float period = 0.08f,
         SlideDirection direction = SlideDirection.FromRight)
-        => new SpringSlideTransition(dampingRatio, period, direction);
+        => new SpringSlideTransition
+        {
+            DampingRatio = dampingRatio,
+            Period = period,
+            Direction = direction,
+        };
 }
 
 public enum SlideDirection { FromRight, FromLeft, FromBottom, FromTop }

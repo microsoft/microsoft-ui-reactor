@@ -37,8 +37,9 @@ public class TransitionEngineTests
     [Fact]
     public void Default_Resolves_To_The_Same_Motion_As_Entrance()
     {
-        // Default is a policy alias for the entrance motion. Callers that request Entrance()
-        // explicitly must get something a host cannot tell apart from Default.
+        // Default is a policy alias for the entrance motion. Entrance() allocates, so the two
+        // are not reference-equal; what matters is that they are value-equal, because
+        // TransitionEngine dispatches on the record type and both land on RunEntrance.
         Assert.Equal(NavigationTransition.Entrance(), NavigationTransition.Default);
     }
 
