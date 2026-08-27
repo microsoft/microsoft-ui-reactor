@@ -192,7 +192,7 @@
         "src/Reactor.Advanced/Markdown/Md4cParser.Inline.cs",
         "src/Reactor.Advanced/Markdown/MarkdownBuilder.cs",
         "src/Reactor.Advanced/Markdown/MarkdownEnums.cs",
-        "Reactor/Markdown/Md4cTypes.cs",
+        "src/Reactor.Advanced/Markdown/MarkdownTypes.cs",
         "src/Reactor.Advanced/Markdown/Md4cEntity.cs",
         "tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs",
         "src/Reactor.Advanced/Markdown/Md4cUnicode.cs"
@@ -216,7 +216,6 @@
       "files": [
         "src/Reactor/Controls/PropertyGrid/ArrayOperations.cs",
         "src/Reactor/Controls/PropertyGrid/Attributes.cs",
-        "Reactor/Controls/PropertyGrid/PropertyDescriptor.cs",
         "src/Reactor/Controls/PropertyGrid/ReflectionTypeMetadataProvider.cs",
         "src/Reactor/Controls/PropertyGrid/TypeMetadata.cs",
         "src/Reactor/Controls/PropertyGrid/TypeRegistry.cs"
@@ -296,7 +295,7 @@
         "src/Reactor.Advanced/Markdown/Md4cParser.Block.cs",
         "src/Reactor.Advanced/Markdown/Md4cParser.Inline.cs",
         "src/Reactor.Advanced/Markdown/MarkdownEnums.cs",
-        "Reactor/Markdown/Md4cTypes.cs",
+        "src/Reactor.Advanced/Markdown/MarkdownTypes.cs",
         "src/Reactor.Advanced/Markdown/Md4cEntity.cs",
         "tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs",
         "src/Reactor.Advanced/Markdown/Md4cUnicode.cs"
@@ -516,11 +515,11 @@
         "tests/Reactor.AppTests.Host/Program.cs",
         "tests/Reactor.AppTests.Host/TestHost.cs",
         "tests/Reactor.AppTests.Host/FixtureRegistry.cs",
-        "tests/Reactor.AppTests/Infrastructure/WinAppDriverHelper.cs",
+        "tests/Reactor.AppTests/Infrastructure/WinAppUi.cs",
         "tests/Reactor.AppTests/Infrastructure/AppTestBase.cs",
         "tests/Reactor.AppTests/Infrastructure/TestSession.cs"
       ],
-      "description": "Test infrastructure \u2014 setup, host, fixtures, WinAppDriver helpers"
+      "description": "Test infrastructure \u2014 setup, host, fixtures, winapp ui helpers"
     },
     {
       "id": "test-quality-batch-12",
@@ -558,7 +557,7 @@
         "tests/Reactor.AppTests/Tests/AccessibilityTests.cs",
         "tests/Reactor.AppTests/Tests/EventHandlerTests.cs",
         "tests/Reactor.AppTests/Tests/InteractiveTests.cs",
-        "tests/Reactor.AppTests/Tests/SelfTestBatch.cs"
+        "tests/Reactor.SelfTests/SelfTestBatch.cs"
       ],
       "description": "AppTest end-to-end tests \u2014 accessibility, events, interactive scenarios"
     },
@@ -641,7 +640,7 @@
         "tests/Reactor.Tests/D3/AreaTests.cs",
         "tests/Reactor.Tests/D3/ChordTests.cs",
         "tests/Reactor.Tests/D3/ClusterTests.cs",
-        "tests/ReactorCharting.Tests/CurveTests.cs",
+        "tests/Reactor.Tests/D3/CurveTests.cs",
         "tests/Reactor.Tests/D3/DelaunayTests.cs",
         "tests/Reactor.Tests/D3/EaseChartingExtraTests.cs",
         "tests/Reactor.Tests/D3/FormatTests.cs",
@@ -1024,7 +1023,7 @@
         "src/Reactor.Advanced/Markdown/Md4cParser.Inline.cs",
         "src/Reactor.Advanced/Markdown/MarkdownBuilder.cs",
         "src/Reactor.Advanced/Markdown/MarkdownEnums.cs",
-        "Reactor/Markdown/Md4cTypes.cs",
+        "src/Reactor.Advanced/Markdown/MarkdownTypes.cs",
         "src/Reactor.Advanced/Markdown/Md4cEntity.cs",
         "tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs",
         "src/Reactor.Advanced/Markdown/Md4cUnicode.cs"
@@ -1048,7 +1047,6 @@
       "id": "general-batch-13",
       "agent": "general",
       "files": [
-        "Reactor/Controls/PropertyGrid/PropertyDescriptor.cs",
         "src/Reactor/Controls/PropertyGrid/ReflectionTypeMetadataProvider.cs",
         "src/Reactor/Controls/PropertyGrid/TypeMetadata.cs",
         "src/Reactor/Controls/PropertyGrid/TypeRegistry.cs"
@@ -1231,7 +1229,6 @@
       "agent": "general",
       "files": [
         "tests/Reactor.Tests/Reactor.Tests.csproj",
-        "tests/ReactorCharting.Tests/ReactorCharting.Tests.csproj",
         "tests/Reactor.AppTests/Reactor.AppTests.csproj",
         "tests/Reactor.AppTests.Host/Reactor.AppTests.Host.csproj"
       ],
