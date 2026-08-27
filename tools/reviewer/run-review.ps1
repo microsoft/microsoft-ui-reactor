@@ -118,6 +118,23 @@ $generalBatches = @($batches | Where-Object { $_.agent -eq "general" })
 # ------------------------------------------------------------------
 
 $SharedBatchFunctions = @'
+# Reject a path whose shape the CI gate (ReviewerManifestTests) would reject, before it
+# ever reaches the filesystem. Without this the run and the gate disagree: a traversal
+# entry such as "src/Reactor/../../<repo>/README.md" satisfies Test-Path and would be
+# counted as reviewed here, while the gate fails the build on it. Rooted paths are
+# rejected for the same reason -- Join-Path's handling of a rooted child is provider- and
+# version-dependent, so this does not rely on it concatenating.
+function Test-ManifestPathShape {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if ($Path.Contains('\')) { return $false }
+    if ($Path.StartsWith('./')) { return $false }
+    if ([System.IO.Path]::IsPathRooted($Path)) { return $false }
+    if (($Path -split '/') -contains '..') { return $false }
+    return $true
+}
+
 # Split a batch's declared files into those that actually exist and those that don't.
 # The reviewer never opens these files itself -- it asks an agent to -- so a path that
 # does not resolve is a file that cannot be reviewed, and must not be counted as one.
@@ -129,7 +146,10 @@ function Resolve-BatchFiles {
     $resolved = [System.Collections.Generic.List[string]]::new()
     $missing = [System.Collections.Generic.List[string]]::new()
     foreach ($f in $Files) {
-        if (Test-Path -LiteralPath (Join-Path $Root $f) -PathType Leaf) { $resolved.Add($f) } else { $missing.Add($f) }
+        if ((Test-ManifestPathShape -Path $f) -and (Test-Path -LiteralPath (Join-Path $Root $f) -PathType Leaf)) {
+            $resolved.Add($f)
+        }
+        else { $missing.Add($f) }
     }
     return [pscustomobject]@{
         Resolved = $resolved.ToArray()
