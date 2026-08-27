@@ -199,25 +199,16 @@ public class InlineSnippetLedgerTests
     /// signature listing, nor a labelled counterexample.
     /// </summary>
     private static IEnumerable<string> UnverifiedExamples(string templateText)
-    {
-        var unverified = CSharpFence.Matches(templateText)
+        => CSharpFence.Matches(templateText)
             // Snippet-backed blocks are extracted from real code, so CI already compiles them.
             .Where(fence => !fence.Groups[1].Value.Contains("snippet="))
             .Select(fence => fence.Groups["body"].Value)
-            // No statement terminator and no brace anywhere: a reference/signature listing.
+            // Keep only bodies that have a statement terminator or a brace. A block with neither is
+            // a reference/signature listing (e.g. `Markdown(string markdown)`), not code to copy.
             .Where(body => body.IndexOfAny([';', '{']) >= 0)
-            .Where(body => !CounterexampleLabel.IsMatch(body));
-
-        foreach (var body in unverified)
-        {
-            var first = body
-                .Split('\n')
-                .Select(l => l.Trim())
-                .FirstOrDefault(l => l.Length > 0);
-
-            if (first is not null) yield return first;
-        }
-    }
+            .Where(body => !CounterexampleLabel.IsMatch(body))
+            .Select(body => body.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0))
+            .Where(first => first is not null)!;
 
     private static IEnumerable<(string Topic, string Path)> Templates()
     {

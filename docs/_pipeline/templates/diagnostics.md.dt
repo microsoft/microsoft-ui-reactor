@@ -224,7 +224,7 @@ under a new `source=event` filter:
       "ts": "2026-05-19T17:42:11.330Z",
       "source": "event",
       "level": "Warning",
-      "text": "SwallowedError category=Hosting operation=AppWindow.Close exceptionType=COMException",
+      "text": "SwallowedError category=Hosting operation=ReactorWindow.Close exceptionType=COMException",
       "eventName": "SwallowedError",
       "eventId": 16
     }
@@ -255,8 +255,8 @@ keyword (`0x20`) at `Warning`, and open the trace in Events Viewer.
 The relevant entries will look like:
 
 ```
-SwallowedError  category=Hosting  operation=AppWindow.Close  exceptionType=COMException
-HResultFailed   category=Hosting  operation=AppWindow.Close  hr=0x80010108
+SwallowedError  category=Hosting  operation=ReactorWindow.Close  exceptionType=COMException
+HResultFailed   category=Hosting  operation=ReactorWindow.Close  hr=0x80010108
 ```
 
 The operation label is stable and developer-authored — search the
