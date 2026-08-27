@@ -321,6 +321,24 @@ class DoGridForForms : Component
 }
 // </snippet:do-grid-for-forms>
 
+class GridStarStackDemo : Component
+{
+    public override Element Render() =>
+        // <snippet:grid-star-stack>
+        // Do:
+        Grid(
+            columns: [GridSize.Star(), GridSize.Star()],   // Star, not Auto
+            rows: [GridSize.Star()],
+            HStack(SaveButton(), CancelButton()).Grid(column: 0, columnSpan: 2));
+        // </snippet:grid-star-stack>
+
+    private static Element SaveButton() =>
+        Button("Save", () => { }).AutomationName("Save");
+
+    private static Element CancelButton() =>
+        Button("Cancel", () => { }).AutomationName("Cancel");
+}
+
 // <snippet:alignment-sizing>
 class AlignmentSizingDemo : Component
 {

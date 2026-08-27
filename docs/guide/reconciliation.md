@@ -298,7 +298,7 @@ position are treated as different elements (force unmount + mount).
 Without a key, identity follows position.
 
 ```csharp
-ForEach(items, item => Card(item).WithKey(item.Id))
+ForEach(items, item => Card(item).WithKey(item.Id));
 ```
 
 Use keys when:
@@ -400,8 +400,10 @@ typical mistake is to derive the key from a value that can change:
 
 ```csharp
 // Stable: row identity persists across edits
-ForEach(rows, row => Card(row).WithKey(row.Id))
+ForEach(rows, row => Card(row).WithKey(row.Id));
+```
 
+```csharp
 // Unstable: changing the title changes the key, remounts the card,
 // loses any state attached via UseState inside Card
 ForEach(rows, row => Card(row).WithKey(row.Title))

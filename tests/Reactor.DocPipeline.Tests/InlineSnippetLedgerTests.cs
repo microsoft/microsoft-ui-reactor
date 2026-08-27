@@ -46,6 +46,69 @@ public class InlineSnippetLedgerTests
         new(@"(?im)^\s*//\s*(don'?t|wrong|bad|avoid|never|incorrect|anti-?pattern|❌)", RegexOptions.Compiled);
 
     /// <summary>
+    /// Separates a reference table from a one-line example. Both can lack a statement terminator,
+    /// so keying only on <c>;</c>/<c>{</c> silently exempted real "copy this" code such as
+    /// <c>ForEach(items, item =&gt; Card(item).WithKey(item.Id))</c> — a hole a reviewer found in
+    /// the first cut of this gate. A listing *declares* typed parameters; an example *passes*
+    /// arguments, which is detectable without parsing C#.
+    /// </summary>
+    /// <summary>True when the block is a signature/reference listing rather than code to copy.</summary>
+    private static bool IsSignatureListing(string body)
+    {
+        // Anything with a statement terminator or a block is real code.
+        if (body.IndexOfAny([';', '{']) >= 0) return false;
+
+        // Strip trailing `// ...` annotations, then join wrapped signatures back onto one line so a
+        // multi-line declaration is judged whole rather than by its dangling `CommandBarFlyout(`.
+        var lines = body.Split('\n')
+            .Select(l => Regex.Replace(l, @"//.*$", string.Empty).TrimEnd())
+            .Where(l => l.Trim().Length > 0)
+            .ToList();
+
+        if (lines.Count == 0) return true;   // comment-only block: no example to verify
+
+        var joined = new List<string>();
+        foreach (var line in lines)
+        {
+            // An indented line continues the declaration above it; a flush-left one starts a new.
+            var continues = joined.Count > 0 && (line.StartsWith(' ') || line.StartsWith('\t'));
+            if (continues) joined[^1] += " " + line.Trim();
+            else joined.Add(line.Trim());
+        }
+
+        return joined.All(IsDeclaration);
+    }
+
+    /// <summary>
+    /// True when a line reads as a declaration — <c>Name(...)</c> whose parameter list is types, or
+    /// types followed by names, rather than passed values.
+    /// </summary>
+    private static bool IsDeclaration(string line)
+    {
+        var open = line.IndexOf('(');
+        var close = line.LastIndexOf(')');
+        if (open <= 0 || close <= open) return false;
+
+        // A call passes values: string/number literals, lambdas, or member access on an argument.
+        // Default values are stripped first, since `= "OK"` and `= 1` are declarations, not calls.
+        var parameters = line[(open + 1)..close];
+        var withoutDefaults = Regex.Replace(parameters, @"=\s*[^,]+", string.Empty);
+        if (withoutDefaults.Contains("=>", StringComparison.Ordinal)) return false;
+        if (Regex.IsMatch(withoutDefaults, @"""|\b\d")) return false;
+
+        // An empty parameter list is a call, not a listing.
+        if (parameters.Trim().Length == 0) return false;
+
+        // Every parameter must be a type, or a type followed by a name (with optional default).
+        return parameters
+            .Split(',')
+            .Select(p => p.Trim())
+            .All(p => p.Length > 0 && Regex.IsMatch(
+                p,
+                @"^(params\s+)?[A-Za-z_][\w.<>,\[\]\s]*\??(\s+[a-z_]\w*(\s*=\s*[^,]+)?)?$"));
+    }
+
+    /// <summary>
     /// Hand-typed examples that are allowed to stay prose, keyed by template, then by the block's
     /// first non-empty line. Each entry records why the block cannot be snippet-backed.
     /// </summary>
@@ -88,6 +151,15 @@ public class InlineSnippetLedgerTests
                     "Two user-code fragments explaining slot ordering; neither is a runnable program.",
             },
 
+            ["reconciliation"] = new(StringComparer.Ordinal)
+            {
+                // Deliberate unstable-key counterexample paired with a compiled stable-key snippet.
+                // Compiling it under the docs analyzer gate would either fail or require changing the
+                // exact bug the prose is warning readers not to write.
+                ["// Unstable: changing the title changes the key, remounts the card,"] =
+                    "Deliberate unstable-key counterexample; the lesson depends on leaving the bad key visible.",
+            },
+
             ["input-and-gestures"] = new(StringComparer.Ordinal)
             {
                 // Labelled "// Before —" rather than "// Don't", so the heuristic does not catch it.
@@ -100,6 +172,14 @@ public class InlineSnippetLedgerTests
                 // A migration guide's whole job is to show the shape that no longer compiles.
                 ["// Before"] =
                     "Migration before/after pair: the 'before' half is the pre-Optional<T> API and cannot compile by design.",
+            },
+
+            ["analyzer-architecture"] = new(StringComparer.Ordinal)
+            {
+                // Intentional analyzer-diagnostic sample: both .Set shapes are shown because the rule
+                // reports them. Moving them into a doc app would make the analyzer gate fail by design.
+                ["// Both are lost when the pooled control is reused. Only the first one"] =
+                    "Deliberate REACTOR_POOL_001 diagnostic sample; it should remain uncompiled prose.",
             },
         };
 
@@ -215,8 +295,16 @@ public class InlineSnippetLedgerTests
         // Positive control: a plain "copy this" block IS reported...
         Assert.Single(UnverifiedExamples("```csharp\nvar x = Button(\"hi\", () => { });\n```\n"));
 
-        // ...a signature listing is not (no statement terminator or brace)...
+        // ...including a single expression with no statement terminator, which an earlier cut of
+        // this classifier let through because it keyed only on ';' and '{'.
+        Assert.Single(UnverifiedExamples(
+            "```csharp\nForEach(items, item => Card(item).WithKey(item.Id))\n```\n"));
+
+        // ...a signature listing is not (it declares typed parameters rather than passing values)...
         Assert.Empty(UnverifiedExamples("```csharp\nMarkdown(string markdown)\n```\n"));
+        Assert.Empty(UnverifiedExamples(
+            "```csharp\nRichEditBox(Optional<string> text = default, Action<string>? onTextChanged = null)\n```\n"));
+        Assert.Empty(UnverifiedExamples("```csharp\nMenuFlyout(Element target, params MenuFlyoutItemBase[] items)\n```\n"));
 
         // ...a labelled counterexample is not...
         Assert.Empty(UnverifiedExamples("```csharp\n// Don't: this leaks.\nvar x = new Timer();\n```\n"));
@@ -234,9 +322,8 @@ public class InlineSnippetLedgerTests
             // Snippet-backed blocks are extracted from real code, so CI already compiles them.
             .Where(fence => !fence.Groups[1].Value.Contains("snippet="))
             .Select(fence => fence.Groups["body"].Value)
-            // Keep only bodies that have a statement terminator or a brace. A block with neither is
-            // a reference/signature listing (e.g. `Markdown(string markdown)`), not code to copy.
-            .Where(body => body.IndexOfAny([';', '{']) >= 0)
+            // A signature/reference listing is not code to copy; see IsSignatureListing.
+            .Where(body => !IsSignatureListing(body))
             .Where(body => !CounterexampleLabel.IsMatch(body))
             .Select(body => body.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0))
             .Where(first => first is not null)!;

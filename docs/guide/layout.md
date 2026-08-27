@@ -653,7 +653,7 @@ to its `0`-sized child. The real fixes are:
 Grid(
     columns: [GridSize.Star(), GridSize.Star()],   // Star, not Auto
     rows: [GridSize.Star()],
-    HStack(SaveButton(), CancelButton()).Grid(column: 0))
+    HStack(SaveButton(), CancelButton()).Grid(column: 0, columnSpan: 2));
 ```
 
 Reactor surfaces this footgun at debug time: when

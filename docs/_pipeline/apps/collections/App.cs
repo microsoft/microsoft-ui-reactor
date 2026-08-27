@@ -178,6 +178,29 @@ class ForEachDemo : Component
 }
 // </snippet:foreach>
 
+class ReconcilerKeyExamples
+{
+    public record Item(string Id, string Title);
+    public record Row(string Id, string Title);
+
+    public static Element KeyedForEach(IEnumerable<Item> items) =>
+        // <snippet:keyed-foreach>
+        ForEach(items, item => Card(item).WithKey(item.Id));
+        // </snippet:keyed-foreach>
+
+    public static Element StableRowKeys(IEnumerable<Row> rows) =>
+        // <snippet:stable-row-key>
+        // Stable: row identity persists across edits
+        ForEach(rows, row => Card(row).WithKey(row.Id));
+        // </snippet:stable-row-key>
+
+    private static Element Card(Item item) =>
+        Microsoft.UI.Reactor.Factories.Card(TextBlock(item.Title));
+
+    private static Element Card(Row row) =>
+        Microsoft.UI.Reactor.Factories.Card(TextBlock(row.Title));
+}
+
 // <snippet:multi-select>
 class MultiSelectDemo : Component
 {

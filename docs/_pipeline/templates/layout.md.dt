@@ -373,12 +373,7 @@ to its `0`-sized child. The real fixes are:
 - Give the stack's children explicit (or minimum) sizes so they don't
   depend on stretch.
 
-```csharp
-// Do:
-Grid(
-    columns: [GridSize.Star(), GridSize.Star()],   // Star, not Auto
-    rows: [GridSize.Star()],
-    HStack(SaveButton(), CancelButton()).Grid(column: 0))
+```csharp snippet="layout/grid-star-stack"
 ```
 
 Reactor surfaces this footgun at debug time: when
