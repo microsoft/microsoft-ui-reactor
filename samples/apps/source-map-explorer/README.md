@@ -35,9 +35,34 @@ because C# forbids a trailing optional parameter after `params`.
 handler lives on the panel root and hit-tests down, so the leaves themselves stay
 callback-free.
 
+**Inspect deepest leaf** runs the same hit-test without needing a mouse. It walks
+to the deepest mapped leaf, computes that control's own centre in host
+coordinates, hit-tests that point, and compares the two answers:
+
+```
+TextBlock
+App.cs:188
+
+hit-test at its own centre (102,261)
+  -> TextBlock  App.cs:188
+  AGREES with the tree walk
+```
+
+The comparison is the assertion. If the hit-test resolved to a different control
+or a different location than the tree walk reported, it prints `DISAGREES`
+instead — so a broken hit-test shows up as a mismatch rather than as a
+plausible-looking location.
+
 **Source mapping: ON / OFF** flips `ReactorSourceMap.Enabled` live. With it off,
 the same scan reports `0 of 14 controls mapped`. That is the runtime gate the
 devtools session controls.
+
+Toggling also remounts the panel on purpose. Without the remount the count reads
+`8 of 14`, because the flag only governs *new* stamps: an unchanged `TextBlock`
+takes the reconciler's shallow-skip path and keeps the `ReactorState` it mounted
+with. That retained location is still correct — the element really did come from
+that line — but it makes the gate look half-broken, so the sample forces a clean
+remount rather than leaving a confusing number on screen.
 
 ## Why the leaves matter
 

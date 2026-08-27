@@ -52,22 +52,78 @@ internal sealed class App : Component
                 : $"{target.GetType().Name}\n{src.Value.ToShortString()}\n\n{src.Value.FilePath}");
         }
 
+        // The single inspection primitive: given a point in host coordinates, find
+        // the innermost element under it that carries a source location. Shared by
+        // the pointer handler and the "Inspect deepest leaf" button so both drive
+        // identical code.
+        UIElement? InspectAtPoint(global::Windows.Foundation.Point point, UIElement root)
+        {
+            foreach (var candidate in VisualTreeHelper.FindElementsInHostCoordinates(point, root))
+            {
+                if (ReactorSourceMap.GetSource(candidate) is not null) return candidate;
+            }
+            return null;
+        }
+
         // Hit-test from the panel root rather than putting a handler on each leaf:
         // a leaf with a callback would be tagged anyway, which would prove nothing.
         void OnPanelPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
             if (sender is not UIElement root) return;
-            var point = e.GetCurrentPoint(null).Position;
+            var found = InspectAtPoint(e.GetCurrentPoint(null).Position, root);
+            if (found is null) { setHit("(nothing under the pointer carries a source location)"); return; }
+            Describe(found, setHit);
+        }
 
-            foreach (var candidate in VisualTreeHelper.FindElementsInHostCoordinates(point, root))
+        // Round-trips the inspection without needing a mouse: walk to the deepest
+        // mapped leaf, compute its own centre in host coordinates, then hit-test
+        // that point. If the hit-test resolves to a different location than the
+        // walk reported for the same control, the two disagree and the output says
+        // so — which is the assertion, not the "no crash".
+        void OnInspectDeepest()
+        {
+            if (canvasRef.Current is not { } root) { setHit("(panel not realized yet)"); return; }
+
+            UIElement? deepest = null;
+            var deepestDepth = -1;
+
+            void Walk(DependencyObject node, int depth)
             {
-                if (ReactorSourceMap.GetSource(candidate) is not null)
+                int count = VisualTreeHelper.GetChildrenCount(node);
+                for (int i = 0; i < count; i++)
                 {
-                    Describe(candidate, setHit);
-                    return;
+                    var child = VisualTreeHelper.GetChild(node, i);
+                    if (child is FrameworkElement fe
+                        && ReactorSourceMap.GetSource(fe) is not null
+                        && depth > deepestDepth)
+                    {
+                        deepest = fe;
+                        deepestDepth = depth;
+                    }
+                    Walk(child, depth + 1);
                 }
             }
-            setHit("(nothing under the pointer carries a source location)");
+
+            Walk(root, 0);
+
+            if (deepest is not FrameworkElement target)
+            {
+                setHit("(no mapped element found — is source mapping on?)");
+                return;
+            }
+
+            var walkSrc = ReactorSourceMap.GetSource(target);
+            var centre = target.TransformToVisual(null)
+                .TransformPoint(new global::Windows.Foundation.Point(target.ActualWidth / 2, target.ActualHeight / 2));
+            var viaHitTest = InspectAtPoint(centre, root);
+            var hitSrc = viaHitTest is null ? null : ReactorSourceMap.GetSource(viaHitTest);
+
+            var agree = hitSrc is not null && walkSrc is not null && hitSrc.Value == walkSrc.Value;
+            setHit(
+                $"{target.GetType().Name}\n{walkSrc?.ToShortString() ?? "-"}\n\n" +
+                $"hit-test at its own centre ({centre.X:F0},{centre.Y:F0})\n" +
+                $"  -> {viaHitTest?.GetType().Name ?? "nothing"}  {hitSrc?.ToShortString() ?? "-"}\n" +
+                $"  {(agree ? "AGREES with the tree walk" : "DISAGREES with the tree walk")}");
         }
 
         void OnScan()
@@ -117,7 +173,8 @@ internal sealed class App : Component
                     setHit(null);
                     setScan(null);
                 }),
-                Button("Scan visual tree", OnScan)
+                Button("Scan visual tree", OnScan),
+                Button("Inspect deepest leaf", OnInspectDeepest)
             ).Spacing(8),
 
             HStack(
