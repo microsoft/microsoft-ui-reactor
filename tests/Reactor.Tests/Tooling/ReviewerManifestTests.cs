@@ -72,8 +72,10 @@ public class ReviewerManifestTests
     public void ManifestLoadsAndIsNonTrivial()
     {
         var batches = Batches();
+        var entryCount = batches.Sum(b => b.Files.Length);
+
         Assert.True(batches.Count >= 50, $"expected the reviewer manifest to define many batches, found {batches.Count}");
-        Assert.True(Entries().Count >= 400, $"expected the reviewer manifest to list many files, found {Entries().Count}");
+        Assert.True(entryCount >= 400, $"expected the reviewer manifest to list many entries, found {entryCount}");
     }
 
     [Fact]
