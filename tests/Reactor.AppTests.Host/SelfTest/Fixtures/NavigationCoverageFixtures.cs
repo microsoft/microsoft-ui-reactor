@@ -566,6 +566,28 @@ internal static class NavigationCoverageFixtures
             // An element no transition ever claimed is owned by nobody.
             H.Check("NavOwn_UnclaimedElement", !TransitionEngine.StillOwns(new Border(), first));
 
+            // Instant-swap navigations claim ownership too, so an in-flight predecessor cannot
+            // reach back and undo the swap. Run a real SuppressTransition over a page the
+            // earlier transition owned and confirm ownership moved.
+            var d = new Border();
+            var swapped = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                c, d, NavigationTransition.None, NavigationMode.Push,
+                onComplete: () => swapped.TrySetResult());
+
+            var swapDone = await global::System.Threading.Tasks.Task.WhenAny(
+                swapped.Task, global::System.Threading.Tasks.Task.Delay(5000)) == swapped.Task;
+            H.Check("NavOwn_SuppressCompleted", swapDone);
+            H.Check("NavOwn_SuppressRevokesOlderOwner", !TransitionEngine.StillOwns(c, second));
+
+            // ...and it normalizes both pages, so neither is left in an interrupted state for
+            // NavigationCacheMode to hand back later.
+            var cVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(c);
+            var dVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(d);
+            H.Check("NavOwn_SuppressNormalizesOutgoing", IsApproximately(cVisual.Opacity, 1f));
+            H.Check("NavOwn_SuppressNormalizesIncoming", IsApproximately(dVisual.Opacity, 1f));
+
             var host = H.CreateHost();
             host.Mount(ctx => TextBlock("Transition ownership done"));
             await Harness.Render();

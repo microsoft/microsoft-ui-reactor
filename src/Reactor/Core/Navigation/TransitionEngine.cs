@@ -24,32 +24,34 @@ internal static class TransitionEngine
         NavigationTransition transition, NavigationMode mode,
         Action onComplete)
     {
-        if (transition is SuppressTransition)
-        {
-            // Instant swap — no animation
-            var inVis = ElementCompositionPreview.GetElementVisual(incoming);
-            inVis.Opacity = 1;
-            inVis.Offset = Vector3.Zero;
-            inVis.Scale = Vector3.One;
-            onComplete();
-            return;
-        }
-
         var outVisual = ElementCompositionPreview.GetElementVisual(outgoing);
         var inVisual = ElementCompositionPreview.GetElementVisual(incoming);
         var compositor = outVisual.Compositor;
         var usesCenterPointBinding = transition is DrillInTransition;
         var suppressesHitTesting = transition is SlideTransition;
 
-        // Unknown transition type — NavigationTransition is a public abstract record, so a
-        // third party can subclass it. Handle it before the scoped batch exists: there is
-        // nothing to animate, and an early return past a subscribed batch would leak it.
-        if (transition is not (EntranceTransition or SlideTransition or FadeTransition
-            or DrillInTransition or SpringSlideTransition or ConnectedTransition))
+        // Claim both pages for this transition before anything else, on every path including
+        // the instant-swap ones. Navigations can overlap — double-clicking a NavigationView
+        // item is enough — and the stamp is what stops an older transition's Completed handler
+        // from stopping a newer transition's animations or snapping a shared page to a finished
+        // state. Claiming here means "the newest navigation owns these pages" holds even when
+        // this call animates nothing, so an in-flight predecessor cannot reach back and undo the
+        // swap we are about to perform.
+        var generation = ClaimForTransition(outgoing, incoming);
+
+        // Instant-swap paths: SuppressTransition, and an unrecognised subclass — NavigationTransition
+        // is a public abstract record, so a third party can subclass it. Both are handled before the
+        // scoped batch exists; an early return past a subscribed batch would leak it.
+        if (transition is SuppressTransition
+            || transition is not (EntranceTransition or SlideTransition or FadeTransition
+                or DrillInTransition or SpringSlideTransition or ConnectedTransition))
         {
-            inVisual.Opacity = 1;
-            inVisual.Offset = Vector3.Zero;
-            inVisual.Scale = Vector3.One;
+            // Normalize both pages rather than just the incoming one. Having revoked the
+            // predecessor's ownership above, nothing else will take the outgoing page out of
+            // whatever state its interrupted animation left it in — and NavigationCacheMode can
+            // hand that control back as a later page.
+            NormalizeVisual(inVisual);
+            NormalizeVisual(outVisual);
             onComplete();
             return;
         }
@@ -74,13 +76,6 @@ internal static class TransitionEngine
 
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
 
-        // Claim both pages for this transition. Navigations can overlap — double-clicking a
-        // NavigationView item is enough — and when they do, an older transition's Completed
-        // handler runs while a newer one is mid-flight on a shared page. Without this stamp the
-        // older handler would stop the newer transition's animations and snap the page to its
-        // finished state. Only the transition that still owns a visual may reset it.
-        var generation = ClaimForTransition(outgoing, incoming);
-
         // Subscribe before End(). A scoped batch can complete synchronously inside End()
         // — most obviously when it captured no animations — and a handler attached
         // afterwards would never run, stranding the navigation: the outgoing page would
@@ -94,10 +89,7 @@ internal static class TransitionEngine
             if (ownsIncoming)
             {
                 // Finalize: ensure incoming is fully visible
-                ReleaseAnimatedProperties(inVisual);
-                inVisual.Opacity = 1;
-                inVisual.Offset = Vector3.Zero;
-                inVisual.Scale = Vector3.One;
+                NormalizeVisual(inVisual);
             }
             if (usesCenterPointBinding)
             {
@@ -131,10 +123,7 @@ internal static class TransitionEngine
                 // the new one, since both are still children of the host Grid.
                 if (ownsOutgoing)
                 {
-                    ReleaseAnimatedProperties(outVisual);
-                    outVisual.Opacity = 1;
-                    outVisual.Offset = Vector3.Zero;
-                    outVisual.Scale = Vector3.One;
+                    NormalizeVisual(outVisual);
                 }
 
                 batch.Dispose();
@@ -196,6 +185,17 @@ internal static class TransitionEngine
 
     internal static bool StillOwns(UIElement element, long generation) =>
         _elementGeneration.TryGetValue(element, out var stamp) && stamp.Value == generation;
+
+    /// <summary>
+    /// Stops the animations this engine starts and returns the visual to its resting state.
+    /// </summary>
+    private static void NormalizeVisual(Visual visual)
+    {
+        ReleaseAnimatedProperties(visual);
+        visual.Opacity = 1;
+        visual.Offset = Vector3.Zero;
+        visual.Scale = Vector3.One;
+    }
 
     /// <summary>
     /// Stops the animations this engine starts, so the following direct assignments are
