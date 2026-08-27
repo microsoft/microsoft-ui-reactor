@@ -261,11 +261,17 @@ function Get-ReactorRestoreArguments {
 #     stable 1.0.0 already installed; `dotnet tool update` refuses to move to a
 #     lower version even when pinned with --version.
 # So: a stable version, strictly greater than 1.0.0, every component inside
-# UInt16, and unique per run so a same-minute re-pack is still installable.
+# UInt16, and unique per run so a rapid re-pack is still installable.
 #   major    1
 #   minor    days since 2020-01-01 UTC   (~2400 today; UInt16 lasts ~179 years)
 #   patch    minute of day               (0-1439)
-#   revision second within the minute     (0-59)
+#   revision second*1000 + millisecond   (0-59999)
+#
+# The revision folds milliseconds in rather than using the second alone: two
+# runs started within the same second would otherwise collide, and a pinned
+# `dotnet tool update --version <same>` reports "already installed" and keeps
+# the older binary — the original failure mode. 59*1000+999 = 59999 still fits
+# UInt16.
 #
 # -Now is injectable so the shape, bounds, and ordering can be tested without
 # depending on the wall clock.
@@ -280,7 +286,13 @@ function Get-ReactorLocalCliVersion {
         throw "Local CLI version stamp is out of range: days-since-2020 = $days must be 1..65534 (system clock wrong?)."
     }
 
-    return '1.{0}.{1}.{2}' -f $days, [int]$utc.TimeOfDay.TotalMinutes, $utc.Second
+    # Floor, not [int]: PowerShell's [int] cast rounds half-to-even, so
+    # 23:59:59.999 (TotalMinutes 1439.99998) would become 1440 — outside the
+    # documented range, and every minute's last 30 seconds would be stamped
+    # with the *next* minute.
+    $minuteOfDay = [int][Math]::Floor($utc.TimeOfDay.TotalMinutes)
+
+    return '1.{0}.{1}.{2}' -f $days, $minuteOfDay, ($utc.Second * 1000 + $utc.Millisecond)
 }
 
 function Get-ReactorToolArguments {

@@ -560,7 +560,23 @@ if ($SkipMurInstall) {
         $expectedSha = & git -C $repoRoot rev-parse HEAD 2>$null
         if ($LASTEXITCODE -ne 0) { $expectedSha = $null }
     }
-    $murVersionLine = & mur --version 2>$null | Select-Object -First 1
+
+    # Collect the output fully before inspecting it. Piping a native command
+    # straight into `Select-Object -First 1` closes the pipeline early, which
+    # can surface as a broken pipe and leaves $LASTEXITCODE non-deterministic —
+    # so the exit code is captured from the unpiped call.
+    $murOutput = & mur --version 2>$null
+    $murExit = $LASTEXITCODE
+    $murVersionLine = @($murOutput) | Select-Object -First 1
+
+    # A `mur` that runs but fails is a broken install, not an unverifiable one.
+    # Falling through to the warning below would mask exactly the class of
+    # defect this block exists to catch.
+    if ($murExit -ne 0) {
+        Fail ("The installed ``mur`` failed to run (``mur --version`` exited $murExit). " +
+              "The global tool is present but broken. Run: dotnet tool uninstall -g Microsoft.UI.Reactor.Cli, then re-run ./bootstrap.ps1.")
+    }
+
     if ($expectedSha -and $murVersionLine -match '\+([0-9a-fA-F]{40})') {
         $installedSha = $Matches[1]
         if ($installedSha -ne $expectedSha) {

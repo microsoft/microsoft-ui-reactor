@@ -288,21 +288,37 @@ try {
     # has to satisfy at once, each of which a plausible alternative violates.
 
     $v = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 7, [DateTimeKind]::Utc))
-    Assert-Equal '1.2429.913.7' $v 'stamp encodes days-since-2020, minute-of-day, and second'
+    Assert-Equal '1.2429.913.7000' $v 'stamp encodes days-since-2020, minute-of-day, and second+millisecond'
 
     # Must outrank the stable 1.0.0 that older bootstraps installed, or
     # `dotnet tool update` refuses to move to it.
     Assert-True ([version]$v -gt [version]'1.0.0') 'stamp sorts above the legacy constant 1.0.0'
 
     # AssemblyVersion/FileVersion components are UInt16; 1.<yyMMdd>.<HHmm>
-    # overflows and fails the build with CS7034.
-    foreach ($part in ([version]$v).ToString().Split('.')) {
-        Assert-True ([int]$part -le 65534) "stamp component '$part' fits in UInt16"
+    # overflows and fails the build with CS7034. The revision is the tightest
+    # component: 59*1000+999 = 59999.
+    $maxRevision = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 23, 59, 59, 999, [DateTimeKind]::Utc))
+    foreach ($part in $maxRevision.Split('.')) {
+        Assert-True ([int]$part -le 65534) "stamp component '$part' fits in UInt16 at the worst-case instant"
     }
 
-    # Unique per run: two packs in the same minute must still yield distinct
-    # versions, otherwise the second install is a no-op that keeps the older
-    # binary.
+    # minute-of-day must stay within 0-1439. A plain [int] cast rounds
+    # half-to-even, so the last 30 seconds of every minute would be stamped with
+    # the following minute and 23:59:59.999 would emit 1440.
+    Assert-Equal '1.2429.1439.59999' $maxRevision 'the last instant of a day floors to minute 1439, not 1440'
+    Assert-Equal '1.2429.913.42000' `
+        (Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 42, [DateTimeKind]::Utc))) `
+        'a second past the half-minute stays in the current minute'
+
+    # Unique per run: two packs within the same *second* must still yield
+    # distinct, ordered versions, otherwise the second install is a no-op that
+    # silently keeps the older binary.
+    $sameSecondA = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 7, 120, [DateTimeKind]::Utc))
+    $sameSecondB = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 7, 880, [DateTimeKind]::Utc))
+    Assert-True ([version]$sameSecondB -gt [version]$sameSecondA) `
+        'two stamps in the same second are distinct and ordered'
+
+    # Ordering must also hold across the coarser boundaries.
     $sameMinuteA = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 7, [DateTimeKind]::Utc))
     $sameMinuteB = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 42, [DateTimeKind]::Utc))
     Assert-True ([version]$sameMinuteB -gt [version]$sameMinuteA) `
