@@ -3866,7 +3866,7 @@ Equals(NavigationTransition other) → bool
 Equals(object obj) → bool
 Fade(TimeSpan? duration = null) → NavigationTransition
 GetHashCode() → int
-Slide(SlideDirection direction = SlideDirection.FromRight, TimeSpan? duration = null, CompositionEasingFunction easing = null, float? distance = null) → NavigationTransition
+Slide(SlideDirection direction = SlideDirection.FromBottom, TimeSpan? duration = null, CompositionEasingFunction easing = null, float? distance = null) → NavigationTransition
 Spring(float dampingRatio = 0.6f, float period = 0.08f, SlideDirection direction = SlideDirection.FromRight) → NavigationTransition
 ToString() → string
 

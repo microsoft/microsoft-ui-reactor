@@ -38,10 +38,28 @@ internal static class TransitionEngine
         var outVisual = ElementCompositionPreview.GetElementVisual(outgoing);
         var inVisual = ElementCompositionPreview.GetElementVisual(incoming);
         var compositor = outVisual.Compositor;
+        var usesCenterPointBinding = transition is DrillInTransition;
+        var suppressesHitTesting = transition is SlideTransition;
+        var outgoingWasHitTestVisible = outgoing.IsHitTestVisible;
+        var incomingWasHitTestVisible = incoming.IsHitTestVisible;
 
         // Reset stale compositor properties from previous animations
         inVisual.Offset = Vector3.Zero;
         inVisual.Scale = Vector3.One;
+
+        if (suppressesHitTesting)
+        {
+            outgoing.IsHitTestVisible = false;
+            incoming.IsHitTestVisible = false;
+        }
+
+        if (usesCenterPointBinding)
+        {
+            // Expression animations are persistent, so start these before the scoped
+            // batch to keep them from blocking the transition's completion callback.
+            BindCenterPointToVisualSize(compositor, outVisual);
+            BindCenterPointToVisualSize(compositor, inVisual);
+        }
 
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
 
@@ -81,6 +99,16 @@ internal static class TransitionEngine
             inVisual.Opacity = 1;
             inVisual.Offset = Vector3.Zero;
             inVisual.Scale = Vector3.One;
+            if (usesCenterPointBinding)
+            {
+                outVisual.StopAnimation("CenterPoint");
+                inVisual.StopAnimation("CenterPoint");
+            }
+            if (suppressesHitTesting)
+            {
+                outgoing.IsHitTestVisible = outgoingWasHitTestVisible;
+                incoming.IsHitTestVisible = incomingWasHitTestVisible;
+            }
             onComplete();
             batch.Dispose();
         };
@@ -91,6 +119,25 @@ internal static class TransitionEngine
     // ════════════════════════════════════════════════════════════════
 
     private static void RunSlide(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        SlideTransition slide, NavigationMode mode)
+    {
+        if (UsesWinUISlideSpecification(slide))
+        {
+            RunWinUISlide(compositor, outVisual, inVisual, slide.Direction, mode);
+            return;
+        }
+
+        RunCustomSlide(compositor, outVisual, inVisual, slide, mode);
+    }
+
+    internal static bool UsesWinUISlideSpecification(SlideTransition slide) =>
+        slide.Direction != SlideDirection.FromTop
+        && slide.Duration is null
+        && slide.Distance is null
+        && slide.Easing is null;
+
+    private static void RunCustomSlide(
         Compositor compositor, Visual outVisual, Visual inVisual,
         SlideTransition slide, NavigationMode mode)
     {
@@ -135,6 +182,110 @@ internal static class TransitionEngine
 
         inVisual.StartAnimation("Offset", inOffset);
         inVisual.StartAnimation("Opacity", inFade);
+    }
+
+    internal const float HorizontalSlideExitOffset = 150f;
+    internal const float HorizontalSlideEntranceOffset = 200f;
+    internal static readonly TimeSpan HorizontalSlideExitDuration = TimeSpan.FromMilliseconds(150);
+    internal static readonly TimeSpan HorizontalSlideEntranceDuration = TimeSpan.FromMilliseconds(300);
+    internal static readonly Vector2 SlideInEasingControlPoint1 = new(0.1f, 0.9f);
+    internal static readonly Vector2 SlideInEasingControlPoint2 = new(0.2f, 1.0f);
+    internal static readonly Vector2 SlideOutEasingControlPoint1 = new(0.7f, 0.0f);
+    internal static readonly Vector2 SlideOutEasingControlPoint2 = new(1.0f, 0.5f);
+
+    internal const float VerticalSlideOffset = 200f;
+    internal const float VerticalSlideExponent = 6f;
+    internal static readonly TimeSpan VerticalSlideHandoffTime = TimeSpan.FromMilliseconds(250);
+    internal static readonly TimeSpan VerticalSlideDuration = TimeSpan.FromMilliseconds(600);
+
+    internal readonly record struct HorizontalSlidePlan(Vector3 OutEnd, Vector3 InStart);
+
+    internal static HorizontalSlidePlan GetHorizontalSlidePlan(
+        SlideDirection direction, NavigationMode mode)
+    {
+        var directionFactor = direction == SlideDirection.FromLeft ? 1f : -1f;
+
+        return mode == NavigationMode.Pop
+            ? new(
+                new Vector3(-HorizontalSlideEntranceOffset * directionFactor, 0, 0),
+                new Vector3(HorizontalSlideExitOffset * directionFactor, 0, 0))
+            : new(
+                new Vector3(HorizontalSlideExitOffset * directionFactor, 0, 0),
+                new Vector3(-HorizontalSlideEntranceOffset * directionFactor, 0, 0));
+    }
+
+    private static void RunWinUISlide(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        SlideDirection direction, NavigationMode mode)
+    {
+        if (direction is SlideDirection.FromLeft or SlideDirection.FromRight)
+        {
+            RunWinUIHorizontalSlide(compositor, outVisual, inVisual, direction, mode);
+        }
+        else
+        {
+            RunWinUIVerticalSlide(compositor, outVisual, inVisual, mode);
+        }
+    }
+
+    private static void RunWinUIHorizontalSlide(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        SlideDirection direction, NavigationMode mode)
+    {
+        var plan = GetHorizontalSlidePlan(direction, mode);
+        var inEasing = compositor.CreateCubicBezierEasingFunction(
+            SlideInEasingControlPoint1, SlideInEasingControlPoint2);
+        var outEasing = compositor.CreateCubicBezierEasingFunction(
+            SlideOutEasingControlPoint1, SlideOutEasingControlPoint2);
+
+        var outOffset = compositor.CreateVector3KeyFrameAnimation();
+        outOffset.InsertKeyFrame(1f, plan.OutEnd, outEasing);
+        outOffset.Duration = HorizontalSlideExitDuration;
+        outVisual.StartAnimation("Offset", outOffset);
+
+        inVisual.Offset = plan.InStart;
+        var inOffset = compositor.CreateVector3KeyFrameAnimation();
+        inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
+        inOffset.Duration = HorizontalSlideEntranceDuration;
+        inOffset.DelayTime = HorizontalSlideExitDuration;
+        inVisual.StartAnimation("Offset", inOffset);
+
+        StartDelayedOpacitySnap(compositor, outVisual, 0f, HorizontalSlideExitDuration);
+        StartDelayedOpacitySnap(compositor, inVisual, 1f, HorizontalSlideExitDuration);
+    }
+
+    private static void RunWinUIVerticalSlide(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        NavigationMode mode)
+    {
+        var offset = new Vector3(0, VerticalSlideOffset, 0);
+        var easingMode = mode == NavigationMode.Pop
+            ? CompositionEasingFunctionMode.In
+            : CompositionEasingFunctionMode.Out;
+        var easing = CompositionEasingFunction.CreateExponentialEasingFunction(
+            compositor, easingMode, VerticalSlideExponent);
+
+        if (mode == NavigationMode.Pop)
+        {
+            var outOffset = compositor.CreateVector3KeyFrameAnimation();
+            outOffset.InsertKeyFrame(1f, offset, easing);
+            outOffset.Duration = VerticalSlideDuration;
+            outVisual.StartAnimation("Offset", outOffset);
+        }
+        else
+        {
+            inVisual.Offset = offset;
+            var inOffset = compositor.CreateVector3KeyFrameAnimation();
+            inOffset.InsertKeyFrame(
+                (float)(VerticalSlideHandoffTime.TotalMilliseconds / VerticalSlideDuration.TotalMilliseconds),
+                offset);
+            inOffset.InsertKeyFrame(1f, Vector3.Zero, easing);
+            inOffset.Duration = VerticalSlideDuration;
+            inVisual.StartAnimation("Offset", inOffset);
+        }
+
+        StartDelayedOpacitySnap(compositor, outVisual, 0f, VerticalSlideHandoffTime);
+        StartDelayedOpacitySnap(compositor, inVisual, 1f, VerticalSlideHandoffTime);
     }
 
     internal static SlideDirection ReverseDirection(SlideDirection direction) => direction switch
@@ -252,11 +403,110 @@ internal static class TransitionEngine
     //  DrillIn transition
     // ════════════════════════════════════════════════════════════════
 
+    internal const float DrillInForwardOutScale = 1.04f;
+    internal const float DrillInForwardInScale = 0.94f;
+    internal const float DrillInBackOutScale = 0.96f;
+    internal const float DrillInBackInScale = 1.06f;
+    internal static readonly TimeSpan DrillInOutScaleDuration = TimeSpan.FromMilliseconds(100);
+    internal static readonly TimeSpan DrillInOutOpacityDuration = TimeSpan.FromMilliseconds(100);
+    internal static readonly TimeSpan DrillInForwardInScaleDuration = TimeSpan.FromMilliseconds(783);
+    internal static readonly TimeSpan DrillInForwardInOpacityDuration = TimeSpan.FromMilliseconds(333);
+    internal static readonly TimeSpan DrillInBackInScaleDuration = TimeSpan.FromMilliseconds(333);
+    internal static readonly TimeSpan DrillInBackInOpacityDuration = TimeSpan.FromMilliseconds(333);
+    internal static readonly Vector2 DrillInScaleEasingControlPoint1 = new(0.1f, 0.9f);
+    internal static readonly Vector2 DrillInScaleEasingControlPoint2 = new(0.2f, 1.0f);
+    internal static readonly Vector2 DrillInBackScaleEasingControlPoint1 = new(0.12f, 0.0f);
+    internal static readonly Vector2 DrillInBackScaleEasingControlPoint2 = new(0.0f, 1.0f);
+    internal static readonly Vector2 DrillInOpacityEasingControlPoint1 = new(0.17f, 0.17f);
+    internal static readonly Vector2 DrillInOpacityEasingControlPoint2 = new(0.0f, 1.0f);
+
+    internal readonly record struct DrillInPlan(
+        float OutEndScale,
+        float InStartScale,
+        TimeSpan OutScaleDuration,
+        TimeSpan OutOpacityDuration,
+        TimeSpan InScaleDuration,
+        TimeSpan InOpacityDuration,
+        Vector2 InScaleEasingControlPoint1,
+        Vector2 InScaleEasingControlPoint2);
+
+    internal static DrillInPlan GetDrillInPlan(NavigationMode mode) =>
+        mode == NavigationMode.Pop
+            ? new(
+                DrillInBackOutScale,
+                DrillInBackInScale,
+                DrillInOutScaleDuration,
+                DrillInOutOpacityDuration,
+                DrillInBackInScaleDuration,
+                DrillInBackInOpacityDuration,
+                DrillInBackScaleEasingControlPoint1,
+                DrillInBackScaleEasingControlPoint2)
+            : new(
+                DrillInForwardOutScale,
+                DrillInForwardInScale,
+                DrillInOutScaleDuration,
+                DrillInOutOpacityDuration,
+                DrillInForwardInScaleDuration,
+                DrillInForwardInOpacityDuration,
+                DrillInScaleEasingControlPoint1,
+                DrillInScaleEasingControlPoint2);
+
     private static void RunDrillIn(
         Compositor compositor, Visual outVisual, Visual inVisual,
         DrillInTransition drill, NavigationMode mode)
     {
-        var duration = drill.Duration ?? TimeSpan.FromMilliseconds(300);
+        if (!UsesWinUIDrillInSpecification(drill))
+        {
+            RunCustomDrillIn(compositor, outVisual, inVisual, drill.Duration!.Value, mode);
+            return;
+        }
+
+        var plan = GetDrillInPlan(mode);
+        var outScaleEasing = compositor.CreateCubicBezierEasingFunction(
+            DrillInScaleEasingControlPoint1, DrillInScaleEasingControlPoint2);
+        var inScaleEasing = compositor.CreateCubicBezierEasingFunction(
+            plan.InScaleEasingControlPoint1, plan.InScaleEasingControlPoint2);
+        var opacityEasing = compositor.CreateCubicBezierEasingFunction(
+            DrillInOpacityEasingControlPoint1, DrillInOpacityEasingControlPoint2);
+
+        var outScale = compositor.CreateVector3KeyFrameAnimation();
+        outScale.InsertKeyFrame(1f, new Vector3(plan.OutEndScale, plan.OutEndScale, 1f), outScaleEasing);
+        outScale.Duration = plan.OutScaleDuration;
+        outVisual.StartAnimation("Scale", outScale);
+
+        var outFade = compositor.CreateScalarKeyFrameAnimation();
+        outFade.InsertKeyFrame(1f, 0f, opacityEasing);
+        outFade.Duration = plan.OutOpacityDuration;
+        outVisual.StartAnimation("Opacity", outFade);
+
+        inVisual.Scale = new Vector3(plan.InStartScale, plan.InStartScale, 1f);
+
+        var inScale = compositor.CreateVector3KeyFrameAnimation();
+        inScale.InsertKeyFrame(1f, Vector3.One, inScaleEasing);
+        inScale.Duration = plan.InScaleDuration;
+        inVisual.StartAnimation("Scale", inScale);
+
+        var inFade = compositor.CreateScalarKeyFrameAnimation();
+        inFade.InsertKeyFrame(1f, 1f, opacityEasing);
+        inFade.Duration = plan.InOpacityDuration;
+        inVisual.StartAnimation("Opacity", inFade);
+    }
+
+    internal static bool UsesWinUIDrillInSpecification(DrillInTransition drill) =>
+        drill.Duration is null;
+
+    private static void BindCenterPointToVisualSize(Compositor compositor, Visual visual)
+    {
+        var centerPoint = compositor.CreateExpressionAnimation(
+            "Vector3(target.Size.X / 2, target.Size.Y / 2, 0)");
+        centerPoint.SetReferenceParameter("target", visual);
+        visual.StartAnimation("CenterPoint", centerPoint);
+    }
+
+    private static void RunCustomDrillIn(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        TimeSpan duration, NavigationMode mode)
+    {
         var easing = compositor.CreateCubicBezierEasingFunction(
             new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1.0f));
 
@@ -273,7 +523,6 @@ internal static class TransitionEngine
             outFade.InsertKeyFrame(1f, 0f, easing);
             outFade.Duration = duration;
 
-            outVisual.CenterPoint = new Vector3(outVisual.Size / 2, 0);
             outVisual.StartAnimation("Scale", outScale);
             outVisual.StartAnimation("Opacity", outFade);
 
@@ -287,7 +536,6 @@ internal static class TransitionEngine
         {
             // Forward: incoming scales up from 0.85 + fades in, outgoing fades out
             inVisual.Scale = new Vector3(0.85f, 0.85f, 1f);
-            inVisual.CenterPoint = new Vector3(inVisual.Size / 2, 0);
 
             var inScale = compositor.CreateVector3KeyFrameAnimation();
             inScale.InsertKeyFrame(0f, new Vector3(0.85f, 0.85f, 1f));

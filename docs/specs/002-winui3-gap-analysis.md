@@ -642,7 +642,7 @@ this for simple property animations.
 
 | Transition | Status | Reactor Surface |
 |---|---|---|
-| Fade / DrillIn / Slide / Spring | Exposed | `NavigationTransition.Fade(duration?)`, `.DrillIn(duration?)`, `.Slide(direction, duration?, easing?, distance?)`, `.Spring(dampingRatio, period, direction)` |
+| Fade / DrillIn / Slide / Spring | Exposed | `NavigationTransition.Fade(duration?)`, `.DrillIn(duration?)`, `.Slide(direction, duration?, easing?, distance?)`, `.Spring(dampingRatio, period, direction)`. DrillIn and parameterless Slide use WinUI's native timing, easing, scale, distance, and opacity staging; explicit duration/distance/easing values opt into Reactor's customizable variants. |
 | Connected | Exposed | `NavigationTransition.Connected("key")` — pairs with `.ConnectedAnimation("key")` |
 | Default / suppressed | Exposed | `NavigationTransition.Default` (WinUI entrance), `NavigationTransition.None` (suppress) |
 

@@ -39,9 +39,10 @@ public class TransitionEngineTests
     {
         var transition = NavigationTransition.Slide();
         var slide = Assert.IsType<SlideTransition>(transition);
-        Assert.Equal(SlideDirection.FromRight, slide.Direction);
+        Assert.Equal(SlideDirection.FromBottom, slide.Direction);
         Assert.Null(slide.Duration);
         Assert.Null(slide.Easing);
+        Assert.Null(slide.Distance);
     }
 
     [Fact]
@@ -67,6 +68,15 @@ public class TransitionEngineTests
         var transition = NavigationTransition.DrillIn(TimeSpan.FromMilliseconds(400));
         var drill = Assert.IsType<DrillInTransition>(transition);
         Assert.Equal(TimeSpan.FromMilliseconds(400), drill.Duration);
+    }
+
+    [Fact]
+    public void DrillIn_Factory_Uses_WinUI_Specification_By_Default()
+    {
+        var drill = Assert.IsType<DrillInTransition>(NavigationTransition.DrillIn());
+
+        Assert.Null(drill.Duration);
+        Assert.True(TransitionEngine.UsesWinUIDrillInSpecification(drill));
     }
 
     [Fact]

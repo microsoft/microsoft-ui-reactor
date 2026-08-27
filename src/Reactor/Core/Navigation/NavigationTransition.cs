@@ -39,9 +39,12 @@ public abstract record NavigationTransition
     /// <summary>No animation — instant swap.</summary>
     public static readonly NavigationTransition None = new SuppressTransition();
 
-    /// <summary>Slide transition with configurable direction, duration, distance, and easing.</summary>
+    /// <summary>
+    /// WinUI slide transition. Supplying duration, easing, or distance opts into
+    /// Reactor's customizable simultaneous slide behavior.
+    /// </summary>
     public static NavigationTransition Slide(
-        SlideDirection direction = SlideDirection.FromRight,
+        SlideDirection direction = SlideDirection.FromBottom,
         TimeSpan? duration = null,
         CompositionEasingFunction? easing = null,
         float? distance = null)
@@ -84,10 +87,10 @@ internal sealed record EntranceTransition : NavigationTransition;
 /// <summary>Slide transition — animate offset and opacity.</summary>
 public sealed record SlideTransition : NavigationTransition
 {
-    public SlideDirection Direction { get; init; } = SlideDirection.FromRight;
+    public SlideDirection Direction { get; init; } = SlideDirection.FromBottom;
     public TimeSpan? Duration { get; init; }
     public CompositionEasingFunction? Easing { get; init; }
-    /// <summary>Slide distance in pixels. When null, defaults to 200px.</summary>
+    /// <summary>Custom slide distance in pixels. Null uses the WinUI specification.</summary>
     public float? Distance { get; init; }
 }
 
@@ -97,7 +100,10 @@ public sealed record FadeTransition : NavigationTransition
     public TimeSpan? Duration { get; init; }
 }
 
-/// <summary>Drill-in transition — scale + fade from center.</summary>
+/// <summary>
+/// WinUI drill-in transition. Supplying a duration opts into Reactor's
+/// customizable symmetric drill-in behavior.
+/// </summary>
 public sealed record DrillInTransition : NavigationTransition
 {
     public TimeSpan? Duration { get; init; }
