@@ -573,18 +573,6 @@ if ($SkipMurInstall) {
         # may strip the revision suffix. Say so rather than implying success.
         Write-Host "    [warn] Could not verify the installed mur revision (mur --version returned '$murVersionLine')." -ForegroundColor Yellow
     }
-    if ($expectedSha -and $murVersionLine -match '\+([0-9a-fA-F]{40})') {
-        $installedSha = $Matches[1]
-        if ($installedSha -ne $expectedSha) {
-            Fail ("Installed mur reports revision $($installedSha.Substring(0,8)) but HEAD is $($expectedSha.Substring(0,8)). " +
-                  "The global tool was not replaced. Run: dotnet tool uninstall -g Microsoft.UI.Reactor.Cli, then re-run ./bootstrap.ps1.")
-        }
-        Write-Ok "mur verified at revision $($expectedSha.Substring(0,8)) (version $cliLocalVersion)"
-    } else {
-        # Non-fatal: a shallow/exported tree has no git, and a consumer build
-        # may strip the revision suffix. Say so rather than implying success.
-        Write-Host "    [warn] Could not verify the installed mur revision (mur --version returned '$murVersionLine')." -ForegroundColor Yellow
-    }
 
     Write-Ok "mur installed as global tool (also on this shell's PATH)"
 }
