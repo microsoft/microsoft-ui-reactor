@@ -187,15 +187,15 @@
       "id": "lifecycle-batch-6",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Markdown/Md4cParser.cs",
-        "Reactor/Markdown/Md4cParser.Block.cs",
-        "Reactor/Markdown/Md4cParser.Inline.cs",
-        "Reactor/Markdown/MarkdownBuilder.cs",
-        "Reactor/Markdown/Md4cEnums.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.Block.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.Inline.cs",
+        "src/Reactor.Advanced/Markdown/MarkdownBuilder.cs",
+        "src/Reactor.Advanced/Markdown/MarkdownEnums.cs",
         "Reactor/Markdown/Md4cTypes.cs",
-        "Reactor/Markdown/Md4cEntity.cs",
-        "Reactor/Markdown/Md4cHtml.cs",
-        "Reactor/Markdown/Md4cUnicode.cs"
+        "src/Reactor.Advanced/Markdown/Md4cEntity.cs",
+        "tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs",
+        "src/Reactor.Advanced/Markdown/Md4cUnicode.cs"
       ],
       "description": "Markdown parser \u2014 native interop lifecycle, buffer management"
     },
@@ -205,7 +205,7 @@
       "files": [
         "src/Reactor/Controls/PropertyGrid/PropertyGridComponent.cs",
         "src/Reactor/Controls/PropertyGrid/PropertyGridElement.cs",
-        "Reactor/Controls/PropertyGrid/Factories.cs",
+        "src/Reactor/Controls/PropertyGrid/PropertyGridFactories.cs",
         "src/Reactor/Controls/PropertyGrid/PropertyGridDefaults.cs"
       ],
       "description": "PropertyGrid \u2014 component lifecycle, event wiring"
@@ -227,14 +227,14 @@
       "id": "lifecycle-batch-9",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Navigation/NavigationContext.cs",
-        "Reactor/Navigation/NavigationHandle.cs",
-        "Reactor/Navigation/NavigationLifecycle.cs",
-        "Reactor/Navigation/NavigationStack.cs",
-        "Reactor/Navigation/NavigationCache.cs",
-        "Reactor/Navigation/NavigationTransition.cs",
-        "Reactor/Navigation/TransitionEngine.cs",
-        "Reactor/Navigation/DeepLinkMap.cs"
+        "src/Reactor/Core/Navigation/NavigationContext.cs",
+        "src/Reactor/Core/Navigation/NavigationHandle.cs",
+        "src/Reactor/Core/Navigation/NavigationLifecycle.cs",
+        "src/Reactor/Core/Navigation/NavigationStack.cs",
+        "src/Reactor/Core/Navigation/NavigationCache.cs",
+        "src/Reactor/Core/Navigation/NavigationTransition.cs",
+        "src/Reactor/Core/Navigation/TransitionEngine.cs",
+        "src/Reactor/Core/Navigation/DeepLinkMap.cs"
       ],
       "description": "Navigation system \u2014 stack lifecycle, cache eviction, transition cleanup"
     },
@@ -253,15 +253,15 @@
       "id": "lifecycle-batch-11",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Localization/LocaleContext.cs",
-        "Reactor/Localization/LocaleProviderElement.cs",
-        "Reactor/Localization/IntlAccessor.cs",
-        "Reactor/Localization/MessageCache.cs",
-        "Reactor/Localization/MessageKey.cs",
-        "Reactor/Localization/ReswResourceProvider.cs",
-        "Reactor/Localization/IStringResourceProvider.cs",
-        "Reactor/Localization/PseudoLocalizer.cs",
-        "Reactor/Localization/RtlHelper.cs"
+        "src/Reactor/Core/Localization/LocaleContext.cs",
+        "src/Reactor/Core/Localization/LocaleProviderElement.cs",
+        "src/Reactor/Core/Localization/IntlAccessor.cs",
+        "src/Reactor/Core/Localization/MessageCache.cs",
+        "src/Reactor/Core/Localization/MessageKey.cs",
+        "src/Reactor/Core/Localization/ReswResourceProvider.cs",
+        "src/Reactor/Core/Localization/IStringResourceProvider.cs",
+        "src/Reactor/Core/Localization/PseudoLocalizer.cs",
+        "src/Reactor/Core/Localization/RtlHelper.cs"
       ],
       "description": "Localization runtime \u2014 provider lifecycle, message cache invalidation"
     },
@@ -269,9 +269,9 @@
       "id": "lifecycle-batch-12",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Localization/DateFormatOptions.cs",
-        "Reactor/Localization/ListFormatType.cs",
-        "Reactor/Localization/NumberFormatOptions.cs"
+        "src/Reactor/Core/Localization/DateFormatOptions.cs",
+        "src/Reactor/Core/Localization/ListFormatType.cs",
+        "src/Reactor/Core/Localization/NumberFormatOptions.cs"
       ],
       "description": "Localization format option types"
     },
@@ -279,7 +279,7 @@
       "id": "interop-batch-1",
       "agent": "interop",
       "files": [
-        "Reactor/Hosting/PreviewCaptureServer.cs",
+        "src/Reactor.Devtools/PreviewCaptureServer.cs",
         "src/Reactor/Hosting/XamlInterop.cs",
         "src/Reactor/Elements/WinRTCache.cs",
         "src/Reactor/Hosting/ReactorApp.cs",
@@ -292,14 +292,14 @@
       "id": "interop-batch-2",
       "agent": "interop",
       "files": [
-        "Reactor/Markdown/Md4cParser.cs",
-        "Reactor/Markdown/Md4cParser.Block.cs",
-        "Reactor/Markdown/Md4cParser.Inline.cs",
-        "Reactor/Markdown/Md4cEnums.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.Block.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.Inline.cs",
+        "src/Reactor.Advanced/Markdown/MarkdownEnums.cs",
         "Reactor/Markdown/Md4cTypes.cs",
-        "Reactor/Markdown/Md4cEntity.cs",
-        "Reactor/Markdown/Md4cHtml.cs",
-        "Reactor/Markdown/Md4cUnicode.cs"
+        "src/Reactor.Advanced/Markdown/Md4cEntity.cs",
+        "tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs",
+        "src/Reactor.Advanced/Markdown/Md4cUnicode.cs"
       ],
       "description": "Md4c markdown parser \u2014 potential native interop, unsafe code"
     },
@@ -317,7 +317,7 @@
       "id": "security-batch-1",
       "agent": "security",
       "files": [
-        "Reactor/Hosting/PreviewCaptureServer.cs",
+        "src/Reactor.Devtools/PreviewCaptureServer.cs",
         "src/Reactor/Hosting/ReactorApp.cs",
         "src/Reactor.Cli/Program.cs"
       ],
@@ -638,16 +638,16 @@
       "id": "test-quality-batch-20",
       "agent": "test-quality",
       "files": [
-        "tests/ReactorCharting.Tests/AreaTests.cs",
-        "tests/ReactorCharting.Tests/ChordTests.cs",
-        "tests/ReactorCharting.Tests/ClusterTests.cs",
+        "tests/Reactor.Tests/D3/AreaTests.cs",
+        "tests/Reactor.Tests/D3/ChordTests.cs",
+        "tests/Reactor.Tests/D3/ClusterTests.cs",
         "tests/ReactorCharting.Tests/CurveTests.cs",
-        "tests/ReactorCharting.Tests/DelaunayTests.cs",
-        "tests/ReactorCharting.Tests/EaseTests.cs",
-        "tests/ReactorCharting.Tests/FormatTests.cs",
-        "tests/ReactorCharting.Tests/GroupTests.cs",
-        "tests/ReactorCharting.Tests/InterpolateColorTests.cs",
-        "tests/ReactorCharting.Tests/LineTests.cs"
+        "tests/Reactor.Tests/D3/DelaunayTests.cs",
+        "tests/Reactor.Tests/D3/EaseChartingExtraTests.cs",
+        "tests/Reactor.Tests/D3/FormatTests.cs",
+        "tests/Reactor.Tests/D3/GroupTests.cs",
+        "tests/Reactor.Tests/D3/InterpolateColorTests.cs",
+        "tests/Reactor.Tests/D3/LineTests.cs"
       ],
       "description": "Charting test suite part 1 \u2014 area, chord, cluster, curve, delaunay, ease, format"
     },
@@ -655,16 +655,16 @@
       "id": "test-quality-batch-21",
       "agent": "test-quality",
       "files": [
-        "tests/ReactorCharting.Tests/LinearScaleTests.cs",
-        "tests/ReactorCharting.Tests/PartitionTests.cs",
-        "tests/ReactorCharting.Tests/PathBuilderTests.cs",
-        "tests/ReactorCharting.Tests/PieTests.cs",
-        "tests/ReactorCharting.Tests/PolygonTests.cs",
-        "tests/ReactorCharting.Tests/RadialTests.cs",
-        "tests/ReactorCharting.Tests/RandomTests.cs",
-        "tests/ReactorCharting.Tests/RangeTests.cs",
-        "tests/ReactorCharting.Tests/SankeyTests.cs",
-        "tests/ReactorCharting.Tests/ScaleTests.cs"
+        "tests/Reactor.Tests/D3/LinearScaleTests.cs",
+        "tests/Reactor.Tests/D3/PartitionTests.cs",
+        "tests/Reactor.Tests/D3/PathBuilderTests.cs",
+        "tests/Reactor.Tests/D3/PieTests.cs",
+        "tests/Reactor.Tests/D3/PolygonTests.cs",
+        "tests/Reactor.Tests/D3/RadialTests.cs",
+        "tests/Reactor.Tests/D3/RandomTests.cs",
+        "tests/Reactor.Tests/D3/RangeTests.cs",
+        "tests/Reactor.Tests/D3/SankeyTests.cs",
+        "tests/Reactor.Tests/D3/ScaleTests.cs"
       ],
       "description": "Charting test suite part 2 \u2014 scale, partition, path, pie, polygon, sankey"
     },
@@ -672,12 +672,12 @@
       "id": "test-quality-batch-22",
       "agent": "test-quality",
       "files": [
-        "tests/ReactorCharting.Tests/StatisticsTests.cs",
-        "tests/ReactorCharting.Tests/StratifyTests.cs",
-        "tests/ReactorCharting.Tests/SymbolTests.cs",
-        "tests/ReactorCharting.Tests/TicksTests.cs",
-        "tests/ReactorCharting.Tests/TreemapTests.cs",
-        "tests/ReactorCharting.Tests/ContourTests.cs"
+        "tests/Reactor.Tests/D3/StatisticsChartingExtraTests.cs",
+        "tests/Reactor.Tests/D3/StratifyTests.cs",
+        "tests/Reactor.Tests/D3/SymbolTests.cs",
+        "tests/Reactor.Tests/D3/TicksTests.cs",
+        "tests/Reactor.Tests/D3/TreemapTests.cs",
+        "tests/Reactor.Tests/D3/ContourTests.cs"
       ],
       "description": "Charting test suite part 3 \u2014 statistics, stratify, symbol, ticks, treemap, contour"
     },
@@ -914,14 +914,14 @@
       "id": "general-batch-4",
       "agent": "general",
       "files": [
-        "Reactor/Navigation/NavigationContext.cs",
-        "Reactor/Navigation/NavigationHandle.cs",
-        "Reactor/Navigation/NavigationLifecycle.cs",
-        "Reactor/Navigation/NavigationStack.cs",
-        "Reactor/Navigation/NavigationCache.cs",
-        "Reactor/Navigation/NavigationTransition.cs",
-        "Reactor/Navigation/TransitionEngine.cs",
-        "Reactor/Navigation/DeepLinkMap.cs"
+        "src/Reactor/Core/Navigation/NavigationContext.cs",
+        "src/Reactor/Core/Navigation/NavigationHandle.cs",
+        "src/Reactor/Core/Navigation/NavigationLifecycle.cs",
+        "src/Reactor/Core/Navigation/NavigationStack.cs",
+        "src/Reactor/Core/Navigation/NavigationCache.cs",
+        "src/Reactor/Core/Navigation/NavigationTransition.cs",
+        "src/Reactor/Core/Navigation/TransitionEngine.cs",
+        "src/Reactor/Core/Navigation/DeepLinkMap.cs"
       ],
       "description": "Navigation system \u2014 stack, cache, transitions, deep links"
     },
@@ -929,15 +929,15 @@
       "id": "general-batch-5",
       "agent": "general",
       "files": [
-        "Reactor/Localization/LocaleContext.cs",
-        "Reactor/Localization/LocaleProviderElement.cs",
-        "Reactor/Localization/IntlAccessor.cs",
-        "Reactor/Localization/MessageCache.cs",
-        "Reactor/Localization/MessageKey.cs",
-        "Reactor/Localization/ReswResourceProvider.cs",
-        "Reactor/Localization/IStringResourceProvider.cs",
-        "Reactor/Localization/PseudoLocalizer.cs",
-        "Reactor/Localization/RtlHelper.cs"
+        "src/Reactor/Core/Localization/LocaleContext.cs",
+        "src/Reactor/Core/Localization/LocaleProviderElement.cs",
+        "src/Reactor/Core/Localization/IntlAccessor.cs",
+        "src/Reactor/Core/Localization/MessageCache.cs",
+        "src/Reactor/Core/Localization/MessageKey.cs",
+        "src/Reactor/Core/Localization/ReswResourceProvider.cs",
+        "src/Reactor/Core/Localization/IStringResourceProvider.cs",
+        "src/Reactor/Core/Localization/PseudoLocalizer.cs",
+        "src/Reactor/Core/Localization/RtlHelper.cs"
       ],
       "description": "Localization runtime \u2014 providers, cache, RTL, pseudo-loc"
     },
@@ -945,9 +945,9 @@
       "id": "general-batch-6",
       "agent": "general",
       "files": [
-        "Reactor/Localization/DateFormatOptions.cs",
-        "Reactor/Localization/ListFormatType.cs",
-        "Reactor/Localization/NumberFormatOptions.cs"
+        "src/Reactor/Core/Localization/DateFormatOptions.cs",
+        "src/Reactor/Core/Localization/ListFormatType.cs",
+        "src/Reactor/Core/Localization/NumberFormatOptions.cs"
       ],
       "description": "Localization format option types"
     },
@@ -961,7 +961,7 @@
         "src/Reactor/Hosting/ReactorApp.cs",
         "src/Reactor/Hosting/RenderStats.cs",
         "src/Reactor/Hosting/HotReloadService.cs",
-        "Reactor/Hosting/PreviewCaptureServer.cs",
+        "src/Reactor.Devtools/PreviewCaptureServer.cs",
         "src/Reactor/Hosting/XamlInterop.cs"
       ],
       "description": "Hosting layer \u2014 app host, render control, preview, XAML interop"
@@ -1019,15 +1019,15 @@
       "agent": "general",
       "files": [
         "src/Reactor/Yoga/FlexDirectionHelper.cs",
-        "Reactor/Markdown/Md4cParser.cs",
-        "Reactor/Markdown/Md4cParser.Block.cs",
-        "Reactor/Markdown/Md4cParser.Inline.cs",
-        "Reactor/Markdown/MarkdownBuilder.cs",
-        "Reactor/Markdown/Md4cEnums.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.Block.cs",
+        "src/Reactor.Advanced/Markdown/Md4cParser.Inline.cs",
+        "src/Reactor.Advanced/Markdown/MarkdownBuilder.cs",
+        "src/Reactor.Advanced/Markdown/MarkdownEnums.cs",
         "Reactor/Markdown/Md4cTypes.cs",
-        "Reactor/Markdown/Md4cEntity.cs",
-        "Reactor/Markdown/Md4cHtml.cs",
-        "Reactor/Markdown/Md4cUnicode.cs"
+        "src/Reactor.Advanced/Markdown/Md4cEntity.cs",
+        "tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs",
+        "src/Reactor.Advanced/Markdown/Md4cUnicode.cs"
       ],
       "description": "Markdown parser and remaining Yoga helpers"
     },
@@ -1037,7 +1037,7 @@
       "files": [
         "src/Reactor/Controls/PropertyGrid/PropertyGridComponent.cs",
         "src/Reactor/Controls/PropertyGrid/PropertyGridElement.cs",
-        "Reactor/Controls/PropertyGrid/Factories.cs",
+        "src/Reactor/Controls/PropertyGrid/PropertyGridFactories.cs",
         "src/Reactor/Controls/PropertyGrid/PropertyGridDefaults.cs",
         "src/Reactor/Controls/PropertyGrid/ArrayOperations.cs",
         "src/Reactor/Controls/PropertyGrid/Attributes.cs"
@@ -1122,13 +1122,13 @@
       "id": "general-batch-19",
       "agent": "general",
       "files": [
-        "Reactor/Charting/Array/Bin.cs",
-        "Reactor/Charting/Array/Bisect.cs",
-        "Reactor/Charting/Array/Extent.cs",
-        "Reactor/Charting/Array/Group.cs",
-        "Reactor/Charting/Array/Range.cs",
-        "Reactor/Charting/Array/Statistics.cs",
-        "Reactor/Charting/Array/Ticks.cs"
+        "src/Reactor.Advanced/Charting/D3/Array/Bin.cs",
+        "src/Reactor.Advanced/Charting/D3/Array/Bisect.cs",
+        "src/Reactor.Advanced/Charting/D3/Array/Extent.cs",
+        "src/Reactor.Advanced/Charting/D3/Array/Group.cs",
+        "src/Reactor.Advanced/Charting/D3/Array/Range.cs",
+        "src/Reactor.Advanced/Charting/D3/Array/Statistics.cs",
+        "src/Reactor.Advanced/Charting/D3/Array/Ticks.cs"
       ],
       "description": "Charting array utilities \u2014 bin, bisect, extent, group, statistics"
     },
@@ -1136,12 +1136,12 @@
       "id": "general-batch-20",
       "agent": "general",
       "files": [
-        "Reactor/Charting/Scale/LinearScale.cs",
-        "Reactor/Charting/Scale/LogScale.cs",
-        "Reactor/Charting/Scale/PowScale.cs",
-        "Reactor/Charting/Scale/QuantizeScale.cs",
-        "Reactor/Charting/Scale/BandScale.cs",
-        "Reactor/Charting/Scale/OrdinalScale.cs"
+        "src/Reactor.Advanced/Charting/D3/Scale/LinearScale.cs",
+        "src/Reactor.Advanced/Charting/D3/Scale/LogScale.cs",
+        "src/Reactor.Advanced/Charting/D3/Scale/PowScale.cs",
+        "src/Reactor.Advanced/Charting/D3/Scale/QuantizeScale.cs",
+        "src/Reactor.Advanced/Charting/D3/Scale/BandScale.cs",
+        "src/Reactor.Advanced/Charting/D3/Scale/OrdinalScale.cs"
       ],
       "description": "Charting scales \u2014 linear, log, pow, quantize, band, ordinal"
     },
@@ -1149,15 +1149,15 @@
       "id": "general-batch-21",
       "agent": "general",
       "files": [
-        "Reactor/Charting/Shape/Arc.cs",
-        "Reactor/Charting/Shape/Area.cs",
-        "Reactor/Charting/Shape/Curve.cs",
-        "Reactor/Charting/Shape/Line.cs",
-        "Reactor/Charting/Shape/Link.cs",
-        "Reactor/Charting/Shape/Pie.cs",
-        "Reactor/Charting/Shape/Radial.cs",
-        "Reactor/Charting/Shape/Stack.cs",
-        "Reactor/Charting/Shape/Symbol.cs"
+        "src/Reactor.Advanced/Charting/D3/Shape/Arc.cs",
+        "src/Reactor.Advanced/Charting/D3/Shape/Area.cs",
+        "src/Reactor.Advanced/Charting/D3/Shape/Curve.cs",
+        "src/Reactor.Advanced/Charting/D3/Shape/Line.cs",
+        "src/Reactor.Advanced/Charting/D3/Shape/Link.cs",
+        "src/Reactor.Advanced/Charting/D3/Shape/Pie.cs",
+        "src/Reactor.Advanced/Charting/D3/Shape/Radial.cs",
+        "src/Reactor.Advanced/Charting/D3/Shape/Stack.cs",
+        "src/Reactor.Advanced/Charting/D3/Shape/Symbol.cs"
       ],
       "description": "Charting shapes \u2014 arc, area, curve, line, pie, radial, stack, symbol"
     },
@@ -1165,14 +1165,14 @@
       "id": "general-batch-22",
       "agent": "general",
       "files": [
-        "Reactor/Charting/Layout/Cluster.cs",
-        "Reactor/Charting/Layout/ForceSimulation.cs",
-        "Reactor/Charting/Layout/Pack.cs",
-        "Reactor/Charting/Layout/Partition.cs",
-        "Reactor/Charting/Layout/Sankey.cs",
-        "Reactor/Charting/Layout/Stratify.cs",
-        "Reactor/Charting/Layout/TreeLayout.cs",
-        "Reactor/Charting/Layout/Treemap.cs"
+        "src/Reactor.Advanced/Charting/D3/Layout/Cluster.cs",
+        "src/Reactor.Advanced/Charting/D3/Layout/ForceSimulation.cs",
+        "src/Reactor.Advanced/Charting/D3/Layout/Pack.cs",
+        "src/Reactor.Advanced/Charting/D3/Layout/Partition.cs",
+        "src/Reactor.Advanced/Charting/D3/Layout/Sankey.cs",
+        "src/Reactor.Advanced/Charting/D3/Layout/Stratify.cs",
+        "src/Reactor.Advanced/Charting/D3/Layout/TreeLayout.cs",
+        "src/Reactor.Advanced/Charting/D3/Layout/Treemap.cs"
       ],
       "description": "Charting layouts \u2014 cluster, force, pack, partition, sankey, tree, treemap"
     },
@@ -1180,15 +1180,15 @@
       "id": "general-batch-23",
       "agent": "general",
       "files": [
-        "Reactor/Charting/Charts/Charts.cs",
-        "Reactor/Charting/Charts/D3Charts.cs",
-        "Reactor/Charting/Charts/PathDataParser.cs",
-        "Reactor/Charting/Charts/TreeChartDsl.cs",
-        "Reactor/Charting/Chord/Chord.cs",
-        "Reactor/Charting/Color/D3Color.cs",
-        "Reactor/Charting/Contour/Contour.cs",
-        "Reactor/Charting/Ease/Ease.cs",
-        "Reactor/Charting/Format/Format.cs"
+        "src/Reactor.Advanced/Charting/Charts.cs",
+        "src/Reactor.Advanced/Charting/D3Charts.cs",
+        "src/Reactor/Core/PathDataParser.cs",
+        "src/Reactor.Advanced/Charting/Charts.Tree.cs",
+        "src/Reactor.Advanced/Charting/D3/Chord/Chord.cs",
+        "src/Reactor.Advanced/Charting/D3/Color/D3Color.cs",
+        "src/Reactor.Advanced/Charting/D3/Contour/Contour.cs",
+        "src/Reactor.Advanced/Charting/D3/Ease/Ease.cs",
+        "src/Reactor.Advanced/Charting/D3/Format/Format.cs"
       ],
       "description": "Charting charts, chord, color, contour, ease, format"
     },
@@ -1196,12 +1196,12 @@
       "id": "general-batch-24",
       "agent": "general",
       "files": [
-        "Reactor/Charting/Interpolate/Interpolate.cs",
-        "Reactor/Charting/Interpolate/InterpolateColor.cs",
-        "Reactor/Charting/Path/PathBuilder.cs",
-        "Reactor/Charting/Polygon/Polygon.cs",
-        "Reactor/Charting/Random/Random.cs",
-        "Reactor/Charting/Voronoi/Delaunay.cs"
+        "src/Reactor.Advanced/Charting/D3/Interpolate/Interpolate.cs",
+        "src/Reactor.Advanced/Charting/D3/Interpolate/InterpolateColor.cs",
+        "src/Reactor.Advanced/Charting/D3/Path/PathBuilder.cs",
+        "src/Reactor.Advanced/Charting/D3/Polygon/Polygon.cs",
+        "src/Reactor.Advanced/Charting/D3/Random/Random.cs",
+        "src/Reactor.Advanced/Charting/D3/Voronoi/Delaunay.cs"
       ],
       "description": "Charting interpolation, path, polygon, random, voronoi"
     },
