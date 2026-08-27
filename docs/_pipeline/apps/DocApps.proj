@@ -29,19 +29,24 @@
     <DocApp Include="$(MSBuildThisFileDirectory)*\*.csproj" />
   </ItemGroup>
 
+  <!-- Every target runs serially, and that costs almost nothing: a measured Rebuild of all 53
+       apps takes 45s serial vs 43s parallel, because the real work is the shared framework
+       projects, which are built once either way. Each doc app is a small compile on top.
+
+       Parallelism is what it buys us trouble for. All 53 apps ProjectReference the same framework
+       projects, so building or restoring them concurrently has several processes writing the same
+       obj/bin and NuGet assets. Restore failed exactly that way on the first CI run
+       ("NuGet.targets(198,5): error : Cannot create a file when that file already exists"), and
+       AGENTS.md documents the matching build-side hazard (`CSC error CS2012 ... used by another
+       process` under parallel WinUI builds). A gate that fails intermittently gets switched off,
+       so this one trades two seconds for determinism. -->
   <Target Name="Build">
     <Message Importance="high" Text="Building doc apps ($(Configuration)|$(Platform))" />
     <MSBuild Projects="@(DocApp)"
-             BuildInParallel="true"
+             BuildInParallel="false"
              Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
 
-  <!-- Restore runs serially on purpose. All 53 doc apps ProjectReference the same framework
-       projects, so restoring them in parallel has NuGet writing the shared assets/nuget.g.props
-       files from several processes at once — which failed on the CI runner with
-       "NuGet.targets(198,5): error : Cannot create a file when that file already exists."
-       Restore is cheap and idempotent, so serialising it costs little; Build below stays parallel
-       because MSBuild dedupes a shared project reference within one build session. -->
   <Target Name="Restore">
     <MSBuild Projects="@(DocApp)"
              Targets="Restore"
@@ -55,7 +60,7 @@
   <Target Name="Rebuild">
     <MSBuild Projects="@(DocApp)"
              Targets="Rebuild"
-             BuildInParallel="true"
+             BuildInParallel="false"
              Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
 

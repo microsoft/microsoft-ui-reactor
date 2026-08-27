@@ -450,7 +450,7 @@ public class DocAppGateWiringTests
                 Path.IsPathRooted(normalized),
                 $"'{segment}' must be repo-relative; a rooted segment would silently discard '{combined}'.");
 
-            combined = Path.Combine(combined, normalized);
+            combined = Path.Join(combined, normalized);
         }
 
         var resolved = Path.GetFullPath(combined);
@@ -466,7 +466,7 @@ public class DocAppGateWiringTests
         var dir = Directory.GetCurrentDirectory();
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir, "Reactor.slnx")) || Directory.Exists(Path.Combine(dir, ".git")))
+            if (File.Exists(Path.Join(dir, "Reactor.slnx")) || Directory.Exists(Path.Join(dir, ".git")))
                 return dir;
             dir = Path.GetDirectoryName(dir);
         }
