@@ -36,10 +36,16 @@
              Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
 
+  <!-- Restore runs serially on purpose. All 53 doc apps ProjectReference the same framework
+       projects, so restoring them in parallel has NuGet writing the shared assets/nuget.g.props
+       files from several processes at once — which failed on the CI runner with
+       "NuGet.targets(198,5): error : Cannot create a file when that file already exists."
+       Restore is cheap and idempotent, so serialising it costs little; Build below stays parallel
+       because MSBuild dedupes a shared project reference within one build session. -->
   <Target Name="Restore">
     <MSBuild Projects="@(DocApp)"
              Targets="Restore"
-             BuildInParallel="true"
+             BuildInParallel="false"
              Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
 
