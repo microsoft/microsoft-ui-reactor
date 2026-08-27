@@ -1,0 +1,320 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
+
+namespace Microsoft.UI.Reactor.SourceMap.Generator;
+
+/// <summary>
+/// Spec 010 Route B — stamps <c>Element.Source</c> onto every Reactor DSL call
+/// site using C# interceptors (stable in C# 14 / .NET 10).
+///
+/// <para>The generator runs in the <em>consumer's</em> compilation and, for each
+/// <c>Microsoft.UI.Reactor.Factories.*</c> invocation that returns an
+/// <c>Element</c>, emits a same-signature interceptor that calls the original
+/// factory and then stamps the call site's file + line. No factory signature
+/// changes and no call site is edited — which is the whole point of this route,
+/// and the only way to cover the 39 <c>params Element?[] children</c> factories
+/// (C# forbids a trailing optional parameter after <c>params</c>, so
+/// <c>[CallerLineNumber]</c> structurally cannot reach them).</para>
+///
+/// <para><b>Opt-in.</b> Emitting an interceptor into a project that has not
+/// listed the interceptor namespace in <c>&lt;InterceptorsNamespaces&gt;</c> is a
+/// hard <c>CS9137</c> build error, not a silent no-op. The generator therefore
+/// emits nothing unless the consumer set <c>ReactorSourceMap=true</c>, which is
+/// the same condition under which <c>Microsoft.UI.Reactor.targets</c> appends
+/// the namespace. The two must stay welded together.</para>
+/// </summary>
+[Generator(LanguageNames.CSharp)]
+public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
+{
+    internal const string InterceptorNamespace = "Microsoft.UI.Reactor.Generated";
+    private const string FactoriesMetadataName = "Microsoft.UI.Reactor.Factories";
+    private const string ElementMetadataName = "Microsoft.UI.Reactor.Core.Element";
+
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        // ── Opt-in gate ───────────────────────────────────────────────────
+        var enabled = context.AnalyzerConfigOptionsProvider.Select(static (p, _) =>
+            p.GlobalOptions.TryGetValue("build_property.ReactorSourceMap", out var v)
+            && v.Equals("true", StringComparison.OrdinalIgnoreCase));
+
+        // Whether the BCL already declares InterceptsLocationAttribute. As of
+        // .NET 10 it does NOT (verified: CS0234), so the polyfill below is the
+        // live path — but probe rather than assume, so a future BCL that adds it
+        // does not produce a duplicate-definition break.
+        var needsPolyfill = context.CompilationProvider.Select(static (c, _) =>
+            c.GetTypeByMetadataName("System.Runtime.CompilerServices.InterceptsLocationAttribute") is null);
+
+        // PathMap, so the emitted literal matches what [CallerFilePath] would
+        // produce under DeterministicSourcePaths (Directory.Build.props:117-119
+        // turns that on when CI=true). The compiler rewrites CallerFilePath, but
+        // it does NOT rewrite a string literal a generator emitted — we have to
+        // apply the map ourselves or Route B leaks local disk paths into CI
+        // binaries that Route A would have normalized.
+        var pathMap = context.CompilationProvider.Select(static (c, _) =>
+            (c.Options.SourceReferenceResolver as SourceFileResolver)?.PathMap
+            ?? ImmutableArray<KeyValuePair<string, string>>.Empty);
+
+        var callSites = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is InvocationExpressionSyntax,
+                transform: static (ctx, ct) => TryDescribe(ctx, ct))
+            .Where(static x => x is not null)
+            .Collect();
+
+        var input = callSites.Combine(enabled).Combine(needsPolyfill).Combine(pathMap);
+
+        context.RegisterSourceOutput(input, static (spc, tuple) =>
+        {
+            var (((sites, isEnabled), polyfill), map) = tuple;
+            if (!isEnabled || sites.IsDefaultOrEmpty) return;
+            spc.AddSource("ReactorSourceMap.Interceptors.g.cs", Emit(sites!, polyfill, map));
+        });
+    }
+
+    // ── Call-site discovery ───────────────────────────────────────────────
+
+    private static CallSite? TryDescribe(GeneratorSyntaxContext ctx, System.Threading.CancellationToken ct)
+    {
+        var invocation = (InvocationExpressionSyntax)ctx.Node;
+
+        if (ctx.SemanticModel.GetSymbolInfo(invocation, ct).Symbol is not IMethodSymbol method) return null;
+        if (!method.IsStatic) return null;
+        if (method.MethodKind != MethodKind.Ordinary) return null;
+
+        // Only the Reactor DSL surface.
+        if (method.ContainingType?.ToDisplayString() != FactoriesMetadataName) return null;
+
+        // Generic factories (Component<T>, ForEach<T>, Memo<T>, …) are out of
+        // scope for this spike: an interceptor for a generic method must restate
+        // the type parameters AND their constraints, which is mechanical but
+        // noisy. Excluded deliberately so the measured numbers describe a
+        // surface that actually compiles.
+        if (method.IsGenericMethod) return null;
+
+        // The interceptor has to be able to call the original with exactly the
+        // arguments it received; by-ref parameters would need matching ref kinds
+        // on both sides. Nothing in the DSL uses them today — bail rather than
+        // emit something subtly wrong if that changes.
+        if (method.Parameters.Any(p => p.RefKind != RefKind.None)) return null;
+
+        // Must return something we can stamp.
+        if (!ReturnsElement(method.ReturnType)) return null;
+
+        var location = ctx.SemanticModel.GetInterceptableLocation(invocation, ct);
+        if (location is null) return null;
+
+        var lineSpan = invocation.SyntaxTree.GetLineSpan(invocation.Span, ct);
+
+        return new CallSite(
+            attribute: location.GetInterceptsLocationAttributeSyntax(),
+            filePath: invocation.SyntaxTree.FilePath,
+            line: lineSpan.StartLinePosition.Line + 1,
+            signature: Signature.From(method));
+    }
+
+    private static bool ReturnsElement(ITypeSymbol type)
+    {
+        for (var t = type; t is not null; t = t.BaseType)
+        {
+            if (t.ToDisplayString() == ElementMetadataName) return true;
+        }
+        return false;
+    }
+
+    // ── Emit ──────────────────────────────────────────────────────────────
+
+    private static string Emit(
+        ImmutableArray<CallSite?> sites,
+        bool needsPolyfill,
+        ImmutableArray<KeyValuePair<string, string>> pathMap)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Spec 010 Route B — Reactor source-map interceptors.");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+
+        if (needsPolyfill)
+        {
+            sb.AppendLine("namespace System.Runtime.CompilerServices");
+            sb.AppendLine("{");
+            sb.AppendLine("    // Not present in the .NET 10 BCL; the compiler recognizes this");
+            sb.AppendLine("    // declaration by full name, so every interceptor generator has to");
+            sb.AppendLine("    // supply its own copy.");
+            sb.AppendLine("    [global::System.AttributeUsage(global::System.AttributeTargets.Method, AllowMultiple = true)]");
+            sb.AppendLine("    file sealed class InterceptsLocationAttribute : global::System.Attribute");
+            sb.AppendLine("    {");
+            sb.AppendLine("        public InterceptsLocationAttribute(int version, string data) { _ = version; _ = data; }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine($"namespace {InterceptorNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    file static class ReactorSourceMapInterceptors");
+        sb.AppendLine("    {");
+
+        int index = 0;
+        foreach (var site in sites)
+        {
+            if (site is null) continue;
+            var sig = site.Signature;
+            var mapped = ApplyPathMap(site.FilePath, pathMap);
+            var name = $"__Reactor_{sig.MethodName}_{index}";
+
+            sb.AppendLine($"        {site.Attribute}");
+            sb.AppendLine($"        public static {sig.ReturnType} {name}({sig.ParameterList})");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            var __e = global::{FactoriesMetadataName}.{sig.MethodName}({sig.ArgumentList});");
+            sb.AppendLine("            if (!global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled) return __e;");
+            // The null guard is emitted only for a nullable-annotated return; on a
+            // non-nullable one it would be dead code the nullable analysis flags.
+            if (sig.ReturnsNullable)
+            {
+                sb.AppendLine("            if (__e is null) return __e;");
+            }
+            sb.AppendLine("            return __e with");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation({Literal(mapped)}, {site.Line})");
+            sb.AppendLine("            };");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            index++;
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    internal static string ApplyPathMap(string path, ImmutableArray<KeyValuePair<string, string>> pathMap)
+    {
+        if (pathMap.IsDefaultOrEmpty || string.IsNullOrEmpty(path)) return path;
+        foreach (var entry in pathMap)
+        {
+            if (path.StartsWith(entry.Key, StringComparison.OrdinalIgnoreCase))
+                return entry.Value + path.Substring(entry.Key.Length);
+        }
+        return path;
+    }
+
+    private static string Literal(string value) => "@\"" + value.Replace("\"", "\"\"") + "\"";
+
+    // ── Models ────────────────────────────────────────────────────────────
+
+    private sealed class CallSite : IEquatable<CallSite>
+    {
+        public CallSite(string attribute, string filePath, int line, Signature signature)
+        {
+            Attribute = attribute;
+            FilePath = filePath;
+            Line = line;
+            Signature = signature;
+        }
+
+        public string Attribute { get; }
+        public string FilePath { get; }
+        public int Line { get; }
+        public Signature Signature { get; }
+
+        public bool Equals(CallSite? other)
+            => other is not null
+               && Attribute == other.Attribute
+               && FilePath == other.FilePath
+               && Line == other.Line
+               && Signature.Equals(other.Signature);
+
+        public override bool Equals(object? obj) => Equals(obj as CallSite);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int h = Attribute.GetHashCode();
+                h = (h * 397) ^ FilePath.GetHashCode();
+                h = (h * 397) ^ Line;
+                return (h * 397) ^ Signature.GetHashCode();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The pieces of the intercepted method's signature that the interceptor has
+    /// to restate verbatim. Parameters are emitted WITHOUT default values on
+    /// purpose: interception happens after overload resolution, so the compiler
+    /// has already materialized any omitted optional argument. <c>params</c> IS
+    /// restated because an expanded-form call site binds the array at the call
+    /// site and the interceptor must accept it in the same form.
+    /// </summary>
+    private sealed class Signature : IEquatable<Signature>
+    {
+        private static readonly SymbolDisplayFormat s_typeFormat =
+            SymbolDisplayFormat.FullyQualifiedFormat
+                .WithMiscellaneousOptions(
+                    SymbolDisplayMiscellaneousOptions.UseSpecialTypes
+                    | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+        private Signature(string methodName, string returnType, string parameterList, string argumentList, bool returnsNullable)
+        {
+            MethodName = methodName;
+            ReturnType = returnType;
+            ParameterList = parameterList;
+            ArgumentList = argumentList;
+            ReturnsNullable = returnsNullable;
+        }
+
+        public string MethodName { get; }
+        public string ReturnType { get; }
+        public string ParameterList { get; }
+        public string ArgumentList { get; }
+        public bool ReturnsNullable { get; }
+
+        public static Signature From(IMethodSymbol method)
+        {
+            var parameters = new List<string>(method.Parameters.Length);
+            var arguments = new List<string>(method.Parameters.Length);
+
+            for (int i = 0; i < method.Parameters.Length; i++)
+            {
+                var p = method.Parameters[i];
+                var name = "__a" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var type = p.Type.ToDisplayString(s_typeFormat);
+                var prefix = p.IsParams ? "params " : string.Empty;
+                parameters.Add($"{prefix}{type} {name}");
+                arguments.Add(name);
+            }
+
+            return new Signature(
+                method.Name,
+                method.ReturnType.ToDisplayString(s_typeFormat),
+                string.Join(", ", parameters),
+                string.Join(", ", arguments),
+                method.ReturnType.NullableAnnotation == NullableAnnotation.Annotated);
+        }
+
+        public bool Equals(Signature? other)
+            => other is not null
+               && MethodName == other.MethodName
+               && ReturnType == other.ReturnType
+               && ParameterList == other.ParameterList;
+
+        public override bool Equals(object? obj) => Equals(obj as Signature);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int h = MethodName.GetHashCode();
+                h = (h * 397) ^ ReturnType.GetHashCode();
+                return (h * 397) ^ ParameterList.GetHashCode();
+            }
+        }
+    }
+}

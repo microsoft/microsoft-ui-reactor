@@ -321,7 +321,16 @@ public static partial class ReactorApp
     public static bool DevtoolsEnabled
     {
         get => Volatile.Read(ref _devtoolsEnabled) != 0;
-        internal set => Volatile.Write(ref _devtoolsEnabled, value ? 1 : 0);
+        internal set
+        {
+            Volatile.Write(ref _devtoolsEnabled, value ? 1 : 0);
+            // Spec 010 — source mapping is a devtools-session capability. Enabling
+            // it flips Reconciler.NeedsTag so every control (not just the
+            // callback/key/extras-bearing ones) carries the element back-pointer
+            // an inspector needs. Deliberately one-way-follows the devtools flag:
+            // turning devtools off turns source mapping off with it.
+            Diagnostics.ReactorSourceMap.Enabled = value;
+        }
     }
 
     // Unpackaged WinUI apps (WindowsPackageType=None) don't inherit DPI awareness from an
@@ -843,6 +852,9 @@ public static partial class ReactorApp
     internal static void ResetDevtoolsEnabledForTests()
     {
         Interlocked.Exchange(ref _devtoolsEnabled, 0);
+        // Spec 010 — keep the derived source-map flag in lockstep; the field
+        // write above bypasses the property setter that normally mirrors it.
+        Diagnostics.ReactorSourceMap.Enabled = false;
     }
 
     internal static void ResetDipBehaviorChangeNoticeForTests()

@@ -604,11 +604,21 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="GetElementTag(FrameworkElement)"/> — see the helper's
     /// summary for the three categories.
     /// </summary>
+    /// <remarks>
+    /// Spec 010: the <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/> arm is
+    /// LAST on purpose. When source mapping is off (the shipping default) the
+    /// four original tests short-circuit exactly as before for every tagged
+    /// element, and an untagged leaf pays one additional static bool read and
+    /// no allocation — so the flag-off allocation profile is unchanged. When it
+    /// is on, every control gets tagged so an inspector can walk from any
+    /// <c>UIElement</c> back to <see cref="Element.CallSite"/>.
+    /// </remarks>
     private static bool NeedsTag(Element element) =>
         element.HasCallbacks
         || element.Key is not null
         || element.Extensions is not null
-        || HasReferenceModifiers(element);
+        || HasReferenceModifiers(element)
+        || Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
 
     /// <summary>
     /// True when the element carries any reactive reference modifier — the imperative

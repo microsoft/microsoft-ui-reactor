@@ -9,6 +9,9 @@ internal static class SelfTestFixtureRegistry
 {
     public static readonly string[] AllFixtures =
     [
+        "SourceMapReadPath_Enabled",
+        "SourceMapReadPath_Disabled",
+        "SourceMapReadPath_AlreadyTagged",
         "ErrorBoundary_CatchesRenderError",
         "ErrorBoundary_Recovery",
         "Reconciler_MountText",
@@ -2281,9 +2284,12 @@ internal static class SelfTestFixtureRegistry
         "AnimScope_NestingBehavior" => new AnimationScopeTests.NestingBehavior(harness),
         "AnimScope_NullCurveSuppresses" => new AnimationScopeTests.NullCurveSuppresses(harness),
         "AnimScope_WithAnimationIntegration" => new AnimationScopeTests.WithAnimationIntegration(harness),
+        // Spec 010 — source-map read path (UIElement → ReactorState → Element.CallSite)
+        "SourceMapReadPath_Enabled" => new SourceMapReadPathTests.LeafIsReadableWhenEnabled(harness),
+        "SourceMapReadPath_Disabled" => new SourceMapReadPathTests.LeafIsNotTaggedWhenDisabled(harness),
+        "SourceMapReadPath_AlreadyTagged" => new SourceMapReadPathTests.AlreadyTaggedControlStillCarriesSource(harness),
         // Animation system — .Animate() modifier
-        "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),
-        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
+        "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),
         // Animation system — InteractionStates
         "InterState_StateMachineTransitions" => new InteractionStatesTests.StateMachineTransitions(harness),

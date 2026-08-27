@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishTrimmed">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <PublishTrimmed>false</PublishTrimmed>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <AssemblyName>Reactor.SourceMap.Generator</AssemblyName>
+    <RootNamespace>Microsoft.UI.Reactor.SourceMap.Generator</RootNamespace>
+
+    <!-- Roslyn loads generators into the in-process csc compiler, so the DLL
+         must be architecture-neutral regardless of the consuming project's
+         $(Platform). Mirrors Reactor.Analyzers / Reactor.Wrappers.Generator. -->
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
+
+    <!-- Spec 010 spike (Route B). Bundled into Microsoft.UI.Reactor.nupkg under
+         analyzers/dotnet/cs (see Reactor.csproj) rather than shipping as its own
+         package — same model as Reactor.Wrappers.Generator. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- RS2008: this component ships no diagnostics of its own, so the analyzer
+         release-tracking files do not apply. -->
+    <NoWarn>$(NoWarn);RS2008</NoWarn>
+  </PropertyGroup>
+
+</Project>

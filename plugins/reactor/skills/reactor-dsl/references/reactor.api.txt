@@ -2151,6 +2151,7 @@ KeyframeEntry[] KeyframeAnimations { get; init; }
 LayoutAnimationConfig LayoutAnimation { get; init; }
 ResourceOverrides ResourceOverrides { get; init; }
 ScrollAnimationConfig ScrollAnimation { get; init; }
+SourceLocation? CallSite { get; init; }
 StaggerConfig StaggerConfig { get; init; }
 ThemeTransitions ThemeTransitions { get; init; }
 Thickness? Margin { get; init; }
@@ -4575,6 +4576,10 @@ Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
 
+### static class ReactorSourceMap
+bool Enabled { get; set; }
+GetSource(UIElement control) → SourceLocation?
+
 ### static class ReactorTrace
 Subscribe(Action<ReactorEvent> onEvent, EventLevel level = EventLevel.Verbose, EventKeywords keywords = EventKeywords.All) → IDisposable
 
@@ -5276,6 +5281,17 @@ Deconstruct(ref string Field, ref SortDirection Direction) → void
 Equals(SortDescriptor other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
+ToString() → string
+
+### struct SourceLocation
+new(string FilePath, int LineNumber)
+int LineNumber { get; init; }
+string FilePath { get; init; }
+Deconstruct(ref string FilePath, ref int LineNumber) → void
+Equals(SourceLocation other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToShortString() → string
 ToString() → string
 
 ### record SplitButtonElement

@@ -37,6 +37,34 @@ public abstract record Element
 // </snippet:element-record>
 
     /// <summary>
+    /// Spec 010 — the C# source location that created this element, or
+    /// <c>null</c> when source mapping is not active.
+    ///
+    /// <para>NOTE ON THE NAME: spec 010 proposes <c>Element.Source</c>. That name
+    /// is unusable — five existing element records already declare a positional
+    /// <c>Source</c> member of an incompatible type (<c>ImageElement(string
+    /// Source)</c>, <c>WebViewElement(Uri? Source)</c>,
+    /// <c>MediaPlayerElement(string? Source)</c>, plus <c>AnimatedIconElement</c>
+    /// and <c>ParallaxViewElement</c>), and a base property of a different type
+    /// makes their positional parameters fail to bind (CS8866). <c>CallSite</c>
+    /// is the collision-free equivalent.</para>
+    ///
+    /// <para>The slot is present in every build configuration (the library
+    /// ships as a Release-built NuGet package, so a <c>#if DEBUG</c> gate would
+    /// make the property invisible to consumers). The <em>cost</em> is what is
+    /// gated: nothing writes this slot unless a source-map provider is wired
+    /// into the consuming compilation, and the reconciler only starts tagging
+    /// leaf controls for readback when
+    /// <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/> is set.</para>
+    ///
+    /// <para>Populated per call site, so it is a compile-time constant for a
+    /// given DSL invocation and survives fluent modifier chains automatically
+    /// (record <c>with</c> copies it). It is deliberately NOT consulted by
+    /// <see cref="ShallowEquals"/> — see the reconciler's allow-list.</para>
+    /// </summary>
+    public SourceLocation? CallSite { get; init; }
+
+    /// <summary>
     /// Outer margin shim that routes to <see cref="Modifiers"/>. Lets
     /// <c>el with { Margin = new Thickness(8) }</c> work directly on a record
     /// initializer (where extension methods are not visible). Identical

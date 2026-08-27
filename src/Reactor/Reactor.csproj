@@ -113,6 +113,15 @@
     <ProjectReference Include="..\Reactor.Wrappers.Generator\Reactor.Wrappers.Generator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+    <!-- Spec 010 Route B — the source-map interceptor generator. Deliberately NOT
+         registered as an analyzer on this project: it must run in the CONSUMER's
+         compilation (that is where the DSL call sites are), and running it here
+         would try to intercept Reactor's own internal factory calls. It is only
+         referenced so its build output exists for the <None Pack="true"> block
+         below, which is the same "build it, don't run it, ship it" arrangement
+         Reactor.Analyzers uses. -->
+    <ProjectReference Include="..\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
+                      ReferenceOutputAssembly="false" />
     <!-- The wrapper generator's authoring attributes ([GenerateReactorWrapper],
          [WrapControlled], …). Hosting them in their own assembly rather than
          generating them into every compilation avoids the CS0436 collision that
@@ -193,6 +202,12 @@
          processed; the authoring attributes ship in lib/ via
          Reactor.Wrappers.Abstractions.dll. -->
     <None Include="..\Reactor.Wrappers.Generator\$(_ReactorAnalyzerBinDir)\Reactor.Wrappers.Generator.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <!-- Spec 010 Route B — source-map interceptor generator. Ships alongside the
+         other components; it emits nothing unless the consumer opts in with
+         ReactorSourceMap=true, which build\Reactor.targets pairs with the
+         required InterceptorsNamespaces entry. -->
+    <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />

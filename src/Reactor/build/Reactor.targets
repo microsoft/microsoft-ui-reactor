@@ -1,4 +1,40 @@
 <Project>
+  <!--
+    Spec 010 Route B — source-map opt-in.
+
+    The interceptor generator that ships in analyzers/dotnet/cs emits nothing
+    unless ReactorSourceMap is true. When it IS true the generated
+    [InterceptsLocation] attributes are only honoured if the interceptor
+    namespace is listed in InterceptorsNamespaces — and if it is NOT listed the
+    consumer gets CS9137, a hard build error, rather than a silent no-op. The
+    two settings therefore have to be applied together, which is what this block
+    guarantees for PackageReference consumers: the app author writes one
+    property and never has to know the namespace exists.
+
+    IN-REPO CAVEAT: this file is ALSO imported by the repo's own
+    Directory.Build.props (line 137), which runs BEFORE a project's own
+    PropertyGroups. So an in-repo project that writes
+    <ReactorSourceMap>true</ReactorSourceMap> in its csproj body does not get
+    the InterceptorsNamespaces line from here and must set it itself — see
+    tests/Reactor.SourceMap.Spike. PackageReference consumers are unaffected:
+    NuGet imports build/*.targets after the project body, so the condition sees
+    their property.
+
+    Default is off. Turning it on has a real build-time cost (the generator
+    visits every invocation in the compilation) and a real run-time cost when
+    Reactor.Diagnostics.ReactorSourceMap.Enabled is also set (each stamped call
+    site copies its element via `with`), so it is opt-in rather than
+    Debug-by-default.
+  -->
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets the generator read $(ReactorSourceMap) via the analyzer config. -->
+    <CompilerVisibleProperty Include="ReactorSourceMap" />
+  </ItemGroup>
+
   <ItemGroup>
     <!--
       ReactorApplication.InitializeComponent loads XAML resources from these
