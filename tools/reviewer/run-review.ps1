@@ -197,15 +197,15 @@ if ($batches.Count -gt 0) {
 
 function Build-AgentPrompt {
     param(
-        [object]$BatchObj
+        [object]$BatchObj,
+        [Parameter(Mandatory)][object]$Scan
     )
     $agentName = $BatchObj.agent
     $promptTemplate = Get-Content (Join-Path $PromptsDir "$agentName.md") -Raw
 
-    # Only hand the agent files that exist. Listing an unopenable path invites the
-    # agent to guess, or to silently skip it and report the batch as done.
-    $scan = Resolve-BatchFiles -Files $BatchObj.files -Root $RepoRoot
-    $fileList = ($scan.Resolved | ForEach-Object { "- $_" }) -join "`n"
+    # Scan is passed in rather than recomputed so the prompt's file list and the report
+    # header's "N of M" cannot disagree: one resolution, one source of truth.
+    $fileList = ($Scan.Resolved | ForEach-Object { "- $_" }) -join "`n"
 
     $fullPrompt = @"
 $promptTemplate
@@ -240,8 +240,12 @@ function Invoke-ReviewAgent {
     $batchId = $BatchObj.id
     $reportPath = Join-Path $ReportsDir "$batchId.md"
 
-    $prompt = Build-AgentPrompt -BatchObj $BatchObj
+    # Resolved once and threaded through both the prompt and the report, so the agent's
+    # file list and the reported coverage are guaranteed to describe the same set.
+    # Only hand the agent files that exist: listing an unopenable path invites it to guess,
+    # or to silently skip the file and report the batch as done.
     $scan = Resolve-BatchFiles -Files $BatchObj.files -Root $RepoRoot
+    $prompt = Build-AgentPrompt -BatchObj $BatchObj -Scan $scan
 
     Write-Host (Get-BatchProgressText -BatchId $batchId -Scan $scan) -ForegroundColor Gray
     if ($scan.Missing.Count -gt 0) {

@@ -151,12 +151,13 @@ public class ReviewerManifestTests
     /// accepts a wrong path whenever it happens to resolve under the other base.
     /// </summary>
     /// <remarks>
-    /// A rooted path such as <c>C:/x.cs</c> does not actually escape the repo root here — both
-    /// <c>Path.Join</c> and PowerShell's <c>Join-Path</c> concatenate rather than letting a rooted
-    /// second argument win, so it fails <c>File.Exists</c> and the resolve test catches it. (That
-    /// is <c>Path.Combine</c>'s behaviour, which this gate deliberately does not use.) It is
-    /// rejected here anyway so the diagnosis names the real defect — a malformed path — instead of
-    /// reporting a missing file.
+    /// Rooted paths are rejected here for the sake of the diagnosis, not because they can escape
+    /// the repo root. This gate composes with <c>Path.Join</c>, which concatenates rather than
+    /// letting a rooted second argument win, so <c>C:/x.cs</c> already fails <c>File.Exists</c>
+    /// and <see cref="EveryManifestPathResolvesFromRepoRoot"/> catches it. <c>Path.Combine</c>
+    /// would let it win — this gate deliberately does not use it, so don't "harden" it by
+    /// switching. Rejecting rooted paths here only means the failure names the real defect, a
+    /// malformed path, instead of reporting a missing file.
     /// </remarks>
     [Fact]
     public void PathsUseRepoRootRelativeForwardSlashForm()
