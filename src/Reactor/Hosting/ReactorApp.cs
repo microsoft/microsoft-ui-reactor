@@ -372,8 +372,27 @@ public static partial class ReactorApp
         double? width = null,
         double? height = null,
         bool fullScreen = false,
-        Action<ReactorHost>? configure = null,
-        WindowIcon? icon = null)
+        Action<ReactorHost>? configure = null)
+        where TRoot : Component, new()
+        => Run<TRoot>(title, width, height, fullScreen, configure, icon: null);
+
+    /// <summary>
+    /// Launches the app with an explicit window icon. See
+    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?)"/>
+    /// for all other parameter semantics.
+    /// </summary>
+    /// <param name="icon">
+    /// Window icon — the Win32 <c>HICON</c> Windows shows in the taskbar, Alt-Tab, and
+    /// Task Manager. Use <see cref="WindowIcon.FromPath"/> for a file beside the app, or
+    /// <see cref="WindowIcon.FromResource"/> for a packaged <c>ms-appx:///</c> asset.
+    /// </param>
+    public static void Run<TRoot>(
+        string title,
+        double? width,
+        double? height,
+        bool fullScreen,
+        Action<ReactorHost>? configure,
+        WindowIcon? icon)
         where TRoot : Component, new()
     {
         EmitDipBehaviorChangeNoticeOnce();
@@ -445,8 +464,26 @@ public static partial class ReactorApp
         double? width = null,
         double? height = null,
         bool fullScreen = false,
-        Action<ReactorHost>? configure = null,
-        WindowIcon? icon = null)
+        Action<ReactorHost>? configure = null)
+        => Run(title, rootRender, width, height, fullScreen, configure, icon: null);
+
+    /// <summary>
+    /// Launches the app with a render function and an explicit window icon. See
+    /// <see cref="Run(string, Func{RenderContext, Element}, double?, double?, bool, Action{ReactorHost}?)"/>
+    /// for all other parameter semantics.
+    /// </summary>
+    /// <param name="icon">
+    /// Window icon. See
+    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?, WindowIcon)"/>.
+    /// </param>
+    public static void Run(
+        string title,
+        Func<RenderContext, Element> rootRender,
+        double? width,
+        double? height,
+        bool fullScreen,
+        Action<ReactorHost>? configure,
+        WindowIcon? icon)
     {
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;

@@ -626,10 +626,10 @@ public sealed class ReactorWindow : IDisposable
             // no icon at all, because a non-null spec.Icon used to suppress the fallback.
             if (spec.Icon is { } icon)
             {
-                if (!icon.Apply(_appWindow) && isInitial)
+                if (!icon.Apply(_appWindow))
                     TryApplyExeIconFallback();
             }
-            else if (isInitial)
+            else
                 TryApplyExeIconFallback();
         }
 
@@ -915,6 +915,19 @@ public sealed class ReactorWindow : IDisposable
     /// </remarks>
     private void TryApplyExeIconFallback()
     {
+        if (_exeFallbackHIcon != 0)
+        {
+            try
+            {
+                _appWindow.SetIcon(Microsoft.UI.Win32Interop.GetIconIdFromIcon(_exeFallbackHIcon));
+            }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
+            }
+            return;
+        }
+
         // Load first, outside the try: both loaders are non-throwing (the DllImports
         // return 0 on failure and LoadConventionAssetIcon guards its own file probe).
         var hIcon = LoadConventionAssetIcon();

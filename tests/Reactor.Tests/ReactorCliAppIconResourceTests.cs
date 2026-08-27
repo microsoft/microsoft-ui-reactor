@@ -53,5 +53,3 @@ public class ReactorCliAppIconResourceTests
         Assert.True(frameCount > 0, $"icon declares {frameCount} frames");
     }
 }
-
-
