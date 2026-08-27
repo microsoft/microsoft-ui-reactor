@@ -630,11 +630,13 @@ public sealed partial class ReactorWindow : IDisposable
             // no icon at all, because a non-null spec.Icon used to suppress the fallback.
             if (spec.Icon is { } icon)
             {
-                if (!icon.Apply(_appWindow))
-                    TryApplyExeIconFallback();
+                if (!icon.Apply(_appWindow) && !TryApplyExeIconFallback() && !isInitial)
+                    ClearWindowIcon();
             }
-            else
-                TryApplyExeIconFallback();
+            else if (!TryApplyExeIconFallback() && !isInitial)
+            {
+                ClearWindowIcon();
+            }
         }
 
         // Spec 045 §2.6 tear-off — window-wide alpha via WS_EX_LAYERED +
@@ -917,7 +919,7 @@ public sealed partial class ReactorWindow : IDisposable
     /// PE icon at all, so that is the ordinary outcome for an app that ships none.
     /// (spec 036 §4.1 — implementation-time addition)</para>
     /// </remarks>
-    private void TryApplyExeIconFallback()
+    private bool TryApplyExeIconFallback()
     {
         if (_exeFallbackHIcon != 0)
         {
@@ -931,14 +933,14 @@ public sealed partial class ReactorWindow : IDisposable
             {
                 DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
             }
-            return;
+            return true;
         }
 
         // This runs on every chrome application, not just the first, so an app that
         // ships no icon at all would otherwise re-probe the filesystem and both
         // loaders on every Update. One attempt per window is enough: neither source
         // can appear while the window is alive.
-        if (_exeFallbackAttempted) return;
+        if (_exeFallbackAttempted) return false;
         _exeFallbackAttempted = true;
 
         // Load first, outside the try: both loaders are non-throwing (the generated
@@ -946,7 +948,7 @@ public sealed partial class ReactorWindow : IDisposable
         // own file probe).
         var hIcon = LoadConventionAssetIcon();
         if (hIcon == 0) hIcon = LoadExecutablePeIcon();
-        if (hIcon == 0) return;
+        if (hIcon == 0) return false;
 
         try
         {
@@ -955,6 +957,7 @@ public sealed partial class ReactorWindow : IDisposable
             // Ownership transfers to the window here — Dispose frees it. Assigned only
             // after SetIcon succeeds, so the catch below still owns the handle.
             _exeFallbackHIcon = hIcon;
+            return true;
         }
         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         {
@@ -963,7 +966,14 @@ public sealed partial class ReactorWindow : IDisposable
             // lifetime. DestroyIcon cannot throw at the marshal boundary.
             NativeIcon.DestroyIcon(hIcon);
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
+            return false;
         }
+    }
+
+    private void ClearWindowIcon()
+    {
+        _ = NativeIcon.SendMessageW(_hwnd, NativeIcon.WM_SETICON, NativeIcon.ICON_SMALL, 0);
+        _ = NativeIcon.SendMessageW(_hwnd, NativeIcon.WM_SETICON, NativeIcon.ICON_BIG, 0);
     }
 
     /// <summary>
@@ -1017,6 +1027,9 @@ public sealed partial class ReactorWindow : IDisposable
 
     private static partial class NativeIcon
     {
+        public const uint WM_SETICON = 0x0080;
+        public const nint ICON_SMALL = 0;
+        public const nint ICON_BIG = 1;
         public const uint IMAGE_ICON = 1;
         public const uint LR_LOADFROMFILE = 0x00000010;
         public const uint LR_DEFAULTSIZE = 0x00000040;
@@ -1042,6 +1055,9 @@ public sealed partial class ReactorWindow : IDisposable
         [global::System.Runtime.InteropServices.LibraryImport("user32.dll", SetLastError = true)]
         [return: global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.Bool)]
         public static partial bool DestroyIcon(nint hIcon);
+
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
+        public static partial nint SendMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
     }
 
     private static class NativeOwnership
