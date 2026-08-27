@@ -87,15 +87,26 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         if (!method.IsStatic) return null;
         if (method.MethodKind != MethodKind.Ordinary) return null;
 
+        // GetSymbolInfo on a generic call returns the CONSTRUCTED method, whose
+        // Parameters carry SUBSTITUTED types (e.g. `TProps` already replaced by
+        // the caller's `ProbeProps`). Rendering those while also declaring
+        // `<T, TProps>` produces an interceptor that mixes an open signature with
+        // closed parameter types — which fails to bind, and additionally leaks the
+        // caller's type arguments into the interceptor's signature (CS0122 when
+        // one of them is a private nested type). Everything about the SIGNATURE
+        // must come from the open definition; only the call site comes from the
+        // constructed symbol.
+        method = method.OriginalDefinition;
+
         // Only the Reactor DSL surface.
         if (method.ContainingType?.ToDisplayString() != FactoriesMetadataName) return null;
 
-        // Generic factories (Component<T>, ForEach<T>, Memo<T>, …) are out of
-        // scope for this spike: an interceptor for a generic method must restate
-        // the type parameters AND their constraints, which is mechanical but
-        // noisy. Excluded deliberately so the measured numbers describe a
-        // surface that actually compiles.
-        if (method.IsGenericMethod) return null;
+        // Generic factories (Component<T>, Component<T,TProps>, ForEach<T>, Memo<TKey>,
+        // ListView<T>, …). An interceptor for a generic method has to restate the
+        // type parameters AND their constraints; whether Roslyn accepts that is
+        // the point of the generic spike, so they are emitted rather than skipped.
+        if (method.IsGenericMethod && method.TypeParameters.Any(HasUnrenderableConstraint))
+            return null;
 
         // The interceptor has to be able to call the original with exactly the
         // arguments it received; by-ref parameters would need matching ref kinds
@@ -118,8 +129,18 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             signature: Signature.From(method));
     }
 
-    private static bool ReturnsElement(ITypeSymbol type)
-    {
+    /// <summary>
+    /// A type parameter whose constraints reference ANOTHER type parameter of the
+    /// same method (e.g. <c>Component&lt;T, TProps&gt;</c>'s
+    /// <c>where T : Component&lt;TProps&gt;</c>) is still renderable — the names
+    /// are in scope on the interceptor too. This hook exists for constraint
+    /// shapes that genuinely cannot be restated; today only an unexpected
+    /// nullability form on a `class` constraint qualifies, and nothing in the
+    /// Reactor DSL hits it.
+    /// </summary>
+    private static bool HasUnrenderableConstraint(ITypeParameterSymbol tp) => false;
+
+    private static bool ReturnsElement(ITypeSymbol type)    {
         for (var t = type; t is not null; t = t.BaseType)
         {
             if (t.ToDisplayString() == ElementMetadataName) return true;
@@ -170,9 +191,11 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             var name = $"__Reactor_{sig.MethodName}_{index}";
 
             sb.AppendLine($"        {site.Attribute}");
-            sb.AppendLine($"        public static {sig.ReturnType} {name}({sig.ParameterList})");
+            sb.AppendLine($"        public static {sig.ReturnType} {name}{sig.TypeParameterList}({sig.ParameterList})");
+            foreach (var clause in sig.ConstraintClauses)
+                sb.AppendLine($"            {clause}");
             sb.AppendLine("        {");
-            sb.AppendLine($"            var __e = global::{FactoriesMetadataName}.{sig.MethodName}({sig.ArgumentList});");
+            sb.AppendLine($"            var __e = global::{FactoriesMetadataName}.{sig.MethodName}{sig.TypeArgumentList}({sig.ArgumentList});");
             sb.AppendLine("            if (!global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled) return __e;");
             // The null guard is emitted only for a nullable-annotated return; on a
             // non-nullable one it would be dead code the nullable analysis flags.
@@ -281,13 +304,17 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                     SymbolDisplayMiscellaneousOptions.UseSpecialTypes
                     | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-        private Signature(string methodName, string returnType, string parameterList, string argumentList, bool returnsNullable)
+        private Signature(string methodName, string returnType, string parameterList, string argumentList, bool returnsNullable,
+                          string typeParameterList, string typeArgumentList, ImmutableArray<string> constraintClauses)
         {
             MethodName = methodName;
             ReturnType = returnType;
             ParameterList = parameterList;
             ArgumentList = argumentList;
             ReturnsNullable = returnsNullable;
+            TypeParameterList = typeParameterList;
+            TypeArgumentList = typeArgumentList;
+            ConstraintClauses = constraintClauses;
         }
 
         public string MethodName { get; }
@@ -295,6 +322,15 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         public string ParameterList { get; }
         public string ArgumentList { get; }
         public bool ReturnsNullable { get; }
+
+        /// <summary><c>&lt;T, TProps&gt;</c> on the interceptor declaration, or empty.</summary>
+        public string TypeParameterList { get; }
+
+        /// <summary><c>&lt;T, TProps&gt;</c> on the forwarding call, or empty.</summary>
+        public string TypeArgumentList { get; }
+
+        /// <summary>One rendered <c>where …</c> clause per constrained type parameter.</summary>
+        public ImmutableArray<string> ConstraintClauses { get; }
 
         public static Signature From(IMethodSymbol method)
         {
@@ -311,19 +347,77 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                 arguments.Add(name);
             }
 
+            var typeParams = string.Empty;
+            var constraints = ImmutableArray<string>.Empty;
+            if (method.IsGenericMethod)
+            {
+                typeParams = "<" + string.Join(", ", method.TypeParameters.Select(tp => tp.Name)) + ">";
+                constraints = method.TypeParameters
+                    .Select(RenderConstraintClause)
+                    .Where(c => c is not null)
+                    .Select(c => c!)
+                    .ToImmutableArray();
+            }
+
             return new Signature(
                 method.Name,
                 method.ReturnType.ToDisplayString(s_typeFormat),
                 string.Join(", ", parameters),
                 string.Join(", ", arguments),
-                method.ReturnType.NullableAnnotation == NullableAnnotation.Annotated);
+                method.ReturnType.NullableAnnotation == NullableAnnotation.Annotated,
+                typeParams,
+                typeParams,
+                constraints);
+        }
+
+        /// <summary>
+        /// Renders <c>where T : …</c> for one type parameter, or null when it is
+        /// unconstrained. Order is fixed by the language: the primary constraint
+        /// (<c>class</c> / <c>struct</c> / <c>unmanaged</c> / <c>notnull</c>)
+        /// first, then base and interface types, then <c>new()</c> last.
+        /// Constraint types are printed fully qualified WITH nullable
+        /// annotations, so a constraint that names another type parameter of the
+        /// same method — <c>where T : Component&lt;TProps&gt;</c> — round-trips:
+        /// <c>TProps</c> is in scope on the interceptor under the same name.
+        /// </summary>
+        private static string? RenderConstraintClause(ITypeParameterSymbol tp)
+        {
+            var parts = new List<string>();
+
+            if (tp.HasUnmanagedTypeConstraint) parts.Add("unmanaged");
+            else if (tp.HasValueTypeConstraint) parts.Add("struct");
+            else if (tp.HasReferenceTypeConstraint)
+                parts.Add(tp.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "class?" : "class");
+            else if (tp.HasNotNullConstraint) parts.Add("notnull");
+
+            for (int i = 0; i < tp.ConstraintTypes.Length; i++)
+            {
+                var ct = tp.ConstraintTypes[i];
+                var rendered = ct.ToDisplayString(s_typeFormat);
+                // A value-type constraint already implies non-nullability; only a
+                // reference constraint carries a meaningful '?' here.
+                if (i < tp.ConstraintNullableAnnotations.Length
+                    && tp.ConstraintNullableAnnotations[i] == NullableAnnotation.Annotated
+                    && !ct.IsValueType
+                    && !rendered.EndsWith("?", StringComparison.Ordinal))
+                {
+                    rendered += "?";
+                }
+                parts.Add(rendered);
+            }
+
+            if (tp.HasConstructorConstraint) parts.Add("new()");
+
+            return parts.Count == 0 ? null : $"where {tp.Name} : {string.Join(", ", parts)}";
         }
 
         public bool Equals(Signature? other)
             => other is not null
                && MethodName == other.MethodName
                && ReturnType == other.ReturnType
-               && ParameterList == other.ParameterList;
+               && ParameterList == other.ParameterList
+               && TypeParameterList == other.TypeParameterList
+               && ConstraintClauses.SequenceEqual(other.ConstraintClauses);
 
         public override bool Equals(object? obj) => Equals(obj as Signature);
 
@@ -333,7 +427,10 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             {
                 int h = MethodName.GetHashCode();
                 h = (h * 397) ^ ReturnType.GetHashCode();
-                return (h * 397) ^ ParameterList.GetHashCode();
+                h = (h * 397) ^ ParameterList.GetHashCode();
+                h = (h * 397) ^ TypeParameterList.GetHashCode();
+                foreach (var c in ConstraintClauses) h = (h * 397) ^ c.GetHashCode();
+                return h;
             }
         }
     }

@@ -78,6 +78,24 @@
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
   </ItemGroup>
+
+  <!--
+    Spec 010 Route B spike — source-map opt-in on the flagship sample, so the
+    interceptor generator's coverage and build cost can be measured against a
+    real consumer app rather than a test host. OFF by default and byte-identical
+    to a tree without the spike; pass -p:ReactorSourceMap=true to enable.
+    See tests/Reactor.AppTests.Host for the same block and why
+    InterceptorsNamespaces is spelled out rather than inherited.
+  -->
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <ProjectReference Include="..\..\src\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\ControlImages\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\SampleImages\**" CopyToOutputDirectory="PreserveNewest" />
