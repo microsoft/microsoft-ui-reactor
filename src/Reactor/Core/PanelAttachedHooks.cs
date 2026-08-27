@@ -64,10 +64,10 @@ public partial record GridElement
             _ => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
         };
 
-        if(def.Min is not null)
+        if(def.Min is not null && double.IsFinite(def.Min.Value))
             colDef.MinWidth = def.Min.Value;
 
-        if(def.Max is not null)
+        if(def.Max is not null && !double.IsNaN(def.Max.Value))
             colDef.MaxWidth = def.Max.Value;
 
         return colDef;
