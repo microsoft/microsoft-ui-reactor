@@ -26,6 +26,25 @@ public sealed class SourceMapInterceptorTests : IDisposable
 
     private static int Line([CallerLineNumber] int line = 0) => line;
 
+    private static string File([CallerFilePath] string file = "") => file;
+
+    // ── Path parity with the CallerInfo route ─────────────────────────────
+
+    [Fact]
+    public void InterceptorPath_MatchesWhatCallerFilePathWouldProduce()
+    {
+        // The two routes must agree on the path string, or a "go to source"
+        // consumer would behave differently depending on which provider is
+        // wired in. This matters most under a deterministic build
+        // (Directory.Build.props sets DeterministicSourcePaths when CI=true),
+        // where the compiler rewrites [CallerFilePath] through the PathMap but
+        // does NOT rewrite a string literal a generator emitted — the generator
+        // has to apply the same map itself.
+        var element = TextBlock("hi"); var expected = File();
+
+        Assert.Equal(expected, element.CallSite!.Value.FilePath);
+    }
+
     // ── Coverage: non-params factory ──────────────────────────────────────
 
     [Fact]

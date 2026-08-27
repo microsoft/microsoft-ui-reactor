@@ -194,13 +194,33 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Applies the compiler's <c>PathMap</c> to a source path so the emitted
+    /// literal matches what <c>[CallerFilePath]</c> would have produced.
+    ///
+    /// <para>Prefix substitution alone is NOT enough: Roslyn also rewrites the
+    /// separators of the remainder to match the separator used by the
+    /// replacement value, so a Windows path mapped to <c>/_/</c> comes out fully
+    /// forward-slashed. Verified against a live <c>[CallerFilePath]</c> under
+    /// <c>CI=true</c> — without this normalization the two source-map providers
+    /// disagree on the path string (<c>/_/tests\Foo\Bar.cs</c> vs
+    /// <c>/_/tests/Foo/Bar.cs</c>), which would make a "go to source" consumer
+    /// behave differently depending on which provider is wired in.</para>
+    /// </summary>
     internal static string ApplyPathMap(string path, ImmutableArray<KeyValuePair<string, string>> pathMap)
     {
         if (pathMap.IsDefaultOrEmpty || string.IsNullOrEmpty(path)) return path;
         foreach (var entry in pathMap)
         {
-            if (path.StartsWith(entry.Key, StringComparison.OrdinalIgnoreCase))
-                return entry.Value + path.Substring(entry.Key.Length);
+            if (!path.StartsWith(entry.Key, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var suffix = path.Substring(entry.Key.Length);
+            if (entry.Value.IndexOf('/') >= 0 && entry.Value.IndexOf('\\') < 0)
+                suffix = suffix.Replace('\\', '/');
+            else if (entry.Value.IndexOf('\\') >= 0 && entry.Value.IndexOf('/') < 0)
+                suffix = suffix.Replace('/', '\\');
+
+            return entry.Value + suffix;
         }
         return path;
     }
