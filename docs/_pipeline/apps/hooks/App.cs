@@ -299,10 +299,15 @@ class ReducerNewValueDemo : Component
     {
         // <snippet:reducer-new-value>
         var (items, update) = UseReducer(new List<string>());
-        update(prev => [.. prev, "new"]);   // must return a NEW list
+
+        // The updater must return a NEW list — mutating and returning the same
+        // instance compares equal, so nothing is written and nothing re-renders.
+        Action addItem = () => update(prev => [.. prev, "new"]);
         // </snippet:reducer-new-value>
 
-        return TextBlock($"{items.Count} items");
+        return VStack(8,
+            TextBlock($"{items.Count} items"),
+            Button("Add", addItem).AutomationName("Add item"));
     }
 }
 

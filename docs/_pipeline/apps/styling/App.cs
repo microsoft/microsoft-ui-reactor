@@ -17,7 +17,7 @@ class ThemeTokensExample : Component
             TextBlock("Accent Text").Foreground(Theme.AccentText).SemiBold(),
             Border(
                 TextBlock("On Accent Background")
-                    .Foreground(Theme.AccentText)
+                    .Foreground(Theme.Ref("TextOnAccentFillColorPrimaryBrush"))
                     .Padding(horizontal: 8, vertical: 4)
             ).Background(Theme.Accent)
              .CornerRadius(4)

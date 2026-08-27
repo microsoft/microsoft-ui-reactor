@@ -47,10 +47,8 @@ public UIElement Mount(Element element, Action requestRerender, Reconciler recon
     // event trampolines can re-fetch the live element on each fire.
     // Gated: callback-free leaves never dispatch into Reactor code, so we
     // skip the ReactorState allocation for them (§4.4 follow-up).
-    // <snippet:element-tag-refresh-mount>
     if (control is FrameworkElement fe)
         Reconciler.SetElementTagIfNeeded(fe, typedEl);
-    // </snippet:element-tag-refresh-mount>
 
     // Strategy dispatch — only when the handler declares a non-None Children strategy.
     var strategy = _handler.Children;

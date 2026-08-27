@@ -59,7 +59,7 @@ of mode.
 
 ## Theme tokens
 
-Apply a typed token with `.Background()` or `.Foreground()`:
+Apply a theme token with `.Background()` or `.Foreground()`:
 
 ```csharp snippet="styling/theme-tokens"
 ```

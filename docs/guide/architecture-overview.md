@@ -263,7 +263,6 @@ public UIElement? Reconcile(
     // one emits. Decrementing on `emitTrace` alone would leak the counter
     // once a pass contained a nested reconcile, permanently suppressing
     // every later top-level trace.
-    // <snippet:reconcile-trace-start>
     bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
         global::System.Diagnostics.Tracing.EventLevel.Informational,
         Diagnostics.ReactorEventSource.Keywords.Reconcile);
@@ -273,7 +272,6 @@ public UIElement? Reconcile(
         Diagnostics.ReactorEventSource.Log.ReconcileStart(
             newElement?.GetType().Name ?? "null");
     }
-    // </snippet:reconcile-trace-start>
     if (_debugReconcileDepth++ == 0)
     {
         DebugElementsDiffed = 0;

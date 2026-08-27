@@ -44,8 +44,6 @@ package reference first:
 ```
 
 ```csharp snippet="charting/imports"
-using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Charting.Charts;
 ```
 
 ## Line Chart

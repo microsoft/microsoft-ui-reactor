@@ -232,18 +232,16 @@ class AutoGridExample : Component
 {
     public override Element Render()
     {
-        return Border(
-            WrapGrid(maxRowsOrColumns: 4,
-                children: Enumerable.Range(1, 11)
-                    .Select(i =>
-                        Border(TextBlock($"Tile {i}").Padding(12))
-                            .Background(Theme.CardBackground)
-                            .CornerRadius(6)
-                            .Width(110).Height(60))
-                    .Cast<Element?>()
-                    .ToArray()
-            )
-        ).Padding(24);
+        return WrapGrid(maxRowsOrColumns: 4,
+            children: Enumerable.Range(1, 11)
+                .Select(i =>
+                    Border(TextBlock($"Tile {i}").Padding(12))
+                        .Background(Theme.CardBackground)
+                        .CornerRadius(6)
+                        .Width(110).Height(60))
+                .Cast<Element?>()
+                .ToArray()
+        );
     }
 }
 // </snippet:auto-grid>

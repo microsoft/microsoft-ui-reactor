@@ -41,9 +41,16 @@ public class InlineSnippetLedgerTests
     private static readonly Regex CSharpFence =
         new(@"(?m)^```csharp([^\r\n]*)\r?\n(?<body>.*?)^```", RegexOptions.Compiled | RegexOptions.Singleline);
 
-    /// <summary>A first line that labels the block as a deliberate counterexample.</summary>
+    /// <summary>
+    /// A first line that labels the block as a deliberate counterexample.
+    /// </summary>
+    /// <remarks>
+    /// Anchored to the start of the body, not to every line. Under <c>RegexOptions.Multiline</c>
+    /// a <c>// Don't</c> appearing anywhere — including a warning comment halfway down an
+    /// otherwise copyable example — exempted the whole block from the gate.
+    /// </remarks>
     private static readonly Regex CounterexampleLabel =
-        new(@"(?im)^\s*//\s*(don'?t|wrong|bad|avoid|never|incorrect|anti-?pattern|❌)", RegexOptions.Compiled);
+        new(@"(?i)^\s*//\s*(don'?t|wrong|bad|avoid|never|incorrect|anti-?pattern|❌)", RegexOptions.Compiled);
 
     /// <summary>
     /// Separates a reference table from a one-line example. Both can lack a statement terminator,
@@ -309,8 +316,18 @@ public class InlineSnippetLedgerTests
         // ...a labelled counterexample is not...
         Assert.Empty(UnverifiedExamples("```csharp\n// Don't: this leaks.\nvar x = new Timer();\n```\n"));
 
-        // ...and neither is a snippet-backed block.
+        // ...and neither is a snippet-backed block with an empty body, which the assembler expands.
         Assert.Empty(UnverifiedExamples("```csharp snippet=\"layout/demo\"\n```\n"));
+
+        // ...but a snippet= fence that still carries a hand-typed body IS reported: the assembler
+        // only expands empty directives, so that text ships unverified.
+        Assert.Single(UnverifiedExamples(
+            "```csharp snippet=\"layout/demo\"\nvar x = Button(\"hi\", () => { });\n```\n"));
+
+        // A counterexample label only exempts when it opens the block; a warning comment further
+        // down must not launder the copyable code above it.
+        Assert.Single(UnverifiedExamples(
+            "```csharp\nvar x = Button(\"hi\", () => { });\n// Don't do the other thing.\n```\n"));
     }
 
     /// <summary>
@@ -319,8 +336,14 @@ public class InlineSnippetLedgerTests
     /// </summary>
     private static IEnumerable<string> UnverifiedExamples(string templateText)
         => CSharpFence.Matches(templateText)
-            // Snippet-backed blocks are extracted from real code, so CI already compiles them.
-            .Where(fence => !fence.Groups[1].Value.Contains("snippet="))
+            // A snippet= fence is only expanded by DocAssembler when its body is EMPTY. A fence
+            // carrying both the attribute and hand-typed text is never expanded, so the page keeps
+            // the hand-typed copy and the app marker it names is dead — exactly the drift this gate
+            // exists to catch. Treating it as verified because the attribute is present was a hole
+            // that three real fences (charting/imports, data-system/imports,
+            // dialogs-and-flyouts/right-click-list-row) were sitting in.
+            .Where(fence => !(fence.Groups[1].Value.Contains("snippet=")
+                              && fence.Groups["body"].Value.Trim().Length == 0))
             .Select(fence => fence.Groups["body"].Value)
             // A signature/reference listing is not code to copy; see IsSignatureListing.
             .Where(body => !IsSignatureListing(body))
