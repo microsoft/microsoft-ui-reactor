@@ -83,7 +83,7 @@ but `dotnet test` does not accept them and the test host has never heard of them
 
 | Handled by `dotnet test` | Forwarded, and valid | Recognised by neither — breaks the run |
 |---|---|---|
-| `-p:` / `--property`, `-c`, `-f`, `-r`, `-a` / `--arch`, `--os`, `-v`, `-e`, `-t:` / `-target:`, `--no-build`, `--no-restore`, `-bl` | `--filter`, `--filter-class`, `--filter-trait`, `--parallel`, `--max-threads`, `--report-trx`, `--hangdump`, `--minimum-expected-tests` | `-m` / `-maxcpucount`, `-nodereuse` / `-nr`, `--nologo`, `-warnaserror`, `-graphBuild` |
+| `-p:` / `--property`, `-c`, `-f`, `-r`, `-a` / `--arch`, `--os`, `-v`, `-e`, `-t:` / `-target:`, `--no-build`, `--no-restore`, `-bl`, `--results-directory`, `--minimum-expected-tests` | `--filter`, `--filter-class`, `--filter-trait`, `--parallel`, `--max-threads`, `--report-trx`, `--hangdump` | `-m` / `-maxcpucount`, `-nodereuse` / `-nr`, `--nologo`, `-warnaserror`, `-graphBuild` |
 
 Two of these are counter-intuitive enough to call out. `--nologo` is a real `dotnet build`
 switch and reads like a harmless one, but `dotnet test` does not accept it, so it kills the
