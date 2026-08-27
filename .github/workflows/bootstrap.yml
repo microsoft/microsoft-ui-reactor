@@ -113,6 +113,32 @@ jobs:
           mur doctor
           if ($LASTEXITCODE -ne 0) { throw "mur doctor failed (exit $LASTEXITCODE)" }
 
+      # Regression guard: `mur check` loads Roslyn at runtime, and a
+      # PrivateAssets="all" reference once excluded Microsoft.CodeAnalysis*.dll
+      # from the packed tools/ payload. The assemblies were still in bin/, so
+      # `dotnet run` worked while every *installed* `mur check` threw
+      # FileNotFoundException at startup — invisible to every check above,
+      # which only exercise commands that don't touch Roslyn.
+      #
+      # --list-rules is the cheapest command that forces the load: it resolves
+      # the rule registry and exits without running a build.
+      - name: Verify installed mur check loads Roslyn
+        shell: pwsh
+        run: |
+          $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
+          $out = mur check --list-rules 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host $out
+              throw "mur check --list-rules exited $LASTEXITCODE"
+          }
+          # Exit 0 alone is not proof: assert the registry actually rendered.
+          # A rule name that vanishes is a real signal, not a formatting nit.
+          if ($out -notmatch 'GridSizePxRenameRule') {
+              Write-Host $out
+              throw "mur check --list-rules did not list the expected ruleset"
+          }
+          Write-Host $out
+
       - name: Verify local-nupkgs/ produced
         shell: pwsh
         run: |

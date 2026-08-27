@@ -275,13 +275,48 @@ try {
     # Regression guard for the stale-global-tool bug: bootstrap packs a per-run
     # version stamp and must pin it explicitly, because `dotnet tool update`
     # silently no-ops (exit 0) when the resolved version equals the installed
-    # one. Sample value matches the shipped stamp shape: 1.<days since
-    # 2020-01-01>.<minute of day>.
+    # one. Sample value matches the shipped stamp shape.
     $toolArgs = Get-ReactorToolArguments `
         -Feed 'C:\repo\local-nupkgs' `
-        -Version '1.2429.1352'
-    Assert-Equal '-g|--add-source|C:\repo\local-nupkgs|Microsoft.UI.Reactor.Cli|--version|1.2429.1352|--no-cache|--ignore-failed-sources' `
+        -Version '1.2429.1352.7'
+    Assert-Equal '-g|--add-source|C:\repo\local-nupkgs|Microsoft.UI.Reactor.Cli|--version|1.2429.1352.7|--no-cache|--ignore-failed-sources' `
         ($toolArgs -join '|') 'tool arguments pin the explicitly supplied version'
+
+    # ---- Get-ReactorLocalCliVersion -------------------------------------
+    # The stamp is what actually broke: a constant 1.0.0 made `dotnet tool
+    # update` a silent no-op. These assert the three constraints the encoding
+    # has to satisfy at once, each of which a plausible alternative violates.
+
+    $v = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 7, [DateTimeKind]::Utc))
+    Assert-Equal '1.2429.913.7' $v 'stamp encodes days-since-2020, minute-of-day, and second'
+
+    # Must outrank the stable 1.0.0 that older bootstraps installed, or
+    # `dotnet tool update` refuses to move to it.
+    Assert-True ([version]$v -gt [version]'1.0.0') 'stamp sorts above the legacy constant 1.0.0'
+
+    # AssemblyVersion/FileVersion components are UInt16; 1.<yyMMdd>.<HHmm>
+    # overflows and fails the build with CS7034.
+    foreach ($part in ([version]$v).ToString().Split('.')) {
+        Assert-True ([int]$part -le 65534) "stamp component '$part' fits in UInt16"
+    }
+
+    # Unique per run: two packs in the same minute must still yield distinct
+    # versions, otherwise the second install is a no-op that keeps the older
+    # binary.
+    $sameMinuteA = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 7, [DateTimeKind]::Utc))
+    $sameMinuteB = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 15, 13, 42, [DateTimeKind]::Utc))
+    Assert-True ([version]$sameMinuteB -gt [version]$sameMinuteA) `
+        'two stamps in the same minute are distinct and ordered'
+
+    # Ordering must hold across a day boundary, where minute-of-day resets.
+    $endOfDay = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 26, 23, 59, 59, [DateTimeKind]::Utc))
+    $nextDay  = Get-ReactorLocalCliVersion -Now ([datetime]::new(2026, 8, 27, 0, 0, 0, [DateTimeKind]::Utc))
+    Assert-True ([version]$nextDay -gt [version]$endOfDay) 'stamp keeps ordering across a day boundary'
+
+    # A wrong system clock would otherwise emit a negative or absurd minor and
+    # produce a confusing NuGet error far from the cause.
+    Assert-Throws { Get-ReactorLocalCliVersion -Now ([datetime]::new(2019, 12, 31, 0, 0, 0, [DateTimeKind]::Utc)) } `
+        'a pre-epoch clock is rejected rather than emitting a bad version'
 
     $env:RestoreConfigFile = 'before.config'
     $env:RestoreSources = 'before-source'

@@ -14,6 +14,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Roslyn ships ~13 localized satellite assemblies per package. `mur`
+         surfaces compiler diagnostics verbatim, so localized Roslyn resources
+         would only translate a fraction of its output; they cost ~1.9 MB in the
+         packed tool payload and the release publish for no coherent benefit. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Mirror the deployed skill-kit layout under <repo>/bin/<arch>/ so devs
          can put that directory on PATH and `mur` resolves to the freshly-built
          binary. The release workflow produces the same bin/x64 + bin/arm64

@@ -245,6 +245,44 @@ function Get-ReactorRestoreArguments {
     return @($arguments)
 }
 
+# Version stamp for the locally-packed `mur` global tool.
+#
+# Without an explicit -p:Version the SDK defaults to 1.0.0 on *every* commit, so
+# re-running bootstrap packed a byte-new binary under a version NuGet had already
+# seen. `dotnet tool update` compared 1.0.0 to 1.0.0, decided nothing was newer,
+# no-opped, and exited 0 — leaving a months-stale `mur` on PATH while bootstrap
+# reported success.
+#
+# The encoding has to clear three constraints at once, and the two obvious
+# candidates each fail one:
+#   * 1.<yyMMdd>.<HHmm> overflows AssemblyVersion/FileVersion, whose components
+#     are capped at 65534 (UInt16) -> CS7034 at build time.
+#   * 1.0.0-local.<stamp> is a prerelease of 1.0.0 and therefore sorts BELOW the
+#     stable 1.0.0 already installed; `dotnet tool update` refuses to move to a
+#     lower version even when pinned with --version.
+# So: a stable version, strictly greater than 1.0.0, every component inside
+# UInt16, and unique per run so a same-minute re-pack is still installable.
+#   major    1
+#   minor    days since 2020-01-01 UTC   (~2400 today; UInt16 lasts ~179 years)
+#   patch    minute of day               (0-1439)
+#   revision second within the minute     (0-59)
+#
+# -Now is injectable so the shape, bounds, and ordering can be tested without
+# depending on the wall clock.
+function Get-ReactorLocalCliVersion {
+    param(
+        [datetime]$Now = (Get-Date).ToUniversalTime()
+    )
+
+    $utc = $Now.ToUniversalTime()
+    $days = [int]($utc.Date - [datetime]'2020-01-01').TotalDays
+    if ($days -lt 1 -or $days -gt 65534) {
+        throw "Local CLI version stamp is out of range: days-since-2020 = $days must be 1..65534 (system clock wrong?)."
+    }
+
+    return '1.{0}.{1}.{2}' -f $days, [int]$utc.TimeOfDay.TotalMinutes, $utc.Second
+}
+
 function Get-ReactorToolArguments {
     param(
         [Parameter(Mandatory)][string]$Feed,
@@ -266,9 +304,14 @@ function Get-ReactorToolArguments {
     # resolves the highest version in the feed and compares it to what is
     # installed — and because the pack used to produce a constant `1.0.0` on
     # every commit, that comparison said "already up to date" and silently
-    # no-opped with exit 0. An explicit --version removes the dependency on
-    # version ordering entirely: the requested version is installed whether it
-    # sorts higher, lower, or equal.
+    # no-opped with exit 0.
+    #
+    # Pinning does NOT make ordering irrelevant: `dotnet tool update --version`
+    # still refuses to move to a *lower* version ("is lower than existing
+    # version ..."), and treats an equal version as already-installed. It only
+    # removes the "highest in feed" resolution step. Get-ReactorLocalCliVersion
+    # is therefore responsible for producing a version that is both strictly
+    # greater than 1.0.0 and unique per run.
     if (-not [string]::IsNullOrWhiteSpace($Version)) {
         $arguments.Add('--version')
         $arguments.Add($Version)
