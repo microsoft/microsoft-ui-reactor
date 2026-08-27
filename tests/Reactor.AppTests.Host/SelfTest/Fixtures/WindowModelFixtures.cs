@@ -235,7 +235,27 @@ internal static partial class WindowModelFixtures
                     new WindowSpec { Title = "Icon Convention", Width = 200, Height = 160 },
                     () => new StubComponent());
                 nint conventionIcon;
-                try { conventionIcon = IconOf(conventionWin); }
+                nint afterImperativeOverride;
+                try
+                {
+                    conventionIcon = IconOf(conventionWin);
+
+                    // With the fallback already applied, an app that then sets its own
+                    // icon imperatively must keep it: a later chrome update must not
+                    // re-apply the cached fallback handle over the top.
+                    var cwid = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(conventionWin.Hwnd);
+                    Microsoft.UI.Windowing.AppWindow.GetFromWindowId(cwid).SetIcon(sourcePath);
+                    var overridden = IconOf(conventionWin);
+
+                    conventionWin.Update(conventionWin.Spec with { Title = "Icon Convention (updated)" });
+                    afterImperativeOverride = IconOf(conventionWin);
+
+                    // Compare against the imperative icon, not against zero: both the
+                    // healthy and broken states are non-zero here, so only the identity
+                    // of the handle distinguishes them.
+                    H.Check("WindowIcon_Imperative_Override_Survives_Update",
+                        overridden != 0 && afterImperativeOverride == overridden);
+                }
                 finally { await CloseAndSettle(conventionWin); }
 
                 H.Check("WindowIcon_ConventionAsset_Sets_HICON", conventionIcon != 0);

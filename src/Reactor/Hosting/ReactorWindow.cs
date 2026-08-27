@@ -937,16 +937,9 @@ public sealed partial class ReactorWindow : IDisposable
     {
         if (_exeFallbackHIcon != 0)
         {
-            // Already resolved for this window — re-apply the cached handle rather than
-            // loading a second one. SetIcon copies, so the window keeps owning this one.
-            try
-            {
-                _appWindow.SetIcon(Microsoft.UI.Win32Interop.GetIconIdFromIcon(_exeFallbackHIcon));
-            }
-            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
-            {
-                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
-            }
+            // Already applied to this window and SetIcon took its own copy, so the icon
+            // is still on the HWND — re-writing it would be redundant, and would also
+            // clobber an icon the app set imperatively after this fallback first ran.
             return true;
         }
 
