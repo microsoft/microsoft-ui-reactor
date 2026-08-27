@@ -372,27 +372,8 @@ public static partial class ReactorApp
         double? width = null,
         double? height = null,
         bool fullScreen = false,
-        Action<ReactorHost>? configure = null)
-        where TRoot : Component, new()
-        => Run<TRoot>(title, width, height, fullScreen, configure, icon: null);
-
-    /// <summary>
-    /// Launches the app with an explicit window icon. See
-    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?)"/>
-    /// for all other parameter semantics.
-    /// </summary>
-    /// <param name="icon">
-    /// Window icon — the Win32 <c>HICON</c> Windows shows in the taskbar, Alt-Tab, and
-    /// Task Manager. Use <see cref="WindowIcon.FromPath"/> for a file beside the app, or
-    /// <see cref="WindowIcon.FromResource"/> for a packaged <c>ms-appx:///</c> asset.
-    /// </param>
-    public static void Run<TRoot>(
-        string title,
-        double? width,
-        double? height,
-        bool fullScreen,
-        Action<ReactorHost>? configure,
-        WindowIcon? icon)
+        Action<ReactorHost>? configure = null,
+        WindowIcon? icon = null)
         where TRoot : Component, new()
     {
         EmitDipBehaviorChangeNoticeOnce();
@@ -464,26 +445,8 @@ public static partial class ReactorApp
         double? width = null,
         double? height = null,
         bool fullScreen = false,
-        Action<ReactorHost>? configure = null)
-        => Run(title, rootRender, width, height, fullScreen, configure, icon: null);
-
-    /// <summary>
-    /// Launches the app with a render function and an explicit window icon. See
-    /// <see cref="Run(string, Func{RenderContext, Element}, double?, double?, bool, Action{ReactorHost}?)"/>
-    /// for all other parameter semantics.
-    /// </summary>
-    /// <param name="icon">
-    /// Window icon. See
-    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?, WindowIcon)"/>.
-    /// </param>
-    public static void Run(
-        string title,
-        Func<RenderContext, Element> rootRender,
-        double? width,
-        double? height,
-        bool fullScreen,
-        Action<ReactorHost>? configure,
-        WindowIcon? icon)
+        Action<ReactorHost>? configure = null,
+        WindowIcon? icon = null)
     {
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
@@ -529,6 +492,59 @@ public static partial class ReactorApp
     /// legacy option record carry.
     /// </summary>
     private static bool IsFullScreen(WindowSpec spec) => spec.Presenter == PresenterKind.FullScreen;
+
+    // ── Binary-compatibility shims ────────────────────────────────────────
+    // Adding `icon` as an optional parameter is source-compatible but changes the CLR
+    // signature, so an assembly compiled against an earlier build would fail to bind at
+    // runtime. These overloads restore the exact pre-icon parameter lists. Optional
+    // defaults are metadata and play no part in the CLR signature, so declaring every
+    // parameter required here reproduces the old signature exactly while keeping the
+    // icon-bearing overloads above unambiguous: a call that omits any argument can only
+    // match those, and a call that supplies all five can only match these.
+    // Guarded by Legacy_Run_Overloads_Retain_Their_Clr_Signatures.
+
+    /// <summary>
+    /// Binary-compatibility overload for callers compiled before <c>icon</c> was added.
+    /// Prefer <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}, WindowIcon)"/>.
+    /// </summary>
+    /// <param name="title">Window caption text.</param>
+    /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
+    /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
+    /// <param name="fullScreen">Open with the full-screen presenter.</param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread before the root mounts.
+    /// </param>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static void Run<TRoot>(
+        string title,
+        double? width,
+        double? height,
+        bool fullScreen,
+        Action<ReactorHost>? configure)
+        where TRoot : Component, new()
+        => Run<TRoot>(title, width, height, fullScreen, configure, icon: null);
+
+    /// <summary>
+    /// Binary-compatibility overload for callers compiled before <c>icon</c> was added.
+    /// Prefer <see cref="Run(string, Func{RenderContext, Element}, double?, double?, bool, Action{ReactorHost}, WindowIcon)"/>.
+    /// </summary>
+    /// <param name="title">Window caption text.</param>
+    /// <param name="rootRender">Render function for the window's root content.</param>
+    /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
+    /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
+    /// <param name="fullScreen">Open with the full-screen presenter.</param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread before the root mounts.
+    /// </param>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static void Run(
+        string title,
+        Func<RenderContext, Element> rootRender,
+        double? width,
+        double? height,
+        bool fullScreen,
+        Action<ReactorHost>? configure)
+        => Run(title, rootRender, width, height, fullScreen, configure, icon: null);
 
     /// <summary>
     /// Resolves the <see cref="WindowSpec"/> the primary window opens with: an explicitly

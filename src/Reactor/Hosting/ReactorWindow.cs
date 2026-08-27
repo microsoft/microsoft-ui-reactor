@@ -82,6 +82,10 @@ public sealed partial class ReactorWindow : IDisposable
     // SetIcon returns, so destruction at window-close is safe and avoids
     // leaking one HICON per window.
     private nint _exeFallbackHIcon;
+
+    // Set once the fallback has looked for an icon, whether or not it found one, so a
+    // window with no icon source anywhere does not re-probe on every chrome update.
+    private bool _exeFallbackAttempted;
     // Lazy-init shell wrappers — apps that never read these never instantiate
     // them, keeping the cold-start budget clean (spec 036 §0.7 / §11.7).
     private TaskbarProgress? _taskbarProgress;
@@ -917,6 +921,8 @@ public sealed partial class ReactorWindow : IDisposable
     {
         if (_exeFallbackHIcon != 0)
         {
+            // Already resolved for this window — re-apply the cached handle rather than
+            // loading a second one. SetIcon copies, so the window keeps owning this one.
             try
             {
                 _appWindow.SetIcon(Microsoft.UI.Win32Interop.GetIconIdFromIcon(_exeFallbackHIcon));
@@ -928,8 +934,16 @@ public sealed partial class ReactorWindow : IDisposable
             return;
         }
 
-        // Load first, outside the try: both loaders are non-throwing (the DllImports
-        // return 0 on failure and LoadConventionAssetIcon guards its own file probe).
+        // This runs on every chrome application, not just the first, so an app that
+        // ships no icon at all would otherwise re-probe the filesystem and both
+        // loaders on every Update. One attempt per window is enough: neither source
+        // can appear while the window is alive.
+        if (_exeFallbackAttempted) return;
+        _exeFallbackAttempted = true;
+
+        // Load first, outside the try: both loaders are non-throwing (the generated
+        // interop stubs return 0 on failure and LoadConventionAssetIcon guards its
+        // own file probe).
         var hIcon = LoadConventionAssetIcon();
         if (hIcon == 0) hIcon = LoadExecutablePeIcon();
         if (hIcon == 0) return;
@@ -946,7 +960,7 @@ public sealed partial class ReactorWindow : IDisposable
         {
             // SetIcon failed, so the handle was never handed over and nothing else
             // will free it. Destroy it here rather than leaking it for the process
-            // lifetime. DestroyIcon is a [DllImport] bool and cannot throw.
+            // lifetime. DestroyIcon cannot throw at the marshal boundary.
             NativeIcon.DestroyIcon(hIcon);
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
         }

@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hosting;
 using System.Reflection;
 using Xunit;
 
