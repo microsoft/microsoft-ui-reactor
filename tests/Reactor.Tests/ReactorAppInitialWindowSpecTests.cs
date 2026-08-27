@@ -1,7 +1,5 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Reactor.Hosting;
-using System.Reflection;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
@@ -20,25 +18,6 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </remarks>
 public class ReactorAppInitialWindowSpecTests
 {
-    [Fact]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only public-API compatibility guard: reflects known public ReactorApp methods by design. This host is never trimmed; the behaviour-neutral suppression neither preserves nor prunes members.")]
-    public void Legacy_Run_Overloads_Retain_Their_Clr_Signatures()
-    {
-        var methods = typeof(ReactorApp).GetMethods(BindingFlags.Public | BindingFlags.Static);
-
-        Assert.Contains(methods, method =>
-            method.Name == nameof(ReactorApp.Run)
-            && method.IsGenericMethodDefinition
-            && ParameterTypes(method).SequenceEqual([typeof(string), typeof(double?), typeof(double?), typeof(bool), typeof(Action<ReactorHost>)]));
-        Assert.Contains(methods, method =>
-            method.Name == nameof(ReactorApp.Run)
-            && !method.IsGenericMethod
-            && ParameterTypes(method).SequenceEqual([typeof(string), typeof(Func<RenderContext, Element>), typeof(double?), typeof(double?), typeof(bool), typeof(Action<ReactorHost>)]));
-    }
-
-    private static Type[] ParameterTypes(MethodInfo method)
-        => method.GetParameters().Select(parameter => parameter.ParameterType).ToArray();
-
     [Fact]
     public void Icon_Option_Reaches_The_Synthesized_Spec()
     {

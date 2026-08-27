@@ -975,7 +975,7 @@ public sealed partial class ReactorWindow : IDisposable
         string path;
         try
         {
-            path = global::System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            path = global::System.IO.Path.Join(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
             if (!global::System.IO.File.Exists(path)) return 0;
         }
         catch (Exception ex) when (ex is ArgumentException

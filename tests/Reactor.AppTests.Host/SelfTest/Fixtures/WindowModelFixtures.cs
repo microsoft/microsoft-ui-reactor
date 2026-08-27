@@ -182,9 +182,9 @@ internal static partial class WindowModelFixtures
             // checks below differ from the zero control by exactly one variable: the
             // existence of that file. Creating it at runtime (rather than shipping it)
             // is what keeps the control genuinely zero.
-            var conventionPath = global::System.IO.Path.Combine(
+            var conventionPath = global::System.IO.Path.Join(
                 AppContext.BaseDirectory, "Assets", "AppIcon.ico");
-            var sourcePath = global::System.IO.Path.Combine(
+            var sourcePath = global::System.IO.Path.Join(
                 AppContext.BaseDirectory, "Assets", "SelfTestWindowIcon.ico");
 
             if (global::System.IO.File.Exists(conventionPath))
@@ -232,7 +232,12 @@ internal static partial class WindowModelFixtures
             finally
             {
                 try { global::System.IO.File.Delete(conventionPath); }
-                catch (global::System.Exception) { /* best effort — next run overwrites */ }
+                catch (global::System.Exception ex) when (ex is global::System.IO.IOException
+                                                             or global::System.UnauthorizedAccessException)
+                {
+                    // Leaving the asset behind only affects a subsequent run in the same
+                    // output directory, where the precondition check reports it.
+                }
             }
         }
     }

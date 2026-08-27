@@ -191,7 +191,9 @@ public sealed class WindowIcon
             if (global::System.IO.Path.IsPathRooted(path))
                 return global::System.IO.File.Exists(path);
 
-            var beside = global::System.IO.Path.Combine(AppContext.BaseDirectory, path);
+            // Path.Join rather than Path.Combine: Join always concatenates, whereas
+            // Combine discards everything before a rooted segment.
+            var beside = global::System.IO.Path.Join(AppContext.BaseDirectory, path);
             if (global::System.IO.File.Exists(beside))
             {
                 resolved = beside;
