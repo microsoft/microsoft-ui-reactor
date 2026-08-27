@@ -130,9 +130,10 @@ public sealed class WindowIcon
     /// missing icon never crashes window construction.
     /// </summary>
     /// <returns>
-    /// <c>true</c> when the icon was handed to the platform. <c>false</c> only when the
-    /// source is a filesystem path that demonstrably does not exist — the caller then
-    /// falls back rather than leaving the window with no icon at all.
+    /// <c>true</c> when the icon was handed to the platform. <c>false</c> when it was
+    /// not: a filesystem path that demonstrably does not exist, a <c>null</c>
+    /// <paramref name="appWindow"/>, or a <c>SetIcon</c> call that threw. The caller
+    /// then falls back rather than leaving the window with no icon at all.
     /// </returns>
     /// <remarks>
     /// The source is passed to <c>AppWindow.SetIcon</c> essentially as given. Measured
