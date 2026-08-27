@@ -234,10 +234,12 @@ UseEffect(() =>
         }
         catch (OperationCanceledException) { /* expected on cleanup */ }
     });
-    // Cancel *and* dispose: the source owns a registration list and a wait handle.
-    // Disposing after Cancel is safe here because the token is already cancelled, so the
-    // loop's next WaitForNextTickAsync completes without touching the disposed source.
-    return () => { cts.Cancel(); cts.Dispose(); };
+    // Cancel only, and deliberately so. The fire-and-forget worker shares ownership of the
+    // source: disposing here while it is still inside WaitForNextTickAsync can surface an
+    // ObjectDisposedException on the token. Nothing leaks — a CTS with no timer and no
+    // WaitHandle access holds no unmanaged resource, so dropping the reference is enough.
+    // Dispose only where a single owner can prove the worker has finished.
+    return () => { cts.Cancel(); };
 }, Array.Empty<object>());
 ```
 
