@@ -215,12 +215,13 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64
   ```
 - **Never append an MSBuild-only switch to `dotnet test`** (issue #1140). `-m:1`,
-  `-nodereuse:false`, `--nologo`, `-t:`, `-warnaserror` and friends are *not* `dotnet test`
-  options, and MTP mode forwards every unrecognised token to the **test executable** rather
-  than to MSBuild. The test host rejects it as an unknown option and exits
-  **5 (`InvalidCommandLine`)** before running anything — and **the rejected-option message is
-  never surfaced**, so the only signals are the exit code and a summary that reads green in
-  prose:
+  `-nodereuse:false`, `--nologo`, `-warnaserror` and friends are *not* `dotnet test`
+  options, and anything `dotnet test` does not recognise is forwarded to the **test
+  executable**. That forwarding is normal — it is how `--filter-class`, `--parallel` and
+  `--report-trx` reach the runner — but an MSBuild-only switch is recognised by *neither*
+  layer, so MTP rejects it and exits **5 (`InvalidCommandLine`)** before running anything.
+  **The rejected-option message is never surfaced**, so the only signals are the exit code
+  and a summary that reads green in prose:
   ```text
   ...\Reactor.Tests.dll (net10.0-windows10.0.22621.0) Zero tests ran
   Test run summary: Zero tests ran
@@ -230,10 +231,11 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   The reliable tell is the module label: a run that actually started prints the
   handshake-derived `net10.0|x64`, so the full `net10.0-windows10.0.22621.0` means the test
   host died before its handshake. Exit 5 is *invalid command line*, **not** MTP's zero-tests
-  policy (that is exit 8). `-p:…` **is** a real `dotnet test` option and does reach MSBuild,
-  which is why `-p:SkipSignaturesGen=true` and `-p:Platform=x64` are safe there; measured on
-  this tree, `$env:MSBUILDDISABLENODEREUSE='1'` is also safe, because an environment variable
-  is not an argv token. See
+  policy (that is exit 8). `-p:…` **is** a real `dotnet test` option, which is why
+  `-p:SkipSignaturesGen=true` and `-p:Platform=x64` are safe there; measured on this tree,
+  `$env:MSBUILDDISABLENODEREUSE='1'` is also safe, because an environment variable is not an
+  argv token. Note `dotnet test --help` is not a reliable safe-list — `-t:`/`-target:` and
+  `--property` are accepted but unlisted. See
   [`TESTING.md`](TESTING.md#msbuild-switches-are-not-dotnet-test-switches).
 - **Fast selftest loop** (TAP `ok`/`not ok`): `dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter "<Prefix>"`.
 - **Headless unit tests cannot construct any `Microsoft.UI.Xaml` object** — control, brush,

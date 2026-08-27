@@ -65,22 +65,32 @@ packages are already referenced by the projects that need them.
 
 ### MSBuild switches are not `dotnet test` switches
 
-`dotnet test` does **not** hand leftover arguments to MSBuild. The SDK composes its MSBuild
-command line only from the options it recognises; every token it does *not* recognise is
-appended to the **test executable's own** command line, where MTP rejects it as an unknown
-option and exits **5 (`InvalidCommandLine`)** before a single test runs.
+Every flag on a `dotnet test` command line is handled by one of two layers, and it
+matters which:
 
-The rule is simply *"if `dotnet test --help` doesn't list it, it goes to the test app"* —
-so check there when in doubt rather than assuming an MSBuild switch carries over.
+1. **`dotnet test` itself** recognises a set of options and uses them to drive the build
+   and the run — `-p:` / `--property`, `-c`, `-f`, `-r`, `-a` / `--arch`, `--os`, `-v`,
+   `-e`, `-t:` / `-target:`, `--no-build`, `--no-restore`, `-bl`.
+2. **Everything else is forwarded verbatim to the test executable**, where MTP and the
+   xUnit runner parse it. That is not a failure mode — it is how the whole table above
+   works. `--filter-class`, `--parallel`, `--max-threads`, `--report-trx` and `--hangdump`
+   are all forwarded, and all valid.
 
-| Reaches MSBuild — safe | Goes to the test app — breaks the run |
-|---|---|
-| `-p:` / `--property`, `-c`, `-f`, `-r`, `-a` / `--arch`, `--os`, `-v`, `-e`, `--no-build`, `--no-restore`, and `-bl` | `-m` / `-maxcpucount`, `-nodereuse` / `-nr`, `--nologo`, `-t:` / `-target:`, `-warnaserror`, and every other MSBuild-only switch |
+The run breaks only when a token is recognised by **neither** layer. MTP then rejects it as
+an unknown option and exits **5 (`InvalidCommandLine`)** before a single test runs.
+MSBuild-only switches are the common way to land in that gap: they look like build flags,
+but `dotnet test` does not accept them and the test host has never heard of them.
 
-`--nologo` is in the right-hand column on purpose: it is a real `dotnet build` switch and
-reads like a harmless one, but `dotnet test` does not recognise it, so it kills the run
-exactly like `-m:1` does. `-bl` is the one exception — the SDK lifts binlog arguments out
-before forwarding the rest.
+| Handled by `dotnet test` | Forwarded, and valid | Recognised by neither — breaks the run |
+|---|---|---|
+| `-p:` / `--property`, `-c`, `-f`, `-r`, `-a` / `--arch`, `--os`, `-v`, `-e`, `-t:` / `-target:`, `--no-build`, `--no-restore`, `-bl` | `--filter`, `--filter-class`, `--filter-trait`, `--parallel`, `--max-threads`, `--report-trx`, `--hangdump`, `--minimum-expected-tests` | `-m` / `-maxcpucount`, `-nodereuse` / `-nr`, `--nologo`, `-warnaserror`, `-graphBuild` |
+
+Two of these are counter-intuitive enough to call out. `--nologo` is a real `dotnet build`
+switch and reads like a harmless one, but `dotnet test` does not accept it, so it kills the
+run exactly like `-m:1`. Conversely `-t:`/`-target:` **is** accepted, even though
+`dotnet test --help` does not list it — so "not in `--help`" is not a reliable test for
+whether a flag is safe. When in doubt, run the command against a known-passing filter and
+check that the test count is non-zero.
 
 Environment variables are not argv tokens, so `MSBUILDDISABLENODEREUSE=1` is safe — it
 reaches MSBuild and never reaches the test host.

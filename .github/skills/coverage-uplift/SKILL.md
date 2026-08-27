@@ -123,13 +123,15 @@ persists under parallel builds, escalate **on the `dotnet build` line only** —
 separate `dotnet test … --no-build` line above.
 
 **Never move `-m:1` or `-nodereuse:false` onto a `dotnet test` command** (issue #1140):
-those are MSBuild-only switches, and `dotnet test` forwards every token it does not
-recognise to the **test executable**, which rejects it and exits 5 before running anything.
-Nothing prints why — you just get `Zero tests ran / total: 0 / failed: 0 / skipped: 0`,
-which reads green, so a coverage run reports no failures while measuring nothing. The tell
-is the module label: `net10.0-windows10.0.22621.0` instead of `net10.0|x64`. `-p:…` is a
-real `dotnet test` option and is safe, as is the `MSBUILDDISABLENODEREUSE` environment
-variable. See `TESTING.md` → *MSBuild switches are not `dotnet test` switches*.
+`dotnet test` does not accept those switches, and the test host does not recognise them
+either, so it exits 5 before running anything. Nothing prints why — you just get
+`Zero tests ran / total: 0 / failed: 0 / skipped: 0`, which reads green, so a coverage run
+reports no failures while measuring nothing. The tell is the module label:
+`net10.0-windows10.0.22621.0` instead of `net10.0|x64`. Runner options such as
+`--filter-class`, `--parallel` and `--max-threads` are fine — they are forwarded to the test
+app on purpose. `-p:…` is a real `dotnet test` option and is safe, as is the
+`MSBUILDDISABLENODEREUSE` environment variable. See `TESTING.md` → *MSBuild switches are not
+`dotnet test` switches*.
 
 E2E input needs an interactive desktop: if `SendInput`/`GetCursorPos` return
 `ACCESS_DENIED (err 5)` your local session can't inject input — validate the fixture over

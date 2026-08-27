@@ -418,7 +418,7 @@ Note: the first three rules below are pre-existing gaps for **all** hooks; file 
 Run before merging any phase:
 
 - [ ] **All unit tests** (`dotnet test tests/Reactor.Tests`) — 2,200+ existing + phase-specific additions
-- [ ] **All threading tests** run both serially and under load — `dotnet test tests/Reactor.Tests --parallel none` and `dotnet test tests/Reactor.Tests --max-threads 4` — to expose contention that only appears when collections run concurrently. (Do **not** use `-m:1`/`-m:4` here: those are MSBuild switches, and `dotnet test` forwards unrecognised tokens to the test host, which rejects them and runs zero tests — issue #1140.)
+- [ ] **All threading tests** run both serially and under load — `dotnet test tests/Reactor.Tests -p:Platform=x64 --parallel none` and `dotnet test tests/Reactor.Tests -p:Platform=x64 --max-threads 4` — to expose contention that only appears when collections run concurrently. (Do **not** use `-m:1`/`-m:4` here: those are MSBuild switches that `dotnet test` does not accept, and the test host rejects them and runs zero tests — issue #1140.)
 - [ ] **All selfhost fixtures** (`dotnet run --project tests/Reactor.AppTests.Host -- --self-test`) including the `AsyncResource.*` prefix
 - [ ] **Framerate fixtures** (`--filter "AsyncResource.Framerate"`) — these are the regression canary for "works once, breaks at 60Hz"
 - [ ] **E2E regression** (`dotnet test tests/Reactor.AppTests`) — no new E2E tests required; verify no existing AT/a11y regression
