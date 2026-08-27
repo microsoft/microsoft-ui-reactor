@@ -47,14 +47,14 @@
       "id": "safety-batch-1",
       "agent": "safety",
       "files": [
-        "Reactor/Core/Reconciler.cs",
-        "Reactor/Core/Reconciler.Mount.cs",
-        "Reactor/Core/Reconciler.Update.cs",
-        "Reactor/Core/ChildReconciler.cs",
-        "Reactor/Core/RenderContext.cs",
-        "Reactor/Core/Element.cs",
-        "Reactor/Core/Component.cs",
-        "Reactor/Core/ElementPool.cs"
+        "src/Reactor/Core/Reconciler.cs",
+        "src/Reactor/Core/Reconciler.Mount.cs",
+        "src/Reactor/Core/Reconciler.Update.cs",
+        "src/Reactor/Core/ChildReconciler.cs",
+        "src/Reactor/Core/RenderContext.cs",
+        "src/Reactor/Core/Element.cs",
+        "src/Reactor/Core/Component.cs",
+        "src/Reactor/Core/ElementPool.cs"
       ],
       "description": "Core reconciler and render loop \u2014 shared mutable state, tree diffing, pooling"
     },
@@ -62,13 +62,13 @@
       "id": "safety-batch-2",
       "agent": "safety",
       "files": [
-        "Reactor/Core/Context.cs",
-        "Reactor/Core/ContextScope.cs",
-        "Reactor/Core/ContextExtensions.cs",
-        "Reactor/Core/ChildCollection.cs",
-        "Reactor/Core/ElementFactory.cs",
-        "Reactor/Core/ObservableTreeTracker.cs",
-        "Reactor/Core/PersistedStateCache.cs"
+        "src/Reactor/Core/Context.cs",
+        "src/Reactor/Core/ContextScope.cs",
+        "src/Reactor/Core/ContextExtensions.cs",
+        "src/Reactor/Core/ChildCollection.cs",
+        "src/Reactor/Core/ElementFactory.cs",
+        "src/Reactor/Core/ObservableTreeTracker.cs",
+        "src/Reactor/Core/PersistedStateCache.cs"
       ],
       "description": "Core context, state management, and observable tracking \u2014 thread-safety boundaries"
     },
@@ -76,12 +76,12 @@
       "id": "safety-batch-3",
       "agent": "safety",
       "files": [
-        "Reactor/Hosting/ReactorHost.cs",
-        "Reactor/Hosting/ReactorHostControl.cs",
-        "Reactor/Hosting/PageHelper.cs",
-        "Reactor/Hosting/ReactorApp.cs",
-        "Reactor/Hosting/RenderStats.cs",
-        "Reactor/Hosting/HotReloadService.cs"
+        "src/Reactor/Hosting/ReactorHost.cs",
+        "src/Reactor/Hosting/ReactorHostControl.cs",
+        "src/Reactor/Hosting/PageHelper.cs",
+        "src/Reactor/Hosting/ReactorApp.cs",
+        "src/Reactor/Hosting/RenderStats.cs",
+        "src/Reactor/Hosting/HotReloadService.cs"
       ],
       "description": "Hosting layer \u2014 render dispatch, app lifecycle, hot reload coordination"
     },
@@ -89,12 +89,12 @@
       "id": "safety-batch-4",
       "agent": "safety",
       "files": [
-        "Reactor/Yoga/FlexEnums.cs",
-        "Reactor/Yoga/FlexPanel.cs",
-        "Reactor/Yoga/YogaNode.cs",
-        "Reactor/Yoga/YogaAlgorithm.cs",
-        "Reactor/Yoga/AlgorithmUtils.cs",
-        "Reactor/Yoga/YogaConfig.cs"
+        "src/Reactor/Yoga/FlexEnums.cs",
+        "src/Reactor/Yoga/FlexPanel.cs",
+        "src/Reactor/Yoga/YogaNode.cs",
+        "src/Reactor/Yoga/YogaAlgorithm.cs",
+        "src/Reactor/Yoga/AlgorithmUtils.cs",
+        "src/Reactor/Yoga/YogaConfig.cs"
       ],
       "description": "Flex layout engine \u2014 yoga algorithm, node tree, shared layout state"
     },
@@ -102,11 +102,11 @@
       "id": "safety-batch-5",
       "agent": "safety",
       "files": [
-        "Reactor/Yoga/YogaStyle.cs",
-        "Reactor/Yoga/YogaValue.cs",
-        "Reactor/Yoga/YogaEnums.cs",
-        "Reactor/Yoga/LayoutResults.cs",
-        "Reactor/Yoga/FlexDirectionHelper.cs"
+        "src/Reactor/Yoga/YogaStyle.cs",
+        "src/Reactor/Yoga/YogaValue.cs",
+        "src/Reactor/Yoga/YogaEnums.cs",
+        "src/Reactor/Yoga/LayoutResults.cs",
+        "src/Reactor/Yoga/FlexDirectionHelper.cs"
       ],
       "description": "Yoga value types, enums, and layout results \u2014 data integrity"
     },
@@ -114,13 +114,13 @@
       "id": "lifecycle-batch-1",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Core/Reconciler.cs",
-        "Reactor/Core/Reconciler.Mount.cs",
-        "Reactor/Core/Reconciler.Update.cs",
-        "Reactor/Core/ChildReconciler.cs",
-        "Reactor/Core/Element.cs",
-        "Reactor/Core/Component.cs",
-        "Reactor/Core/RenderContext.cs"
+        "src/Reactor/Core/Reconciler.cs",
+        "src/Reactor/Core/Reconciler.Mount.cs",
+        "src/Reactor/Core/Reconciler.Update.cs",
+        "src/Reactor/Core/ChildReconciler.cs",
+        "src/Reactor/Core/Element.cs",
+        "src/Reactor/Core/Component.cs",
+        "src/Reactor/Core/RenderContext.cs"
       ],
       "description": "Core reconciler lifecycle \u2014 mount, update, unmount paths"
     },
@@ -128,14 +128,14 @@
       "id": "lifecycle-batch-2",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Core/Context.cs",
-        "Reactor/Core/ContextScope.cs",
-        "Reactor/Core/ContextExtensions.cs",
-        "Reactor/Core/ChildCollection.cs",
-        "Reactor/Core/ElementPool.cs",
-        "Reactor/Core/ElementFactory.cs",
-        "Reactor/Core/ObservableTreeTracker.cs",
-        "Reactor/Core/PersistedStateCache.cs"
+        "src/Reactor/Core/Context.cs",
+        "src/Reactor/Core/ContextScope.cs",
+        "src/Reactor/Core/ContextExtensions.cs",
+        "src/Reactor/Core/ChildCollection.cs",
+        "src/Reactor/Core/ElementPool.cs",
+        "src/Reactor/Core/ElementFactory.cs",
+        "src/Reactor/Core/ObservableTreeTracker.cs",
+        "src/Reactor/Core/PersistedStateCache.cs"
       ],
       "description": "Context lifecycle, element pooling, observable dispose patterns"
     },
@@ -143,12 +143,12 @@
       "id": "lifecycle-batch-3",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Hosting/ReactorHost.cs",
-        "Reactor/Hosting/ReactorHostControl.cs",
-        "Reactor/Hosting/PageHelper.cs",
-        "Reactor/Hosting/ReactorApp.cs",
-        "Reactor/Hosting/RenderStats.cs",
-        "Reactor/Hosting/HotReloadService.cs"
+        "src/Reactor/Hosting/ReactorHost.cs",
+        "src/Reactor/Hosting/ReactorHostControl.cs",
+        "src/Reactor/Hosting/PageHelper.cs",
+        "src/Reactor/Hosting/ReactorApp.cs",
+        "src/Reactor/Hosting/RenderStats.cs",
+        "src/Reactor/Hosting/HotReloadService.cs"
       ],
       "description": "Host control lifecycle \u2014 startup, shutdown, hot reload"
     },
@@ -156,15 +156,15 @@
       "id": "lifecycle-batch-4",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Elements/Dsl.cs",
-        "Reactor/Elements/ElementExtensions.cs",
-        "Reactor/Elements/BrushHelper.cs",
-        "Reactor/Elements/ThemeResource.cs",
-        "Reactor/Elements/WinRTCache.cs",
-        "Reactor/Elements/FlexExtensions.cs",
-        "Reactor/Elements/CanvasExtensions.cs",
-        "Reactor/Elements/GridExtensions.cs",
-        "Reactor/Elements/RelativePanelExtensions.cs"
+        "src/Reactor/Elements/Dsl.cs",
+        "src/Reactor/Elements/ElementExtensions.cs",
+        "src/Reactor/Elements/BrushHelper.cs",
+        "src/Reactor/Elements/ThemeResource.cs",
+        "src/Reactor/Elements/WinRTCache.cs",
+        "src/Reactor/Elements/FlexExtensions.cs",
+        "src/Reactor/Elements/CanvasExtensions.cs",
+        "src/Reactor/Elements/GridExtensions.cs",
+        "src/Reactor/Elements/RelativePanelExtensions.cs"
       ],
       "description": "Element DSL, extensions, and WinRT caching \u2014 event handler attach/detach"
     },
@@ -172,14 +172,14 @@
       "id": "lifecycle-batch-5",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Animation/AnimateProperty.cs",
-        "Reactor/Animation/AnimationHelper.cs",
-        "Reactor/Animation/AnimationScope.cs",
-        "Reactor/Animation/Curve.cs",
-        "Reactor/Animation/InteractionStates.cs",
-        "Reactor/Animation/KeyframeBuilder.cs",
-        "Reactor/Animation/ScrollAnimation.cs",
-        "Reactor/Animation/Transition.cs"
+        "src/Reactor/Animation/AnimateProperty.cs",
+        "src/Reactor/Animation/AnimationHelper.cs",
+        "src/Reactor/Animation/AnimationScope.cs",
+        "src/Reactor/Animation/Curve.cs",
+        "src/Reactor/Animation/InteractionStates.cs",
+        "src/Reactor/Animation/KeyframeBuilder.cs",
+        "src/Reactor/Animation/ScrollAnimation.cs",
+        "src/Reactor/Animation/Transition.cs"
       ],
       "description": "Animation system \u2014 scope lifecycle, transition cleanup, scroll animation dispose"
     },
@@ -203,10 +203,10 @@
       "id": "lifecycle-batch-7",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Controls/PropertyGrid/PropertyGridComponent.cs",
-        "Reactor/Controls/PropertyGrid/PropertyGridElement.cs",
+        "src/Reactor/Controls/PropertyGrid/PropertyGridComponent.cs",
+        "src/Reactor/Controls/PropertyGrid/PropertyGridElement.cs",
         "Reactor/Controls/PropertyGrid/Factories.cs",
-        "Reactor/Controls/PropertyGrid/PropertyGridDefaults.cs"
+        "src/Reactor/Controls/PropertyGrid/PropertyGridDefaults.cs"
       ],
       "description": "PropertyGrid \u2014 component lifecycle, event wiring"
     },
@@ -214,12 +214,12 @@
       "id": "lifecycle-batch-8",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Controls/PropertyGrid/ArrayOperations.cs",
-        "Reactor/Controls/PropertyGrid/Attributes.cs",
+        "src/Reactor/Controls/PropertyGrid/ArrayOperations.cs",
+        "src/Reactor/Controls/PropertyGrid/Attributes.cs",
         "Reactor/Controls/PropertyGrid/PropertyDescriptor.cs",
-        "Reactor/Controls/PropertyGrid/ReflectionTypeMetadataProvider.cs",
-        "Reactor/Controls/PropertyGrid/TypeMetadata.cs",
-        "Reactor/Controls/PropertyGrid/TypeRegistry.cs"
+        "src/Reactor/Controls/PropertyGrid/ReflectionTypeMetadataProvider.cs",
+        "src/Reactor/Controls/PropertyGrid/TypeMetadata.cs",
+        "src/Reactor/Controls/PropertyGrid/TypeRegistry.cs"
       ],
       "description": "PropertyGrid reflection, type metadata, and registry \u2014 disposal and caching"
     },
@@ -242,10 +242,10 @@
       "id": "lifecycle-batch-10",
       "agent": "lifecycle",
       "files": [
-        "Reactor/Core/Theme.cs",
-        "Reactor/Core/CommandInterop.cs",
-        "Reactor/Core/Command.cs",
-        "Reactor/Core/StandardCommand.cs"
+        "src/Reactor/Core/Theme.cs",
+        "src/Reactor/Core/CommandInterop.cs",
+        "src/Reactor/Core/Command.cs",
+        "src/Reactor/Core/StandardCommand.cs"
       ],
       "description": "Commands and theming \u2014 command lifecycle, dispose patterns"
     },
@@ -280,11 +280,11 @@
       "agent": "interop",
       "files": [
         "Reactor/Hosting/PreviewCaptureServer.cs",
-        "Reactor/Hosting/XamlInterop.cs",
-        "Reactor/Elements/WinRTCache.cs",
-        "Reactor/Hosting/ReactorApp.cs",
-        "Reactor/Hosting/ReactorHost.cs",
-        "Reactor/Hosting/ReactorHostControl.cs"
+        "src/Reactor/Hosting/XamlInterop.cs",
+        "src/Reactor/Elements/WinRTCache.cs",
+        "src/Reactor/Hosting/ReactorApp.cs",
+        "src/Reactor/Hosting/ReactorHost.cs",
+        "src/Reactor/Hosting/ReactorHostControl.cs"
       ],
       "description": "XAML interop, WinRT cache, preview server \u2014 P/Invoke and COM boundaries"
     },
@@ -307,9 +307,9 @@
       "id": "interop-batch-3",
       "agent": "interop",
       "files": [
-        "Reactor/Yoga/YogaNode.cs",
-        "Reactor/Yoga/YogaAlgorithm.cs",
-        "Reactor/Yoga/AlgorithmUtils.cs"
+        "src/Reactor/Yoga/YogaNode.cs",
+        "src/Reactor/Yoga/YogaAlgorithm.cs",
+        "src/Reactor/Yoga/AlgorithmUtils.cs"
       ],
       "description": "Yoga layout engine \u2014 cross-boundary calls"
     },
@@ -318,8 +318,8 @@
       "agent": "security",
       "files": [
         "Reactor/Hosting/PreviewCaptureServer.cs",
-        "Reactor/Hosting/ReactorApp.cs",
-        "Reactor.Cli/Program.cs"
+        "src/Reactor/Hosting/ReactorApp.cs",
+        "src/Reactor.Cli/Program.cs"
       ],
       "description": "Network-facing preview server, app host, CLI entry \u2014 attack surface"
     },
@@ -327,12 +327,12 @@
       "id": "security-batch-2",
       "agent": "security",
       "files": [
-        "Reactor.Cli/Loc/CopilotTranslationProvider.cs",
-        "Reactor.Cli/Loc/ExtractCommand.cs",
-        "Reactor.Cli/Loc/TranslateCommand.cs",
-        "Reactor.Cli/Loc/TranslationPrompt.cs",
-        "Reactor.Cli/Loc/LocCommand.cs",
-        "Reactor.Cli/Loc/ITranslationProvider.cs"
+        "src/Reactor.Cli/Loc/CopilotTranslationProvider.cs",
+        "src/Reactor.Cli/Loc/ExtractCommand.cs",
+        "src/Reactor.Cli/Loc/TranslateCommand.cs",
+        "src/Reactor.Cli/Loc/TranslationPrompt.cs",
+        "src/Reactor.Cli/Loc/LocCommand.cs",
+        "src/Reactor.Cli/Loc/ITranslationProvider.cs"
       ],
       "description": "CLI localization commands \u2014 API keys, network calls, file I/O"
     },
@@ -340,13 +340,13 @@
       "id": "security-batch-3",
       "agent": "security",
       "files": [
-        "Reactor.Cli/Loc/LocalizableStringScanner.cs",
-        "Reactor.Cli/Loc/SourceRewriter.cs",
-        "Reactor.Cli/Loc/ReswReader.cs",
-        "Reactor.Cli/Loc/ReswWriter.cs",
-        "Reactor.Cli/Loc/PruneCommand.cs",
-        "Reactor.Cli/Loc/StatusCommand.cs",
-        "Reactor.Cli/Loc/ValidateCommand.cs"
+        "src/Reactor.Cli/Loc/LocalizableStringScanner.cs",
+        "src/Reactor.Cli/Loc/SourceRewriter.cs",
+        "src/Reactor.Cli/Loc/ReswReader.cs",
+        "src/Reactor.Cli/Loc/ReswWriter.cs",
+        "src/Reactor.Cli/Loc/PruneCommand.cs",
+        "src/Reactor.Cli/Loc/StatusCommand.cs",
+        "src/Reactor.Cli/Loc/ValidateCommand.cs"
       ],
       "description": "CLI file I/O \u2014 source scanning, resx read/write, validation"
     },
@@ -354,14 +354,14 @@
       "id": "security-batch-4",
       "agent": "security",
       "files": [
-        "Reactor.Cli/Docs/CompileCommand.cs",
-        "Reactor.Cli/Docs/DocAssembler.cs",
-        "Reactor.Cli/Docs/DocsCommand.cs",
-        "Reactor.Cli/Docs/ImageProcessor.cs",
-        "Reactor.Cli/Docs/ManifestParser.cs",
-        "Reactor.Cli/Docs/ScreenshotCapture.cs",
-        "Reactor.Cli/Docs/SnippetExtractor.cs",
-        "Reactor.Cli/Docs/TemplateParser.cs"
+        "src/Reactor.Cli/Docs/CompileCommand.cs",
+        "src/Reactor.Cli/Docs/DocAssembler.cs",
+        "src/Reactor.Cli/Docs/DocsCommand.cs",
+        "src/Reactor.Cli/Docs/ImageProcessor.cs",
+        "src/Reactor.Cli/Docs/ManifestParser.cs",
+        "src/Reactor.Cli/Docs/ScreenshotCapture.cs",
+        "src/Reactor.Cli/Docs/SnippetExtractor.cs",
+        "src/Reactor.Cli/Docs/TemplateParser.cs"
       ],
       "description": "CLI docs toolchain \u2014 file I/O, image processing, process invocation"
     },
@@ -874,14 +874,14 @@
       "id": "general-batch-1",
       "agent": "general",
       "files": [
-        "Reactor/Core/Reconciler.cs",
-        "Reactor/Core/Reconciler.Mount.cs",
-        "Reactor/Core/Reconciler.Update.cs",
-        "Reactor/Core/ChildReconciler.cs",
-        "Reactor/Core/RenderContext.cs",
-        "Reactor/Core/Element.cs",
-        "Reactor/Core/Component.cs",
-        "Reactor/Core/ElementPool.cs"
+        "src/Reactor/Core/Reconciler.cs",
+        "src/Reactor/Core/Reconciler.Mount.cs",
+        "src/Reactor/Core/Reconciler.Update.cs",
+        "src/Reactor/Core/ChildReconciler.cs",
+        "src/Reactor/Core/RenderContext.cs",
+        "src/Reactor/Core/Element.cs",
+        "src/Reactor/Core/Component.cs",
+        "src/Reactor/Core/ElementPool.cs"
       ],
       "description": "Core reconciler and element infrastructure"
     },
@@ -889,14 +889,14 @@
       "id": "general-batch-2",
       "agent": "general",
       "files": [
-        "Reactor/Core/Context.cs",
-        "Reactor/Core/ContextScope.cs",
-        "Reactor/Core/ContextExtensions.cs",
-        "Reactor/Core/ChildCollection.cs",
-        "Reactor/Core/ElementFactory.cs",
-        "Reactor/Core/ObservableTreeTracker.cs",
-        "Reactor/Core/PersistedStateCache.cs",
-        "Reactor/Core/Theme.cs"
+        "src/Reactor/Core/Context.cs",
+        "src/Reactor/Core/ContextScope.cs",
+        "src/Reactor/Core/ContextExtensions.cs",
+        "src/Reactor/Core/ChildCollection.cs",
+        "src/Reactor/Core/ElementFactory.cs",
+        "src/Reactor/Core/ObservableTreeTracker.cs",
+        "src/Reactor/Core/PersistedStateCache.cs",
+        "src/Reactor/Core/Theme.cs"
       ],
       "description": "Core context, state, and observable infrastructure"
     },
@@ -904,9 +904,9 @@
       "id": "general-batch-3",
       "agent": "general",
       "files": [
-        "Reactor/Core/CommandInterop.cs",
-        "Reactor/Core/Command.cs",
-        "Reactor/Core/StandardCommand.cs"
+        "src/Reactor/Core/CommandInterop.cs",
+        "src/Reactor/Core/Command.cs",
+        "src/Reactor/Core/StandardCommand.cs"
       ],
       "description": "Command system"
     },
@@ -955,14 +955,14 @@
       "id": "general-batch-7",
       "agent": "general",
       "files": [
-        "Reactor/Hosting/ReactorHost.cs",
-        "Reactor/Hosting/ReactorHostControl.cs",
-        "Reactor/Hosting/PageHelper.cs",
-        "Reactor/Hosting/ReactorApp.cs",
-        "Reactor/Hosting/RenderStats.cs",
-        "Reactor/Hosting/HotReloadService.cs",
+        "src/Reactor/Hosting/ReactorHost.cs",
+        "src/Reactor/Hosting/ReactorHostControl.cs",
+        "src/Reactor/Hosting/PageHelper.cs",
+        "src/Reactor/Hosting/ReactorApp.cs",
+        "src/Reactor/Hosting/RenderStats.cs",
+        "src/Reactor/Hosting/HotReloadService.cs",
         "Reactor/Hosting/PreviewCaptureServer.cs",
-        "Reactor/Hosting/XamlInterop.cs"
+        "src/Reactor/Hosting/XamlInterop.cs"
       ],
       "description": "Hosting layer \u2014 app host, render control, preview, XAML interop"
     },
@@ -970,15 +970,15 @@
       "id": "general-batch-8",
       "agent": "general",
       "files": [
-        "Reactor/Elements/Dsl.cs",
-        "Reactor/Elements/ElementExtensions.cs",
-        "Reactor/Elements/BrushHelper.cs",
-        "Reactor/Elements/ThemeResource.cs",
-        "Reactor/Elements/WinRTCache.cs",
-        "Reactor/Elements/FlexExtensions.cs",
-        "Reactor/Elements/CanvasExtensions.cs",
-        "Reactor/Elements/GridExtensions.cs",
-        "Reactor/Elements/RelativePanelExtensions.cs"
+        "src/Reactor/Elements/Dsl.cs",
+        "src/Reactor/Elements/ElementExtensions.cs",
+        "src/Reactor/Elements/BrushHelper.cs",
+        "src/Reactor/Elements/ThemeResource.cs",
+        "src/Reactor/Elements/WinRTCache.cs",
+        "src/Reactor/Elements/FlexExtensions.cs",
+        "src/Reactor/Elements/CanvasExtensions.cs",
+        "src/Reactor/Elements/GridExtensions.cs",
+        "src/Reactor/Elements/RelativePanelExtensions.cs"
       ],
       "description": "Element DSL, extensions, brushes, and layout helpers"
     },
@@ -986,14 +986,14 @@
       "id": "general-batch-9",
       "agent": "general",
       "files": [
-        "Reactor/Animation/AnimateProperty.cs",
-        "Reactor/Animation/AnimationHelper.cs",
-        "Reactor/Animation/AnimationScope.cs",
-        "Reactor/Animation/Curve.cs",
-        "Reactor/Animation/InteractionStates.cs",
-        "Reactor/Animation/KeyframeBuilder.cs",
-        "Reactor/Animation/ScrollAnimation.cs",
-        "Reactor/Animation/Transition.cs"
+        "src/Reactor/Animation/AnimateProperty.cs",
+        "src/Reactor/Animation/AnimationHelper.cs",
+        "src/Reactor/Animation/AnimationScope.cs",
+        "src/Reactor/Animation/Curve.cs",
+        "src/Reactor/Animation/InteractionStates.cs",
+        "src/Reactor/Animation/KeyframeBuilder.cs",
+        "src/Reactor/Animation/ScrollAnimation.cs",
+        "src/Reactor/Animation/Transition.cs"
       ],
       "description": "Animation system \u2014 properties, scopes, curves, transitions"
     },
@@ -1001,16 +1001,16 @@
       "id": "general-batch-10",
       "agent": "general",
       "files": [
-        "Reactor/Yoga/FlexEnums.cs",
-        "Reactor/Yoga/FlexPanel.cs",
-        "Reactor/Yoga/YogaNode.cs",
-        "Reactor/Yoga/YogaAlgorithm.cs",
-        "Reactor/Yoga/AlgorithmUtils.cs",
-        "Reactor/Yoga/YogaConfig.cs",
-        "Reactor/Yoga/YogaStyle.cs",
-        "Reactor/Yoga/YogaValue.cs",
-        "Reactor/Yoga/YogaEnums.cs",
-        "Reactor/Yoga/LayoutResults.cs"
+        "src/Reactor/Yoga/FlexEnums.cs",
+        "src/Reactor/Yoga/FlexPanel.cs",
+        "src/Reactor/Yoga/YogaNode.cs",
+        "src/Reactor/Yoga/YogaAlgorithm.cs",
+        "src/Reactor/Yoga/AlgorithmUtils.cs",
+        "src/Reactor/Yoga/YogaConfig.cs",
+        "src/Reactor/Yoga/YogaStyle.cs",
+        "src/Reactor/Yoga/YogaValue.cs",
+        "src/Reactor/Yoga/YogaEnums.cs",
+        "src/Reactor/Yoga/LayoutResults.cs"
       ],
       "description": "Flex layout and Yoga engine"
     },
@@ -1018,7 +1018,7 @@
       "id": "general-batch-11",
       "agent": "general",
       "files": [
-        "Reactor/Yoga/FlexDirectionHelper.cs",
+        "src/Reactor/Yoga/FlexDirectionHelper.cs",
         "Reactor/Markdown/Md4cParser.cs",
         "Reactor/Markdown/Md4cParser.Block.cs",
         "Reactor/Markdown/Md4cParser.Inline.cs",
@@ -1035,12 +1035,12 @@
       "id": "general-batch-12",
       "agent": "general",
       "files": [
-        "Reactor/Controls/PropertyGrid/PropertyGridComponent.cs",
-        "Reactor/Controls/PropertyGrid/PropertyGridElement.cs",
+        "src/Reactor/Controls/PropertyGrid/PropertyGridComponent.cs",
+        "src/Reactor/Controls/PropertyGrid/PropertyGridElement.cs",
         "Reactor/Controls/PropertyGrid/Factories.cs",
-        "Reactor/Controls/PropertyGrid/PropertyGridDefaults.cs",
-        "Reactor/Controls/PropertyGrid/ArrayOperations.cs",
-        "Reactor/Controls/PropertyGrid/Attributes.cs"
+        "src/Reactor/Controls/PropertyGrid/PropertyGridDefaults.cs",
+        "src/Reactor/Controls/PropertyGrid/ArrayOperations.cs",
+        "src/Reactor/Controls/PropertyGrid/Attributes.cs"
       ],
       "description": "PropertyGrid components"
     },
@@ -1049,9 +1049,9 @@
       "agent": "general",
       "files": [
         "Reactor/Controls/PropertyGrid/PropertyDescriptor.cs",
-        "Reactor/Controls/PropertyGrid/ReflectionTypeMetadataProvider.cs",
-        "Reactor/Controls/PropertyGrid/TypeMetadata.cs",
-        "Reactor/Controls/PropertyGrid/TypeRegistry.cs"
+        "src/Reactor/Controls/PropertyGrid/ReflectionTypeMetadataProvider.cs",
+        "src/Reactor/Controls/PropertyGrid/TypeMetadata.cs",
+        "src/Reactor/Controls/PropertyGrid/TypeRegistry.cs"
       ],
       "description": "PropertyGrid type system \u2014 descriptors, reflection, registry"
     },
@@ -1059,13 +1059,13 @@
       "id": "general-batch-14",
       "agent": "general",
       "files": [
-        "Reactor.Cli/Program.cs",
-        "Reactor.Cli/Loc/LocCommand.cs",
-        "Reactor.Cli/Loc/ExtractCommand.cs",
-        "Reactor.Cli/Loc/TranslateCommand.cs",
-        "Reactor.Cli/Loc/TranslationPrompt.cs",
-        "Reactor.Cli/Loc/CopilotTranslationProvider.cs",
-        "Reactor.Cli/Loc/ITranslationProvider.cs"
+        "src/Reactor.Cli/Program.cs",
+        "src/Reactor.Cli/Loc/LocCommand.cs",
+        "src/Reactor.Cli/Loc/ExtractCommand.cs",
+        "src/Reactor.Cli/Loc/TranslateCommand.cs",
+        "src/Reactor.Cli/Loc/TranslationPrompt.cs",
+        "src/Reactor.Cli/Loc/CopilotTranslationProvider.cs",
+        "src/Reactor.Cli/Loc/ITranslationProvider.cs"
       ],
       "description": "CLI entry point and localization commands"
     },
@@ -1073,14 +1073,14 @@
       "id": "general-batch-15",
       "agent": "general",
       "files": [
-        "Reactor.Cli/Loc/LocalizableString.cs",
-        "Reactor.Cli/Loc/LocalizableStringScanner.cs",
-        "Reactor.Cli/Loc/SourceRewriter.cs",
-        "Reactor.Cli/Loc/InterpolationConverter.cs",
-        "Reactor.Cli/Loc/KeyNamer.cs",
-        "Reactor.Cli/Loc/KeyedLocString.cs",
-        "Reactor.Cli/Loc/ReswReader.cs",
-        "Reactor.Cli/Loc/ReswWriter.cs"
+        "src/Reactor.Cli/Loc/LocalizableString.cs",
+        "src/Reactor.Cli/Loc/LocalizableStringScanner.cs",
+        "src/Reactor.Cli/Loc/SourceRewriter.cs",
+        "src/Reactor.Cli/Loc/InterpolationConverter.cs",
+        "src/Reactor.Cli/Loc/KeyNamer.cs",
+        "src/Reactor.Cli/Loc/KeyedLocString.cs",
+        "src/Reactor.Cli/Loc/ReswReader.cs",
+        "src/Reactor.Cli/Loc/ReswWriter.cs"
       ],
       "description": "CLI localization tooling \u2014 scanning, rewriting, resw I/O"
     },
@@ -1088,14 +1088,14 @@
       "id": "general-batch-16",
       "agent": "general",
       "files": [
-        "Reactor.Cli/Loc/PruneCommand.cs",
-        "Reactor.Cli/Loc/StatusCommand.cs",
-        "Reactor.Cli/Loc/ValidateCommand.cs",
-        "Reactor.Cli/Docs/DocsCommand.cs",
-        "Reactor.Cli/Docs/CompileCommand.cs",
-        "Reactor.Cli/Docs/DocAssembler.cs",
-        "Reactor.Cli/Docs/ImageProcessor.cs",
-        "Reactor.Cli/Docs/ManifestParser.cs"
+        "src/Reactor.Cli/Loc/PruneCommand.cs",
+        "src/Reactor.Cli/Loc/StatusCommand.cs",
+        "src/Reactor.Cli/Loc/ValidateCommand.cs",
+        "src/Reactor.Cli/Docs/DocsCommand.cs",
+        "src/Reactor.Cli/Docs/CompileCommand.cs",
+        "src/Reactor.Cli/Docs/DocAssembler.cs",
+        "src/Reactor.Cli/Docs/ImageProcessor.cs",
+        "src/Reactor.Cli/Docs/ManifestParser.cs"
       ],
       "description": "CLI prune/status/validate and docs compilation"
     },
@@ -1103,9 +1103,9 @@
       "id": "general-batch-17",
       "agent": "general",
       "files": [
-        "Reactor.Cli/Docs/ScreenshotCapture.cs",
-        "Reactor.Cli/Docs/SnippetExtractor.cs",
-        "Reactor.Cli/Docs/TemplateParser.cs"
+        "src/Reactor.Cli/Docs/ScreenshotCapture.cs",
+        "src/Reactor.Cli/Docs/SnippetExtractor.cs",
+        "src/Reactor.Cli/Docs/TemplateParser.cs"
       ],
       "description": "CLI docs tooling \u2014 screenshots, snippets, templates"
     },
@@ -1113,8 +1113,8 @@
       "id": "general-batch-18",
       "agent": "general",
       "files": [
-        "Reactor.Localization.Generator/LocSourceGenerator.cs",
-        "Reactor.Localization.Generator/ReswParser.cs"
+        "src/Reactor.Localization.Generator/LocSourceGenerator.cs",
+        "src/Reactor.Localization.Generator/ReswParser.cs"
       ],
       "description": "Source generator for localization"
     },
@@ -1220,9 +1220,9 @@
         "Directory.Build.props",
         "Directory.Build.targets",
         "Reactor.slnx",
-        "Reactor/Reactor.csproj",
-        "Reactor.Cli/Reactor.Cli.csproj",
-        "Reactor.Localization.Generator/Reactor.Localization.Generator.csproj"
+        "src/Reactor/Reactor.csproj",
+        "src/Reactor.Cli/Reactor.Cli.csproj",
+        "src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj"
       ],
       "description": "Root build config \u2014 solution, props, targets, main project files"
     },
