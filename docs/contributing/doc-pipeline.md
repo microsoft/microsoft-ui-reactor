@@ -605,3 +605,62 @@ dotnet build docs/_pipeline/apps/<topic>/<topic>.csproj -c Debug -p:Platform=x64
 `csc`, so the analyzers do not run and a dirty app reports zero warnings.
 `-p:BuildProjectReferences=false` keeps several single-app builds from racing
 on `src/Reactor`'s `obj/bin`.
+
+## 10. Inline C# in templates
+
+A ` ```csharp snippet="topic/id" ` block is extracted from a real doc app, so CI compiles it and
+the `docs-snippet-gate` job holds it to the same analyzer rules a reader's own project uses.
+
+A plain ` ```csharp ` block is just text. Nothing compiles it, nothing analyses it, and it renders
+identically on the published page — so a reader cannot tell the verified one from the unverified
+one. That gap shipped real defects: `testing.md` taught a `ProfileCard`/`Mount` API that does not
+exist, `hooks-internals.md` read `Ref<T>.Value` when the property is `.Current`, and `layout.md`
+referenced an undeclared `window`.
+
+`InlineSnippetLedgerTests` now fails the build on any new hand-typed C# example. You have three
+ways to satisfy it.
+
+### A — move it into the topic's doc app
+
+The default for ordinary app-level Reactor code. Wrap the code in `// <snippet:id>` /
+`// </snippet:id>` inside `docs/_pipeline/apps/<topic>/App.cs`, then reference it:
+
+````markdown
+```csharp snippet="<topic>/<id>"
+```
+````
+
+Supporting types the example needs in order to compile go *outside* the markers, so they do not
+appear on the page.
+
+### B — point at real repo source
+
+For code that *is* framework, analyzer, or test code. Add the same markers to the real file and
+reference it by path:
+
+````markdown
+```csharp snippet="source:src/Reactor/Core/RenderContext.cs#use-state-slot"
+```
+````
+
+This is the right choice on the under-the-hood pages, and it is strictly better than copying:
+the page can no longer drift from the implementation it documents. It also works against
+`tests/` — a page that shows a test which is itself a passing test in this repo is the strongest
+guarantee available.
+
+Only ever add **comment markers** to files under `src/` or `tests/`; never change their behaviour.
+
+### C — leave it inline, and say why
+
+Legitimate when the block genuinely cannot compile: a migration guide's "before" half, a two-line
+syntax fragment, or a deliberately-wrong example the prose (rather than a `// Don't` comment)
+introduces as the trap. Add it to `AllowedInlineExamples` in
+`tests/Reactor.DocPipeline.Tests/InlineSnippetLedgerTests.cs`, keyed by template and the block's
+first line, with the reason.
+
+Two shapes need no ledger entry because they are self-evidently not code to copy: a signature
+listing (no `;` or `{` anywhere, e.g. `Markdown(string markdown)`), and a block whose first line
+labels it a counterexample (`// Don't`, `// Wrong`, `// Avoid`, …).
+
+C is for code that *should not* be compiled — never for code that *will not* compile. If a block
+fails to build, that is the bug this system exists to surface: fix the code, don't ledger it.

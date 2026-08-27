@@ -491,15 +491,23 @@ descriptor with a stable id that follows the
 `REACTOR_<CATEGORY>_<NNN>` convention:
 
 ```csharp
-public const string DiagnosticId = "REACTOR_MYTHING_001";
+public const string DiagnosticId = "REACTOR_DYM_005";
+
+private static readonly LocalizableString Title =
+    "Reactor factory expects an Element, not a string";
+private static readonly LocalizableString MessageFormat =
+    "'{0}' expects an Element here but a string was supplied — wrap it in a text factory such as TextBlock, Heading or Caption";
+private static readonly LocalizableString Description =
+    "A string was passed where a Reactor Element is required (compiler CS1503). Wrap it in a text factory such as TextBlock(\"…\").";
+
 private static readonly DiagnosticDescriptor Rule = new(
     DiagnosticId,
-    title: "One-line title",
-    messageFormat: "Specific problem: {0}",
-    category: "Reactor.MyThing",
-    defaultSeverity: DiagnosticSeverity.Warning,
+    Title,
+    MessageFormat,
+    "Reactor.DidYouMean",
+    DiagnosticSeverity.Warning,
     isEnabledByDefault: true,
-    description: "Why this is wrong and what to do instead.");
+    description: Description);
 ```
 
 Then register the syntax-node action in `Initialize` and write the

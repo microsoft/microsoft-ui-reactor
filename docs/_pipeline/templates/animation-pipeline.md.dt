@@ -148,17 +148,7 @@ on the wrapping element rather than per-property animations on each
 child. The element's enter / exit drive the whole subtree's
 appearance through one transition spec:
 
-```csharp
-public override Element Render()
-{
-    var (show, setShow) = UseState(false);
-    return VStack(
-        Button(show ? "Hide" : "Show", () => setShow(!show)),
-        show
-            ? Card(TextBlock("Hello")).Transition(Transition.Fade + Transition.Slide(Edge.Top))
-            : null
-    );
-}
+```csharp snippet="animation/conditional-subtree-transition"
 ```
 
 The reconciler treats the `null` branch as an unmount and the

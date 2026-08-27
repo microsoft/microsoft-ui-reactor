@@ -94,7 +94,7 @@ package reference and a second `using static`:
 <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="{{reactorVersion}}" />
 ```
 
-```csharp
+```csharp snippet="data-system/imports"
 using static Microsoft.UI.Reactor.Factories;          // core DSL
 using static Microsoft.UI.Reactor.Advanced.Factories; // DataGrid, Column, AutoColumns
 ```

@@ -397,6 +397,93 @@ class TransactionalAnimateDemo : Component
 }
 // </snippet:transactional-animate>
 
+class AnimateNestingDemo : Component
+{
+    public override Element Render()
+    {
+        var initialItems = UseMemo<IReadOnlyList<Todo>>(() =>
+            [new Todo("nest-1", "Outer item")]);
+        var initialOtherItems = UseMemo<IReadOnlyList<Todo>>(() =>
+            [new Todo("nest-other-1", "Suppressed item")]);
+        var (items, setItems) = UseState(initialItems);
+        var (others, setOtherItems) = UseState(initialOtherItems);
+
+        return VStack(12,
+            SubHeading("Nested Animate scopes"),
+            Button("Add scoped rows", () =>
+            {
+                var x = new Todo(Guid.NewGuid().ToString(), "Spring insert");
+                var y = new Todo(Guid.NewGuid().ToString(), "Instant insert");
+
+                // <snippet:animate-nesting>
+                Animations.Animate(AnimationKind.Spring, () =>
+                {
+                    // Insert: animates with Spring.
+                    setItems([.. items, x]);
+
+                    Animations.Animate(AnimationKind.None, () =>
+                    {
+                        // Insert inside None: no animation, even though we're still inside
+                        // an outer Spring transaction. Useful when a child component needs
+                        // to opt out of the caller's implicit animation intent.
+                        setOtherItems([.. others, y]);
+                    });
+                });
+                // </snippet:animate-nesting>
+            }).AutomationName("Add nested animation rows"),
+            HStack(12,
+                ListView<Todo>(items, (t, _) => TextBlock(t.Title).Padding(8)).Height(120),
+                ListView<Todo>(others, (t, _) => TextBlock(t.Title).Padding(8)).Height(120)
+            )
+        ).Padding(24);
+    }
+}
+
+class ReducedMotionAnimateDemo : Component
+{
+    public override Element Render()
+    {
+        var initialItems = UseMemo<IReadOnlyList<Todo>>(() =>
+            [new Todo("reduced-1", "First")]);
+        var (items, setItems) = UseState(initialItems);
+
+        // <snippet:animate-reduced-motion>
+        var reduceMotion = UseReducedMotion();
+        Action<Todo> addItem = x =>
+        {
+            Action commit = () => setItems([.. items, x]);
+            if (reduceMotion) commit();
+            else Animations.Animate(AnimationKind.Spring, commit);
+        };
+        // </snippet:animate-reduced-motion>
+
+        return VStack(12,
+            SubHeading("Reduced motion"),
+            Button("Add respecting reduced motion",
+                () => addItem(new Todo(Guid.NewGuid().ToString(), "New")))
+                .AutomationName("Add reduced motion aware row"),
+            ListView<Todo>(items, (t, _) => TextBlock(t.Title).Padding(8)).Height(160)
+        ).Padding(24);
+    }
+}
+
+class ConditionalSubtreeTransitionDemo : Component
+{
+    // <snippet:conditional-subtree-transition>
+    public override Element Render()
+    {
+        var (show, setShow) = UseState(false);
+        return VStack(
+            Button(show ? "Hide" : "Show", () => setShow(!show))
+                .AutomationName(show ? "Hide conditional transition" : "Show conditional transition"),
+            show
+                ? Card(TextBlock("Hello")).Transition(Transition.Fade + Transition.Slide(Edge.Top))
+                : null
+        );
+    }
+    // </snippet:conditional-subtree-transition>
+}
+
 // Main app
 class AnimationApp : Component
 {
@@ -419,7 +506,10 @@ class AnimationApp : Component
                 Component<StaggerDemo>(),
                 Component<KeyframeDemo>(),
                 Component<ChoreographyDemo>(),
-                Component<TransactionalAnimateDemo>()
+                Component<TransactionalAnimateDemo>(),
+                Component<AnimateNestingDemo>(),
+                Component<ReducedMotionAnimateDemo>(),
+                Component<ConditionalSubtreeTransitionDemo>()
             ).Padding(24)
         );
     }

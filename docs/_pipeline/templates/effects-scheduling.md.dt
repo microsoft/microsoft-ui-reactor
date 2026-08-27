@@ -1,6 +1,6 @@
 ---
 title: "Effects Scheduling"
-app: effects-scheduling
+app: effects
 order: 35
 audience: advanced
 goal: |
@@ -173,25 +173,7 @@ component for as long as I'm on screen, then release it". Reactor's own
 [`Observable<T>` bridge](reactivity-model.md) follows this shape; so
 does any timer, event subscription, or background task.
 
-```csharp
-var (seconds, updateSeconds) = UseReducer(0);
-
-UseEffect(() =>
-{
-    var cts = new CancellationTokenSource();
-    var token = cts.Token;   // capture once — the loop must not re-read cts.Token
-    _ = Task.Run(async () =>
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-        try
-        {
-            while (await timer.WaitForNextTickAsync(token))
-                updateSeconds(s => s + 1);
-        }
-        catch (OperationCanceledException) { /* expected on cleanup */ }
-    });
-    return () => { cts.Cancel(); };
-}, Array.Empty<object>());
+```csharp snippet="effects/scheduling-subscribe-cleanup"
 ```
 
 The updater `updateSeconds` auto-marshals back to the UI thread (see
@@ -206,13 +188,7 @@ fresh data, broadcast a notification — pass the value as a dependency.
 The cleanup runs the moment the value changes, before the new effect
 body, so any work tied to the old value is torn down first.
 
-```csharp
-UseEffect(() =>
-{
-    if (!isOpen) return () => { };
-    LogTelemetry("dialog_opened");
-    return () => LogTelemetry("dialog_closed");
-}, isOpen);
+```csharp snippet="effects/scheduling-observe-change"
 ```
 
 Telemetry stays balanced because flush runs the previous body's

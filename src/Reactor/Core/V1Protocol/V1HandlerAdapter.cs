@@ -37,8 +37,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         // event trampolines can re-fetch the live element on each fire.
         // Gated: callback-free leaves never dispatch into Reactor code, so we
         // skip the ReactorState allocation for them (§4.4 follow-up).
+        // <snippet:element-tag-refresh-mount>
         if (control is FrameworkElement fe)
             Reconciler.SetElementTagIfNeeded(fe, typedEl);
+        // </snippet:element-tag-refresh-mount>
 
         // Strategy dispatch — only when the handler declares a non-None Children strategy.
         var strategy = _handler.Children;
@@ -82,8 +84,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         var ctx = new UpdateContext(reconciler, requestRerender);
         _handler.Update(ctx, typedOld, typedNew, typedControl);
 
+        // <snippet:element-tag-refresh-update>
         if (control is FrameworkElement fe)
             Reconciler.SetElementTagIfNeeded(fe, typedNew);
+        // </snippet:element-tag-refresh-update>
 
         var strategy = _handler.Children;
         if (strategy is not null)

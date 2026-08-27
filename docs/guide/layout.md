@@ -312,12 +312,12 @@ class ResponsiveDemo : Component
 ![Responsive layout](images/layout/responsive.png)
 
 For real responsive layouts, use [`UseBreakpoint`](hooks.md)
-`(window, minWidth)` which returns `true` when the window is at least
+`(minWidth)` (or `(window, minWidth)` for an explicit host window), which returns `true` when the window is at least
 `minWidth` pixels wide. Pair it with `If()` to swap layouts:
 
 <!-- ai:lock -->
 ```csharp
-var wide = UseBreakpoint(window, 800);
+var wide = UseBreakpoint(800);
 return If(wide,
     () => HStack(12, panelA, panelB),
     () => VStack(8, panelA, panelB));

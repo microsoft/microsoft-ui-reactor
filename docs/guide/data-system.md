@@ -108,7 +108,7 @@ package reference and a second `using static`:
 <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.13" />
 ```
 
-```csharp
+```csharp snippet="data-system/imports"
 using static Microsoft.UI.Reactor.Factories;          // core DSL
 using static Microsoft.UI.Reactor.Advanced.Factories; // DataGrid, Column, AutoColumns
 ```

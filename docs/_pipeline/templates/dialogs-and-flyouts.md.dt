@@ -376,8 +376,8 @@ data — `MenuItem<T>(Command<T>, T)` lets a single command apply to every
 row's context. The keyed `ListView<T>` overload takes a `Func<T, string>`
 key selector, so project non-string ids to a string:
 
-```csharp
-ListView(items, x => x.Id.ToString(), (item, _) =>
+```csharp snippet="dialogs-and-flyouts/right-click-list-row"
+ListView(items, item => item.Id.ToString(), (item, _) =>
     MenuFlyout(
         RowContent(item),
         MenuItem(deleteCommand, item),

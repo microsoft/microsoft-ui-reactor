@@ -250,7 +250,7 @@ HResultFailed   category=Hosting  operation=AppWindow.Close  hr=0x80010108
 ```
 
 The operation label is stable and developer-authored — search the
-Reactor source for `"AppWindow.Close"` and you land on the
+Reactor source for `"ReactorWindow.Close"` and you land on the
 `DiagnosticLog.SwallowedError` call site. The exception type and HR
 together pin the failure class (in this case, `RPC_E_DISCONNECTED` —
 the AppWindow COM proxy was torn down before the call landed) without
@@ -315,11 +315,13 @@ catch (Exception ex)
 ```
 
 ```csharp
-// Do (framework code):
-try { window.AppWindow.Close(); }
-catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+private void CloseNativeWindowOnce()
 {
-    DiagnosticLog.SwallowedError(LogCategory.Hosting, "AppWindow.Close", ex);
+    if (_disposed || _nativeCloseRequested) return;
+    _nativeCloseRequested = true;
+    try { _window.Close(); }
+    catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+    { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Close", ex); }
 }
 ```
 

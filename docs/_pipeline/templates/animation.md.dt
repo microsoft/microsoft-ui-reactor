@@ -227,20 +227,7 @@ transactional case, not a hammer for every change.
 Nested `Animate` calls stack like `using` blocks — the inner kind wins for
 state changes inside its scope, and the outer kind resumes after:
 
-```csharp
-Animations.Animate(AnimationKind.Spring, () =>
-{
-    // Insert: animates with Spring.
-    setItems([.. items, x]);
-
-    Animations.Animate(AnimationKind.None, () =>
-    {
-        // Insert inside None: no animation, even though we're still inside
-        // an outer Spring transaction. Useful when a child component needs
-        // to opt out of the caller's implicit animation intent.
-        setOtherItems([.. others, y]);
-    });
-});
+```csharp snippet="animation/animate-nesting"
 ```
 
 ### Reduced motion
@@ -249,11 +236,7 @@ Animations.Animate(AnimationKind.Spring, () =>
 site*. Read `UseReducedMotion()` and skip the wrapper when the user has
 opted out:
 
-```csharp
-var reduceMotion = UseReducedMotion();
-Action commit = () => setItems([.. items, x]);
-if (reduceMotion) commit();
-else              Animations.Animate(AnimationKind.Spring, commit);
+```csharp snippet="animation/animate-reduced-motion"
 ```
 
 ## WithAnimation Scope

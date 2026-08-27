@@ -283,14 +283,14 @@ class FunctionComponentDemo : Component
 
 You can also use a function component as the app root:
 
-<!-- ai:lock -->
 ```csharp
-ReactorApp.Run("Title", ctx => {
+ReactorApp.Run("Title", ctx =>
+{
     var (n, setN) = ctx.UseState(0);
-    return TextBlock($"{n}");
+    return Button($"Count: {n}", () => setN(n + 1))
+        .AutomationName("Increment count");
 }, width: 400, height: 300);
 ```
-<!-- /ai:lock -->
 
 ## Composition
 

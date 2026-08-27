@@ -166,6 +166,27 @@ class ResponsiveDemo : Component
 }
 // </snippet:responsive>
 
+class UseBreakpointSwitchDemo : Component
+{
+    public override Element Render()
+    {
+        var panelA = BreakpointPanel("Panel A", Theme.SystemNeutralBackground);
+        var panelB = BreakpointPanel("Panel B", Theme.SystemSuccessBackground);
+
+        // <snippet:use-breakpoint-switch>
+        var wide = UseBreakpoint(800);
+        return If(wide,
+            () => HStack(12, panelA, panelB),
+            () => VStack(8, panelA, panelB));
+        // </snippet:use-breakpoint-switch>
+    }
+
+    private static Element BreakpointPanel(string label, ThemeRef background) =>
+        Border(TextBlock(label).Padding(16))
+            .Background(background)
+            .CornerRadius(4);
+}
+
 // <snippet:app-shell>
 // App shell scaffold: title bar + sidebar + content using a single Grid
 // declaration. The two-column / three-row layout is the canonical

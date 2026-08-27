@@ -186,13 +186,7 @@ double-subscribe its `ValueChanged` event.
 Controlled descriptor entries read `Optional<TValue>` from the new
 element before they compare or arm echo suppression:
 
-```csharp
-var next = get(newElement);              // Optional<TValue>
-if (!next.HasValue) return;              // Unset: control owns the value
-var value = next.Value;
-var current = readBack(control);
-if (comparer.Equals(current, value)) return;
-// HasValue drift: arm value-diff echo suppression, then write value.
+```csharp snippet="source:src/Reactor/Core/V1Protocol/Descriptor/PropEntry.cs#controlled-update-gate"
 ```
 
 `Unset` is therefore a real authority state, not a sentinel value of

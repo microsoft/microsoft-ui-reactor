@@ -77,42 +77,41 @@ build.
 
 Reactor's component lifecycle (`BeginRender` → `Render` → `FlushEffects` → `RunCleanups`)
 is exposed through the framework's internal API and used directly by
-`ComponentModelIntegrationTests` in `tests/Reactor.Tests/`. The pattern
-is small enough to fit in a helper inside your test class:
+`ContextSystemSelfHostTests` and `ComponentModelIntegrationTests` in
+`tests/Reactor.Tests/`. The pattern is small enough to fit in a helper
+inside your test class:
 
 ```csharp
-private readonly ContextScope _scope = new();   // internal
-
-private Element Mount(Component component,
-    Dictionary<ContextBase, object?>? ctx = null,
-    Action? onRerender = null)
+private static Element MountComponent(
+    Component component, ContextScope scope,
+    Dictionary<ContextBase, object?>? contextValues = null)
 {
-    if (ctx is { Count: > 0 }) _scope.Push(ctx);
+    if (contextValues is { Count: > 0 })
+        scope.Push(contextValues);
+
     try
     {
-        component.Context.BeginRender(onRerender ?? (() => { }), _scope);
-        var el = component.Render();
+        component.Context.BeginRender(() => { }, scope);
+        var element = component.Render();
         component.Context.FlushEffects();
-        return el;
+        return element;
     }
     finally
     {
-        if (ctx is { Count: > 0 }) _scope.Pop(ctx.Count);
+        if (contextValues is { Count: > 0 })
+            scope.Pop(contextValues.Count);
     }
 }
-
-private Element Rerender(Component c) => Mount(c);
-private void Unmount(Component c) => c.Context.RunCleanups();
 ```
 
-`Mount` returns the root element. The test then drives state via the
+The helper returns the root element. The test then drives state via the
 component's own public surface (a property the component exposes, or a
-captured setter from `UseState`), calls `Rerender`, and asserts.
-`Unmount` runs the cleanup chain so effects with `dispose` lambdas
-release their resources before the next test starts. Pushing and
-popping the `ContextScope` in a `try/finally` matters: a test that
-throws mid-render would otherwise leak its context values into the
-next test in the class.
+captured setter from `UseState`), calls the helper again to re-render,
+and asserts. When the fixture owns effects with `dispose` lambdas, call
+`component.Context.RunCleanups()` before the next test starts. Pushing
+and popping the `ContextScope` in a `try/finally` matters: a test that
+throws mid-render would otherwise leak its context values into the next
+test in the class.
 
 The full pattern is in `ComponentModelIntegrationTests.cs` — that file
 mounts a component with state + context + effects, drives 5 distinct
@@ -175,14 +174,13 @@ rather than at a 200-line text diff:
 
 ```csharp
 [Fact]
-public void Card_renders_name_then_age()
+public void Component_TProps_Renders_With_Props()
 {
-    var rendered = Mount(new ProfileCard("Ada", "Lovelace", 36));
-
-    var stack = Assert.IsType<StackElement>(rendered);
-    Assert.Collection(stack.Children,
-        c => Assert.Equal("Ada Lovelace", Assert.IsType<TextBlockElement>(c).Content),
-        c => Assert.Equal("36",           Assert.IsType<TextBlockElement>(c).Content));
+    var comp = new GreetingComponent { Props = "Alice" };
+    comp.Context.BeginRender(() => { });
+    var el = comp.Render();
+    Assert.IsType<TextBlockElement>(el);
+    Assert.Equal("Hello, Alice!", ((TextBlockElement)el).Content);
 }
 ```
 
@@ -220,19 +218,25 @@ class NamedButton : Component
 
 ```csharp
 [Fact]
-public void IconOnlyButton_flags_missing_accessible_name()
+public void A11Y_001_IconButton_Without_AutomationName()
 {
-    var diagnostics = AccessibilityScanner.Scan(new IconOnlyButton().Render());
+    var tree = VStack(
+        Button(TextBlock("🔍"), null) // icon content, no AutomationName
+    );
 
-    Assert.Contains(diagnostics, d => d.Id == "A11Y_001");
+    var findings = AccessibilityScanner.Scan(tree);
+    Assert.Contains(findings, f => f.Id == "A11Y_001");
 }
 
 [Fact]
-public void NamedButton_passes_a11y_scan()
+public void A11Y_001_IconButton_With_AutomationName_Passes()
 {
-    var diagnostics = AccessibilityScanner.Scan(new NamedButton().Render());
+    var tree = VStack(
+        Button(TextBlock("🔍"), null).AutomationName("Search")
+    );
 
-    Assert.DoesNotContain(diagnostics, d => d.Id == "A11Y_001");
+    var findings = AccessibilityScanner.Scan(tree);
+    Assert.DoesNotContain(findings, f => f.Id == "A11Y_001");
 }
 ```
 

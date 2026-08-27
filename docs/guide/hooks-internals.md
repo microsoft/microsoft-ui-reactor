@@ -5,9 +5,9 @@ is slot 1, then `UseMemo` is slot 2 — and stores whatever each hook
 needs in a `List<HookState>` on the owning `RenderContext`. The next
 render starts from `_hookIndex = 0` again and walks the same list in
 the same order. The slot at position 0 had better still be the one
-`UseState` expects to find there, because the setter closure
-`UseState` returned on the first render captured the literal index
-`0` and writes back to that slot when you call it. This is the entire
+`UseState` expects to find there, because the setter delegate
+`UseState` returned on the first render is cached on that slot cell
+and writes back to the same cell when you call it. This is the entire
 mechanical foundation of every hook rule you've ever read: "same hooks
 in the same order every render" is the runtime invariant the slot
 table enforces. Get it wrong — a conditional `UseState` inside an
@@ -75,11 +75,20 @@ element).
 The slot-type check at the top of each hook is the runtime guard:
 
 ```csharp
-if (_hooks[currentIndex] is not ValueHookState<T> hook)
-    throw new HookOrderException(
-        $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, " +
-        $"expected ValueHookState<{typeof(T).Name}> (UseState). " +
-        "Hooks must be called in the same order every render.");
+public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = false)
+{
+    if (_hookIndex >= _hooks.Count)
+    {
+        _hooks.Add(new ValueHookState<T>(initialValue, threadSafe));
+    }
+
+    var currentIndex = _hookIndex;
+    _hookIndex++;
+
+    if (_hooks[currentIndex] is not ValueHookState<T> hook)
+        throw new HookOrderException(
+            $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected ValueHookState<{typeof(T).Name}> (UseState). " +
+            "Hooks must be called in the same order every render.");
 ```
 
 That check is the reason hook rules exist. A conditional hook
@@ -259,7 +268,7 @@ helper called by `Render()`, as long as call order is stable.
 
 `UseRef<T>(initial)` stores a `Ref<T>` wrapper in an ordinary
 `ValueHookState<Ref<T>>` slot — there is no dedicated ref slot type; the
-wrapper *is* the mutable cell. It exposes `Value` as a get/set property;
+wrapper *is* the mutable cell. It exposes `Current` as a get/set property;
 mutating it does *not* schedule a re-render — that's the entire point.
 Reach for `UseRef` when you need a value that persists across renders
 but the UI doesn't depend on it: a counter you log, a debounce
@@ -267,11 +276,22 @@ timer ID, the previous value of a state cell, a stable target for an
 external library that wants a long-lived reference.
 
 ```csharp
-var renderCount = UseRef(0);
-renderCount.Value++;  // does NOT re-render
+public Ref<T> UseRef<T>(T initialValue = default!)
+{
+    if (_hookIndex >= _hooks.Count)
+    {
+        _hooks.Add(new ValueHookState<Ref<T>>(new Ref<T>(initialValue)));
+    }
 
-var prev = UseRef("");
-UseEffect(() => { prev.Value = name; }, name);
+    var currentIndex = _hookIndex;
+    _hookIndex++;
+
+    if (_hooks[currentIndex] is not ValueHookState<Ref<T>> hook)
+        throw new HookOrderException(
+            $"Hook at index {currentIndex} expected ValueHookState<Ref<{typeof(T).Name}>>, got {_hooks[currentIndex].GetType().Name}. " +
+            "Hooks must be called in the same order every render.");
+    return hook.Value;
+}
 ```
 
 If you find yourself wanting `UseRef` to trigger re-renders, you
@@ -427,8 +447,8 @@ breaks the same way an inline conditional `UseState` would.
 ```csharp
 var (count, setCount) = UseState(0);
 var prevCount = UseRef(0);
-var previous = prevCount.Value;
-UseEffect(() => { prevCount.Value = count; }, count);
+var previous = prevCount.Current;
+UseEffect(() => { prevCount.Current = count; }, count);
 ```
 
 `previous` carries the value `count` had before the most recent

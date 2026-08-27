@@ -337,6 +337,61 @@ class EffectVsMemoDoExample : Component
     }
 }
 // </snippet:effect-vs-memo-do>
+
+class SchedulingSubscribeCleanupExample : Component
+{
+    public override Element Render()
+    {
+        // <snippet:scheduling-subscribe-cleanup>
+        var (seconds, updateSeconds) = UseReducer(0);
+
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
+            _ = Task.Run(async () =>
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateSeconds(s => s + 1);
+                }
+                catch (OperationCanceledException) { /* expected on cleanup */ }
+            });
+            return () => { cts.Cancel(); };
+        }, Array.Empty<object>());
+        // </snippet:scheduling-subscribe-cleanup>
+
+        return TextBlock($"Elapsed: {seconds}s").Padding(24);
+    }
+}
+
+class SchedulingObserveChangeExample : Component
+{
+    static void LogTelemetry(string eventName)
+    {
+        _ = eventName;
+    }
+
+    public override Element Render()
+    {
+        var (isOpen, setIsOpen) = UseState(false);
+
+        // <snippet:scheduling-observe-change>
+        UseEffect(() =>
+        {
+            if (!isOpen) return () => { };
+            LogTelemetry("dialog_opened");
+            return () => LogTelemetry("dialog_closed");
+        }, isOpen);
+        // </snippet:scheduling-observe-change>
+
+        return Button(isOpen ? "Close" : "Open", () => setIsOpen(!isOpen))
+            .AutomationName(isOpen ? "Close dialog" : "Open dialog");
+    }
+}
+
 // Main app
 class EffectsApp : Component
 {

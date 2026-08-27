@@ -434,9 +434,12 @@ opted out:
 
 ```csharp
 var reduceMotion = UseReducedMotion();
-Action commit = () => setItems([.. items, x]);
-if (reduceMotion) commit();
-else              Animations.Animate(AnimationKind.Spring, commit);
+Action<Todo> addItem = x =>
+{
+    Action commit = () => setItems([.. items, x]);
+    if (reduceMotion) commit();
+    else Animations.Animate(AnimationKind.Spring, commit);
+};
 ```
 
 ## WithAnimation Scope

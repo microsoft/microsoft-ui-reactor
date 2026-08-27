@@ -214,30 +214,7 @@ and the resulting re-render onto the UI dispatcher. You write the same code
 you'd write on the UI thread:
 
 <!-- ai:lock -->
-```csharp
-public override Element Render()
-{
-    var (seconds, updateSeconds) = UseReducer(0);
-
-    UseEffect(() =>
-    {
-        var cts = new CancellationTokenSource();
-        var token = cts.Token;   // capture once — the loop must not re-read cts.Token
-        _ = Task.Run(async () =>
-        {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            try
-            {
-                while (await timer.WaitForNextTickAsync(token))
-                    updateSeconds(s => s + 1);   // auto-marshals to the UI thread
-            }
-            catch (OperationCanceledException) { /* expected on cleanup */ }
-        });
-        return () => { cts.Cancel(); };
-    });
-
-    return TextBlock($"Elapsed: {seconds}s");
-}
+```csharp snippet="hooks/background-setter"
 ```
 <!-- /ai:lock -->
 
@@ -249,9 +226,7 @@ that hammer the same hook from multiple producers), pass `threadSafe: true` to
 the hook:
 
 <!-- ai:lock -->
-```csharp
-var (count, setCount) = UseState(0, threadSafe: true);
-var (sum, addToSum) = UseReducer(0, threadSafe: true);
+```csharp snippet="hooks/thread-safe-hooks"
 ```
 <!-- /ai:lock -->
 
@@ -278,14 +253,7 @@ of `_hookIndex` against `_hooks[currentIndex]` is described in
 
 **Do:**
 <!-- ai:lock -->
-```csharp
-public override Element Render()
-{
-    var (a, setA) = UseState(0);     // always first
-    var (b, setB) = UseState("");    // always second
-    UseEffect(() => { ... }, a);     // always third
-    return TextBlock($"{a} {b}");
-}
+```csharp snippet="hooks/hook-order-do"
 ```
 <!-- /ai:lock -->
 
@@ -304,8 +272,7 @@ public override Element Render()
 
 Put the condition **inside** the hook instead:
 <!-- ai:lock -->
-```csharp
-UseEffect(() => { if (a > 0) { /* ... */ } }, a);
+```csharp snippet="hooks/conditional-effect-body"
 ```
 <!-- /ai:lock -->
 
@@ -363,9 +330,7 @@ must **not** trigger them. Storing the previous prop value for diffing,
 holding a `CancellationTokenSource`, or counting renders for diagnostics
 all belong in a ref:
 
-```csharp
-var prev = UseRef<int?>(null);
-UseEffect(() => { /* compare prev.Current to current */ prev.Current = current; }, current);
+```csharp snippet="hooks/deferred-ref"
 ```
 
 The setter writes to `.Current` immediately without scheduling a render —
@@ -394,8 +359,7 @@ The next render finds `EffectHookState` where it expected `ValueHookState`
 and throws `HookOrderException`. The fix is to call the hook
 unconditionally and put the condition **inside** it:
 
-```csharp
-UseEffect(() => { if (!open) return () => { }; return Subscribe(); }, open);
+```csharp snippet="hooks/conditional-subscribe-fix"
 ```
 
 ### Stale closures

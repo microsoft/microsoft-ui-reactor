@@ -32,7 +32,7 @@ package reference first:
 <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.13" />
 ```
 
-```csharp
+```csharp snippet="charting/imports"
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Charting.Charts;
 ```

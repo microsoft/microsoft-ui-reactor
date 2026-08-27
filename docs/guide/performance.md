@@ -120,34 +120,29 @@ Every reconcile pass starts here. The event-id pair is `1` / `2`
 `ReconcileStop` are the per-pass cost summary:
 
 ```csharp
-// Gate the depth counter and the Start emit on IsEnabled so a session
-// with no consumer attached pays nothing beyond one bool check.
-// `traceEnabled` and `emitTrace` are separate: every enabled call must
-// decrement the depth it incremented, but only the outermost one emits.
-// Decrementing on `emitTrace` alone would leak the counter once a pass
-// contained a nested reconcile, suppressing every later top-level span.
-bool traceEnabled = ReactorEventSource.Log.IsEnabled(
-    EventLevel.Informational, ReactorEventSource.Keywords.Reconcile);
+bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
+    global::System.Diagnostics.Tracing.EventLevel.Informational,
+    Diagnostics.ReactorEventSource.Keywords.Reconcile);
 bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
-
 if (emitTrace)
-    ReactorEventSource.Log.ReconcileStart(newElement?.GetType().Name ?? "null");
-
-try
 {
-    // ... mount / update walk ...
+    Diagnostics.ReactorEventSource.Log.ReconcileStart(
+        newElement?.GetType().Name ?? "null");
 }
-finally
+```
+
+The matching `finally` decrements exactly the depth it incremented and
+emits the stop payload only for the outermost pass:
+
+```csharp
+if (traceEnabled)
 {
-    if (traceEnabled)
+    _reconcileTraceDepth--;
+    if (emitTrace)
     {
-        _reconcileTraceDepth--;
-        if (emitTrace)
-        {
-            ReactorEventSource.Log.ReconcileStop(
-                DebugElementsDiffed, DebugElementsSkipped,
-                DebugUIElementsCreated, DebugUIElementsModified);
-        }
+        Diagnostics.ReactorEventSource.Log.ReconcileStop(
+            DebugElementsDiffed, DebugElementsSkipped,
+            DebugUIElementsCreated, DebugUIElementsModified);
     }
 }
 ```

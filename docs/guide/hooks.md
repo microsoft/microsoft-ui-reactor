@@ -492,7 +492,7 @@ public override Element Render()
 {
     var (a, setA) = UseState(0);     // always first
     var (b, setB) = UseState("");    // always second
-    UseEffect(() => { ... }, a);     // always third
+    UseEffect(() => { /* ... */ }, a);     // always third
     return TextBlock($"{a} {b}");
 }
 ```

@@ -235,18 +235,7 @@ is a descriptor (name, description, input schema built with the
 `delegate object? (JsonElement? @params)` — that returns a
 JSON-serializable result:
 
-```csharp
-server.Tools.Register(
-    new McpToolDescriptor(
-        Name: "appStats",
-        Description: "Returns the running app's render and reconcile counters.",
-        InputSchema: Schema.Root()),
-    _ => server.OnDispatcher<object>(() => new
-    {
-        renders = AppStats.RenderCount,
-        reconciles = AppStats.ReconcileCount,
-        avgRenderUs = AppStats.AvgRenderMicroseconds(),
-    }));
+```csharp snippet="source:src/Reactor.Devtools/DevtoolsDockingTools.cs#mcp-tool-registration"
 ```
 
 The tool shows up in `tools/list` on the next call, with the input

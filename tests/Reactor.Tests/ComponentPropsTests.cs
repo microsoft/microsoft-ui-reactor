@@ -41,6 +41,7 @@ public class ComponentPropsTests
         Assert.Equal("World", comp.Props);
     }
 
+    // <snippet:structural-render-assertion>
     [Fact]
     public void Component_TProps_Renders_With_Props()
     {
@@ -50,6 +51,7 @@ public class ComponentPropsTests
         Assert.IsType<TextBlockElement>(el);
         Assert.Equal("Hello, Alice!", ((TextBlockElement)el).Content);
     }
+    // </snippet:structural-render-assertion>
 
     [Fact]
     public void Component_TProps_Int_Props()

@@ -249,15 +249,14 @@ JSON-serializable result:
 ```csharp
 server.Tools.Register(
     new McpToolDescriptor(
-        Name: "appStats",
-        Description: "Returns the running app's render and reconcile counters.",
+        Name: "docking.list",
+        Description:
+            "Enumerates every live DockManager host in the process. " +
+            "Returns { hosts: [{ id, paneCount, activeKey, sideCounts }] }. " +
+            "Host ids are stable for the lifetime of the underlying element; " +
+            "agents pass them to docking.snapshot / docking.dock.",
         InputSchema: Schema.Root()),
-    _ => server.OnDispatcher<object>(() => new
-    {
-        renders = AppStats.RenderCount,
-        reconciles = AppStats.ReconcileCount,
-        avgRenderUs = AppStats.AvgRenderMicroseconds(),
-    }));
+    _ => server.OnDispatcher<object>(() => BuildListPayload()));
 ```
 
 The tool shows up in `tools/list` on the next call, with the input

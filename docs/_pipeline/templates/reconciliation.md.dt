@@ -248,9 +248,12 @@ resolve through the tag at all.
 ```csharp snippet="source:src/Reactor/Core/Element.cs#click-trampoline"
 ```
 
-```csharp
-// Mount / Update: refresh the tag, but only when something will read it
-Reconciler.SetElementTagIfNeeded(control, newElement);
+The descriptor adapter refreshes that live tag on both mount and update:
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/V1HandlerAdapter.cs#element-tag-refresh-mount"
+```
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/V1HandlerAdapter.cs#element-tag-refresh-update"
 ```
 
 Tagging is allocation-gated. `NeedsTag(element)` is true when the

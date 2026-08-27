@@ -260,7 +260,7 @@ HResultFailed   category=Hosting  operation=AppWindow.Close  hr=0x80010108
 ```
 
 The operation label is stable and developer-authored — search the
-Reactor source for `"AppWindow.Close"` and you land on the
+Reactor source for `"ReactorWindow.Close"` and you land on the
 `DiagnosticLog.SwallowedError` call site. The exception type and HR
 together pin the failure class (in this case, `RPC_E_DISCONNECTED` —
 the AppWindow COM proxy was torn down before the call landed) without
@@ -271,36 +271,7 @@ ever leaking the user-visible window title.
 A devtools overlay that wants to surface "navigation event happening
 now" doesn't need a file capture — just an in-process subscription:
 
-```csharp
-public sealed class NavigationOverlay : IDisposable
-{
-    // ReactorEventSource is internal to Reactor, so an app names the
-    // keyword by its documented bit value rather than by symbol.
-    private const EventKeywords NavigationKeyword = (EventKeywords)0x200;
-
-    private readonly IDisposable _subscription;
-    private readonly Queue<string> _ring = new();
-
-    public NavigationOverlay()
-    {
-        _subscription = ReactorTrace.Subscribe(
-            evt =>
-            {
-                var line = $"{evt.EventName} {string.Join(' ',
-                    Enumerable.Range(0, evt.Payload.Count)
-                        .Select(i => $"{evt.PayloadNames[i]}={evt.Payload[i]}"))}";
-                lock (_ring)
-                {
-                    _ring.Enqueue(line);
-                    while (_ring.Count > 50) _ring.Dequeue();
-                }
-            },
-            level: EventLevel.Verbose,
-            keywords: NavigationKeyword);
-    }
-
-    public void Dispose() => _subscription.Dispose();
-}
+```csharp snippet="diagnostics/navigation-overlay"
 ```
 
 `Subscribe` already applies the keyword mask, so the callback does not
@@ -324,13 +295,7 @@ catch (Exception ex)
 }
 ```
 
-```csharp
-// Do (framework code):
-try { window.AppWindow.Close(); }
-catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
-{
-    DiagnosticLog.SwallowedError(LogCategory.Hosting, "AppWindow.Close", ex);
-}
+```csharp snippet="source:src/Reactor/Hosting/ReactorWindow.cs#teardown-reentry-diagnostic"
 ```
 
 The first form was invisible to every shipped app. The second form

@@ -120,21 +120,7 @@ A Visual-Studio-shaped layout: tool strip on the left, document well in
 the middle, tool strip on the right. `model.Dock(doc, DockTarget.Center)`
 lands in the middle group regardless of where it sits in tree order:
 
-```csharp
-new DockSplit(Orientation.Horizontal, new DockNode[]
-{
-    new DockTabGroup(
-        new[] { galleryItemsToolWindow },
-        Width: 260,
-        Role: DockGroupRole.ToolWindowStrip),
-    new DockTabGroup(
-        Array.Empty<DockableContent>(),
-        Role: DockGroupRole.DocumentArea), // implies ShowWhenEmpty
-    new DockTabGroup(
-        new[] { configurationToolWindow },
-        Width: 320,
-        Role: DockGroupRole.ToolWindowStrip),
-})
+```csharp snippet="docking/document-well"
 ```
 
 > Programmatic `Dock(content, DockTarget.Center)` routes to the first
@@ -159,12 +145,7 @@ tool window may dock to (Qt's `setAllowedAreas` shape). Default
 `DockSides.All` preserves unconstrained placement. Set it to
 `DockSides.Bottom` to lock an Errors pane to the bottom strip:
 
-```csharp
-var errors = new ToolWindow {
-    Title = "Errors",
-    Key = "tool:errors",
-    AllowedSides = DockSides.Bottom,
-};
+```csharp snippet="docking/allowed-sides"
 ```
 
 Effect:
