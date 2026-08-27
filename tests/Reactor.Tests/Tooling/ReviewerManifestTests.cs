@@ -155,7 +155,7 @@ public class ReviewerManifestTests
             .Where(e => e.Path.Contains('\\')
                      || e.Path.StartsWith('/')
                      || e.Path.StartsWith("./")
-                     || e.Path.Contains(".."))
+                     || HasTraversalSegment(e.Path))
             .Select(e => $"  {e.BatchId}: {e.Path}")
             .ToList();
 
@@ -168,4 +168,13 @@ public class ReviewerManifestTests
             {string.Join("\n", malformed)}
             """);
     }
+
+    /// <summary>
+    /// True when <c>..</c> appears as a whole path segment, i.e. actual parent-directory
+    /// traversal. Deliberately not a substring test: a file legitimately named
+    /// <c>foo..bar.cs</c> is not traversal, and flagging it would be a false positive
+    /// against a rule whose entire purpose is to keep paths anchored to the repo root.
+    /// </summary>
+    static bool HasTraversalSegment(string path) =>
+        path.Split('/').Any(segment => segment == "..");
 }
