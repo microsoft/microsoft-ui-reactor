@@ -2,6 +2,8 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Navigation;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
+using SlideNavigationTransitionEffect =
+    global::Microsoft.UI.Xaml.Media.Animation.SlideNavigationTransitionEffect;
 
 namespace Microsoft.UI.Reactor.Tests;
 
@@ -114,10 +116,80 @@ public class NavigationViewSyncTests
         var el = NavigationView([NavItem("Home", tag: "home"), NavItem("Settings", tag: "settings")])
             .WithNavigation(nav, RouteToTag, TagToRoute);
 
-        el.OnSelectedTagChanged!("settings");
+        el.OnSelectedTagChangedWithTransition!("settings", NavigationTransition.Default);
 
         Assert.IsType<Settings>(nav.CurrentRoute);
         Assert.True(nav.CanGoBack);
+    }
+
+    [Theory]
+    [InlineData(SlideNavigationTransitionEffect.FromLeft, SlideDirection.FromLeft)]
+    [InlineData(SlideNavigationTransitionEffect.FromRight, SlideDirection.FromRight)]
+    [InlineData(SlideNavigationTransitionEffect.FromBottom, SlideDirection.FromBottom)]
+    public void Recommended_Slide_Transition_Maps_WinUI_Direction(
+        SlideNavigationTransitionEffect effect,
+        SlideDirection expectedDirection)
+    {
+        var transition = NavigationViewElement.GetRecommendedSlideTransition(effect);
+
+        var slide = Assert.IsType<SlideTransition>(transition);
+        Assert.Equal(expectedDirection, slide.Direction);
+    }
+
+    [Fact]
+    public void Missing_Recommendation_Maps_To_Default_Entrance_Transition()
+    {
+        var transition = NavigationViewElement.GetRecommendedNavigationTransition(null);
+
+        Assert.Same(NavigationTransition.Default, transition);
+    }
+
+    [Fact]
+    public void WithNavigation_Recommended_Transition_Is_Passed_To_NavigationHost()
+    {
+        var stack = new NavigationStack<Route>(new Home());
+        var nav = new NavigationHandle<Route>(stack);
+        var transition = NavigationTransition.Slide(SlideDirection.FromRight);
+
+        var el = NavigationView([NavItem("Home", tag: "home"), NavItem("Settings", tag: "settings")])
+            .WithNavigation(nav, RouteToTag, TagToRoute);
+
+        el.OnSelectedTagChangedWithTransition!("settings", transition);
+
+        Assert.IsType<Settings>(nav.CurrentRoute);
+        Assert.Same(transition, ((INavigationHandle)nav).PendingTransitionOverride);
+    }
+
+    [Fact]
+    public void WithNavigation_Settings_Uses_Recommended_Transition()
+    {
+        var stack = new NavigationStack<Route>(new Home());
+        var nav = new NavigationHandle<Route>(stack);
+        var transition = NavigationTransition.Slide(SlideDirection.FromLeft);
+
+        var el = NavigationView([NavItem("Home", tag: "home")])
+            .WithNavigation(nav, RouteToTag, TagToRoute, () => new Settings());
+
+        el.OnSettingsSelectedWithTransition!(transition);
+
+        Assert.IsType<Settings>(nav.CurrentRoute);
+        Assert.Same(transition, ((INavigationHandle)nav).PendingTransitionOverride);
+    }
+
+    [Fact]
+    public void WithNavigation_Unchanged_Route_Does_Not_Leave_Transition_Override()
+    {
+        var stack = new NavigationStack<Route>(new Home());
+        var nav = new NavigationHandle<Route>(stack);
+        var transition = NavigationTransition.Slide(SlideDirection.FromRight);
+
+        var el = NavigationView([NavItem("Home", tag: "home")])
+            .WithNavigation(nav, RouteToTag, TagToRoute);
+
+        el.OnSelectedTagChangedWithTransition!("home", transition);
+
+        Assert.Null(((INavigationHandle)nav).PendingTransitionOverride);
+        Assert.False(nav.CanGoBack);
     }
 
     [Fact]
@@ -129,7 +201,7 @@ public class NavigationViewSyncTests
         var el = NavigationView([NavItem("Home", tag: "home")])
             .WithNavigation(nav, RouteToTag, TagToRoute);
 
-        el.OnSelectedTagChanged!(null);
+        el.OnSelectedTagChangedWithTransition!(null, NavigationTransition.Default);
 
         Assert.IsType<Home>(nav.CurrentRoute);
         Assert.False(nav.CanGoBack);
@@ -148,7 +220,7 @@ public class NavigationViewSyncTests
             .WithNavigation(nav, RouteToTag, TagToRoute);
 
         // Selecting the already-active route should not trigger navigation
-        el.OnSelectedTagChanged!("home");
+        el.OnSelectedTagChangedWithTransition!("home", NavigationTransition.Default);
 
         Assert.Equal(0, navigatedCount);
         Assert.IsType<Home>(nav.CurrentRoute);
@@ -173,7 +245,7 @@ public class NavigationViewSyncTests
 
         Assert.Null(el.OnSettingsSelected);
         // The tag path must not route the sentinel either.
-        el.OnSelectedTagChanged!(NavigationViewElement.SettingsTag);
+        Assert.Null(el.OnSettingsSelectedWithTransition);
         Assert.IsType<Home>(nav.CurrentRoute);
     }
 
@@ -186,8 +258,8 @@ public class NavigationViewSyncTests
         var el = NavigationView([NavItem("Home", tag: "home")])
             .WithNavigation(nav, RouteToTag, TagToRoute, () => new Settings());
 
-        Assert.NotNull(el.OnSettingsSelected);
-        el.OnSettingsSelected!();
+        Assert.NotNull(el.OnSettingsSelectedWithTransition);
+        el.OnSettingsSelectedWithTransition!(NavigationTransition.Default);
 
         Assert.IsType<Settings>(nav.CurrentRoute);
     }
@@ -204,9 +276,52 @@ public class NavigationViewSyncTests
         var el = NavigationView([NavItem("Home", tag: "home")])
             .WithNavigation(nav, RouteToTag, TagToRoute, () => new Settings());
 
-        el.OnSettingsSelected!();
+        el.OnSettingsSelectedWithTransition!(NavigationTransition.Default);
 
         Assert.Equal(0, navigatedCount);
+    }
+
+    [Fact]
+    public void Public_SelectedTagChanged_After_WithNavigation_Overrides_AutoNavigation()
+    {
+        var stack = new NavigationStack<Route>(new Home());
+        var nav = new NavigationHandle<Route>(stack);
+        string? selectedTag = null;
+        var transition = NavigationTransition.Slide(SlideDirection.FromRight);
+
+        var el = NavigationView([NavItem("Home", tag: "home"), NavItem("Settings", tag: "settings")])
+            .WithNavigation(nav, RouteToTag, TagToRoute)
+            .SelectedTagChanged(tag => selectedTag = tag);
+
+        NavigationViewElement.DispatchSelectionChanged(el, false, "settings", transition);
+
+        Assert.Equal("settings", selectedTag);
+        Assert.IsType<Home>(nav.CurrentRoute);
+        Assert.Null(((INavigationHandle)nav).PendingTransitionOverride);
+    }
+
+    [Fact]
+    public void Public_SettingsSelected_After_WithNavigation_Overrides_Only_Settings_Navigation()
+    {
+        var stack = new NavigationStack<Route>(new Home());
+        var nav = new NavigationHandle<Route>(stack);
+        var settingsInvocations = 0;
+        var transition = NavigationTransition.Slide(SlideDirection.FromRight);
+
+        var el = NavigationView([NavItem("Home", tag: "home"), NavItem("Settings", tag: "settings")])
+            .WithNavigation(nav, RouteToTag, TagToRoute, () => new Settings())
+            .SettingsSelected(() => settingsInvocations++);
+
+        NavigationViewElement.DispatchSelectionChanged(
+            el, true, NavigationViewElement.SettingsTag, transition);
+
+        Assert.Equal(1, settingsInvocations);
+        Assert.IsType<Home>(nav.CurrentRoute);
+
+        NavigationViewElement.DispatchSelectionChanged(el, false, "settings", transition);
+
+        Assert.IsType<Settings>(nav.CurrentRoute);
+        Assert.Same(transition, ((INavigationHandle)nav).PendingTransitionOverride);
     }
 
     // Returning SettingsTag from routeToTag is how the settings item shows as

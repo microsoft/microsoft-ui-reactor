@@ -47,6 +47,9 @@ internal static class TransitionEngine
 
         switch (transition)
         {
+            case EntranceTransition:
+                RunEntrance(compositor, outVisual, inVisual, mode);
+                break;
             case SlideTransition slide:
                 RunSlide(compositor, outVisual, inVisual, slide, mode);
                 break;
@@ -153,6 +156,71 @@ internal static class TransitionEngine
             SlideDirection.FromTop => (new Vector3(0, distance, 0), new Vector3(0, -distance, 0)),
             _ => (Vector3.Zero, Vector3.Zero),
         };
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  WinUI entrance transition
+    // ════════════════════════════════════════════════════════════════
+
+    internal const float EntranceTranslationOffset = 140f;
+    internal static readonly TimeSpan EntranceExitDuration = TimeSpan.FromMilliseconds(150);
+    internal static readonly TimeSpan EntranceDuration = TimeSpan.FromMilliseconds(300);
+    internal static readonly TimeSpan EntranceOpacitySnapDuration = TimeSpan.FromMilliseconds(1);
+    internal static readonly Vector2 EntranceInEasingControlPoint1 = new(0.1f, 0.9f);
+    internal static readonly Vector2 EntranceInEasingControlPoint2 = new(0.2f, 1.0f);
+    internal static readonly Vector2 EntranceOutEasingControlPoint1 = new(0.7f, 0.0f);
+    internal static readonly Vector2 EntranceOutEasingControlPoint2 = new(1.0f, 0.5f);
+
+    private static void RunEntrance(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        NavigationMode mode)
+    {
+        var inEasing = compositor.CreateCubicBezierEasingFunction(
+            EntranceInEasingControlPoint1, EntranceInEasingControlPoint2);
+        var outEasing = compositor.CreateCubicBezierEasingFunction(
+            EntranceOutEasingControlPoint1, EntranceOutEasingControlPoint2);
+
+        if (mode == NavigationMode.Pop)
+        {
+            var outOffset = compositor.CreateVector3KeyFrameAnimation();
+            outOffset.InsertKeyFrame(1f, new Vector3(0, EntranceTranslationOffset, 0), outEasing);
+            outOffset.Duration = EntranceExitDuration;
+            outVisual.StartAnimation("Offset", outOffset);
+
+            StartDelayedOpacitySnap(compositor, outVisual, 0f, EntranceExitDuration);
+
+            var inFade = compositor.CreateScalarKeyFrameAnimation();
+            inFade.InsertKeyFrame(1f, 1f, inEasing);
+            inFade.Duration = EntranceDuration;
+            inFade.DelayTime = EntranceExitDuration;
+            inVisual.StartAnimation("Opacity", inFade);
+        }
+        else
+        {
+            var outFade = compositor.CreateScalarKeyFrameAnimation();
+            outFade.InsertKeyFrame(1f, 0f, outEasing);
+            outFade.Duration = EntranceExitDuration;
+            outVisual.StartAnimation("Opacity", outFade);
+
+            inVisual.Offset = new Vector3(0, EntranceTranslationOffset, 0);
+            var inOffset = compositor.CreateVector3KeyFrameAnimation();
+            inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
+            inOffset.Duration = EntranceDuration;
+            inOffset.DelayTime = EntranceExitDuration;
+            inVisual.StartAnimation("Offset", inOffset);
+
+            StartDelayedOpacitySnap(compositor, inVisual, 1f, EntranceExitDuration);
+        }
+    }
+
+    private static void StartDelayedOpacitySnap(
+        Compositor compositor, Visual visual, float opacity, TimeSpan delay)
+    {
+        var animation = compositor.CreateScalarKeyFrameAnimation();
+        animation.InsertKeyFrame(1f, opacity);
+        animation.Duration = EntranceOpacitySnapDuration;
+        animation.DelayTime = delay;
+        visual.StartAnimation("Opacity", animation);
     }
 
     // ════════════════════════════════════════════════════════════════

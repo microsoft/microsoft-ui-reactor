@@ -21,15 +21,15 @@ public partial record NavigationViewElement
         __SelectionChangedTrampoline = (s, args) =>
         {
             if (Reconciler.GetElementTag(s) is not NavigationViewElement el) return;
-            if (args.IsSettingsSelected)
-            {
-                // OnSelectedTagChanged has always reported null here; keep that so adding
-                // OnSettingsSelected isn't a silent breaking change for existing callers.
-                el.OnSelectedTagChanged?.Invoke(null);
-                el.OnSettingsSelected?.Invoke();
-                return;
-            }
-            el.OnSelectedTagChanged?.Invoke((args.SelectedItem as WinUI.NavigationViewItem)?.Tag as string);
+
+            var tag = args.IsSettingsSelected
+                ? SettingsTag
+                : (args.SelectedItem as WinUI.NavigationViewItem)?.Tag as string;
+            DispatchSelectionChanged(
+                el,
+                args.IsSettingsSelected,
+                tag,
+                GetRecommendedNavigationTransition(args.RecommendedNavigationTransitionInfo));
         };
 
     private static readonly TypedEventHandler<WinUI.NavigationView, WinUI.NavigationViewBackRequestedEventArgs>
@@ -156,7 +156,10 @@ public partial record NavigationViewElement
             .HandCodedEvent<V1.NavigationViewEventPayload,
                 TypedEventHandler<WinUI.NavigationView, WinUI.NavigationViewSelectionChangedEventArgs>>(
                 subscribe:        static (c, h) => c.SelectionChanged += h,
-                callbackPresent:  static e => e.OnSelectedTagChanged ?? (Delegate?)e.OnSettingsSelected,
+                callbackPresent:  static e => (Delegate?)e.OnSelectedTagChangedWithTransition
+                    ?? (Delegate?)e.OnSettingsSelectedWithTransition
+                    ?? (Delegate?)e.OnSelectedTagChanged
+                    ?? e.OnSettingsSelected,
                 trampoline:       __SelectionChangedTrampoline,
                 slotIsNull:       static p => p.SelectionChangedTrampoline is null,
                 setSlot:          static (p, h) => p.SelectionChangedTrampoline = h)
@@ -203,6 +206,52 @@ public partial record NavigationViewElement
                 setObserveSlot:    static (p, cb) => p.IsPaneOpenObserver = cb,
                 loadedHook:        null);
     }
+
+    internal static void DispatchSelectionChanged(
+        NavigationViewElement element,
+        bool isSettingsSelected,
+        string? tag,
+        Navigation.NavigationTransition transition)
+    {
+        if (isSettingsSelected)
+        {
+            // OnSelectedTagChanged has always reported null for settings. Preserve that
+            // contract while allowing a later public callback to override auto-navigation.
+            element.OnSelectedTagChanged?.Invoke(null);
+            if (element.OnSettingsSelected is { } settingsSelected)
+                settingsSelected();
+            else
+                element.OnSettingsSelectedWithTransition?.Invoke(transition);
+            return;
+        }
+
+        if (element.OnSelectedTagChanged is { } selectedTagChanged)
+            selectedTagChanged(tag);
+        else
+            element.OnSelectedTagChangedWithTransition?.Invoke(tag, transition);
+    }
+
+    internal static Navigation.NavigationTransition GetRecommendedNavigationTransition(
+        global::Microsoft.UI.Xaml.Media.Animation.NavigationTransitionInfo? transitionInfo) =>
+        transitionInfo switch
+        {
+            global::Microsoft.UI.Xaml.Media.Animation.SlideNavigationTransitionInfo slide =>
+                GetRecommendedSlideTransition(slide.Effect),
+            global::Microsoft.UI.Xaml.Media.Animation.SuppressNavigationTransitionInfo =>
+                Navigation.NavigationTransition.None,
+            _ => Navigation.NavigationTransition.Default,
+        };
+
+    internal static Navigation.NavigationTransition GetRecommendedSlideTransition(
+        global::Microsoft.UI.Xaml.Media.Animation.SlideNavigationTransitionEffect effect) =>
+        effect switch
+        {
+            global::Microsoft.UI.Xaml.Media.Animation.SlideNavigationTransitionEffect.FromLeft =>
+                Navigation.NavigationTransition.Slide(Navigation.SlideDirection.FromLeft),
+            global::Microsoft.UI.Xaml.Media.Animation.SlideNavigationTransitionEffect.FromRight =>
+                Navigation.NavigationTransition.Slide(Navigation.SlideDirection.FromRight),
+            _ => Navigation.NavigationTransition.Slide(Navigation.SlideDirection.FromBottom),
+        };
 
     private static void ApplyMenuAndSelection(WinUI.NavigationView control, NavigationViewElement? oldElement, NavigationViewElement element)
     {

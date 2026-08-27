@@ -23,9 +23,9 @@ public class TransitionEngineTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void Default_Transition_Is_SlideTransition()
+    public void Default_Transition_Is_WinUI_EntranceTransition()
     {
-        Assert.IsType<SlideTransition>(NavigationTransition.Default);
+        Assert.IsType<EntranceTransition>(NavigationTransition.Default);
     }
 
     [Fact]

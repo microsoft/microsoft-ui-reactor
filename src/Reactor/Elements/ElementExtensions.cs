@@ -2005,6 +2005,9 @@ public static partial class ElementExtensions
     /// Auto-syncs this NavigationView with a NavigationHandle: sets <c>SelectedTag</c>
     /// from the current route, wires <c>OnSelectedTagChanged</c> to navigate,
     /// <c>OnBackRequested</c> to <c>GoBack</c>, and <c>IsBackEnabled</c> to <c>CanGoBack</c>.
+    /// NavigationView's recommended transition is forwarded to the navigation host, so
+    /// pane navigation uses WinUI's entrance motion and top navigation slides horizontally
+    /// according to the selected item's position.
     /// <para>
     /// The built-in settings item is opt-in: pass <paramref name="settingsRoute"/> to make
     /// selecting it navigate. It is a separate parameter rather than a
@@ -2033,23 +2036,31 @@ public static partial class ElementExtensions
     {
         SelectedTag = routeToTag(nav.CurrentRoute),
         IsBackEnabled = nav.CanGoBack,
-        OnSelectedTagChanged = tag =>
+        OnSelectedTagChanged = null,
+        OnSettingsSelected = null,
+        OnSelectedTagChangedWithTransition = (tag, transition) =>
         {
             if (tag is not null && tag != NavigationViewElement.SettingsTag)
-                NavigateTo(nav, tagToRoute(tag));
+                NavigateTo(nav, tagToRoute(tag), transition);
         },
-        OnSettingsSelected = settingsRoute is null
+        OnSettingsSelectedWithTransition = settingsRoute is null
             ? null
-            : () => NavigateTo(nav, settingsRoute()),
+            : transition => NavigateTo(nav, settingsRoute(), transition),
         OnBackRequested = () => nav.GoBack(),
     };
 
     private static void NavigateTo<TRoute>(
         Navigation.NavigationHandle<TRoute> nav,
-        TRoute route) where TRoute : notnull
+        TRoute route,
+        Navigation.NavigationTransition? transition = null) where TRoute : notnull
     {
         if (!EqualityComparer<TRoute>.Default.Equals(route, nav.CurrentRoute))
-            nav.Navigate(route);
+        {
+            var options = transition is null
+                ? null
+                : new Navigation.NavigateOptions { Transition = transition };
+            nav.Navigate(route, options);
+        }
     }
 
     // ── TitleBar sugar ──────────────────────────────────────────────

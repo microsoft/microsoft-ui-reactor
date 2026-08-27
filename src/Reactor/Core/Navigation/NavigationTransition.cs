@@ -33,8 +33,8 @@ public enum NavigationCacheMode
 /// </summary>
 public abstract record NavigationTransition
 {
-    /// <summary>Default slide-from-right transition.</summary>
-    public static readonly NavigationTransition Default = new SlideTransition();
+    /// <summary>Default WinUI entrance transition.</summary>
+    public static readonly NavigationTransition Default = new EntranceTransition();
 
     /// <summary>No animation — instant swap.</summary>
     public static readonly NavigationTransition None = new SuppressTransition();
@@ -77,6 +77,9 @@ public abstract record NavigationTransition
             Direction = direction,
         };
 }
+
+/// <summary>WinUI entrance transition used by Frame when no override is supplied.</summary>
+internal sealed record EntranceTransition : NavigationTransition;
 
 /// <summary>Slide transition — animate offset and opacity.</summary>
 public sealed record SlideTransition : NavigationTransition

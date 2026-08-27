@@ -644,7 +644,7 @@ this for simple property animations.
 |---|---|---|
 | Fade / DrillIn / Slide / Spring | Exposed | `NavigationTransition.Fade(duration?)`, `.DrillIn(duration?)`, `.Slide(direction, duration?, easing?, distance?)`, `.Spring(dampingRatio, period, direction)` |
 | Connected | Exposed | `NavigationTransition.Connected("key")` — pairs with `.ConnectedAnimation("key")` |
-| Default / suppressed | Exposed | `NavigationTransition.Default` (slide), `NavigationTransition.None` (suppress) |
+| Default / suppressed | Exposed | `NavigationTransition.Default` (WinUI entrance), `NavigationTransition.None` (suppress) |
 
 **Verdict: well-covered.** Theme transitions, implicit transitions, connected animations, and a
 curve-based `.Animate()` DSL are all first-class; the router picks the page transition per

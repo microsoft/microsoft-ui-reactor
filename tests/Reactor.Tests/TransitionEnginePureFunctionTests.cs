@@ -11,6 +11,19 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class TransitionEnginePureFunctionTests
 {
+    [Fact]
+    public void EntranceTransition_Matches_WinUI_Timing_And_Distance()
+    {
+        Assert.Equal(140f, TransitionEngine.EntranceTranslationOffset);
+        Assert.Equal(TimeSpan.FromMilliseconds(150), TransitionEngine.EntranceExitDuration);
+        Assert.Equal(TimeSpan.FromMilliseconds(300), TransitionEngine.EntranceDuration);
+        Assert.Equal(TimeSpan.FromMilliseconds(1), TransitionEngine.EntranceOpacitySnapDuration);
+        Assert.Equal(new Vector2(0.1f, 0.9f), TransitionEngine.EntranceInEasingControlPoint1);
+        Assert.Equal(new Vector2(0.2f, 1.0f), TransitionEngine.EntranceInEasingControlPoint2);
+        Assert.Equal(new Vector2(0.7f, 0.0f), TransitionEngine.EntranceOutEasingControlPoint1);
+        Assert.Equal(new Vector2(1.0f, 0.5f), TransitionEngine.EntranceOutEasingControlPoint2);
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  ReverseDirection — used to flip slide direction on GoBack
     // ════════════════════════════════════════════════════════════════
