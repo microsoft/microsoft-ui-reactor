@@ -86,6 +86,10 @@ public sealed partial class ReactorWindow : IDisposable
     // Set once the fallback has looked for an icon, whether or not it found one, so a
     // window with no icon source anywhere does not re-probe on every chrome update.
     private bool _exeFallbackAttempted;
+
+    // True once Reactor has put an icon on this window (declared or fallback). Gates
+    // ClearWindowIcon so Reactor only ever takes down an icon it applied itself.
+    private bool _reactorAppliedIcon;
     // Lazy-init shell wrappers — apps that never read these never instantiate
     // them, keeping the cold-start budget clean (spec 036 §0.7 / §11.7).
     private TaskbarProgress? _taskbarProgress;
@@ -628,14 +632,24 @@ public sealed partial class ReactorWindow : IDisposable
             // A declared icon that cannot be resolved (wrong format, missing file, or a
             // resource URI with no matching asset) would otherwise leave the window with
             // no icon at all, because a non-null spec.Icon used to suppress the fallback.
-            if (spec.Icon is { } icon)
+            var applied = spec.Icon is { } icon
+                ? icon.Apply(_appWindow) || TryApplyExeIconFallback()
+                : TryApplyExeIconFallback();
+
+            if (applied)
             {
-                if (!icon.Apply(_appWindow) && !TryApplyExeIconFallback() && !isInitial)
-                    ClearWindowIcon();
+                _reactorAppliedIcon = true;
             }
-            else if (!TryApplyExeIconFallback() && !isInitial)
+            else if (!isInitial && _reactorAppliedIcon)
             {
+                // Reactor put this window's icon there and the declaration that
+                // justified it is now gone, so take it back down. Gated on having
+                // applied one ourselves: an app that set its own icon imperatively
+                // (a `configure:` callback calling AppWindow.SetIcon, say) must not
+                // have it wiped by an unrelated chrome update, and a window that
+                // never had an icon keeps whatever default the platform gave it.
                 ClearWindowIcon();
+                _reactorAppliedIcon = false;
             }
         }
 
@@ -970,6 +984,10 @@ public sealed partial class ReactorWindow : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends <c>WM_SETICON</c> with a null handle to drop the window's small and big
+    /// icons. Only called for an icon Reactor itself applied — see the call site.
+    /// </summary>
     private void ClearWindowIcon()
     {
         _ = NativeIcon.SendMessageW(_hwnd, NativeIcon.WM_SETICON, NativeIcon.ICON_SMALL, 0);

@@ -165,6 +165,32 @@ internal static partial class WindowModelFixtures
             }
             finally { await CloseAndSettle(byPath); }
 
+            // An icon the app set imperatively (the pre-#1143 `configure:` pattern, and
+            // anything else calling AppWindow.SetIcon directly) must survive an unrelated
+            // chrome update. Reactor only takes down icons it applied itself, so a window
+            // that never had a declared icon must not be cleared out from under the app.
+            var imperative = await OpenAndSettle(
+                new WindowSpec { Title = "Icon Imperative", Width = 200, Height = 160 },
+                () => new StubComponent());
+            try
+            {
+                // Same starting point as the zero control, so the reading below can only
+                // come from the SetIcon call.
+                H.Check("WindowIcon_Imperative_Starts_Zero", IconOf(imperative) == 0);
+
+                var wid = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(imperative.Hwnd);
+                Microsoft.UI.Windowing.AppWindow.GetFromWindowId(wid).SetIcon(
+                    global::System.IO.Path.Join(
+                        AppContext.BaseDirectory, "Assets", "SelfTestWindowIcon.ico"));
+                H.Check("WindowIcon_Imperative_Set_HICON", IconOf(imperative) != 0);
+
+                // Touch an unrelated field. Icon is still null in the spec, and no
+                // fallback source exists, so the pre-fix code cleared the icon here.
+                imperative.Update(imperative.Spec with { Title = "Icon Imperative (updated)" });
+                H.Check("WindowIcon_Imperative_Survives_Unrelated_Update", IconOf(imperative) != 0);
+            }
+            finally { await CloseAndSettle(imperative); }
+
             // FromResource — the packaged spelling. The platform resolves the ms-appx URI
             // itself, including MRT qualifiers; Reactor passes it through untouched.
             var byResource = await OpenAndSettle(
