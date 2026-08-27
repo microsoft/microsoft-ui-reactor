@@ -1,19 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Spec 010 Route B spike consumer.
+    Spec 010 — this project exists to test the interceptor generator, so it forces
+    ReactorSourceMap ON in EVERY configuration rather than inheriting the
+    Debug-only default from build/Reactor.targets. Because that override lands in
+    the project body — after Directory.Build.props has already imported the
+    targets — the InterceptorsNamespaces entry the targets would normally supply
+    has to be spelled out here too. A PackageReference consumer never does this:
+    they get both from the Debug default.
 
-    This project exists to prove the interceptor route END TO END at runtime, in a
-    project small enough that turning interception on has a bounded blast radius.
-    Reactor.Tests deliberately does NOT enable it: doing so would rewrite several
-    thousand DSL call sites in a suite whose assertions were written against
-    un-stamped elements, which measures the spike's disruption rather than its
-    behaviour.
-
-    The two properties below are the entire consumer-side opt-in story, and they
-    MUST move together — emitting an interceptor into a project that has not
-    listed the namespace is CS9137, a hard build error rather than a no-op.
+    Reactor.Tests deliberately does NOT enable the generator: doing so would
+    rewrite several thousand DSL call sites in a suite whose assertions were
+    written against un-stamped elements, measuring the change's disruption rather
+    than its behaviour.
   -->
+  <PropertyGroup>
+    <ReactorSourceMap>true</ReactorSourceMap>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+
+    <!-- Lets the measurement read the generated interceptor file off disk. -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <Platforms>x64;ARM64</Platforms>
@@ -26,16 +33,6 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <OutputType>Exe</OutputType>
-
-    <!-- Route B opt-in (1 of 2): tells the generator to emit. -->
-    <ReactorSourceMap>true</ReactorSourceMap>
-    <!-- Route B opt-in (2 of 2): tells the C# compiler to honour the emitted
-         [InterceptsLocation]. In a PackageReference consumer this line is
-         supplied automatically by build/Microsoft.UI.Reactor.targets. -->
-    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
-
-    <!-- Lets the measurement read the generated interceptor file off disk. -->
-    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
 
   <!-- The generator reads this to decide whether to emit anything. -->

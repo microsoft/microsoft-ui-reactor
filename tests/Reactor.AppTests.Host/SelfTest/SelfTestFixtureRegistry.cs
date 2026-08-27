@@ -10,10 +10,10 @@ internal static class SelfTestFixtureRegistry
     public static readonly string[] AllFixtures =
     [
         "SourceMapReadPath_Enabled",
-        "SourceMapReadPath_UnstampedDisabled",
-        "SourceMapReadPath_UnstampedEnabled",
-        "SourceMapReadPath_StampedDisabled",
-        "SourceMapReadPath_AlreadyTagged",
+        "SourceMapReadPath_DistinctLines",
+        "SourceMapReadPath_Disabled",
+        "SourceMapReadPath_HandStamped",
+        "SourceMapReadPath_Callback",
         "ErrorBoundary_CatchesRenderError",
         "ErrorBoundary_Recovery",
         "Reconciler_MountText",
@@ -2288,10 +2288,10 @@ internal static class SelfTestFixtureRegistry
         "AnimScope_WithAnimationIntegration" => new AnimationScopeTests.WithAnimationIntegration(harness),
         // Spec 010 — source-map read path (UIElement → ReactorState → Element.CallSite)
         "SourceMapReadPath_Enabled" => new SourceMapReadPathTests.LeafIsReadableWhenEnabled(harness),
-        "SourceMapReadPath_UnstampedDisabled" => new SourceMapReadPathTests.UnstampedLeafIsNotTaggedWhenDisabled(harness),
-        "SourceMapReadPath_UnstampedEnabled" => new SourceMapReadPathTests.UnstampedLeafIsTaggedWhenEnabled(harness),
-        "SourceMapReadPath_StampedDisabled" => new SourceMapReadPathTests.StampedLeafIsTaggedEvenWhenDisabled(harness),
-        "SourceMapReadPath_AlreadyTagged" => new SourceMapReadPathTests.AlreadyTaggedControlStillCarriesSource(harness),
+        "SourceMapReadPath_DistinctLines" => new SourceMapReadPathTests.DistinctLeavesReportDistinctLines(harness),
+        "SourceMapReadPath_Disabled" => new SourceMapReadPathTests.LeafIsNotTaggedWhenDisabled(harness),
+        "SourceMapReadPath_HandStamped" => new SourceMapReadPathTests.HandStampedLeafIsTaggedWithFlagOff(harness),
+        "SourceMapReadPath_Callback" => new SourceMapReadPathTests.CallbackControlAlsoCarriesSource(harness),
         // Animation system — .Animate() modifier
         "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),

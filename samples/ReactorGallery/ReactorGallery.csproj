@@ -80,17 +80,13 @@
   </ItemGroup>
 
   <!--
-    Spec 010 Route B spike — source-map opt-in on the flagship sample, so the
-    interceptor generator's coverage and build cost can be measured against a
-    real consumer app rather than a test host. OFF by default and byte-identical
-    to a tree without the spike; pass -p:ReactorSourceMap=true to enable.
-    See tests/Reactor.AppTests.Host for the same block and why
-    InterceptorsNamespaces is spelled out rather than inherited.
+    Spec 010 — source mapping. ReactorSourceMap defaults to true in Debug via
+    build/Reactor.targets (mirroring WPF's XamlDebuggingInformation), which also
+    supplies the required InterceptorsNamespaces entry, so nothing is spelled out
+    here. In-repo projects still need this ProjectReference because they consume
+    Reactor by project, not from the nupkg whose analyzers/ folder carries the
+    generator for real PackageReference consumers.
   -->
-  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
-    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
-  </PropertyGroup>
-
   <ItemGroup Condition="'$(ReactorSourceMap)' == 'true'">
     <ProjectReference Include="..\..\src\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
                       OutputItemType="Analyzer"

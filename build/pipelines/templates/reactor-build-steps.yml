@@ -312,6 +312,7 @@ steps:
     #   analyzers/dotnet/cs/Reactor.Analyzers.dll
     #   analyzers/dotnet/cs/Reactor.Localization.Generator.dll
     #   analyzers/dotnet/cs/Reactor.Wrappers.Generator.dll
+    #   analyzers/dotnet/cs/Reactor.SourceMap.Generator.dll
     # And inside Microsoft.UI.Reactor.Advanced.nupkg:
     #   lib/<tfm>/Reactor.Advanced.dll
     # And inside Microsoft.UI.Reactor.Devtools.nupkg:
@@ -323,7 +324,7 @@ steps:
         inputs:
           command: 'sign'
           signing_profile: external_distribution
-          files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor\bin\**\Reactor.Wrappers.Abstractions.dll;Reactor.Advanced\bin\**\Reactor.Advanced.dll;Reactor.Devtools\bin\**\Microsoft.UI.Reactor.Devtools.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll;Reactor.Wrappers.Generator\bin\**\Reactor.Wrappers.Generator.dll'
+          files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor\bin\**\Reactor.Wrappers.Abstractions.dll;Reactor.Advanced\bin\**\Reactor.Advanced.dll;Reactor.Devtools\bin\**\Microsoft.UI.Reactor.Devtools.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll;Reactor.Wrappers.Generator\bin\**\Reactor.Wrappers.Generator.dll;Reactor.SourceMap.Generator\bin\**\Reactor.SourceMap.Generator.dll'
           search_root: '$(Build.SourcesDirectory)\src'
 
     - pwsh: |

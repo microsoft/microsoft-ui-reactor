@@ -75,6 +75,7 @@ Additional flags:
 
 | ID | Severity | What it means | Fix |
 |---|---|---|---|
+| `CS9137` | error | *"The 'interceptors' feature is not enabled in this namespace."* The source-map generator emitted an interceptor but `InterceptorsNamespaces` does not list `Microsoft.UI.Reactor.Generated`. | You almost never hit this from a PackageReference — `build/Microsoft.UI.Reactor.targets` pairs the two settings automatically. It appears when a project sets `<ReactorSourceMap>true</ReactorSourceMap>` in its own body *after* the targets were imported (in-repo projects, where `Directory.Build.props` imports them early). Add `<InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>` alongside it, or drop the explicit property and let the Debug default apply. |
 | `REACTOR_HOOKS_001` | warning | Hook called inside `if` / `for` / `while` / `switch` / `try` | Move the hook to the top of `Render()`. Use the result conditionally, not the call. |
 | `REACTOR_HOOKS_004` | warning | Hook `deps` contains a freshly-allocated object/array/lambda | Memoize with `UseMemo`, hoist to a field, or project to a scalar key. |
 | `REACTOR_HOOKS_005` | warning | Hook called outside `Render()` or a custom-hook method | Move the call into `Render()` or a `Use*` helper. Hooks read slot state that only exists during render. |
@@ -146,6 +147,15 @@ If a `REACTOR_*` ID isn't in this table, the bundled analyzer DLL has more docs.
 - **Don't introspect via `[System.Reflection]`.** Enumerating Reactor types or members at runtime to "discover" the API is unnecessary and slow. This cheat table plus `mur check`'s did-you-mean suggestions plus `reactor-dsl/references/reactor.api.txt` cover the surface.
 - **Trust the analyzer over your memory.** If `REACTOR_DSL_001` says "missing `.WithKey`", add `.WithKey(...)` — the analyzer is right.
 - **Don't bypass.** Avoid `#pragma warning disable REACTOR_*` unless you have a specific known reason. The analyzers exist because the runtime symptoms are subtle (focus loss, identity drift, refetch storms).
+
+## Build properties
+
+Consumer-facing MSBuild properties the package honours.
+
+| Property | Default | Effect |
+|---|---|---|
+| `ReactorSourceMap` | `true` in Debug, unset in Release | Runs the source-map interceptor generator, which stamps each DSL call site's file and line onto `Element.CallSite`. Read it back with `ReactorSourceMap.GetSource(uiElement)`. Follows the build configuration on purpose, mirroring WPF's `XamlDebuggingInformation`. Locations only populate when the app runs with devtools; a Debug build that never does pays no runtime allocation. Costs roughly 0.5–0.6 ms per intercepted call site at build time — set it to `false` on a very large app if the edit loop matters more than element attribution. Setting it also implies the `InterceptorsNamespaces` entry the generator needs (see `CS9137` above). |
+| `Reactor.DevtoolsSupport` | `false` | Build-time capability gate for the devtools subsystem; without it, devtools is trimmed out of AOT publishes. Set via `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />`. |
 
 ## Prerequisites
 

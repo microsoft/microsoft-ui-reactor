@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Diagnostics;
@@ -7,26 +8,29 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Spec 010 — proves the source-map READ path against a real WinUI control:
-/// <c>UIElement</c> → <c>ReactorAttached.StateProperty</c> →
-/// <c>ReactorState.Element</c> → <c>Element.CallSite</c>.
+/// Spec 010 — proves the source-map chain end to end against real WinUI controls:
+/// interceptor stamp → <c>Element.CallSite</c> → <c>ReactorAttached.StateProperty</c>
+/// → <c>ReactorState.Element</c> → <see cref="ReactorSourceMap.GetSource"/>.
 ///
-/// <para>The element is stamped by hand here rather than by the interceptor
-/// generator. That is deliberate: this fixture's job is the reconciler half of
-/// the chain (does the <see cref="ReactorSourceMap.Enabled"/> flag actually make
-/// <c>NeedsTag</c> tag a callback-free display leaf, and does the tag survive to
-/// be read back), which is the only half that needs a live control. The
-/// generator half is measured headlessly in Reactor.SourceMap.Spike, where the
-/// call-site line can be checked against an independent oracle.</para>
+/// <para>This host builds with <c>ReactorSourceMap=true</c> (the Debug default
+/// from <c>build/Reactor.targets</c>), so the DSL calls below are really
+/// intercepted — these fixtures exercise the shipping path rather than a
+/// hand-written stand-in. The headless generator-side assertions live in
+/// <c>tests/Reactor.SourceMap.Spike</c>; what needs a live control, and so lives
+/// here, is the reconciler half: whether a stamped element actually gets a
+/// <c>ReactorState</c> back-pointer and survives to be read back.</para>
 /// </summary>
 internal static class SourceMapReadPathTests
 {
-    private static readonly SourceLocation Marker = new(@"C:\fixture\SourceMapReadPath.cs", 4242);
+    private static int Line([CallerLineNumber] int line = 0) => line;
+
+    private static readonly SourceLocation HandStamp = new(@"C:\fixture\HandStamped.cs", 4242);
 
     /// <summary>
-    /// Flag ON: a bare TextBlock — no callbacks, no key, no extras, no reference
-    /// modifiers, i.e. precisely the leaf PR #468 stopped tagging — must become
-    /// readable again, and must hand back the exact location that was stamped.
+    /// Flag ON: a bare TextBlock — no callbacks, no key, no reference modifiers,
+    /// i.e. exactly the display leaf PR #468 stopped tagging — becomes readable
+    /// again purely because the interceptor stamped it, and reports the real
+    /// file and line of its own call site.
     /// </summary>
     internal class LeafIsReadableWhenEnabled(Harness h) : SelfTestFixtureBase(h)
     {
@@ -36,10 +40,12 @@ internal static class SourceMapReadPathTests
             ReactorSourceMap.Enabled = true;
             try
             {
-                var host = H.CreateHost();
-                host.Mount(ctx => VStack(
-                    TextBlock("mapped") with { CallSite = Marker }));
+                // Factory call and line probe on ONE physical line, so the expected
+                // line is an independent oracle rather than a magic offset.
+                var leaf = TextBlock("mapped"); var expectedLine = Line();
 
+                var host = H.CreateHost();
+                host.Mount(ctx => VStack(leaf));
                 await Harness.Render();
 
                 var target = H.FindControl<TextBlock>(t => t.Text == "mapped");
@@ -49,14 +55,12 @@ internal static class SourceMapReadPathTests
                 var resolved = ReactorSourceMap.GetSource(target);
 
                 // Non-null alone would be satisfied by any stamp reaching any
-                // element, so assert the exact round-tripped values.
+                // element, so assert the exact call site.
                 H.Check("SourceMapReadPath_Resolved", resolved is not null);
-                H.Check("SourceMapReadPath_LineRoundTrips",
-                    resolved?.LineNumber == 4242);
-                H.Check("SourceMapReadPath_PathRoundTrips",
-                    resolved?.FilePath == @"C:\fixture\SourceMapReadPath.cs");
-                H.Check("SourceMapReadPath_ShortForm",
-                    resolved?.ToShortString() == "SourceMapReadPath.cs:4242");
+                H.Check("SourceMapReadPath_LineIsRealCallSite",
+                    resolved?.LineNumber == expectedLine);
+                H.Check("SourceMapReadPath_FileIsThisFixture",
+                    resolved?.FilePath.EndsWith("SourceMapReadPathTests.cs", StringComparison.Ordinal) == true);
             }
             finally
             {
@@ -66,19 +70,54 @@ internal static class SourceMapReadPathTests
     }
 
     /// <summary>
-    /// Flag OFF + UNSTAMPED leaf: must NOT be tagged. This is the PR #468
-    /// allocation gate, and it is the real negative control for the fixture
-    /// above — if it also resolved, "enabled" would be proving nothing about
-    /// the flag because the leaf would have been tagged either way.
-    ///
-    /// <para>Note this fixture deliberately does NOT stamp the element. Once
-    /// <c>CallSite</c> moved into the spec 047 §4.4 extras bucket, a stamped
-    /// element necessarily has a non-null <c>Extensions</c>, which already
-    /// satisfies <c>NeedsTag</c> on its own — see
-    /// <see cref="StampedLeafIsTaggedEvenWhenDisabled"/>. So an unstamped leaf
-    /// is the only thing that can still exercise the flag arm.</para>
+    /// Two leaves on different source lines must resolve to different locations.
+    /// Guards against a stamp that is present but constant — which the single
+    /// fixture above could not distinguish from a correct one if every element
+    /// happened to share one location.
     /// </summary>
-    internal class UnstampedLeafIsNotTaggedWhenDisabled(Harness h) : SelfTestFixtureBase(h)
+    internal class DistinctLeavesReportDistinctLines(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = true;
+            try
+            {
+                var first = TextBlock("first"); var firstLine = Line();
+                var second = TextBlock("second"); var secondLine = Line();
+
+                var host = H.CreateHost();
+                host.Mount(ctx => VStack(first, second));
+                await Harness.Render();
+
+                var a = H.FindControl<TextBlock>(t => t.Text == "first");
+                var b = H.FindControl<TextBlock>(t => t.Text == "second");
+                H.Check("SourceMapReadPath_BothLeavesMounted", a is not null && b is not null);
+                if (a is null || b is null) return;
+
+                var ra = ReactorSourceMap.GetSource(a);
+                var rb = ReactorSourceMap.GetSource(b);
+
+                H.Check("SourceMapReadPath_FirstLine", ra?.LineNumber == firstLine);
+                H.Check("SourceMapReadPath_SecondLine", rb?.LineNumber == secondLine);
+                H.Check("SourceMapReadPath_LinesDiffer",
+                    ra is not null && rb is not null && ra.Value.LineNumber != rb.Value.LineNumber);
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Flag OFF: the interceptor is still compiled in, but skips the stamp, so
+    /// the leaf carries no <c>Extensions</c> and must NOT be tagged. This is the
+    /// negative control for the fixtures above AND the guard on PR #468's
+    /// leaf-tagging allocation win — if it ever passes with a tag, the retail
+    /// allocation profile has regressed.
+    /// </summary>
+    internal class LeafIsNotTaggedWhenDisabled(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -86,16 +125,18 @@ internal static class SourceMapReadPathTests
             ReactorSourceMap.Enabled = false;
             try
             {
-                var host = H.CreateHost();
-                host.Mount(ctx => VStack(TextBlock("unmapped")));
+                var leaf = TextBlock("unmapped");
 
+                var host = H.CreateHost();
+                host.Mount(ctx => VStack(leaf));
                 await Harness.Render();
 
                 var target = H.FindControl<TextBlock>(t => t.Text == "unmapped");
                 H.Check("SourceMapReadPath_DisabledLeafMounted", target is not null);
                 if (target is null) return;
 
-                H.Check("SourceMapReadPath_DisabledUnstampedLeafNotTagged",
+                H.Check("SourceMapReadPath_DisabledLeafHasNoStamp", leaf.CallSite is null);
+                H.Check("SourceMapReadPath_DisabledLeafNotTagged",
                     Reconciler.GetElementTag(target) is null);
             }
             finally
@@ -106,13 +147,47 @@ internal static class SourceMapReadPathTests
     }
 
     /// <summary>
-    /// Flag ON + UNSTAMPED leaf: must be tagged. Paired with the fixture above,
-    /// this is what proves the <c>NeedsTag</c> flag arm still does something
-    /// after bucketing — it is now the arm's ONLY remaining purpose, covering
-    /// elements no source-map provider stamped (generic factories, third-party
-    /// factories, direct <c>new XElement(...)</c>).
+    /// A stamped element is tagged even with the runtime flag off, because
+    /// <c>CallSite</c> lives in the <c>ElementExtras</c> bucket and
+    /// <c>NeedsTag</c> already accepts a non-null bucket. This is what lets spec
+    /// 010 add no arm to <c>NeedsTag</c> at all — asserted rather than assumed,
+    /// since deleting that arm was a deliberate design decision.
     /// </summary>
-    internal class UnstampedLeafIsTaggedWhenEnabled(Harness h) : SelfTestFixtureBase(h)
+    internal class HandStampedLeafIsTaggedWithFlagOff(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = false;
+            try
+            {
+                var host = H.CreateHost();
+                host.Mount(ctx => VStack(
+                    TextBlock("hand-stamped") with { CallSite = HandStamp }));
+                await Harness.Render();
+
+                var target = H.FindControl<TextBlock>(t => t.Text == "hand-stamped");
+                H.Check("SourceMapReadPath_HandStampedMounted", target is not null);
+                if (target is null) return;
+
+                H.Check("SourceMapReadPath_HandStampedReadableWithoutFlag",
+                    ReactorSourceMap.GetSource(target)?.LineNumber == 4242);
+                H.Check("SourceMapReadPath_HandStampedShortForm",
+                    ReactorSourceMap.GetSource(target)?.ToShortString() == "HandStamped.cs:4242");
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
+
+    /// <summary>
+    /// An element that was ALREADY tagged for its own reasons (a callback-bearing
+    /// Button) still carries its source location — confirming the stamp composes
+    /// with the pre-existing tagging categories rather than competing with them.
+    /// </summary>
+    internal class CallbackControlAlsoCarriesSource(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -120,89 +195,18 @@ internal static class SourceMapReadPathTests
             ReactorSourceMap.Enabled = true;
             try
             {
+                var btn = Button("tagged", () => { }); var expectedLine = Line();
+
                 var host = H.CreateHost();
-                host.Mount(ctx => VStack(TextBlock("unstamped-on")));
-
-                await Harness.Render();
-
-                var target = H.FindControl<TextBlock>(t => t.Text == "unstamped-on");
-                H.Check("SourceMapReadPath_EnabledUnstampedLeafMounted", target is not null);
-                if (target is null) return;
-
-                H.Check("SourceMapReadPath_EnabledUnstampedLeafTagged",
-                    Reconciler.GetElementTag(target) is not null);
-                // Tagged, but nothing stamped it, so there is no location to read.
-                H.Check("SourceMapReadPath_EnabledUnstampedLeafHasNoSource",
-                    ReactorSourceMap.GetSource(target) is null);
-            }
-            finally
-            {
-                ReactorSourceMap.Enabled = previous;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Flag OFF + STAMPED leaf: tagged and readable anyway. Documents the
-    /// consequence of bucketing <c>CallSite</c> into <c>ElementExtras</c> — a
-    /// stamped element carries a non-null <c>Extensions</c>, which already
-    /// satisfies <c>NeedsTag</c>, so the source-map flag arm is REDUNDANT for
-    /// any element a provider actually stamped.
-    /// </summary>
-    internal class StampedLeafIsTaggedEvenWhenDisabled(Harness h) : SelfTestFixtureBase(h)
-    {
-        public override async Task RunAsync()
-        {
-            var previous = ReactorSourceMap.Enabled;
-            ReactorSourceMap.Enabled = false;
-            try
-            {
-                var host = H.CreateHost();
-                host.Mount(ctx => VStack(
-                    TextBlock("stamped-off") with { CallSite = Marker }));
-
-                await Harness.Render();
-
-                var target = H.FindControl<TextBlock>(t => t.Text == "stamped-off");
-                H.Check("SourceMapReadPath_StampedOffLeafMounted", target is not null);
-                if (target is null) return;
-
-                H.Check("SourceMapReadPath_StampedOffLeafReadableWithoutFlag",
-                    ReactorSourceMap.GetSource(target)?.LineNumber == 4242);
-            }
-            finally
-            {
-                ReactorSourceMap.Enabled = previous;
-            }
-        }
-    }
-
-    /// <summary>
-    /// The flag must not disturb the elements that were ALREADY tagged. A
-    /// callback-bearing Button is tagged with the flag off, so the source stamp
-    /// has to be readable there too — confirming the new arm is purely additive
-    /// to <c>NeedsTag</c> rather than replacing the existing ones.
-    /// </summary>
-    internal class AlreadyTaggedControlStillCarriesSource(Harness h) : SelfTestFixtureBase(h)
-    {
-        public override async Task RunAsync()
-        {
-            var previous = ReactorSourceMap.Enabled;
-            ReactorSourceMap.Enabled = false;
-            try
-            {
-                var host = H.CreateHost();
-                host.Mount(ctx => VStack(
-                    Button("tagged", () => { }) with { CallSite = Marker }));
-
+                host.Mount(ctx => VStack(btn));
                 await Harness.Render();
 
                 var target = H.FindControl<Button>(b => b.Content as string == "tagged");
                 H.Check("SourceMapReadPath_ButtonMounted", target is not null);
                 if (target is null) return;
 
-                H.Check("SourceMapReadPath_ButtonCarriesSourceWithFlagOff",
-                    ReactorSourceMap.GetSource(target)?.LineNumber == 4242);
+                H.Check("SourceMapReadPath_ButtonCarriesRealCallSite",
+                    ReactorSourceMap.GetSource(target)?.LineNumber == expectedLine);
             }
             finally
             {

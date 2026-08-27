@@ -95,20 +95,92 @@ public sealed class SourceMapElementSlotTests
         Assert.Equal("34", new SourceLocation("", 34).ToShortString());
     }
 
+    // ── Behavioral-extras predicate (guards the ElementFactory fast paths) ──
+
+    [Fact]
+    public void HasBehavioralExtras_IsFalseForACallSiteOnlyBucket()
+    {
+        // Regression guard. Bucketing CallSite into ElementExtras makes a stamped
+        // element's Extensions non-null, which silently disqualified it from two
+        // engine fast paths that gate on `Extensions is null`: the virtualized
+        // keyed-memo cache (ElementFactory.cs) and safe component adoption. Those
+        // gates exist to exclude BEHAVIOR that resolution/adoption would drop; a
+        // source location carries none.
+        var stamped = TextBlock("hi") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.NotNull(stamped.Extensions);          // the bucket really is materialized
+        Assert.False(Element.HasBehavioralExtras(stamped));
+    }
+
+    [Fact]
+    public void HasBehavioralExtras_IsTrueForRealExtras()
+    {
+        // Positive control for the test above: if the predicate had degenerated
+        // into "always false", the CallSite assertion would look green while
+        // silently re-admitting elements the gates must reject.
+        var themed = TextBlock("hi").ConnectedAnimation("hero");
+
+        Assert.NotNull(themed.Extensions);
+        Assert.True(Element.HasBehavioralExtras(themed));
+    }
+
+    [Fact]
+    public void HasBehavioralExtras_IsTrueWhenCallSiteAccompaniesRealExtras()
+    {
+        // A stamped element that ALSO carries behavior must still be excluded —
+        // the stamp must not mask the behavioral extra.
+        var both = (TextBlock("hi").ConnectedAnimation("hero"))
+            with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.True(Element.HasBehavioralExtras(both));
+    }
+
+    [Fact]
+    public void HasBehavioralExtras_IsFalseWhenThereIsNoBucketAtAll()
+    {
+        Assert.Null(TextBlock("hi").Extensions);
+        Assert.False(Element.HasBehavioralExtras(TextBlock("hi")));
+    }
+
+    // ── NormalizeExtras collapse contract (PR #455 CR item #2) ─────────────
+
+    [Fact]
+    public void ClearingCallSite_CollapsesTheBucketAndRestoresEquality()
+    {
+        // ElementExtras.IsEmpty exists so that writing a bucketed field back to
+        // null collapses the bucket to a null slot — otherwise an "empty but
+        // non-null" bucket breaks record equality against a never-stamped
+        // element. Adding CallSite to IsEmpty is what keeps that true here.
+        var bare = TextBlock("hi");
+        var stamped = bare with { CallSite = new SourceLocation("A.cs", 7) };
+        var cleared = stamped with { CallSite = null };
+
+        Assert.NotNull(stamped.Extensions);
+        Assert.Null(cleared.Extensions);
+        Assert.Equal(bare, cleared);
+    }
+
     // ── Runtime flag ──────────────────────────────────────────────────────
 
     [Fact]
-    public void Enabled_DefaultsToFalse_AndRoundTrips()
+    public void Enabled_DefaultsToFalse()
     {
-        // The default matters: it is what keeps NeedsTag's behaviour (and so the
-        // PR #468 leaf-tagging allocation win) unchanged for every retail app.
+        // Asserted BEFORE any mutation, so a default-true initializer fails here.
+        // The default is what preserves PR #468's leaf-tagging allocation win for
+        // every retail app, so it must be pinned independently of round-tripping.
+        Assert.False(ReactorSourceMap.Enabled);
+    }
+
+    [Fact]
+    public void Enabled_RoundTrips()
+    {
         var previous = ReactorSourceMap.Enabled;
         try
         {
-            ReactorSourceMap.Enabled = false;
-            Assert.False(ReactorSourceMap.Enabled);
             ReactorSourceMap.Enabled = true;
             Assert.True(ReactorSourceMap.Enabled);
+            ReactorSourceMap.Enabled = false;
+            Assert.False(ReactorSourceMap.Enabled);
         }
         finally
         {

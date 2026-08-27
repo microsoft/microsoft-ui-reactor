@@ -106,6 +106,7 @@ jobs:
         run: |
           dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
           dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
+          dotnet restore tests/Reactor.SourceMap.Spike/Reactor.SourceMap.Spike.csproj -p:Platform=x64
 
       - name: Test (Reactor.Tests)
         # SkipSignaturesGen / SkipReactorApiGen disable the on-build regeneration of
@@ -129,6 +130,15 @@ jobs:
         # job still fails because the Reactor.Tests step's non-zero exit stands.
         if: ${{ !cancelled() }}
         run: dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --hangdump --hangdump-timeout 180s --hangdump-type None
+
+      - name: Test (Reactor.SourceMap.Spike)
+        # Spec 010 — the ONLY suite that compiles with the source-map interceptor
+        # generator enabled, so it is also the only gate proving the generator emits
+        # code that actually binds (a generator that silently stopped applying would
+        # leave Element.CallSite null everywhere else without failing anything).
+        # Same !cancelled() rationale as the step above.
+        if: ${{ !cancelled() }}
+        run: dotnet test tests/Reactor.SourceMap.Spike/Reactor.SourceMap.Spike.csproj --no-restore -p:Platform=x64 --hangdump --hangdump-timeout 180s --hangdump-type None
 
   audit-ledger:
     name: Audit ledger gate

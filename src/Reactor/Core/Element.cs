@@ -454,6 +454,21 @@ public abstract record Element
             && oldEl.HasCallbacks == newEl.HasCallbacks;
 
     /// <summary>
+    /// Spec 010 — true when the element carries a bucketed extra that affects
+    /// <em>behavior</em>, as opposed to a source-map <see cref="CallSite"/>
+    /// stamp, which is inert diagnostic metadata.
+    ///
+    /// <para>Engine fast paths that used to test <c>Extensions is null</c>
+    /// directly must use this instead: once <c>CallSite</c> is bucketed, a
+    /// stamped element has a non-null bucket and would otherwise be excluded
+    /// from those paths whenever source mapping is active — silently changing
+    /// virtualization behavior in exactly the builds a developer is profiling.
+    /// </para>
+    /// </summary>
+    internal static bool HasBehavioralExtras(Element element)
+        => element.Extensions is { } extras && !extras.IsBehaviorallyEmpty;
+
+    /// <summary>
     /// Fast structural comparison that avoids the pitfalls of record Equals
     /// (Dictionary reference equality, Action[] reference equality, delegate equality).
     /// Returns true only when the two elements are provably identical for rendering purposes.
@@ -1821,7 +1836,22 @@ public record ElementExtras
     /// equality between an extras-free element and one whose only "extra" is a
     /// field explicitly set to null stays symmetric (PR #455 CR item #2).
     /// </summary>
-    internal bool IsEmpty =>
+    internal bool IsEmpty => IsBehaviorallyEmpty && CallSite is null;
+
+    /// <summary>
+    /// True when every bucketed field EXCEPT <see cref="CallSite"/> is null —
+    /// i.e. the bucket carries diagnostic metadata only and no behavior.
+    ///
+    /// <para>Spec 010: bucketing <see cref="CallSite"/> here made a stamped
+    /// element's <c>Extensions</c> non-null, which silently disqualified it from
+    /// two engine fast paths that gate on <c>Extensions is null</c> — the
+    /// virtualized keyed-memo cache and safe component adoption. Those gates
+    /// exist to exclude elements carrying <em>behavior</em> (attached props,
+    /// theme bindings, transitions, context values) that resolution or adoption
+    /// would drop or mis-key. A source location installs no runtime bookkeeping
+    /// and is safe to drop, so they test this instead of raw nullness.</para>
+    /// </summary>
+    internal bool IsBehaviorallyEmpty =>
         Attached is null
         && ImplicitTransitions is null
         && ThemeTransitions is null
@@ -1835,8 +1865,7 @@ public record ElementExtras
         && ScrollAnimation is null
         && ConnectedAnimationKey is null
         && ResourceOverrides is null
-        && ContextValues is null
-        && CallSite is null;
+        && ContextValues is null;
 }
 
 public record ElementModifiers

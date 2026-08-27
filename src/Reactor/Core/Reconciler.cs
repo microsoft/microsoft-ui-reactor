@@ -605,20 +605,19 @@ public sealed partial class Reconciler : IDisposable
     /// summary for the three categories.
     /// </summary>
     /// <remarks>
-    /// Spec 010: the <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/> arm is
-    /// LAST on purpose. When source mapping is off (the shipping default) the
-    /// four original tests short-circuit exactly as before for every tagged
-    /// element, and an untagged leaf pays one additional static bool read and
-    /// no allocation — so the flag-off allocation profile is unchanged. When it
-    /// is on, every control gets tagged so an inspector can walk from any
-    /// <c>UIElement</c> back to <see cref="Element.CallSite"/>.
+    /// Spec 010 deliberately adds NO arm here. A source-mapped element carries
+    /// its <see cref="Element.CallSite"/> in the <see cref="Element.Extensions"/>
+    /// bucket, so it already satisfies the <c>Extensions is not null</c> test
+    /// above and is tagged without further help. An arm keyed on the source-map
+    /// flag would only ever tag <em>unstamped</em> elements — which by
+    /// definition have no location to read back — while re-introducing exactly
+    /// the per-leaf <c>ReactorState</c> allocation PR #468 removed.
     /// </remarks>
     private static bool NeedsTag(Element element) =>
         element.HasCallbacks
         || element.Key is not null
         || element.Extensions is not null
-        || HasReferenceModifiers(element)
-        || Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+        || HasReferenceModifiers(element);
 
     /// <summary>
     /// True when the element carries any reactive reference modifier — the imperative

@@ -223,12 +223,19 @@ public sealed partial class ElementFactory<T> : IElementFactory
         // returned on every subsequent hit (preserving ReferenceEquals).
         //
         // Only a "bare" wrapper is memoized: resolution returns the inner element, so any
-        // modifiers / Key / Extensions applied ON the wrapper itself (the non-idiomatic
-        // `Memo(k, …).Margin(8)` shape — modifiers belong inside the factory lambda) would be
-        // dropped. A decorated wrapper instead falls through unchanged and is rendered by the
-        // reconciler's transparent unwrap path (Mount/Update), which preserves those modifiers.
+        // modifiers / Key / behavioral Extensions applied ON the wrapper itself (the
+        // non-idiomatic `Memo(k, …).Margin(8)` shape — modifiers belong inside the factory
+        // lambda) would be dropped. A decorated wrapper instead falls through unchanged and is
+        // rendered by the reconciler's transparent unwrap path (Mount/Update), which preserves
+        // those modifiers.
+        //
+        // Spec 010: the test is HasBehavioralExtras, not `Extensions is null`. A source-map
+        // CallSite stamp materializes the extras bucket but carries no behavior, and the inner
+        // element gets its own stamp from its own call site — so dropping the wrapper's stamp is
+        // harmless. Testing raw nullness here would disable this cache for every memoized row
+        // whenever source mapping is on.
         if (built is KeyedMemoElement km
-            && km.Modifiers is null && km.Key is null && km.Extensions is null)
+            && km.Modifiers is null && km.Key is null && !Element.HasBehavioralExtras(km))
             built = _keyedMemoCache.Resolve(km, keyed ? key : null);
         else if (keyed)
             built = ApplyItemIdentityKey(built, key);
@@ -748,13 +755,20 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // Callers that fail this gate must fall back to something that produces a
     // genuinely fresh container — the framework's realize channel
     // (ScheduleReRealize) or a plain mount — never a silent adopt.
+    //
+    // Spec 010: the extras test is HasBehavioralExtras, not `Extensions is null`.
+    // The reason this gate rejects extras is that ApplyModifiers installs runtime
+    // bookkeeping keyed on the replacement control; a source-map CallSite stamp
+    // installs none, so it must not disqualify adoption. Testing raw nullness
+    // here would force re-realization of every stamped row whenever source
+    // mapping is on.
     private static bool CanSafelyAdopt(UIElement control, Element oldElement, Element newElement)
         => control is Border
             && oldElement is ComponentElement oldComp
             && newElement is ComponentElement newComp
             && oldComp.ComponentType == newComp.ComponentType
             && oldComp.Modifiers is null && newComp.Modifiers is null
-            && oldComp.Extensions is null && newComp.Extensions is null;
+            && !Element.HasBehavioralExtras(oldComp) && !Element.HasBehavioralExtras(newComp);
 
     // Retire a container for good: it will never be handed back to the
     // repeater, but the repeater keeps it parented regardless, so everything

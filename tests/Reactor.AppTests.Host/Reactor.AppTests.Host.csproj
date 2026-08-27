@@ -62,23 +62,13 @@
   </ItemGroup>
 
   <!--
-    Spec 010 Route B spike — build-cost measurement harness.
-
-    OFF by default and byte-identical to a tree without the spike: with
-    ReactorSourceMap unset, no analyzer is added to the compilation at all.
-    Pass -p:ReactorSourceMap=true together with the InterceptorsNamespaces
-    line below to turn the interceptor generator on for this project and
-    measure its build cost against the same tree.
-
-    The InterceptorsNamespaces value is spelled out here rather than inherited
-    from build\Reactor.targets because the repo's Directory.Build.props imports
-    that file BEFORE project bodies, so its ReactorSourceMap condition cannot
-    see a property set in a csproj. PackageReference consumers do inherit it.
+    Spec 010 — source mapping. ReactorSourceMap defaults to true in Debug via
+    build/Reactor.targets, which also supplies the required InterceptorsNamespaces
+    entry. In-repo projects still need this ProjectReference because they consume
+    Reactor by project rather than from the nupkg whose analyzers/ folder carries
+    the generator for real PackageReference consumers. The selftest fixtures in
+    SelfTest/Fixtures/SourceMapReadPathTests.cs depend on it being wired here.
   -->
-  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
-    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
-  </PropertyGroup>
-
   <ItemGroup Condition="'$(ReactorSourceMap)' == 'true'">
     <ProjectReference Include="..\..\src\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
                       OutputItemType="Analyzer"
