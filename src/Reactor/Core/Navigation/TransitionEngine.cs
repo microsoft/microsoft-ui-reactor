@@ -74,6 +74,13 @@ internal static class TransitionEngine
 
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
 
+        // Claim both pages for this transition. Navigations can overlap — double-clicking a
+        // NavigationView item is enough — and when they do, an older transition's Completed
+        // handler runs while a newer one is mid-flight on a shared page. Without this stamp the
+        // older handler would stop the newer transition's animations and snap the page to its
+        // finished state. Only the transition that still owns a visual may reset it.
+        var generation = ClaimForTransition(outgoing, incoming);
+
         // Subscribe before End(). A scoped batch can complete synchronously inside End()
         // — most obviously when it captured no animations — and a handler attached
         // afterwards would never run, stranding the navigation: the outgoing page would
@@ -81,19 +88,26 @@ internal static class TransitionEngine
         // hit-test-suppressed page would stay unclickable.
         batch.Completed += (_, _) =>
         {
-            ReleaseAnimatedProperties(inVisual);
+            var ownsIncoming = StillOwns(incoming, generation);
+            var ownsOutgoing = StillOwns(outgoing, generation);
 
-            // Finalize: ensure incoming is fully visible
-            inVisual.Opacity = 1;
-            inVisual.Offset = Vector3.Zero;
-            inVisual.Scale = Vector3.One;
+            if (ownsIncoming)
+            {
+                // Finalize: ensure incoming is fully visible
+                ReleaseAnimatedProperties(inVisual);
+                inVisual.Opacity = 1;
+                inVisual.Offset = Vector3.Zero;
+                inVisual.Scale = Vector3.One;
+            }
             if (usesCenterPointBinding)
             {
-                outVisual.StopAnimation("CenterPoint");
-                inVisual.StopAnimation("CenterPoint");
+                if (ownsOutgoing) outVisual.StopAnimation("CenterPoint");
+                if (ownsIncoming) inVisual.StopAnimation("CenterPoint");
             }
             if (suppressesHitTesting)
             {
+                // Nest-aware by depth, so this is safe to run even for a page a newer
+                // transition has taken over — it only restores once the last one finishes.
                 RestoreHitTesting(outgoing);
                 RestoreHitTesting(incoming);
             }
@@ -115,10 +129,13 @@ internal static class TransitionEngine
                 // touching its visual, so a page cached mid-fade would return invisible. Doing
                 // this before onComplete would instead flash the old page at full opacity over
                 // the new one, since both are still children of the host Grid.
-                ReleaseAnimatedProperties(outVisual);
-                outVisual.Opacity = 1;
-                outVisual.Offset = Vector3.Zero;
-                outVisual.Scale = Vector3.One;
+                if (ownsOutgoing)
+                {
+                    ReleaseAnimatedProperties(outVisual);
+                    outVisual.Opacity = 1;
+                    outVisual.Offset = Vector3.Zero;
+                    outVisual.Scale = Vector3.One;
+                }
 
                 batch.Dispose();
             }
@@ -153,6 +170,32 @@ internal static class TransitionEngine
 
         batch.End();
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Transition ownership
+    //
+    //  Navigations overlap. A page can be the incoming half of one transition and the
+    //  outgoing half of the next before the first has finished, so an older Completed
+    //  handler must not stop the newer transition's animations or snap the page to a
+    //  finished state. Each RunTransition claims its two pages with a monotonic stamp;
+    //  a handler only resets a visual it still owns.
+    // ════════════════════════════════════════════════════════════════
+
+    private static long _transitionGeneration;
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, global::System.Runtime.CompilerServices.StrongBox<long>>
+        _elementGeneration = new();
+
+    internal static long ClaimForTransition(UIElement outgoing, UIElement incoming)
+    {
+        var generation = global::System.Threading.Interlocked.Increment(ref _transitionGeneration);
+        _elementGeneration.GetOrCreateValue(outgoing).Value = generation;
+        _elementGeneration.GetOrCreateValue(incoming).Value = generation;
+        return generation;
+    }
+
+    internal static bool StillOwns(UIElement element, long generation) =>
+        _elementGeneration.TryGetValue(element, out var stamp) && stamp.Value == generation;
 
     /// <summary>
     /// Stops the animations this engine starts, so the following direct assignments are

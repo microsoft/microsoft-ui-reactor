@@ -465,11 +465,24 @@ internal static class NavigationCoverageFixtures
 
             // Entrance fades the outgoing page to 0. Left that way, a cached page comes back
             // invisible on a later NavigationTransition.None navigation.
-            H.Check("NavOutNorm_OpacityRestored", outVisual.Opacity == 1f);
-            H.Check("NavOutNorm_OffsetReset", outVisual.Offset == global::System.Numerics.Vector3.Zero);
-            H.Check("NavOutNorm_ScaleReset", outVisual.Scale == global::System.Numerics.Vector3.One);
+            H.Check("NavOutNorm_OpacityRestored", IsApproximately(outVisual.Opacity, 1f));
+            H.Check("NavOutNorm_OffsetReset", IsApproximately(outVisual.Offset, global::System.Numerics.Vector3.Zero));
+            H.Check("NavOutNorm_ScaleReset", IsApproximately(outVisual.Scale, global::System.Numerics.Vector3.One));
         }
     }
+
+    /// <summary>
+    /// Compositor properties are floats; compare them with a tolerance rather than for exact
+    /// equality, even where the value was assigned directly.
+    /// </summary>
+    private static bool IsApproximately(float actual, float expected) =>
+        global::System.MathF.Abs(actual - expected) < 0.0001f;
+
+    private static bool IsApproximately(
+        global::System.Numerics.Vector3 actual, global::System.Numerics.Vector3 expected) =>
+        IsApproximately(actual.X, expected.X)
+        && IsApproximately(actual.Y, expected.Y)
+        && IsApproximately(actual.Z, expected.Z);
 
     // ════════════════════════════════════════════════════════════════════════
     //  6e. Composition behaviour this engine depends on
@@ -513,9 +526,49 @@ internal static class NavigationCoverageFixtures
             // ownership of the property this would be dropped and Opacity would stay 0 —
             // which would silently break every reset in TransitionEngine's completion handler.
             visual.Opacity = 1f;
-            H.Check("NavAnimRelease_DirectWriteAfterCompletionSticks", visual.Opacity == 1f);
+            H.Check("NavAnimRelease_DirectWriteAfterCompletionSticks", IsApproximately(visual.Opacity, 1f));
 
             batch.Dispose();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6f. Transition ownership across overlapping navigations
+    //      A page can be the incoming half of one transition and the outgoing half of the
+    //      next before the first finishes. The older transition must not reset it.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavTransitionOwnership(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var a = new Border();
+            var b = new Border();
+            var c = new Border();
+
+            // Transition 1: A -> B.
+            var first = TransitionEngine.ClaimForTransition(a, b);
+            H.Check("NavOwn_FirstOwnsOutgoing", TransitionEngine.StillOwns(a, first));
+            H.Check("NavOwn_FirstOwnsIncoming", TransitionEngine.StillOwns(b, first));
+
+            // Transition 2 starts before 1 finishes: B -> C. B changes hands.
+            var second = TransitionEngine.ClaimForTransition(b, c);
+            H.Check("NavOwn_GenerationAdvances", second > first);
+            H.Check("NavOwn_SecondOwnsShiftedPage", TransitionEngine.StillOwns(b, second));
+
+            // The crux: when transition 1 completes it must NOT reset B, which transition 2 is
+            // still animating. Without the stamp it would stop those animations and snap B.
+            H.Check("NavOwn_FirstNoLongerOwnsSharedPage", !TransitionEngine.StillOwns(b, first));
+
+            // A was untouched by transition 2, so transition 1 still cleans it up.
+            H.Check("NavOwn_FirstStillOwnsUnsharedPage", TransitionEngine.StillOwns(a, first));
+
+            // An element no transition ever claimed is owned by nobody.
+            H.Check("NavOwn_UnclaimedElement", !TransitionEngine.StillOwns(new Border(), first));
+
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Transition ownership done"));
+            await Harness.Render();
         }
     }
 

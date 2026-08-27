@@ -199,7 +199,9 @@ public class WinUiNavigationMotionParityTests
         var root = global::Microsoft.UI.Reactor.Cli.Pack.RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
 
-        var propsPath = global::System.IO.Path.Combine(root!, "Directory.Build.props");
+        // Path.Join rather than Path.Combine: Combine discards everything before a rooted
+        // segment, which is never what a repo-relative lookup wants.
+        var propsPath = global::System.IO.Path.Join(root, "Directory.Build.props");
         Assert.True(global::System.IO.File.Exists(propsPath), $"Missing {propsPath}");
 
         var props = global::System.IO.File.ReadAllText(propsPath);
