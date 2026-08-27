@@ -83,10 +83,7 @@ internal static class TransitionEngine
         // hit-test-suppressed page would stay unclickable.
         batch.Completed += (_, _) =>
         {
-            var ownsIncoming = StillOwns(incoming, generation);
-            var ownsOutgoing = StillOwns(outgoing, generation);
-
-            if (ownsIncoming)
+            if (StillOwns(incoming, generation))
             {
                 // Finalize: ensure incoming is fully visible
                 NormalizeVisual(inVisual);
@@ -116,7 +113,12 @@ internal static class TransitionEngine
                 // touching its visual, so a page cached mid-fade would return invisible. Doing
                 // this before onComplete would instead flash the old page at full opacity over
                 // the new one, since both are still children of the host Grid.
-                if (ownsOutgoing)
+                //
+                // Ownership is re-checked here rather than reused from before the try: an
+                // onNavigatedTo handler can start another navigation synchronously, and that
+                // navigation claims these same pages. Normalizing on a stale answer would snap
+                // a transition that is already running.
+                if (StillOwns(outgoing, generation))
                 {
                     NormalizeVisual(outVisual);
                 }

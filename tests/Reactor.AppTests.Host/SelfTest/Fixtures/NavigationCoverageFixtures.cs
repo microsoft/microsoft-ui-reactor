@@ -603,6 +603,30 @@ internal static class NavigationCoverageFixtures
             H.Check("NavOwn_SuppressNormalizesOutgoing", IsApproximately(cVisual.Opacity, 1f));
             H.Check("NavOwn_SuppressNormalizesIncoming", IsApproximately(dVisual.Opacity, 1f));
 
+            // onComplete can start another navigation synchronously — an onNavigatedTo handler
+            // doing so is ordinary. That navigation claims these same pages, so the outgoing
+            // normalization must re-check ownership rather than reuse the answer from before
+            // onComplete ran, or it would snap a transition that is already in flight.
+            var e = new Border();
+            var f = new Border();
+            var reclaimed = 0L;
+            var reentered = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+
+            TransitionEngine.RunTransition(
+                e, f, NavigationTransition.Entrance(), NavigationMode.Push,
+                onComplete: () =>
+                {
+                    // Stand in for a nested navigation starting from onNavigatedTo.
+                    reclaimed = TransitionEngine.ClaimForTransition(e, f);
+                    reentered.TrySetResult();
+                });
+
+            var reentryDone = await global::System.Threading.Tasks.Task.WhenAny(
+                reentered.Task, global::System.Threading.Tasks.Task.Delay(5000)) == reentered.Task;
+            H.Check("NavOwn_ReentrantCompleted", reentryDone);
+            H.Check("NavOwn_ReentrantClaimWins", TransitionEngine.StillOwns(e, reclaimed));
+
             var host = H.CreateHost();
             host.Mount(ctx => TextBlock("Transition ownership done"));
             await Harness.Render();
