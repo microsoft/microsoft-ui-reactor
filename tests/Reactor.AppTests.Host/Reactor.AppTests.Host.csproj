@@ -61,6 +61,14 @@
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
   </ItemGroup>
 
+  <!-- Window-icon selftest asset (WindowModel_WindowIcon fixtures). Deliberately NOT
+       named AppIcon.ico: ReactorWindow's no-icon fallback probes Assets\AppIcon.ico, and
+       an asset by that name here would give every window an icon and silently make the
+       fixtures' zero-icon control vacuous. -->
+  <ItemGroup>
+    <Content Include="Assets\SelfTestWindowIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
     <!-- Issue #433: md4c HTML renderer used by MarkdownHtmlFixtures. -->

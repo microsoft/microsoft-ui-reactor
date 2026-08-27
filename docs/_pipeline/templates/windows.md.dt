@@ -21,9 +21,11 @@ declarative component model used inside a page.
 
 ## Lifecycle basics
 
-`ReactorApp.Run<TRoot>(...)` opens the primary window. `ReactorApp.OpenWindow`
-opens a secondary window from the UI thread and returns a `ReactorWindow` handle
-for imperative lifecycle operations.
+`ReactorApp.Run<TRoot>(...)` opens the primary window. Pass a `WindowSpec` instead
+of the individual arguments when the primary window needs the full declarative
+surface — icon, min/max size, backdrop, corner style, or placement persistence.
+`ReactorApp.OpenWindow` opens a secondary window from the UI thread and returns a
+`ReactorWindow` handle for imperative lifecycle operations.
 
 ```csharp snippet="windows/run"
 ```
@@ -244,6 +246,40 @@ Caveats:
 - `TitleBarHeight` / `.Tall()` require a content-extended window. On a window that
   never extends, Reactor warns and skips the write rather than throwing — and
   re-applies the declared height automatically if the window later extends.
+
+## Window icon
+
+The window icon is the Win32 `HICON` Windows shows in the taskbar, the Alt-Tab
+switcher, and Task Manager. Set it declaratively with `icon:` on `ReactorApp.Run`,
+or with `WindowSpec.Icon` for a secondary window:
+
+```csharp snippet="windows/window-icon"
+```
+
+This is **not** the same as `TitleBar(...).Icon(...)`, which draws an app mark
+*inside* the window's client area. A window can legitimately have both, and they
+may differ — a monochrome mark in the title bar, a full-colour `.ico` in the
+taskbar.
+
+When no icon is declared, Reactor falls back in order to `Assets\AppIcon.ico`
+beside the app, then to the icon embedded in the executable by
+`<ApplicationIcon>`.
+
+Caveats:
+
+- Prefer a real `.ico`. It is the format `AppWindow.SetIcon` documents, and the only
+  one the tray-icon, taskbar-overlay, and thumbnail-toolbar surfaces can load —
+  they need a raw `HICON` via `LoadImageW`. Reactor passes the source to the
+  platform unchanged rather than pre-validating the extension.
+- A packaged app does **not** get its window icon from `Package.appxmanifest`.
+  The manifest's `Square44x44Logo` drives the *taskbar button* through package
+  identity, which bypasses the window handle entirely — so without an explicit
+  icon the Alt-Tab entry still shows a generic glyph.
+- `<ApplicationIcon>` alone sets the icon Explorer shows for the `.exe`. Reactor's
+  fallback is what carries it onto the window; WinUI does not do so on its own.
+- A `FromPath` source that does not exist is reported as a failure so the fallback
+  still runs — a declared-but-missing icon never leaves the window barer than
+  declaring none. `FromResource` URIs are left to the platform to resolve.
 
 ## Taskbar integration
 

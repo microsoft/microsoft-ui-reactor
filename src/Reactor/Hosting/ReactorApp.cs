@@ -25,7 +25,8 @@ internal record ReactorAppOptions(
     double? WindowHeight = null,
     bool FullScreen = false,
     Action<ReactorAppContext>? Startup = null,
-    WindowSpec? InitialWindowSpec = null);
+    WindowSpec? InitialWindowSpec = null,
+    WindowIcon? WindowIcon = null);
 
 public static partial class ReactorApp
 {
@@ -227,7 +228,7 @@ public static partial class ReactorApp
     /// XAML loader for this process. Required when a third-party control library
     /// is referenced from a Reactor app that has no XAML files of its own (and
     /// therefore no compiler-generated provider that would auto-chain to the
-    /// library). Call before <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?)"/>.
+    /// library). Call before <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?, WindowIcon?)"/>.
     /// Idempotent (same instance is added at most once) and thread-safe.
     /// See https://github.com/microsoft/microsoft-ui-reactor/issues/142.
     /// </summary>
@@ -342,12 +343,29 @@ public static partial class ReactorApp
     /// <c>--devtools</c> surface: component switching via VS Code, MCP agent tools,
     /// and component listing.
     /// </summary>
+    /// <param name="title">Window caption text.</param>
+    /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
+    /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
+    /// <param name="fullScreen">Open with the full-screen presenter.</param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread before the root mounts.
+    /// </param>
+    /// <param name="icon">
+    /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the taskbar,
+    /// Alt-Tab, and Task Manager. Use an <c>.ico</c>: build it with
+    /// <see cref="WindowIcon.FromPath"/> for a file beside the app, or
+    /// <see cref="WindowIcon.FromResource"/> for a packaged <c>ms-appx:///</c> asset.
+    /// When omitted, Reactor falls back to <c>Assets\AppIcon.ico</c> and then to the
+    /// executable's embedded icon. Distinct from <c>TitleBar(...).Icon(...)</c>, which
+    /// sets the app mark drawn inside the window.
+    /// </param>
     public static void Run<TRoot>(
         string title = "Reactor App",
         double? width = null,
         double? height = null,
         bool fullScreen = false,
-        Action<ReactorHost>? configure = null)
+        Action<ReactorHost>? configure = null,
+        WindowIcon? icon = null)
         where TRoot : Component, new()
     {
         EmitDipBehaviorChangeNoticeOnce();
@@ -362,7 +380,51 @@ public static partial class ReactorApp
                 WindowTitle: title,
                 WindowWidth: width,
                 WindowHeight: height,
-                FullScreen: fullScreen);
+                FullScreen: fullScreen,
+                WindowIcon: icon);
+
+            Application.Start(_ =>
+            {
+                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
+                SynchronizationContext.SetSynchronizationContext(context);
+                new ReactorApplication();
+            });
+        });
+    }
+
+    /// <summary>
+    /// Launches the app with a full <see cref="WindowSpec"/> for the primary window, so it
+    /// gets the same declarative surface as a secondary window opened via
+    /// <see cref="OpenWindow(WindowSpec, Func{Component}, Action{ReactorHost})"/> —
+    /// icon, min/max size, backdrop, corner style, start position, and placement
+    /// persistence.
+    /// </summary>
+    /// <remarks>
+    /// Under <c>--devtools run</c> the preview host substitutes its own window; it reads
+    /// title and size from the spec and ignores the remaining fields, exactly as it does
+    /// for the flat overloads.
+    /// </remarks>
+    public static void Run<TRoot>(
+        WindowSpec spec,
+        Action<ReactorHost>? configure = null)
+        where TRoot : Component, new()
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        spec.Validate();
+        EmitDipBehaviorChangeNoticeOnce();
+        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
+
+        RunOnSta(() =>
+        {
+            InitProcess();
+            Options = new ReactorAppOptions(
+                RootFactory: () => new TRoot(),
+                Configure: configure,
+                WindowTitle: spec.Title,
+                WindowWidth: spec.Width,
+                WindowHeight: spec.Height,
+                FullScreen: IsFullScreen(spec),
+                InitialWindowSpec: spec);
 
             Application.Start(_ =>
             {
@@ -379,13 +441,26 @@ public static partial class ReactorApp
     /// <c>null</c> to let the OS pick the initial window size.
     /// See the generic overload for devtools activation semantics.
     /// </summary>
+    /// <param name="title">Window caption text.</param>
+    /// <param name="rootRender">Render function for the window's root content.</param>
+    /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
+    /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
+    /// <param name="fullScreen">Open with the full-screen presenter.</param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread before the root mounts.
+    /// </param>
+    /// <param name="icon">
+    /// Optional window icon. See
+    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}, WindowIcon)"/>.
+    /// </param>
     public static void Run(
         string title,
         Func<RenderContext, Element> rootRender,
         double? width = null,
         double? height = null,
         bool fullScreen = false,
-        Action<ReactorHost>? configure = null)
+        Action<ReactorHost>? configure = null,
+        WindowIcon? icon = null)
     {
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
@@ -399,7 +474,8 @@ public static partial class ReactorApp
                 WindowTitle: title,
                 WindowWidth: width,
                 WindowHeight: height,
-                FullScreen: fullScreen);
+                FullScreen: fullScreen,
+                WindowIcon: icon);
 
             Application.Start(_ =>
             {
@@ -409,6 +485,70 @@ public static partial class ReactorApp
             });
         });
     }
+
+    /// <summary>
+    /// Launches the app with a render function and a full <see cref="WindowSpec"/> for the
+    /// primary window. See
+    /// <see cref="Run{TRoot}(WindowSpec, Action{ReactorHost})"/> for the spec semantics.
+    /// </summary>
+    public static void Run(
+        WindowSpec spec,
+        Func<RenderContext, Element> rootRender,
+        Action<ReactorHost>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(rootRender);
+        spec.Validate();
+        EmitDipBehaviorChangeNoticeOnce();
+        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, rootRenderFunc: rootRender)) return;
+
+        RunOnSta(() =>
+        {
+            InitProcess();
+            Options = new ReactorAppOptions(
+                RootRenderFunc: rootRender,
+                Configure: configure,
+                WindowTitle: spec.Title,
+                WindowWidth: spec.Width,
+                WindowHeight: spec.Height,
+                FullScreen: IsFullScreen(spec),
+                InitialWindowSpec: spec);
+
+            Application.Start(_ =>
+            {
+                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
+                SynchronizationContext.SetSynchronizationContext(context);
+                new ReactorApplication();
+            });
+        });
+    }
+
+    /// <summary>
+    /// Flattens a spec's presenter choice onto the boolean the devtools probe and the
+    /// legacy option record carry.
+    /// </summary>
+    private static bool IsFullScreen(WindowSpec spec) => spec.Presenter == PresenterKind.FullScreen;
+
+    /// <summary>
+    /// Resolves the <see cref="WindowSpec"/> the primary window opens with: an explicitly
+    /// supplied spec wins outright, otherwise one is synthesized from the flat
+    /// title / size / fullscreen / icon options the legacy <c>Run</c> overloads carry.
+    /// </summary>
+    /// <remarks>
+    /// Split out of <c>ReactorApplication.OnLaunched</c> so the mapping is reachable from
+    /// headless tests — it touches no WinUI types. <c>DevtoolsHost</c> depends on the
+    /// synthesis branch: it passes <c>InitialWindowSpec: null</c> for the non-embed preview
+    /// and expects the flat options to be honoured.
+    /// </remarks>
+    internal static WindowSpec BuildInitialWindowSpec(ReactorAppOptions opts)
+        => opts.InitialWindowSpec ?? new WindowSpec
+        {
+            Title = opts.WindowTitle,
+            Width = opts.WindowWidth,
+            Height = opts.WindowHeight,
+            Presenter = opts.FullScreen ? PresenterKind.FullScreen : PresenterKind.Overlapped,
+            Icon = opts.WindowIcon,
+        };
 
     /// <summary>
     /// Multi-window startup entry. The <paramref name="startup"/> callback runs
@@ -446,7 +586,7 @@ public static partial class ReactorApp
     /// Use it for pre-mount setup that needs the live <see cref="ReactorHost"/>
     /// (logger wiring, custom reconciler registrations, host-level event
     /// hooks). Mirror of the <c>configure</c> parameter on the legacy
-    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?)"/>
+    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?, WindowIcon?)"/>
     /// entry — secondary windows now have the same escape hatch as the
     /// primary.
     /// </param>
@@ -1047,16 +1187,11 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // during OnLaunched). (spec 036 §4.3)
         if (opts.RootFactory is null && opts.RootRenderFunc is null) return;
 
-        var spec = opts.InitialWindowSpec ?? new WindowSpec
-        {
-            Title = opts.WindowTitle,
-            Width = opts.WindowWidth,
-            Height = opts.WindowHeight,
-            Presenter = opts.FullScreen ? PresenterKind.FullScreen : PresenterKind.Overlapped,
-        };
+        var spec = ReactorApp.BuildInitialWindowSpec(opts);
 
         ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
     }
+
 
     /// <summary>
     /// Maps the WinUI <see cref="LaunchActivatedEventArgs"/> + the richer

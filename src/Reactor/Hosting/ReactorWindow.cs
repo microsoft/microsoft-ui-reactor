@@ -621,8 +621,14 @@ public sealed class ReactorWindow : IDisposable
 
         if (spec.Embed is null)
         {
+            // A declared icon that cannot be resolved (wrong format, missing file, or a
+            // resource URI with no matching asset) would otherwise leave the window with
+            // no icon at all, because a non-null spec.Icon used to suppress the fallback.
             if (spec.Icon is { } icon)
-                icon.Apply(_appWindow);
+            {
+                if (!icon.Apply(_appWindow) && isInitial)
+                    TryApplyExeIconFallback();
+            }
             else if (isInitial)
                 TryApplyExeIconFallback();
         }
@@ -880,38 +886,39 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>
-    /// Best-effort: when no explicit <see cref="WindowSpec.Icon"/> was supplied,
-    /// load the first icon embedded in the running executable's PE resources
-    /// (the one the build wired in via <c>&lt;ApplicationIcon&gt;</c>) and
-    /// apply it to the AppWindow so the taskbar / Alt-Tab / Win11 thumbnail
-    /// show the developer's icon instead of the WinUI default.
+    /// Best-effort: when no explicit <see cref="WindowSpec.Icon"/> was supplied (or the one
+    /// supplied could not be resolved), find an icon for the window so the taskbar /
+    /// Alt-Tab / Win11 thumbnail show the developer's icon instead of the WinUI default.
     /// </summary>
     /// <remarks>
-    /// <para>Skipped under MSIX-packaged execution — packaged apps get their
-    /// AppWindow icon from <c>Package.appxmanifest</c>'s
-    /// <c>VisualElements</c> tiles automatically; overriding here would just
-    /// fight the manifest. Unpackaged apps have no manifest to fall back to,
-    /// so the EXE PE resource is the next best source.</para>
-    /// <para>Failures are silent — if there's no embedded icon, the AppWindow
-    /// keeps its default. (spec 036 §4.1 — implementation-time addition)</para>
+    /// <para>Two sources are tried, in order:</para>
+    /// <list type="number">
+    /// <item><description><c>Assets\AppIcon.ico</c> beside the app — the asset name the
+    /// official WinUI 3 packaged template ships. Tried <b>first</b> because it is
+    /// unambiguously author-supplied.</description></item>
+    /// <item><description>The first icon embedded in the running executable's PE resources
+    /// (what <c>&lt;ApplicationIcon&gt;</c> wires in). Second, so an explicit asset always
+    /// wins over whatever the build happened to embed.</description></item>
+    /// </list>
+    /// <para>This runs for packaged apps too. A packaged app does <b>not</b> get its window
+    /// <c>HICON</c> from <c>Package.appxmanifest</c>: the manifest's <c>VisualElements</c>
+    /// tiles drive the shell's taskbar button through package identity, which bypasses the
+    /// HWND entirely, so <c>WM_GETICON</c> stays 0 and Alt-Tab shows a generic icon. See
+    /// microsoft-ui-xaml#6104 — which is why the official packaged template calls
+    /// <c>AppWindow.SetIcon</c> explicitly. The manifest assets are not usable here either:
+    /// they are named by MRT resource identifier rather than filename, so the literal
+    /// manifest string does not exist on disk.</para>
+    /// <para>Failures are silent — if neither source yields an icon, the AppWindow keeps
+    /// its default. A .NET apphost built without <c>&lt;ApplicationIcon&gt;</c> carries no
+    /// PE icon at all, so that is the ordinary outcome for an app that ships none.
+    /// (spec 036 §4.1 — implementation-time addition)</para>
     /// </remarks>
     private void TryApplyExeIconFallback()
     {
         try
         {
-            // Packaged apps: the manifest's Square*Logo assets are the
-            // canonical icon source; let the platform resolve them.
-            if (Hosting.Shell.PackageRuntime.IsPackaged) return;
-
-            var exePath = global::System.Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exePath)) return;
-
-            // LR_LOADFROMFILE on a .exe path loads the first icon group
-            // from its PE resources. LR_DEFAULTSIZE picks the system
-            // default size (usually 32x32) — Windows will scale to the
-            // taskbar's needs from there.
-            var hIcon = NativeIcon.LoadImageW(0, exePath, NativeIcon.IMAGE_ICON,
-                0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
+            var hIcon = LoadConventionAssetIcon();
+            if (hIcon == 0) hIcon = LoadExecutablePeIcon();
             if (hIcon == 0) return;
 
             var iconId = Microsoft.UI.Win32Interop.GetIconIdFromIcon(hIcon);
@@ -929,16 +936,71 @@ public sealed class ReactorWindow : IDisposable
         }
     }
 
+    /// <summary>
+    /// Loads <c>Assets\AppIcon.ico</c> from the app's base directory, which resolves to the
+    /// package install root for a packaged app. Returns 0 when absent.
+    /// </summary>
+    private static nint LoadConventionAssetIcon()
+    {
+        string path;
+        try
+        {
+            path = global::System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            if (!global::System.IO.File.Exists(path)) return 0;
+        }
+        catch (Exception ex)
+        {
+            // File-system access can throw on locked-down hosts; a missing convention
+            // asset is never fatal — fall through to the PE resource.
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.LoadConventionAssetIcon", ex);
+            return 0;
+        }
+
+        return NativeIcon.LoadImageW(0, path, NativeIcon.IMAGE_ICON,
+            0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
+    }
+
+    /// <summary>
+    /// Loads the icon embedded in the running executable's PE resources (what
+    /// <c>&lt;ApplicationIcon&gt;</c> wires in). Returns 0 when the image carries none.
+    /// </summary>
+    /// <remarks>
+    /// Uses <c>ExtractIconExW</c>, not <c>LoadImageW</c> with <c>LR_LOADFROMFILE</c>:
+    /// that flag loads a standalone <i>image file</i> (<c>.ico</c>/<c>.bmp</c>/<c>.cur</c>)
+    /// and returns 0 for every <c>.exe</c>, PE icon resources included — measured against
+    /// <c>explorer.exe</c>, which has an icon and still yields 0 that way.
+    /// </remarks>
+    private static nint LoadExecutablePeIcon()
+    {
+        var exePath = global::System.Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath)) return 0;
+
+        var large = new nint[1];
+        // nIcons=1 extracts the first icon group only; the small-icon array is optional
+        // and omitted so there is no second handle to own and destroy.
+        _ = NativeIcon.ExtractIconExW(exePath, 0, large, null, 1);
+        return large[0];
+    }
+
     private static class NativeIcon
     {
         public const uint IMAGE_ICON = 1;
         public const uint LR_LOADFROMFILE = 0x00000010;
         public const uint LR_DEFAULTSIZE = 0x00000040;
 
+        // Correct for standalone .ico files. Does NOT read PE resources — see
+        // LoadExecutablePeIcon.
         [global::System.Runtime.InteropServices.DllImport("user32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
         public static extern nint LoadImageW(nint hInst,
             [global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.LPWStr)] string lpszName,
             uint uType, int cxDesired, int cyDesired, uint fuLoad);
+
+        // Reads icon groups out of a PE image. phiconSmall is [out, optional]; passing
+        // null asks for the large icons only.
+        [global::System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode)]
+        public static extern uint ExtractIconExW(
+            [global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.LPWStr)] string lpszFile,
+            int nIconIndex, nint[]? phiconLarge, nint[]? phiconSmall, uint nIcons);
 
         [global::System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
         [return: global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.Bool)]

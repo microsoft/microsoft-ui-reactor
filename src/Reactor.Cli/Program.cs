@@ -245,6 +245,7 @@ int CreateProject(string name)
     File.WriteAllText(Path.Combine(dir, "Program.cs"), GenerateProgram(name));
     File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), GenerateCsproj());
     File.WriteAllText(Path.Combine(dir, $"{name}.sln"), GenerateSln(name, appGuid, patchGuid));
+    var wroteIcon = TryWriteAppIcon(dir);
 
     Console.WriteLine($"Created Reactor project '{name}' in .{Path.DirectorySeparatorChar}{name}{Path.DirectorySeparatorChar}");
     Console.WriteLine();
@@ -252,6 +253,8 @@ int CreateProject(string name)
     Console.WriteLine($"    {name}{Path.DirectorySeparatorChar}{name}.sln");
     Console.WriteLine($"    {name}{Path.DirectorySeparatorChar}{name}.csproj");
     Console.WriteLine($"    {name}{Path.DirectorySeparatorChar}Program.cs");
+    if (wroteIcon)
+        Console.WriteLine($"    {name}{Path.DirectorySeparatorChar}Assets{Path.DirectorySeparatorChar}AppIcon.ico");
     Console.WriteLine();
     Console.WriteLine("NOTE: The generated .sln assumes this project is a sibling of the Reactor directory:");
     Console.WriteLine($"    parent/");
@@ -275,6 +278,36 @@ int CreateProject(string name)
 //  Template generators
 // ---------------------------------------------------------------------------
 
+/// <summary>
+/// Writes the embedded placeholder icon to <c>Assets\AppIcon.ico</c> in the new project.
+/// Scaffolding must not fail over an icon, so any error is reported and swallowed — the
+/// generated csproj references the asset conditionally and the app still builds and runs
+/// without it (falling back to whatever the platform default is).
+/// </summary>
+bool TryWriteAppIcon(string projectDir)
+{
+    try
+    {
+        using var stream = assembly.GetManifestResourceStream("ReactorAppIcon.ico");
+        if (stream is null)
+        {
+            Console.Error.WriteLine("Warning: embedded ReactorAppIcon.ico not found; skipping Assets/AppIcon.ico.");
+            return false;
+        }
+
+        var assets = Path.Combine(projectDir, "Assets");
+        Directory.CreateDirectory(assets);
+        using var file = File.Create(Path.Combine(assets, "AppIcon.ico"));
+        stream.CopyTo(file);
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Warning: could not write Assets/AppIcon.ico: {ex.Message}");
+        return false;
+    }
+}
+
 string GenerateProgram(string name) =>
     $$"""
     using Microsoft.UI.Reactor;
@@ -285,7 +318,11 @@ string GenerateProgram(string name) =>
     // Custom control descriptor scaffolds can declare reactive reference edges:
     // .Reference<FrameworkElement>(get: e => e.Target, set: (c, t) => c.Target = t) // spec 057
 
-    ReactorApp.Run<App>("{{name}}", width: 800, height: 600);
+    // `icon:` sets the Win32 window icon — the one Windows shows in the taskbar,
+    // Alt-Tab, and Task Manager. Use an .ico. This is separate from
+    // TitleBar(...).Icon(...), which draws an app mark inside the window.
+    ReactorApp.Run<App>("{{name}}", width: 800, height: 600,
+        icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
 
     class App : Component
     {
@@ -307,7 +344,14 @@ string GenerateCsproj() =>
         <Nullable>enable</Nullable>
         <UseWinUI>true</UseWinUI>
         <WindowsPackageType>None</WindowsPackageType>
+        <!-- Embeds the icon in the .exe so File Explorer and shortcuts show it too.
+             The ReactorApp.Run(icon:) call sets the window icon itself; without either,
+             Reactor falls back to Assets\AppIcon.ico and then to this embedded icon. -->
+        <ApplicationIcon Condition="Exists('Assets\AppIcon.ico')">Assets\AppIcon.ico</ApplicationIcon>
       </PropertyGroup>
+      <ItemGroup>
+        <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets\AppIcon.ico')" />
+      </ItemGroup>
       <ItemGroup Condition="'$(Configuration)' == 'Debug'">
         <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                         Value="true"

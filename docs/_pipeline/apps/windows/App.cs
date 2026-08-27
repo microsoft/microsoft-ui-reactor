@@ -122,6 +122,35 @@ class SettingsWindow : Component
     }
 }
 
+// <snippet:window-icon>
+// The window icon is the Win32 HICON shown in the taskbar, Alt-Tab, and Task
+// Manager — distinct from TitleBar(...).Icon(...), which draws a mark inside
+// the window. Use an .ico.
+static class WindowIconSetup
+{
+    // Unpackaged: a file deployed beside the app.
+    public static void RunWithFileIcon() =>
+        ReactorApp.Run<WindowsApp>("Windows Demo",
+            icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
+
+    // Packaged: an .ico shipped with Build Action = Content.
+    public static void RunWithPackagedIcon() =>
+        ReactorApp.Run<WindowsApp>("Windows Demo",
+            icon: WindowIcon.FromResource("ms-appx:///Assets/AppIcon.ico"));
+
+    // A full WindowSpec reaches the fields the flat arguments cannot.
+    public static void RunWithSpec() =>
+        ReactorApp.Run<WindowsApp>(new WindowSpec
+        {
+            Title = "Windows Demo",
+            Width = 640,
+            Height = 520,
+            MinWidth = 400,
+            Icon = WindowIcon.FromPath("Assets/AppIcon.ico"),
+        });
+}
+// </snippet:window-icon>
+
 // <snippet:shutdown-policy>
 // Call once at startup, before ReactorApp.Run. With OnLastSurfaceClosed the
 // process keeps running while a tray icon or any window is alive; with

@@ -1219,6 +1219,7 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents",
+        "WindowModel_WindowIconApplied",
         "WindowModel_ClosingEventCancels",
         "WindowModel_TaskbarProgressLiveCom",
         "WindowModel_ThumbnailToolbarLiveCom",
@@ -2926,6 +2927,7 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents" => new WindowModelFixtures.WindowLifecycleEvents(harness),
+        "WindowModel_WindowIconApplied" => new WindowModelFixtures.WindowIconApplied(harness),
         "WindowModel_ClosingEventCancels" => new WindowModelFixtures.WindowClosingEventCancels(harness),
         "WindowModel_TaskbarProgressLiveCom" => new WindowModelFixtures.TaskbarProgressLiveCom(harness),
         "WindowModel_ThumbnailToolbarLiveCom" => new WindowModelFixtures.ThumbnailToolbarLiveCom(harness),

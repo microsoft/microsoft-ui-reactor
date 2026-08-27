@@ -97,6 +97,100 @@ internal static class WindowModelFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
+    //  Window icon — issue #1143
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Verifies that a declared <see cref="WindowSpec.Icon"/> reaches the live window's
+    /// Win32 <c>HICON</c> — the handle Alt-Tab, the taskbar, and Task Manager read.
+    /// </summary>
+    /// <remarks>
+    /// <para>The oracle is differential rather than a bare non-null check. This host ships
+    /// no <c>&lt;ApplicationIcon&gt;</c> and no <c>Assets\AppIcon.ico</c>, so a window with
+    /// no declared icon has nothing to fall back to and reports <c>HICON == 0</c>. That
+    /// zero is the control: it proves the probe can observe the broken state, so the
+    /// non-zero readings below are measurements rather than tautologies.</para>
+    /// <para>If someone later gives this host an icon, <c>WindowIcon_Control_NoIcon_IsZero</c>
+    /// fails loudly instead of the remaining checks quietly going vacuous.</para>
+    /// </remarks>
+    internal class WindowIconApplied(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const uint WM_GETICON = 0x007F;
+        private const int ICON_BIG = 1;
+
+        [global::System.Runtime.InteropServices.DllImport("user32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern nint SendMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
+
+        private static nint IconOf(ReactorWindow win) => SendMessageW(win.Hwnd, WM_GETICON, ICON_BIG, 0);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // Control — no declared icon, and nothing for the fallback to find.
+            var bare = await OpenAndSettle(
+                new WindowSpec { Title = "Icon Control", Width = 200, Height = 160 },
+                () => new StubComponent());
+            nint bareIcon;
+            try { bareIcon = IconOf(bare); }
+            finally { await CloseAndSettle(bare); }
+
+            H.Check("WindowIcon_Control_NoIcon_IsZero", bareIcon == 0);
+
+            // FromPath — the ordinary unpackaged spelling.
+            var byPath = await OpenAndSettle(
+                new WindowSpec
+                {
+                    Title = "Icon FromPath",
+                    Width = 200,
+                    Height = 160,
+                    Icon = WindowIcon.FromPath("Assets/SelfTestWindowIcon.ico"),
+                },
+                () => new StubComponent());
+            nint pathIcon;
+            try { pathIcon = IconOf(byPath); }
+            finally { await CloseAndSettle(byPath); }
+
+            H.Check("WindowIcon_FromPath_Sets_HICON", pathIcon != 0);
+
+            // FromResource — the packaged spelling. The platform resolves the ms-appx URI
+            // itself, including MRT qualifiers; Reactor passes it through untouched.
+            var byResource = await OpenAndSettle(
+                new WindowSpec
+                {
+                    Title = "Icon FromResource",
+                    Width = 200,
+                    Height = 160,
+                    Icon = WindowIcon.FromResource("ms-appx:///Assets/SelfTestWindowIcon.ico"),
+                },
+                () => new StubComponent());
+            nint resourceIcon;
+            try { resourceIcon = IconOf(byResource); }
+            finally { await CloseAndSettle(byResource); }
+
+            H.Check("WindowIcon_FromResource_Sets_HICON", resourceIcon != 0);
+
+            // An icon file that isn't there must not leave the window worse off than
+            // declaring nothing: Apply reports failure so the fallback gets a turn.
+            // This host has no fallback source, so it lands back on the control value.
+            var missing = await OpenAndSettle(
+                new WindowSpec
+                {
+                    Title = "Icon Missing",
+                    Width = 200,
+                    Height = 160,
+                    Icon = WindowIcon.FromPath("Assets/DoesNotExist.ico"),
+                },
+                () => new StubComponent());
+            nint missingIcon;
+            try { missingIcon = IconOf(missing); }
+            finally { await CloseAndSettle(missing); }
+
+            H.Check("WindowIcon_MissingFile_Falls_Back_To_Control", missingIcon == bareIcon);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  Closing event cancels the close (event subscriber path)
     //
     //  Note: the UseClosingGuard *hook* path resolves the owning window

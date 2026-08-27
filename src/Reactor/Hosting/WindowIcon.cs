@@ -14,6 +14,20 @@ namespace Microsoft.UI.Reactor;
 /// <c>ms-appx:///</c>-style packaged-app resource URI (<see cref="FromResource"/>).
 /// Empty strings are rejected at construction so a malformed icon never reaches
 /// the WinUI APIs.
+/// <para>Consumers differ in what they can accept, because most of them need a raw
+/// Win32 <c>HICON</c>:</para>
+/// <list type="bullet">
+/// <item><description><see cref="WindowSpec.Icon"/> — accepts both kinds. The source is
+/// handed to <c>AppWindow.SetIcon</c> verbatim, so the platform resolves
+/// <c>ms-appx:</c> URIs (including MRT scale/target-size qualifiers)
+/// itself.</description></item>
+/// <item><description>Tray icons, taskbar overlays, and thumbnail-toolbar buttons —
+/// <see cref="FromPath"/> only. They load through <c>LoadImageW</c>, which cannot read a
+/// packaged resource URI.</description></item>
+/// <item><description>Jump lists — <see cref="FromResource"/> on the packaged path
+/// (the WinRT API takes the URI directly) and <see cref="FromPath"/> on the unpackaged
+/// one. Each silently skips the other kind.</description></item>
+/// </list>
 /// </remarks>
 public sealed class WindowIcon
 {
@@ -98,6 +112,9 @@ public sealed class WindowIcon
     /// <summary>
     /// Create an icon from a packaged-app resource URI
     /// (e.g. <c>ms-appx:///Assets/AppIcon.ico</c>). Throws on null/empty input.
+    /// <para>The URI is handed to the platform unchanged, so MRT qualifier resolution
+    /// applies. Manifest visual assets (<c>Square44x44Logo</c> and friends) are named by
+    /// resource identifier rather than filename and are not addressable this way.</para>
     /// </summary>
     public static WindowIcon FromResource(string uri)
     {
@@ -112,16 +129,63 @@ public sealed class WindowIcon
     /// <c>System.Diagnostics.Debug.WriteLine</c> and swallowed so that a
     /// missing icon never crashes window construction.
     /// </summary>
-    internal void Apply(AppWindow appWindow)
+    /// <returns>
+    /// <c>true</c> when the icon was handed to the platform. <c>false</c> only when the
+    /// source is a filesystem path that demonstrably does not exist — the caller then
+    /// falls back rather than leaving the window with no icon at all.
+    /// </returns>
+    /// <remarks>
+    /// The source is passed to <c>AppWindow.SetIcon</c> verbatim. Measured against
+    /// Windows App SDK 2.1, that API accepts more than its documentation describes — both
+    /// <c>ms-appx:///</c> URIs and non-<c>.ico</c> images work — so Reactor deliberately
+    /// does not pre-validate the format or rewrite the URI. Rewriting an
+    /// <c>ms-appx:</c> URI to a plain path would also bypass the platform's MRT
+    /// scale/target-size qualifier resolution, breaking packaged apps that ship
+    /// qualified variants. Only a resource URI is left entirely to the platform;
+    /// a plain path is existence-checked first, because <c>SetIcon</c> reports a bad
+    /// path by silently doing nothing.
+    /// </remarks>
+    internal bool Apply(AppWindow appWindow)
     {
-        if (appWindow is null) return;
+        if (appWindow is null) return false;
+
+        if (!_isResource && !PathExists(_source))
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon.Apply: no icon file at '{_source}'.");
+            return false;
+        }
+
         try
         {
             appWindow.SetIcon(_source);
+            return true;
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[Reactor] WindowIcon.Apply failed for '{_source}': {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// True when a filesystem source resolves to a real file, either as given or relative
+    /// to the app's base directory (which is the package root for a packaged app). Errors
+    /// resolve to <c>true</c> so a probe failure never suppresses an icon that would have
+    /// worked.
+    /// </summary>
+    private static bool PathExists(string path)
+    {
+        try
+        {
+            if (global::System.IO.File.Exists(path)) return true;
+            if (global::System.IO.Path.IsPathRooted(path)) return false;
+            return global::System.IO.File.Exists(
+                global::System.IO.Path.Combine(AppContext.BaseDirectory, path));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon.Apply: existence check failed for '{path}': {ex.Message}");
+            return true;
         }
     }
 }
