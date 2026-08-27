@@ -237,8 +237,14 @@ public partial record NavigationViewElement
         {
             global::Microsoft.UI.Xaml.Media.Animation.SlideNavigationTransitionInfo slide =>
                 GetRecommendedSlideTransition(slide.Effect),
+            global::Microsoft.UI.Xaml.Media.Animation.EntranceNavigationTransitionInfo =>
+                Navigation.NavigationTransition.Entrance(),
+            global::Microsoft.UI.Xaml.Media.Animation.DrillInNavigationTransitionInfo =>
+                Navigation.NavigationTransition.DrillIn(),
             global::Microsoft.UI.Xaml.Media.Animation.SuppressNavigationTransitionInfo =>
                 Navigation.NavigationTransition.None,
+            // Null, or a NavigationTransitionInfo Reactor has no counterpart for: fall back to
+            // whatever the host default is rather than guessing at a motion.
             _ => Navigation.NavigationTransition.Default,
         };
 

@@ -137,8 +137,11 @@ public class NavigationViewSyncTests
     }
 
     [Fact]
-    public void Missing_Recommendation_Maps_To_Default_Entrance_Transition()
+    public void Missing_Recommendation_Falls_Back_To_The_Host_Default()
     {
+        // A null recommendation means "WinUI didn't tell us", not "WinUI asked for entrance".
+        // The recognised infos are mapped to named motions in the selftest tier, because
+        // NavigationTransitionInfo cannot be constructed without a live WinUI application.
         var transition = NavigationViewElement.GetRecommendedNavigationTransition(null);
 
         Assert.Same(NavigationTransition.Default, transition);

@@ -33,11 +33,28 @@ public enum NavigationCacheMode
 /// </summary>
 public abstract record NavigationTransition
 {
-    /// <summary>Default WinUI entrance transition.</summary>
+    /// <summary>
+    /// The transition a host or navigation gets when it doesn't ask for one. Currently
+    /// resolves to <see cref="Entrance"/>, which is what WinUI's <c>Frame</c> plays when
+    /// <c>Navigate</c> is called with no <c>NavigationTransitionInfo</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is a policy alias, not a motion — it means "whatever Reactor defaults to". Use
+    /// <see cref="Entrance"/> when you want the entrance motion specifically and don't want
+    /// the call site to silently follow a future change of default.
+    /// </remarks>
     public static readonly NavigationTransition Default = new EntranceTransition();
 
     /// <summary>No animation — instant swap.</summary>
     public static readonly NavigationTransition None = new SuppressTransition();
+
+    /// <summary>
+    /// Entrance transition — the incoming page slides up a short distance and fades in.
+    /// This is WinUI's own default page transition
+    /// (<c>EntranceNavigationTransitionInfo</c>, the "page refresh" animation), and the
+    /// motion <see cref="Default"/> currently resolves to.
+    /// </summary>
+    public static NavigationTransition Entrance() => new EntranceTransition();
 
     /// <summary>
     /// WinUI slide transition. Supplying duration, easing, or distance opts into
@@ -64,11 +81,17 @@ public abstract record NavigationTransition
     public static NavigationTransition DrillIn(TimeSpan? duration = null)
         => new DrillInTransition { Duration = duration };
 
-    /// <summary>Connected animation transition (stub — falls back to slide in Phase 4).</summary>
+    /// <summary>
+    /// Connected animation transition (stub — shared-element animation is not implemented yet,
+    /// so this currently plays <see cref="Entrance"/>).
+    /// </summary>
     public static NavigationTransition Connected(string animationKey)
         => new ConnectedTransition { AnimationKey = animationKey };
 
-    /// <summary>Spring-physics slide transition.</summary>
+    /// <summary>
+    /// Spring-physics slide transition. A Reactor extension with no WinUI counterpart, so it
+    /// keeps a horizontal default rather than following <see cref="Slide"/>'s vertical one.
+    /// </summary>
     public static NavigationTransition Spring(
         float dampingRatio = 0.6f,
         float period = 0.08f,
@@ -81,8 +104,12 @@ public abstract record NavigationTransition
         };
 }
 
-/// <summary>WinUI entrance transition used by Frame when no override is supplied.</summary>
-internal sealed record EntranceTransition : NavigationTransition;
+/// <summary>
+/// Entrance transition — slide up + fade in on the incoming page. Mirrors WinUI's
+/// <c>EntranceNavigationTransitionInfo</c>, the animation a <c>Frame</c> plays when
+/// <c>Navigate</c> is called without a <c>NavigationTransitionInfo</c>.
+/// </summary>
+public sealed record EntranceTransition : NavigationTransition;
 
 /// <summary>Slide transition — animate offset and opacity.</summary>
 public sealed record SlideTransition : NavigationTransition
@@ -115,7 +142,11 @@ public sealed record ConnectedTransition : NavigationTransition
     public required string AnimationKey { get; init; }
 }
 
-/// <summary>Spring-physics slide transition.</summary>
+/// <summary>
+/// Spring-physics slide transition. Unlike <see cref="SlideTransition"/> this is a Reactor
+/// extension with no WinUI counterpart, so it keeps its own horizontal default rather than
+/// following WinUI's vertical slide specification.
+/// </summary>
 public sealed record SpringSlideTransition : NavigationTransition
 {
     public float DampingRatio { get; init; } = 0.6f;

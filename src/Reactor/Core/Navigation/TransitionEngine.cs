@@ -81,9 +81,12 @@ internal static class TransitionEngine
                 RunSpringSlide(compositor, outVisual, inVisual, spring, mode);
                 break;
             case ConnectedTransition:
-                // Stub — fall back to default slide
-                global::System.Diagnostics.Debug.WriteLine("[Reactor] ConnectedTransition not yet implemented; falling back to SlideTransition.");
-                RunSlide(compositor, outVisual, inVisual, new SlideTransition(), mode);
+                // Stub — shared-element animation isn't implemented yet, so play the platform
+                // default instead. Entrance is the right fallback: it's what the navigation would
+                // have got had no transition been requested, and unlike a slide it doesn't invent
+                // a direction or opt into the slide path's hit-test suppression.
+                global::System.Diagnostics.Debug.WriteLine("[Reactor] ConnectedTransition not yet implemented; falling back to EntranceTransition.");
+                RunEntrance(compositor, outVisual, inVisual, mode);
                 break;
             default:
                 // Unknown transition — instant swap

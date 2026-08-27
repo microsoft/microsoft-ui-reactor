@@ -29,6 +29,32 @@ public class TransitionEngineTests
     }
 
     [Fact]
+    public void Entrance_Factory_Creates_EntranceTransition()
+    {
+        Assert.IsType<EntranceTransition>(NavigationTransition.Entrance());
+    }
+
+    [Fact]
+    public void Default_Resolves_To_The_Same_Motion_As_Entrance()
+    {
+        // Default is a policy alias for the entrance motion. Callers that request Entrance()
+        // explicitly must get something a host cannot tell apart from Default.
+        Assert.Equal(NavigationTransition.Entrance(), NavigationTransition.Default);
+    }
+
+    [Fact]
+    public void Entrance_Is_Distinct_From_Every_Other_Built_In_Transition()
+    {
+        var entrance = NavigationTransition.Entrance();
+
+        Assert.NotEqual(entrance, NavigationTransition.None);
+        Assert.NotEqual(entrance, NavigationTransition.Slide());
+        Assert.NotEqual(entrance, NavigationTransition.Fade());
+        Assert.NotEqual(entrance, NavigationTransition.DrillIn());
+        Assert.NotEqual(entrance, NavigationTransition.Spring());
+    }
+
+    [Fact]
     public void None_Transition_Is_SuppressTransition()
     {
         Assert.IsType<SuppressTransition>(NavigationTransition.None);

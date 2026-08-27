@@ -316,14 +316,63 @@ internal static class NavigationCoverageFixtures
             var spring = NavigationTransition.Spring(0.7f, 0.05f, SlideDirection.FromBottom);
             H.Check("NavTrans_Spring", spring is SpringSlideTransition sp && sp.DampingRatio == 0.7f);
 
+            var entrance = NavigationTransition.Entrance();
+            H.Check("NavTrans_Entrance", entrance is EntranceTransition);
+
             var defaultT = NavigationTransition.Default;
-            H.Check("NavTrans_Default", defaultT is SlideTransition);
+            H.Check("NavTrans_Default", defaultT is EntranceTransition);
+
+            // Default is an alias for the entrance motion, so the two must stay interchangeable.
+            H.Check("NavTrans_Default_Is_Entrance", defaultT == entrance);
 
             var none = NavigationTransition.None;
             H.Check("NavTrans_None", none is SuppressTransition);
 
             var host = H.CreateHost();
             host.Mount(ctx => TextBlock("Transitions done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6b. NavigationViewElement.GetRecommendedNavigationTransition
+    //      Targets: the WinUI NavigationTransitionInfo → NavigationTransition mapping.
+    //      Lives here rather than in Reactor.Tests because NavigationTransitionInfo is a
+    //      Microsoft.UI.Xaml type and cannot be constructed headless.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavRecommendedTransitionMapping(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var entrance = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.EntranceNavigationTransitionInfo());
+            H.Check("NavRecTrans_Entrance", entrance is EntranceTransition);
+
+            var drillIn = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.DrillInNavigationTransitionInfo());
+            H.Check("NavRecTrans_DrillIn", drillIn is DrillInTransition);
+
+            var suppress = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.SuppressNavigationTransitionInfo());
+            H.Check("NavRecTrans_Suppress", suppress is SuppressTransition);
+
+            var slide = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.SlideNavigationTransitionInfo
+                {
+                    Effect = global::Microsoft.UI.Xaml.Media.Animation
+                        .SlideNavigationTransitionEffect.FromRight,
+                });
+            H.Check(
+                "NavRecTrans_Slide",
+                slide is SlideTransition sl && sl.Direction == SlideDirection.FromRight);
+
+            // A recognised entrance recommendation must not be answered by the generic
+            // "we don't know" arm — those coincide today only because Default is entrance.
+            H.Check("NavRecTrans_Entrance_Not_Fallback", !ReferenceEquals(entrance, NavigationTransition.Default));
+
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Recommended transitions done"));
             await Harness.Render();
         }
     }
