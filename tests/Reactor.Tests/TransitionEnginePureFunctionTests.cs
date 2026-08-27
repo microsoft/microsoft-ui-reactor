@@ -5,37 +5,17 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Tests for TransitionEngine's pure helper functions: ReverseDirection, GetSlideOffsets,
-/// and the Push/Pop plan builders.
+/// Tests for TransitionEngine's pure helper functions: ReverseDirection and GetSlideOffsets —
+/// the direction-resolution and offset math shared by the slide and spring-slide transitions.
 ///
 /// <para>
-/// A note on the constant tests below. They are <b>pinning</b> tests: they compare a
-/// constant against a literal copy of itself, so they fail only when someone edits the
-/// constant. They deliberately do <b>not</b> establish parity with WinUI — nothing in this
-/// repo can, because the values WinUI uses for its entrance / slide / drill-in animations
-/// live in a generated theme-animation table (<c>TAS_ENTERPAGE</c> / <c>TA_ENTERPAGE_TARGET</c>)
-/// that is not part of the public microsoft-ui-xaml source. Their purpose is to make a
-/// change to a tuned motion constant deliberate and reviewable, not to detect drift from
-/// WinUI. If WinUI retunes its animations, these tests keep passing and Reactor keeps the
-/// old values — an accepted consequence of rendering transitions on the Composition layer
-/// rather than through a WinUI Frame (see docs/specs/011-navigation-design.md, Appendix C).
+/// The WinUI motion constants and the Push/Pop plan builders are covered separately, with
+/// citations into the WinUI sources they were taken from, in
+/// <see cref="WinUiNavigationMotionParityTests"/>.
 /// </para>
 /// </summary>
 public class TransitionEnginePureFunctionTests
 {
-    [Fact]
-    public void Entrance_Motion_Constants_Are_Pinned()
-    {
-        Assert.Equal(140f, TransitionEngine.EntranceTranslationOffset);
-        Assert.Equal(TimeSpan.FromMilliseconds(150), TransitionEngine.EntranceExitDuration);
-        Assert.Equal(TimeSpan.FromMilliseconds(300), TransitionEngine.EntranceDuration);
-        Assert.Equal(TimeSpan.FromMilliseconds(1), TransitionEngine.EntranceOpacitySnapDuration);
-        Assert.Equal(new Vector2(0.1f, 0.9f), TransitionEngine.EntranceInEasingControlPoint1);
-        Assert.Equal(new Vector2(0.2f, 1.0f), TransitionEngine.EntranceInEasingControlPoint2);
-        Assert.Equal(new Vector2(0.7f, 0.0f), TransitionEngine.EntranceOutEasingControlPoint1);
-        Assert.Equal(new Vector2(1.0f, 0.5f), TransitionEngine.EntranceOutEasingControlPoint2);
-    }
-
     // ════════════════════════════════════════════════════════════════
     //  ReverseDirection — used to flip slide direction on GoBack
     // ════════════════════════════════════════════════════════════════
@@ -171,19 +151,6 @@ public class TransitionEnginePureFunctionTests
         Assert.False(TransitionEngine.UsesWinUISlideSpecification(slide));
     }
 
-    [Fact]
-    public void HorizontalSlide_Motion_Constants_Are_Pinned()
-    {
-        Assert.Equal(150f, TransitionEngine.HorizontalSlideExitOffset);
-        Assert.Equal(200f, TransitionEngine.HorizontalSlideEntranceOffset);
-        Assert.Equal(TimeSpan.FromMilliseconds(150), TransitionEngine.HorizontalSlideExitDuration);
-        Assert.Equal(TimeSpan.FromMilliseconds(300), TransitionEngine.HorizontalSlideEntranceDuration);
-        Assert.Equal(new Vector2(0.1f, 0.9f), TransitionEngine.SlideInEasingControlPoint1);
-        Assert.Equal(new Vector2(0.2f, 1.0f), TransitionEngine.SlideInEasingControlPoint2);
-        Assert.Equal(new Vector2(0.7f, 0.0f), TransitionEngine.SlideOutEasingControlPoint1);
-        Assert.Equal(new Vector2(1.0f, 0.5f), TransitionEngine.SlideOutEasingControlPoint2);
-    }
-
     [Theory]
     [InlineData(SlideDirection.FromLeft, NavigationMode.Push, 150f, -200f)]
     [InlineData(SlideDirection.FromRight, NavigationMode.Push, -150f, 200f)]
@@ -196,15 +163,6 @@ public class TransitionEnginePureFunctionTests
 
         Assert.Equal(new Vector3(outX, 0, 0), plan.OutEnd);
         Assert.Equal(new Vector3(inX, 0, 0), plan.InStart);
-    }
-
-    [Fact]
-    public void VerticalSlide_Motion_Constants_Are_Pinned()
-    {
-        Assert.Equal(200f, TransitionEngine.VerticalSlideOffset);
-        Assert.Equal(6f, TransitionEngine.VerticalSlideExponent);
-        Assert.Equal(TimeSpan.FromMilliseconds(250), TransitionEngine.VerticalSlideHandoffTime);
-        Assert.Equal(TimeSpan.FromMilliseconds(600), TransitionEngine.VerticalSlideDuration);
     }
 
     [Fact]

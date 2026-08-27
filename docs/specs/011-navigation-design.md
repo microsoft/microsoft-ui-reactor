@@ -766,6 +766,17 @@ public enum SlideDirection { FromRight, FromLeft, FromBottom, FromTop }
 > `RecommendedNavigationTransitionInfo` — must say `Entrance()`, so it doesn't silently
 > change meaning if the default is ever revisited again.
 
+> **Where the motion values come from.** Because Reactor replays these animations on the
+> Composition layer instead of handing a `NavigationTransitionInfo` to a `Frame`, WinUI's
+> timings, offsets, scales and easing curves are *copied* into
+> `TransitionEngine`. Each one is taken from `microsoft/microsoft-ui-xaml`:
+> `dxaml/phone/lib/ThemeTransitions.cpp` for the entrance, slide and drill-in storyboards,
+> `dxaml/phone/lib/ThemeTransitions.h` for the drill-in durations, and
+> `dxaml/phone/lib/NavigateTransitionHelper.h` for the vertical slide's `SLIDE_*` constants.
+> `WinUiNavigationMotionParityTests` records each value beside the Reactor constant it backs,
+> and fails if the repo's pinned Windows App SDK version changes — an SDK bump is the signal to
+> re-read those sources, since nothing else would notice WinUI retuning a value.
+
 #### Per-navigation override
 
 ```csharp

@@ -427,6 +427,51 @@ internal static class NavigationCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  6d. TransitionEngine — the outgoing page is normalized after a transition
+    //      NavigationCacheMode can hand the outgoing control back as a later page, and
+    //      the instant-swap path adds a cached control without touching its visual, so a
+    //      page cached while still faded out would return invisible.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavTransitionNormalizesOutgoing(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Outgoing normalization"));
+            await Harness.Render();
+
+            var outgoing = new Border { Width = 100, Height = 100 };
+            var incoming = new Border { Width = 100, Height = 100 };
+
+            // RunContinuationsAsynchronously matters: the default resumes the await *inside*
+            // TrySetResult, i.e. inside onComplete, before RunTransition has normalized the
+            // outgoing visual — the assertions below would race the code they test.
+            var done = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                outgoing, incoming,
+                NavigationTransition.Entrance(), NavigationMode.Push,
+                onComplete: () => done.TrySetResult());
+
+            var completed = await global::System.Threading.Tasks.Task.WhenAny(
+                done.Task, global::System.Threading.Tasks.Task.Delay(5000)) == done.Task;
+            H.Check("NavOutNorm_Completed", completed);
+
+            if (!completed) return;
+
+            var outVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+                .GetElementVisual(outgoing);
+
+            // Entrance fades the outgoing page to 0. Left that way, a cached page comes back
+            // invisible on a later NavigationTransition.None navigation.
+            H.Check("NavOutNorm_OpacityRestored", outVisual.Opacity == 1f);
+            H.Check("NavOutNorm_OffsetReset", outVisual.Offset == global::System.Numerics.Vector3.Zero);
+            H.Check("NavOutNorm_ScaleReset", outVisual.Scale == global::System.Numerics.Vector3.One);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  7. NavigationHandle — Navigated event + BackStack/ForwardStack
     //     Targets: NavigationHandle.Navigated, BackStack, ForwardStack properties
     // ════════════════════════════════════════════════════════════════════════

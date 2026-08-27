@@ -81,7 +81,7 @@ internal static class TransitionEngine
         // hit-test-suppressed page would stay unclickable.
         batch.Completed += (_, _) =>
         {
-            // Finalize: ensure incoming is fully visible, reset outgoing
+            // Finalize: ensure incoming is fully visible
             inVisual.Opacity = 1;
             inVisual.Offset = Vector3.Zero;
             inVisual.Scale = Vector3.One;
@@ -95,7 +95,21 @@ internal static class TransitionEngine
                 RestoreHitTesting(outgoing);
                 RestoreHitTesting(incoming);
             }
+
             onComplete();
+
+            // Normalize the outgoing visual too, but only after onComplete has taken it out of
+            // the tree — cached or unmounted. Its animation left it faded out and possibly
+            // offset or scaled, and NavigationCacheMode can hand that same control back as a
+            // later page: NavigationHostLifecycle's instant-swap path (SuppressTransition, or a
+            // navigation with no outgoing page) adds a cached control to the tree without
+            // touching its visual, so a page cached mid-fade would return invisible. Doing this
+            // before onComplete would instead flash the old page at full opacity over the new
+            // one, since both are still children of the host Grid.
+            ReleaseAnimatedProperties(outVisual);
+            outVisual.Opacity = 1;
+            outVisual.Offset = Vector3.Zero;
+            outVisual.Scale = Vector3.One;
             batch.Dispose();
         };
 
@@ -127,6 +141,18 @@ internal static class TransitionEngine
         }
 
         batch.End();
+    }
+
+    /// <summary>
+    /// Hands the properties this engine animates back to direct assignment. A Composition
+    /// property remains under animation control once started — including after the animation
+    /// finishes — and writes to it are silently dropped until the animation is stopped.
+    /// </summary>
+    private static void ReleaseAnimatedProperties(Visual visual)
+    {
+        visual.StopAnimation("Opacity");
+        visual.StopAnimation("Offset");
+        visual.StopAnimation("Scale");
     }
 
     // ════════════════════════════════════════════════════════════════
