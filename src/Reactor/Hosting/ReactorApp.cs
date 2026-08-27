@@ -16,6 +16,14 @@ namespace Microsoft.UI.Reactor;
 /// <summary>
 /// Configuration for ReactorApp.Run. Scoped as a single record to avoid scattered static fields.
 /// </summary>
+/// <remarks>
+/// Parameter order groups the flat window-shape options together
+/// (<c>WindowTitle</c> through <c>WindowIcon</c>), then the alternate-entry fields that
+/// replace them wholesale: <c>Startup</c> for the multi-window entry, and
+/// <c>InitialWindowSpec</c> for the <c>Run(WindowSpec, ...)</c> overloads. Every
+/// construction site passes arguments by name, so the order is documentation rather
+/// than contract.
+/// </remarks>
 internal record ReactorAppOptions(
     Func<Component>? RootFactory = null,
     Func<RenderContext, Element>? RootRenderFunc = null,
@@ -24,9 +32,9 @@ internal record ReactorAppOptions(
     double? WindowWidth = null,
     double? WindowHeight = null,
     bool FullScreen = false,
+    WindowIcon? WindowIcon = null,
     Action<ReactorAppContext>? Startup = null,
-    WindowSpec? InitialWindowSpec = null,
-    WindowIcon? WindowIcon = null);
+    WindowSpec? InitialWindowSpec = null);
 
 public static partial class ReactorApp
 {
