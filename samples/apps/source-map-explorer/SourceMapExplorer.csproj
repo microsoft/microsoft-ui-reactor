@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>SourceMapExplorer</RootNamespace>
+    <AssemblyName>source-map-explorer</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    Spec 010 — NOTE WHAT IS *NOT* HERE.
+
+    This app sets no source-map property at all. ReactorSourceMap defaults to
+    true in Debug (see src/Reactor/build/Reactor.targets), so a plain
+    `dotnet run` gets per-element file:line with zero configuration — which is
+    the whole point of the feature and the thing this sample exists to prove.
+
+    Build it -c Release and every location reports "(none)": the interceptors
+    are not generated, and no source paths ship in the binary.
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+    <!--
+      In-repo projects consume Reactor by project reference, so they wire the
+      generator up by hand. A real consumer gets it automatically from the
+      analyzers/ folder of the Microsoft.UI.Reactor NuGet package.
+    -->
+    <ProjectReference Include="..\..\..\src\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      Condition="'$(ReactorSourceMap)' == 'true'" />
+  </ItemGroup>
+
+</Project>

@@ -269,6 +269,12 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/samples/apps/source-map-explorer/">
+    <Project Path="samples/apps/source-map-explorer/SourceMapExplorer.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/samples/apps/minesweeper/">
     <Project Path="samples/apps/minesweeper/Minesweeper.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
