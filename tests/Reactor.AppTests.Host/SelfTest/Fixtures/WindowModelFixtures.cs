@@ -154,16 +154,16 @@ internal static partial class WindowModelFixtures
                     Icon = WindowIcon.FromPath("Assets/SelfTestWindowIcon.ico"),
                 },
                 () => new StubComponent());
-            nint pathIcon;
-            try { pathIcon = IconOf(byPath); }
+            try
+            {
+                H.Check("WindowIcon_FromPath_Sets_HICON", IconOf(byPath) != 0);
+
+                // Removing an explicit icon must not strand its native handle. This host has
+                // no fallback source, so a successful clear is observable as zero.
+                byPath.Update(byPath.Spec with { Icon = null });
+                H.Check("WindowIcon_Removing_Explicit_Icon_Clears_HICON", IconOf(byPath) == 0);
+            }
             finally { await CloseAndSettle(byPath); }
-
-            H.Check("WindowIcon_FromPath_Sets_HICON", pathIcon != 0);
-
-            // Removing an explicit icon must not strand its native handle. This host has
-            // no fallback source, so a successful clear is observable as zero.
-            byPath.Update(byPath.Spec with { Icon = null });
-            H.Check("WindowIcon_Removing_Explicit_Icon_Clears_HICON", IconOf(byPath) == 0);
 
             // FromResource — the packaged spelling. The platform resolves the ms-appx URI
             // itself, including MRT qualifiers; Reactor passes it through untouched.
