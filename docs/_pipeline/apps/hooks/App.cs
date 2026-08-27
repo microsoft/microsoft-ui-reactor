@@ -154,7 +154,10 @@ class BackgroundSetterDemo : Component
                 }
                 catch (OperationCanceledException) { /* expected on cleanup */ }
             });
-            return () => { cts.Cancel(); };
+            // Cancel *and* dispose: the source owns a registration list and a wait handle.
+            // Disposing after Cancel is safe here because the token is already cancelled, so the
+            // loop's next WaitForNextTickAsync completes without touching the disposed source.
+            return () => { cts.Cancel(); cts.Dispose(); };
         });
 
         return TextBlock($"Elapsed: {seconds}s");
