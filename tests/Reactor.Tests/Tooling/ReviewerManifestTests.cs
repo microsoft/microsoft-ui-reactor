@@ -45,7 +45,12 @@ public class ReviewerManifestTests
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         Assert.True(
             doc.RootElement.TryGetProperty("batches", out var batches),
-            $"{ManifestRelativePath} has no 'batches' array — the manifest shape changed and this gate needs updating.");
+            $"{ManifestRelativePath} has no 'batches' property — the manifest shape changed and this gate needs updating.");
+        // Checked explicitly so a shape change reports this message rather than an
+        // InvalidOperationException from EnumerateArray().
+        Assert.True(
+            batches.ValueKind == JsonValueKind.Array,
+            $"{ManifestRelativePath} has a 'batches' property of kind {batches.ValueKind}, expected an array — the manifest shape changed and this gate needs updating.");
 
         return batches.EnumerateArray()
             .Select(b => (

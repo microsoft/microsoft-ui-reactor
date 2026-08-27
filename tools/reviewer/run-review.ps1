@@ -121,13 +121,15 @@ $SharedBatchFunctions = @'
 # Split a batch's declared files into those that actually exist and those that don't.
 # The reviewer never opens these files itself -- it asks an agent to -- so a path that
 # does not resolve is a file that cannot be reviewed, and must not be counted as one.
+# -PathType Leaf matters: the CI gate uses File.Exists, so accepting a directory here
+# would let the run report coverage the gate would reject.
 function Resolve-BatchFiles {
     param([string[]]$Files, [string]$Root)
 
     $resolved = [System.Collections.Generic.List[string]]::new()
     $missing = [System.Collections.Generic.List[string]]::new()
     foreach ($f in $Files) {
-        if (Test-Path -LiteralPath (Join-Path $Root $f)) { $resolved.Add($f) } else { $missing.Add($f) }
+        if (Test-Path -LiteralPath (Join-Path $Root $f) -PathType Leaf) { $resolved.Add($f) } else { $missing.Add($f) }
     }
     return [pscustomobject]@{
         Resolved = $resolved.ToArray()

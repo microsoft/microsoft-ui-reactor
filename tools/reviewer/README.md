@@ -181,7 +181,7 @@ several batches so different agents can review it from different angles):
 - `src/Reactor.Cli/` — CLI tool
 - `src/Reactor.Devtools/` — Devtools and preview server
 - `src/Reactor.Localization.Generator/` — Source generator
-- `src/vscode-reactor/` — VS Code extension
+- `src/vscode-reactor/src/` — VS Code extension sources
 - `tests/` — All test projects (reviewed for quality, not just correctness)
 - Build config (`Directory.Build.props`, `*.csproj`, `Reactor.slnx`)
 
