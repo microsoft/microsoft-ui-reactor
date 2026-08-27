@@ -117,8 +117,19 @@ dotnet test tests/Reactor.AppTests -p:Platform=x64
 Always pass `-p:Platform=x64` (AnyCPU app/test builds fail with *"WindowsAppSDKSelfContained
 requires a supported Windows architecture"*) and `-p:SkipSignaturesGen=true` on
 `Reactor.Tests` to dodge the `CS2012 …\intermediatexaml\Reactor.dll` race. If the race
-persists under parallel builds, escalate: prebuild `src/Reactor` first, then add `-m:1`
-`-nodereuse:false` and `$env:MSBUILDDISABLENODEREUSE='1'`.
+persists under parallel builds, escalate **on the `dotnet build` line only** — prebuild
+`src/Reactor` first, then add `-m:1 -nodereuse:false` (or set
+`$env:MSBUILDDISABLENODEREUSE='1'`) to the build — and keep running the suite through the
+separate `dotnet test … --no-build` line above.
+
+**Never move `-m:1` or `-nodereuse:false` onto a `dotnet test` command** (issue #1140):
+those are MSBuild-only switches, and `dotnet test` forwards every token it does not
+recognise to the **test executable**, which rejects it and exits 5 before running anything.
+Nothing prints why — you just get `Zero tests ran / total: 0 / failed: 0 / skipped: 0`,
+which reads green, so a coverage run reports no failures while measuring nothing. The tell
+is the module label: `net10.0-windows10.0.22621.0` instead of `net10.0|x64`. `-p:…` is a
+real `dotnet test` option and is safe, as is the `MSBUILDDISABLENODEREUSE` environment
+variable. See `TESTING.md` → *MSBuild switches are not `dotnet test` switches*.
 
 E2E input needs an interactive desktop: if `SendInput`/`GetCursorPos` return
 `ACCESS_DENIED (err 5)` your local session can't inject input — validate the fixture over

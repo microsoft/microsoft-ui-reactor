@@ -63,6 +63,53 @@ packages are already referenced by the projects that need them.
 > `--filter-class "*SwallowedErrorAudit*"` both select the same 11 tests, and
 > `--filter-class` against `tests/Reactor.SelfTests` exits 5.
 
+### MSBuild switches are not `dotnet test` switches
+
+`dotnet test` does **not** hand leftover arguments to MSBuild. The SDK composes its MSBuild
+command line only from the options it recognises; every token it does *not* recognise is
+appended to the **test executable's own** command line, where MTP rejects it as an unknown
+option and exits **5 (`InvalidCommandLine`)** before a single test runs.
+
+The rule is simply *"if `dotnet test --help` doesn't list it, it goes to the test app"* —
+so check there when in doubt rather than assuming an MSBuild switch carries over.
+
+| Reaches MSBuild — safe | Goes to the test app — breaks the run |
+|---|---|
+| `-p:` / `--property`, `-c`, `-f`, `-r`, `-a` / `--arch`, `--os`, `-v`, `-e`, `--no-build`, `--no-restore`, and `-bl` | `-m` / `-maxcpucount`, `-nodereuse` / `-nr`, `--nologo`, `-t:` / `-target:`, `-warnaserror`, and every other MSBuild-only switch |
+
+`--nologo` is in the right-hand column on purpose: it is a real `dotnet build` switch and
+reads like a harmless one, but `dotnet test` does not recognise it, so it kills the run
+exactly like `-m:1` does. `-bl` is the one exception — the SDK lifts binlog arguments out
+before forwarding the rest.
+
+Environment variables are not argv tokens, so `MSBUILDDISABLENODEREUSE=1` is safe — it
+reaches MSBuild and never reaches the test host.
+
+So when a build needs `-m:1 -nodereuse:false` (the `CS2012 …\intermediatexaml\Reactor.dll`
+race — see [`AGENTS.md`](AGENTS.md) field notes), split the command in two:
+
+```bash
+dotnet build tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64
+```
+
+**Recognising the failure.** Nothing prints *why* the command line was rejected — the test
+host's message is not surfaced — so the run looks like this, and the summary prose scans as
+green even though nothing ran:
+
+```text
+...\Reactor.Tests.dll (net10.0-windows10.0.22621.0) Zero tests ran
+Test run summary: Zero tests ran
+  error: 1
+  total: 0   failed: 0   succeeded: 0   skipped: 0
+```
+
+The reliable tell is the module label. A run that started prints the handshake-derived
+`net10.0|x64`; a rejected one falls back to the project's full
+`net10.0-windows10.0.22621.0`, because the test host died before its handshake. Exit 5 is
+*invalid command line* — the same code MSTest returns for `--filter-class` above — and is
+**not** MTP's zero-tests policy, which is exit 8. (Issue #1140.)
+
 ## When to write which test
 
 | If you're testing… | Write a… |
