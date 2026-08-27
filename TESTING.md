@@ -92,8 +92,9 @@ run exactly like `-m:1`. Conversely `-t:`/`-target:` **is** accepted, even thoug
 whether a flag is safe. When in doubt, run the command against a known-passing filter and
 check that the test count is non-zero.
 
-Environment variables are not argv tokens, so `MSBUILDDISABLENODEREUSE=1` is safe — it
-reaches MSBuild and never reaches the test host.
+Environment variables are not argv tokens, so `MSBUILDDISABLENODEREUSE=1` is safe. The test
+host does inherit it — child processes inherit the environment — but it is never parsed as
+an MTP option, which is what the rejection above turns on.
 
 So when a build needs `-m:1 -nodereuse:false` (the `CS2012 …\intermediatexaml\Reactor.dll`
 race — see [`AGENTS.md`](AGENTS.md) field notes), split the command in two:
