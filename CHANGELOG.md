@@ -27,16 +27,12 @@ Conventions for contributors:
 ## [Unreleased]
 
 ### Added
-- **`MinSize(double min)`, `MaxSize(double max)` and `MinMaxSize(double min, double max)` (issue #1106).**
+- **`MinSize(double min)` and `MaxSize(double max)` (issue #1106).**
   Added fluent extension for `GridSize` to allow for defining minimum and maximum sizes. 
 
 ### Changed
 - **`GridSize` Allow for min and max size (issue 1106).**
   Changed the base constructor to `GridSize(double value, GridUnitType type, double? min = null, double? max = null)` to accomodate passing in the min and max value for `GridSize`. This will be passed on to WinUI's `ColumnDefinition` or `RowDefinition`. The old constructor is still valid but has no way of passing in min and max values.
-- **`GridSize` Explicit value and boundary checks.**
-  The new constructor for `GridSize` validates passed in values and does a boundary check on min and max sizes when passed in. It also rejects invalid values when the string constructor is used. For example, `new GridDefinition(["This is not a grid"], ["*"])` now fails with a `FormatException`.  
-- **`GridSize` removed init.**
-  All values are set in the constructor and the `init` was removed for `Value` and `GridUnitType`. As a result you can no longer initialize an record using `with { Value = ...}`. 
 
 ### Deprecated
 

@@ -2768,12 +2768,13 @@ GetHashCode() → int
 ToString() → string
 
 ### struct GridSize
-new(double value, GridUnitType type, double? min = null, double? max = null)
+new(double Value, GridUnitType Type, double? Min = null, double? Max = null)
 GridSize Auto { get; }
-GridUnitType Type { get; }
-double Max { get; }
-double Min { get; }
-double Value { get; }
+GridUnitType Type { get; init; }
+double Value { get; init; }
+double? Max { get; init; }
+double? Min { get; init; }
+Deconstruct(ref double Value, ref GridUnitType Type, ref double? Min, ref double? Max) → void
 Equals(GridSize other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -2784,7 +2785,6 @@ ToString() → string
 
 ### static class GridSizeExtensions
 GridSize.MaxSize(double max) → GridSize
-GridSize.MinMaxSize(double min, double max) → GridSize
 GridSize.MinSize(double min) → GridSize
 
 ### record GridViewElement

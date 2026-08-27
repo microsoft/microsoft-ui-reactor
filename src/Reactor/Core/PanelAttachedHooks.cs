@@ -64,8 +64,12 @@ public partial record GridElement
             _ => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
         };
 
-        colDef.MinWidth = def.Min;
-        colDef.MaxWidth = def.Max;
+        if(def.Min is not null)
+            colDef.MinWidth = def.Min.Value;
+
+        if(def.Max is not null)
+            colDef.MaxWidth = def.Max.Value;
+
         return colDef;
     }
 
@@ -78,8 +82,13 @@ public partial record GridElement
             GridUnitType.Pixel => new WinUI.RowDefinition { Height = new GridLength(def.Value) },
             _ => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) }
         };
-        rowDef.MinHeight = def.Min;
-        rowDef.MaxHeight = def.Max;
+
+        if(def.Min is not null)
+            rowDef.MinHeight = def.Min.Value;
+
+        if(def.Max is not null)
+            rowDef.MaxHeight = def.Max.Value;
+
         return rowDef;
     }
 

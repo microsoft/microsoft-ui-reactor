@@ -28,38 +28,8 @@ namespace Microsoft.UI.Reactor;
 /// <exception cref="ArgumentOutOfRangeException">Thrown when <c>GridType</c> is set to <c>Pixel</c> and the <c>Value</c> is &lt; 0, or when the GridType is set to <c>Star</c> and the <c>Value</c> is &lt;= 0.</exception>
 /// <exception cref="ArgumentOutOfRangeException">Thrown when the <c>Value</c>, <c>Min</c>, or <c>Max</c> properties are out of range.</exception>
 [DebuggerDisplay("{ToString(),nq}")]
-public readonly record struct GridSize
+public readonly record struct GridSize(double Value, GridUnitType Type, double? Min = null, double? Max = null)
 {
-    private readonly double? _min;
-    private readonly double? _max;
-    public double Value { get; }
-    public GridUnitType Type { get; }
-    public double Min => _min ?? 0;
-    public double Max => _max ?? double.PositiveInfinity;  
-    public GridSize(double value, GridUnitType type, double? min = null, double? max = null)
-    {
-        if (type == GridUnitType.Pixel && value < 0)
-            throw new ArgumentOutOfRangeException(nameof(value), value, "Pixel size must be >= 0.");
-        
-        if (type == GridUnitType.Star && value <= 0)
-            throw new ArgumentOutOfRangeException(nameof(value), value, "Star weight must be > 0.");
-
-        if (min is not null and < 0)
-            throw new ArgumentOutOfRangeException(nameof(min), min, "Min size must be >= 0.");
-        
-        if (max is not null and < 0)
-            throw new ArgumentOutOfRangeException(nameof(max), max, "Max size must be >= 0.");
-        
-        if (max < min)
-            throw new ArgumentOutOfRangeException(nameof(max), max, "Max size must be >= Min size.");
-        
-        Value = value;
-        Type = type;
-        _min = min;
-        _max = max;
-    }
-
-
     /// <summary>The auto-sized track. Equivalent to the WinUI <c>Auto</c> length.</summary>
     public static GridSize Auto { get; } = new(1, GridUnitType.Auto);
 
@@ -68,11 +38,21 @@ public readonly record struct GridSize
     /// 1.5 produces <c>"1.5*"</c>, 0.33 produces <c>"0.33*"</c>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="weight"/> is &lt;= 0.</exception>
-    public static GridSize Star(double weight = 1) => new(weight, GridUnitType.Star);
+    public static GridSize Star(double weight = 1)
+    {
+        if (!(weight > 0))
+            throw new ArgumentOutOfRangeException(nameof(weight), weight, "Star weight must be > 0.");
+        return new GridSize(weight, GridUnitType.Star);
+    }
 
     /// <summary>A pixel-sized track. <paramref name="pixels"/> must be &gt;= 0.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="pixels"/> is &lt; 0.</exception>
-    public static GridSize Px(double pixels) => new(pixels, GridUnitType.Pixel);
+    public static GridSize Px(double pixels)
+    {
+        if (pixels < 0)
+            throw new ArgumentOutOfRangeException(nameof(pixels), pixels, "Pixel size must be >= 0.");
+        return new GridSize(pixels, GridUnitType.Pixel);
+    }
 
     /// <summary>
     /// Implicit conversion to <see cref="GridLength"/> so the typed form composes

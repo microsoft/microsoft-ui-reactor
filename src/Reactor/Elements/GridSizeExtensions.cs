@@ -20,13 +20,4 @@ public static class GridSizeExtensions
     /// <param name="max">The maximum size value to set.</param>
     /// <returns>A new <see cref="GridSize"/> instance with the <c>Max</c> property set.</returns>
     public static GridSize MaxSize(this GridSize size, double max) => new (size.Value, size.Type, size.Min, max);
-
-    /// <summary>
-    /// Sets both the <c>Min</c> and <c>Max</c> properties of a <see cref="GridSize"/> instance.
-    /// </summary>
-    /// <param name="size">The <see cref="GridSize"/> instance to modify.</param>
-    /// <param name="min">The minimum size value to set.</param>
-    /// <param name="max">The maximum size value to set.</param>
-    /// <returns>A new <see cref="GridSize"/> instance with the <c>Min</c> and <c>Max</c> properties set.</returns>
-    public static GridSize MinMaxSize(this GridSize size, double min, double max) => new (size.Value, size.Type, min, max);
 }
