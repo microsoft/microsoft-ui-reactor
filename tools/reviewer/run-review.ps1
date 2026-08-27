@@ -282,9 +282,8 @@ $result
     catch {
         Write-Warning "  [$batchId] FAILED: $_"
         @"
-# Review Report: $batchId
+$(New-ReportHeader -BatchId $batchId -AgentName $agentName -Description $BatchObj.description -Scan $scan)
 
-**Agent**: $agentName
 **Status**: FAILED
 **Error**: $_
 "@ | Set-Content $reportPath -Encoding UTF8
@@ -384,7 +383,12 @@ $result
             }
             catch {
                 Write-Warning "  [$batchId] FAILED: $_"
-                "# Review Report: $batchId`n**Status**: FAILED`n**Error**: $_" | Set-Content $reportPath
+                @"
+$(New-ReportHeader -BatchId $batchId -AgentName $agentName -Description $BatchObj.description -Scan $scan)
+
+**Status**: FAILED
+**Error**: $_
+"@ | Set-Content $reportPath -Encoding UTF8
             }
         }
     }
@@ -495,7 +499,12 @@ $result
             }
             catch {
                 Write-Warning "  [$batchId] FAILED: $_"
-                "# Review Report: $batchId`n**Status**: FAILED`n**Error**: $_" | Set-Content $reportPath
+                @"
+$(New-ReportHeader -BatchId $batchId -AgentName 'general' -Description $BatchObj.description -Scan $scan)
+
+**Status**: FAILED
+**Error**: $_
+"@ | Set-Content $reportPath -Encoding UTF8
             }
         }
     }
