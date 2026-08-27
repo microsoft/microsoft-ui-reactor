@@ -211,7 +211,7 @@ public partial record NavigationViewElement
         NavigationViewElement element,
         bool isSettingsSelected,
         string? tag,
-        Navigation.NavigationTransition transition)
+        Navigation.NavigationTransition? transition)
     {
         if (isSettingsSelected)
         {
@@ -231,7 +231,7 @@ public partial record NavigationViewElement
             element.OnSelectedTagChangedWithTransition?.Invoke(tag, transition);
     }
 
-    internal static Navigation.NavigationTransition GetRecommendedNavigationTransition(
+    internal static Navigation.NavigationTransition? GetRecommendedNavigationTransition(
         global::Microsoft.UI.Xaml.Media.Animation.NavigationTransitionInfo? transitionInfo) =>
         transitionInfo switch
         {
@@ -243,9 +243,13 @@ public partial record NavigationViewElement
                 Navigation.NavigationTransition.DrillIn(),
             global::Microsoft.UI.Xaml.Media.Animation.SuppressNavigationTransitionInfo =>
                 Navigation.NavigationTransition.None,
-            // Null, or a NavigationTransitionInfo Reactor has no counterpart for: fall back to
-            // whatever the host default is rather than guessing at a motion.
-            _ => Navigation.NavigationTransition.Default,
+            // Null, or a NavigationTransitionInfo Reactor has no counterpart for. Return null
+            // rather than NavigationTransition.Default: the caller turns a non-null value into
+            // an explicit NavigateOptions.Transition, and a per-navigation override outranks
+            // the host's own Transition (NavigationHostLifecycle: `transitionOverride ??
+            // node.HostTransition`). Answering "no recommendation" with the framework default
+            // would silently defeat a host that asked for, say, DrillIn.
+            _ => null,
         };
 
     internal static Navigation.NavigationTransition GetRecommendedSlideTransition(

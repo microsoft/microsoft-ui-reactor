@@ -57,9 +57,17 @@ public abstract record NavigationTransition
     public static NavigationTransition Entrance() => new EntranceTransition();
 
     /// <summary>
-    /// WinUI slide transition. Supplying duration, easing, or distance opts into
-    /// Reactor's customizable simultaneous slide behavior.
+    /// Slide transition. With no arguments this is WinUI's slide specification — vertical,
+    /// 600 ms, exponential easing.
     /// </summary>
+    /// <remarks>
+    /// Supplying <paramref name="duration"/>, <paramref name="easing"/>, or
+    /// <paramref name="distance"/> switches to Reactor's customizable simultaneous slide,
+    /// which is a structurally different animation — not the WinUI slide with one value
+    /// changed. <see cref="SlideDirection.FromTop"/> is Reactor-only and always takes that
+    /// path. Note the default direction is <see cref="SlideDirection.FromBottom"/>; pass
+    /// <see cref="SlideDirection.FromRight"/> explicitly for a horizontal push.
+    /// </remarks>
     public static NavigationTransition Slide(
         SlideDirection direction = SlideDirection.FromBottom,
         TimeSpan? duration = null,

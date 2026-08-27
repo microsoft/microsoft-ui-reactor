@@ -40,8 +40,19 @@ internal static class TransitionEngine
         var compositor = outVisual.Compositor;
         var usesCenterPointBinding = transition is DrillInTransition;
         var suppressesHitTesting = transition is SlideTransition;
-        var outgoingWasHitTestVisible = outgoing.IsHitTestVisible;
-        var incomingWasHitTestVisible = incoming.IsHitTestVisible;
+
+        // Unknown transition type — NavigationTransition is a public abstract record, so a
+        // third party can subclass it. Handle it before the scoped batch exists: there is
+        // nothing to animate, and an early return past a subscribed batch would leak it.
+        if (transition is not (EntranceTransition or SlideTransition or FadeTransition
+            or DrillInTransition or SpringSlideTransition or ConnectedTransition))
+        {
+            inVisual.Opacity = 1;
+            inVisual.Offset = Vector3.Zero;
+            inVisual.Scale = Vector3.One;
+            onComplete();
+            return;
+        }
 
         // Reset stale compositor properties from previous animations
         inVisual.Offset = Vector3.Zero;
@@ -49,8 +60,8 @@ internal static class TransitionEngine
 
         if (suppressesHitTesting)
         {
-            outgoing.IsHitTestVisible = false;
-            incoming.IsHitTestVisible = false;
+            SuppressHitTesting(outgoing);
+            SuppressHitTesting(incoming);
         }
 
         if (usesCenterPointBinding)
@@ -62,6 +73,31 @@ internal static class TransitionEngine
         }
 
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+
+        // Subscribe before End(). A scoped batch can complete synchronously inside End()
+        // — most obviously when it captured no animations — and a handler attached
+        // afterwards would never run, stranding the navigation: the outgoing page would
+        // never be cached or unmounted, onNavigatedTo/From would never fire, and a
+        // hit-test-suppressed page would stay unclickable.
+        batch.Completed += (_, _) =>
+        {
+            // Finalize: ensure incoming is fully visible, reset outgoing
+            inVisual.Opacity = 1;
+            inVisual.Offset = Vector3.Zero;
+            inVisual.Scale = Vector3.One;
+            if (usesCenterPointBinding)
+            {
+                outVisual.StopAnimation("CenterPoint");
+                inVisual.StopAnimation("CenterPoint");
+            }
+            if (suppressesHitTesting)
+            {
+                RestoreHitTesting(outgoing);
+                RestoreHitTesting(incoming);
+            }
+            onComplete();
+            batch.Dispose();
+        };
 
         switch (transition)
         {
@@ -88,33 +124,58 @@ internal static class TransitionEngine
                 global::System.Diagnostics.Debug.WriteLine("[Reactor] ConnectedTransition not yet implemented; falling back to EntranceTransition.");
                 RunEntrance(compositor, outVisual, inVisual, mode);
                 break;
-            default:
-                // Unknown transition — instant swap
-                inVisual.Opacity = 1;
-                onComplete();
-                return;
         }
 
         batch.End();
-        batch.Completed += (_, _) =>
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Hit-test suppression
+    //
+    //  Slide transitions make both pages non-hit-testable while they animate. Navigations
+    //  can overlap (double-clicking a NavigationView item is enough), so this is nest-aware:
+    //  the value from *before* any suppression is recorded once and restored only when the
+    //  last overlapping transition finishes. Snapshotting `IsHitTestVisible` per transition
+    //  instead would let the second transition capture the first one's `false` and restore
+    //  that — and a page cached by NavigationCacheMode would come back permanently
+    //  unclickable.
+    // ════════════════════════════════════════════════════════════════
+
+    private sealed class HitTestSuppression
+    {
+        public bool OriginalValue;
+        public int Depth;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, HitTestSuppression>
+        _hitTestSuppressions = new();
+
+    internal static void SuppressHitTesting(UIElement element)
+    {
+        if (_hitTestSuppressions.TryGetValue(element, out var existing))
         {
-            // Finalize: ensure incoming is fully visible, reset outgoing
-            inVisual.Opacity = 1;
-            inVisual.Offset = Vector3.Zero;
-            inVisual.Scale = Vector3.One;
-            if (usesCenterPointBinding)
+            existing.Depth++;
+        }
+        else
+        {
+            _hitTestSuppressions.Add(element, new HitTestSuppression
             {
-                outVisual.StopAnimation("CenterPoint");
-                inVisual.StopAnimation("CenterPoint");
-            }
-            if (suppressesHitTesting)
-            {
-                outgoing.IsHitTestVisible = outgoingWasHitTestVisible;
-                incoming.IsHitTestVisible = incomingWasHitTestVisible;
-            }
-            onComplete();
-            batch.Dispose();
-        };
+                OriginalValue = element.IsHitTestVisible,
+                Depth = 1,
+            });
+        }
+
+        element.IsHitTestVisible = false;
+    }
+
+    internal static void RestoreHitTesting(UIElement element)
+    {
+        if (!_hitTestSuppressions.TryGetValue(element, out var state)) return;
+
+        if (--state.Depth > 0) return;
+
+        _hitTestSuppressions.Remove(element);
+        element.IsHitTestVisible = state.OriginalValue;
     }
 
     // ════════════════════════════════════════════════════════════════

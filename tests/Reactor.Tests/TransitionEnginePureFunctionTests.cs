@@ -5,14 +5,26 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Tests for TransitionEngine's pure helper functions: ReverseDirection and GetSlideOffsets.
-/// These are the core direction-resolution and offset-calculation algorithms used by all
-/// slide and spring-slide transitions during page navigation.
+/// Tests for TransitionEngine's pure helper functions: ReverseDirection, GetSlideOffsets,
+/// and the Push/Pop plan builders.
+///
+/// <para>
+/// A note on the constant tests below. They are <b>pinning</b> tests: they compare a
+/// constant against a literal copy of itself, so they fail only when someone edits the
+/// constant. They deliberately do <b>not</b> establish parity with WinUI — nothing in this
+/// repo can, because the values WinUI uses for its entrance / slide / drill-in animations
+/// live in a generated theme-animation table (<c>TAS_ENTERPAGE</c> / <c>TA_ENTERPAGE_TARGET</c>)
+/// that is not part of the public microsoft-ui-xaml source. Their purpose is to make a
+/// change to a tuned motion constant deliberate and reviewable, not to detect drift from
+/// WinUI. If WinUI retunes its animations, these tests keep passing and Reactor keeps the
+/// old values — an accepted consequence of rendering transitions on the Composition layer
+/// rather than through a WinUI Frame (see docs/specs/011-navigation-design.md, Appendix C).
+/// </para>
 /// </summary>
 public class TransitionEnginePureFunctionTests
 {
     [Fact]
-    public void EntranceTransition_Matches_WinUI_Timing_And_Distance()
+    public void Entrance_Motion_Constants_Are_Pinned()
     {
         Assert.Equal(140f, TransitionEngine.EntranceTranslationOffset);
         Assert.Equal(TimeSpan.FromMilliseconds(150), TransitionEngine.EntranceExitDuration);
@@ -160,7 +172,7 @@ public class TransitionEnginePureFunctionTests
     }
 
     [Fact]
-    public void HorizontalSlide_Matches_WinUI_Timing_Distance_And_Easing()
+    public void HorizontalSlide_Motion_Constants_Are_Pinned()
     {
         Assert.Equal(150f, TransitionEngine.HorizontalSlideExitOffset);
         Assert.Equal(200f, TransitionEngine.HorizontalSlideEntranceOffset);
@@ -177,7 +189,7 @@ public class TransitionEnginePureFunctionTests
     [InlineData(SlideDirection.FromRight, NavigationMode.Push, -150f, 200f)]
     [InlineData(SlideDirection.FromLeft, NavigationMode.Pop, -200f, 150f)]
     [InlineData(SlideDirection.FromRight, NavigationMode.Pop, 200f, -150f)]
-    public void HorizontalSlide_Uses_WinUI_Forward_And_Back_Offsets(
+    public void HorizontalSlidePlan_Reverses_Offsets_Between_Push_And_Pop(
         SlideDirection direction, NavigationMode mode, float outX, float inX)
     {
         var plan = TransitionEngine.GetHorizontalSlidePlan(direction, mode);
@@ -187,7 +199,7 @@ public class TransitionEnginePureFunctionTests
     }
 
     [Fact]
-    public void VerticalSlide_Matches_WinUI_Timeline()
+    public void VerticalSlide_Motion_Constants_Are_Pinned()
     {
         Assert.Equal(200f, TransitionEngine.VerticalSlideOffset);
         Assert.Equal(6f, TransitionEngine.VerticalSlideExponent);
@@ -196,7 +208,7 @@ public class TransitionEnginePureFunctionTests
     }
 
     [Fact]
-    public void DrillIn_Forward_Phases_Match_WinUI()
+    public void DrillInPlan_Push_Grows_Outgoing_And_Shrinks_Incoming()
     {
         var plan = TransitionEngine.GetDrillInPlan(NavigationMode.Push);
 
@@ -211,7 +223,7 @@ public class TransitionEnginePureFunctionTests
     }
 
     [Fact]
-    public void DrillIn_Back_Phases_Match_WinUI()
+    public void DrillInPlan_Pop_Shrinks_Outgoing_And_Grows_Incoming()
     {
         var plan = TransitionEngine.GetDrillInPlan(NavigationMode.Pop);
 
@@ -226,7 +238,7 @@ public class TransitionEnginePureFunctionTests
     }
 
     [Fact]
-    public void DrillIn_Opacity_Easing_Matches_WinUI()
+    public void DrillIn_Opacity_Easing_Constants_Are_Pinned()
     {
         Assert.Equal(new Vector2(0.17f, 0.17f), TransitionEngine.DrillInOpacityEasingControlPoint1);
         Assert.Equal(new Vector2(0.0f, 1.0f), TransitionEngine.DrillInOpacityEasingControlPoint2);

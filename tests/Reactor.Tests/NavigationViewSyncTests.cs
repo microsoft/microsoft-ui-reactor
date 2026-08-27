@@ -137,14 +137,27 @@ public class NavigationViewSyncTests
     }
 
     [Fact]
-    public void Missing_Recommendation_Falls_Back_To_The_Host_Default()
+    public void Missing_Recommendation_Leaves_The_Host_Transition_Alone()
     {
         // A null recommendation means "WinUI didn't tell us", not "WinUI asked for entrance".
-        // The recognised infos are mapped to named motions in the selftest tier, because
-        // NavigationTransitionInfo cannot be constructed without a live WinUI application.
-        var transition = NavigationViewElement.GetRecommendedNavigationTransition(null);
+        // It must stay null: WithNavigation turns a non-null value into an explicit
+        // NavigateOptions.Transition, which outranks NavigationHost's own Transition.
+        Assert.Null(NavigationViewElement.GetRecommendedNavigationTransition(null));
+    }
 
-        Assert.Same(NavigationTransition.Default, transition);
+    [Fact]
+    public void Missing_Recommendation_Does_Not_Override_The_Hosts_Transition()
+    {
+        var stack = new NavigationStack<Route>(new Home());
+        var nav = new NavigationHandle<Route>(stack);
+
+        var el = NavigationView([NavItem("Home", tag: "home"), NavItem("Settings", tag: "settings")])
+            .WithNavigation(nav, RouteToTag, TagToRoute);
+
+        el.OnSelectedTagChangedWithTransition!("settings", null);
+
+        Assert.IsType<Settings>(nav.CurrentRoute);
+        Assert.Null(((INavigationHandle)nav).PendingTransitionOverride);
     }
 
     [Fact]

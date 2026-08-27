@@ -367,12 +367,61 @@ internal static class NavigationCoverageFixtures
                 "NavRecTrans_Slide",
                 slide is SlideTransition sl && sl.Direction == SlideDirection.FromRight);
 
-            // A recognised entrance recommendation must not be answered by the generic
-            // "we don't know" arm — those coincide today only because Default is entrance.
-            H.Check("NavRecTrans_Entrance_Not_Fallback", !ReferenceEquals(entrance, NavigationTransition.Default));
+            // An unrecognised info must map to null, not to Default — a non-null value becomes
+            // an explicit per-navigation override that outranks the host's own Transition.
+            var unknown = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.ContinuumNavigationTransitionInfo());
+            H.Check("NavRecTrans_Unknown_Is_Null", unknown is null);
 
             var host = H.CreateHost();
             host.Mount(ctx => TextBlock("Recommended transitions done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6c. TransitionEngine hit-test suppression — nesting behaviour
+    //      Targets: SuppressHitTesting / RestoreHitTesting. Overlapping navigations
+    //      must not leave a page permanently unclickable. Needs a live UIElement,
+    //      so it cannot run headless.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavHitTestSuppressionNesting(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var page = new Border();
+            H.Check("NavHitTest_StartsVisible", page.IsHitTestVisible);
+
+            // First transition suppresses.
+            TransitionEngine.SuppressHitTesting(page);
+            H.Check("NavHitTest_SuppressedOnce", !page.IsHitTestVisible);
+
+            // A second, overlapping transition suppresses the same page.
+            TransitionEngine.SuppressHitTesting(page);
+            H.Check("NavHitTest_SuppressedTwice", !page.IsHitTestVisible);
+
+            // The first finishing must NOT re-enable it — the second is still running.
+            TransitionEngine.RestoreHitTesting(page);
+            H.Check("NavHitTest_StillSuppressedAfterFirstRestore", !page.IsHitTestVisible);
+
+            // Only the last one restores. Naive per-transition snapshotting would capture the
+            // first transition's `false` here and restore that, leaving the page dead forever.
+            TransitionEngine.RestoreHitTesting(page);
+            H.Check("NavHitTest_RestoredAfterLastRestore", page.IsHitTestVisible);
+
+            // An unbalanced restore is a no-op rather than flipping the value.
+            TransitionEngine.RestoreHitTesting(page);
+            H.Check("NavHitTest_ExtraRestoreIsNoOp", page.IsHitTestVisible);
+
+            // An element the app itself made non-hit-testable keeps that value.
+            var inert = new Border { IsHitTestVisible = false };
+            TransitionEngine.SuppressHitTesting(inert);
+            TransitionEngine.RestoreHitTesting(inert);
+            H.Check("NavHitTest_PreservesAuthorFalse", !inert.IsHitTestVisible);
+
+            var host2 = H.CreateHost();
+            host2.Mount(ctx => TextBlock("Hit-test suppression done"));
             await Harness.Render();
         }
     }

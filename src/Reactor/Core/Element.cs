@@ -4674,8 +4674,8 @@ public partial record NavigationViewElement(
 
     public string? SelectedTag { get; init; }
     public Action<string?>? OnSelectedTagChanged { get; init; }
-    internal Action<string?, Navigation.NavigationTransition>? OnSelectedTagChangedWithTransition { get; init; }
-    internal Action<Navigation.NavigationTransition>? OnSettingsSelectedWithTransition { get; init; }
+    internal Action<string?, Navigation.NavigationTransition?>? OnSelectedTagChangedWithTransition { get; init; }
+    internal Action<Navigation.NavigationTransition?>? OnSettingsSelectedWithTransition { get; init; }
     /// <summary>
     /// Raised when NavigationView's built-in settings item becomes selected — by the user,
     /// or by setting <see cref="SelectedTag"/> to <see cref="SettingsTag"/>. Distinguishes the

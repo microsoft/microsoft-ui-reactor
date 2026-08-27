@@ -28,6 +28,13 @@ Conventions for contributors:
 
 ### Added
 
+- **`NavigationTransition.Entrance()` — the WinUI page-refresh motion as a first-class
+  transition (spec 011 §6).** The incoming page slides up a short distance and fades in,
+  mirroring WinUI's `EntranceNavigationTransitionInfo`. `EntranceTransition` is public and
+  pattern-matchable like every other transition record. Prefer `Entrance()` when you mean the
+  motion; `NavigationTransition.Default` is a *policy* alias meaning "whatever Reactor
+  defaults to", and a call site that means the entrance animation should not silently follow a
+  future change of default.
 - **`TitleLarge()` and `Display()` type-ramp factories (spec 039 §17.6).** Extend the
   named-style factory set alongside `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`,
   mapping to `TitleLargeTextBlockStyle` (40px Semibold) and `DisplayTextBlockStyle`
@@ -37,6 +44,31 @@ Conventions for contributors:
 
 ### Changed
 
+- **`NavigationTransition.Default` is now the entrance motion, not a slide from the right
+  (spec 011 §6, issue #1144).** A WinUI `Frame` navigated with no `NavigationTransitionInfo`
+  plays `EntranceNavigationTransitionInfo`, so a Reactor app now animates like its WinUI XAML
+  counterpart out of the box. Slide-from-right is the iOS `UINavigationController`
+  convention; an earlier revision of spec 011 described it as the "platform default", which
+  was wrong for Windows. Apps that want the old motion can ask for
+  `NavigationTransition.Slide(SlideDirection.FromRight)` explicitly.
+- **`NavigationTransition.Slide()` defaults to `FromBottom` and follows WinUI's motion
+  specification (spec 011 §6).** The parameterless call was previously a 250 ms horizontal
+  slide; it is now WinUI's vertical slide. **Passing any of `duration`, `distance`, or
+  `easing` opts out of the WinUI specification** and back into Reactor's customizable
+  simultaneous slide — so `Slide(duration: …)` is not "the WinUI slide but slower", it is a
+  structurally different animation. `SlideDirection.FromTop` is Reactor-only and always takes
+  the custom path. `NavigationTransition.Spring(...)` keeps its horizontal `FromRight`
+  default: it is a Reactor extension with no WinUI counterpart.
+- **`DrillIn()` follows WinUI's scale, timing, and opacity staging (spec 011 §6).** Passing an
+  explicit `duration` keeps Reactor's older symmetric behavior.
+- **`NavigationView` forwards its recommended transition through `WithNavigation` (spec 011
+  §6).** Pane navigation uses the entrance motion and top navigation slides horizontally
+  according to the selected item's position, matching WinUI. When WinUI supplies no
+  recommendation, the host's own `Transition` still applies.
+- **`NavigationTransition.Connected()`'s unimplemented stub falls back to the entrance
+  motion rather than a slide (spec 011 §6).** Shared-element animation is still deferred; the
+  previous fallback constructed a default `SlideTransition`, which silently became a 600 ms
+  vertical slide once `Slide` adopted WinUI's specification.
 - **`.ApplyStyle()` reports an unresolved style key instead of throwing (spec 044 §6.1).**
   A missing key — or one that resolves to something that is not a `Style` — previously threw
   out of the mount action, which `Reconciler.ApplyModifiers` invokes unguarded, failing the
