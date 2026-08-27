@@ -915,23 +915,26 @@ public sealed class ReactorWindow : IDisposable
     /// </remarks>
     private void TryApplyExeIconFallback()
     {
+        // Load first, outside the try: both loaders are non-throwing (the DllImports
+        // return 0 on failure and LoadConventionAssetIcon guards its own file probe).
+        var hIcon = LoadConventionAssetIcon();
+        if (hIcon == 0) hIcon = LoadExecutablePeIcon();
+        if (hIcon == 0) return;
+
         try
         {
-            var hIcon = LoadConventionAssetIcon();
-            if (hIcon == 0) hIcon = LoadExecutablePeIcon();
-            if (hIcon == 0) return;
-
             var iconId = Microsoft.UI.Win32Interop.GetIconIdFromIcon(hIcon);
             _appWindow.SetIcon(iconId);
-            // Stash the HICON for Dispose to free — see field comment for
-            // ownership rationale.
+            // Ownership transfers to the window here — Dispose frees it. Assigned only
+            // after SetIcon succeeds, so the catch below still owns the handle.
             _exeFallbackHIcon = hIcon;
         }
         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         {
-            // _appWindow.SetIcon during teardown reentry — the only WinRT call
-            // in the try that can plausibly fail here. LoadImageW returns 0 on
-            // failure (handled inline) and GetIconIdFromIcon is non-throwing.
+            // SetIcon failed, so the handle was never handed over and nothing else
+            // will free it. Destroy it here rather than leaking it for the process
+            // lifetime. DestroyIcon is a [DllImport] bool and cannot throw.
+            NativeIcon.DestroyIcon(hIcon);
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
         }
     }

@@ -109,9 +109,12 @@ internal static class WindowModelFixtures
     /// no <c>&lt;ApplicationIcon&gt;</c> and no <c>Assets\AppIcon.ico</c>, so a window with
     /// no declared icon has nothing to fall back to and reports <c>HICON == 0</c>. That
     /// zero is the control: it proves the probe can observe the broken state, so the
-    /// non-zero readings below are measurements rather than tautologies.</para>
-    /// <para>If someone later gives this host an icon, <c>WindowIcon_Control_NoIcon_IsZero</c>
-    /// fails loudly instead of the remaining checks quietly going vacuous.</para>
+    /// non-zero readings are measurements rather than tautologies.</para>
+    /// <para>The convention-fallback checks create <c>Assets\AppIcon.ico</c> at runtime and
+    /// delete it afterwards, so they differ from the control by exactly one variable. The
+    /// asset is created rather than shipped precisely so the control stays zero;
+    /// <c>WindowIcon_Convention_Asset_Absent_Precondition</c> fails loudly if a future
+    /// change ships one and silently makes the control vacuous.</para>
     /// </remarks>
     internal class WindowIconApplied(Harness h) : SelfTestFixtureBase(h)
     {
@@ -170,23 +173,63 @@ internal static class WindowModelFixtures
 
             H.Check("WindowIcon_FromResource_Sets_HICON", resourceIcon != 0);
 
-            // An icon file that isn't there must not leave the window worse off than
-            // declaring nothing: Apply reports failure so the fallback gets a turn.
-            // This host has no fallback source, so it lands back on the control value.
-            var missing = await OpenAndSettle(
-                new WindowSpec
-                {
-                    Title = "Icon Missing",
-                    Width = 200,
-                    Height = 160,
-                    Icon = WindowIcon.FromPath("Assets/DoesNotExist.ico"),
-                },
-                () => new StubComponent());
-            nint missingIcon;
-            try { missingIcon = IconOf(missing); }
-            finally { await CloseAndSettle(missing); }
+            // ── Convention fallback ─────────────────────────────────────────
+            // Everything above ran with no Assets\AppIcon.ico present, so the two
+            // checks below differ from the zero control by exactly one variable: the
+            // existence of that file. Creating it at runtime (rather than shipping it)
+            // is what keeps the control genuinely zero.
+            var conventionPath = global::System.IO.Path.Combine(
+                AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            var sourcePath = global::System.IO.Path.Combine(
+                AppContext.BaseDirectory, "Assets", "SelfTestWindowIcon.ico");
 
-            H.Check("WindowIcon_MissingFile_Falls_Back_To_Control", missingIcon == bareIcon);
+            if (global::System.IO.File.Exists(conventionPath))
+            {
+                // The zero control above would have been vacuous. Fail loudly.
+                H.Check("WindowIcon_Convention_Asset_Absent_Precondition", false);
+                return;
+            }
+
+            try
+            {
+                global::System.IO.File.Copy(sourcePath, conventionPath);
+
+                // No declared icon at all — this is the exact spec that produced 0 above.
+                // A non-zero reading now can only come from LoadConventionAssetIcon.
+                var conventionWin = await OpenAndSettle(
+                    new WindowSpec { Title = "Icon Convention", Width = 200, Height = 160 },
+                    () => new StubComponent());
+                nint conventionIcon;
+                try { conventionIcon = IconOf(conventionWin); }
+                finally { await CloseAndSettle(conventionWin); }
+
+                H.Check("WindowIcon_ConventionAsset_Sets_HICON", conventionIcon != 0);
+
+                // A declared icon that does not exist must not leave the window worse off
+                // than declaring nothing: Apply reports failure and the fallback runs.
+                // With the convention asset present this is now a real assertion — it
+                // fails if ReactorWindow stops calling TryApplyExeIconFallback after a
+                // failed Apply.
+                var missing = await OpenAndSettle(
+                    new WindowSpec
+                    {
+                        Title = "Icon Missing",
+                        Width = 200,
+                        Height = 160,
+                        Icon = WindowIcon.FromPath("Assets/DoesNotExist.ico"),
+                    },
+                    () => new StubComponent());
+                nint missingIcon;
+                try { missingIcon = IconOf(missing); }
+                finally { await CloseAndSettle(missing); }
+
+                H.Check("WindowIcon_MissingDeclared_Falls_Back_To_Convention", missingIcon != 0);
+            }
+            finally
+            {
+                try { global::System.IO.File.Delete(conventionPath); }
+                catch (global::System.Exception) { /* best effort — next run overwrites */ }
+            }
         }
     }
 

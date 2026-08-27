@@ -379,25 +379,14 @@ public static partial class ReactorApp
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
 
-        RunOnSta(() =>
-        {
-            InitProcess();
-            Options = new ReactorAppOptions(
-                RootFactory: () => new TRoot(),
-                Configure: configure,
-                WindowTitle: title,
-                WindowWidth: width,
-                WindowHeight: height,
-                FullScreen: fullScreen,
-                WindowIcon: icon);
-
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
+        StartApplication(() => new ReactorAppOptions(
+            RootFactory: () => new TRoot(),
+            Configure: configure,
+            WindowTitle: title,
+            WindowWidth: width,
+            WindowHeight: height,
+            FullScreen: fullScreen,
+            WindowIcon: icon));
     }
 
     /// <summary>
@@ -422,25 +411,14 @@ public static partial class ReactorApp
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
 
-        RunOnSta(() =>
-        {
-            InitProcess();
-            Options = new ReactorAppOptions(
-                RootFactory: () => new TRoot(),
-                Configure: configure,
-                WindowTitle: spec.Title,
-                WindowWidth: spec.Width,
-                WindowHeight: spec.Height,
-                FullScreen: IsFullScreen(spec),
-                InitialWindowSpec: spec);
-
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
+        StartApplication(() => new ReactorAppOptions(
+            RootFactory: () => new TRoot(),
+            Configure: configure,
+            WindowTitle: spec.Title,
+            WindowWidth: spec.Width,
+            WindowHeight: spec.Height,
+            FullScreen: IsFullScreen(spec),
+            InitialWindowSpec: spec));
     }
 
     /// <summary>
@@ -473,25 +451,14 @@ public static partial class ReactorApp
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
 
-        RunOnSta(() =>
-        {
-            InitProcess();
-            Options = new ReactorAppOptions(
-                RootRenderFunc: rootRender,
-                Configure: configure,
-                WindowTitle: title,
-                WindowWidth: width,
-                WindowHeight: height,
-                FullScreen: fullScreen,
-                WindowIcon: icon);
-
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
+        StartApplication(() => new ReactorAppOptions(
+            RootRenderFunc: rootRender,
+            Configure: configure,
+            WindowTitle: title,
+            WindowWidth: width,
+            WindowHeight: height,
+            FullScreen: fullScreen,
+            WindowIcon: icon));
     }
 
     /// <summary>
@@ -510,25 +477,14 @@ public static partial class ReactorApp
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, rootRenderFunc: rootRender)) return;
 
-        RunOnSta(() =>
-        {
-            InitProcess();
-            Options = new ReactorAppOptions(
-                RootRenderFunc: rootRender,
-                Configure: configure,
-                WindowTitle: spec.Title,
-                WindowWidth: spec.Width,
-                WindowHeight: spec.Height,
-                FullScreen: IsFullScreen(spec),
-                InitialWindowSpec: spec);
-
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
+        StartApplication(() => new ReactorAppOptions(
+            RootRenderFunc: rootRender,
+            Configure: configure,
+            WindowTitle: spec.Title,
+            WindowWidth: spec.Width,
+            WindowHeight: spec.Height,
+            FullScreen: IsFullScreen(spec),
+            InitialWindowSpec: spec));
     }
 
     /// <summary>
@@ -568,10 +524,25 @@ public static partial class ReactorApp
     {
         ArgumentNullException.ThrowIfNull(startup);
         EmitDipBehaviorChangeNoticeOnce();
+        StartApplication(() => new ReactorAppOptions(Startup: startup));
+    }
+
+    /// <summary>
+    /// Shared startup tail for every <c>Run</c> overload: enter an STA, initialize the
+    /// process, publish the options <see cref="ReactorApplication"/> reads on launch, and
+    /// hand control to WinUI. Blocks until the app exits.
+    /// </summary>
+    /// <param name="options">
+    /// Invoked on the STA thread after <c>InitProcess</c>, preserving the original
+    /// construction order of every overload.
+    /// </param>
+    private static void StartApplication(Func<ReactorAppOptions> options)
+    {
         RunOnSta(() =>
         {
             InitProcess();
-            Options = new ReactorAppOptions(Startup: startup);
+            Options = options();
+
             Application.Start(_ =>
             {
                 var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());

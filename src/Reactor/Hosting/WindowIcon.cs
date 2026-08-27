@@ -135,21 +135,25 @@ public sealed class WindowIcon
     /// falls back rather than leaving the window with no icon at all.
     /// </returns>
     /// <remarks>
-    /// The source is passed to <c>AppWindow.SetIcon</c> verbatim. Measured against
-    /// Windows App SDK 2.1, that API accepts more than its documentation describes — both
-    /// <c>ms-appx:///</c> URIs and non-<c>.ico</c> images work — so Reactor deliberately
-    /// does not pre-validate the format or rewrite the URI. Rewriting an
+    /// The source is passed to <c>AppWindow.SetIcon</c> essentially as given. Measured
+    /// against Windows App SDK 2.1, that API accepts more than its documentation
+    /// describes — both <c>ms-appx:///</c> URIs and non-<c>.ico</c> images work — so
+    /// Reactor deliberately does not pre-validate the format. Rewriting an
     /// <c>ms-appx:</c> URI to a plain path would also bypass the platform's MRT
     /// scale/target-size qualifier resolution, breaking packaged apps that ship
-    /// qualified variants. Only a resource URI is left entirely to the platform;
-    /// a plain path is existence-checked first, because <c>SetIcon</c> reports a bad
-    /// path by silently doing nothing.
+    /// qualified variants, so a resource source is left entirely to the platform.
+    /// <para>A filesystem source is resolved to an absolute path first, preferring the
+    /// app's base directory over the process working directory. That keeps the
+    /// existence check and the value handed to <c>SetIcon</c> describing the same file,
+    /// and stops a launcher-chosen working directory from substituting a different
+    /// icon for a relative path.</para>
     /// </remarks>
     internal bool Apply(AppWindow appWindow)
     {
         if (appWindow is null) return false;
 
-        if (!_isResource && !PathExists(_source))
+        var target = _source;
+        if (!_isResource && !TryResolveExistingPath(_source, out target))
         {
             Debug.WriteLine($"[Reactor] WindowIcon.Apply: no icon file at '{_source}'.");
             return false;
@@ -157,7 +161,7 @@ public sealed class WindowIcon
 
         try
         {
-            appWindow.SetIcon(_source);
+            appWindow.SetIcon(target);
             return true;
         }
         catch (Exception ex)
@@ -168,23 +172,44 @@ public sealed class WindowIcon
     }
 
     /// <summary>
-    /// True when a filesystem source resolves to a real file, either as given or relative
-    /// to the app's base directory (which is the package root for a packaged app). Errors
-    /// resolve to <c>true</c> so a probe failure never suppresses an icon that would have
-    /// worked.
+    /// Resolves a filesystem source to an existing absolute path. Relative paths are
+    /// tried against <see cref="AppContext.BaseDirectory"/> first (the package root for
+    /// a packaged app) and only then against the process working directory, so a
+    /// relative icon means "beside my app" rather than "wherever I happened to be
+    /// launched from".
     /// </summary>
-    private static bool PathExists(string path)
+    /// <returns>
+    /// <c>false</c> only when the file is proven absent. A probe that throws resolves to
+    /// <c>true</c> with the original source, so a locked-down filesystem never suppresses
+    /// an icon that would otherwise have worked.
+    /// </returns>
+    private static bool TryResolveExistingPath(string path, out string resolved)
     {
+        resolved = path;
         try
         {
-            if (global::System.IO.File.Exists(path)) return true;
-            if (global::System.IO.Path.IsPathRooted(path)) return false;
-            return global::System.IO.File.Exists(
-                global::System.IO.Path.Combine(AppContext.BaseDirectory, path));
+            if (global::System.IO.Path.IsPathRooted(path))
+                return global::System.IO.File.Exists(path);
+
+            var beside = global::System.IO.Path.Combine(AppContext.BaseDirectory, path);
+            if (global::System.IO.File.Exists(beside))
+            {
+                resolved = beside;
+                return true;
+            }
+
+            if (global::System.IO.File.Exists(path))
+            {
+                resolved = global::System.IO.Path.GetFullPath(path);
+                return true;
+            }
+
+            return false;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor] WindowIcon.Apply: existence check failed for '{path}': {ex.Message}");
+            Debug.WriteLine($"[Reactor] WindowIcon.Apply: path probe failed for '{path}': {ex.Message}");
+            resolved = path;
             return true;
         }
     }

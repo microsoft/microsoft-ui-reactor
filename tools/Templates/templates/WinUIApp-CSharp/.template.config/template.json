@@ -13,6 +13,16 @@
   },
   "sourceName": "Company.ReactorApp1",
   "preferNameDirectory": true,
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "//": "Binary assets must be copied verbatim; the template engine otherwise runs sourceName / version substitution over their bytes.",
+          "copyOnly": [ "Assets/**" ]
+        }
+      ]
+    }
+  ],
   "symbols": {
     "TargetFrameworkOverride": {
       "type": "parameter",
