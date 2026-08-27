@@ -30,7 +30,7 @@ namespace Microsoft.UI.Reactor;
 /// <para>Disposal is idempotent — a second <see cref="Close"/> or
 /// <see cref="Dispose"/> is a no-op, not an exception.</para>
 /// </remarks>
-public sealed class ReactorWindow : IDisposable
+public sealed partial class ReactorWindow : IDisposable
 {
     // Spec 044 §6.7 catch-shape conventions used throughout this file:
     //
@@ -964,10 +964,14 @@ public sealed class ReactorWindow : IDisposable
             path = global::System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
             if (!global::System.IO.File.Exists(path)) return 0;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException
+                                      or NotSupportedException
+                                      or global::System.IO.IOException
+                                      or UnauthorizedAccessException
+                                      or global::System.Security.SecurityException)
         {
-            // File-system access can throw on locked-down hosts; a missing convention
-            // asset is never fatal — fall through to the PE resource.
+            // Malformed base directory, or a locked-down / unreadable filesystem. A
+            // missing convention asset is never fatal — fall through to the PE resource.
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.LoadConventionAssetIcon", ex);
             return 0;
         }
@@ -991,14 +995,13 @@ public sealed class ReactorWindow : IDisposable
         var exePath = global::System.Environment.ProcessPath;
         if (string.IsNullOrEmpty(exePath)) return 0;
 
-        var large = new nint[1];
-        // nIcons=1 extracts the first icon group only; the small-icon array is optional
-        // and omitted so there is no second handle to own and destroy.
-        _ = NativeIcon.ExtractIconExW(exePath, 0, large, null, 1);
-        return large[0];
+        // nIcons=1 extracts the first icon group only; nint.Zero for the small-icon
+        // slot means there is no second handle to own and destroy.
+        _ = NativeIcon.ExtractIconExW(exePath, 0, out var large, 0, 1);
+        return large;
     }
 
-    private static class NativeIcon
+    private static partial class NativeIcon
     {
         public const uint IMAGE_ICON = 1;
         public const uint LR_LOADFROMFILE = 0x00000010;
@@ -1006,21 +1009,25 @@ public sealed class ReactorWindow : IDisposable
 
         // Correct for standalone .ico files. Does NOT read PE resources — see
         // LoadExecutablePeIcon.
-        [global::System.Runtime.InteropServices.DllImport("user32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
-        public static extern nint LoadImageW(nint hInst,
-            [global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.LPWStr)] string lpszName,
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll",
+            EntryPoint = "LoadImageW",
+            StringMarshalling = global::System.Runtime.InteropServices.StringMarshalling.Utf16,
+            SetLastError = true)]
+        public static partial nint LoadImageW(nint hInst, string lpszName,
             uint uType, int cxDesired, int cyDesired, uint fuLoad);
 
-        // Reads icon groups out of a PE image. phiconSmall is [out, optional]; passing
-        // null asks for the large icons only.
-        [global::System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode)]
-        public static extern uint ExtractIconExW(
-            [global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.LPWStr)] string lpszFile,
-            int nIconIndex, nint[]? phiconLarge, nint[]? phiconSmall, uint nIcons);
+        // Reads icon groups out of a PE image. Both phicon parameters are
+        // [out, optional] arrays; with nIcons = 1 a single `out nint` is the
+        // equivalent blittable shape, and `nint.Zero` asks for large icons only.
+        [global::System.Runtime.InteropServices.LibraryImport("shell32.dll",
+            EntryPoint = "ExtractIconExW",
+            StringMarshalling = global::System.Runtime.InteropServices.StringMarshalling.Utf16)]
+        public static partial uint ExtractIconExW(string lpszFile, int nIconIndex,
+            out nint phiconLarge, nint phiconSmall, uint nIcons);
 
-        [global::System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll", SetLastError = true)]
         [return: global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.Bool)]
-        public static extern bool DestroyIcon(nint hIcon);
+        public static partial bool DestroyIcon(nint hIcon);
     }
 
     private static class NativeOwnership

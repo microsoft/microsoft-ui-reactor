@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// the live UI-thread surface is exercised; cleanup closes every window
 /// and unregisters every tray icon so the next fixture starts clean.
 /// </summary>
-internal static class WindowModelFixtures
+internal static partial class WindowModelFixtures
 {
     /// <summary>
     /// Capture the UI dispatcher on the harness window once. The selftest
@@ -116,14 +116,18 @@ internal static class WindowModelFixtures
     /// <c>WindowIcon_Convention_Asset_Absent_Precondition</c> fails loudly if a future
     /// change ships one and silently makes the control vacuous.</para>
     /// </remarks>
-    internal class WindowIconApplied(Harness h) : SelfTestFixtureBase(h)
+    internal partial class WindowIconApplied(Harness h) : SelfTestFixtureBase(h)
     {
         private const uint WM_GETICON = 0x007F;
         private const int ICON_BIG = 1;
 
-        [global::System.Runtime.InteropServices.DllImport("user32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode)]
-        private static extern nint SendMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
+        // Source-generated interop rather than [DllImport]: no managed API exposes a
+        // window's HICON, so the native probe is required, but the generated stub keeps
+        // the boundary analyzable and blittable.
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll")]
+        private static partial nint SendMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
 
+        [global::System.Runtime.Versioning.SupportedOSPlatform("windows")]
         private static nint IconOf(ReactorWindow win) => SendMessageW(win.Hwnd, WM_GETICON, ICON_BIG, 0);
 
         public override async Task RunAsync()
