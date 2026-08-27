@@ -236,7 +236,7 @@ public static partial class ReactorApp
     /// XAML loader for this process. Required when a third-party control library
     /// is referenced from a Reactor app that has no XAML files of its own (and
     /// therefore no compiler-generated provider that would auto-chain to the
-    /// library). Call before <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?, WindowIcon?)"/>.
+    /// library). Call before <see cref="Run{TRoot}(string, double?, double?, bool, WindowIcon?, Action{ReactorHost}?)"/>.
     /// Idempotent (same instance is added at most once) and thread-safe.
     /// See https://github.com/microsoft/microsoft-ui-reactor/issues/142.
     /// </summary>
@@ -355,9 +355,6 @@ public static partial class ReactorApp
     /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
     /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
     /// <param name="fullScreen">Open with the full-screen presenter.</param>
-    /// <param name="configure">
-    /// Optional callback invoked on the UI thread before the root mounts.
-    /// </param>
     /// <param name="icon">
     /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the taskbar,
     /// Alt-Tab, and Task Manager. Use an <c>.ico</c>: build it with
@@ -367,13 +364,16 @@ public static partial class ReactorApp
     /// executable's embedded icon. Distinct from <c>TitleBar(...).Icon(...)</c>, which
     /// sets the app mark drawn inside the window.
     /// </param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread before the root mounts.
+    /// </param>
     public static void Run<TRoot>(
         string title = "Reactor App",
         double? width = null,
         double? height = null,
         bool fullScreen = false,
-        Action<ReactorHost>? configure = null,
-        WindowIcon? icon = null)
+        WindowIcon? icon = null,
+        Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
         EmitDipBehaviorChangeNoticeOnce();
@@ -432,12 +432,12 @@ public static partial class ReactorApp
     /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
     /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
     /// <param name="fullScreen">Open with the full-screen presenter.</param>
-    /// <param name="configure">
-    /// Optional callback invoked on the UI thread before the root mounts.
-    /// </param>
     /// <param name="icon">
     /// Optional window icon. See
-    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}, WindowIcon)"/>.
+    /// <see cref="Run{TRoot}(string, double?, double?, bool, WindowIcon, Action{ReactorHost})"/>.
+    /// </param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread before the root mounts.
     /// </param>
     public static void Run(
         string title,
@@ -445,8 +445,8 @@ public static partial class ReactorApp
         double? width = null,
         double? height = null,
         bool fullScreen = false,
-        Action<ReactorHost>? configure = null,
-        WindowIcon? icon = null)
+        WindowIcon? icon = null,
+        Action<ReactorHost>? configure = null)
     {
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
@@ -565,7 +565,7 @@ public static partial class ReactorApp
     /// Use it for pre-mount setup that needs the live <see cref="ReactorHost"/>
     /// (logger wiring, custom reconciler registrations, host-level event
     /// hooks). Mirror of the <c>configure</c> parameter on the legacy
-    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?, WindowIcon?)"/>
+    /// <see cref="Run{TRoot}(string, double?, double?, bool, WindowIcon?, Action{ReactorHost}?)"/>
     /// entry — secondary windows now have the same escape hatch as the
     /// primary.
     /// </param>

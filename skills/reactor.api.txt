@@ -4460,9 +4460,9 @@ RegisterControlAssembly(Assembly assembly) → void
 RegisterControlAssembly(IXamlMetadataProvider provider) → void
 Run(Action<ReactorAppContext> startup) → void
 Run(WindowSpec spec, Func<RenderContext, Element> rootRender, Action<ReactorHost> configure = null) → void
-Run(string title, Func<RenderContext, Element> rootRender, double? width = null, double? height = null, bool fullScreen = false, Action<ReactorHost> configure = null, WindowIcon icon = null) → void
+Run(string title, Func<RenderContext, Element> rootRender, double? width = null, double? height = null, bool fullScreen = false, WindowIcon icon = null, Action<ReactorHost> configure = null) → void
 Run<TRoot>(WindowSpec spec, Action<ReactorHost> configure = null) → void
-Run<TRoot>(string title = "Reactor App", double? width = null, double? height = null, bool fullScreen = false, Action<ReactorHost> configure = null, WindowIcon icon = null) → void
+Run<TRoot>(string title = "Reactor App", double? width = null, double? height = null, bool fullScreen = false, WindowIcon icon = null, Action<ReactorHost> configure = null) → void
 TryRegisterControlAssembly(Assembly assembly) → bool
 event EventHandler<ReactorTrayIcon> TrayIconClosed
 event EventHandler<ReactorTrayIcon> TrayIconOpened
