@@ -182,13 +182,16 @@ foreach ($b in $batches) {
 }
 if ($batches.Count -gt 0) {
     $reviewable = $declaredTotal - $missingAll.Count
+    # "entries", not "files": a file can appear in several batches on purpose, so this
+    # run-level total exceeds the distinct file count. The per-batch header below says
+    # "Files reviewed" and is accurate there, because no batch may list a path twice.
     if ($missingAll.Count -gt 0) {
-        Write-Warning "Manifest coverage: $reviewable of $declaredTotal files resolve; $($missingAll.Count) path(s) are stale and will NOT be reviewed."
+        Write-Warning "Manifest coverage: $reviewable of $declaredTotal entries resolve; $($missingAll.Count) path(s) are stale and will NOT be reviewed."
         foreach ($m in $missingAll) { Write-Host "    $m" -ForegroundColor DarkYellow }
         Write-Host "  Fix these in tools/reviewer/manifest.json (paths are relative to the repo root)." -ForegroundColor DarkYellow
     }
     else {
-        Write-Host "Manifest coverage: $declaredTotal of $declaredTotal files resolve." -ForegroundColor Green
+        Write-Host "Manifest coverage: $declaredTotal of $declaredTotal entries resolve." -ForegroundColor Green
     }
 }
 
