@@ -261,7 +261,7 @@ and nothing is written or re-rendered. Allocate a new list — or use
 [`UseReducer`](hooks.md) so the framework forces you to return a new
 value from the reducer:
 
-```csharp snippet="source:src/Reactor/Core/RenderContext.cs#use-reducer-slot"
+```csharp snippet="hooks/reducer-new-value"
 ```
 
 ## Tips

@@ -276,22 +276,11 @@ timer ID, the previous value of a state cell, a stable target for an
 external library that wants a long-lived reference.
 
 ```csharp
-public Ref<T> UseRef<T>(T initialValue = default!)
-{
-    if (_hookIndex >= _hooks.Count)
-    {
-        _hooks.Add(new ValueHookState<Ref<T>>(new Ref<T>(initialValue)));
-    }
+var renderCount = UseRef(0);
+renderCount.Current++;              // does NOT re-render
 
-    var currentIndex = _hookIndex;
-    _hookIndex++;
-
-    if (_hooks[currentIndex] is not ValueHookState<Ref<T>> hook)
-        throw new HookOrderException(
-            $"Hook at index {currentIndex} expected ValueHookState<Ref<{typeof(T).Name}>>, got {_hooks[currentIndex].GetType().Name}. " +
-            "Hooks must be called in the same order every render.");
-    return hook.Value;
-}
+var prev = UseRef("");
+UseEffect(() => { prev.Current = name; }, name);
 ```
 
 If you find yourself wanting `UseRef` to trigger re-renders, you

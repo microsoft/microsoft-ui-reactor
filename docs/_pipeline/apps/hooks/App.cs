@@ -271,6 +271,41 @@ class DeferredRefDemo : Component
     }
 }
 
+// Tight fragments for the internals pages, which explain the mechanism in prose and
+// need one illustrative call rather than a whole demo component.
+class RefMutableCellDemo : Component
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState("");
+
+        // <snippet:ref-mutable-cell>
+        var renderCount = UseRef(0);
+        renderCount.Current++;              // does NOT re-render
+
+        var prev = UseRef("");
+        UseEffect(() => { prev.Current = name; }, name);
+        // </snippet:ref-mutable-cell>
+
+        return TextBox(name, setName, placeholderText: "Type")
+            .AutomationName("Ref demo text")
+            .Width(200);
+    }
+}
+
+class ReducerNewValueDemo : Component
+{
+    public override Element Render()
+    {
+        // <snippet:reducer-new-value>
+        var (items, update) = UseReducer(new List<string>());
+        update(prev => [.. prev, "new"]);   // must return a NEW list
+        // </snippet:reducer-new-value>
+
+        return TextBlock($"{items.Count} items");
+    }
+}
+
 // <snippet:usecallback>
 class CallbackDemo : Component
 {

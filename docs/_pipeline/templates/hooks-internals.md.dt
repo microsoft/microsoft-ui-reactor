@@ -194,7 +194,7 @@ but the UI doesn't depend on it: a counter you log, a debounce
 timer ID, the previous value of a state cell, a stable target for an
 external library that wants a long-lived reference.
 
-```csharp snippet="source:src/Reactor/Core/RenderContext.cs#use-ref-slot"
+```csharp snippet="hooks/ref-mutable-cell"
 ```
 
 If you find yourself wanting `UseRef` to trigger re-renders, you

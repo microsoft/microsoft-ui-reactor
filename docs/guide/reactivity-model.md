@@ -397,76 +397,8 @@ and nothing is written or re-rendered. Allocate a new list — or use
 value from the reducer:
 
 ```csharp
-public (T Value, Action<Func<T, T>> Update) UseReducer<T>(T initialValue, bool threadSafe = false)
-{
-    if (_hookIndex >= _hooks.Count)
-    {
-        _hooks.Add(new ValueHookState<T>(initialValue, threadSafe));
-    }
-
-    var currentIndex = _hookIndex;
-    _hookIndex++;
-
-    if (_hooks[currentIndex] is not ValueHookState<T> hook)
-        throw new HookOrderException(
-            $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected ValueHookState<{typeof(T).Name}> (UseReducer). " +
-            "Hooks must be called in the same order every render.");
-
-    T current;
-    if (hook.ThreadSafe)
-        lock (hook.Lock!) { current = hook.Value; }
-    else
-        current = hook.Value;
-
-    // Issue #659 (#44): reuse the ref-stable updater. The updater receives
-    // its reducer as a call-time argument (not a captured render value), so
-    // caching it has no stale-capture risk.
-    if (hook.SetterKind != SetterKindReducer || hook.Setter is not Action<Func<T, T>> updater)
-    {
-        updater = MakeReducerUpdater(hook);
-        hook.Setter = updater;
-        hook.SetterKind = SetterKindReducer;
-    }
-
-    return (current, updater);
-}
-
-private Action<Func<T, T>> MakeReducerUpdater<T>(ValueHookState<T> h)
-{
-    void Updater(Func<T, T> reducer)
-    {
-        bool changed;
-        if (h.ThreadSafe)
-        {
-            lock (h.Lock!)
-            {
-                var prev = h.Value;
-                var next = reducer(prev);
-                changed = !EqualityComparer<T>.Default.Equals(prev, next);
-                if (changed) h.Value = next;
-            }
-            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                    global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                    Diagnostics.ReactorEventSource.Keywords.State))
-                Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
-            if (changed) _requestRerender?.Invoke();
-        }
-        else
-        {
-            if (MarshalIfOffUIThread("UseReducer", () => Updater(reducer))) return;
-            var prev = h.Value;
-            var next = reducer(prev);
-            changed = !EqualityComparer<T>.Default.Equals(prev, next);
-            if (changed) h.Value = next;
-            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                    global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                    Diagnostics.ReactorEventSource.Keywords.State))
-                Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
-            if (changed) _requestRerender?.Invoke();
-        }
-    }
-    return Updater;
-}
+var (items, update) = UseReducer(new List<string>());
+update(prev => [.. prev, "new"]);   // must return a NEW list
 ```
 
 ## Tips
