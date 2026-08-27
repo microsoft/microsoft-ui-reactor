@@ -61,8 +61,21 @@ public abstract record Element
     /// given DSL invocation and survives fluent modifier chains automatically
     /// (record <c>with</c> copies it). It is deliberately NOT consulted by
     /// <see cref="ShallowEquals"/> — see the reconciler's allow-list.</para>
+    ///
+    /// <para>STORAGE: this is a shim over the spec 047 §4.4
+    /// <see cref="Extensions"/> bucket, exactly like <see cref="Attached"/> and
+    /// <see cref="ThemeBindings"/>. Declaring it inline on the record instead
+    /// costs +24 bytes on every element ever allocated, measured, in every
+    /// build — a permanent retail tax for a debug-only feature. The public
+    /// shape is identical either way, so this is a storage decision, not an API
+    /// one.</para>
     /// </summary>
-    public SourceLocation? CallSite { get; init; }
+    public SourceLocation? CallSite
+    {
+        get => Extensions?.CallSite;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { CallSite = value } : Extensions with { CallSite = value });
+    }
 
     /// <summary>
     /// Outer margin shim that routes to <see cref="Modifiers"/>. Lets
@@ -1784,6 +1797,24 @@ public record ElementExtras
     public IReadOnlyDictionary<ContextBase, object?>? ContextValues { get; init; }
 
     /// <summary>
+    /// Spec 010 — the DSL call site that produced the owning element.
+    ///
+    /// <para>Bucketed here rather than declared inline on <see cref="Element"/>
+    /// so that an element nobody stamped pays nothing. An inline
+    /// <c>SourceLocation?</c> widens EVERY element instance by 24 bytes in
+    /// every build and every configuration — measured at +24.0 B/op on the M12
+    /// control-model bench with source mapping switched off — which is a
+    /// permanent retail tax for a debug-only feature. Living in the §4.4 extras
+    /// bucket makes the cost proportional to the number of stamped elements
+    /// instead of the number of elements.</para>
+    ///
+    /// <para>Read through <c>Element.CallSite</c>, which is the public shim; the
+    /// bucket is an implementation detail.</para>
+    /// </summary>
+    /// <remarks>Spec 047 §4.4 bucketing; spec 010 slot.</remarks>
+    public SourceLocation? CallSite { get; init; }
+
+    /// <summary>
     /// True when every bucketed field is null. The <see cref="Element"/> shim
     /// setters use this (via <c>Element.NormalizeExtras</c>) to collapse an
     /// all-null bucket back to a null <c>Extensions</c> slot, so record
@@ -1804,7 +1835,8 @@ public record ElementExtras
         && ScrollAnimation is null
         && ConnectedAnimationKey is null
         && ResourceOverrides is null
-        && ContextValues is null;
+        && ContextValues is null
+        && CallSite is null;
 }
 
 public record ElementModifiers

@@ -2224,6 +2224,7 @@ KeyframeEntry[] KeyframeAnimations { get; init; }
 LayoutAnimationConfig LayoutAnimation { get; init; }
 ResourceOverrides ResourceOverrides { get; init; }
 ScrollAnimationConfig ScrollAnimation { get; init; }
+SourceLocation? CallSite { get; init; }
 StaggerConfig StaggerConfig { get; init; }
 ThemeTransitions ThemeTransitions { get; init; }
 string ConnectedAnimationKey { get; init; }

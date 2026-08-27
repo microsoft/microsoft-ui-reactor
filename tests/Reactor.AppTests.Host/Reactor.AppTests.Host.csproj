@@ -61,9 +61,32 @@
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
   </ItemGroup>
 
+  <!--
+    Spec 010 Route B spike — build-cost measurement harness.
+
+    OFF by default and byte-identical to a tree without the spike: with
+    ReactorSourceMap unset, no analyzer is added to the compilation at all.
+    Pass -p:ReactorSourceMap=true together with the InterceptorsNamespaces
+    line below to turn the interceptor generator on for this project and
+    measure its build cost against the same tree.
+
+    The InterceptorsNamespaces value is spelled out here rather than inherited
+    from build\Reactor.targets because the repo's Directory.Build.props imports
+    that file BEFORE project bodies, so its ReactorSourceMap condition cannot
+    see a property set in a csproj. PackageReference consumers do inherit it.
+  -->
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <ProjectReference Include="..\..\src\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
-    <!-- Issue #433: md4c HTML renderer used by MarkdownHtmlFixtures. -->
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />    <!-- Issue #433: md4c HTML renderer used by MarkdownHtmlFixtures. -->
     <ProjectReference Include="..\Reactor.Markdown.TestRenderer\Reactor.Markdown.TestRenderer.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Devtools\Reactor.Devtools.csproj" />

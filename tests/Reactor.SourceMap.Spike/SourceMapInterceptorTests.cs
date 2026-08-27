@@ -118,6 +118,44 @@ public sealed class SourceMapInterceptorTests : IDisposable
         Assert.NotNull(control.CallSite);
     }
 
+    // ── Route-independent coverage hole: the string → Element operator ────
+
+    [Fact]
+    public void BareStringChild_IsNotAttributedToUserCode()
+    {
+        // Element.cs:383 declares
+        //     public static implicit operator Element(string text) => Factories.TextBlock(text);
+        // so a bare-string child's TextBlock call site lives inside Element.cs,
+        // in the Reactor assembly, NOT in user code. The generator only sees
+        // invocations in the CONSUMER's syntax trees, so that call site is never
+        // intercepted at all.
+        var stack = VStack("bare string child"); var thisLine = Line();
+
+        var child = global::System.Linq.Enumerable.Single(stack.Children);
+
+        // Positive control: the VStack call site itself IS attributed here, so a
+        // null child stamp is a real hole and not the generator having silently
+        // emitted nothing for this file.
+        Assert.Equal(thisLine, stack.CallSite!.Value.LineNumber);
+
+        // The hole: no stamp at all. Route B yields null rather than a
+        // confidently-wrong location inside framework source.
+        Assert.Null(child.CallSite);
+    }
+
+    [Fact]
+    public void ExplicitTextBlockChild_IsAttributed_PositiveControlForTheHole()
+    {
+        // Same shape, but the child is written explicitly. This is the control
+        // that proves the null above is caused by the implicit operator and not
+        // by children being unreachable in general.
+        var stack = VStack(TextBlock("explicit child")); var thisLine = Line();
+
+        var child = global::System.Linq.Enumerable.Single(stack.Children);
+
+        Assert.Equal(thisLine, child!.CallSite!.Value.LineNumber);
+    }
+
     // ── Helper-method attribution (reported, not aspirational) ────────────
 
     private static TextBlockElement MyHeader() => TextBlock("header");
