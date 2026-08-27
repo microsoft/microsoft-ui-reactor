@@ -95,7 +95,7 @@ public class InlineSnippetLedgerTests
                     "The 'before' half of a migration pair; compiling it would trip REACTOR_EVENT_001 by design.",
             },
 
-            ["050-optional-t"] = new(StringComparer.Ordinal)
+            ["migration/050-optional-t"] = new(StringComparer.Ordinal)
             {
                 // A migration guide's whole job is to show the shape that no longer compiles.
                 ["// Before"] =
@@ -164,6 +164,37 @@ public class InlineSnippetLedgerTests
     }
 
     /// <summary>
+    /// Topic ids must be unique. <c>index.md.dt</c> exists at the templates root and again under
+    /// <c>recipes/</c>, so a file-name-only key collapsed them — and a ledger entry written for one
+    /// would then quietly excuse a block in the other.
+    /// </summary>
+    [Fact]
+    public void Topic_Ids_Are_Unique_Across_Subdirectories()
+    {
+        var duplicates = Templates()
+            .GroupBy(t => t.Topic, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        Assert.True(
+            duplicates.Count == 0,
+            "These topic ids are ambiguous, so AllowedInlineExamples cannot target one template "
+            + "without also excusing the other:\n  " + string.Join("\n  ", duplicates));
+
+        // Positive control: the corpus really does contain a colliding *file name*, so this proves
+        // the path-relative key solved something rather than passing on an empty set.
+        var collidingFileNames = Templates()
+            .GroupBy(t => t.Topic.Split('/')[^1], StringComparer.OrdinalIgnoreCase)
+            .Count(g => g.Count() > 1);
+
+        Assert.True(
+            collidingFileNames > 0,
+            "No template file name collides any more; if that is intentional this control can go, "
+            + "but until then it is what makes the uniqueness assertion above meaningful.");
+    }
+
+    /// <summary>
     /// Floors the two facts above. Both pass by reporting nothing, which is indistinguishable from
     /// a scanner that reads no templates or a classifier that calls everything exempt.
     /// </summary>
@@ -217,8 +248,12 @@ public class InlineSnippetLedgerTests
 
         foreach (var file in Directory.EnumerateFiles(dir, "*.md.dt", SearchOption.AllDirectories))
         {
-            var name = Path.GetFileName(file);
-            yield return (name[..^".md.dt".Length], file);
+            // Path-relative, not file name: `index.md.dt` exists at the root *and* under
+            // recipes/, so keying by name alone collapsed two distinct templates into one topic —
+            // which would let a ledger entry written for one silently excuse a block in the other,
+            // and made offender messages ambiguous about which file to open.
+            var relative = Path.GetRelativePath(dir, file).Replace(Path.DirectorySeparatorChar, '/');
+            yield return (relative[..^".md.dt".Length], file);
         }
     }
 
