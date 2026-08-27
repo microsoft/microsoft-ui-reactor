@@ -91,11 +91,6 @@ internal static class TransitionEngine
                 // Finalize: ensure incoming is fully visible
                 NormalizeVisual(inVisual);
             }
-            if (usesCenterPointBinding)
-            {
-                if (ownsOutgoing) outVisual.StopAnimation("CenterPoint");
-                if (ownsIncoming) inVisual.StopAnimation("CenterPoint");
-            }
             if (suppressesHitTesting)
             {
                 // Nest-aware by depth, so this is safe to run even for a page a newer
@@ -202,18 +197,30 @@ internal static class TransitionEngine
     /// unambiguous.
     /// </summary>
     /// <remarks>
-    /// This is defensive rather than load-bearing for the keyframe animations used here: a
-    /// completed <c>KeyFrameAnimation</c> does release its property, and a direct write that
-    /// disagrees with the final keyframe takes effect — <c>NavCov_CompletedAnimationReleasesProperty</c>
-    /// pins that behaviour, because it is the assumption every reset in this file rests on and it
-    /// is not obvious from the API. The stops are kept for the animation kinds that have no
-    /// keyframe to settle on (the spring path), and to keep the reset's intent explicit.
+    /// <para>
+    /// This is load-bearing, not defensive. A finished <c>KeyFrameAnimation</c> does not detach
+    /// itself — <c>NavCov_CompletedAnimationReleasesProperty</c> measures that the property is
+    /// still associated with the animation after the scoped batch completes, and only
+    /// <c>StopAnimation</c> clears it. Note that reading the property back is not a way to check
+    /// this: a Composition getter returns the last value the app assigned, not what the
+    /// compositor is rendering.
+    /// </para>
+    /// <para>
+    /// <c>CenterPoint</c> matters most. DrillIn binds it with an <b>expression</b> animation,
+    /// which is not time-based and never ends, so it holds the property until stopped. Stopping
+    /// it here rather than in DrillIn's own branch is deliberate: when navigations overlap, a
+    /// DrillIn can lose ownership of a page to a Slide or an instant swap and never run its own
+    /// cleanup, so whichever transition ends up owning the page has to be the one that clears
+    /// it — otherwise a live animation leaks onto a control that <c>NavigationCacheMode</c> may
+    /// hand back later.
+    /// </para>
     /// </remarks>
     private static void ReleaseAnimatedProperties(Visual visual)
     {
         visual.StopAnimation("Opacity");
         visual.StopAnimation("Offset");
         visual.StopAnimation("Scale");
+        visual.StopAnimation("CenterPoint");
     }
 
     // ════════════════════════════════════════════════════════════════

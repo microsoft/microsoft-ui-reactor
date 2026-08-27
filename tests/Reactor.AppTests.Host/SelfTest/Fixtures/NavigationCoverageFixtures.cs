@@ -487,8 +487,8 @@ internal static class NavigationCoverageFixtures
     // ════════════════════════════════════════════════════════════════════════
     //  6e. Composition behaviour this engine depends on
     //      Every reset in TransitionEngine's completion handler is a direct assignment to a
-    //      property that was just animated. Whether that is even observable is a Composition
-    //      question, not a Reactor one — so pin it, rather than assume it in a comment.
+    //      property that was just animated. Whether completion alone hands the property back
+    //      is a Composition question, not a Reactor one — so measure it rather than assume it.
     // ════════════════════════════════════════════════════════════════════════
 
     internal class NavCompletedAnimationReleasesProperty(Harness h) : SelfTestFixtureBase(h)
@@ -504,7 +504,15 @@ internal static class NavigationCoverageFixtures
                 .GetElementVisual(element);
             var compositor = visual.Compositor;
 
-            // Animate Opacity down to 0 and wait for the batch to complete.
+            // Note on instrumentation: reading the property back is NOT a valid probe. A
+            // Composition getter returns the last value the app assigned, not what the
+            // compositor is rendering, so it cannot distinguish "the write took effect" from
+            // "the write was stored and ignored". TryGetAnimationController reports whether a
+            // time-based animation is still attached, which is the thing that matters here.
+            H.Check(
+                "NavAnimRelease_NoControllerBeforeStart",
+                visual.TryGetAnimationController("Opacity") is null);
+
             var batch = compositor.CreateScopedBatch(
                 global::Microsoft.UI.Composition.CompositionBatchTypes.Animation);
             var done = new global::System.Threading.Tasks.TaskCompletionSource(
@@ -522,11 +530,18 @@ internal static class NavigationCoverageFixtures
             H.Check("NavAnimRelease_Completed", completed);
             if (!completed) return;
 
-            // The write disagrees with the final keyframe (0). If a completed animation kept
-            // ownership of the property this would be dropped and Opacity would stay 0 —
-            // which would silently break every reset in TransitionEngine's completion handler.
-            visual.Opacity = 1f;
-            H.Check("NavAnimRelease_DirectWriteAfterCompletionSticks", IsApproximately(visual.Opacity, 1f));
+            // The finding: finishing does NOT detach the animation. The property stays
+            // associated with it until StopAnimation, which is exactly why
+            // TransitionEngine.ReleaseAnimatedProperties exists rather than the completion
+            // handler simply assigning over the animated values.
+            H.Check(
+                "NavAnimRelease_CompletionDoesNotDetach",
+                visual.TryGetAnimationController("Opacity") is not null);
+
+            visual.StopAnimation("Opacity");
+            H.Check(
+                "NavAnimRelease_StopDetaches",
+                visual.TryGetAnimationController("Opacity") is null);
 
             batch.Dispose();
         }
