@@ -52,11 +52,42 @@ public class ReviewerManifestTests
             batches.ValueKind == JsonValueKind.Array,
             $"{ManifestRelativePath} has a 'batches' property of kind {batches.ValueKind}, expected an array — the manifest shape changed and this gate needs updating.");
 
-        return batches.EnumerateArray()
-            .Select(b => (
-                Id: b.GetProperty("id").GetString()!,
-                Files: b.GetProperty("files").EnumerateArray().Select(f => f.GetString()!).ToArray()))
-            .ToList();
+        return batches.EnumerateArray().Select(ReadBatch).ToList();
+    }
+
+    /// <summary>
+    /// Reads one batch, validating its shape so a manifest change reports what is wrong rather
+    /// than surfacing a bare <c>KeyNotFoundException</c> from <c>GetProperty</c> or an
+    /// <c>InvalidOperationException</c> from <c>EnumerateArray</c>. This gate's whole value is
+    /// telling the next person what to fix; an unexplained exception in CI does not.
+    /// </summary>
+    static (string Id, string[] Files) ReadBatch(JsonElement batch, int index)
+    {
+        Assert.True(
+            batch.ValueKind == JsonValueKind.Object,
+            $"{ManifestRelativePath} batch at index {index} is a {batch.ValueKind}, expected an object — the manifest shape changed and this gate needs updating.");
+
+        Assert.True(
+            batch.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String,
+            $"{ManifestRelativePath} batch at index {index} has no string 'id' — the manifest shape changed and this gate needs updating.");
+
+        var batchId = id.GetString()!;
+
+        Assert.True(
+            batch.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array,
+            $"{ManifestRelativePath} batch '{batchId}' has no 'files' array — the manifest shape changed and this gate needs updating.");
+
+        var paths = new string[files.GetArrayLength()];
+        var i = 0;
+        foreach (var file in files.EnumerateArray())
+        {
+            Assert.True(
+                file.ValueKind == JsonValueKind.String,
+                $"{ManifestRelativePath} batch '{batchId}' has a non-string entry at index {i} (kind {file.ValueKind}) — every file entry must be a path string.");
+            paths[i++] = file.GetString()!;
+        }
+
+        return (batchId, paths);
     }
 
     static IReadOnlyList<Entry> Entries() =>
