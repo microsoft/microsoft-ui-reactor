@@ -83,10 +83,10 @@ public partial record GridElement
             _ => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) }
         };
 
-        if(def.Min is not null)
+        if(def.Min is not null && double.IsFinite(def.Min.Value))
             rowDef.MinHeight = def.Min.Value;
 
-        if(def.Max is not null)
+        if(def.Max is not null && !double.IsNaN(def.Max.Value))
             rowDef.MaxHeight = def.Max.Value;
 
         return rowDef;
