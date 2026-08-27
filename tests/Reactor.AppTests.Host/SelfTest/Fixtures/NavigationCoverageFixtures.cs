@@ -472,6 +472,54 @@ internal static class NavigationCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  6e. Composition behaviour this engine depends on
+    //      Every reset in TransitionEngine's completion handler is a direct assignment to a
+    //      property that was just animated. Whether that is even observable is a Composition
+    //      question, not a Reactor one — so pin it, rather than assume it in a comment.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavCompletedAnimationReleasesProperty(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Animation property release"));
+            await Harness.Render();
+
+            var element = new Border { Width = 100, Height = 100 };
+            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+                .GetElementVisual(element);
+            var compositor = visual.Compositor;
+
+            // Animate Opacity down to 0 and wait for the batch to complete.
+            var batch = compositor.CreateScopedBatch(
+                global::Microsoft.UI.Composition.CompositionBatchTypes.Animation);
+            var done = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            batch.Completed += (_, _) => done.TrySetResult();
+
+            var fade = compositor.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(1f, 0f);
+            fade.Duration = TimeSpan.FromMilliseconds(60);
+            visual.StartAnimation("Opacity", fade);
+            batch.End();
+
+            var completed = await global::System.Threading.Tasks.Task.WhenAny(
+                done.Task, global::System.Threading.Tasks.Task.Delay(5000)) == done.Task;
+            H.Check("NavAnimRelease_Completed", completed);
+            if (!completed) return;
+
+            // The write disagrees with the final keyframe (0). If a completed animation kept
+            // ownership of the property this would be dropped and Opacity would stay 0 —
+            // which would silently break every reset in TransitionEngine's completion handler.
+            visual.Opacity = 1f;
+            H.Check("NavAnimRelease_DirectWriteAfterCompletionSticks", visual.Opacity == 1f);
+
+            batch.Dispose();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  7. NavigationHandle — Navigated event + BackStack/ForwardStack
     //     Targets: NavigationHandle.Navigated, BackStack, ForwardStack properties
     // ════════════════════════════════════════════════════════════════════════

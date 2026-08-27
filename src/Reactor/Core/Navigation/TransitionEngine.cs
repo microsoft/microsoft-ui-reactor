@@ -81,6 +81,8 @@ internal static class TransitionEngine
         // hit-test-suppressed page would stay unclickable.
         batch.Completed += (_, _) =>
         {
+            ReleaseAnimatedProperties(inVisual);
+
             // Finalize: ensure incoming is fully visible
             inVisual.Opacity = 1;
             inVisual.Offset = Vector3.Zero;
@@ -96,21 +98,30 @@ internal static class TransitionEngine
                 RestoreHitTesting(incoming);
             }
 
-            onComplete();
+            try
+            {
+                // onComplete runs app lifecycle callbacks (onNavigatedTo / onNavigatedFrom) and
+                // can throw. The finally block still has to run: it takes the outgoing page out
+                // of the animation's end state, and disposes the batch.
+                onComplete();
+            }
+            finally
+            {
+                // Normalize the outgoing visual too, but only after onComplete has taken it out
+                // of the tree — cached or unmounted. Its animation left it faded out and possibly
+                // offset or scaled, and NavigationCacheMode can hand that same control back as a
+                // later page: NavigationHostLifecycle's instant-swap path (SuppressTransition, or
+                // a navigation with no outgoing page) adds a cached control to the tree without
+                // touching its visual, so a page cached mid-fade would return invisible. Doing
+                // this before onComplete would instead flash the old page at full opacity over
+                // the new one, since both are still children of the host Grid.
+                ReleaseAnimatedProperties(outVisual);
+                outVisual.Opacity = 1;
+                outVisual.Offset = Vector3.Zero;
+                outVisual.Scale = Vector3.One;
 
-            // Normalize the outgoing visual too, but only after onComplete has taken it out of
-            // the tree — cached or unmounted. Its animation left it faded out and possibly
-            // offset or scaled, and NavigationCacheMode can hand that same control back as a
-            // later page: NavigationHostLifecycle's instant-swap path (SuppressTransition, or a
-            // navigation with no outgoing page) adds a cached control to the tree without
-            // touching its visual, so a page cached mid-fade would return invisible. Doing this
-            // before onComplete would instead flash the old page at full opacity over the new
-            // one, since both are still children of the host Grid.
-            ReleaseAnimatedProperties(outVisual);
-            outVisual.Opacity = 1;
-            outVisual.Offset = Vector3.Zero;
-            outVisual.Scale = Vector3.One;
-            batch.Dispose();
+                batch.Dispose();
+            }
         };
 
         switch (transition)
@@ -144,10 +155,17 @@ internal static class TransitionEngine
     }
 
     /// <summary>
-    /// Hands the properties this engine animates back to direct assignment. A Composition
-    /// property remains under animation control once started — including after the animation
-    /// finishes — and writes to it are silently dropped until the animation is stopped.
+    /// Stops the animations this engine starts, so the following direct assignments are
+    /// unambiguous.
     /// </summary>
+    /// <remarks>
+    /// This is defensive rather than load-bearing for the keyframe animations used here: a
+    /// completed <c>KeyFrameAnimation</c> does release its property, and a direct write that
+    /// disagrees with the final keyframe takes effect — <c>NavCov_CompletedAnimationReleasesProperty</c>
+    /// pins that behaviour, because it is the assumption every reset in this file rests on and it
+    /// is not obvious from the API. The stops are kept for the animation kinds that have no
+    /// keyframe to settle on (the spring path), and to keep the reset's intent explicit.
+    /// </remarks>
     private static void ReleaseAnimatedProperties(Visual visual)
     {
         visual.StopAnimation("Opacity");
