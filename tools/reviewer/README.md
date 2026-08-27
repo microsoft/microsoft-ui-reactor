@@ -83,6 +83,21 @@ Each agent:
 4. Applies the Team Lead Test: only emit findings a senior lead would keep
 5. Cites pattern IDs from skill catalogs for every finding
 
+### Coverage reporting
+
+The orchestrator does not open the batch files itself — it lists them in the
+agent's prompt. So before each batch it resolves every manifest path against the
+repo root, prompts with only the files that exist, and writes
+
+```
+**Files reviewed**: 7 of 8
+```
+
+naming any path that did not resolve. A stale path is reported as a shortfall
+rather than aborting the run, because killing 91 batches over one bad entry
+would trade a reporting problem for an availability one. `ReviewerManifestTests`
+is the strict check; it fails the build instead.
+
 ### Phase 2: General Review (after specialists)
 
 The general agent runs after specialists complete. It:
@@ -122,7 +137,7 @@ Decisions are saved directly into `fix-list.md`. The file can also be edited man
 
 ```markdown
 ## F001
-- **File**: Reactor/Core/Reconciler.cs:145-167
+- **File**: src/Reactor/Core/Reconciler.cs:145-167
 - **Severity**: high
 - **Priority**: P1
 - **Domain**: concurrency
@@ -159,22 +174,30 @@ The implementation agent:
 
 ## Scope
 
-**Included** (485 files across 91 batches):
-- `Reactor/` — Core framework (reconciler, elements, hosting, flex, yoga, animation, markdown, property grid)
-- `Reactor.Cli/` — CLI tool
-- `Reactor.Localization.Generator/` — Source generator
-- `ReactorCharting/` — D3 visualization library
-- `vscode-reactor/` — VS Code extension
+**Included** (477 files across 91 batches, 630 entries — a file may appear in
+several batches so different agents can review it from different angles):
+- `src/Reactor/` — Core framework (reconciler, elements, hosting, flex, yoga, animation, property grid)
+- `src/Reactor.Advanced/` — Charting/D3 and Markdown
+- `src/Reactor.Cli/` — CLI tool
+- `src/Reactor.Devtools/` — Devtools and preview server
+- `src/Reactor.Localization.Generator/` — Source generator
+- `src/vscode-reactor/` — VS Code extension
 - `tests/` — All test projects (reviewed for quality, not just correctness)
-- Build config (`Directory.Build.props`, `*.csproj`, `*.sln`)
+- Build config (`Directory.Build.props`, `*.csproj`, `Reactor.slnx`)
 
 **Excluded**:
 - `samples/` — Sample apps
 - `docs/` — Documentation markdown
-- `selfhost/` — Runtime config files
 - `tests/Reactor.Tests/YogaGenerated/` — Auto-generated upstream test fixtures
 - `tests/Reactor.Tests/Md4cGenerated/` — Auto-generated CommonMark spec tests
 - Binary/image/config files
+
+The manifest is hand-maintained: there is no generator, because the batch and
+agent assignments encode a judgement about which files are worth reviewing
+*together*, which a directory glob cannot reproduce. It is gated by
+`ReviewerManifestTests` in `tests/Reactor.Tests/Tooling/`, which fails the build
+if any listed path stops resolving — the manifest previously drifted to 147 dead
+paths out of 633 without anything noticing.
 
 ## Advanced Usage
 
