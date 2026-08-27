@@ -204,9 +204,15 @@ correct.
 ```
 
 [`REACTOR_THEME_001`](theming-tokens.md) is a counterpoint: the rule
-needs to read the string literal that follows
-`.Background("...")` / `.Foreground("...")` / `.WithBorder("...")` and
-map it to a suggested theme token. The descriptor message format has a
+needs to read the string literals an argument to
+`.Background("...")` / `.Foreground("...")` / `.WithBorder("...")` can
+evaluate to, and map each one to a suggested theme token. It walks the
+value-*selecting* shapes — a conditional, switch, null-coalesce, or
+parenthesis — rather than only accepting a bare literal, because
+`.Background(isSelected ? "#E5F1FB" : "#FFFFFF")` is still two
+hard-coded colours. It deliberately does not walk into nested calls,
+where a string is not necessarily a colour at all. The descriptor
+message format has a
 `{0}` slot for the suggested token, which the analyzer looks up in
 `ColorToThemeToken` after the syntactic match. The diagnostic flows
 through to a paired `CodeFixProvider` that rewrites the literal to the

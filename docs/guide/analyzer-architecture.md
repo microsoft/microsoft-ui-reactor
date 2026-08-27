@@ -256,20 +256,63 @@ private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     if (args.Count == 0)
         return;
 
-    // Check if the first argument is a string literal
-    var firstArg = args[0].Expression;
-    if (firstArg is not LiteralExpressionSyntax literal)
-        return;
-    if (!literal.IsKind(SyntaxKind.StringLiteralExpression))
-        return;
+    // Every string literal the first argument can evaluate to -- not just the argument itself.
+    // Gating on `firstArg is LiteralExpressionSyntax` let a selected/unselected pair like
+    // `.Background(isSelected ? "#E5F1FB" : "#FFFFFF")` through completely unreported, which is
+    // still two hard-coded colours and still ignores the reader's theme.
+    foreach (var literal in ColorLiterals(args[0].Expression))
+        ReportHardCodedColor(context, literal, methodName);
+}
 
-    var colorValue = literal.Token.ValueText;
+/// <summary>
+/// The string literals an argument can evaluate to.
+/// </summary>
+/// <remarks>
+/// Only value-<em>selecting</em> shapes are walked — a parenthesis, conditional, null-coalesce,
+/// or switch expression. Walking every descendant instead would reach into nested calls and
+/// report things that are not colours at all, e.g. the argument of
+/// <c>.Background(LookUpBrush("accent-ish"))</c>.
+/// </remarks>
+private static IEnumerable<LiteralExpressionSyntax> ColorLiterals(ExpressionSyntax? expression)
+{
+    switch (expression)
+    {
+        case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression):
+            yield return literal;
+            break;
+
+        case ParenthesizedExpressionSyntax parenthesized:
+            foreach (var nested in ColorLiterals(parenthesized.Expression)) yield return nested;
+            break;
+
+        case ConditionalExpressionSyntax conditional:
+            foreach (var nested in ColorLiterals(conditional.WhenTrue)) yield return nested;
+            foreach (var nested in ColorLiterals(conditional.WhenFalse)) yield return nested;
+            break;
+
+        case BinaryExpressionSyntax coalesce when coalesce.IsKind(SyntaxKind.CoalesceExpression):
+            foreach (var nested in ColorLiterals(coalesce.Left)) yield return nested;
+            foreach (var nested in ColorLiterals(coalesce.Right)) yield return nested;
+            break;
+
+        case SwitchExpressionSyntax switchExpression:
+            foreach (var arm in switchExpression.Arms)
+                foreach (var nested in ColorLiterals(arm.Expression)) yield return nested;
+            break;
+    }
+}
 ```
 
 [`REACTOR_THEME_001`](theming-tokens.md) is a counterpoint: the rule
-needs to read the string literal that follows
-`.Background("...")` / `.Foreground("...")` / `.WithBorder("...")` and
-map it to a suggested theme token. The descriptor message format has a
+needs to read the string literals an argument to
+`.Background("...")` / `.Foreground("...")` / `.WithBorder("...")` can
+evaluate to, and map each one to a suggested theme token. It walks the
+value-*selecting* shapes — a conditional, switch, null-coalesce, or
+parenthesis — rather than only accepting a bare literal, because
+`.Background(isSelected ? "#E5F1FB" : "#FFFFFF")` is still two
+hard-coded colours. It deliberately does not walk into nested calls,
+where a string is not necessarily a colour at all. The descriptor
+message format has a
 `{0}` slot for the suggested token, which the analyzer looks up in
 `ColorToThemeToken` after the syntactic match. The diagnostic flows
 through to a paired `CodeFixProvider` that rewrites the literal to the

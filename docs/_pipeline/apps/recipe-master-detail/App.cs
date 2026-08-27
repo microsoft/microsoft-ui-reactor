@@ -40,7 +40,7 @@ class NoteBrowser : Component
                     .WithKey(n.Id.ToString())
                     .AutomationName(n.Title)
                     .HAlign(Microsoft.UI.Xaml.HorizontalAlignment.Stretch)
-                    .Background(n.Id == selectedId ? "#E5F1FB" : "#FFFFFF")
+                    .Background(n.Id == selectedId ? Theme.SubtleFill : Theme.SolidBackground)
             ).ToArray()
         ).Width(200).Padding(8);
 
