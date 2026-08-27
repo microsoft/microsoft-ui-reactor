@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 <#
 .SYNOPSIS
     Parallelized code review orchestrator using Claude Code CLI agents.
