@@ -17,6 +17,7 @@
   <PropertyGroup>
     <ReactorSourceMap>true</ReactorSourceMap>
     <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+    <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
 
     <!-- Lets the measurement read the generated interceptor file off disk. -->
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>

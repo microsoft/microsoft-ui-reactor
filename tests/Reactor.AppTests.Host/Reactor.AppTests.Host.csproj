@@ -69,6 +69,14 @@
     the generator for real PackageReference consumers. The selftest fixtures in
     SelfTest/Fixtures/SourceMapReadPathTests.cs depend on it being wired here.
   -->
+  <!-- Spec 010 - the constant travels WITH the generator reference: it means
+       "interceptors are compiled into this assembly", so it must never be
+       defined where the generator is not actually wired. -->
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+    <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(ReactorSourceMap)' == 'true'">
     <ProjectReference Include="..\..\src\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
                       OutputItemType="Analyzer"

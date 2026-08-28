@@ -45,17 +45,35 @@
     <ReactorSourceMap>true</ReactorSourceMap>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
+  <!--
+    Wire the generator and its compile-time signal TOGETHER, and only for a
+    PackageReference consumer (the DLL sits under build\sourcemap\ in the
+    package, not analyzers\dotnet\cs, precisely so it is not auto-loaded).
+
+    Two reasons this is conditional rather than always-on:
+
+      * Cost. An analyzer under analyzers/dotnet/cs loads into EVERY consumer
+        compilation, and this generator's syntax provider visits every
+        invocation to classify it semantically. Gating the DLL's presence is
+        what actually delivers the "Release costs nothing" claim; gating only
+        the emit still pays the whole discovery pass.
+
+      * Honesty of the signal. REACTOR_SOURCEMAP means "interceptors are
+        compiled into this assembly". Defining it anywhere the generator is not
+        actually running would make guarded inspector code treat an unavailable
+        provider as a broken one. The constant is therefore defined in the same
+        conditional block that adds the analyzer, and never on its own.
+
+    In-repo projects do not go through this path; they consume Reactor by
+    project reference, so they add the generator ProjectReference and the
+    constant themselves. Only the handful that opt in get either.
+  -->
+  <ItemGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+    <Analyzer Include="$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
     <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
-    <!--
-      Compile-time signal that this assembly was BUILT with source mapping. It is
-      deliberately a build fact rather than a runtime probe: code that needs to
-      know whether locations are available must not infer it from "GetSource
-      returned null", because that cannot distinguish "not compiled in" from
-      "compiled in but broken". Tests use it to skip honestly on a Release build
-      while still asserting hard on a Debug one; consumers can use it to guard
-      inspector UI that would otherwise show empty locations.
-    -->
     <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
   </PropertyGroup>
 

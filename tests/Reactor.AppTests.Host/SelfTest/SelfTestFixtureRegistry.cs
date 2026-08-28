@@ -14,6 +14,7 @@ internal static class SelfTestFixtureRegistry
         "SourceMapReadPath_Disabled",
         "SourceMapReadPath_HandStamped",
         "SourceMapReadPath_Callback",
+        "SourceMapReadPath_BranchSwitch",
         "ErrorBoundary_CatchesRenderError",
         "ErrorBoundary_Recovery",
         "Reconciler_MountText",
@@ -2292,6 +2293,7 @@ internal static class SelfTestFixtureRegistry
         "SourceMapReadPath_Disabled" => new SourceMapReadPathTests.LeafIsNotTaggedWhenDisabled(harness),
         "SourceMapReadPath_HandStamped" => new SourceMapReadPathTests.HandStampedLeafIsTaggedWithFlagOff(harness),
         "SourceMapReadPath_Callback" => new SourceMapReadPathTests.CallbackControlAlsoCarriesSource(harness),
+        "SourceMapReadPath_BranchSwitch" => new SourceMapReadPathTests.BranchSwitchRefreshesTheReportedLine(harness),
         // Animation system — .Animate() modifier
         "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),

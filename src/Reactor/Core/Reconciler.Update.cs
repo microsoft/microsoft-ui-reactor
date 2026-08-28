@@ -113,6 +113,8 @@ public sealed partial class Reconciler
             // (TextBlock, Image, Border, etc.) — which is most of them.
             if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
                 SetElementTag(tagFeSE, newEl);
+            else if (CallSiteChangedOnSkip(oldEl, newEl) && control is FrameworkElement srcFeSE)
+                SetElementTag(srcFeSE, newEl);   // spec 010 — keep the reported line live
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
                 ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
             // Re-resolve ThemeRef-based resource overrides on theme change, against the

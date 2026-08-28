@@ -251,4 +251,67 @@ internal static class SourceMapReadPathTests
             }
         }
     }
+
+    /// <summary>
+    /// The branch-switch case: two structurally identical, callback-free leaves
+    /// rendered from DIFFERENT lines. <c>ShallowEquals</c> ignores
+    /// <c>CallSite</c>, so these compare equal and take the reconciler's skip
+    /// path — which left the control's back-pointer naming the branch that is no
+    /// longer live, so <c>GetSource</c> reported a confidently wrong line.
+    /// Guards the refresh added to the skip arms.
+    /// </summary>
+    internal class BranchSwitchRefreshesTheReportedLine(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = true;
+            try
+            {
+                // Two calls, same text, different lines. Identical for rendering.
+                var fromA = TextBlock("branch"); var lineA = Line();
+                var fromB = TextBlock("branch"); var lineB = Line();
+
+                var host = H.CreateHost();
+                var useA = true;
+                host.Mount(ctx => VStack(useA ? fromA : fromB));
+                await Harness.Render();
+
+                var target = H.FindControl<TextBlock>(t => t.Text == "branch");
+                H.Check("SourceMapBranch_Mounted", target is not null);
+                if (target is null) return;
+
+#if REACTOR_SOURCEMAP
+                H.Check("SourceMapBranch_InitialLineIsA",
+                    ReactorSourceMap.GetSource(target)?.LineNumber == lineA);
+
+                // Swap branches and re-render. Re-mounting the host is how the
+                // other fixtures drive an update; the two elements are
+                // shallow-equal, so this lands on the skip path rather than a
+                // real update — which is precisely the path under test.
+                useA = false;
+                host.Mount(ctx => VStack(useA ? fromA : fromB));
+                await Harness.Render();
+
+                var after = H.FindControl<TextBlock>(t => t.Text == "branch");
+                H.Check("SourceMapBranch_StillMounted", after is not null);
+                if (after is null) return;
+
+                var reported = ReactorSourceMap.GetSource(after)?.LineNumber;
+                H.Check("SourceMapBranch_LineFollowsTheLiveBranch", reported == lineB);
+                H.Check("SourceMapBranch_LineIsNotStale", reported != lineA);
+#else
+                _ = lineA; _ = lineB;
+                H.Skip("SourceMapBranch_InitialLineIsA", SkipReason);
+                H.Skip("SourceMapBranch_StillMounted", SkipReason);
+                H.Skip("SourceMapBranch_LineFollowsTheLiveBranch", SkipReason);
+                H.Skip("SourceMapBranch_LineIsNotStale", SkipReason);
+#endif
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
 }

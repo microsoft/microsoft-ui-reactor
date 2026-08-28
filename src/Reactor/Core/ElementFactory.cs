@@ -445,6 +445,14 @@ public sealed partial class ElementFactory<T> : IElementFactory
                     // `child` now hosts the fresh component subtree — tracking
                     // stays anchored on the still-realized `child`.
                     _lastElementByControl[child] = newElement;
+                    // Adoption moves the component node and Border.Child but not
+                    // ReactorAttached.StateProperty, so the still-parented wrapper
+                    // would keep pointing at the OLD element. Harmless for
+                    // rendering, but ReactorSourceMap.GetSource reads that
+                    // back-pointer, so without this the wrapper reports the
+                    // previous row's call site (spec 010).
+                    if (child is FrameworkElement adoptedFe)
+                        Reconciler.SetElementTagIfNeeded(adoptedFe, newElement);
                 }
                 else
                 {
@@ -616,6 +624,11 @@ public sealed partial class ElementFactory<T> : IElementFactory
                     && _reconciler.TryAdoptRealizedReplacement(reused, replacement))
                 {
                     control = reused;
+                    // Same as the adopt path above: refresh the back-pointer the
+                    // adoption itself does not move, so the reported source
+                    // location follows the row that is actually live (spec 010).
+                    if (reused is FrameworkElement adoptedFe)
+                        Reconciler.SetElementTagIfNeeded(adoptedFe, element);
                 }
                 else
                 {

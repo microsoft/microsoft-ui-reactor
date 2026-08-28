@@ -203,12 +203,14 @@
          Reactor.Wrappers.Abstractions.dll. -->
     <None Include="..\Reactor.Wrappers.Generator\$(_ReactorAnalyzerBinDir)\Reactor.Wrappers.Generator.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-    <!-- Spec 010 Route B — source-map interceptor generator. Ships alongside the
-         other components; it emits nothing unless the consumer opts in with
-         ReactorSourceMap=true, which build\Reactor.targets pairs with the
-         required InterceptorsNamespaces entry. -->
+    <!-- Spec 010 Route B — source-map interceptor generator. Packed OUTSIDE
+         analyzers/dotnet/cs on purpose: everything in that folder is loaded into
+         every consumer compilation, and this generator classifies every
+         invocation semantically. build\Reactor.targets adds it as an <Analyzer>
+         only when ReactorSourceMap is true, so a Release consumer never loads
+         it and pays nothing. -->
     <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
-          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+          Pack="true" PackagePath="build/sourcemap" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="" Visible="false" />

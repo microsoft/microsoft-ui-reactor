@@ -202,6 +202,15 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("            if (__e is null) return __e;");
             }
+            // FIRST STAMP WINS. Several DSL factories are pass-throughs that return
+            // an element someone else created -- When/If/Expr return `then()`
+            // verbatim. Those calls are intercepted too, so an unconditional write
+            // here would clone the inner element and replace the creating call
+            // site's location with the wrapper's, and GetSource would name the
+            // `When(` line instead of the `TextBlock(` line that actually made the
+            // control. Coalescing preserves the innermost stamp; a genuinely new
+            // element has a null CallSite and takes this call site as it should.
+            sb.AppendLine("            if (__e.CallSite is not null) return __e;");
             sb.AppendLine("            return __e with");
             sb.AppendLine("            {");
             sb.AppendLine($"                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation({Literal(mapped)}, {site.Line})");

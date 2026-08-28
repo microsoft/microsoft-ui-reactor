@@ -27,6 +27,14 @@
     are not generated, and no source paths ship in the binary.
   -->
 
+  <!-- Spec 010 - the constant travels WITH the generator reference: it means
+       "interceptors are compiled into this assembly", so it must never be
+       defined where the generator is not actually wired. -->
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+    <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
     <!--

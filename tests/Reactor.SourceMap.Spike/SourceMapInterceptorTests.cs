@@ -156,6 +156,50 @@ public sealed class SourceMapInterceptorTests : IDisposable
         Assert.Equal(thisLine, child!.CallSite!.Value.LineNumber);
     }
 
+    // ── Pass-through factories must not steal the creator's location ──────
+
+    [Fact]
+    public void PassThroughWhen_PreservesTheInnerElementsCallSite()
+    {
+        // When/If/Expr return their inner element verbatim, and are themselves
+        // intercepted. An unconditional stamp would clone the TextBlock and
+        // replace its location with the `When(` line, so GetSource would name the
+        // wrapper rather than the factory that created the control.
+        var inner = TextBlock("kept"); var innerLine = Line();
+
+        var wrapped = When(true, () => inner);
+
+        Assert.Same(inner, wrapped);
+        Assert.Equal(innerLine, wrapped.CallSite!.Value.LineNumber);
+    }
+
+    [Fact]
+    public void PassThroughWhen_MultilineFormIsAttributedToTheInnerFactory()
+    {
+        // The shape the reviewer described: the inner factory is on a different
+        // physical line from the wrapper, so a stolen stamp is observable as a
+        // concrete wrong line rather than a coincidence.
+        var wrapperLine = Line();
+        var wrapped = When(
+            true,
+            () => TextBlock("multiline"));
+
+        // The TextBlock call is two lines below the When call.
+        Assert.NotEqual(wrapperLine, wrapped.CallSite!.Value.LineNumber);
+        Assert.Equal(wrapperLine + 3, wrapped.CallSite!.Value.LineNumber);
+    }
+
+    [Fact]
+    public void NonPassThroughFactory_StillTakesItsOwnCallSite()
+    {
+        // Positive control for the two tests above: a factory that genuinely
+        // CREATES an element must still stamp itself. If the coalescing logic
+        // were inverted (or stamped nothing), this would catch it.
+        var stack = VStack(TextBlock("child")); var stackLine = Line();
+
+        Assert.Equal(stackLine, stack.CallSite!.Value.LineNumber);
+    }
+
     // ── Helper-method attribution (reported, not aspirational) ────────────
 
     private static TextBlockElement MyHeader() => TextBlock("header");

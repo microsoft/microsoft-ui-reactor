@@ -620,6 +620,26 @@ public sealed partial class Reconciler : IDisposable
         || HasReferenceModifiers(element);
 
     /// <summary>
+    /// Spec 010 — did the source location change across a shallow skip?
+    ///
+    /// <para><see cref="Element.ShallowEquals"/> deliberately ignores
+    /// <see cref="Element.CallSite"/>, so two structurally identical
+    /// callback-free leaves rendered from DIFFERENT lines (the two arms of a
+    /// conditional, say) compare equal and take the skip path. That is the right
+    /// call for rendering — nothing about the control needs to change — but the
+    /// control's back-pointer would keep naming the branch that is no longer
+    /// live, and <c>ReactorSourceMap.GetSource</c> would confidently report the
+    /// wrong line. Same class of problem as the #721 gesture/drag slots, and
+    /// handled the same way: refresh on skip.</para>
+    ///
+    /// <para>Costs one nullable-struct compare when source mapping is off, where
+    /// both sides are null and this is always false — so no control fetch and no
+    /// DependencyProperty write on the flag-off path.</para>
+    /// </summary>
+    internal static bool CallSiteChangedOnSkip(Element oldEl, Element newEl)
+        => oldEl.CallSite != newEl.CallSite;
+
+    /// <summary>
     /// True when the element carries any reactive reference modifier — the imperative
     /// <c>.Ref</c> producer slot, an <c>XYFocus*</c> edge, or an accessibility
     /// relationship edge. Such elements must be tagged so the unmount path can find the
