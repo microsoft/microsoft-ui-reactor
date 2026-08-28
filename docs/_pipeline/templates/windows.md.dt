@@ -249,9 +249,9 @@ Caveats:
 
 ## Window icon
 
-The window icon is the Win32 `HICON` Windows shows in the taskbar, the Alt-Tab
-switcher, and Task Manager. Set it declaratively with `icon:` on `ReactorApp.Run`,
-or with `WindowSpec.Icon` for a secondary window:
+The window icon is the Win32 `HICON` Windows shows in the window's caption and the
+Alt-Tab switcher. Set it declaratively with `icon:` on `ReactorApp.Run`, or with
+`WindowSpec.Icon` for a secondary window:
 
 ```csharp snippet="windows/window-icon"
 ```
@@ -265,6 +265,26 @@ When no icon is declared, Reactor falls back in order to `Assets\AppIcon.ico`
 beside the app, then to the icon embedded in the executable by
 `<ApplicationIcon>`.
 
+### Which surface shows which icon
+
+This trips people up, so it is worth being precise. The window icon and the
+taskbar button are **not** always the same picture, and which one wins depends on
+whether your app has package identity:
+
+| Surface | Unpackaged | Packaged (MSIX) |
+| --- | --- | --- |
+| Window caption | window icon | window icon |
+| Alt-Tab | window icon | window icon |
+| Taskbar button | window icon | `Square44x44Logo` from the manifest |
+| Task Manager | window icon | manifest logo, via package identity |
+
+So for a **packaged** app, setting `icon:` alone is not enough to change the
+taskbar button — the shell resolves that through package identity and never looks
+at the window handle. Ship a `Square44x44Logo` that matches your `.ico` as well,
+or the two surfaces will legitimately disagree and it will look like the window
+icon "did not apply". For an **unpackaged** app there is no package identity, so
+the window icon drives every surface and `icon:` is all you need.
+
 Caveats:
 
 - Prefer a real `.ico`. It is the format `AppWindow.SetIcon` documents, and the only
@@ -272,9 +292,10 @@ Caveats:
   they need a raw `HICON` via `LoadImageW`. Reactor passes the source to the
   platform unchanged rather than pre-validating the extension.
 - A packaged app does **not** get its window icon from `Package.appxmanifest`.
-  The manifest's `Square44x44Logo` drives the *taskbar button* through package
-  identity, which bypasses the window handle entirely — so without an explicit
-  icon the Alt-Tab entry still shows a generic glyph.
+  The manifest drives the taskbar button and Task Manager through package identity,
+  which bypasses the window handle entirely — so without an explicit icon the
+  caption and Alt-Tab entry still show a generic glyph, even though the taskbar
+  button looks right.
 - `<ApplicationIcon>` alone sets the icon Explorer shows for the `.exe`. Reactor's
   fallback is what carries it onto the window; WinUI does not do so on its own.
 - A `FromPath` source that does not exist is reported as a failure so the fallback

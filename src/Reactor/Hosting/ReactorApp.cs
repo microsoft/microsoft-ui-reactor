@@ -356,13 +356,16 @@ public static partial class ReactorApp
     /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
     /// <param name="fullScreen">Open with the full-screen presenter.</param>
     /// <param name="icon">
-    /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the taskbar,
-    /// Alt-Tab, and Task Manager. Use an <c>.ico</c>: build it with
+    /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the window's
+    /// caption and the Alt-Tab switcher. Use an <c>.ico</c>: build it with
     /// <see cref="WindowIcon.FromPath"/> for a file beside the app, or
     /// <see cref="WindowIcon.FromResource"/> for a packaged <c>ms-appx:///</c> asset.
     /// When omitted, Reactor falls back to <c>Assets\AppIcon.ico</c> and then to the
     /// executable's embedded icon. Distinct from <c>TitleBar(...).Icon(...)</c>, which
-    /// sets the app mark drawn inside the window.
+    /// sets the app mark drawn inside the window. Note that in a <b>packaged</b> app this
+    /// does not change the taskbar button or Task Manager — the shell draws those from
+    /// package identity and the manifest's <c>Square44x44Logo</c>; see
+    /// <see cref="WindowSpec.Icon"/>.
     /// </param>
     /// <param name="configure">
     /// Optional callback invoked on the UI thread before the root mounts.

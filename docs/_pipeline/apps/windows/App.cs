@@ -123,9 +123,10 @@ class SettingsWindow : Component
 }
 
 // <snippet:window-icon>
-// The window icon is the Win32 HICON shown in the taskbar, Alt-Tab, and Task
-// Manager — distinct from TitleBar(...).Icon(...), which draws a mark inside
-// the window. Use an .ico.
+// The window icon is the Win32 HICON shown in the window caption and Alt-Tab —
+// distinct from TitleBar(...).Icon(...), which draws a mark inside the window.
+// Use an .ico. Unpackaged, this also drives the taskbar button; packaged, the
+// taskbar comes from the manifest's Square44x44Logo instead.
 static class WindowIconSetup
 {
     // Unpackaged: a file deployed beside the app.
