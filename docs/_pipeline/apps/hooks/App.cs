@@ -384,6 +384,7 @@ class ExternalStoreDemo : Component
 // A custom hook is a RenderContext extension method whose name starts with
 // `Use`. It owns three slots — two UseState and one UseEffect — and the caller
 // still gets the simple (value, setter) shape they'd get from UseState.
+// <snippet:custom-hook-debounce-hook>
 static class DebouncedTextHook
 {
     public static (string Value, Action<string> Set) UseDebouncedText(
@@ -404,11 +405,16 @@ static class DebouncedTextHook
                 catch (OperationCanceledException) { return; }
             });
             return () => { cts.Cancel(); };
-        }, value);
+            // Both captured values are dependencies. `ms` is easy to leave out —
+            // it usually comes from a constant at the call site — but omitting it
+            // means a caller that changes the delay keeps the already-armed timer
+            // running on the old interval until `value` happens to change.
+        }, value, ms);
 
         return (debounced, setValue);
     }
 }
+// </snippet:custom-hook-debounce-hook>
 
 class CustomHookDemo : Component
 {

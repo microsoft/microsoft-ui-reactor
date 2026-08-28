@@ -571,7 +571,11 @@ static class DebouncedTextHook
                 catch (OperationCanceledException) { return; }
             });
             return () => { cts.Cancel(); };
-        }, value);
+            // Both captured values are dependencies. `ms` is easy to leave out —
+            // it usually comes from a constant at the call site — but omitting it
+            // means a caller that changes the delay keeps the already-armed timer
+            // running on the old interval until `value` happens to change.
+        }, value, ms);
 
         return (debounced, setValue);
     }

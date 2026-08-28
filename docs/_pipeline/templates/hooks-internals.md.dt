@@ -268,22 +268,7 @@ slot table doesn't care; only call order matters. The convention is
 the `Use` prefix so the analyzer can apply hook-rules at the call
 site:
 
-```csharp
-public static (string Value, Action<string> Set) UseDebouncedText(
-    this RenderContext ctx, string initial, TimeSpan delay)
-{
-    var (value, setValue) = ctx.UseState(initial);
-    var (debounced, setDebounced) = ctx.UseState(initial);
-    ctx.UseEffect(() =>
-    {
-        var cts = new CancellationTokenSource();
-        _ = Task.Delay(delay, cts.Token).ContinueWith(
-            _ => setDebounced(value),
-            TaskContinuationOptions.OnlyOnRanToCompletion);
-        return () => { cts.Cancel(); };
-    }, value);
-    return (debounced, setValue);
-}
+```csharp snippet="hooks/custom-hook-debounce-hook"
 ```
 
 ```csharp snippet="source:src/Reactor/Hooks/UseElementRef.cs#use-elementref"

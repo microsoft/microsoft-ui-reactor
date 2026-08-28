@@ -392,20 +392,34 @@ the `Use` prefix so the analyzer can apply hook-rules at the call
 site:
 
 ```csharp
-public static (string Value, Action<string> Set) UseDebouncedText(
-    this RenderContext ctx, string initial, TimeSpan delay)
+static class DebouncedTextHook
 {
-    var (value, setValue) = ctx.UseState(initial);
-    var (debounced, setDebounced) = ctx.UseState(initial);
-    ctx.UseEffect(() =>
+    public static (string Value, Action<string> Set) UseDebouncedText(
+        this RenderContext ctx, string initial, int ms)
     {
-        var cts = new CancellationTokenSource();
-        _ = Task.Delay(delay, cts.Token).ContinueWith(
-            _ => setDebounced(value),
-            TaskContinuationOptions.OnlyOnRanToCompletion);
-        return () => { cts.Cancel(); };
-    }, value);
-    return (debounced, setValue);
+        var (value, setValue) = ctx.UseState(initial);
+        var (debounced, setDebounced) = ctx.UseState(initial);
+
+        ctx.UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                try { await Task.Delay(ms, cts.Token); setDebounced(value); }
+                // Expected: the cleanup below cancels this delay whenever `value`
+                // changes again inside the debounce window. Cancelling is how the
+                // stale result is discarded, so there is nothing to report.
+                catch (OperationCanceledException) { return; }
+            });
+            return () => { cts.Cancel(); };
+            // Both captured values are dependencies. `ms` is easy to leave out —
+            // it usually comes from a constant at the call site — but omitting it
+            // means a caller that changes the delay keeps the already-armed timer
+            // running on the old interval until `value` happens to change.
+        }, value, ms);
+
+        return (debounced, setValue);
+    }
 }
 ```
 

@@ -236,25 +236,6 @@ public class InlineSnippetLedgerTests
 
             ["hooks-internals"] = new(StringComparer.Ordinal)
             {
-                ["""
-                 public static (string Value, Action<string> Set) UseDebouncedText(
-                     this RenderContext ctx, string initial, TimeSpan delay)
-                 {
-                     var (value, setValue) = ctx.UseState(initial);
-                     var (debounced, setDebounced) = ctx.UseState(initial);
-                     ctx.UseEffect(() =>
-                     {
-                         var cts = new CancellationTokenSource();
-                         _ = Task.Delay(delay, cts.Token).ContinueWith(
-                             _ => setDebounced(value),
-                             TaskContinuationOptions.OnlyOnRanToCompletion);
-                         return () => { cts.Cancel(); };
-                     }, value);
-                     return (debounced, setValue);
-                 }
-                 """] =
-                    "Illustrative custom-hook sketch with no counterpart in src/ to point at.",
-
                 // These two share a first line. Under the old first-line key a single entry
                 // covered both, so only one was ever actually reviewed.
                 ["""
