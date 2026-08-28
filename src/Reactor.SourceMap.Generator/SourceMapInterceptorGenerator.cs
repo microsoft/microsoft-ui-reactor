@@ -289,7 +289,15 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             // singleton's reference identity AND materializes a 152-byte extras bucket
             // on every conditional-empty render — a hot path for Empty(), and for
             // factories like DevtoolsMenu that yield the sentinel when switched off.
-            sb.AppendLine("            if (__e is global::Microsoft.UI.Reactor.Core.EmptyElement) return __e;");
+            //
+            // Emitted ONLY where the declared return type could actually be one. For a
+            // factory returning a concrete record (TextBlockElement, …) the compiler
+            // proves the test is always false and reports CS0184, which Release
+            // promotes to an error via TreatWarningsAsErrors.
+            if (sig.CanReturnEmpty)
+            {
+                sb.AppendLine("            if (__e is global::Microsoft.UI.Reactor.Core.EmptyElement) return __e;");
+            }
             sb.AppendLine("            return __e with");
             sb.AppendLine("            {");
             sb.AppendLine($"                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation({Literal(mapped)}, {site.Line})");
@@ -398,8 +406,10 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                     | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
         private Signature(string ownerType, string methodName, string returnType, string parameterList, string argumentList, bool returnsNullable,
+                          bool canReturnEmpty,
                           string typeParameterList, string typeArgumentList, ImmutableArray<string> constraintClauses)
         {
+            CanReturnEmpty = canReturnEmpty;
             OwnerType = ownerType;
             MethodName = methodName;
             ReturnType = returnType;
@@ -424,6 +434,13 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         public string ParameterList { get; }
         public string ArgumentList { get; }
         public bool ReturnsNullable { get; }
+
+        /// <summary>
+        /// True when the declared return type could actually be an <c>EmptyElement</c> —
+        /// i.e. the base <c>Element</c> or <c>EmptyElement</c> itself. A concrete element
+        /// record cannot be, and testing for it would be CS0184 (error in Release).
+        /// </summary>
+        public bool CanReturnEmpty { get; }
 
         /// <summary><c>&lt;T, TProps&gt;</c> on the interceptor declaration, or empty.</summary>
         public string TypeParameterList { get; }
@@ -461,6 +478,13 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                     .ToImmutableArray();
             }
 
+            // Only the base Element (or EmptyElement itself) can hold an EmptyElement at
+            // runtime; a concrete element record provably cannot, and testing for it is
+            // CS0184 — a warning that Release turns into a build error.
+            var returnName = method.ReturnType.OriginalDefinition.ToDisplayString();
+            var canReturnEmpty = returnName == ElementMetadataName
+                || returnName == "Microsoft.UI.Reactor.Core.EmptyElement";
+
             return new Signature(
                 method.ContainingType.ToDisplayString(s_typeFormat),
                 method.Name,
@@ -468,6 +492,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                 string.Join(", ", parameters),
                 string.Join(", ", arguments),
                 method.ReturnType.NullableAnnotation == NullableAnnotation.Annotated,
+                canReturnEmpty,
                 typeParams,
                 typeParams,
                 constraints);
@@ -540,5 +565,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         }
     }
 }
+
+
 
 
