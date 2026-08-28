@@ -445,6 +445,27 @@ internal static class NavigationCoverageFixtures
             TransitionEngine.RestoreHitTesting(preempted);
             H.Check("NavHitTest_LateRestoreAfterClearIsNoOp", preempted.IsHitTestVisible);
 
+            // Same hazard when the preempting navigation is an *animated* non-slide transition:
+            // Entrance/DrillIn/Fade never suppress, so without the clear they would inherit an
+            // overlapping slide's suppression on the page they are about to show.
+            var preemptedByAnimated = new Border();
+            TransitionEngine.SuppressHitTesting(preemptedByAnimated);
+            H.Check("NavHitTest_AnimatedPreemptStartsSuppressed", !preemptedByAnimated.IsHitTestVisible);
+
+            var animatedDone = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                new Border(), preemptedByAnimated,
+                NavigationTransition.Entrance(), NavigationMode.Push,
+                onComplete: () => animatedDone.TrySetResult());
+
+            H.Check(
+                "NavHitTest_AnimatedNonSlideClearsSuppression",
+                preemptedByAnimated.IsHitTestVisible);
+
+            await global::System.Threading.Tasks.Task.WhenAny(
+                animatedDone.Task, global::System.Threading.Tasks.Task.Delay(5000));
+
             var host2 = H.CreateHost();
             host2.Mount(ctx => TextBlock("Hit-test suppression done"));
             await Harness.Render();

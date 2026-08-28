@@ -87,6 +87,17 @@ internal static class TransitionEngine
             SuppressHitTesting(outgoing);
             SuppressHitTesting(incoming);
         }
+        else
+        {
+            // This transition does not suppress hit testing, but an overlapping slide may
+            // already have suppressed one of these pages — and that page can be the one this
+            // navigation is about to *show*. Slide A→B, then Entrance B→A before the slide
+            // finishes, and A appears still non-hit-testable. Clear outright for the same reason
+            // the instant-swap path does: only a transition that is itself suppressing gets to
+            // leave these pages inert.
+            ClearHitTestSuppression(outgoing);
+            ClearHitTestSuppression(incoming);
+        }
 
         if (usesCenterPointBinding)
         {
@@ -218,11 +229,19 @@ internal static class TransitionEngine
         {
             return new global::Windows.UI.ViewManagement.UISettings();
         }
-        catch (global::System.Exception)
+        catch (global::System.Runtime.InteropServices.COMException ex)
         {
-            // UISettings is a WinRT/COM activation and needs a usable view context. If it is
-            // unavailable — some host, test, or headless configuration — fall back to animating,
-            // which is the pre-existing behaviour, rather than failing the navigation.
+            // UISettings is a WinRT activation and needs a usable view context. Some host, test,
+            // or headless configuration can refuse it. Fall back to animating — the pre-existing
+            // behaviour — rather than failing the navigation, but do not go silent about it.
+            Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Core.Diagnostics.LogCategory.Navigation, "UISettings activation", ex);
+            return null;
+        }
+        catch (global::System.InvalidOperationException ex)
+        {
+            Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Core.Diagnostics.LogCategory.Navigation, "UISettings activation", ex);
             return null;
         }
     }
@@ -251,8 +270,24 @@ internal static class TransitionEngine
             {
                 return _uiSettings.AnimationsEnabled;
             }
-            catch (global::System.Exception)
+            catch (global::System.Runtime.InteropServices.COMException ex)
             {
+                // Reading across the WinRT boundary can fail during teardown. Animating is the
+                // pre-existing behaviour, so prefer it over failing the navigation.
+                Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Core.Diagnostics.LogCategory.Navigation, "UISettings.AnimationsEnabled", ex);
+                return true;
+            }
+            catch (global::System.ObjectDisposedException ex)
+            {
+                Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Core.Diagnostics.LogCategory.Navigation, "UISettings.AnimationsEnabled", ex);
+                return true;
+            }
+            catch (global::System.InvalidOperationException ex)
+            {
+                Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Core.Diagnostics.LogCategory.Navigation, "UISettings.AnimationsEnabled", ex);
                 return true;
             }
         }
