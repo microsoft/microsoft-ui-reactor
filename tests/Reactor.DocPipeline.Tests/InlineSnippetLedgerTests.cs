@@ -43,11 +43,16 @@ public class InlineSnippetLedgerTests
     /// CommonMark defines. Hard-coding three backticks made the gate blind to a four-backtick block
     /// — the form CommonMark requires when the example itself contains a triple-backtick run — and
     /// to a tilde fence, so hand-typed copyable C# could enter the guides without a ledger entry
-    /// just by being fenced one character wider or with a different character. The closing fence
-    /// must repeat the opening run, which is also CommonMark's rule.
+    /// just by being fenced one character wider or with a different character.
+    /// <para>
+    /// The fence <em>character</em> is captured separately from the run so the closing fence can
+    /// only repeat that same character: CommonMark requires it, and allowing either character in
+    /// the suffix meant a line like <c>~~~```</c> falsely closed a tilde block, hiding everything
+    /// after it from the gate.
+    /// </para>
     /// </remarks>
     private static readonly Regex CSharpFence =
-        new(@"(?im)^(?<fence>`{3,}|~{3,})csharp([^\r\n]*)\r?\n(?<body>.*?)^\k<fence>[`~]*[ \t]*\r?$",
+        new(@"(?im)^(?<fence>(?<fc>[`~])\k<fc>{2,})csharp([^\r\n]*)\r?\n(?<body>.*?)^\k<fence>\k<fc>*[ \t]*\r?$",
             RegexOptions.Compiled | RegexOptions.Singleline);
 
     /// <summary>
@@ -399,6 +404,24 @@ public class InlineSnippetLedgerTests
 
         Assert.Single(found);
         // If the scanner stopped at the inner ``` it would only see `var a = 1;`.
+        Assert.Contains("var b = 2;", found[0]);
+    }
+
+    /// <summary>
+    /// CommonMark requires the closing fence to use the same character as the opening one. Allowing
+    /// either character in the closing run let a line like <c>~~~```</c> falsely close a tilde
+    /// block, hiding every copyable line after it from the gate.
+    /// </summary>
+    [Theory]
+    [InlineData("~~~", "```")]
+    [InlineData("```", "~~~")]
+    public void Mismatched_Fence_Character_Does_Not_Close_The_Block(string open, string other)
+    {
+        var template = $"{open}csharp\nvar a = 1;\n{open}{other}\nvar b = 2;\n{open}\n";
+
+        var found = UnverifiedExamples(template).ToList();
+
+        Assert.Single(found);
         Assert.Contains("var b = 2;", found[0]);
     }
 
