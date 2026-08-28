@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.SourceMap.Generator;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
@@ -26,8 +27,16 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class PassThroughFactoryDriftTests
 {
-    /// <summary>Mirrors SourceMapInterceptorGenerator.PassThroughFactories.</summary>
-    private static readonly string[] GeneratorList = ["When", "If", "Expr"];
+    /// <summary>
+    /// The generator's OWN set, read directly rather than copied. Comparing against a
+    /// hand-maintained duplicate would guard only the DSL surface: edit
+    /// <c>PassThroughFactories</c> and a copied list would stay green while interception
+    /// coverage drifted, which is the exact failure this test exists to prevent.
+    /// </summary>
+    private static string[] GeneratorList
+        => SourceMapInterceptorGenerator.PassThroughFactories
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
 
     private static bool ProducesElementWithNoInput(Type t)
         // `Func<Element>` / `Func<Element?>`: a NULLARY producer, so the element it
@@ -61,7 +70,7 @@ public class PassThroughFactoryDriftTests
     public void GeneratorPassThroughListMatchesTheDslSurface()
     {
         var discovered = DiscoverPassThroughs();
-        var expected = GeneratorList.OrderBy(n => n, StringComparer.Ordinal).ToArray();
+        var expected = GeneratorList;
 
         Assert.True(
             discovered.SequenceEqual(expected, StringComparer.Ordinal),
@@ -106,3 +115,4 @@ public class PassThroughFactoryDriftTests
         Assert.DoesNotContain("ForEach", discovered);
     }
 }
+

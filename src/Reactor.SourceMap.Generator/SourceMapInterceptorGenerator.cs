@@ -43,8 +43,12 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     /// DSL factories that return an element the CALLER supplied rather than one they
     /// built: <c>When</c>/<c>If</c> return <c>then()</c>, <c>Expr</c> returns
     /// <c>render()</c>. See the rationale at the use site in <c>TryDescribe</c>.
+    ///
+    /// <para><c>internal</c> so PassThroughFactoryDriftTests compares the DISCOVERED
+    /// pass-through set against this one directly. A hand-copied list in the test would
+    /// only guard the DSL surface, and would stay green if this set were edited.</para>
     /// </summary>
-    private static readonly ImmutableHashSet<string> PassThroughFactories =
+    internal static readonly ImmutableHashSet<string> PassThroughFactories =
         ImmutableHashSet.Create(StringComparer.Ordinal, "When", "If", "Expr");
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
