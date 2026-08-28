@@ -39,19 +39,28 @@ public static class ReactorSourceMap
     ///
     /// <para>Deliberately a field INITIALIZER and not a static constructor:
     /// declaring an explicit cctor would strip <c>beforefieldinit</c> from this
-    /// type, and <see cref="Enabled"/> is read on the mount hot path via
-    /// <c>Reconciler.NeedsTag</c>, where an unhoistable class-init check would
-    /// show up.</para>
+    /// type, and <see cref="Enabled"/> is read by every generated factory
+    /// interceptor, where an unhoistable class-init check would show up.</para>
     /// </summary>
     private static int s_enabled =
-        string.Equals(
-            global::System.Environment.GetEnvironmentVariable("REACTOR_SOURCEMAP"),
-            "1",
-            StringComparison.Ordinal) ? 1 : 0;
+        IsEnabledByEnvironment(global::System.Environment.GetEnvironmentVariable("REACTOR_SOURCEMAP")) ? 1 : 0;
 
     /// <summary>
-    /// True when source mapping is active for this process. Read on the mount
-    /// hot path, so it is an <c>int</c> + <c>Volatile</c> rather than a lock.
+    /// The <c>REACTOR_SOURCEMAP</c> contract: exactly <c>"1"</c> enables, anything else
+    /// (including <c>"true"</c>, <c>"0"</c>, empty and unset) does not.
+    ///
+    /// <para>Factored out so the contract can be tested directly. Asserting it through
+    /// <see cref="Enabled"/> instead would be testing a mutable process-global that this
+    /// very environment variable is allowed to initialize to true — the test would fail
+    /// under its own supported opt-in, and could also observe another class's write.</para>
+    /// </summary>
+    internal static bool IsEnabledByEnvironment(string? value)
+        => string.Equals(value, "1", StringComparison.Ordinal);
+
+    /// <summary>
+    /// True when source mapping is active for this process. Read by every generated
+    /// factory interceptor before it stamps, so it is an <c>int</c> + <c>Volatile</c>
+    /// rather than a lock.
     /// </summary>
     public static bool Enabled
     {
@@ -67,9 +76,14 @@ public static class ReactorSourceMap
     /// property: <c>UIElement</c> → <c>ReactorAttached.StateProperty</c> →
     /// <c>ReactorState.Element</c> → <see cref="Element.CallSite"/>.</para>
     ///
-    /// <para>Returns <c>null</c> when the control was not produced by Reactor,
-    /// when it was mounted while <see cref="Enabled"/> was false and therefore
-    /// never tagged, or when no source-map provider stamped the element.</para>
+    /// <para>Returns <c>null</c> when the control was not produced by Reactor, or when
+    /// the element behind it carries no <see cref="Element.CallSite"/> — because it was
+    /// built while <see cref="Enabled"/> was false, or because no provider reaches that
+    /// factory (see the known limitations in the source-mapping guide). Note this is a
+    /// property of the ELEMENT, not of tagging: a control can be tagged for unrelated
+    /// reasons (callbacks, a key, other extras) and still report no location, and an
+    /// element hand-stamped with a <c>CallSite</c> reports one even with the flag
+    /// off.</para>
     /// </summary>
     public static SourceLocation? GetSource(UIElement control)
         => Reconciler.GetElementTag(control)?.CallSite;

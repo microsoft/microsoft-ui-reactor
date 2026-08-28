@@ -36,4 +36,12 @@
     <NoWarn>$(NoWarn);RS2008</NoWarn>
   </PropertyGroup>
 
+  <!-- Spec 010 - lets Reactor.Tests unit-test ApplyPathMap directly. The
+       end-to-end parity test in the spike only exercises the PathMap the CI build
+       happens to set, so the casing and prefix edge cases need a direct call. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Reactor.Tests" />
+  </ItemGroup>
+
 </Project>
+

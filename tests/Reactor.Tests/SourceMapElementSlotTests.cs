@@ -169,12 +169,30 @@ public sealed class SourceMapElementSlotTests
     // ── Runtime flag ──────────────────────────────────────────────────────
 
     [Fact]
-    public void Enabled_DefaultsToFalse()
+    public void EnvironmentContract_OnlyExactlyOneEnables()
     {
-        // Asserted BEFORE any mutation, so a default-true initializer fails here.
-        // The default is what preserves PR #468's leaf-tagging allocation win for
-        // every retail app, so it must be pinned independently of round-tripping.
-        Assert.False(ReactorSourceMap.Enabled);
+        // The REACTOR_SOURCEMAP seed contract, tested directly rather than through
+        // ReactorSourceMap.Enabled. Asserting the live flag "defaults to false" would
+        // fail under this very opt-in - running the suite with REACTOR_SOURCEMAP=1 is
+        // supported, and correctly initializes it to true - and could also observe a
+        // write from another class sharing the process-global.
+        Assert.True(ReactorSourceMap.IsEnabledByEnvironment("1"));
+
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment(null));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment(""));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment("0"));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment("true"));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment("True"));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment(" 1"));
+    }
+
+    [Fact]
+    public void EnvironmentContract_DefaultIsOff()
+    {
+        // The default is what preserves PR #468's leaf-tagging allocation win for every
+        // retail app: absent the explicit opt-in, source mapping must be off. Pinned on
+        // the parser so it holds regardless of how this process was launched.
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment(null));
     }
 
     [Fact]

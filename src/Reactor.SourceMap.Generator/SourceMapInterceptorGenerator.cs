@@ -309,11 +309,19 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     /// disagree on the path string (<c>/_/tests\Foo\Bar.cs</c> vs
     /// <c>/_/tests/Foo/Bar.cs</c>), which would make a "go to source" consumer
     /// behave differently depending on which provider is wired in.</para>
+    /// <para>Comparison is <see cref="StringComparison.Ordinal"/>, matching Roslyn's
+    /// <c>PathUtilities.NormalizePathPrefix</c> — which backs <c>SourceFileResolver</c>
+    /// and therefore <c>[CallerFilePath]</c> — and whose own comment reads "we expect
+    /// the client to use consistent capitalization; we use ordinal (case-sensitive)
+    /// comparisons". Case-INSENSITIVE matching here would be a silent divergence: given
+    /// a PathMap key whose casing differs from the real path, this generator would
+    /// rewrite the literal while the compiler left <c>[CallerFilePath]</c> alone, and
+    /// the two providers would disagree on where the code lives.</para>
     /// </summary>
     internal static string ApplyPathMap(string path, ImmutableArray<KeyValuePair<string, string>> pathMap)
     {
         if (pathMap.IsDefaultOrEmpty || string.IsNullOrEmpty(path)) return path;
-        foreach (var entry in pathMap.Where(entry => path.StartsWith(entry.Key, StringComparison.OrdinalIgnoreCase)))
+        foreach (var entry in pathMap.Where(entry => path.StartsWith(entry.Key, StringComparison.Ordinal)))
         {
             var suffix = path.Substring(entry.Key.Length);
             if (entry.Value.IndexOf('/') >= 0 && entry.Value.IndexOf('\\') < 0)
@@ -525,3 +533,5 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         }
     }
 }
+
+
