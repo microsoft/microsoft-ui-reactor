@@ -245,6 +245,42 @@ public sealed class SourceMapInterceptorTests : IDisposable
         Assert.Equal(freshLine, fresh.CallSite!.Value.LineNumber);
     }
 
+    // ── The empty sentinel must survive interception untouched ────────────
+
+    [Fact]
+    public void EmptyFactory_PreservesTheSingletonIdentity()
+    {
+        // Empty() returns the shared EmptyElement.Instance, and Mount filters
+        // EmptyElement out before it becomes a control - so a stamp here could never
+        // be read back. Cloning it via `with` would break reference identity AND
+        // allocate a 152-byte extras bucket on every conditional-empty render.
+        var a = Empty();
+        var b = Empty();
+
+        Assert.Same(a, b);
+        Assert.Null(a.CallSite);
+    }
+
+    [Fact]
+    public void EmptyFactory_AllocatesNoExtrasBucket()
+    {
+        // The allocation half, stated separately: identity could be preserved while
+        // still paying for a bucket, and vice versa.
+        var empty = Empty();
+
+        Assert.Null(empty.Extensions);
+    }
+
+    [Fact]
+    public void ANonEmptyFactoryOnTheSameLinesStillStamps()
+    {
+        // Positive control: the guard above must be specific to EmptyElement, not a
+        // blanket "stop stamping" that would make the two tests above vacuous.
+        var el = TextBlock("not-empty"); var line = Line();
+
+        Assert.NotNull(el.CallSite);
+        Assert.Equal(line, el.CallSite!.Value.LineNumber);
+    }
     [Fact]
     public void NonPassThroughFactory_StillTakesItsOwnCallSite()
     {
@@ -294,3 +330,4 @@ public sealed class SourceMapInterceptorTests : IDisposable
         Assert.DoesNotContain(global::System.IO.Path.DirectorySeparatorChar, text);
     }
 }
+

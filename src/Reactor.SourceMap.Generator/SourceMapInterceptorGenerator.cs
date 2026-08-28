@@ -283,6 +283,13 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             // build on this call (a memo hit), where the existing stamp is the right
             // answer and this call site is not.
             sb.AppendLine("            if (__e.CallSite is not null) return __e;");
+            // EmptyElement is a shared singleton (EmptyElement.Instance) that Mount
+            // filters out before it ever becomes a control, so a location stamped here
+            // could never be read back. Cloning it would be pure cost: it breaks the
+            // singleton's reference identity AND materializes a 152-byte extras bucket
+            // on every conditional-empty render — a hot path for Empty(), and for
+            // factories like DevtoolsMenu that yield the sentinel when switched off.
+            sb.AppendLine("            if (__e is global::Microsoft.UI.Reactor.Core.EmptyElement) return __e;");
             sb.AppendLine("            return __e with");
             sb.AppendLine("            {");
             sb.AppendLine($"                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation({Literal(mapped)}, {site.Line})");
