@@ -75,11 +75,20 @@ build.
 
 ## Unit-level fixtures
 
-Reactor's component lifecycle (`BeginRender` → `Render` → `FlushEffects` → `RunCleanups`)
-is exposed through the framework's internal API and used directly by
-`ContextSystemSelfHostTests` and `ComponentModelIntegrationTests` in
-`tests/Reactor.Tests/`. The pattern is small enough to fit in a helper
-inside your test class:
+> **This section is for tests inside this repository.** Reactor's component
+> lifecycle (`BeginRender` → `Render` → `FlushEffects` → `RunCleanups`),
+> `Component.Context` and `ContextScope` are **internal**. They are visible to
+> `tests/Reactor.Tests` only because `src/Reactor/Reactor.csproj` grants it
+> `InternalsVisibleTo`, so the helper below **will not compile in a consumer test
+> project** — it is shown to explain how Reactor's own fixtures are written, not
+> as code to copy into your app's tests. To test your own components from
+> outside the repo, use the public surface shown in
+> [Structural assertions](#structural-assertions-on-the-element-tree),
+> or drive a real control from a self-test.
+
+The lifecycle is used directly by `ContextSystemSelfHostTests` and
+`ComponentModelIntegrationTests` in `tests/Reactor.Tests/`, wrapped in a
+per-class helper:
 
 ```csharp
 private static Element MountComponent(
@@ -177,7 +186,6 @@ rather than at a 200-line text diff:
 public void Component_TProps_Renders_With_Props()
 {
     var comp = new GreetingComponent { Props = "Alice" };
-    comp.Context.BeginRender(() => { });
     var el = comp.Render();
     Assert.IsType<TextBlockElement>(el);
     Assert.Equal("Hello, Alice!", ((TextBlockElement)el).Content);

@@ -48,11 +48,12 @@ public class InlineSnippetLedgerTests
     /// The fence <em>character</em> is captured separately from the run so the closing fence can
     /// only repeat that same character: CommonMark requires it, and allowing either character in
     /// the suffix meant a line like <c>~~~```</c> falsely closed a tilde block, hiding everything
-    /// after it from the gate.
+    /// after it from the gate. Up to three leading spaces are allowed on either fence, which
+    /// CommonMark also permits — a block indented inside a list item is still fenced C#.
     /// </para>
     /// </remarks>
     private static readonly Regex CSharpFence =
-        new(@"(?im)^(?<fence>(?<fc>[`~])\k<fc>{2,})csharp([^\r\n]*)\r?\n(?<body>.*?)^\k<fence>\k<fc>*[ \t]*\r?$",
+        new(@"(?im)^[ ]{0,3}(?<fence>(?<fc>[`~])\k<fc>{2,})csharp([^\r\n]*)\r?\n(?<body>.*?)^[ ]{0,3}\k<fence>\k<fc>*[ \t]*\r?$",
             RegexOptions.Compiled | RegexOptions.Singleline);
 
     /// <summary>
@@ -405,6 +406,24 @@ public class InlineSnippetLedgerTests
         Assert.Single(found);
         // If the scanner stopped at the inner ``` it would only see `var a = 1;`.
         Assert.Contains("var b = 2;", found[0]);
+    }
+
+    /// <summary>
+    /// CommonMark allows up to three leading spaces on a fence — a block nested inside a list item
+    /// is still fenced C#. Requiring column zero let such a block bypass the ledger.
+    /// </summary>
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("  ")]
+    [InlineData("   ")]
+    public void Gate_Sees_Indented_Fences(string indent)
+    {
+        var template = $"{indent}```csharp\n{indent}var x = Button(\"hi\", () => {{ }});\n{indent}```\n";
+
+        var found = UnverifiedExamples(template).ToList();
+
+        Assert.Single(found);
+        Assert.Contains("Button(\"hi\"", found[0]);
     }
 
     /// <summary>
