@@ -17,10 +17,10 @@ namespace Microsoft.UI.Reactor;
 /// <para>Consumers differ in what they can accept, because most of them need a raw
 /// Win32 <c>HICON</c>:</para>
 /// <list type="bullet">
-/// <item><description><see cref="WindowSpec.Icon"/> — accepts both kinds. The source is
-/// handed to <c>AppWindow.SetIcon</c> verbatim, so the platform resolves
-/// <c>ms-appx:</c> URIs (including MRT scale/target-size qualifiers)
-/// itself.</description></item>
+/// <item><description><see cref="WindowSpec.Icon"/> — accepts both kinds. An
+/// <c>ms-appx:</c> source is mapped to a file beside the app before it reaches
+/// <c>AppWindow.SetIcon</c>, which needs a filesystem path: handed the URI itself
+/// inside a packaged app it silently applies a default icon.</description></item>
 /// <item><description>Tray icons, taskbar overlays, and thumbnail-toolbar buttons —
 /// <see cref="FromPath"/> only. They load through <c>LoadImageW</c>, which cannot read a
 /// packaged resource URI.</description></item>
@@ -112,8 +112,9 @@ public sealed class WindowIcon
     /// <summary>
     /// Create an icon from a packaged-app resource URI
     /// (e.g. <c>ms-appx:///Assets/AppIcon.ico</c>). Throws on null/empty input.
-    /// <para>The URI is handed to the platform unchanged, so MRT qualifier resolution
-    /// applies. Manifest visual assets (<c>Square44x44Logo</c> and friends) are named by
+    /// <para>The URI is mapped to a file beside the app (the package install root when
+    /// packaged) before it reaches <c>AppWindow.SetIcon</c>, which requires a filesystem
+    /// path. Manifest visual assets (<c>Square44x44Logo</c> and friends) are named by
     /// resource identifier rather than filename and are not addressable this way.</para>
     /// </summary>
     public static WindowIcon FromResource(string uri)
@@ -136,25 +137,34 @@ public sealed class WindowIcon
     /// then falls back rather than leaving the window with no icon at all.
     /// </returns>
     /// <remarks>
-    /// The source is passed to <c>AppWindow.SetIcon</c> essentially as given. Measured
-    /// against Windows App SDK 2.1, that API accepts more than its documentation
-    /// describes — both <c>ms-appx:///</c> URIs and non-<c>.ico</c> images work — so
-    /// Reactor deliberately does not pre-validate the format. Rewriting an
-    /// <c>ms-appx:</c> URI to a plain path would also bypass the platform's MRT
-    /// scale/target-size qualifier resolution, breaking packaged apps that ship
-    /// qualified variants, so a resource source is left entirely to the platform.
     /// <para>A filesystem source is resolved to an absolute path first, preferring the
     /// app's base directory over the process working directory. That keeps the
     /// existence check and the value handed to <c>SetIcon</c> describing the same file,
     /// and stops a launcher-chosen working directory from substituting a different
     /// icon for a relative path.</para>
+    /// <para>An <c>ms-appx:</c> source is translated to a filesystem path the same way.
+    /// <c>AppWindow.SetIcon</c> takes "the fully qualified path to the .ico file"; handed
+    /// a packaged-resource URI inside an MSIX app it does <b>not</b> load the asset — it
+    /// silently applies a default icon instead. Measured on Windows App SDK 2.1: in a
+    /// packaged process the URI form yields the same shared handle for every window,
+    /// while the path form yields a real per-window icon. (It appears to work in an
+    /// <i>unpackaged</i> process only because <c>ms-appx:</c> maps to the executable
+    /// directory there, which is why this needs a packaged app to observe.)</para>
+    /// <para>If the translated path does not exist the original URI is passed through
+    /// unchanged, so an asset the platform can resolve some other way — an MRT
+    /// scale/target-size qualified variant, say — still gets its chance.</para>
     /// </remarks>
     internal bool Apply(AppWindow appWindow)
     {
         if (appWindow is null) return false;
 
         var target = _source;
-        if (!_isResource && !TryResolveExistingPath(_source, out target))
+        if (_isResource)
+        {
+            // Best-effort: fall through with the raw URI when it cannot be mapped.
+            if (TryResolveResourceUri(_source, out var fromResource)) target = fromResource;
+        }
+        else if (!TryResolveExistingPath(_source, out target))
         {
             Debug.WriteLine($"[Reactor] WindowIcon.Apply: no icon file at '{_source}'.");
             return false;
@@ -168,6 +178,54 @@ public sealed class WindowIcon
         catch (Exception ex)
         {
             Debug.WriteLine($"[Reactor] WindowIcon.Apply failed for '{_source}': {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Maps an <c>ms-appx:///Assets/App.ico</c> style URI onto an existing file under
+    /// <see cref="AppContext.BaseDirectory"/>, which is the install root for a packaged
+    /// app and the executable directory otherwise.
+    /// </summary>
+    /// <returns>
+    /// <c>false</c> when the URI is not <c>ms-appx:</c>, names no asset, or maps to a file
+    /// that does not exist — the caller then passes the original URI to the platform
+    /// rather than second-guessing it.
+    /// </returns>
+    internal static bool TryResolveResourceUri(string uri, out string resolved)
+    {
+        resolved = uri;
+        const string scheme = "ms-appx:";
+        if (string.IsNullOrEmpty(uri) ||
+            !uri.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var rest = uri.Substring(scheme.Length);
+
+        // "ms-appx:///Assets/App.ico" has an empty authority; "ms-appx://pkg/Assets/App.ico"
+        // names one. Drop the authority segment in both shapes.
+        if (rest.StartsWith("//", StringComparison.Ordinal))
+        {
+            rest = rest.Substring(2);
+            var slash = rest.IndexOf('/');
+            rest = slash >= 0 ? rest.Substring(slash + 1) : string.Empty;
+        }
+
+        rest = rest.TrimStart('/');
+        if (rest.Length == 0) return false;
+
+        try
+        {
+            var candidate = global::System.IO.Path.Join(
+                AppContext.BaseDirectory,
+                rest.Replace('/', global::System.IO.Path.DirectorySeparatorChar));
+            if (!global::System.IO.File.Exists(candidate)) return false;
+            resolved = candidate;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon: could not map '{uri}' to a path: {ex.Message}");
             return false;
         }
     }

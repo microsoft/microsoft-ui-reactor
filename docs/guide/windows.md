@@ -427,7 +427,10 @@ Caveats:
   fallback is what carries it onto the window; WinUI does not do so on its own.
 - A `FromPath` source that does not exist is reported as a failure so the fallback
   still runs — a declared-but-missing icon never leaves the window barer than
-  declaring none. `FromResource` URIs are left to the platform to resolve.
+  declaring none. A `FromResource` URI is mapped to the matching file beside the
+  app before it reaches the platform, because `AppWindow.SetIcon` wants a
+  filesystem path: given the URI itself, a packaged app silently gets a default
+  icon instead of the asset.
 
 ## Taskbar integration
 
