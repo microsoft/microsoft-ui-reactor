@@ -476,6 +476,9 @@ public class PackagedSelfTestBatch
         Flush();
     }
 
+    /// <summary>Fixture-level abort suffixes the runner appends to a TAP fixture name.</summary>
+    private static readonly string[] AbortSuffixes = ["_CRASH", "_TIMEOUT"];
+
     /// <summary>
     /// Recognises a runner-level TAP line that names a known fixture which is not the one
     /// currently in flight, and records that fixture's verdict directly.
@@ -499,15 +502,8 @@ public class PackagedSelfTestBatch
         if (token.Length == 0) return false;
 
         // The runner suffixes a fixture-level abort with _CRASH / _TIMEOUT.
-        var name = token;
-        foreach (var suffix in new[] { "_CRASH", "_TIMEOUT" })
-        {
-            if (name.EndsWith(suffix, StringComparison.Ordinal))
-            {
-                name = name[..^suffix.Length];
-                break;
-            }
-        }
+        var abortSuffix = AbortSuffixes.FirstOrDefault(s => token.EndsWith(s, StringComparison.Ordinal));
+        var name = abortSuffix is null ? token : token[..^abortSuffix.Length];
 
         if (!known.Contains(name) || string.Equals(name, current, StringComparison.Ordinal))
             return false;

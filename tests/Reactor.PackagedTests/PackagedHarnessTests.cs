@@ -312,8 +312,8 @@ public class PackagedHarnessTests
     /// <remarks>
     /// Drift is silent in the direction that matters: registration still succeeds, but
     /// lookups by name find nothing, so cleanup no-ops and a stale layout keeps owning the
-    /// alias for the next run. <c>Register()</c> now fails fast on that, and this test
-    /// catches it without needing Developer Mode or a registration at all.
+    /// alias for the next run. <c>Register()</c> fails fast on that before registering
+    /// anything, and this test catches it without needing Developer Mode at all.
     /// </remarks>
     [TestMethod]
     public void Deployment_Constants_Match_The_Manifest()
@@ -349,6 +349,76 @@ public class PackagedHarnessTests
             AppxLooseLayoutDeployment.AliasExeName,
             alias!.Attribute("Alias")!.Value,
             "AppxLooseLayoutDeployment.AliasExeName drifted from the manifest's ExecutionAlias.");
+    }
+
+    /// <summary>
+    /// The reader <c>Register()</c> uses for its pre-flight identity check must return the
+    /// manifest's values, not the constants it is compared against.
+    /// </summary>
+    [TestMethod]
+    public void ReadManifestIdentity_Reads_The_Source_Manifest()
+    {
+        var manifestPath = Path.Join(
+            RepoRoot(), "tests", "Reactor.PackagedTests.Host", "Package.appxmanifest");
+
+        var (name, publisher) = AppxLooseLayoutDeployment.ReadManifestIdentity(manifestPath);
+
+        Assert.AreEqual(AppxLooseLayoutDeployment.PackageName, name);
+        Assert.AreEqual(AppxLooseLayoutDeployment.PackagePublisher, publisher);
+    }
+
+    /// <summary>
+    /// Positive control for the check above: an identity that does <em>not</em> match the
+    /// constants must be reported as it is written. Without this, a reader that echoed the
+    /// constants back would satisfy the parity assertions while detecting no drift at all —
+    /// and the drift it fails to detect is exactly the one that leaks a registration.
+    /// </summary>
+    [TestMethod]
+    public void ReadManifestIdentity_Reports_A_Divergent_Identity()
+    {
+        var path = Path.Join(Path.GetTempPath(), $"reactor-manifest-{Guid.NewGuid():N}.xml");
+        File.WriteAllText(path,
+            """
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
+              <Identity Name="Drifted.Name" Publisher="CN=Drifted.Publisher" Version="1.0.0.0" />
+            </Package>
+            """);
+
+        try
+        {
+            var (name, publisher) = AppxLooseLayoutDeployment.ReadManifestIdentity(path);
+
+            Assert.AreEqual("Drifted.Name", name);
+            Assert.AreEqual("CN=Drifted.Publisher", publisher);
+            Assert.AreNotEqual(AppxLooseLayoutDeployment.PackageName, name);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A manifest with no <c>Identity</c> element must read as absent rather than throwing,
+    /// so <c>Register()</c> reports the mismatch with both sides quoted.
+    /// </summary>
+    [TestMethod]
+    public void ReadManifestIdentity_Tolerates_A_Missing_Identity_Element()
+    {
+        var path = Path.Join(Path.GetTempPath(), $"reactor-manifest-{Guid.NewGuid():N}.xml");
+        File.WriteAllText(path, "<Package />");
+
+        try
+        {
+            var (name, publisher) = AppxLooseLayoutDeployment.ReadManifestIdentity(path);
+
+            Assert.IsNull(name);
+            Assert.IsNull(publisher);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     /// <summary>

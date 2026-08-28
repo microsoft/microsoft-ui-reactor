@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Xml.Linq;
 using Windows.Management.Deployment;
 
 namespace Microsoft.UI.Reactor.PackagedTests;
@@ -124,19 +125,13 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// "packaged host not built" for a host that had just been built. Reading the value
     /// MSBuild used keeps the two in step for any configuration.
     /// </remarks>
-    private static string MetadataOr(string key, string fallback)
-    {
-        foreach (var attr in typeof(AppxLooseLayoutDeployment).Assembly
-                     .GetCustomAttributes<AssemblyMetadataAttribute>())
-        {
-            if (string.Equals(attr.Key, key, StringComparison.Ordinal) &&
-                !string.IsNullOrWhiteSpace(attr.Value))
-            {
-                return attr.Value;
-            }
-        }
-        return fallback;
-    }
+    private static string MetadataOr(string key, string fallback) =>
+        typeof(AppxLooseLayoutDeployment).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .Where(a => string.Equals(a.Key, key, StringComparison.Ordinal) &&
+                        !string.IsNullOrWhiteSpace(a.Value))
+            .Select(a => a.Value!)
+            .FirstOrDefault() ?? fallback;
 
     /// <summary>The build output directory holding AppxManifest.xml and the host binaries.</summary>
     internal static string ResolveLayoutDirectory()
@@ -180,6 +175,24 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
         var manager = new PackageManager();
 
+        // Drift guard, deliberately *before* registering. PackageName/PackagePublisher must
+        // match the manifest's Identity element, and nothing at compile time links them.
+        // Checking afterwards would be too late: the package would already be registered
+        // under the manifest's identity while every lookup here — including cleanup —
+        // searched for the stale constants, leaking the registration and leaving the alias
+        // owned by a layout no later run could remove.
+        var (manifestName, manifestPublisher) = ReadManifestIdentity(manifest);
+        if (!string.Equals(manifestName, PackageName, StringComparison.Ordinal) ||
+            !string.Equals(manifestPublisher, PackagePublisher, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"The constants in {nameof(AppxLooseLayoutDeployment)} have drifted from the " +
+                $"manifest's Identity element, so cleanup could not remove what registration " +
+                $"would create.\nManifest: {manifest}\n" +
+                $"  Name:      manifest '{manifestName}' vs constant '{PackageName}'\n" +
+                $"  Publisher: manifest '{manifestPublisher}' vs constant '{PackagePublisher}'");
+        }
+
         // Remove any registration left behind by an earlier run before registering this
         // one. Without this a stale layout — pointing at a different build directory —
         // keeps owning the alias, and the tier would silently exercise the wrong binary.
@@ -201,20 +214,15 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                 "Registering an unsigned loose layout requires Developer Mode (or sideloading).");
         }
 
+        // Captured so cleanup can remove precisely what was registered rather than
+        // re-deriving it from the constants.
         _registeredFullName = FindRegistration(manager)?.Id.FullName;
 
-        // Drift guard. PackageName/PackagePublisher here must match Identity/@Name and
-        // Identity/@Publisher in Package.appxmanifest, and nothing at compile time links
-        // them. If they diverge, registration still succeeds but FindRegistration returns
-        // null — which would make RemoveExistingRegistrations a silent no-op and leak the
-        // registration, leaving a stale layout owning the alias for the next run.
         if (_registeredFullName is null)
         {
             throw new InvalidOperationException(
                 $"Registered '{manifest}' but no package named '{PackageName}' with publisher " +
-                $"'{PackagePublisher}' was found afterwards. The constants in " +
-                $"{nameof(AppxLooseLayoutDeployment)} have drifted from the manifest's Identity " +
-                "element; cleanup would silently leak this registration.");
+                $"'{PackagePublisher}' was found afterwards.");
         }
 
         var alias = Path.Join(
@@ -235,7 +243,15 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     public void Unregister()
     {
         var manager = new PackageManager();
-        try { RemoveExistingRegistrations(manager); }
+        try
+        {
+            // Remove exactly what was registered first, then sweep by identity. The
+            // captured full name is what registration actually produced, so it stays
+            // correct even if the constants below are edited mid-run; the sweep still
+            // catches anything a previous run left behind.
+            if (_registeredFullName is not null) RemovePackage(manager, _registeredFullName);
+            RemoveExistingRegistrations(manager);
+        }
         catch (Exception ex) when (
             ex is COMException or InvalidOperationException or UnauthorizedAccessException or IOException)
         {
@@ -250,24 +266,37 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         _registeredFullName = null;
     }
 
-    private static Windows.ApplicationModel.Package? FindRegistration(PackageManager manager)
+    /// <summary>Reads <c>Identity/@Name</c> and <c>Identity/@Publisher</c> from a manifest.</summary>
+    /// <remarks>
+    /// Matched by local name so the check does not break if the manifest's foundation
+    /// namespace is revised.
+    /// </remarks>
+    internal static (string? Name, string? Publisher) ReadManifestIdentity(string manifestPath)
     {
-        foreach (var pkg in manager.FindPackagesForUser(string.Empty, PackageName, PackagePublisher))
-            return pkg;
-        return null;
+        var identity = XDocument.Load(manifestPath).Root?
+            .Elements()
+            .FirstOrDefault(e => e.Name.LocalName == "Identity");
+
+        return (identity?.Attribute("Name")?.Value, identity?.Attribute("Publisher")?.Value);
     }
+
+    private static Windows.ApplicationModel.Package? FindRegistration(PackageManager manager) =>
+        manager.FindPackagesForUser(string.Empty, PackageName, PackagePublisher).FirstOrDefault();
 
     private static void RemoveExistingRegistrations(PackageManager manager)
     {
         foreach (var pkg in manager.FindPackagesForUser(string.Empty, PackageName, PackagePublisher).ToList())
+            RemovePackage(manager, pkg.Id.FullName);
+    }
+
+    private static void RemovePackage(PackageManager manager, string fullName)
+    {
+        var removal = manager.RemovePackageAsync(fullName).AsTask().GetAwaiter().GetResult();
+        if (removal.ExtendedErrorCode != null)
         {
-            var removal = manager.RemovePackageAsync(pkg.Id.FullName).AsTask().GetAwaiter().GetResult();
-            if (removal.ExtendedErrorCode != null)
-            {
-                throw new InvalidOperationException(
-                    $"Removing package '{pkg.Id.FullName}' failed " +
-                    $"(0x{removal.ExtendedErrorCode.HResult:X8}): {removal.ErrorText}");
-            }
+            throw new InvalidOperationException(
+                $"Removing package '{fullName}' failed " +
+                $"(0x{removal.ExtendedErrorCode.HResult:X8}): {removal.ErrorText}");
         }
     }
 }
