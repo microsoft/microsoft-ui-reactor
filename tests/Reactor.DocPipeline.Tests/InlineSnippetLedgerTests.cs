@@ -38,8 +38,16 @@ public class InlineSnippetLedgerTests
     private const string TemplatesRelative = "docs/_pipeline/templates";
 
     /// <summary>A fenced C# block, with the fence's info string.</summary>
+    /// <remarks>
+    /// The fence is variable-length and matched by backreference. Hard-coding three backticks made
+    /// the gate blind to a four-backtick block — the form CommonMark requires when the example
+    /// itself contains a triple-backtick run — so hand-typed copyable C# could enter the guides
+    /// without a ledger entry simply by being fenced one character wider. The closing fence must be
+    /// at least as long as the opening one, which is also CommonMark's rule.
+    /// </remarks>
     private static readonly Regex CSharpFence =
-        new(@"(?m)^```csharp([^\r\n]*)\r?\n(?<body>.*?)^```", RegexOptions.Compiled | RegexOptions.Singleline);
+        new(@"(?im)^(?<fence>`{3,})csharp([^\r\n]*)\r?\n(?<body>.*?)^\k<fence>`*[ \t]*\r?$",
+            RegexOptions.Compiled | RegexOptions.Singleline);
 
     /// <summary>
     /// A first line that labels the block as a deliberate counterexample.
@@ -354,6 +362,41 @@ public class InlineSnippetLedgerTests
             + "(```csharp snippet=\"source:<path>#<region>\"). If it genuinely cannot be compiled, "
             + "add it to AllowedInlineExamples with the reason:\n  "
             + string.Join("\n  ", offenders.OrderBy(o => o, StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// The scanner must see a C# block whatever its fence length. A block fenced with four
+    /// backticks — the form CommonMark requires when the example itself contains a triple-backtick
+    /// run — was invisible, so copyable code could bypass the ledger by widening its fence.
+    /// </summary>
+    [Theory]
+    [InlineData("```")]
+    [InlineData("````")]
+    [InlineData("`````")]
+    public void Gate_Sees_Csharp_Blocks_At_Any_Fence_Length(string fence)
+    {
+        var template = $"{fence}csharp\nvar x = Button(\"hi\", () => {{ }});\n{fence}\n";
+
+        var found = UnverifiedExamples(template).ToList();
+
+        Assert.Single(found);
+        Assert.Equal("var x = Button(\"hi\", () => { });", found[0]);
+    }
+
+    /// <summary>
+    /// A longer closing fence still closes the block (CommonMark), but a shorter one does not —
+    /// so an inner triple-backtick run inside a four-backtick block must not truncate the body.
+    /// </summary>
+    [Fact]
+    public void Inner_Backtick_Run_Does_Not_Terminate_A_Wider_Fence()
+    {
+        var template = "````csharp\nvar a = 1;\n```\nvar b = 2;\n````\n";
+
+        var found = UnverifiedExamples(template).ToList();
+
+        Assert.Single(found);
+        // If the scanner stopped at the inner ``` it would only see `var a = 1;`.
+        Assert.Contains("var b = 2;", found[0]);
     }
 
     /// <summary>

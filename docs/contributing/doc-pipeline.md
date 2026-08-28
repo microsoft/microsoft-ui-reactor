@@ -700,12 +700,21 @@ Only ever add **comment markers** to files under `src/` or `tests/`; never chang
 Legitimate when the block genuinely cannot compile: a migration guide's "before" half, a two-line
 syntax fragment, or a deliberately-wrong example the prose (rather than a `// Don't` comment)
 introduces as the trap. Add it to `AllowedInlineExamples` in
-`tests/Reactor.DocPipeline.Tests/InlineSnippetLedgerTests.cs`, keyed by template and the block's
-first line, with the reason.
+`tests/Reactor.DocPipeline.Tests/InlineSnippetLedgerTests.cs`, keyed by template and then by the
+block's **full text**, with the reason.
+
+Use a raw string literal for the key and paste the block verbatim — the gate normalizes both sides
+(LF endings, no trailing whitespace, no leading or trailing blank lines), so indentation inside the
+block is preserved and must match. The failure message prints each offending block in exactly the
+form the key needs. Entries are keyed on the whole block rather than its first line because openers
+are shared: `hooks-internals` has two different examples that both begin
+`var (count, setCount) = UseState(0);`, and a first-line key silently excused both while only one
+had been reviewed.
 
 Two shapes need no ledger entry because they are self-evidently not code to copy: a signature
-listing (no `;` or `{` anywhere, e.g. `Markdown(string markdown)`), and a block whose first line
-labels it a counterexample (`// Don't`, `// Wrong`, `// Avoid`, …).
+listing (no `;` or `{` anywhere, and every parameter reads as a declaration — `Markdown(string
+markdown)`, `Border(Element)` — rather than a passed value like `TextBlock(message)`), and a block
+whose first line labels it a counterexample (`// Don't`, `// Wrong`, `// Avoid`, …).
 
 C is for code that *should not* be compiled — never for code that *will not* compile. If a block
 fails to build, that is the bug this system exists to surface: fix the code, don't ledger it.

@@ -143,4 +143,89 @@ public class SourceSnippetTests : IDisposable
             SnippetExtractor.ExtractFromSource(_root, "src/Foo.cs", "demo"));
         Assert.Equal("REACTOR_DOC_SNIPPET_004", ex.Code);
     }
+
+    /// <summary>
+    /// A marker for a *different* region nested inside the requested one is pipeline bookkeeping,
+    /// not code. Copying it verbatim printed lines like <c>// &lt;snippet:reconcile-trace-start&gt;</c>
+    /// into reconciliation.md, architecture-overview.md and control-reconciler-protocol.md, where
+    /// readers saw them as framework source. Overlapping regions are legitimate — a wide region
+    /// often contains a narrower one — so the extractor drops the marker lines and keeps the body.
+    /// </summary>
+    [Fact]
+    public void Nested_different_name_markers_are_stripped_but_their_body_is_kept()
+    {
+        WriteFile("src/Foo.cs", """
+            // <snippet:outer>
+            before();
+            // <snippet:inner>
+            middle();
+            // </snippet:inner>
+            after();
+            // </snippet:outer>
+            """);
+
+        var snippet = SnippetExtractor.ExtractFromSource(_root, "src/Foo.cs", "outer");
+
+        // The inner region's *content* is part of the outer region and must survive.
+        Assert.Contains("before();", snippet.Code);
+        Assert.Contains("middle();", snippet.Code);
+        Assert.Contains("after();", snippet.Code);
+
+        // Its markers are bookkeeping and must not reach the page. Reverting the skip in
+        // ExtractFromSource leaves both of these lines in the output.
+        Assert.DoesNotContain("<snippet:inner>", snippet.Code);
+        Assert.DoesNotContain("</snippet:inner>", snippet.Code);
+        Assert.DoesNotContain("snippet:", snippet.Code);
+
+        // Structural oracle: exactly the three code lines, nothing else. A test that only
+        // asserted "no marker text" would also pass if the extractor dropped everything.
+        Assert.Equal(
+            ["before();", "middle();", "after();"],
+            snippet.Code.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>
+    /// The inner region must still be independently extractable — stripping markers from the outer
+    /// view must not consume them for the region that owns them.
+    /// </summary>
+    [Fact]
+    public void Nested_region_is_still_extractable_on_its_own()
+    {
+        WriteFile("src/Foo.cs", """
+            // <snippet:outer>
+            before();
+            // <snippet:inner>
+            middle();
+            // </snippet:inner>
+            after();
+            // </snippet:outer>
+            """);
+
+        var inner = SnippetExtractor.ExtractFromSource(_root, "src/Foo.cs", "inner");
+
+        Assert.Equal("middle();", inner.Code.Trim());
+    }
+
+    /// <summary>
+    /// HTML-comment markers are the form used by XML/csproj sources (the shape packaging.md's
+    /// project snippets rely on), so nested-marker stripping must recognise them too.
+    /// </summary>
+    [Fact]
+    public void Nested_html_comment_markers_are_stripped()
+    {
+        WriteFile("src/App.csproj", """
+            <!-- <snippet:outer> -->
+            <PropertyGroup>
+            <!-- <snippet:inner> -->
+              <UseWinUI>true</UseWinUI>
+            <!-- </snippet:inner> -->
+            </PropertyGroup>
+            <!-- </snippet:outer> -->
+            """);
+
+        var snippet = SnippetExtractor.ExtractFromSource(_root, "src/App.csproj", "outer");
+
+        Assert.Contains("<UseWinUI>true</UseWinUI>", snippet.Code);
+        Assert.DoesNotContain("snippet:", snippet.Code);
+    }
 }

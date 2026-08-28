@@ -107,13 +107,37 @@ public class NonCsharpSnippetFenceTests
     [InlineData("xaml", "<!-- Project shape -->")]
     [InlineData("html", "<!-- Project shape -->")]
     [InlineData("csharp", "// Project shape")]
-    [InlineData("powershell", "// Project shape")]
+    [InlineData("json", "// Project shape")]
+    [InlineData("powershell", "# Project shape")]
+    [InlineData("bash", "# Project shape")]
+    [InlineData("yaml", "# Project shape")]
+    [InlineData("sql", "-- Project shape")]
     public void Title_uses_a_comment_syntax_valid_for_the_language(string language, string expected)
     {
         // `title=` previously emitted `// Title` unconditionally. Inside an xml
-        // fence that is not a comment — it renders as malformed markup at the top
-        // of the block.
+        // fence that is not a comment; and defaulting every non-XML language to
+        // `//` just moved the bug — PowerShell, shell and YAML all read `//` as
+        // code, so the "title" would corrupt the example it labels.
         Assert.Equal(expected, DocAssembler.TitleComment(language, "Project shape"));
+    }
+
+    [Fact]
+    public void Title_on_an_unmapped_language_is_reported_rather_than_guessed()
+    {
+        // Fail-closed: emitting a plausible-looking comment for a language we do not
+        // actually know is how the `//`-for-everything bug happened. An unmapped
+        // language must surface as an error, not as a silently wrong line.
+        Assert.Null(DocAssembler.TitleComment("brainfuck", "Title"));
+
+        const string id = "probe/id";
+        var output = DocAssembler.Assemble(
+            $"```brainfuck snippet=\"{id}\" title=\"T\"\n```",
+            OneSnippet(id, "BODY"), NoScreenshots, out var errors, out _, null, null);
+
+        Assert.Contains(errors, e => e.Contains("title=") && e.Contains("brainfuck"));
+        // The snippet body still ships; only the unrepresentable title is dropped.
+        Assert.Contains("BODY", output);
+        Assert.DoesNotContain("T\n", output.Replace("BODY", string.Empty));
     }
 
     [Theory]

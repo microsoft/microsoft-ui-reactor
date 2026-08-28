@@ -79,7 +79,14 @@ internal static partial class DocAssembler
             // of prose, and as an XML/HTML comment it would be parsed as raw
             // markdown HTML and vanish from the page entirely.
             if (title != null)
-                sb.AppendLine(TitleComment(language, title));
+            {
+                var comment = TitleComment(language, title);
+                if (comment is null)
+                    errs.Add($"title= is not supported for language '{language}' (snippet {snippetId}): "
+                             + "no comment syntax is known for it, so the title would corrupt the example.");
+                else
+                    sb.AppendLine(comment);
+            }
             sb.AppendLine(snippet.Code);
             sb.Append(fence);
             return sb.ToString();
@@ -123,17 +130,30 @@ internal static partial class DocAssembler
     }
 
     /// <summary>
-    /// Renders <paramref name="title"/> as a comment valid in
-    /// <paramref name="language"/>. A <c>title=</c> on an ```xml fence used to
-    /// emit <c>// Title</c>, which is not an XML comment — the header rendered
-    /// as malformed markup inside the code block.
+    /// Renders <paramref name="title"/> as a comment valid in <paramref name="language"/>, or
+    /// <see langword="null"/> when no safe representation is known.
     /// </summary>
-    internal static string TitleComment(string language, string title) =>
+    /// <remarks>
+    /// A <c>title=</c> on an ```xml fence used to emit <c>// Title</c>, which is not an XML comment.
+    /// Defaulting every non-XML language to <c>//</c> just moved the bug: PowerShell, shell, YAML
+    /// and Python all read <c>//</c> as code, not as a comment. Languages are mapped explicitly and
+    /// an unknown one returns null so <see cref="Assemble"/> can report it, rather than silently
+    /// emitting a line that corrupts the example.
+    /// </remarks>
+    internal static string? TitleComment(string language, string title) =>
         language.ToLowerInvariant() switch
         {
-            "xml" or "html" or "xaml" or "svg" or "csproj" or "props" or "targets"
+            "xml" or "html" or "xaml" or "svg" or "csproj" or "props" or "targets" or "markdown" or "md"
                 => $"<!-- {title} -->",
-            _ => $"// {title}",
+            "powershell" or "ps1" or "pwsh" or "bash" or "sh" or "shell" or "console"
+                or "yaml" or "yml" or "python" or "py" or "ini" or "toml" or "dockerfile" or "r"
+                => $"# {title}",
+            "csharp" or "cs" or "c" or "cpp" or "c++" or "java" or "javascript" or "js"
+                or "typescript" or "ts" or "json" or "jsonc" or "go" or "rust" or "rs" or "swift" or "kotlin"
+                => $"// {title}",
+            "sql" => $"-- {title}",
+            "vb" or "vbnet" or "vba" => $"' {title}",
+            _ => null,
         };
 
     /// <summary>
