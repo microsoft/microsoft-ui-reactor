@@ -223,12 +223,24 @@ public sealed class WindowIcon
             resolved = candidate;
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsPathProbeFailure(ex))
         {
             Debug.WriteLine($"[Reactor] WindowIcon: could not map '{uri}' to a path: {ex.Message}");
             return false;
         }
     }
+
+    /// <summary>
+    /// The failures a path join plus an existence probe can raise: a malformed segment,
+    /// an unsupported path shape, or a filesystem that refuses the read. Anything else
+    /// is a genuine bug and propagates.
+    /// </summary>
+    private static bool IsPathProbeFailure(Exception ex)
+        => ex is ArgumentException
+              or NotSupportedException
+              or global::System.IO.IOException
+              or UnauthorizedAccessException
+              or global::System.Security.SecurityException;
 
     /// <summary>
     /// Resolves a filesystem source to an existing absolute path. Relative paths are
@@ -267,7 +279,7 @@ public sealed class WindowIcon
 
             return false;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsPathProbeFailure(ex))
         {
             Debug.WriteLine($"[Reactor] WindowIcon.Apply: path probe failed for '{path}': {ex.Message}");
             resolved = path;

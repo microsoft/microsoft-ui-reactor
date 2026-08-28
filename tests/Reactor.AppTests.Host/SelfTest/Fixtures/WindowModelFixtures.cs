@@ -287,7 +287,10 @@ internal static partial class WindowModelFixtures
                                                              or global::System.UnauthorizedAccessException)
                 {
                     // Leaving the asset behind only affects a subsequent run in the same
-                    // output directory, where the precondition check reports it.
+                    // output directory, where the precondition check reports it. Logged
+                    // rather than swallowed so that run's failure is explicable.
+                    global::System.Diagnostics.Debug.WriteLine(
+                        $"[selftest] could not delete '{conventionPath}': {ex.Message}");
                 }
             }
         }

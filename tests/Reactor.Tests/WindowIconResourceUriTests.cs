@@ -37,8 +37,18 @@ public class WindowIconResourceUriTests
         public void Dispose()
         {
             try { global::System.IO.File.Delete(Path); }
-            catch (global::System.IO.IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (global::System.IO.IOException ex)
+            {
+                // Best-effort cleanup: a locked file only affects a later run in the
+                // same output directory, and failing here would mask the real assertion.
+                global::System.Diagnostics.Debug.WriteLine(
+                    $"[test] TempAsset could not delete '{Path}': {ex.Message}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                global::System.Diagnostics.Debug.WriteLine(
+                    $"[test] TempAsset was denied deletion of '{Path}': {ex.Message}");
+            }
         }
     }
 
