@@ -39,6 +39,14 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     private const string FactoriesMetadataName = "Microsoft.UI.Reactor.Factories";
     private const string ElementMetadataName = "Microsoft.UI.Reactor.Core.Element";
 
+    /// <summary>
+    /// DSL factories that return an element the CALLER supplied rather than one they
+    /// built: <c>When</c>/<c>If</c> return <c>then()</c>, <c>Expr</c> returns
+    /// <c>render()</c>. See the rationale at the use site in <c>TryDescribe</c>.
+    /// </summary>
+    private static readonly ImmutableHashSet<string> PassThroughFactories =
+        ImmutableHashSet.Create(StringComparer.Ordinal, "When", "If", "Expr");
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // ── Opt-in gate ───────────────────────────────────────────────────
@@ -115,6 +123,24 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         // WrapperFactoryInterceptionTests, which pins the limitation. Coverage that
         // varies with project shape is worse than a documented, uniform gap.
         if (method.ContainingType?.ToDisplayString() != FactoriesMetadataName) return null;
+
+        // Pass-throughs are never stamped, because they did not create the element.
+        // When/If/Expr return `then()` / `render()` verbatim, so the returned element
+        // belongs to whatever call site built it. Stamping here would name the `When(`
+        // line as the creator.
+        //
+        // A first-stamp-wins guard in the emitted body is NOT sufficient on its own:
+        // it only defers when the inner element already carries a location, and an
+        // element built while mapping was disabled (or pulled from a memo cache) has
+        // none — so the pass-through would happily claim it. Declining to intercept
+        // these at all keeps "unknown" rather than inventing a confident wrong answer.
+        //
+        // This list is name-based and therefore driftable. PassThroughFactoryDriftTests
+        // in Reactor.Tests reflects over Factories and fails if the set of
+        // base-Element-returning factories that take a Func<...Element...> ever stops
+        // matching it, so a fourth pass-through is a loud failure rather than a silent
+        // misattribution.
+        if (PassThroughFactories.Contains(method.Name)) return null;
 
         // Generic factories (Component<T>, Component<T,TProps>, ForEach<T>, Memo<TKey>,
         // ListView<T>, …). An interceptor for a generic method has to restate the
@@ -249,14 +275,13 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("            if (__e is null) return __e;");
             }
-            // FIRST STAMP WINS. Several DSL factories are pass-throughs that return
-            // an element someone else created -- When/If/Expr return `then()`
-            // verbatim. Those calls are intercepted too, so an unconditional write
-            // here would clone the inner element and replace the creating call
-            // site's location with the wrapper's, and GetSource would name the
-            // `When(` line instead of the `TextBlock(` line that actually made the
-            // control. Coalescing preserves the innermost stamp; a genuinely new
-            // element has a null CallSite and takes this call site as it should.
+            // Defence in depth. Pass-throughs (When/If/Expr) are excluded from
+            // interception entirely in TryDescribe, because a guard here cannot save
+            // them: an element built while mapping was off carries no location, so
+            // "first stamp wins" would let the wrapper claim it. This guard still
+            // earns its place for a factory that returns a CACHED element it did not
+            // build on this call (a memo hit), where the existing stamp is the right
+            // answer and this call site is not.
             sb.AppendLine("            if (__e.CallSite is not null) return __e;");
             sb.AppendLine("            return __e with");
             sb.AppendLine("            {");

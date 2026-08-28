@@ -50,27 +50,27 @@
   <path class="edge" d="M320 108 L370 108" marker-end="url(#arr)"/>
   <path class="edge" d="M690 108 L740 108" marker-end="url(#arr)"/>
 
-  <!-- Planned group -->
+  <!-- Implemented group -->
   <rect class="group" x="20" y="200" width="1080" height="160" rx="8"/>
-  <text class="group-label" x="40" y="222">Designed — spec 010 (per-element file:line attribution)</text>
+  <text class="group-label" x="40" y="222">Implemented — spec 010 (per-element file:line attribution)</text>
 
   <rect class="box-accent" x="40" y="250" width="180" height="56" rx="6"/>
   <text class="label" x="130" y="273" text-anchor="middle">User source</text>
   <text class="sub" x="130" y="291" text-anchor="middle">Text("hello")</text>
 
-  <rect class="box-planned" x="250" y="250" width="200" height="56" rx="6"/>
-  <text class="label" x="350" y="273" text-anchor="middle">[CallerFilePath]</text>
-  <text class="sub" x="350" y="291" text-anchor="middle">[CallerLineNumber]</text>
+  <rect class="box-accent" x="250" y="250" width="200" height="56" rx="6"/>
+  <text class="label" x="350" y="273" text-anchor="middle">Interceptor</text>
+  <text class="sub" x="350" y="291" text-anchor="middle">generated per call site</text>
 
-  <rect class="box-planned" x="480" y="250" width="200" height="56" rx="6"/>
-  <text class="label" x="580" y="273" text-anchor="middle">Element.Source</text>
+  <rect class="box-accent" x="480" y="250" width="200" height="56" rx="6"/>
+  <text class="label" x="580" y="273" text-anchor="middle">Element.CallSite</text>
   <text class="sub" x="580" y="291" text-anchor="middle">(MyView.cs, 42)</text>
 
-  <rect class="box-planned" x="710" y="250" width="200" height="56" rx="6"/>
-  <text class="label" x="810" y="273" text-anchor="middle">WinUI attached DP</text>
-  <text class="sub" x="810" y="291" text-anchor="middle">SourceInfo.Location</text>
+  <rect class="box-accent" x="710" y="250" width="200" height="56" rx="6"/>
+  <text class="label" x="810" y="273" text-anchor="middle">ReactorState</text>
+  <text class="sub" x="810" y="291" text-anchor="middle">existing attached state</text>
 
-  <rect class="box-planned" x="930" y="250" width="170" height="56" rx="6"/>
+  <rect class="box-accent" x="930" y="250" width="170" height="56" rx="6"/>
   <text class="label" x="1015" y="273" text-anchor="middle">Inspector</text>
   <text class="sub" x="1015" y="291" text-anchor="middle">jump-to-source</text>
 

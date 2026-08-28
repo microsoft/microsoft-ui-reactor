@@ -6,15 +6,23 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// <summary>
 /// Spec 010 — runtime switch and read path for Reactor source mapping.
 ///
-/// <para><b>Why a runtime flag at all.</b> The reconciler only attaches a
-/// <c>ReactorState</c> (the control → element back-pointer) to controls that
+/// <para><b>Why a runtime flag at all.</b> Interceptors are baked in at compile
+/// time, so without a runtime gate every Debug build would pay the stamping cost
+/// whether or not anyone is inspecting. This flag is what the emitted interceptor
+/// checks before writing a location, so an un-inspected Debug session allocates
+/// nothing extra.</para>
+///
+/// <para><b>It does not change control tagging.</b> The reconciler attaches a
+/// <c>ReactorState</c> (the control → element back-pointer) only to controls that
 /// something will read back — callbacks, a key, extras, or reference modifiers
-/// (see <c>Reconciler.NeedsTag</c>). Display leaves such as
-/// <c>TextBlock</c>/<c>Border</c>/<c>StackPanel</c>/<c>Image</c> stay untagged,
-/// which is exactly the allocation win PR #468 landed. Source mapping needs the
-/// back-pointer on <em>every</em> control, so it flips that gate — but only
-/// while it is on. With the flag off, <c>NeedsTag</c> evaluates identically to
-/// before (one extra static bool read, zero extra allocation).</para>
+/// (see <c>Reconciler.NeedsTag</c>), which is the allocation win PR #468 landed.
+/// <c>NeedsTag</c> has no arm for this flag: a stamped element carries its
+/// <c>CallSite</c> in the <c>Extensions</c> bucket and so already satisfies the
+/// existing <c>Extensions is not null</c> test. Adding one would only tag
+/// <em>unstamped</em> elements, which have no location to return, while
+/// re-introducing the per-leaf allocation. Elements the generator does not reach
+/// (wrapper factories, bare-string children) therefore stay untagged and report
+/// no location rather than a wrong one.</para>
 ///
 /// <para><b>Who turns it on.</b> The devtools session switch. <c>ReactorApp</c>
 /// sets <see cref="Enabled"/> when the process was launched with

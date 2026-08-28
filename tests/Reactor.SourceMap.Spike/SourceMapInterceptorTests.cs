@@ -190,6 +190,62 @@ public sealed class SourceMapInterceptorTests : IDisposable
     }
 
     [Fact]
+    public void PassThroughWhen_DoesNotClaimAnUnstampedInnerElement()
+    {
+        // The case the first-stamp-wins guard alone cannot cover: the inner element
+        // was built while mapping was OFF, so it carries no location. A guard that
+        // only defers to an EXISTING stamp finds none and lets `When` write its own,
+        // reporting the wrapper as the creator of something built elsewhere — a
+        // confident wrong answer, which is worse than no answer. Pass-throughs are
+        // therefore not intercepted at all.
+        ReactorSourceMap.Enabled = false;
+        var inner = TextBlock("built-while-off");
+        ReactorSourceMap.Enabled = true;
+
+        var whenLine = Line();
+        var wrapped = When(true, () => inner);
+
+        Assert.Same(inner, wrapped);
+        Assert.Null(wrapped.CallSite);
+        _ = whenLine;
+    }
+
+    [Fact]
+    public void PassThroughIfAndExpr_AlsoDoNotClaimAnUnstampedElement()
+    {
+        // If and Expr are the other two pass-throughs. Covered explicitly so the fix
+        // is not silently specific to When.
+        ReactorSourceMap.Enabled = false;
+        var a = TextBlock("a");
+        var b = TextBlock("b");
+        ReactorSourceMap.Enabled = true;
+
+        var viaIf = If(true, () => a);
+        var viaExpr = Expr(() => b);
+
+        Assert.Same(a, viaIf);
+        Assert.Same(b, viaExpr);
+        Assert.Null(viaIf.CallSite);
+        Assert.Null(viaExpr.CallSite);
+    }
+
+    [Fact]
+    public void CreatingFactoryStillStampsWhenReEnabled()
+    {
+        // Positive control for the three tests above. Toggling the flag off and on is
+        // the shared setup; if that sequence left interception broken, the nulls above
+        // would be vacuous. A factory that really creates an element must still stamp.
+        ReactorSourceMap.Enabled = false;
+        _ = TextBlock("ignored");
+        ReactorSourceMap.Enabled = true;
+
+        var fresh = TextBlock("fresh"); var freshLine = Line();
+
+        Assert.NotNull(fresh.CallSite);
+        Assert.Equal(freshLine, fresh.CallSite!.Value.LineNumber);
+    }
+
+    [Fact]
     public void NonPassThroughFactory_StillTakesItsOwnCallSite()
     {
         // Positive control for the two tests above: a factory that genuinely
