@@ -2768,13 +2768,14 @@ GetHashCode() → int
 ToString() → string
 
 ### struct GridSize
-new(double Value, GridUnitType Type, double? Min = null, double? Max = null)
+new(double value, GridUnitType type, double? min = null, double? max = null)
 GridSize Auto { get; }
 GridUnitType Type { get; init; }
 double Value { get; init; }
 double? Max { get; init; }
 double? Min { get; init; }
-Deconstruct(ref double Value, ref GridUnitType Type, ref double? Min, ref double? Max) → void
+Deconstruct(ref double value, ref GridUnitType type) → void
+Deconstruct(ref double value, ref GridUnitType type, ref double? min, ref double? max) → void
 Equals(GridSize other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

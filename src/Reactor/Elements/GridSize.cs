@@ -24,12 +24,52 @@ namespace Microsoft.UI.Reactor;
 /// strings are never localized. Whitespace is trimmed; <c>"Auto"</c> matches
 /// case-insensitively; numeric forms use <see cref="CultureInfo.InvariantCulture"/>.
 /// </para>
+/// <para>
+/// When Min or Max are specified, the track size is clamped to that range. For example,
+/// <c>GridSize.Px(100) with { Min=50 and Max=200 }</c> will be set to 100 initially and depending on changes clamped to 50 and 200.
+/// Min can be set higher as Max in which case the track size will be clamped to the Max value.
+/// </para>
 /// </remarks>
 /// <exception cref="ArgumentOutOfRangeException">Thrown when <c>GridType</c> is set to <c>Pixel</c> and the <c>Value</c> is &lt; 0, or when the GridType is set to <c>Star</c> and the <c>Value</c> is &lt;= 0.</exception>
 /// <exception cref="ArgumentOutOfRangeException">Thrown when the <c>Value</c>, <c>Min</c>, or <c>Max</c> properties are out of range.</exception>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when the <c>Min</c> is not a number or &lt; 0.</exception>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when the <c>Max</c> is not a number or &lt; 0.</exception>
 [DebuggerDisplay("{ToString(),nq}")]
-public readonly record struct GridSize(double Value, GridUnitType Type, double? Min = null, double? Max = null)
+public readonly record struct GridSize
 {
+    public GridSize(double value, GridUnitType type, double? min = null, double? max = null)
+    {
+        // Validate the min and max values
+        if(min.HasValue && !IsFiniteAndNonNegative(min.Value))
+            throw new ArgumentOutOfRangeException(nameof(min), min, "Min size must be a number and >= 0.");
+        if(max.HasValue && !IsFiniteAndNonNegative(max.Value))
+            throw new ArgumentOutOfRangeException(nameof(max), max, "Max size must be a number and >= 0.");
+
+        // Validate the value based on the type
+        if (type == GridUnitType.Pixel && !IsFiniteAndNonNegative(value))
+            throw new ArgumentOutOfRangeException(nameof(value), value, "Pixel size must be a number and >= 0.");
+        if (type == GridUnitType.Star && (!IsFiniteAndNonNegative(value) || value <= 0))
+            throw new ArgumentOutOfRangeException(nameof(value), value, "Star weight must be a number and > 0.");
+
+        Value = value;
+        Type = type;
+        Min = min;
+        Max = max;
+    }
+
+    public double Value { get; init; }
+    public GridUnitType Type { get; init; }
+    public double? Min { get; init; }
+    public double? Max { get; init; }
+
+    public void Deconstruct(out double value, out GridUnitType type) => (value, type) = (Value, Type);
+    public void Deconstruct(
+        out double value,
+        out GridUnitType type,
+        out double? min,
+        out double? max
+        ) => (value, type, min, max) = (Value, Type, Min, Max);
+
     /// <summary>The auto-sized track. Equivalent to the WinUI <c>Auto</c> length.</summary>
     public static GridSize Auto { get; } = new(1, GridUnitType.Auto);
 
@@ -38,21 +78,11 @@ public readonly record struct GridSize(double Value, GridUnitType Type, double? 
     /// 1.5 produces <c>"1.5*"</c>, 0.33 produces <c>"0.33*"</c>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="weight"/> is &lt;= 0.</exception>
-    public static GridSize Star(double weight = 1)
-    {
-        if (!(weight > 0))
-            throw new ArgumentOutOfRangeException(nameof(weight), weight, "Star weight must be > 0.");
-        return new GridSize(weight, GridUnitType.Star);
-    }
+    public static GridSize Star(double weight = 1) => new(weight, GridUnitType.Star);
 
     /// <summary>A pixel-sized track. <paramref name="pixels"/> must be &gt;= 0.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="pixels"/> is &lt; 0.</exception>
-    public static GridSize Px(double pixels)
-    {
-        if (pixels < 0)
-            throw new ArgumentOutOfRangeException(nameof(pixels), pixels, "Pixel size must be >= 0.");
-        return new GridSize(pixels, GridUnitType.Pixel);
-    }
+    public static GridSize Px(double pixels) => new(pixels, GridUnitType.Pixel);
 
     /// <summary>
     /// Implicit conversion to <see cref="GridLength"/> so the typed form composes
@@ -104,4 +134,6 @@ public readonly record struct GridSize(double Value, GridUnitType Type, double? 
             return Px(px);
         throw new FormatException($"Invalid grid track '{s}'.");
     }
+
+    private static bool IsFiniteAndNonNegative(double value) => !double.IsNaN(value) && !double.IsInfinity(value) && value >= 0;
 }
