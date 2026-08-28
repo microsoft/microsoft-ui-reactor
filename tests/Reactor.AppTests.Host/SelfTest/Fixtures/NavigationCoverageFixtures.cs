@@ -634,6 +634,77 @@ internal static class NavigationCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  6g. Reduced motion — Settings → Accessibility → Visual effects → Animation effects
+    //      WinUI's own theme transitions honour this. Reactor replays those motions on the
+    //      Composition layer, so nothing honours it for us unless TransitionEngine does.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavReducedMotion(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Reduced motion"));
+            await Harness.Render();
+
+            // With animations off, an animated transition must behave exactly like
+            // NavigationTransition.None: onComplete synchronously, both pages resting.
+            using (TransitionEngine.OverrideAnimationsEnabled(false))
+            {
+                var outgoing = new Border { Width = 100, Height = 100 };
+                var incoming = new Border { Width = 100, Height = 100 };
+                var inVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+                    .GetElementVisual(incoming);
+
+                // The host mounts the incoming page hidden and relies on the transition to
+                // reveal it. If the gate skipped that, a reduced-motion navigation would land
+                // on an invisible page — a worse bug than the animation it was avoiding.
+                inVisual.Opacity = 0;
+
+                var completedSynchronously = false;
+                TransitionEngine.RunTransition(
+                    outgoing, incoming,
+                    NavigationTransition.Entrance(), NavigationMode.Push,
+                    onComplete: () => completedSynchronously = true);
+
+                H.Check("NavReducedMotion_CompletesSynchronously", completedSynchronously);
+                H.Check("NavReducedMotion_IncomingVisible", IsApproximately(inVisual.Opacity, 1f));
+                H.Check(
+                    "NavReducedMotion_IncomingNotOffset",
+                    IsApproximately(inVisual.Offset, global::System.Numerics.Vector3.Zero));
+                H.Check(
+                    "NavReducedMotion_NoAnimationAttached",
+                    inVisual.TryGetAnimationController("Offset") is null);
+            }
+
+            // Positive control: the same call animates when the setting is on, so the checks
+            // above are reporting the gate rather than something that never animates.
+            using (TransitionEngine.OverrideAnimationsEnabled(true))
+            {
+                var outgoing = new Border { Width = 100, Height = 100 };
+                var incoming = new Border { Width = 100, Height = 100 };
+                var inVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+                    .GetElementVisual(incoming);
+
+                var completedSynchronously = false;
+                var done = new global::System.Threading.Tasks.TaskCompletionSource(
+                    global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+
+                TransitionEngine.RunTransition(
+                    outgoing, incoming,
+                    NavigationTransition.Entrance(), NavigationMode.Push,
+                    onComplete: () => { completedSynchronously = true; done.TrySetResult(); });
+
+                H.Check("NavReducedMotion_AnimatedDoesNotCompleteSynchronously", !completedSynchronously);
+
+                var finished = await global::System.Threading.Tasks.Task.WhenAny(
+                    done.Task, global::System.Threading.Tasks.Task.Delay(5000)) == done.Task;
+                H.Check("NavReducedMotion_AnimatedStillCompletes", finished);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  7. NavigationHandle — Navigated event + BackStack/ForwardStack
     //     Targets: NavigationHandle.Navigated, BackStack, ForwardStack properties
     // ════════════════════════════════════════════════════════════════════════

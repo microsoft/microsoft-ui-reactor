@@ -39,10 +39,22 @@ internal static class TransitionEngine
         // swap we are about to perform.
         var generation = ClaimForTransition(outgoing, incoming);
 
-        // Instant-swap paths: SuppressTransition, and an unrecognised subclass — NavigationTransition
-        // is a public abstract record, so a third party can subclass it. Both are handled before the
-        // scoped batch exists; an early return past a subscribed batch would leak it.
-        if (transition is SuppressTransition
+        // Instant-swap paths, in order of why:
+        //
+        //  1. The user turned animations off (Settings → Accessibility → Visual effects →
+        //     Animation effects). WinUI's own theme transitions honour this; because Reactor
+        //     replays those motions on the Composition layer rather than handing a
+        //     NavigationTransitionInfo to a Frame, nothing honours it for us unless we do it
+        //     here. Spec 006 §4.3 requires it. This is the single choke point every animated
+        //     navigation passes through, so gating here covers all of them.
+        //  2. SuppressTransition — the author asked for no animation.
+        //  3. An unrecognised subclass: NavigationTransition is a public abstract record, so a
+        //     third party can subclass it and we have no animation to run.
+        //
+        // All three are handled before the scoped batch exists; an early return past a
+        // subscribed batch would leak it.
+        if (!AnimationsEnabled
+            || transition is SuppressTransition
             || transition is not (EntranceTransition or SlideTransition or FadeTransition
                 or DrillInTransition or SpringSlideTransition or ConnectedTransition))
         {
@@ -182,6 +194,74 @@ internal static class TransitionEngine
 
     internal static bool StillOwns(UIElement element, long generation) =>
         _elementGeneration.TryGetValue(element, out var stamp) && stamp.Value == generation;
+
+    // ════════════════════════════════════════════════════════════════
+    //  Reduced motion
+    // ════════════════════════════════════════════════════════════════
+
+    private static readonly global::Windows.UI.ViewManagement.UISettings? _uiSettings =
+        CreateUiSettings();
+
+    private static global::Windows.UI.ViewManagement.UISettings? CreateUiSettings()
+    {
+        try
+        {
+            return new global::Windows.UI.ViewManagement.UISettings();
+        }
+        catch (global::System.Exception)
+        {
+            // UISettings is a WinRT/COM activation and needs a usable view context. If it is
+            // unavailable — some host, test, or headless configuration — fall back to animating,
+            // which is the pre-existing behaviour, rather than failing the navigation.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether the user has left animations on
+    /// (Settings → Accessibility → Visual effects → Animation effects).
+    /// </summary>
+    /// <remarks>
+    /// Read live rather than cached: the setting can be toggled while the app is running, and
+    /// WinUI's own theme transitions pick that up without a restart. <c>UISettings</c> itself is
+    /// cached because constructing it is the expensive part.
+    /// <para>
+    /// A navigation still happens when this is false — the pages swap instantly, exactly as
+    /// <see cref="NavigationTransition.None"/> does. Only the motion is dropped.
+    /// </para>
+    /// </remarks>
+    internal static bool AnimationsEnabled
+    {
+        get
+        {
+            if (_animationsEnabledOverride is { } forced) return forced;
+            if (_uiSettings is null) return true;
+
+            try
+            {
+                return _uiSettings.AnimationsEnabled;
+            }
+            catch (global::System.Exception)
+            {
+                return true;
+            }
+        }
+    }
+
+    // Test seam (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host): the real setting is
+    // machine state, so a fixture cannot rely on it being either value.
+    private static bool? _animationsEnabledOverride;
+
+    internal static IDisposable OverrideAnimationsEnabled(bool value)
+    {
+        _animationsEnabledOverride = value;
+        return new AnimationsEnabledScope();
+    }
+
+    private sealed class AnimationsEnabledScope : IDisposable
+    {
+        public void Dispose() => _animationsEnabledOverride = null;
+    }
 
     /// <summary>
     /// Stops the animations this engine starts and returns the visual to its resting state.
