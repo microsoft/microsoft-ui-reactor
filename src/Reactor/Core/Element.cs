@@ -1838,6 +1838,18 @@ public record ElementExtras
     /// bucket makes the cost proportional to the number of stamped elements
     /// instead of the number of elements.</para>
     ///
+    /// <para>It is NOT free, and the trade is worth stating precisely. As a nullable
+    /// struct this field is stored inline, so it widens the bucket itself: measured at
+    /// 152 B/instance with it and 24 B of that attributable to this field (an 8-byte
+    /// path reference, a 4-byte line, the nullable flag, padded). Any element carrying a
+    /// behavioral extra — Attached, ThemeBindings, animations, ResourceOverrides,
+    /// ContextValues — pays that whether or not source mapping is on, and whether or not
+    /// the consumer even has the generator. The M12 benchmark cannot see it, because M12
+    /// leaves are extras-free and allocate no bucket at all. Accepted because it is
+    /// bounded and proportional to elements that already allocate this object, versus
+    /// +24 B on EVERY element (measured) for the inline-on-the-record alternative.
+    /// ElementExtrasAllocationTests pins both halves.</para>
+    ///
     /// <para>Read through <c>Element.CallSite</c>, which is the public shim; the
     /// bucket is an implementation detail.</para>
     /// </summary>

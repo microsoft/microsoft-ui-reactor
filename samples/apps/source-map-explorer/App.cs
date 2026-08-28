@@ -14,15 +14,20 @@ namespace SourceMapExplorer;
 ///
 /// <para>Click anything in the left panel. The inspector on the right reports
 /// the control you hit and the exact <c>file:line</c> of the DSL call that
-/// created it. Nothing in the sample UI carries a callback or a key — these are
-/// plain display leaves, the ones the reconciler deliberately does NOT tag
-/// (PR #468). They are addressable only because the source-map stamp puts them
-/// back on the map.</para>
+/// created it. The interesting ones are the <em>descendants</em> that
+/// <c>Walk</c> traverses: plain display leaves with no callback and no key, the
+/// ones the reconciler deliberately does NOT tag (PR #468), addressable only
+/// because the source-map stamp puts them back on the map. The panel root and
+/// the toolbar buttons are not examples of that — they carry a ref, a pointer
+/// handler and callbacks, so they would be tagged regardless.</para>
 ///
 /// <para>The "Source mapping" toggle flips
 /// <see cref="ReactorSourceMap.Enabled"/> live. Turn it off and re-click: the
-/// same elements report nothing, because the interceptors skip the stamp and
-/// the reconciler stops tagging them. That is the runtime gate devtools
+/// same elements report nothing. Not because tagging is removed — a control
+/// already tagged keeps its <c>ReactorState</c>, and reconciliation refreshes
+/// that state to point at the newly-built element. It is that new element which
+/// is unstamped, since the interceptor skips the stamp while the flag is off, so
+/// the location reads back as null. That is the runtime gate devtools
 /// controls.</para>
 /// </summary>
 internal sealed class App : Component

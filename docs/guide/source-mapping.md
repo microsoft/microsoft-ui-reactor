@@ -159,13 +159,23 @@ override, `<ReactorSourceMap>false</ReactorSourceMap>`, turns it off in Debug.
 Generation costs roughly 0.5–0.6 ms per intercepted call site; on the Reactor
 gallery (1,660 call sites) that is about one second on an incremental rebuild.
 
-A Debug build that never turns the runtime flag on pays nothing at runtime: the
-interceptor checks `ReactorSourceMap.Enabled` and returns the original
-element untouched, so per-render allocation is identical to a build with
-no generator at all. The devtools verb sets that flag for you; a host embedding
+A Debug build that never turns the runtime flag on allocates nothing extra
+per render: the interceptor checks `ReactorSourceMap.Enabled` and returns the
+original element untouched, measured as byte-identical to a build with no
+generator at all on the M12 control-model benchmark. The devtools verb sets that flag for you; a host embedding
 its own inspector can set `ReactorSourceMap.Enabled` directly, and a process that
 never goes through the CLI (a benchmark host, a repro) can start with
 `REACTOR_SOURCEMAP=1` in the environment.
+
+One cost is *not* zero, and the benchmark above cannot see it. `CallSite` lives in
+the shared `ElementExtras` bucket, and as a nullable struct it is stored inline, so
+it makes that bucket 24 bytes wider — 152 B/instance, measured. Any element carrying
+a behavioral extra (attached properties, theme bindings, animations, resource
+overrides, context values) allocates that bucket anyway and pays the 24 bytes whether
+or not source mapping is on. Elements with no extras, which is the common leaf and
+what M12 measures, allocate no bucket and pay nothing. The alternative — declaring
+`CallSite` inline on the record — measured +24 B on *every* element in every build,
+so this is the cheaper of the two.
 
 Read a location back from any realized control:
 
