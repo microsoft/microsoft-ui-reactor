@@ -14,8 +14,12 @@
              verb. A Debug build that never runs devtools pays no runtime
              allocation (measured: byte-identical per-render bytes to a build
              with no generator at all).
-    Release → not generated. No build cost, and no absolute source paths are
-             baked into shipped binaries.
+             Release, BY DEFAULT, not generated. No build cost, and no absolute source paths
+             are baked into shipped binaries. This is a default, not a prohibition: the
+             analyzer below keys on $(ReactorSourceMap) alone, so an explicit
+             <ReactorSourceMap>true</ReactorSourceMap> DOES generate interceptors in Release
+             and DOES embed mapped source paths in the binary. Only opt in for a Release
+             build you are not distributing.
 
     Cost of the Debug default, measured on samples/ReactorGallery (9,272 lines,
     1,660 intercepted call sites): +0.99s on an incremental one-line rebuild,

@@ -1041,6 +1041,113 @@ internal static class ElementFactoryRecyclingFixtures
         public override Microsoft.UI.Reactor.Core.Element Render() => TextBlock("flyrowB");
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    //  Spec 010 — a SUCCESSFUL adoption must carry the source location over.
+    //
+    //  TryAdoptRealizedReplacement transplants the component subtree and
+    //  Border.Child, but not ReactorAttached.StateProperty — so the wrapper that
+    //  stays parented keeps pointing at the OLD element. Rendering is unaffected,
+    //  which is exactly why this needs its own fixture: the only visible damage is
+    //  that ReactorSourceMap.GetSource reports the PREVIOUS row's call site.
+    //
+    //  Deliberately no .Ref() here. That would trip the adoption gate the #919
+    //  fixtures above cover, routing the row through the realize channel instead —
+    //  the opposite path from the one under test.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class Factory_SuccessfulAdoption_RefreshesTheReportedCallSite(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string SkipReason =
+            "built without REACTOR_SOURCEMAP, so no interceptors exist to stamp a location";
+
+        public override async Task RunAsync()
+        {
+            var previous = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+            try
+            {
+                // Two Component<> calls on DIFFERENT physical lines, chosen by rev.
+                // Identical for rendering, so the adoption path is reached; the only
+                // difference is the location each stamps.
+                int lineA = 0, lineB = 0;
+
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (rev, setRev) = ctx.UseState(0);
+                    var items = new[] { new Item("a", "A") };
+                    return VStack(
+                        Button("BumpAdoptRev", () => setRev(rev + 1)),
+                        LazyVStack<Item>(items, i => i.Id, (i, _) =>
+                            rev == 0
+                                ? At(out lineA, Component<StatefulKeyedRow>().WithKey($"{i.Id}:{rev}"))
+                                : At(out lineB, Component<StatefulKeyedRow>().WithKey($"{i.Id}:{rev}"))
+                        ).Height(200)
+                    );
+                });
+                await Harness.Render();
+
+                var repeater = H.FindControl<WinXC.ItemsRepeater>(_ => true);
+                H.Check("EFSourceMap_RepeaterFound", repeater is not null);
+                if (repeater is null) return;
+
+                var realizedBefore = repeater.TryGetElement(0);
+                H.Check("EFSourceMap_RowRealized", realizedBefore is not null);
+                if (realizedBefore is null) return;
+
+#if REACTOR_SOURCEMAP
+                // The initially realized wrapper reports NO location: first realize goes
+                // through the framework's realize channel, which tags the wrapper with
+                // its own element rather than the stamped Component<> one. Asserted
+                // rather than ignored, so if that ever changes this fixture says so.
+                var beforeLine = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(realizedBefore)?.LineNumber;
+                H.Check("EFSourceMap_InitialRealizeReportsNothing", beforeLine is null);
+
+                // Anti-tautology: the two arms must really be on different lines, or
+                // "follows the live row" below could pass by coincidence.
+                H.Check("EFSourceMap_ArmsAreOnDifferentLines", lineA != 0 && lineA != lineB);
+
+                // Key "a:0" -> "a:1" in the same slot drives RefreshRealizedItems
+                // down the adoption path.
+                H.ClickButton("BumpAdoptRev");
+                await Harness.Render();
+                await Harness.WaitFor(() => repeater.TryGetElement(0) is not null);
+
+                var realizedAfter = repeater.TryGetElement(0);
+                H.Check("EFSourceMap_RowStillRealized", realizedAfter is not null);
+                if (realizedAfter is null) return;
+
+                var afterLine = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(realizedAfter)?.LineNumber;
+                H.Check("EFSourceMap_LineFollowsTheLiveRow", afterLine is not null && afterLine == lineB);
+                H.Check("EFSourceMap_LineIsNotStale", afterLine != lineA);
+#else
+                H.Skip("EFSourceMap_InitialRealizeReportsNothing", SkipReason);
+                H.Skip("EFSourceMap_ArmsAreOnDifferentLines", SkipReason);
+                H.Skip("EFSourceMap_RowStillRealized", SkipReason);
+                H.Skip("EFSourceMap_LineFollowsTheLiveRow", SkipReason);
+                H.Skip("EFSourceMap_LineIsNotStale", SkipReason);
+#endif
+            }
+            finally
+            {
+                Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = previous;
+            }
+        }
+
+        /// <summary>
+        /// Records the physical line of the call and returns the element unchanged, so
+        /// the two arms above stay identical for rendering while their locations differ.
+        /// The <c>Component&lt;&gt;</c> call sits on the same physical line as this call,
+        /// so the captured number is exactly what the interceptor stamps — an
+        /// independent oracle rather than a hand-counted constant.
+        /// </summary>
+        private static Element At(out int line, Element element, [global::System.Runtime.CompilerServices.CallerLineNumber] int caller = 0)
+        {
+            line = caller;
+            return element;
+        }
+    }
+
     internal class Factory_DecoratorSubstitution_IsNotSilentlyAdopted(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -1487,3 +1594,6 @@ internal static class ElementFactoryRecyclingFixtures
         }
     }
 }
+
+
+

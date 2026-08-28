@@ -207,8 +207,10 @@
          analyzers/dotnet/cs on purpose: everything in that folder is loaded into
          every consumer compilation, and this generator classifies every
          invocation semantically. build\Reactor.targets adds it as an <Analyzer>
-         only when ReactorSourceMap is true, so a Release consumer never loads
-         it and pays nothing. -->
+         only when ReactorSourceMap is true, which by default is Debug-only — so a
+         Release consumer does not load it and pays nothing. Setting the property
+         true explicitly does load it in Release, and then source paths are baked
+         into the binary. -->
     <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
           Pack="true" PackagePath="build/sourcemap" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />

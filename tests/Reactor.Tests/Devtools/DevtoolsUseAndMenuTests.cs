@@ -38,6 +38,49 @@ public class DevtoolsUseAndMenuTests : IDisposable
         Assert.True(ctx.UseDevtools());
     }
 
+    // ── Spec 010: the devtools flag mirrors into source mapping ───────────
+    //
+    // This is the activation path real users take (`--devtools app` / `--devtools
+    // run`); every other source-map test sets ReactorSourceMap.Enabled directly, so
+    // without these three the mirror could be deleted and the whole source-map suite
+    // would stay green while devtools produced no stamps at all.
+
+    [Fact]
+    public void EnablingDevtools_TurnsSourceMappingOn()
+    {
+        Assert.False(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+
+        ReactorApp.DevtoolsEnabled = true;
+
+        Assert.True(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+    }
+
+    [Fact]
+    public void DisablingDevtools_TurnsSourceMappingOff()
+    {
+        ReactorApp.DevtoolsEnabled = true;
+        Assert.True(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+
+        ReactorApp.DevtoolsEnabled = false;
+
+        Assert.False(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+    }
+
+    [Fact]
+    public void ResettingDevtools_TurnsSourceMappingOff()
+    {
+        // The reset helper writes the backing field directly, bypassing the property
+        // setter that normally mirrors — so it needs its own assertion. A reset that
+        // left source mapping on would leak the flag into every later test.
+        ReactorApp.DevtoolsEnabled = true;
+        Assert.True(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+
+        ReactorApp.ResetDevtoolsEnabledForTests();
+
+        Assert.False(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+        Assert.False(ReactorApp.DevtoolsEnabled);
+    }
+
     [Fact]
     public void DevtoolsMenu_RendersEmpty_WhenDisabled()
     {
@@ -72,3 +115,4 @@ public class DevtoolsUseAndMenuTests : IDisposable
     // Reactor.TestApp with `--devtools app`. Don't reintroduce an enabled-path
     // unit test here without a WinUI harness — it will flake on COMException.
 }
+

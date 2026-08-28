@@ -345,6 +345,7 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_SameItemReuse_PreservesRowComponentState",
         "EFR_Factory_RefreshKeyChange_RemountsRealizedRow",
         "EFR_Factory_RefreshKeyChange_ModifiedRootKeepsRefLive",
+        "EFR_Factory_SuccessfulAdoption_RefreshesTheReportedCallSite",
         "EFR_Factory_DecoratorSubstitution_IsNotSilentlyAdopted",
         "EFR_Factory_HostTypeKeyCycle_KeepsContainerSetBounded",
         "EFR_Factory_RetiredContainer_DetachesNestedStateAndOwnership",
@@ -2041,6 +2042,7 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_SameItemReuse_PreservesRowComponentState" => new ElementFactoryRecyclingFixtures.Factory_SameItemReuse_PreservesRowComponentState(harness),
         "EFR_Factory_RefreshKeyChange_RemountsRealizedRow" => new ElementFactoryRecyclingFixtures.Factory_RefreshKeyChange_RemountsRealizedRow(harness),
         "EFR_Factory_RefreshKeyChange_ModifiedRootKeepsRefLive" => new ElementFactoryRecyclingFixtures.Factory_RefreshKeyChange_ModifiedRootKeepsRefLive(harness),
+        "EFR_Factory_SuccessfulAdoption_RefreshesTheReportedCallSite" => new ElementFactoryRecyclingFixtures.Factory_SuccessfulAdoption_RefreshesTheReportedCallSite(harness),
         "EFR_Factory_DecoratorSubstitution_IsNotSilentlyAdopted" => new ElementFactoryRecyclingFixtures.Factory_DecoratorSubstitution_IsNotSilentlyAdopted(harness),
         "EFR_Factory_HostTypeKeyCycle_KeepsContainerSetBounded" => new ElementFactoryRecyclingFixtures.Factory_HostTypeKeyCycle_KeepsContainerSetBounded(harness),
         "EFR_Factory_RetiredContainer_DetachesNestedStateAndOwnership" => new ElementFactoryRecyclingFixtures.Factory_RetiredContainer_DetachesNestedStateAndOwnership(harness),
@@ -3399,4 +3401,6 @@ internal static class SelfTestFixtureRegistry
         _ => null,
     };
 }
+
+
 

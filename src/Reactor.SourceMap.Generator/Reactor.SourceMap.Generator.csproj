@@ -22,7 +22,8 @@
          Reactor.Wrappers.Generator live: everything in that folder loads into every
          consumer compilation, and this generator classifies every invocation
          semantically. build/Microsoft.UI.Reactor.targets adds it as an <Analyzer>
-         only when ReactorSourceMap is true, so a Release consumer never loads it. -->
+         only when ReactorSourceMap is true, which defaults to Debug-only — so a
+         Release consumer does not load it unless it opts in explicitly. -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
