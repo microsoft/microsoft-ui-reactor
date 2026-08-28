@@ -44,6 +44,10 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- Supplies the MTP hangdump option. CI passes it to every xUnit suite, and
+         without this reference MTP rejects the unknown option and reports "Zero
+         tests ran" (exit 5) rather than failing loudly. Mirrors Reactor.Tests. -->
+    <PackageReference Include="Microsoft.Testing.Extensions.HangDump" />
   </ItemGroup>
 
   <!-- Same WinRT/Windows App SDK bootstrap the headless Reactor.Tests suite uses. -->

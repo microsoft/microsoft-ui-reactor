@@ -29,7 +29,19 @@
     same condition so the two can never drift apart, and so no app author ever
     has to know the namespace exists.
   -->
-  <PropertyGroup Condition="'$(ReactorSourceMap)' == '' and '$(Configuration)' == 'Debug'">
+  <!--
+    Debug default. NOTE the empty-string arm: this file is imported by the repo's
+    own Directory.Build.props at the TOP of a project, and $(Configuration) is not
+    defaulted until the SDK props are imported later, so it is genuinely EMPTY
+    here for any build that does not pass -c / -p:Configuration explicitly (which
+    is exactly what CI does). Treating empty as Debug matches MSBuild's own
+    default. A real Release build passes Configuration as a global property, so it
+    is already set by this point and correctly declines.
+
+    A PackageReference consumer imports this file after the project body, where
+    $(Configuration) is always set, so the empty arm is inert for them.
+  -->
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
     <ReactorSourceMap>true</ReactorSourceMap>
   </PropertyGroup>
 

@@ -157,15 +157,14 @@ no generator at all.
 Read a location back from any realized control:
 
 ```csharp
-using Microsoft.UI.Reactor.Diagnostics;
-
-SourceLocation? where = ReactorSourceMap.GetSource(someUIElement);
-// where?.ToString()      → "C:\src\MainPage.cs:34"
-// where?.ToShortString() → "MainPage.cs:34"
+SourceLocation? src = ReactorSourceMap.GetSource(target);
+string label = src is null
+    ? "(no source location)"
+    : $"{src.Value.ToShortString()}";   // e.g. "MainPage.cs:34"
 ```
 
-`GetSource` walks `UIElement` → the element back-pointer the reconciler
-already stores → `Element.CallSite`. It returns `null` when the control
+`GetSource` walks `UIElement` -> the element back-pointer the reconciler
+already stores -> `Element.CallSite`. It returns `null` when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.
 

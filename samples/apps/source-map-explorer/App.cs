@@ -46,10 +46,16 @@ internal sealed class App : Component
 
         void Describe(UIElement target, Action<string?> sink)
         {
-            var src = ReactorSourceMap.GetSource(target);
+            // <snippet:read-source-location>
+            SourceLocation? src = ReactorSourceMap.GetSource(target);
+            string label = src is null
+                ? "(no source location)"
+                : $"{src.Value.ToShortString()}";   // e.g. "MainPage.cs:34"
+            // </snippet:read-source-location>
+
             sink(src is null
-                ? $"{target.GetType().Name}\n(no source location)"
-                : $"{target.GetType().Name}\n{src.Value.ToShortString()}\n\n{src.Value.FilePath}");
+                ? $"{target.GetType().Name}\n{label}"
+                : $"{target.GetType().Name}\n{label}\n\n{src.Value.FilePath}");
         }
 
         // The single inspection primitive: given a point in host coordinates, find
