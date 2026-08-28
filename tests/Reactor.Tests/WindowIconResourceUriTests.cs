@@ -16,7 +16,12 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <para>The bug is invisible to the selftest suite because that host is <b>unpackaged</b>,
 /// where <c>ms-appx:</c> happens to map to the executable directory and appears to work.
 /// These tests therefore cover the mapping itself rather than the live window.</para>
+/// <para>Shares the <c>AppBaseDirectoryAssets</c> collection with the <c>TitleBar</c>
+/// icon-default tests: both create and delete asset files under
+/// <see cref="AppContext.BaseDirectory"/>, so running them in parallel lets one class
+/// delete a directory the other is mid-way through using.</para>
 /// </remarks>
+[Collection("AppBaseDirectoryAssets")]
 public class WindowIconResourceUriTests
 {
     private static string BesideApp(params string[] parts)

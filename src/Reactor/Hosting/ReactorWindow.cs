@@ -694,6 +694,35 @@ public sealed partial class ReactorWindow : IDisposable
             }
             owner.AddOwned(this);
         }
+
+        // The window's icon is ambient state for a mounted TitleBar(...) element: it is
+        // not part of the element, so no element diff can observe it changing. Push it,
+        // the same way the caption height is pushed via SyncTitleBarControlHeight.
+        SyncTitleBarIcon();
+    }
+
+    /// <summary>
+    /// Re-resolves the inherited icon on the mounted <c>TitleBar(...)</c> control after
+    /// the window's own icon may have changed. No-op when no title bar is mounted, or
+    /// when the element declares its own icon (or opted out with <c>.NoIcon()</c>) —
+    /// those own the slot.
+    /// </summary>
+    private void SyncTitleBarIcon()
+    {
+        if (_titleBarControl is null || !_titleBarControl.TryGetTarget(out var control)) return;
+        if (control is not Microsoft.UI.Xaml.Controls.TitleBar bar) return;
+
+        try
+        {
+            Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(bar);
+        }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            // The WinUI TitleBar control throws teardown-reentry COMExceptions while the
+            // window is closing (issue #537). A cosmetic icon refresh must never take the
+            // window down.
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SyncTitleBarIcon", ex);
+        }
     }
 
     private static bool IsTopLevelChromeAllowed(WindowSpec spec)

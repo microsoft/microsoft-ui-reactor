@@ -203,6 +203,11 @@ The WinUI control does not do this itself. Two limits are worth knowing:
 title bar against a full-colour `.ico` in the caption, say. `.NoIcon()` is the
 opt-out for a deliberately bare title bar on an app that ships an icon.
 
+> **Behaviour change.** Before this, a `TitleBar(...)` without `.Icon(...)` always
+> rendered no icon. An existing app that ships a window icon — or an
+> `Assets\AppIcon.ico` — and deliberately wanted a bare title bar should add
+> `.NoIcon()` to keep that. Apps that set `.Icon(...)` explicitly are unaffected.
+
 ### Tall title bar
 
 A title bar that hosts navigation chrome — a back button, a pane toggle — uses the

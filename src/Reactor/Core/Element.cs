@@ -5114,9 +5114,9 @@ public partial record TitleBarElement(
             },
         });
         return d
-            .OneWay(
-                get: static e => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Project(e),
-                set: static (c, v) => c.IconSource = global::Microsoft.UI.Reactor.Core.V1Protocol.IconResolver.ResolveIconSource(v))
+            .Imperative(
+                mount:  static (c, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(c, e, force: true),
+                update: static (c, _, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(c, e, force: false))
             .Imperative(
                 mount: static (c, e) => RegisterWindowTitleBar(c, e),
                 update: static (c, _, e) => ApplyTitleBarHeightOption(c, e))

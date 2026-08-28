@@ -14,6 +14,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// because constructing any <c>Microsoft.UI.Xaml</c> type headlessly throws
 /// <c>COMException</c>.
 /// </summary>
+[Collection("AppBaseDirectoryAssets")]
 public class TitleBarIconDefaultTests : IDisposable
 {
     private readonly string _root;
@@ -222,6 +223,110 @@ public class TitleBarIconDefaultTests : IDisposable
             global::System.IO.File.Delete(asset);
             global::System.IO.Directory.Delete(nested);
             if (created) global::System.IO.Directory.Delete(assets);
+        }
+    }
+
+    // ── Precedence, via the spec-level seam ─────────────────────────────────
+    //
+    // ResolveForSpec is the whole precedence rule minus the ambient window lookup,
+    // so these run headlessly without staging a live window.
+
+    [Fact]
+    public void Spec_Without_Icon_Falls_Back_To_The_Convention_Asset()
+    {
+        var expected = WriteFile("Assets", "AppIcon.ico");
+        TitleBarIconDefault.ResetForTests();
+
+        var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveForSpec(new WindowSpec()));
+        Assert.Equal(expected, icon.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+    }
+
+    [Fact]
+    public void Declared_Spec_Icon_Wins_Over_The_Convention_Asset()
+    {
+        WriteFile("Assets", "AppIcon.ico");
+        var declared = WriteFile("declared.ico");
+        TitleBarIconDefault.ResetForTests();
+
+        var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveForSpec(
+            new WindowSpec { Icon = WindowIcon.FromPath(declared) }));
+
+        Assert.Equal(declared, icon.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+    }
+
+    [Fact]
+    public void A_Declared_Icon_That_Resolves_To_Nothing_Falls_Through_To_The_Convention()
+    {
+        // Mirrors ApplyChrome, where WindowIcon.Apply returning false hands off to the
+        // convention/PE fallback rather than leaving the window with no icon at all.
+        var convention = WriteFile("Assets", "AppIcon.ico");
+        TitleBarIconDefault.ResetForTests();
+
+        var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveForSpec(
+            new WindowSpec { Icon = WindowIcon.FromPath(IOPath.Join(_root, "absent.ico")) }));
+
+        Assert.Equal(convention, icon.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+    }
+
+    [Fact]
+    public void An_Embedded_Window_Inherits_No_Icon()
+    {
+        // Positive control first: the same spec without Embed does resolve, so a null
+        // below is the embed guard firing rather than the convention being unavailable.
+        WriteFile("Assets", "AppIcon.ico");
+        TitleBarIconDefault.ResetForTests();
+        Assert.NotNull(TitleBarIconDefault.ResolveForSpec(new WindowSpec()));
+
+        var embedded = new WindowSpec
+        {
+            Embed = new EmbedRequest(WindowEmbedStyle.Child, HostPid: 1234, InitialVisibility: true),
+        };
+        Assert.Null(TitleBarIconDefault.ResolveForSpec(embedded));
+    }
+
+    [Fact]
+    public void An_Embedded_Window_Inherits_No_Icon_Even_With_A_Declared_One()
+    {
+        var declared = WriteFile("declared.ico");
+        TitleBarIconDefault.ResetForTests();
+
+        var embedded = new WindowSpec
+        {
+            Icon = WindowIcon.FromPath(declared),
+            Embed = new EmbedRequest(WindowEmbedStyle.Child, HostPid: 1234, InitialVisibility: true),
+        };
+        Assert.Null(TitleBarIconDefault.ResolveForSpec(embedded));
+    }
+
+    [Fact]
+    public void A_Null_Spec_Is_Not_An_Embed_And_Still_Resolves_The_Convention()
+    {
+        // A bare ReactorHost with no owning window.
+        var expected = WriteFile("Assets", "AppIcon.ico");
+        TitleBarIconDefault.ResetForTests();
+
+        var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveForSpec(null));
+        Assert.Equal(expected, icon.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+    }
+
+    [Fact]
+    public void Alternating_Between_Two_Declared_Icons_Resolves_Each_Correctly()
+    {
+        // The declared-icon cache is a single slot keyed on the WindowIcon reference, so
+        // two windows alternating renders evict each other. That must cost a re-probe,
+        // never a wrong answer.
+        var a = WriteFile("a.ico");
+        var b = WriteFile("b.ico");
+        TitleBarIconDefault.ResetForTests();
+        var specA = new WindowSpec { Icon = WindowIcon.FromPath(a) };
+        var specB = new WindowSpec { Icon = WindowIcon.FromPath(b) };
+
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.Equal(a, ((ImageIconData)TitleBarIconDefault.ResolveForSpec(specA)!)
+                .Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+            Assert.Equal(b, ((ImageIconData)TitleBarIconDefault.ResolveForSpec(specB)!)
+                .Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
         }
     }
 

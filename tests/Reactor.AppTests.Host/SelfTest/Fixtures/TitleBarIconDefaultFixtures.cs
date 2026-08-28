@@ -447,4 +447,121 @@ internal static class TitleBarIconDefaultFixtures
             }
         }
     }
+
+    /// <summary>The URI behind a title bar's current image icon, or null.</summary>
+    private static Uri? IconUri(WinUI.TitleBar bar) =>
+        ((bar.IconSource as WinUI.ImageIconSource)?.ImageSource as BitmapImage)?.UriSource;
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Regression: the inherited icon is AMBIENT window state, not element
+    //  state. A OneWay descriptor entry decides whether to write by comparing
+    //  get(oldElement) against get(newElement) — and both read the same ambient
+    //  value, so after the window icon changes they compare equal and the
+    //  control keeps the stale icon forever. This arm fails against that shape
+    //  and passes against the Imperative + window-push shape.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultFollowsWindowIconChange(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var first = CreateExternalIcon(scratch);
+                var second = global::System.IO.Path.Join(scratch, "Second.ico");
+                global::System.IO.File.Copy(TestIcoPath, second, overwrite: true);
+
+                var comp = new BarComponent(static e => e);
+                var win = await OpenAndSettle(
+                    Spec("IconFollows") with { Icon = WindowIcon.FromPath(first) }, () => comp);
+                try
+                {
+                    var bar = comp.Bar;
+                    H.Check("TitleBarIcon_Follows_BarMounted", bar is not null);
+                    if (bar is null) return;
+
+                    var before = IconUri(bar);
+                    Console.WriteLine($"# follows: before={before}");
+                    H.Check($"TitleBarIcon_Follows_InitialIcon (uri={before})",
+                        before is not null
+                        && before.LocalPath.EndsWith("External.ico", StringComparison.OrdinalIgnoreCase));
+
+                    // Change ONLY the window icon. The element is untouched, so nothing
+                    // an element diff can observe has changed.
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(second) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var after = IconUri(bar);
+                    Console.WriteLine($"# follows: after={after}");
+                    H.Check($"TitleBarIcon_Follows_TracksWindowIconChange (uri={after})",
+                        after is not null
+                        && after.LocalPath.EndsWith("Second.ico", StringComparison.OrdinalIgnoreCase));
+                    H.Check("TitleBarIcon_Follows_IconActuallyChanged", before != after);
+
+                    // Dropping the window icon entirely, with no convention asset in the
+                    // scratch root, must take the title-bar mark away too.
+                    win.Update(win.Spec with { Icon = null });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    Console.WriteLine($"# follows: cleared={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Follows_ClearsWhenWindowIconRemoved", bar.IconSource is null);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  An element that owns its icon slot keeps it across a window icon change.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultExplicitSurvivesWindowIconChange(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var external = CreateExternalIcon(scratch);
+
+                var comp = new BarComponent(
+                    static e => e.Icon(new FontIconData("\uE734", "Segoe Fluent Icons")));
+                var win = await OpenAndSettle(Spec("ExplicitSurvives"), () => comp);
+                try
+                {
+                    H.Check("TitleBarIcon_Survives_ExplicitBefore",
+                        comp.Bar?.IconSource is WinUI.FontIconSource);
+
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(external) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    Console.WriteLine($"# survives: after={comp.Bar?.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Survives_ExplicitAfterWindowIconChange",
+                        comp.Bar?.IconSource is WinUI.FontIconSource);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
 }

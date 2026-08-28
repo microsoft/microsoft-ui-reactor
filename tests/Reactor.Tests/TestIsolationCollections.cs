@@ -86,3 +86,17 @@ public sealed class LayoutFootgunDetectorCollection { }
 /// </summary>
 [CollectionDefinition("PackageIdentityProbe", DisableParallelization = true)]
 public sealed class PackageIdentityProbeCollection { }
+
+/// <summary>
+/// xUnit collection marker for tests that create and delete icon assets under
+/// <see cref="AppContext.BaseDirectory"/> — the test binary's own output directory —
+/// and/or mutate the process-wide app-root override used by the <c>TitleBar</c> icon
+/// default (<c>TitleBarIconDefault.SetBaseDirectoryForTests</c>).
+/// <para>
+/// Both are global to the test process. Two classes writing into the same
+/// <c>Assets</c> directory can delete each other's fixtures mid-run, and a concurrent
+/// override would make one class's resolution assertions read another's app root.
+/// </para>
+/// </summary>
+[CollectionDefinition("AppBaseDirectoryAssets", DisableParallelization = true)]
+public sealed class AppBaseDirectoryAssetsCollection { }

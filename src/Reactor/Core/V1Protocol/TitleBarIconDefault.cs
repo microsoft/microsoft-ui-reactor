@@ -82,21 +82,114 @@ internal static class TitleBarIconDefault
     }
 
     /// <summary>
+    /// What was last written to a control, and whether the element owned the slot at
+    /// the time. Recording ownership here rather than reading it back off the element
+    /// is deliberate: a callback-free <c>TitleBar</c> is never tagged by
+    /// <c>Reconciler.SetElementTagIfNeeded</c>, so <c>GetElementTag</c> returns null for
+    /// exactly the common case this feature exists to serve.
+    /// </summary>
+    private sealed class AppliedIcon(IconData? value, bool elementOwned)
+    {
+        internal readonly IconData? Value = value;
+        internal readonly bool ElementOwned = elementOwned;
+    }
+
+    private static readonly ConditionalWeakTable<Microsoft.UI.Xaml.Controls.TitleBar, AppliedIcon>
+        s_applied = new();
+
+    /// <summary>True when the element declares the icon itself, or opted out.</summary>
+    private static bool OwnsIconSlot(TitleBarElement element)
+        => element.Icon is not null || element.SuppressIcon;
+
+    /// <summary>
+    /// Writes the projected icon to <paramref name="control"/>, skipping the write when
+    /// it already carries that exact projection.
+    /// </summary>
+    /// <param name="control">The mounted WinUI <c>TitleBar</c> to write to.</param>
+    /// <param name="element">The element being mounted or updated.</param>
+    /// <param name="force">
+    /// <c>true</c> on mount. A pooled or recycled control may carry a record left by the
+    /// element that previously used it, so mount always writes rather than trusting it.
+    /// </param>
+    /// <remarks>
+    /// This is an <c>Imperative</c> entry rather than a <c>OneWay</c> one on purpose.
+    /// <c>OneWayPropEntry.Update</c> decides whether to write by comparing
+    /// <c>get(oldElement)</c> with <c>get(newElement)</c> — which works only for values
+    /// derived purely from the element. The inherited default is <em>ambient</em>: it is
+    /// read from the owning window, so after <c>WindowSpec.Icon</c> changes both the old
+    /// and the new element project the same new value, the comparison finds them equal,
+    /// and the control keeps the previous icon forever. Comparing against what was last
+    /// written to the control instead of against the previous element is what makes an
+    /// ambient change observable.
+    /// </remarks>
+    internal static void Apply(Microsoft.UI.Xaml.Controls.TitleBar control, TitleBarElement element, bool force)
+    {
+        var owned = OwnsIconSlot(element);
+        var projected = Project(element);
+        if (!force
+            && s_applied.TryGetValue(control, out var last)
+            && last.ElementOwned == owned
+            && EqualityComparer<IconData?>.Default.Equals(last.Value, projected))
+        {
+            return;
+        }
+
+        control.IconSource = IconResolver.ResolveIconSource(projected);
+        s_applied.AddOrUpdate(control, new AppliedIcon(projected, owned));
+    }
+
+    /// <summary>
+    /// Re-resolves the inherited icon for an already-mounted title bar. Called by
+    /// <see cref="ReactorWindow"/> when the window's own icon changes, because that is
+    /// ambient state no element diff can see.
+    /// </summary>
+    /// <remarks>
+    /// No-op for a control this type never wrote to, and for a title bar whose element
+    /// declared its own icon or opted out with <c>.NoIcon()</c> — those own the slot.
+    /// </remarks>
+    internal static void ResyncInheritedIcon(Microsoft.UI.Xaml.Controls.TitleBar control)
+    {
+        if (!s_applied.TryGetValue(control, out var last) || last.ElementOwned) return;
+
+        var projected = ResolveDefault();
+        if (EqualityComparer<IconData?>.Default.Equals(last.Value, projected)) return;
+
+        control.IconSource = IconResolver.ResolveIconSource(projected);
+        s_applied.AddOrUpdate(control, new AppliedIcon(projected, elementOwned: false));
+    }
+
+    /// <summary>
+    /// The app's icon as an <see cref="IconData"/>, or <c>null</c> when none is
+    /// resolvable. See the type-level remarks for precedence and the one divergence
+    /// from the window chain.
+    /// </summary>
+    /// <summary>
     /// The app's icon as an <see cref="IconData"/>, or <c>null</c> when none is
     /// resolvable. See the type-level remarks for precedence and the one divergence
     /// from the window chain.
     /// </summary>
     internal static IconData? ResolveDefault()
+        => ResolveForSpec(ReactorApp.ActiveHostInternal?.OwningWindow?.Spec);
+
+    /// <summary>
+    /// The icon a window with <paramref name="spec"/> contributes to its title bar.
+    /// Split out from <see cref="ResolveDefault"/> so the precedence rules are testable
+    /// without staging a live window — the ambient lookup is the only part that needs one.
+    /// </summary>
+    /// <param name="spec">
+    /// The owning window's spec, or <c>null</c> for a bare <c>ReactorHost</c> with no
+    /// owning window. That is not an embed, so it still resolves the app-level
+    /// convention asset.
+    /// </param>
+    internal static IconData? ResolveForSpec(WindowSpec? spec)
     {
-        var window = ReactorApp.ActiveHostInternal?.OwningWindow;
+        // Mirror ApplyChrome's `spec.Embed is null` guard: an embedded window never gets
+        // a window icon, so there is no window icon for its title bar to inherit.
+        if (spec?.Embed is not null) return null;
 
-        // Mirror ApplyChrome's `spec.Embed is null` guard: an embedded window never
-        // gets a window icon, so there is no window icon for its title bar to inherit.
-        // A bare ReactorHost with no owning window is not an embed — it still resolves
-        // the app-level convention asset below.
-        if (window?.Spec.Embed is not null) return null;
-
-        if (window?.Spec.Icon is { } declared && TryResolveDeclared(declared) is { } fromSpec)
+        // A declared icon that resolves to no file falls through to the convention,
+        // exactly as it does for the window itself in ApplyChrome.
+        if (spec?.Icon is { } declared && TryResolveDeclared(declared) is { } fromSpec)
             return fromSpec;
 
         return ResolveConvention();
