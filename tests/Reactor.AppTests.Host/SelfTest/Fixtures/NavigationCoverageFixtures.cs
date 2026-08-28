@@ -420,6 +420,31 @@ internal static class NavigationCoverageFixtures
             TransitionEngine.RestoreHitTesting(inert);
             H.Check("NavHitTest_PreservesAuthorFalse", !inert.IsHitTestVisible);
 
+            // An instant-swap navigation must leave both its pages interactive even when an
+            // older animated transition still holds a claim on one of them: navigating A→B with
+            // a slide and then straight back to A instantly would otherwise show A while it is
+            // still non-hit-testable. Nesting depth is irrelevant here — clear outright.
+            var preempted = new Border();
+            TransitionEngine.SuppressHitTesting(preempted);
+            TransitionEngine.SuppressHitTesting(preempted);
+            H.Check("NavHitTest_PreemptedIsSuppressed", !preempted.IsHitTestVisible);
+
+            var swapTarget = new Border();
+            var swapDone = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                swapTarget, preempted, NavigationTransition.None, NavigationMode.Push,
+                onComplete: () => swapDone.TrySetResult());
+
+            H.Check(
+                "NavHitTest_InstantSwapClearsSuppression",
+                preempted.IsHitTestVisible);
+
+            // The older transition's completion then finds nothing to restore, rather than
+            // flipping the page back to non-hit-testable.
+            TransitionEngine.RestoreHitTesting(preempted);
+            H.Check("NavHitTest_LateRestoreAfterClearIsNoOp", preempted.IsHitTestVisible);
+
             var host2 = H.CreateHost();
             host2.Mount(ctx => TextBlock("Hit-test suppression done"));
             await Harness.Render();

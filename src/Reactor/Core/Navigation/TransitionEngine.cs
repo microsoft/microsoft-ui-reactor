@@ -64,6 +64,16 @@ internal static class TransitionEngine
             // hand that control back as a later page.
             NormalizeVisual(inVisual);
             NormalizeVisual(outVisual);
+
+            // Same reasoning for hit testing. A slide that is still in flight suppressed both of
+            // its pages, and one of them can be a page this swap is about to show — navigating
+            // A→B with a slide and then straight back to A instantly would otherwise display A
+            // while it is still non-hit-testable, leaving the visible page unclickable until the
+            // older slide's completion handler happens to run. "No animation" has to mean these
+            // two pages are interactive now, so clear outright instead of decrementing.
+            ClearHitTestSuppression(outgoing);
+            ClearHitTestSuppression(incoming);
+
             onComplete();
             return;
         }
@@ -349,6 +359,21 @@ internal static class TransitionEngine
         if (!_hitTestSuppressions.TryGetValue(element, out var state)) return;
 
         if (--state.Depth > 0) return;
+
+        _hitTestSuppressions.Remove(element);
+        element.IsHitTestVisible = state.OriginalValue;
+    }
+
+    /// <summary>
+    /// Ends suppression on an element outright, whatever its nesting depth, restoring the value
+    /// from before the first suppression. Used by the instant-swap path: those navigations must
+    /// leave both pages interactive immediately, even when an older animated transition still
+    /// holds a claim. A later <see cref="RestoreHitTesting"/> from that transition is then a
+    /// no-op, since the entry is gone.
+    /// </summary>
+    internal static void ClearHitTestSuppression(UIElement element)
+    {
+        if (!_hitTestSuppressions.TryGetValue(element, out var state)) return;
 
         _hitTestSuppressions.Remove(element);
         element.IsHitTestVisible = state.OriginalValue;
