@@ -257,13 +257,11 @@ public sealed class WindowIcon
         if (global::System.IO.Path.IsPathRooted(assetPath)) return false;
         if (assetPath.Contains(':', StringComparison.Ordinal)) return false;
 
-        foreach (var segment in assetPath.Split('/', '\\'))
-        {
-            if (segment == "..") return false;
-        }
-
-        return true;
+        // Array.IndexOf rather than a scanning loop: same ordinal comparison, and it
+        // states the question ("does any segment step back out?") in one expression.
+        return global::System.Array.IndexOf(assetPath.Split('/', '\\'), "..") < 0;
     }
+
 
     /// <summary>
     /// The failures a path join plus an existence probe can raise: a malformed segment,

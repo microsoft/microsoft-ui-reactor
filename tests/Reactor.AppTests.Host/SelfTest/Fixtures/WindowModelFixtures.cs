@@ -260,6 +260,43 @@ internal static partial class WindowModelFixtures
 
                 H.Check("WindowIcon_ConventionAsset_Sets_HICON", conventionIcon != 0);
 
+                // Removing a declared icon must hand the window back to the fallback,
+                // not strand the declared one. The sequence matters: the fallback has
+                // to run *first* (no declared icon at mount) for it to cache a handle,
+                // and it is that cached handle going stale under a later declared icon
+                // that the bug turns on. Opening straight onto a declared icon never
+                // populates the cache and so cannot reach this.
+                //
+                // Note the oracle: with the convention asset present, both the healthy
+                // and the broken outcome are non-zero, so `!= 0` alone would be a
+                // tautology — only the identity of the handle separates "fallback
+                // re-applied" from "declared icon never taken down".
+                var reverting = await OpenAndSettle(
+                    new WindowSpec { Title = "Icon Revert", Width = 200, Height = 160 },
+                    () => new StubComponent());
+                try
+                {
+                    var fallbackIcon = IconOf(reverting);
+
+                    reverting.Update(reverting.Spec with
+                    {
+                        Icon = WindowIcon.FromPath("Assets/SelfTestWindowIcon.ico"),
+                    });
+                    var declaredIcon = IconOf(reverting);
+
+                    reverting.Update(reverting.Spec with { Icon = null });
+                    var revertedIcon = IconOf(reverting);
+
+                    // The declared icon must actually have displaced the fallback, or
+                    // the removal below proves nothing.
+                    H.Check("WindowIcon_Declared_Displaces_Fallback",
+                        fallbackIcon != 0 && declaredIcon != 0 && declaredIcon != fallbackIcon);
+
+                    H.Check("WindowIcon_Removing_Declared_Reverts_To_Fallback",
+                        revertedIcon != 0 && revertedIcon != declaredIcon);
+                }
+                finally { await CloseAndSettle(reverting); }
+
                 // A declared icon that does not exist must not leave the window worse off
                 // than declaring nothing: Apply reports failure and the fallback runs.
                 // With the convention asset present this is now a real assertion — it

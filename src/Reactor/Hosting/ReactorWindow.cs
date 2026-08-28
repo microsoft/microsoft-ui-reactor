@@ -632,9 +632,21 @@ public sealed partial class ReactorWindow : IDisposable
             // A declared icon that cannot be resolved (wrong format, missing file, or a
             // resource URI with no matching asset) would otherwise leave the window with
             // no icon at all, because a non-null spec.Icon used to suppress the fallback.
-            var applied = spec.Icon is { } icon
-                ? icon.Apply(_appWindow) || TryApplyExeIconFallback()
-                : TryApplyExeIconFallback();
+            bool applied;
+            if (spec.Icon is { } icon && icon.Apply(_appWindow))
+            {
+                // The declared icon is what the window shows now, so a cached fallback
+                // handle no longer describes it. Drop it: otherwise removing the
+                // declaration later would hit the "already applied" early-return in
+                // TryApplyExeIconFallback and strand the declared icon on the window
+                // instead of reverting to the fallback.
+                ReleaseExeIconFallback();
+                applied = true;
+            }
+            else
+            {
+                applied = TryApplyExeIconFallback();
+            }
 
             if (applied)
             {
@@ -973,7 +985,7 @@ public sealed partial class ReactorWindow : IDisposable
             owned = false;
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsIconApplyFailure(ex))
         {
             // Best-effort by contract: this is a cosmetic fallback for an app that
             // shipped no icon, so no failure of it may reach the caller — ApplyChrome
@@ -989,6 +1001,36 @@ public sealed partial class ReactorWindow : IDisposable
             // boundary, so this is safe to run while an exception is in flight.
             if (owned) NativeIcon.DestroyIcon(hIcon);
         }
+    }
+
+    /// <summary>
+    /// The failures the icon boundary can raise: a COM/WinRT fault out of
+    /// <c>SetIcon</c> or the <c>IconId</c> factory, a handle the platform rejects, or a
+    /// window that has already gone away (<see cref="ObjectDisposedException"/> derives
+    /// from <see cref="InvalidOperationException"/>). Anything else is a genuine bug and
+    /// propagates — the <c>finally</c> above still frees the handle either way.
+    /// </summary>
+    private static bool IsIconApplyFailure(Exception ex)
+        => ex is COMException
+              or ArgumentException
+              or InvalidOperationException;
+
+    /// <summary>
+    /// Drops the cached fallback handle once a declared icon has replaced it on the
+    /// window, so removing that declaration later re-runs the fallback instead of
+    /// leaving the declared icon in place.
+    /// </summary>
+    private void ReleaseExeIconFallback()
+    {
+        if (_exeFallbackHIcon != 0)
+        {
+            // Safe for the same reason as in Dispose: the AppWindow holds its own
+            // reference, and this handle is no longer the one the window displays.
+            NativeIcon.DestroyIcon(_exeFallbackHIcon);
+            _exeFallbackHIcon = 0;
+        }
+
+        _exeFallbackAttempted = false;
     }
 
     /// <summary>
