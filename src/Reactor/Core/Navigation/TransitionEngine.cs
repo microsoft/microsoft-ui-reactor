@@ -26,6 +26,15 @@ internal static class TransitionEngine
     {
         var outVisual = ElementCompositionPreview.GetElementVisual(outgoing);
         var inVisual = ElementCompositionPreview.GetElementVisual(incoming);
+
+        // GetElementVisual permanently costs an element the XAML implicit-transition APIs
+        // (OpacityTransition, ScaleTransition, …), so ElementPool refuses to pool anything it
+        // has been called on. Record that here as every Reconciler call site does — a navigation
+        // page is often a Border or Grid, which are poolable, so without this a page whose
+        // visual we animated could be handed to a later renter that needs those APIs.
+        Core.ElementPool.MarkCompositorTainted(outgoing);
+        Core.ElementPool.MarkCompositorTainted(incoming);
+
         var compositor = outVisual.Compositor;
         var usesCenterPointBinding = transition is DrillInTransition;
         var suppressesHitTesting = transition is SlideTransition;

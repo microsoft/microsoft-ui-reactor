@@ -751,6 +751,52 @@ internal static class NavigationCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  6h. Transitioned pages are compositor-tainted
+    //      GetElementVisual permanently costs an element the XAML implicit-transition APIs, so
+    //      ElementPool refuses to pool anything it has been called on. Navigation pages are
+    //      often Borders or Grids, which are poolable.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavTransitionMarksCompositorTainted(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Compositor taint"));
+            await Harness.Render();
+
+            var outgoing = new Border();
+            var incoming = new Border();
+
+            H.Check(
+                "NavTaint_CleanBeforeTransition",
+                !ElementPool.IsCompositorTainted(outgoing) && !ElementPool.IsCompositorTainted(incoming));
+
+            var done = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                outgoing, incoming, NavigationTransition.Entrance(), NavigationMode.Push,
+                onComplete: () => done.TrySetResult());
+
+            H.Check("NavTaint_OutgoingTainted", ElementPool.IsCompositorTainted(outgoing));
+            H.Check("NavTaint_IncomingTainted", ElementPool.IsCompositorTainted(incoming));
+
+            await global::System.Threading.Tasks.Task.WhenAny(
+                done.Task, global::System.Threading.Tasks.Task.Delay(5000));
+
+            // The instant-swap path reads the visuals too, so it has to mark as well.
+            var suppressOut = new Border();
+            var suppressIn = new Border();
+            TransitionEngine.RunTransition(
+                suppressOut, suppressIn, NavigationTransition.None, NavigationMode.Push,
+                onComplete: () => { });
+
+            H.Check("NavTaint_InstantSwapAlsoTaints",
+                ElementPool.IsCompositorTainted(suppressOut) && ElementPool.IsCompositorTainted(suppressIn));
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  7. NavigationHandle — Navigated event + BackStack/ForwardStack
     //     Targets: NavigationHandle.Navigated, BackStack, ForwardStack properties
     // ════════════════════════════════════════════════════════════════════════

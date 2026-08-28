@@ -244,6 +244,7 @@ internal static class NavigationHostLifecycle
             {
                 // Mount new content at Opacity 0 alongside old content
                 var inVisual = ElementCompositionPreview.GetElementVisual(newChildControl!);
+                ElementPool.MarkCompositorTainted(newChildControl!);
                 inVisual.Opacity = 0;
                 grid.Children.Add(newChildControl!);
                 node.TransitionInProgress = true;
