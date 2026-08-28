@@ -92,6 +92,23 @@ public class WindowIconResourceUriTests
         Assert.Equal(source, resolved);
     }
 
+    [Theory]
+    [InlineData("ms-appx:///Assets/../Assets/UriProbe.ico")]
+    [InlineData(@"ms-appx:///Assets\..\Assets\UriProbe.ico")]
+    public void Uri_That_Walks_Out_Of_The_Install_Root_Is_Rejected(string uri)
+    {
+        // Non-vacuous by construction: the asset genuinely exists and File.Exists
+        // resolves ".." itself, so without the traversal guard each of these would map
+        // successfully to a real file. A false here can only come from the guard.
+        using var asset = new TempAsset(@"Assets\UriProbe.ico");
+        Assert.True(global::System.IO.File.Exists(asset.Path),
+            "precondition: the probe asset must exist, or this proves nothing");
+
+        Assert.False(WindowIcon.TryResolveResourceUri(uri, out var resolved),
+            $"'{uri}' steps out of the install root and must not be mapped");
+        Assert.Equal(uri, resolved);
+    }
+
     [Fact]
     public void Appx_Uri_Naming_No_Asset_Is_Rejected()
     {

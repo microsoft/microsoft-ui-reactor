@@ -957,23 +957,37 @@ public sealed partial class ReactorWindow : IDisposable
         if (hIcon == 0) hIcon = LoadExecutablePeIcon();
         if (hIcon == 0) return false;
 
+        // This method owns hIcon until SetIcon has taken it. Tracking that explicitly
+        // rather than relying on the catch means every exit — success, a swallowed
+        // failure, or a throw from the loaders' marshalling — frees the handle exactly
+        // once instead of leaking it for the process lifetime.
+        var owned = true;
         try
         {
             var iconId = Microsoft.UI.Win32Interop.GetIconIdFromIcon(hIcon);
             _appWindow.SetIcon(iconId);
             // Ownership transfers to the window here — Dispose frees it. Assigned only
-            // after SetIcon succeeds, so the catch below still owns the handle.
+            // after SetIcon succeeds, so a throw above still leaves the handle to the
+            // finally below.
             _exeFallbackHIcon = hIcon;
+            owned = false;
             return true;
         }
-        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        catch (Exception ex)
         {
-            // SetIcon failed, so the handle was never handed over and nothing else
-            // will free it. Destroy it here rather than leaking it for the process
-            // lifetime. DestroyIcon cannot throw at the marshal boundary.
-            NativeIcon.DestroyIcon(hIcon);
+            // Best-effort by contract: this is a cosmetic fallback for an app that
+            // shipped no icon, so no failure of it may reach the caller — ApplyChrome
+            // runs during render, and a propagating COMException would take the window
+            // down over a missing icon. Mirrors WindowIcon.Apply, which swallows the
+            // same AppWindow.SetIcon boundary.
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
             return false;
+        }
+        finally
+        {
+            // DestroyIcon is a [LibraryImport] bool — it cannot throw at the marshal
+            // boundary, so this is safe to run while an exception is in flight.
+            if (owned) NativeIcon.DestroyIcon(hIcon);
         }
     }
 

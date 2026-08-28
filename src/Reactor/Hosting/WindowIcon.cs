@@ -214,6 +214,16 @@ public sealed class WindowIcon
         rest = rest.TrimStart('/');
         if (rest.Length == 0) return false;
 
+        // A real packaged-resource URI names a normalized path underneath the install
+        // root, so a "..", a rooted segment, or a drive qualifier can only be a
+        // malformed source. Reject it before the join rather than after, so the path
+        // this hands to SetIcon can never address a file outside BaseDirectory.
+        if (!IsInstallRootRelative(rest))
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon: '{uri}' is not an install-root-relative asset path.");
+            return false;
+        }
+
         try
         {
             var candidate = global::System.IO.Path.Join(
@@ -228,6 +238,31 @@ public sealed class WindowIcon
             Debug.WriteLine($"[Reactor] WindowIcon: could not map '{uri}' to a path: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="assetPath"/> can only name a file underneath the install
+    /// root: not rooted, not drive-qualified, and containing no <c>..</c> segment that
+    /// would step back out of it.
+    /// </summary>
+    /// <remarks>
+    /// This is a well-formedness check, not a trust boundary — the source comes from the
+    /// app's own call to <see cref="FromResource"/>. It exists so that a typo cannot
+    /// quietly resolve to some unrelated file outside the package.
+    /// </remarks>
+    private static bool IsInstallRootRelative(string assetPath)
+    {
+        // "C:\x", "\x" and "C:x" are all rejected: none of them are relative to the
+        // install root, and Path.Join would happily concatenate the last one.
+        if (global::System.IO.Path.IsPathRooted(assetPath)) return false;
+        if (assetPath.Contains(':', StringComparison.Ordinal)) return false;
+
+        foreach (var segment in assetPath.Split('/', '\\'))
+        {
+            if (segment == "..") return false;
+        }
+
+        return true;
     }
 
     /// <summary>
