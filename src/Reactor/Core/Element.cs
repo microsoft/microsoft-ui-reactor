@@ -5063,8 +5063,25 @@ public partial record TitleBarElement(
     /// <see cref="ImageIconData"/> / <see cref="BitmapIconData"/> for a
     /// bundled <c>.ico</c> / image (e.g. <c>new ImageIconData(new
     /// Uri("ms-appx:///Assets/AppIcon.ico"))</c>).
+    /// <para>Left unset, the title bar inherits the <b>window's</b> icon —
+    /// <see cref="WindowSpec.Icon"/> if declared, otherwise the
+    /// <c>Assets\AppIcon.ico</c> convention — so an app that already has an icon
+    /// need not restate it here. The WinUI control does not do this itself. An icon
+    /// that exists only as an executable PE resource is not inherited: that stage
+    /// yields a raw <c>HICON</c> with no path, and a XAML <c>IconSource</c> needs an
+    /// image source. Set <see cref="SuppressIcon"/> via <c>.NoIcon()</c> to show none.</para>
     /// </summary>
     public IconData? Icon { get; init; }
+    /// <summary>
+    /// Suppresses the icon entirely, including the one Reactor would otherwise
+    /// inherit from the window (see <see cref="Icon"/>). Set via <c>.NoIcon()</c>.
+    /// </summary>
+    /// <remarks>
+    /// A separate flag rather than a null <see cref="Icon"/>, because record
+    /// <c>init</c> properties make "never set an icon" and "explicitly set none"
+    /// indistinguishable — and those now mean opposite things.
+    /// </remarks>
+    public bool SuppressIcon { get; init; }
     internal Action<WinUI.TitleBar>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnBackRequested is not null || OnPaneToggleRequested is not null;
 
@@ -5098,7 +5115,7 @@ public partial record TitleBarElement(
         });
         return d
             .OneWay(
-                get: static e => e.Icon,
+                get: static e => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Project(e),
                 set: static (c, v) => c.IconSource = global::Microsoft.UI.Reactor.Core.V1Protocol.IconResolver.ResolveIconSource(v))
             .Imperative(
                 mount: static (c, e) => RegisterWindowTitleBar(c, e),

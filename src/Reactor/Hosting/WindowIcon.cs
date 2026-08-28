@@ -160,22 +160,7 @@ public sealed class WindowIcon
     internal bool Apply(AppWindow appWindow)
     {
         if (appWindow is null) return false;
-
-        var target = _source;
-        if (_isResource)
-        {
-            if (!TryResolveResourceUri(_source, out target))
-            {
-                Debug.WriteLine(
-                    $"[Reactor] WindowIcon.Apply: '{_source}' names no asset under {AppContext.BaseDirectory}.");
-                return false;
-            }
-        }
-        else if (!TryResolveExistingPath(_source, out target))
-        {
-            Debug.WriteLine($"[Reactor] WindowIcon.Apply: no icon file at '{_source}'.");
-            return false;
-        }
+        if (!TryResolvePath(out var target)) return false;
 
         try
         {
@@ -187,6 +172,39 @@ public sealed class WindowIcon
             Debug.WriteLine($"[Reactor] WindowIcon.Apply failed for '{_source}': {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Resolves this icon to an existing file on disk, whichever kind it was
+    /// constructed from. Shared with the <c>TitleBar</c> icon default, which needs the
+    /// same file as a XAML <c>IconSource</c> rather than as a window <c>HICON</c> —
+    /// going through one resolver means the two surfaces cannot disagree about which
+    /// file a declared icon names.
+    /// </summary>
+    /// <returns>
+    /// <c>false</c> when the source names no existing file. See the remarks on
+    /// <see cref="Apply"/> for why a <c>ms-appx:</c> URI that maps to nothing is a
+    /// failure rather than something to pass through.
+    /// </returns>
+    internal bool TryResolvePath(out string resolved)
+    {
+        if (_isResource)
+        {
+            if (!TryResolveResourceUri(_source, out resolved))
+            {
+                Debug.WriteLine(
+                    $"[Reactor] WindowIcon.Apply: '{_source}' names no asset under {AppContext.BaseDirectory}.");
+                return false;
+            }
+            return true;
+        }
+
+        if (!TryResolveExistingPath(_source, out resolved))
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon.Apply: no icon file at '{_source}'.");
+            return false;
+        }
+        return true;
     }
 
     /// <summary>

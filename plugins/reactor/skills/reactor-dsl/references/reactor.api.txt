@@ -824,6 +824,7 @@ TitleBarElement.Content(Element content) → TitleBarElement
 TitleBarElement.HeightOption(WindowTitleBarHeight height) → TitleBarElement
 TitleBarElement.Icon(IconData icon) → TitleBarElement
 TitleBarElement.Icon(string imageUri) → TitleBarElement
+TitleBarElement.NoIcon() → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
 TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
@@ -5876,6 +5877,7 @@ bool AutoRefreshDragRegions { get; init; }
 bool IsBackButtonEnabled { get; init; }
 bool IsBackButtonVisible { get; init; }
 bool IsPaneToggleButtonVisible { get; init; }
+bool SuppressIcon { get; init; }
 string Subtitle { get; init; }
 string Title { get; init; }
 Deconstruct(ref string Title) → void

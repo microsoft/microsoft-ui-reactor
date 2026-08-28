@@ -2096,12 +2096,23 @@ public static partial class ElementExtensions
         el with { RightHeader = rightHeader };
 
     /// <summary>Sets the icon shown in the leading slot. Pass a <see cref="SymbolIconData"/>, <see cref="FontIconData"/>, <see cref="ImageIconData"/>, or <see cref="BitmapIconData"/>.</summary>
+    /// <remarks>Only needed to show something <em>other</em> than the app's own icon — with no
+    /// explicit icon the title bar inherits the window's (<c>WindowSpec.Icon</c>, else
+    /// <c>Assets\AppIcon.ico</c>). Use <see cref="NoIcon"/> to show none at all.</remarks>
     public static TitleBarElement Icon(this TitleBarElement el, IconData icon) =>
-        el with { Icon = icon };
+        el with { Icon = icon, SuppressIcon = false };
 
     /// <summary>Convenience overload — sets the icon to a bundled image / .ico via a Uri string (e.g. <c>"ms-appx:///Assets/AppIcon.ico"</c>).</summary>
     public static TitleBarElement Icon(this TitleBarElement el, string imageUri) =>
-        el with { Icon = new ImageIconData(new Uri(imageUri)) };
+        el with { Icon = new ImageIconData(new Uri(imageUri)), SuppressIcon = false };
+
+    /// <summary>
+    /// Shows no icon at all, overriding the window icon the title bar would otherwise
+    /// inherit. The opt-out for a deliberately bare title bar on an app that ships an
+    /// icon.
+    /// </summary>
+    public static TitleBarElement NoIcon(this TitleBarElement el) =>
+        el with { Icon = null, SuppressIcon = true };
 
     /// <summary>
     /// When <c>true</c>, the title bar re-derives its drag regions on every layout

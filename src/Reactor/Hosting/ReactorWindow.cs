@@ -1050,25 +1050,16 @@ public sealed partial class ReactorWindow : IDisposable
     /// Loads <c>Assets\AppIcon.ico</c> from the app's base directory, which resolves to the
     /// package install root for a packaged app. Returns 0 when absent.
     /// </summary>
+    /// <remarks>
+    /// The path half lives in <see cref="Hosting.AppIconConvention"/> because the
+    /// <c>TitleBar</c> icon default needs the same file as a XAML <c>IconSource</c>
+    /// rather than as an <c>HICON</c>, and the two must not disagree about which file
+    /// the convention names.
+    /// </remarks>
     private static nint LoadConventionAssetIcon()
     {
-        string path;
-        try
-        {
-            path = global::System.IO.Path.Join(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
-            if (!global::System.IO.File.Exists(path)) return 0;
-        }
-        catch (Exception ex) when (ex is ArgumentException
-                                      or NotSupportedException
-                                      or global::System.IO.IOException
-                                      or UnauthorizedAccessException
-                                      or global::System.Security.SecurityException)
-        {
-            // Malformed base directory, or a locked-down / unreadable filesystem. A
-            // missing convention asset is never fatal — fall through to the PE resource.
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.LoadConventionAssetIcon", ex);
+        if (!Hosting.AppIconConvention.TryGetAssetPath(AppContext.BaseDirectory, out var path))
             return 0;
-        }
 
         return NativeIcon.LoadImageW(0, path, NativeIcon.IMAGE_ICON,
             0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);

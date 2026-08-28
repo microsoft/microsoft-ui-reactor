@@ -1316,6 +1316,11 @@ internal static class SelfTestFixtureRegistry
         "TitleBar_ExitPrep",
         "TitleBar_NoElement_NullStaysFalse",
         // Issue #917 — declarative caption height (spec + element).
+        // TitleBar inherits the window icon when it declares none.
+        "TitleBarIcon_Convention",
+        "TitleBarIcon_ZeroControl",
+        "TitleBarIcon_WindowSpec",
+        "TitleBarIcon_ExplicitAndOptOut",
         "TitleBarHeight_ElementTall",
         "TitleBarHeight_SpecPrecedence",
         "TitleBarHeight_ExplicitHeightWins",
@@ -3189,6 +3194,10 @@ internal static class SelfTestFixtureRegistry
         "TitleBar_OwnedTree" => new Phase7WindowingFixtures.TitleBarOwnedTreeFlipsRecursively(harness),
         "TitleBar_ExitPrep" => new Phase7WindowingFixtures.TitleBarExitPrepFlipsOpenWindows(harness),
         "TitleBar_NoElement_NullStaysFalse" => new Phase7WindowingFixtures.TitleBarNoElementNullStaysFalse(harness),
+        "TitleBarIcon_Convention" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultFromConvention(harness),
+        "TitleBarIcon_ZeroControl" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultZeroControl(harness),
+        "TitleBarIcon_WindowSpec" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultFromWindowSpec(harness),
+        "TitleBarIcon_ExplicitAndOptOut" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultExplicitAndOptOut(harness),
         "TitleBarHeight_ElementTall" => new TitleBarHeightFixtures.TitleBarHeightElementTall(harness),
         "TitleBarHeight_SpecPrecedence" => new TitleBarHeightFixtures.TitleBarHeightSpecPrecedence(harness),
         "TitleBarHeight_ExplicitHeightWins" => new TitleBarHeightFixtures.TitleBarHeightExplicitHeightWins(harness),

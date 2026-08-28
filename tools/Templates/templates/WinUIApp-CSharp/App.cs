@@ -29,14 +29,10 @@ class App : Component
     {
         var (name, setName) = UseState("World");
 
-        // App-mark icon drawn *inside* the title bar. This is separate from the
-        // window icon set via ReactorApp.Run(icon:) above, which is what Windows
-        // shows in the window caption and Alt-Tab. The two may differ -- a
-        // monochrome mark here, a full-colour .ico there. This placeholder is a
-        // Segoe Fluent Icons glyph (U+EA3A); swap it for a bundled asset, e.g.
-        // .Icon("ms-appx:///Assets/AppIcon.ico").
+        // The title bar's app mark is inherited from the window icon set via
+        // ReactorApp.Run(icon:) above -- no need to restate it here. Call
+        // .Icon(...) only to show something different, or .NoIcon() for none.
         var titleBar = TitleBar("Company.ReactorApp1")
-            .Icon(FontIcon("\uEA3A", "Segoe Fluent Icons"))
             .Flex(shrink: 0);
 
         var body = Border(
