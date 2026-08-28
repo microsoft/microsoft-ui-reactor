@@ -2003,11 +2003,18 @@ public static partial class ElementExtensions
 
     /// <summary>
     /// Auto-syncs this NavigationView with a NavigationHandle: sets <c>SelectedTag</c>
-    /// from the current route, wires <c>OnSelectedTagChanged</c> to navigate,
-    /// <c>OnBackRequested</c> to <c>GoBack</c>, and <c>IsBackEnabled</c> to <c>CanGoBack</c>.
+    /// from the current route, navigates on selection change, wires <c>OnBackRequested</c>
+    /// to <c>GoBack</c>, and <c>IsBackEnabled</c> to <c>CanGoBack</c>.
     /// NavigationView's recommended transition is forwarded to the navigation host, so
     /// pane navigation uses WinUI's entrance motion and top navigation slides horizontally
     /// according to the selected item's position.
+    /// <para>
+    /// Selection is wired through an internal transition-aware callback rather than the public
+    /// <see cref="NavigationViewElement.OnSelectedTagChanged"/>, which this deliberately leaves
+    /// null: setting that property yourself afterwards then takes precedence and suppresses the
+    /// auto-navigation, so an author can observe selection without this fighting them. The same
+    /// applies to <see cref="NavigationViewElement.OnSettingsSelected"/>.
+    /// </para>
     /// <para>
     /// The built-in settings item is opt-in: pass <paramref name="settingsRoute"/> to make
     /// selecting it navigate. It is a separate parameter rather than a

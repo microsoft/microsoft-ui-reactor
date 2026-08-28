@@ -125,7 +125,12 @@ public sealed record SlideTransition : NavigationTransition
     public SlideDirection Direction { get; init; } = SlideDirection.FromBottom;
     public TimeSpan? Duration { get; init; }
     public CompositionEasingFunction? Easing { get; init; }
-    /// <summary>Custom slide distance in pixels. Null uses the WinUI specification.</summary>
+    /// <summary>
+    /// Custom slide distance in pixels. Supplying one selects Reactor's customizable slide,
+    /// where it is the distance travelled; leaving it null keeps whichever path the other
+    /// properties select — WinUI's specification when they are all null, otherwise the
+    /// customizable slide's own 200px default.
+    /// </summary>
     public float? Distance { get; init; }
 }
 
