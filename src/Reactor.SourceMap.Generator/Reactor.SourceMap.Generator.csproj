@@ -16,9 +16,13 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
 
-    <!-- Spec 010 spike (Route B). Bundled into Microsoft.UI.Reactor.nupkg under
-         analyzers/dotnet/cs (see Reactor.csproj) rather than shipping as its own
-         package — same model as Reactor.Wrappers.Generator. -->
+    <!-- Spec 010 (Route B). Bundled into Microsoft.UI.Reactor.nupkg under
+         build/sourcemap (see Reactor.csproj) rather than shipping as its own
+         package. Deliberately NOT analyzers/dotnet/cs, where Reactor.Analyzers and
+         Reactor.Wrappers.Generator live: everything in that folder loads into every
+         consumer compilation, and this generator classifies every invocation
+         semantically. build/Microsoft.UI.Reactor.targets adds it as an <Analyzer>
+         only when ReactorSourceMap is true, so a Release consumer never loads it. -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

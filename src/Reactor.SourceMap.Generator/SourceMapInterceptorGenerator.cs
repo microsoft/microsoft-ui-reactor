@@ -99,6 +99,19 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         method = method.OriginalDefinition;
 
         // Only the Reactor DSL surface.
+        //
+        // Deliberately NOT widened to "any static that returns an Element", which
+        // would be the obvious way to also cover the factories
+        // Reactor.Wrappers.Generator emits onto the element type
+        // (`FooWrapperElement.Foo(...)`). That was tried and rejected: Roslyn runs
+        // every source generator against the SAME input compilation, so this
+        // generator cannot see symbols another generator emitted. Widening the
+        // filter therefore covers wrapper factories only in project shapes that
+        // happen to compile twice (a WinUI XAML app, where the second pass sees the
+        // first pass's generated files) and silently covers nothing in a
+        // single-pass library. Both halves of that were measured — see
+        // WrapperFactoryInterceptionTests, which pins the limitation. Coverage that
+        // varies with project shape is worse than a documented, uniform gap.
         if (method.ContainingType?.ToDisplayString() != FactoriesMetadataName) return null;
 
         // Generic factories (Component<T>, Component<T,TProps>, ForEach<T>, Memo<TKey>,
@@ -194,7 +207,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             foreach (var clause in sig.ConstraintClauses)
                 sb.AppendLine($"            {clause}");
             sb.AppendLine("        {");
-            sb.AppendLine($"            var __e = global::{FactoriesMetadataName}.{sig.MethodName}{sig.TypeArgumentList}({sig.ArgumentList});");
+            sb.AppendLine($"            var __e = {sig.OwnerType}.{sig.MethodName}{sig.TypeArgumentList}({sig.ArgumentList});");
             sb.AppendLine("            if (!global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled) return __e;");
             // The null guard is emitted only for a nullable-annotated return; on a
             // non-nullable one it would be dead code the nullable analysis flags.
@@ -310,9 +323,10 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                     SymbolDisplayMiscellaneousOptions.UseSpecialTypes
                     | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-        private Signature(string methodName, string returnType, string parameterList, string argumentList, bool returnsNullable,
+        private Signature(string ownerType, string methodName, string returnType, string parameterList, string argumentList, bool returnsNullable,
                           string typeParameterList, string typeArgumentList, ImmutableArray<string> constraintClauses)
         {
+            OwnerType = ownerType;
             MethodName = methodName;
             ReturnType = returnType;
             ParameterList = parameterList;
@@ -322,6 +336,14 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             TypeArgumentList = typeArgumentList;
             ConstraintClauses = constraintClauses;
         }
+
+        /// <summary>
+        /// Fully-qualified type that declares the intercepted factory. Usually
+        /// <c>Microsoft.UI.Reactor.Factories</c>, but the wrapper generator emits
+        /// its factory as a static ON the element type, so the forwarding call
+        /// has to name the real owner rather than assume <c>Factories</c>.
+        /// </summary>
+        public string OwnerType { get; }
 
         public string MethodName { get; }
         public string ReturnType { get; }
@@ -366,6 +388,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             }
 
             return new Signature(
+                method.ContainingType.ToDisplayString(s_typeFormat),
                 method.Name,
                 method.ReturnType.ToDisplayString(s_typeFormat),
                 string.Join(", ", parameters),
@@ -419,6 +442,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
 
         public bool Equals(Signature? other)
             => other is not null
+               && OwnerType == other.OwnerType
                && MethodName == other.MethodName
                && ReturnType == other.ReturnType
                && ParameterList == other.ParameterList
@@ -431,7 +455,8 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         {
             unchecked
             {
-                int h = MethodName.GetHashCode();
+                int h = OwnerType.GetHashCode();
+                h = (h * 397) ^ MethodName.GetHashCode();
                 h = (h * 397) ^ ReturnType.GetHashCode();
                 h = (h * 397) ^ ParameterList.GetHashCode();
                 h = (h * 397) ^ TypeParameterList.GetHashCode();

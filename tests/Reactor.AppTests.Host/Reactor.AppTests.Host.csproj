@@ -65,8 +65,9 @@
     Spec 010 — source mapping. ReactorSourceMap defaults to true in Debug via
     build/Reactor.targets, which also supplies the required InterceptorsNamespaces
     entry. In-repo projects still need this ProjectReference because they consume
-    Reactor by project rather than from the nupkg whose analyzers/ folder carries
-    the generator for real PackageReference consumers. The selftest fixtures in
+    Reactor by project rather than from the nupkg, which carries the generator at
+    build/sourcemap and adds it as an <Analyzer> only when ReactorSourceMap is true.
+    The selftest fixtures in
     SelfTest/Fixtures/SourceMapReadPathTests.cs depend on it being wired here.
   -->
   <!-- Spec 010 - the constant travels WITH the generator reference: it means

@@ -84,8 +84,8 @@
     build/Reactor.targets (mirroring WPF's XamlDebuggingInformation), which also
     supplies the required InterceptorsNamespaces entry, so nothing is spelled out
     here. In-repo projects still need this ProjectReference because they consume
-    Reactor by project, not from the nupkg whose analyzers/ folder carries the
-    generator for real PackageReference consumers.
+    Reactor by project, not from the nupkg, which carries the generator at
+    build/sourcemap and adds it as an <Analyzer> only when ReactorSourceMap is true.
   -->
   <!-- Spec 010 - the constant travels WITH the generator reference: it means
        "interceptors are compiled into this assembly", so it must never be
