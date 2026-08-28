@@ -381,4 +381,67 @@ internal static class SourceMapReadPathTests
             }
         }
     }
+
+    /// <summary>
+    /// Spec 010 — a <c>Component&lt;T&gt;()</c> call must be resolvable from its
+    /// realized control.
+    ///
+    /// <para>The composition primitives mount a <c>Border</c> wrapper, and that wrapper
+    /// is the control an inspector actually hits. Until the mount paths tagged it, an
+    /// intercepted <c>Component&lt;T&gt;()</c> had a perfectly good
+    /// <c>Element.CallSite</c> that <c>GetSource</c> could never reach — the read path
+    /// silently excluded the DSL call a devtools user most wants to resolve.</para>
+    /// </summary>
+    internal class ComponentWrapperIsResolvable(Harness h) : SelfTestFixtureBase(h)
+    {
+        private sealed class Leaf : Microsoft.UI.Reactor.Core.Component
+        {
+            public override Element Render() => TextBlock("component-leaf");
+        }
+
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = true;
+            try
+            {
+                var host = H.CreateHost();
+                var compLine = 0;
+                host.Mount(ctx => VStack(At(out compLine, Component<Leaf>())));
+                await Harness.Render();
+
+                var leaf = H.FindControl<TextBlock>(t => t.Text == "component-leaf");
+                H.Check("SourceMapComp_Mounted", leaf is not null);
+                if (leaf is null) return;
+
+                // Walk up to the component's Border wrapper — the control an inspector
+                // hits when it picks the component rather than its rendered leaf.
+                var wrapper = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(leaf) as Microsoft.UI.Xaml.FrameworkElement;
+                H.Check("SourceMapComp_WrapperFound", wrapper is not null);
+                if (wrapper is null) return;
+
+#if REACTOR_SOURCEMAP
+                H.Check("SourceMapComp_WrapperReportsTheComponentCallSite",
+                    ReactorSourceMap.GetSource(wrapper)?.LineNumber == compLine);
+#else
+                _ = compLine;
+                H.Skip("SourceMapComp_WrapperReportsTheComponentCallSite", SkipReason);
+#endif
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+
+        /// <summary>
+        /// Captures the physical line of the <c>Component&lt;&gt;</c> call, which sits on
+        /// the same line as this call — an independent oracle rather than a constant.
+        /// </summary>
+        private static Element At(out int line, Element element, [global::System.Runtime.CompilerServices.CallerLineNumber] int caller = 0)
+        {
+            line = caller;
+            return element;
+        }
+    }
 }

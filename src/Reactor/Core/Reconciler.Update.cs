@@ -1494,12 +1494,20 @@ public sealed partial class Reconciler
         node.CaughtException = caughtEx;
         node.Fallback = newEb.Fallback;
 
+        // Spec 010 — same refresh as UpdateComponent: the wrapper survives, so its
+        // back-pointer must name the current element or GetSource reports a stale line.
+        SetElementTagIfNeeded(wrapper, newEb);
         return null;
     }
 
     private UIElement? UpdateComponent(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         ReconcileComponent(oldEl, newEl, control, requestRerender);
+        // Spec 010 — the wrapper survives the update, so refresh the back-pointer or
+        // it keeps naming the previous render's element and GetSource reports a stale
+        // call site. Same hazard the skip arms handle via CallSiteChangedOnSkip.
+        if (control is FrameworkElement fe)
+            SetElementTagIfNeeded(fe, newEl);
         return null;
     }
 

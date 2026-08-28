@@ -745,6 +745,13 @@ public sealed partial class Reconciler
             Fallback = eb.Fallback,
         };
 
+        // Spec 010 — composition wrappers carry the DSL call site too. Without this
+        // an intercepted ErrorBoundary(...) has a non-null Element.CallSite that
+        // ReactorSourceMap.GetSource can never reach, because the Border it mounts
+        // is the realized control an inspector actually hits. Costs nothing when
+        // unstamped: NeedsTag is false for a callback-free, key-free, extras-free
+        // element, so no ReactorState is allocated.
+        SetElementTagIfNeeded(wrapper, eb);
         return wrapper;
     }
 
@@ -785,6 +792,9 @@ public sealed partial class Reconciler
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
+        // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
+        // inspector hits, so it has to carry the call site. Free when unstamped.
+        SetElementTagIfNeeded(wrapper, compElement);
         return wrapper;
     }
 
@@ -818,6 +828,9 @@ public sealed partial class Reconciler
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
+        // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
+        // inspector hits, so it has to carry the call site. Free when unstamped.
+        SetElementTagIfNeeded(wrapper, funcElement);
         return wrapper;
     }
 
@@ -852,6 +865,9 @@ public sealed partial class Reconciler
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
+        // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
+        // inspector hits, so it has to carry the call site. Free when unstamped.
+        SetElementTagIfNeeded(wrapper, memoElement);
         return wrapper;
     }
 

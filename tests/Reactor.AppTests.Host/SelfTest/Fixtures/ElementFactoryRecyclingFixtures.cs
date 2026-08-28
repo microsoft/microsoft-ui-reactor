@@ -1096,12 +1096,13 @@ internal static class ElementFactoryRecyclingFixtures
                 if (realizedBefore is null) return;
 
 #if REACTOR_SOURCEMAP
-                // The initially realized wrapper reports NO location: first realize goes
-                // through the framework's realize channel, which tags the wrapper with
-                // its own element rather than the stamped Component<> one. Asserted
-                // rather than ignored, so if that ever changes this fixture says so.
+                // Since the composition mounts tag their wrapper (spec 010), the first
+                // realize now reports the arm that built it. This assertion started life
+                // as "reports nothing", which was true before that fix — the fixture
+                // caught its own premise going stale, which is the point of pinning it
+                // rather than ignoring the initial state.
                 var beforeLine = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(realizedBefore)?.LineNumber;
-                H.Check("EFSourceMap_InitialRealizeReportsNothing", beforeLine is null);
+                H.Check("EFSourceMap_InitialRealizeReportsArmA", beforeLine == lineA);
 
                 // Anti-tautology: the two arms must really be on different lines, or
                 // "follows the live row" below could pass by coincidence.
@@ -1121,7 +1122,7 @@ internal static class ElementFactoryRecyclingFixtures
                 H.Check("EFSourceMap_LineFollowsTheLiveRow", afterLine is not null && afterLine == lineB);
                 H.Check("EFSourceMap_LineIsNotStale", afterLine != lineA);
 #else
-                H.Skip("EFSourceMap_InitialRealizeReportsNothing", SkipReason);
+                H.Skip("EFSourceMap_InitialRealizeReportsArmA", SkipReason);
                 H.Skip("EFSourceMap_ArmsAreOnDifferentLines", SkipReason);
                 H.Skip("EFSourceMap_RowStillRealized", SkipReason);
                 H.Skip("EFSourceMap_LineFollowsTheLiveRow", SkipReason);
@@ -1594,6 +1595,7 @@ internal static class ElementFactoryRecyclingFixtures
         }
     }
 }
+
 
 
 
