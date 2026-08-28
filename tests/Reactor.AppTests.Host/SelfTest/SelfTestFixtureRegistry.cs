@@ -768,6 +768,13 @@ internal static class SelfTestFixtureRegistry
         "NavCov_HandleNavigateOptions",
         "NavCov_DeepLinkMap",
         "NavCov_TransitionFactories",
+        "NavCov_RecommendedTransitionMapping",
+        "NavCov_HitTestSuppressionNesting",
+        "NavCov_TransitionNormalizesOutgoing",
+        "NavCov_CompletedAnimationReleasesProperty",
+        "NavCov_TransitionOwnership",
+        "NavCov_ReducedMotion",
+        "NavCov_TransitionMarksCompositorTainted",
         "NavCov_HandleEvents",
         "NavCov_DestinationGuard",
         "NavCov_DeepLinkQueryString",
@@ -1221,6 +1228,7 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents",
+        "WindowModel_WindowIconApplied",
         "WindowModel_ClosingEventCancels",
         "WindowModel_TaskbarProgressLiveCom",
         "WindowModel_ThumbnailToolbarLiveCom",
@@ -2469,6 +2477,13 @@ internal static class SelfTestFixtureRegistry
         "NavCov_HandleNavigateOptions" => new NavigationCoverageFixtures.NavHandleNavigateOptions(harness),
         "NavCov_DeepLinkMap" => new NavigationCoverageFixtures.DeepLinkMapExercise(harness),
         "NavCov_TransitionFactories" => new NavigationCoverageFixtures.NavTransitionFactories(harness),
+        "NavCov_RecommendedTransitionMapping" => new NavigationCoverageFixtures.NavRecommendedTransitionMapping(harness),
+        "NavCov_HitTestSuppressionNesting" => new NavigationCoverageFixtures.NavHitTestSuppressionNesting(harness),
+        "NavCov_TransitionNormalizesOutgoing" => new NavigationCoverageFixtures.NavTransitionNormalizesOutgoing(harness),
+        "NavCov_CompletedAnimationReleasesProperty" => new NavigationCoverageFixtures.NavCompletedAnimationReleasesProperty(harness),
+        "NavCov_TransitionOwnership" => new NavigationCoverageFixtures.NavTransitionOwnership(harness),
+        "NavCov_ReducedMotion" => new NavigationCoverageFixtures.NavReducedMotion(harness),
+        "NavCov_TransitionMarksCompositorTainted" => new NavigationCoverageFixtures.NavTransitionMarksCompositorTainted(harness),
         "NavCov_HandleEvents" => new NavigationCoverageFixtures.NavHandleEvents(harness),
         "NavCov_DestinationGuard" => new NavigationCoverageFixtures.NavDestinationGuard(harness),
         "NavCov_DeepLinkQueryString" => new NavigationCoverageFixtures.NavDeepLinkQueryString(harness),
@@ -2930,6 +2945,7 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents" => new WindowModelFixtures.WindowLifecycleEvents(harness),
+        "WindowModel_WindowIconApplied" => new WindowModelFixtures.WindowIconApplied(harness),
         "WindowModel_ClosingEventCancels" => new WindowModelFixtures.WindowClosingEventCancels(harness),
         "WindowModel_TaskbarProgressLiveCom" => new WindowModelFixtures.TaskbarProgressLiveCom(harness),
         "WindowModel_ThumbnailToolbarLiveCom" => new WindowModelFixtures.ThumbnailToolbarLiveCom(harness),

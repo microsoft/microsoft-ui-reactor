@@ -2392,6 +2392,14 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### record EntranceTransition
+new()
+Equals(EntranceTransition other) → bool
+Equals(NavigationTransition other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
 ### record ErrorBoundaryElement
 new(Element Child, Func<Exception, Element> Fallback)
 Element Child { get; init; }
@@ -3864,11 +3872,12 @@ ToString() → string
 ### record NavigationTransition
 Connected(string animationKey) → NavigationTransition
 DrillIn(TimeSpan? duration = null) → NavigationTransition
+Entrance() → NavigationTransition
 Equals(NavigationTransition other) → bool
 Equals(object obj) → bool
 Fade(TimeSpan? duration = null) → NavigationTransition
 GetHashCode() → int
-Slide(SlideDirection direction = SlideDirection.FromRight, TimeSpan? duration = null, CompositionEasingFunction easing = null, float? distance = null) → NavigationTransition
+Slide(SlideDirection direction = SlideDirection.FromBottom, TimeSpan? duration = null, CompositionEasingFunction easing = null, float? distance = null) → NavigationTransition
 Spring(float dampingRatio = 0.6f, float period = 0.08f, SlideDirection direction = SlideDirection.FromRight) → NavigationTransition
 ToString() → string
 
@@ -4452,8 +4461,10 @@ RegisterAllBuiltIns() → void
 RegisterControlAssembly(Assembly assembly) → void
 RegisterControlAssembly(IXamlMetadataProvider provider) → void
 Run(Action<ReactorAppContext> startup) → void
-Run(string title, Func<RenderContext, Element> rootRender, double? width = null, double? height = null, bool fullScreen = false, Action<ReactorHost> configure = null) → void
-Run<TRoot>(string title = "Reactor App", double? width = null, double? height = null, bool fullScreen = false, Action<ReactorHost> configure = null) → void
+Run(WindowSpec spec, Func<RenderContext, Element> rootRender, Action<ReactorHost> configure = null) → void
+Run(string title, Func<RenderContext, Element> rootRender, double? width = null, double? height = null, bool fullScreen = false, WindowIcon icon = null, Action<ReactorHost> configure = null) → void
+Run<TRoot>(WindowSpec spec, Action<ReactorHost> configure = null) → void
+Run<TRoot>(string title = "Reactor App", double? width = null, double? height = null, bool fullScreen = false, WindowIcon icon = null, Action<ReactorHost> configure = null) → void
 TryRegisterControlAssembly(Assembly assembly) → bool
 event EventHandler<ReactorTrayIcon> TrayIconClosed
 event EventHandler<ReactorTrayIcon> TrayIconOpened

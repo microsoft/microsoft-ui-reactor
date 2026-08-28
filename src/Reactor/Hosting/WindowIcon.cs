@@ -14,6 +14,20 @@ namespace Microsoft.UI.Reactor;
 /// <c>ms-appx:///</c>-style packaged-app resource URI (<see cref="FromResource"/>).
 /// Empty strings are rejected at construction so a malformed icon never reaches
 /// the WinUI APIs.
+/// <para>Consumers differ in what they can accept, because most of them need a raw
+/// Win32 <c>HICON</c>:</para>
+/// <list type="bullet">
+/// <item><description><see cref="WindowSpec.Icon"/> — accepts both kinds. An
+/// <c>ms-appx:</c> source is mapped to a file beside the app before it reaches
+/// <c>AppWindow.SetIcon</c>, which needs a filesystem path: handed the URI itself
+/// inside a packaged app it silently applies a default icon.</description></item>
+/// <item><description>Tray icons, taskbar overlays, and thumbnail-toolbar buttons —
+/// <see cref="FromPath"/> only. They load through <c>LoadImageW</c>, which cannot read a
+/// packaged resource URI.</description></item>
+/// <item><description>Jump lists — <see cref="FromResource"/> on the packaged path
+/// (the WinRT API takes the URI directly) and <see cref="FromPath"/> on the unpackaged
+/// one. Each silently skips the other kind.</description></item>
+/// </list>
 /// </remarks>
 public sealed class WindowIcon
 {
@@ -98,6 +112,10 @@ public sealed class WindowIcon
     /// <summary>
     /// Create an icon from a packaged-app resource URI
     /// (e.g. <c>ms-appx:///Assets/AppIcon.ico</c>). Throws on null/empty input.
+    /// <para>The URI is mapped to a file beside the app (the package install root when
+    /// packaged) before it reaches <c>AppWindow.SetIcon</c>, which requires a filesystem
+    /// path. Manifest visual assets (<c>Square44x44Logo</c> and friends) are named by
+    /// resource identifier rather than filename and are not addressable this way.</para>
     /// </summary>
     public static WindowIcon FromResource(string uri)
     {
@@ -112,16 +130,201 @@ public sealed class WindowIcon
     /// <c>System.Diagnostics.Debug.WriteLine</c> and swallowed so that a
     /// missing icon never crashes window construction.
     /// </summary>
-    internal void Apply(AppWindow appWindow)
+    /// <returns>
+    /// <c>true</c> when the icon was handed to the platform. <c>false</c> when it was
+    /// not: a filesystem path that demonstrably does not exist, a <c>null</c>
+    /// <paramref name="appWindow"/>, or a <c>SetIcon</c> call that threw. The caller
+    /// then falls back rather than leaving the window with no icon at all.
+    /// </returns>
+    /// <remarks>
+    /// <para>A filesystem source is resolved to an absolute path first, preferring the
+    /// app's base directory over the process working directory. That keeps the
+    /// existence check and the value handed to <c>SetIcon</c> describing the same file,
+    /// and stops a launcher-chosen working directory from substituting a different
+    /// icon for a relative path.</para>
+    /// <para>An <c>ms-appx:</c> source is translated to a filesystem path the same way.
+    /// <c>AppWindow.SetIcon</c> takes "the fully qualified path to the .ico file"; handed
+    /// a packaged-resource URI inside an MSIX app it does <b>not</b> load the asset — it
+    /// silently applies a default icon instead. Measured on Windows App SDK 2.1: in a
+    /// packaged process the URI form yields the same shared handle for every window,
+    /// while the path form yields a real per-window icon. (It appears to work in an
+    /// <i>unpackaged</i> process only because <c>ms-appx:</c> maps to the executable
+    /// directory there, which is why this needs a packaged app to observe.)</para>
+    /// <para>A URI that names no file therefore reports failure rather than being passed
+    /// through to the platform. Passing it through would call <c>SetIcon</c> with a value
+    /// the same measurement shows resolves to a default icon, and — because that call
+    /// does not throw — would report success and suppress the fallback, locking in a
+    /// blank icon for a window that had a perfectly good convention or PE icon
+    /// available.</para>
+    /// </remarks>
+    internal bool Apply(AppWindow appWindow)
     {
-        if (appWindow is null) return;
+        if (appWindow is null) return false;
+
+        var target = _source;
+        if (_isResource)
+        {
+            if (!TryResolveResourceUri(_source, out target))
+            {
+                Debug.WriteLine(
+                    $"[Reactor] WindowIcon.Apply: '{_source}' names no asset under {AppContext.BaseDirectory}.");
+                return false;
+            }
+        }
+        else if (!TryResolveExistingPath(_source, out target))
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon.Apply: no icon file at '{_source}'.");
+            return false;
+        }
+
         try
         {
-            appWindow.SetIcon(_source);
+            appWindow.SetIcon(target);
+            return true;
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[Reactor] WindowIcon.Apply failed for '{_source}': {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Maps an <c>ms-appx:///Assets/App.ico</c> style URI onto an existing file under
+    /// <see cref="AppContext.BaseDirectory"/>, which is the install root for a packaged
+    /// app and the executable directory otherwise.
+    /// </summary>
+    /// <returns>
+    /// <c>false</c> when the URI is not <c>ms-appx:</c>, names no asset, or maps to a file
+    /// that does not exist. <paramref name="resolved"/> is left as the original URI in
+    /// that case, but callers should treat it as unusable — see the remarks on
+    /// <see cref="Apply"/> for why handing a URI to <c>SetIcon</c> is worse than failing.
+    /// </returns>
+    internal static bool TryResolveResourceUri(string uri, out string resolved)
+    {
+        resolved = uri;
+        const string scheme = "ms-appx:";
+        if (string.IsNullOrEmpty(uri) ||
+            !uri.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var rest = uri.Substring(scheme.Length);
+
+        // "ms-appx:///Assets/App.ico" has an empty authority; "ms-appx://pkg/Assets/App.ico"
+        // names one. Drop the authority segment in both shapes.
+        if (rest.StartsWith("//", StringComparison.Ordinal))
+        {
+            rest = rest.Substring(2);
+            var slash = rest.IndexOf('/');
+            rest = slash >= 0 ? rest.Substring(slash + 1) : string.Empty;
+        }
+
+        rest = rest.TrimStart('/');
+        if (rest.Length == 0) return false;
+
+        // A real packaged-resource URI names a normalized path underneath the install
+        // root, so a "..", a rooted segment, or a drive qualifier can only be a
+        // malformed source. Reject it before the join rather than after, so the path
+        // this hands to SetIcon can never address a file outside BaseDirectory.
+        if (!IsInstallRootRelative(rest))
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon: '{uri}' is not an install-root-relative asset path.");
+            return false;
+        }
+
+        try
+        {
+            var candidate = global::System.IO.Path.Join(
+                AppContext.BaseDirectory,
+                rest.Replace('/', global::System.IO.Path.DirectorySeparatorChar));
+            if (!global::System.IO.File.Exists(candidate)) return false;
+            resolved = candidate;
+            return true;
+        }
+        catch (Exception ex) when (IsPathProbeFailure(ex))
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon: could not map '{uri}' to a path: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="assetPath"/> can only name a file underneath the install
+    /// root: not rooted, not drive-qualified, and containing no <c>..</c> segment that
+    /// would step back out of it.
+    /// </summary>
+    /// <remarks>
+    /// This is a well-formedness check, not a trust boundary — the source comes from the
+    /// app's own call to <see cref="FromResource"/>. It exists so that a typo cannot
+    /// quietly resolve to some unrelated file outside the package.
+    /// </remarks>
+    private static bool IsInstallRootRelative(string assetPath)
+    {
+        // "C:\x", "\x" and "C:x" are all rejected: none of them are relative to the
+        // install root, and Path.Join would happily concatenate the last one.
+        if (global::System.IO.Path.IsPathRooted(assetPath)) return false;
+        if (assetPath.Contains(':', StringComparison.Ordinal)) return false;
+
+        // Array.IndexOf rather than a scanning loop: same ordinal comparison, and it
+        // states the question ("does any segment step back out?") in one expression.
+        return global::System.Array.IndexOf(assetPath.Split('/', '\\'), "..") < 0;
+    }
+
+
+    /// <summary>
+    /// The failures a path join plus an existence probe can raise: a malformed segment,
+    /// an unsupported path shape, or a filesystem that refuses the read. Anything else
+    /// is a genuine bug and propagates.
+    /// </summary>
+    private static bool IsPathProbeFailure(Exception ex)
+        => ex is ArgumentException
+              or NotSupportedException
+              or global::System.IO.IOException
+              or UnauthorizedAccessException
+              or global::System.Security.SecurityException;
+
+    /// <summary>
+    /// Resolves a filesystem source to an existing absolute path. Relative paths are
+    /// tried against <see cref="AppContext.BaseDirectory"/> first (the package root for
+    /// a packaged app) and only then against the process working directory, so a
+    /// relative icon means "beside my app" rather than "wherever I happened to be
+    /// launched from".
+    /// </summary>
+    /// <returns>
+    /// <c>false</c> only when the file is proven absent. A probe that throws resolves to
+    /// <c>true</c> with the original source, so a locked-down filesystem never suppresses
+    /// an icon that would otherwise have worked.
+    /// </returns>
+    private static bool TryResolveExistingPath(string path, out string resolved)
+    {
+        resolved = path;
+        try
+        {
+            if (global::System.IO.Path.IsPathRooted(path))
+                return global::System.IO.File.Exists(path);
+
+            // Path.Join rather than Path.Combine: Join always concatenates, whereas
+            // Combine discards everything before a rooted segment.
+            var beside = global::System.IO.Path.Join(AppContext.BaseDirectory, path);
+            if (global::System.IO.File.Exists(beside))
+            {
+                resolved = beside;
+                return true;
+            }
+
+            if (global::System.IO.File.Exists(path))
+            {
+                resolved = global::System.IO.Path.GetFullPath(path);
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception ex) when (IsPathProbeFailure(ex))
+        {
+            Debug.WriteLine($"[Reactor] WindowIcon.Apply: path probe failed for '{path}': {ex.Message}");
+            resolved = path;
+            return true;
         }
     }
 }

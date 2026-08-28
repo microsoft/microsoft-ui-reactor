@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// the live UI-thread surface is exercised; cleanup closes every window
 /// and unregisters every tray icon so the next fixture starts clean.
 /// </summary>
-internal static class WindowModelFixtures
+internal static partial class WindowModelFixtures
 {
     /// <summary>
     /// Capture the UI dispatcher on the harness window once. The selftest
@@ -93,6 +93,273 @@ internal static class WindowModelFixtures
 
             H.Check("Window_Closed_Event_Fired", closed >= 1);
             H.Check("Window_Removed_From_Snapshot", !ReactorApp.Windows.Contains(win));
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Window icon — issue #1143
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Verifies that a declared <see cref="WindowSpec.Icon"/> reaches the live window's
+    /// Win32 <c>HICON</c> — the handle the caption and Alt-Tab read. (In an unpackaged
+    /// process, which this host is, the taskbar button and Task Manager read it too; in a
+    /// packaged app those two come from package identity instead, which is why this
+    /// fixture cannot speak for them.)
+    /// </summary>
+    /// <remarks>
+    /// <para>The oracle is differential rather than a bare non-null check. This host ships
+    /// no <c>&lt;ApplicationIcon&gt;</c> and no <c>Assets\AppIcon.ico</c>, so a window with
+    /// no declared icon has nothing to fall back to and reports <c>HICON == 0</c>. That
+    /// zero is the control: it proves the probe can observe the broken state, so the
+    /// non-zero readings are measurements rather than tautologies.</para>
+    /// <para>The convention-fallback checks create <c>Assets\AppIcon.ico</c> at runtime and
+    /// delete it afterwards, so they differ from the control by exactly one variable. The
+    /// asset is created rather than shipped precisely so the control stays zero;
+    /// <c>WindowIcon_Convention_Asset_Absent_Precondition</c> fails loudly if a future
+    /// change ships one and silently makes the control vacuous.</para>
+    /// </remarks>
+    internal partial class WindowIconApplied(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const uint WM_GETICON = 0x007F;
+        private const int ICON_BIG = 1;
+
+        // Source-generated interop rather than [DllImport]: no managed API exposes a
+        // window's HICON, so the native probe is required, but the generated stub keeps
+        // the boundary analyzable and blittable.
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll")]
+        private static partial nint SendMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
+
+        [global::System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static nint IconOf(ReactorWindow win) => SendMessageW(win.Hwnd, WM_GETICON, ICON_BIG, 0);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // Control — no declared icon, and nothing for the fallback to find.
+            var bare = await OpenAndSettle(
+                new WindowSpec { Title = "Icon Control", Width = 200, Height = 160 },
+                () => new StubComponent());
+            nint bareIcon;
+            try { bareIcon = IconOf(bare); }
+            finally { await CloseAndSettle(bare); }
+
+            H.Check("WindowIcon_Control_NoIcon_IsZero", bareIcon == 0);
+
+            // FromPath — the ordinary unpackaged spelling.
+            var byPath = await OpenAndSettle(
+                new WindowSpec
+                {
+                    Title = "Icon FromPath",
+                    Width = 200,
+                    Height = 160,
+                    Icon = WindowIcon.FromPath("Assets/SelfTestWindowIcon.ico"),
+                },
+                () => new StubComponent());
+            try
+            {
+                H.Check("WindowIcon_FromPath_Sets_HICON", IconOf(byPath) != 0);
+
+                // Removing an explicit icon must not strand its native handle. This host has
+                // no fallback source, so a successful clear is observable as zero.
+                byPath.Update(byPath.Spec with { Icon = null });
+                H.Check("WindowIcon_Removing_Explicit_Icon_Clears_HICON", IconOf(byPath) == 0);
+            }
+            finally { await CloseAndSettle(byPath); }
+
+            // An icon the app set imperatively (the pre-#1143 `configure:` pattern, and
+            // anything else calling AppWindow.SetIcon directly) must survive an unrelated
+            // chrome update. Reactor only takes down icons it applied itself, so a window
+            // that never had a declared icon must not be cleared out from under the app.
+            var imperative = await OpenAndSettle(
+                new WindowSpec { Title = "Icon Imperative", Width = 200, Height = 160 },
+                () => new StubComponent());
+            try
+            {
+                // Same starting point as the zero control, so the reading below can only
+                // come from the SetIcon call.
+                H.Check("WindowIcon_Imperative_Starts_Zero", IconOf(imperative) == 0);
+
+                var wid = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(imperative.Hwnd);
+                Microsoft.UI.Windowing.AppWindow.GetFromWindowId(wid).SetIcon(
+                    global::System.IO.Path.Join(
+                        AppContext.BaseDirectory, "Assets", "SelfTestWindowIcon.ico"));
+                H.Check("WindowIcon_Imperative_Set_HICON", IconOf(imperative) != 0);
+
+                // Touch an unrelated field. Icon is still null in the spec, and no
+                // fallback source exists, so the pre-fix code cleared the icon here.
+                imperative.Update(imperative.Spec with { Title = "Icon Imperative (updated)" });
+                H.Check("WindowIcon_Imperative_Survives_Unrelated_Update", IconOf(imperative) != 0);
+            }
+            finally { await CloseAndSettle(imperative); }
+
+            // FromResource — the packaged spelling. The platform resolves the ms-appx URI
+            // itself, including MRT qualifiers; Reactor passes it through untouched.
+            var byResource = await OpenAndSettle(
+                new WindowSpec
+                {
+                    Title = "Icon FromResource",
+                    Width = 200,
+                    Height = 160,
+                    Icon = WindowIcon.FromResource("ms-appx:///Assets/SelfTestWindowIcon.ico"),
+                },
+                () => new StubComponent());
+            nint resourceIcon;
+            try { resourceIcon = IconOf(byResource); }
+            finally { await CloseAndSettle(byResource); }
+
+            H.Check("WindowIcon_FromResource_Sets_HICON", resourceIcon != 0);
+
+            // ── Convention fallback ─────────────────────────────────────────
+            // Everything above ran with no Assets\AppIcon.ico present, so the two
+            // checks below differ from the zero control by exactly one variable: the
+            // existence of that file. Creating it at runtime (rather than shipping it)
+            // is what keeps the control genuinely zero.
+            var conventionPath = global::System.IO.Path.Join(
+                AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            var sourcePath = global::System.IO.Path.Join(
+                AppContext.BaseDirectory, "Assets", "SelfTestWindowIcon.ico");
+
+            if (global::System.IO.File.Exists(conventionPath))
+            {
+                // The zero control above would have been vacuous. Fail loudly.
+                H.Check("WindowIcon_Convention_Asset_Absent_Precondition", false);
+                return;
+            }
+
+            try
+            {
+                global::System.IO.File.Copy(sourcePath, conventionPath);
+
+                // No declared icon at all — this is the exact spec that produced 0 above.
+                // A non-zero reading now can only come from LoadConventionAssetIcon.
+                var conventionWin = await OpenAndSettle(
+                    new WindowSpec { Title = "Icon Convention", Width = 200, Height = 160 },
+                    () => new StubComponent());
+                nint conventionIcon;
+                nint afterImperativeOverride;
+                try
+                {
+                    conventionIcon = IconOf(conventionWin);
+
+                    // With the fallback already applied, an app that then sets its own
+                    // icon imperatively must keep it: a later chrome update must not
+                    // re-apply the cached fallback handle over the top.
+                    var cwid = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(conventionWin.Hwnd);
+                    Microsoft.UI.Windowing.AppWindow.GetFromWindowId(cwid).SetIcon(sourcePath);
+                    var overridden = IconOf(conventionWin);
+
+                    conventionWin.Update(conventionWin.Spec with { Title = "Icon Convention (updated)" });
+                    afterImperativeOverride = IconOf(conventionWin);
+
+                    // Compare against the imperative icon, not against zero: both the
+                    // healthy and broken states are non-zero here, so only the identity
+                    // of the handle distinguishes them.
+                    H.Check("WindowIcon_Imperative_Override_Survives_Update",
+                        overridden != 0 && afterImperativeOverride == overridden);
+                }
+                finally { await CloseAndSettle(conventionWin); }
+
+                H.Check("WindowIcon_ConventionAsset_Sets_HICON", conventionIcon != 0);
+
+                // Removing a declared icon must hand the window back to the fallback,
+                // not strand the declared one. The sequence matters: the fallback has
+                // to run *first* (no declared icon at mount) for it to cache a handle,
+                // and it is that cached handle going stale under a later declared icon
+                // that the bug turns on. Opening straight onto a declared icon never
+                // populates the cache and so cannot reach this.
+                //
+                // Note the oracle: with the convention asset present, both the healthy
+                // and the broken outcome are non-zero, so `!= 0` alone would be a
+                // tautology — only the identity of the handle separates "fallback
+                // re-applied" from "declared icon never taken down".
+                var reverting = await OpenAndSettle(
+                    new WindowSpec { Title = "Icon Revert", Width = 200, Height = 160 },
+                    () => new StubComponent());
+                try
+                {
+                    var fallbackIcon = IconOf(reverting);
+
+                    reverting.Update(reverting.Spec with
+                    {
+                        Icon = WindowIcon.FromPath("Assets/SelfTestWindowIcon.ico"),
+                    });
+                    var declaredIcon = IconOf(reverting);
+
+                    reverting.Update(reverting.Spec with { Icon = null });
+                    var revertedIcon = IconOf(reverting);
+
+                    // The declared icon must actually have displaced the fallback, or
+                    // the removal below proves nothing.
+                    H.Check("WindowIcon_Declared_Displaces_Fallback",
+                        fallbackIcon != 0 && declaredIcon != 0 && declaredIcon != fallbackIcon);
+
+                    H.Check("WindowIcon_Removing_Declared_Reverts_To_Fallback",
+                        revertedIcon != 0 && revertedIcon != declaredIcon);
+                }
+                finally { await CloseAndSettle(reverting); }
+
+                // A declared icon that does not exist must not leave the window worse off
+                // than declaring nothing: Apply reports failure and the fallback runs.
+                // With the convention asset present this is now a real assertion — it
+                // fails if ReactorWindow stops calling TryApplyExeIconFallback after a
+                // failed Apply.
+                var missing = await OpenAndSettle(
+                    new WindowSpec
+                    {
+                        Title = "Icon Missing",
+                        Width = 200,
+                        Height = 160,
+                        Icon = WindowIcon.FromPath("Assets/DoesNotExist.ico"),
+                    },
+                    () => new StubComponent());
+                nint missingIcon;
+                try { missingIcon = IconOf(missing); }
+                finally { await CloseAndSettle(missing); }
+
+                H.Check("WindowIcon_MissingDeclared_Falls_Back_To_Convention", missingIcon != 0);
+
+                // Same, for the resource spelling: a declared icon whose URI names no
+                // asset must not leave the window worse off than declaring nothing.
+                //
+                // Be clear about what this does and does not prove. It reddens if
+                // ReactorWindow stops running the fallback after a failed resource
+                // Apply. It does *not* discriminate the "unmappable URI must report
+                // failure" fix: measured by mutation, it passes with and without it,
+                // because in this unpackaged host SetIcon rejects the bad URI anyway
+                // and Apply returns false by the other route. The behaviour that fix
+                // targets — SetIcon *succeeding* on a URI while applying a default
+                // icon — only exists in a packaged process, which no tier here can
+                // reach (see #1148).
+                var missingResource = await OpenAndSettle(
+                    new WindowSpec
+                    {
+                        Title = "Icon Missing Resource",
+                        Width = 200,
+                        Height = 160,
+                        Icon = WindowIcon.FromResource("ms-appx:///Assets/DoesNotExist.ico"),
+                    },
+                    () => new StubComponent());
+                nint missingResourceIcon;
+                try { missingResourceIcon = IconOf(missingResource); }
+                finally { await CloseAndSettle(missingResource); }
+
+                H.Check("WindowIcon_MissingResource_Falls_Back_To_Convention", missingResourceIcon != 0);
+            }
+            finally
+            {
+                try { global::System.IO.File.Delete(conventionPath); }
+                catch (global::System.Exception ex) when (ex is global::System.IO.IOException
+                                                             or global::System.UnauthorizedAccessException)
+                {
+                    // Leaving the asset behind only affects a subsequent run in the same
+                    // output directory, where the precondition check reports it. Logged
+                    // rather than swallowed so that run's failure is explicable.
+                    global::System.Diagnostics.Debug.WriteLine(
+                        $"[selftest] could not delete '{conventionPath}': {ex.Message}");
+                }
+            }
         }
     }
 

@@ -30,7 +30,7 @@ namespace Microsoft.UI.Reactor;
 /// <para>Disposal is idempotent — a second <see cref="Close"/> or
 /// <see cref="Dispose"/> is a no-op, not an exception.</para>
 /// </remarks>
-public sealed class ReactorWindow : IDisposable
+public sealed partial class ReactorWindow : IDisposable
 {
     // Spec 044 §6.7 catch-shape conventions used throughout this file:
     //
@@ -82,6 +82,14 @@ public sealed class ReactorWindow : IDisposable
     // SetIcon returns, so destruction at window-close is safe and avoids
     // leaking one HICON per window.
     private nint _exeFallbackHIcon;
+
+    // Set once the fallback has looked for an icon, whether or not it found one, so a
+    // window with no icon source anywhere does not re-probe on every chrome update.
+    private bool _exeFallbackAttempted;
+
+    // True once Reactor has put an icon on this window (declared or fallback). Gates
+    // ClearWindowIcon so Reactor only ever takes down an icon it applied itself.
+    private bool _reactorAppliedIcon;
     // Lazy-init shell wrappers — apps that never read these never instantiate
     // them, keeping the cold-start budget clean (spec 036 §0.7 / §11.7).
     private TaskbarProgress? _taskbarProgress;
@@ -621,10 +629,40 @@ public sealed class ReactorWindow : IDisposable
 
         if (spec.Embed is null)
         {
-            if (spec.Icon is { } icon)
-                icon.Apply(_appWindow);
-            else if (isInitial)
-                TryApplyExeIconFallback();
+            // A declared icon that cannot be resolved (wrong format, missing file, or a
+            // resource URI with no matching asset) would otherwise leave the window with
+            // no icon at all, because a non-null spec.Icon used to suppress the fallback.
+            bool applied;
+            if (spec.Icon is { } icon && icon.Apply(_appWindow))
+            {
+                // The declared icon is what the window shows now, so a cached fallback
+                // handle no longer describes it. Drop it: otherwise removing the
+                // declaration later would hit the "already applied" early-return in
+                // TryApplyExeIconFallback and strand the declared icon on the window
+                // instead of reverting to the fallback.
+                ReleaseExeIconFallback();
+                applied = true;
+            }
+            else
+            {
+                applied = TryApplyExeIconFallback();
+            }
+
+            if (applied)
+            {
+                _reactorAppliedIcon = true;
+            }
+            else if (!isInitial && _reactorAppliedIcon)
+            {
+                // Reactor put this window's icon there and the declaration that
+                // justified it is now gone, so take it back down. Gated on having
+                // applied one ourselves: an app that set its own icon imperatively
+                // (a `configure:` callback calling AppWindow.SetIcon, say) must not
+                // have it wiped by an unrelated chrome update, and a window that
+                // never had an icon keeps whatever default the platform gave it.
+                ClearWindowIcon();
+                _reactorAppliedIcon = false;
+            }
         }
 
         // Spec 045 §2.6 tear-off — window-wide alpha via WS_EX_LAYERED +
@@ -880,69 +918,216 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>
-    /// Best-effort: when no explicit <see cref="WindowSpec.Icon"/> was supplied,
-    /// load the first icon embedded in the running executable's PE resources
-    /// (the one the build wired in via <c>&lt;ApplicationIcon&gt;</c>) and
-    /// apply it to the AppWindow so the taskbar / Alt-Tab / Win11 thumbnail
-    /// show the developer's icon instead of the WinUI default.
+    /// Best-effort: when no explicit <see cref="WindowSpec.Icon"/> was supplied (or the one
+    /// supplied could not be resolved), find an icon for the window so the caption /
+    /// Alt-Tab / Win11 thumbnail show the developer's icon instead of the WinUI default.
+    /// Unpackaged, this also reaches the taskbar button and Task Manager; packaged, those
+    /// two come from package identity and the manifest logo instead (see
+    /// <see cref="WindowSpec.Icon"/>).
     /// </summary>
     /// <remarks>
-    /// <para>Skipped under MSIX-packaged execution — packaged apps get their
-    /// AppWindow icon from <c>Package.appxmanifest</c>'s
-    /// <c>VisualElements</c> tiles automatically; overriding here would just
-    /// fight the manifest. Unpackaged apps have no manifest to fall back to,
-    /// so the EXE PE resource is the next best source.</para>
-    /// <para>Failures are silent — if there's no embedded icon, the AppWindow
-    /// keeps its default. (spec 036 §4.1 — implementation-time addition)</para>
+    /// <para>Two sources are tried, in order:</para>
+    /// <list type="number">
+    /// <item><description><c>Assets\AppIcon.ico</c> beside the app — the asset name the
+    /// official WinUI 3 packaged template ships. Tried <b>first</b> because it is
+    /// unambiguously author-supplied.</description></item>
+    /// <item><description>The first icon embedded in the running executable's PE resources
+    /// (what <c>&lt;ApplicationIcon&gt;</c> wires in). Second, so an explicit asset always
+    /// wins over whatever the build happened to embed.</description></item>
+    /// </list>
+    /// <para>This runs for packaged apps too. A packaged app does <b>not</b> get its window
+    /// <c>HICON</c> from <c>Package.appxmanifest</c>: the manifest's <c>VisualElements</c>
+    /// tiles drive the shell's taskbar button through package identity, which bypasses the
+    /// HWND entirely, so <c>WM_GETICON</c> stays 0 and Alt-Tab shows a generic icon. See
+    /// microsoft-ui-xaml#6104 — which is why the official packaged template calls
+    /// <c>AppWindow.SetIcon</c> explicitly. The manifest assets are not usable here either:
+    /// they are named by MRT resource identifier rather than filename, so the literal
+    /// manifest string does not exist on disk.</para>
+    /// <para>Failures are silent — if neither source yields an icon, the AppWindow keeps
+    /// its default. A .NET apphost built without <c>&lt;ApplicationIcon&gt;</c> carries no
+    /// PE icon at all, so that is the ordinary outcome for an app that ships none.
+    /// (spec 036 §4.1 — implementation-time addition)</para>
     /// </remarks>
-    private void TryApplyExeIconFallback()
+    private bool TryApplyExeIconFallback()
     {
+        if (_exeFallbackHIcon != 0)
+        {
+            // Already applied to this window and SetIcon took its own copy, so the icon
+            // is still on the HWND — re-writing it would be redundant, and would also
+            // clobber an icon the app set imperatively after this fallback first ran.
+            return true;
+        }
+
+        // This runs on every chrome application, not just the first, so an app that
+        // ships no icon at all would otherwise re-probe the filesystem and both
+        // loaders on every Update. One attempt per window is enough: neither source
+        // can appear while the window is alive.
+        if (_exeFallbackAttempted) return false;
+        _exeFallbackAttempted = true;
+
+        // Load first, outside the try: both loaders are non-throwing (the generated
+        // interop stubs return 0 on failure and LoadConventionAssetIcon guards its
+        // own file probe).
+        var hIcon = LoadConventionAssetIcon();
+        if (hIcon == 0) hIcon = LoadExecutablePeIcon();
+        if (hIcon == 0) return false;
+
+        // This method owns hIcon until SetIcon has taken it. Tracking that explicitly
+        // rather than relying on the catch means every exit — success, a swallowed
+        // failure, or a throw from the loaders' marshalling — frees the handle exactly
+        // once instead of leaking it for the process lifetime.
+        var owned = true;
         try
         {
-            // Packaged apps: the manifest's Square*Logo assets are the
-            // canonical icon source; let the platform resolve them.
-            if (Hosting.Shell.PackageRuntime.IsPackaged) return;
-
-            var exePath = global::System.Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exePath)) return;
-
-            // LR_LOADFROMFILE on a .exe path loads the first icon group
-            // from its PE resources. LR_DEFAULTSIZE picks the system
-            // default size (usually 32x32) — Windows will scale to the
-            // taskbar's needs from there.
-            var hIcon = NativeIcon.LoadImageW(0, exePath, NativeIcon.IMAGE_ICON,
-                0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
-            if (hIcon == 0) return;
-
             var iconId = Microsoft.UI.Win32Interop.GetIconIdFromIcon(hIcon);
             _appWindow.SetIcon(iconId);
-            // Stash the HICON for Dispose to free — see field comment for
-            // ownership rationale.
+            // Ownership transfers to the window here — Dispose frees it. Assigned only
+            // after SetIcon succeeds, so a throw above still leaves the handle to the
+            // finally below.
             _exeFallbackHIcon = hIcon;
+            owned = false;
+            return true;
         }
-        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        catch (Exception ex) when (IsIconApplyFailure(ex))
         {
-            // _appWindow.SetIcon during teardown reentry — the only WinRT call
-            // in the try that can plausibly fail here. LoadImageW returns 0 on
-            // failure (handled inline) and GetIconIdFromIcon is non-throwing.
+            // Best-effort by contract: this is a cosmetic fallback for an app that
+            // shipped no icon, so no failure of it may reach the caller — ApplyChrome
+            // runs during render, and a propagating COMException would take the window
+            // down over a missing icon. Mirrors WindowIcon.Apply, which swallows the
+            // same AppWindow.SetIcon boundary.
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
+            return false;
+        }
+        finally
+        {
+            // DestroyIcon is a [LibraryImport] bool — it cannot throw at the marshal
+            // boundary, so this is safe to run while an exception is in flight.
+            if (owned) NativeIcon.DestroyIcon(hIcon);
         }
     }
 
-    private static class NativeIcon
+    /// <summary>
+    /// The failures the icon boundary can raise: a COM/WinRT fault out of
+    /// <c>SetIcon</c> or the <c>IconId</c> factory, a handle the platform rejects, or a
+    /// window that has already gone away (<see cref="ObjectDisposedException"/> derives
+    /// from <see cref="InvalidOperationException"/>). Anything else is a genuine bug and
+    /// propagates — the <c>finally</c> above still frees the handle either way.
+    /// </summary>
+    private static bool IsIconApplyFailure(Exception ex)
+        => ex is COMException
+              or ArgumentException
+              or InvalidOperationException;
+
+    /// <summary>
+    /// Drops the cached fallback handle once a declared icon has replaced it on the
+    /// window, so removing that declaration later re-runs the fallback instead of
+    /// leaving the declared icon in place.
+    /// </summary>
+    private void ReleaseExeIconFallback()
     {
+        if (_exeFallbackHIcon != 0)
+        {
+            // Safe for the same reason as in Dispose: the AppWindow holds its own
+            // reference, and this handle is no longer the one the window displays.
+            NativeIcon.DestroyIcon(_exeFallbackHIcon);
+            _exeFallbackHIcon = 0;
+        }
+
+        _exeFallbackAttempted = false;
+    }
+
+    /// <summary>
+    /// Sends <c>WM_SETICON</c> with a null handle to drop the window's small and big
+    /// icons. Only called for an icon Reactor itself applied — see the call site.
+    /// </summary>
+    private void ClearWindowIcon()
+    {
+        _ = NativeIcon.SendMessageW(_hwnd, NativeIcon.WM_SETICON, NativeIcon.ICON_SMALL, 0);
+        _ = NativeIcon.SendMessageW(_hwnd, NativeIcon.WM_SETICON, NativeIcon.ICON_BIG, 0);
+    }
+
+    /// <summary>
+    /// Loads <c>Assets\AppIcon.ico</c> from the app's base directory, which resolves to the
+    /// package install root for a packaged app. Returns 0 when absent.
+    /// </summary>
+    private static nint LoadConventionAssetIcon()
+    {
+        string path;
+        try
+        {
+            path = global::System.IO.Path.Join(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            if (!global::System.IO.File.Exists(path)) return 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException
+                                      or NotSupportedException
+                                      or global::System.IO.IOException
+                                      or UnauthorizedAccessException
+                                      or global::System.Security.SecurityException)
+        {
+            // Malformed base directory, or a locked-down / unreadable filesystem. A
+            // missing convention asset is never fatal — fall through to the PE resource.
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.LoadConventionAssetIcon", ex);
+            return 0;
+        }
+
+        return NativeIcon.LoadImageW(0, path, NativeIcon.IMAGE_ICON,
+            0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
+    }
+
+    /// <summary>
+    /// Loads the icon embedded in the running executable's PE resources (what
+    /// <c>&lt;ApplicationIcon&gt;</c> wires in). Returns 0 when the image carries none.
+    /// </summary>
+    /// <remarks>
+    /// Uses <c>ExtractIconExW</c>, not <c>LoadImageW</c> with <c>LR_LOADFROMFILE</c>:
+    /// that flag loads a standalone <i>image file</i> (<c>.ico</c>/<c>.bmp</c>/<c>.cur</c>)
+    /// and returns 0 for every <c>.exe</c>, PE icon resources included — measured against
+    /// <c>explorer.exe</c>, which has an icon and still yields 0 that way.
+    /// </remarks>
+    private static nint LoadExecutablePeIcon()
+    {
+        var exePath = global::System.Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath)) return 0;
+
+        // nIcons=1 extracts the first icon group only; nint.Zero for the small-icon
+        // slot means there is no second handle to own and destroy.
+        _ = NativeIcon.ExtractIconExW(exePath, 0, out var large, 0, 1);
+        return large;
+    }
+
+    private static partial class NativeIcon
+    {
+        public const uint WM_SETICON = 0x0080;
+        public const nint ICON_SMALL = 0;
+        public const nint ICON_BIG = 1;
         public const uint IMAGE_ICON = 1;
         public const uint LR_LOADFROMFILE = 0x00000010;
         public const uint LR_DEFAULTSIZE = 0x00000040;
 
-        [global::System.Runtime.InteropServices.DllImport("user32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
-        public static extern nint LoadImageW(nint hInst,
-            [global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.LPWStr)] string lpszName,
+        // Correct for standalone .ico files. Does NOT read PE resources — see
+        // LoadExecutablePeIcon.
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll",
+            EntryPoint = "LoadImageW",
+            StringMarshalling = global::System.Runtime.InteropServices.StringMarshalling.Utf16,
+            SetLastError = true)]
+        public static partial nint LoadImageW(nint hInst, string lpszName,
             uint uType, int cxDesired, int cyDesired, uint fuLoad);
 
-        [global::System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        // Reads icon groups out of a PE image. Both phicon parameters are
+        // [out, optional] arrays; with nIcons = 1 a single `out nint` is the
+        // equivalent blittable shape, and `nint.Zero` asks for large icons only.
+        [global::System.Runtime.InteropServices.LibraryImport("shell32.dll",
+            EntryPoint = "ExtractIconExW",
+            StringMarshalling = global::System.Runtime.InteropServices.StringMarshalling.Utf16)]
+        public static partial uint ExtractIconExW(string lpszFile, int nIconIndex,
+            out nint phiconLarge, nint phiconSmall, uint nIcons);
+
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll", SetLastError = true)]
         [return: global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.Bool)]
-        public static extern bool DestroyIcon(nint hIcon);
+        public static partial bool DestroyIcon(nint hIcon);
+
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
+        public static partial nint SendMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
     }
 
     private static class NativeOwnership

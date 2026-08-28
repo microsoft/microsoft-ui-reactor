@@ -7,7 +7,8 @@ using Microsoft.UI.Xaml.Controls;         // Orientation, InfoBarSeverity, etc.
 using static Microsoft.UI.Reactor.Factories;
 
 #if (csharpFeature_TopLevelProgram)
-ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600);
+ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600,
+    icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
 
 #else
 namespace Company.ReactorApp1;
@@ -16,7 +17,8 @@ class Program
 {
     static void Main(string[] args)
     {
-        ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600);
+        ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600,
+            icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
     }
 }
 
@@ -27,8 +29,11 @@ class App : Component
     {
         var (name, setName) = UseState("World");
 
-        // App-mark icon in the title bar: a placeholder Segoe Fluent Icons glyph
-        // (U+EA3A). Swap it for a bundled asset once you add one, e.g.
+        // App-mark icon drawn *inside* the title bar. This is separate from the
+        // window icon set via ReactorApp.Run(icon:) above, which is what Windows
+        // shows in the window caption and Alt-Tab. The two may differ -- a
+        // monochrome mark here, a full-colour .ico there. This placeholder is a
+        // Segoe Fluent Icons glyph (U+EA3A); swap it for a bundled asset, e.g.
         // .Icon("ms-appx:///Assets/AppIcon.ico").
         var titleBar = TitleBar("Company.ReactorApp1")
             .Icon(FontIcon("\uEA3A", "Segoe Fluent Icons"))

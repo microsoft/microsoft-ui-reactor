@@ -105,6 +105,11 @@
     <EmbeddedResource Include="..\..\SKILL.md" Link="SKILL.md" LogicalName="SKILL.md" />
     <EmbeddedResource Include="..\..\skills\reactor.api.txt" Link="reactor.api.txt" LogicalName="reactor.api.txt"
                       Condition="Exists('..\..\skills\reactor.api.txt')" />
+    <!-- Placeholder app icon written to Assets\AppIcon.ico by `mur new`. Trimmed from
+         samples/Assets/WinUI.ico (the official WinUI logo, MIT, vendored from
+         microsoft-ui-xaml-lift) to the 16/24/32/48/64 frames — the 128/256 frames were
+         ~90% of the original 364 KB and a scaffold placeholder does not need them. -->
+    <EmbeddedResource Include="..\..\assets\ReactorAppIcon.ico" Link="ReactorAppIcon.ico" LogicalName="ReactorAppIcon.ico" />
   </ItemGroup>
 
   <!-- SignaturesGen transitively references WindowsAppSDK, whose targets

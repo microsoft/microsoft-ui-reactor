@@ -293,11 +293,19 @@ class PageTransitionsDemo : Component
 
 | Transition | Effect |
 |-----------|--------|
-| `NavigationTransition.Slide()` | Slide + fade (default) |
+| `NavigationTransition.Entrance()` | Slide up + fade in (**default**) |
+| `NavigationTransition.Slide()` | Slide + fade — vertical unless you pass a direction |
 | `NavigationTransition.Fade()` | Crossfade |
 | `NavigationTransition.DrillIn()` | Scale + fade from center |
 | `NavigationTransition.Spring()` | Spring-physics slide |
 | `NavigationTransition.None` | Instant swap |
+
+The default is the entrance motion because that is what WinUI itself does: a `Frame`
+navigated without a `NavigationTransitionInfo` plays `EntranceNavigationTransitionInfo`,
+the "page refresh" animation. A Reactor app therefore animates like an equivalent WinUI
+XAML app out of the box. `NavigationTransition.Default` is an alias for that motion —
+reach for `Entrance()` directly when you mean the animation rather than "whatever the
+framework default is".
 
 Transitions run on the compositor thread — no managed-code involvement during
 playback. GoBack automatically reverses the direction. See

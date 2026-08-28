@@ -353,7 +353,7 @@ rather than lightweight property changes.
 | **Frame + Page navigation** | Replaced | `NavigationHandle<TRoute>` + `NavigationHost<TRoute>` | A route is any value you choose (usually an enum or record); `routeMap` turns it into an Element. No Page subclass, no XAML, no code-behind |
 | **Back stack management** | Replaced | `nav.BackStack` / `nav.ForwardStack`, `GoBack()`, `GoForward()`, `CanGoBack`, `CanGoForward` | Real history with `NavigationMode` (Push, Pop, Replace, Reset, Forward) and `NavigateOptions.PushToBackStack` to opt a route out |
 | **Navigation parameter passing** | Replaced | The route value *is* the parameter | Strongly typed; no `object`-typed parameter bag, no cast at the destination |
-| **Navigation transitions** | Exposed | `NavigationTransition.Fade/DrillIn/Slide/Spring/Connected`, plus `.Default` and `.None` | Chosen per navigation rather than baked into the target |
+| **Navigation transitions** | Exposed | `NavigationTransition.Entrance/Fade/DrillIn/Slide/Spring/Connected`, plus `.Default` and `.None` | Chosen per navigation rather than baked into the target. `.Default` is the entrance motion, matching a WinUI `Frame` navigated with no transition info |
 | **Deep links / protocol activation** | Augmented | `DeepLinkMap<TRoute>.Map(pattern, factory)` + `LaunchActivation.TryResolve` | Pattern-routed URIs resolve to a route *and* can seed a synthetic back stack (`backStackFactory`). No WinUI equivalent |
 | **TabView** | Exposed | TabViewElement | Full tab management with selection |
 | **BreadcrumbBar** | Exposed | BreadcrumbBarElement | Click handler per item |
@@ -642,9 +642,10 @@ this for simple property animations.
 
 | Transition | Status | Reactor Surface |
 |---|---|---|
-| Fade / DrillIn / Slide / Spring | Exposed | `NavigationTransition.Fade(duration?)`, `.DrillIn(duration?)`, `.Slide(direction, duration?, easing?, distance?)`, `.Spring(dampingRatio, period, direction)` |
+| Entrance (page refresh) | Exposed | `NavigationTransition.Entrance()` — mirrors WinUI's `EntranceNavigationTransitionInfo`, the animation a `Frame` plays with no transition info |
+| Fade / DrillIn / Slide / Spring | Exposed | `NavigationTransition.Fade(duration?)`, `.DrillIn(duration?)`, `.Slide(direction, duration?, easing?, distance?)`, `.Spring(dampingRatio, period, direction)`. DrillIn and parameterless Slide use WinUI's native timing, easing, scale, distance, and opacity staging; explicit duration/distance/easing values opt into Reactor's customizable variants. |
 | Connected | Exposed | `NavigationTransition.Connected("key")` — pairs with `.ConnectedAnimation("key")` |
-| Default / suppressed | Exposed | `NavigationTransition.Default` (slide), `NavigationTransition.None` (suppress) |
+| Default / suppressed | Exposed | `NavigationTransition.Default` (alias for `Entrance()`), `NavigationTransition.None` (suppress) |
 
 **Verdict: well-covered.** Theme transitions, implicit transitions, connected animations, and a
 curve-based `.Animate()` DSL are all first-class; the router picks the page transition per

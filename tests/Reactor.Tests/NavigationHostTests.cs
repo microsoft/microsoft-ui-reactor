@@ -59,7 +59,7 @@ public class NavigationHostTests
 
         var element = new NavigationHostElement(handle, _ => EmptyElement.Instance);
 
-        Assert.IsType<SlideTransition>(element.Transition);
+        Assert.Same(NavigationTransition.Default, element.Transition);
         Assert.Equal(NavigationCacheMode.Disabled, element.CacheMode);
         Assert.Equal(10, element.CacheSize);
     }

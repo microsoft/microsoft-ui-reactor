@@ -193,7 +193,24 @@ public sealed record WindowSpec
     /// <summary>Optional declarative backdrop. Seeds the per-host modifier.</summary>
     public BackdropChoice? Backdrop { get; init; }
 
-    /// <summary>Optional window icon.</summary>
+    /// <summary>
+    /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the window's
+    /// caption and the Alt-Tab switcher. Build it with <see cref="WindowIcon.FromPath"/>
+    /// for a file beside the app or <see cref="WindowIcon.FromResource"/> for a packaged
+    /// <c>ms-appx:///</c> asset.
+    /// </summary>
+    /// <remarks>
+    /// <para>Distinct from <c>TitleBar(...).Icon(...)</c>, which draws an app mark inside
+    /// the window's client area. A window may set both, and they may legitimately differ.
+    /// When this is <c>null</c>, Reactor falls back to <c>Assets\AppIcon.ico</c> beside
+    /// the app and then to the executable's embedded icon.</para>
+    /// <para>In an <b>unpackaged</b> app this also drives the taskbar button and Task
+    /// Manager, because there is no package identity to take precedence. In a
+    /// <b>packaged</b> app it does not: the shell resolves those two surfaces through
+    /// package identity and the manifest's <c>Square44x44Logo</c>, never looking at the
+    /// window handle. A packaged app that wants a consistent icon everywhere must ship a
+    /// matching manifest logo in addition to setting this.</para>
+    /// </remarks>
     public WindowIcon? Icon { get; init; }
 
     /// <summary>Optional persistence id for placement and future per-window persistence subsystems.</summary>

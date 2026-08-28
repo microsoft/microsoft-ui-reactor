@@ -244,6 +244,7 @@ internal static class NavigationHostLifecycle
             {
                 // Mount new content at Opacity 0 alongside old content
                 var inVisual = ElementCompositionPreview.GetElementVisual(newChildControl!);
+                ElementPool.MarkCompositorTainted(newChildControl!);
                 inVisual.Opacity = 0;
                 grid.Children.Add(newChildControl!);
                 node.TransitionInProgress = true;
@@ -272,15 +273,48 @@ internal static class NavigationHostLifecycle
             }
             else
             {
-                // Instant swap (SuppressTransition or missing controls)
-                FinalizeOldPage(oldChildControl, oldChildElement, previousRoute);
-
-                if (newChildControl is not null)
+                // Instant swap. When both pages exist this still goes through RunTransition,
+                // even though there is nothing to animate: that is what claims the transition
+                // ownership stamp and normalizes both visuals. Skipping it would let a suppress
+                // navigation overlap an in-flight predecessor without revoking its claim, and
+                // the predecessor's completion handler would later reset pages this swap has
+                // already moved past.
+                if (oldChildControl is not null && newChildControl is not null)
+                {
                     grid.Children.Add(newChildControl);
 
-                reconciler.InvokePostNavigationLifecycle(
-                    newChildControl, oldHooks,
-                    currentRoute, pendingPreviousRoute, mode);
+                    var capturedOldControl = oldChildControl;
+                    var capturedOldElement = oldChildElement;
+                    var capturedOldRoute = previousRoute;
+                    var capturedNewControl = newChildControl;
+                    var capturedOldHooks = oldHooks;
+                    var capturedMode = mode;
+                    var capturedCurrentRoute = currentRoute;
+                    var capturedPreviousRoute = pendingPreviousRoute;
+
+                    Navigation.TransitionEngine.RunTransition(
+                        capturedOldControl, capturedNewControl, transition, capturedMode,
+                        onComplete: () =>
+                        {
+                            FinalizeOldPage(capturedOldControl, capturedOldElement, capturedOldRoute);
+
+                            reconciler.InvokePostNavigationLifecycle(
+                                capturedNewControl, capturedOldHooks,
+                                capturedCurrentRoute, capturedPreviousRoute, capturedMode);
+                        });
+                }
+                else
+                {
+                    // One side is missing — there is no pair to hand to the transition engine.
+                    FinalizeOldPage(oldChildControl, oldChildElement, previousRoute);
+
+                    if (newChildControl is not null)
+                        grid.Children.Add(newChildControl);
+
+                    reconciler.InvokePostNavigationLifecycle(
+                        newChildControl, oldHooks,
+                        currentRoute, pendingPreviousRoute, mode);
+                }
             }
         }
 

@@ -228,6 +228,13 @@ the same shape behind a `NativeAot` parameter:
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <!--
+        Embeds the app icon in the .exe so File Explorer and shortcuts show it.
+        The ReactorApp.Run(icon:) call in App.cs sets the *window* icon (taskbar /
+        Alt-Tab / Task Manager); without either, Reactor falls back to
+        Assets\AppIcon.ico and then to this embedded icon.
+    -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <!--
         Auto-resolve RuntimeIdentifier from the host SDK when the caller hasn't pinned
         Platform / RuntimeIdentifier explicitly. Lets `dotnet build` / `dotnet run`
         succeed without forcing -p:Platform=x64 on every invocation — WindowsAppSDK's

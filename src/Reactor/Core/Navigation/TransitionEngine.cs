@@ -24,29 +24,156 @@ internal static class TransitionEngine
         NavigationTransition transition, NavigationMode mode,
         Action onComplete)
     {
-        if (transition is SuppressTransition)
+        var outVisual = ElementCompositionPreview.GetElementVisual(outgoing);
+        var inVisual = ElementCompositionPreview.GetElementVisual(incoming);
+
+        // GetElementVisual permanently costs an element the XAML implicit-transition APIs
+        // (OpacityTransition, ScaleTransition, …), so ElementPool refuses to pool anything it
+        // has been called on. Record that here as every Reconciler call site does — a navigation
+        // page is often a Border or Grid, which are poolable, so without this a page whose
+        // visual we animated could be handed to a later renter that needs those APIs.
+        Core.ElementPool.MarkCompositorTainted(outgoing);
+        Core.ElementPool.MarkCompositorTainted(incoming);
+
+        var compositor = outVisual.Compositor;
+        var usesCenterPointBinding = transition is DrillInTransition;
+        var suppressesHitTesting = transition is SlideTransition;
+
+        // Claim both pages for this transition before anything else, on every path including
+        // the instant-swap ones. Navigations can overlap — double-clicking a NavigationView
+        // item is enough — and the stamp is what stops an older transition's Completed handler
+        // from stopping a newer transition's animations or snapping a shared page to a finished
+        // state. Claiming here means "the newest navigation owns these pages" holds even when
+        // this call animates nothing, so an in-flight predecessor cannot reach back and undo the
+        // swap we are about to perform.
+        var generation = ClaimForTransition(outgoing, incoming);
+
+        // Instant-swap paths, in order of why:
+        //
+        //  1. The user turned animations off (Settings → Accessibility → Visual effects →
+        //     Animation effects). WinUI's own theme transitions honour this; because Reactor
+        //     replays those motions on the Composition layer rather than handing a
+        //     NavigationTransitionInfo to a Frame, nothing honours it for us unless we do it
+        //     here. Spec 006 §4.3 requires it. This is the single choke point every animated
+        //     navigation passes through, so gating here covers all of them.
+        //  2. SuppressTransition — the author asked for no animation.
+        //  3. An unrecognised subclass: NavigationTransition is a public abstract record, so a
+        //     third party can subclass it and we have no animation to run.
+        //
+        // All three are handled before the scoped batch exists; an early return past a
+        // subscribed batch would leak it.
+        if (!AnimationsEnabled
+            || transition is SuppressTransition
+            || transition is not (EntranceTransition or SlideTransition or FadeTransition
+                or DrillInTransition or SpringSlideTransition or ConnectedTransition))
         {
-            // Instant swap — no animation
-            var inVis = ElementCompositionPreview.GetElementVisual(incoming);
-            inVis.Opacity = 1;
-            inVis.Offset = Vector3.Zero;
-            inVis.Scale = Vector3.One;
+            // Normalize both pages rather than just the incoming one. Having revoked the
+            // predecessor's ownership above, nothing else will take the outgoing page out of
+            // whatever state its interrupted animation left it in — and NavigationCacheMode can
+            // hand that control back as a later page.
+            NormalizeVisual(inVisual);
+            NormalizeVisual(outVisual);
+
+            // Same reasoning for hit testing. A slide that is still in flight suppressed both of
+            // its pages, and one of them can be a page this swap is about to show — navigating
+            // A→B with a slide and then straight back to A instantly would otherwise display A
+            // while it is still non-hit-testable, leaving the visible page unclickable until the
+            // older slide's completion handler happens to run. "No animation" has to mean these
+            // two pages are interactive now, so clear outright instead of decrementing.
+            ClearHitTestSuppression(outgoing);
+            ClearHitTestSuppression(incoming);
+
             onComplete();
             return;
         }
-
-        var outVisual = ElementCompositionPreview.GetElementVisual(outgoing);
-        var inVisual = ElementCompositionPreview.GetElementVisual(incoming);
-        var compositor = outVisual.Compositor;
 
         // Reset stale compositor properties from previous animations
         inVisual.Offset = Vector3.Zero;
         inVisual.Scale = Vector3.One;
 
+        if (suppressesHitTesting)
+        {
+            SuppressHitTesting(outgoing);
+            SuppressHitTesting(incoming);
+        }
+        else
+        {
+            // This transition does not suppress hit testing, but an overlapping slide may
+            // already have suppressed one of these pages — and that page can be the one this
+            // navigation is about to *show*. Slide A→B, then Entrance B→A before the slide
+            // finishes, and A appears still non-hit-testable. Clear outright for the same reason
+            // the instant-swap path does: only a transition that is itself suppressing gets to
+            // leave these pages inert.
+            ClearHitTestSuppression(outgoing);
+            ClearHitTestSuppression(incoming);
+        }
+
+        if (usesCenterPointBinding)
+        {
+            // Expression animations are persistent, so start these before the scoped
+            // batch to keep them from blocking the transition's completion callback.
+            BindCenterPointToVisualSize(compositor, outVisual);
+            BindCenterPointToVisualSize(compositor, inVisual);
+        }
+
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+
+        // Subscribe before End(). A scoped batch can complete synchronously inside End()
+        // — most obviously when it captured no animations — and a handler attached
+        // afterwards would never run, stranding the navigation: the outgoing page would
+        // never be cached or unmounted, onNavigatedTo/From would never fire, and a
+        // hit-test-suppressed page would stay unclickable.
+        batch.Completed += (_, _) =>
+        {
+            if (StillOwns(incoming, generation))
+            {
+                // Finalize: ensure incoming is fully visible
+                NormalizeVisual(inVisual);
+            }
+            if (suppressesHitTesting)
+            {
+                // Nest-aware by depth, so this is safe to run even for a page a newer
+                // transition has taken over — it only restores once the last one finishes.
+                RestoreHitTesting(outgoing);
+                RestoreHitTesting(incoming);
+            }
+
+            try
+            {
+                // onComplete runs app lifecycle callbacks (onNavigatedTo / onNavigatedFrom) and
+                // can throw. The finally block still has to run: it takes the outgoing page out
+                // of the animation's end state, and disposes the batch.
+                onComplete();
+            }
+            finally
+            {
+                // Normalize the outgoing visual too, but only after onComplete has taken it out
+                // of the tree — cached or unmounted. Its animation left it faded out and possibly
+                // offset or scaled, and NavigationCacheMode can hand that same control back as a
+                // later page: NavigationHostLifecycle's instant-swap path (SuppressTransition, or
+                // a navigation with no outgoing page) adds a cached control to the tree without
+                // touching its visual, so a page cached mid-fade would return invisible. Doing
+                // this before onComplete would instead flash the old page at full opacity over
+                // the new one, since both are still children of the host Grid.
+                //
+                // Ownership is re-checked here rather than reused from before the try: an
+                // onNavigatedTo handler can start another navigation synchronously, and that
+                // navigation claims these same pages. Normalizing on a stale answer would snap
+                // a transition that is already running.
+                if (StillOwns(outgoing, generation))
+                {
+                    NormalizeVisual(outVisual);
+                }
+
+                batch.Dispose();
+            }
+        };
 
         switch (transition)
         {
+            case EntranceTransition:
+                RunEntrance(compositor, outVisual, inVisual, mode);
+                break;
             case SlideTransition slide:
                 RunSlide(compositor, outVisual, inVisual, slide, mode);
                 break;
@@ -60,27 +187,240 @@ internal static class TransitionEngine
                 RunSpringSlide(compositor, outVisual, inVisual, spring, mode);
                 break;
             case ConnectedTransition:
-                // Stub — fall back to default slide
-                global::System.Diagnostics.Debug.WriteLine("[Reactor] ConnectedTransition not yet implemented; falling back to SlideTransition.");
-                RunSlide(compositor, outVisual, inVisual, new SlideTransition(), mode);
+                // Stub — shared-element animation isn't implemented yet, so play the platform
+                // default instead. Entrance is the right fallback: it's what the navigation would
+                // have got had no transition been requested, and unlike a slide it doesn't invent
+                // a direction or opt into the slide path's hit-test suppression.
+                global::System.Diagnostics.Debug.WriteLine("[Reactor] ConnectedTransition not yet implemented; falling back to EntranceTransition.");
+                RunEntrance(compositor, outVisual, inVisual, mode);
                 break;
-            default:
-                // Unknown transition — instant swap
-                inVisual.Opacity = 1;
-                onComplete();
-                return;
         }
 
         batch.End();
-        batch.Completed += (_, _) =>
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Transition ownership
+    //
+    //  Navigations overlap. A page can be the incoming half of one transition and the
+    //  outgoing half of the next before the first has finished, so an older Completed
+    //  handler must not stop the newer transition's animations or snap the page to a
+    //  finished state. Each RunTransition claims its two pages with a monotonic stamp;
+    //  a handler only resets a visual it still owns.
+    // ════════════════════════════════════════════════════════════════
+
+    private static long _transitionGeneration;
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, global::System.Runtime.CompilerServices.StrongBox<long>>
+        _elementGeneration = new();
+
+    internal static long ClaimForTransition(UIElement outgoing, UIElement incoming)
+    {
+        var generation = global::System.Threading.Interlocked.Increment(ref _transitionGeneration);
+        _elementGeneration.GetOrCreateValue(outgoing).Value = generation;
+        _elementGeneration.GetOrCreateValue(incoming).Value = generation;
+        return generation;
+    }
+
+    internal static bool StillOwns(UIElement element, long generation) =>
+        _elementGeneration.TryGetValue(element, out var stamp) && stamp.Value == generation;
+
+    // ════════════════════════════════════════════════════════════════
+    //  Reduced motion
+    // ════════════════════════════════════════════════════════════════
+
+    private static readonly global::Windows.UI.ViewManagement.UISettings? _uiSettings =
+        CreateUiSettings();
+
+    private static global::Windows.UI.ViewManagement.UISettings? CreateUiSettings()
+    {
+        try
         {
-            // Finalize: ensure incoming is fully visible, reset outgoing
-            inVisual.Opacity = 1;
-            inVisual.Offset = Vector3.Zero;
-            inVisual.Scale = Vector3.One;
-            onComplete();
-            batch.Dispose();
-        };
+            return new global::Windows.UI.ViewManagement.UISettings();
+        }
+        catch (global::System.Runtime.InteropServices.COMException ex)
+        {
+            // UISettings is a WinRT activation and needs a usable view context. Some host, test,
+            // or headless configuration can refuse it. Fall back to animating — the pre-existing
+            // behaviour — rather than failing the navigation, but do not go silent about it.
+            Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Core.Diagnostics.LogCategory.Navigation, "UISettings activation", ex);
+            return null;
+        }
+        catch (global::System.InvalidOperationException ex)
+        {
+            Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Core.Diagnostics.LogCategory.Navigation, "UISettings activation", ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether the user has left animations on
+    /// (Settings → Accessibility → Visual effects → Animation effects).
+    /// </summary>
+    /// <remarks>
+    /// Read live rather than cached: the setting can be toggled while the app is running, and
+    /// WinUI's own theme transitions pick that up without a restart. <c>UISettings</c> itself is
+    /// cached because constructing it is the expensive part.
+    /// <para>
+    /// A navigation still happens when this is false — the pages swap instantly, exactly as
+    /// <see cref="NavigationTransition.None"/> does. Only the motion is dropped.
+    /// </para>
+    /// </remarks>
+    internal static bool AnimationsEnabled
+    {
+        get
+        {
+            if (_animationsEnabledOverride is { } forced) return forced;
+            if (_uiSettings is null) return true;
+
+            try
+            {
+                return _uiSettings.AnimationsEnabled;
+            }
+            catch (global::System.Runtime.InteropServices.COMException ex)
+            {
+                // Reading across the WinRT boundary can fail during teardown. Animating is the
+                // pre-existing behaviour, so prefer it over failing the navigation.
+                Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Core.Diagnostics.LogCategory.Navigation, "UISettings.AnimationsEnabled", ex);
+                return true;
+            }
+            catch (global::System.ObjectDisposedException ex)
+            {
+                Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Core.Diagnostics.LogCategory.Navigation, "UISettings.AnimationsEnabled", ex);
+                return true;
+            }
+            catch (global::System.InvalidOperationException ex)
+            {
+                Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Core.Diagnostics.LogCategory.Navigation, "UISettings.AnimationsEnabled", ex);
+                return true;
+            }
+        }
+    }
+
+    // Test seam (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host): the real setting is
+    // machine state, so a fixture cannot rely on it being either value.
+    private static bool? _animationsEnabledOverride;
+
+    internal static IDisposable OverrideAnimationsEnabled(bool value)
+    {
+        _animationsEnabledOverride = value;
+        return new AnimationsEnabledScope();
+    }
+
+    private sealed class AnimationsEnabledScope : IDisposable
+    {
+        public void Dispose() => _animationsEnabledOverride = null;
+    }
+
+    /// <summary>
+    /// Stops the animations this engine starts and returns the visual to its resting state.
+    /// </summary>
+    private static void NormalizeVisual(Visual visual)
+    {
+        ReleaseAnimatedProperties(visual);
+        visual.Opacity = 1;
+        visual.Offset = Vector3.Zero;
+        visual.Scale = Vector3.One;
+    }
+
+    /// <summary>
+    /// Stops the animations this engine starts, so the following direct assignments are
+    /// unambiguous.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is load-bearing, not defensive. A finished <c>KeyFrameAnimation</c> does not detach
+    /// itself — <c>NavCov_CompletedAnimationReleasesProperty</c> measures that the property is
+    /// still associated with the animation after the scoped batch completes, and only
+    /// <c>StopAnimation</c> clears it. Note that reading the property back is not a way to check
+    /// this: a Composition getter returns the last value the app assigned, not what the
+    /// compositor is rendering.
+    /// </para>
+    /// <para>
+    /// <c>CenterPoint</c> matters most. DrillIn binds it with an <b>expression</b> animation,
+    /// which is not time-based and never ends, so it holds the property until stopped. Stopping
+    /// it here rather than in DrillIn's own branch is deliberate: when navigations overlap, a
+    /// DrillIn can lose ownership of a page to a Slide or an instant swap and never run its own
+    /// cleanup, so whichever transition ends up owning the page has to be the one that clears
+    /// it — otherwise a live animation leaks onto a control that <c>NavigationCacheMode</c> may
+    /// hand back later.
+    /// </para>
+    /// </remarks>
+    private static void ReleaseAnimatedProperties(Visual visual)
+    {
+        visual.StopAnimation("Opacity");
+        visual.StopAnimation("Offset");
+        visual.StopAnimation("Scale");
+        visual.StopAnimation("CenterPoint");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Hit-test suppression
+    //
+    //  Slide transitions make both pages non-hit-testable while they animate. Navigations
+    //  can overlap (double-clicking a NavigationView item is enough), so this is nest-aware:
+    //  the value from *before* any suppression is recorded once and restored only when the
+    //  last overlapping transition finishes. Snapshotting `IsHitTestVisible` per transition
+    //  instead would let the second transition capture the first one's `false` and restore
+    //  that — and a page cached by NavigationCacheMode would come back permanently
+    //  unclickable.
+    // ════════════════════════════════════════════════════════════════
+
+    private sealed class HitTestSuppression
+    {
+        public bool OriginalValue;
+        public int Depth;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, HitTestSuppression>
+        _hitTestSuppressions = new();
+
+    internal static void SuppressHitTesting(UIElement element)
+    {
+        if (_hitTestSuppressions.TryGetValue(element, out var existing))
+        {
+            existing.Depth++;
+        }
+        else
+        {
+            _hitTestSuppressions.Add(element, new HitTestSuppression
+            {
+                OriginalValue = element.IsHitTestVisible,
+                Depth = 1,
+            });
+        }
+
+        element.IsHitTestVisible = false;
+    }
+
+    internal static void RestoreHitTesting(UIElement element)
+    {
+        if (!_hitTestSuppressions.TryGetValue(element, out var state)) return;
+
+        if (--state.Depth > 0) return;
+
+        _hitTestSuppressions.Remove(element);
+        element.IsHitTestVisible = state.OriginalValue;
+    }
+
+    /// <summary>
+    /// Ends suppression on an element outright, whatever its nesting depth, restoring the value
+    /// from before the first suppression. Used by the instant-swap path: those navigations must
+    /// leave both pages interactive immediately, even when an older animated transition still
+    /// holds a claim. A later <see cref="RestoreHitTesting"/> from that transition is then a
+    /// no-op, since the entry is gone.
+    /// </summary>
+    internal static void ClearHitTestSuppression(UIElement element)
+    {
+        if (!_hitTestSuppressions.TryGetValue(element, out var state)) return;
+
+        _hitTestSuppressions.Remove(element);
+        element.IsHitTestVisible = state.OriginalValue;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -88,6 +428,25 @@ internal static class TransitionEngine
     // ════════════════════════════════════════════════════════════════
 
     private static void RunSlide(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        SlideTransition slide, NavigationMode mode)
+    {
+        if (UsesWinUISlideSpecification(slide))
+        {
+            RunWinUISlide(compositor, outVisual, inVisual, slide.Direction, mode);
+            return;
+        }
+
+        RunCustomSlide(compositor, outVisual, inVisual, slide, mode);
+    }
+
+    internal static bool UsesWinUISlideSpecification(SlideTransition slide) =>
+        slide.Direction != SlideDirection.FromTop
+        && slide.Duration is null
+        && slide.Distance is null
+        && slide.Easing is null;
+
+    private static void RunCustomSlide(
         Compositor compositor, Visual outVisual, Visual inVisual,
         SlideTransition slide, NavigationMode mode)
     {
@@ -134,6 +493,110 @@ internal static class TransitionEngine
         inVisual.StartAnimation("Opacity", inFade);
     }
 
+    internal const float HorizontalSlideExitOffset = 150f;
+    internal const float HorizontalSlideEntranceOffset = 200f;
+    internal static readonly TimeSpan HorizontalSlideExitDuration = TimeSpan.FromMilliseconds(150);
+    internal static readonly TimeSpan HorizontalSlideEntranceDuration = TimeSpan.FromMilliseconds(300);
+    internal static readonly Vector2 SlideInEasingControlPoint1 = new(0.1f, 0.9f);
+    internal static readonly Vector2 SlideInEasingControlPoint2 = new(0.2f, 1.0f);
+    internal static readonly Vector2 SlideOutEasingControlPoint1 = new(0.7f, 0.0f);
+    internal static readonly Vector2 SlideOutEasingControlPoint2 = new(1.0f, 0.5f);
+
+    internal const float VerticalSlideOffset = 200f;
+    internal const float VerticalSlideExponent = 6f;
+    internal static readonly TimeSpan VerticalSlideHandoffTime = TimeSpan.FromMilliseconds(250);
+    internal static readonly TimeSpan VerticalSlideDuration = TimeSpan.FromMilliseconds(600);
+
+    internal readonly record struct HorizontalSlidePlan(Vector3 OutEnd, Vector3 InStart);
+
+    internal static HorizontalSlidePlan GetHorizontalSlidePlan(
+        SlideDirection direction, NavigationMode mode)
+    {
+        var directionFactor = direction == SlideDirection.FromLeft ? 1f : -1f;
+
+        return mode == NavigationMode.Pop
+            ? new(
+                new Vector3(-HorizontalSlideEntranceOffset * directionFactor, 0, 0),
+                new Vector3(HorizontalSlideExitOffset * directionFactor, 0, 0))
+            : new(
+                new Vector3(HorizontalSlideExitOffset * directionFactor, 0, 0),
+                new Vector3(-HorizontalSlideEntranceOffset * directionFactor, 0, 0));
+    }
+
+    private static void RunWinUISlide(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        SlideDirection direction, NavigationMode mode)
+    {
+        if (direction is SlideDirection.FromLeft or SlideDirection.FromRight)
+        {
+            RunWinUIHorizontalSlide(compositor, outVisual, inVisual, direction, mode);
+        }
+        else
+        {
+            RunWinUIVerticalSlide(compositor, outVisual, inVisual, mode);
+        }
+    }
+
+    private static void RunWinUIHorizontalSlide(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        SlideDirection direction, NavigationMode mode)
+    {
+        var plan = GetHorizontalSlidePlan(direction, mode);
+        var inEasing = compositor.CreateCubicBezierEasingFunction(
+            SlideInEasingControlPoint1, SlideInEasingControlPoint2);
+        var outEasing = compositor.CreateCubicBezierEasingFunction(
+            SlideOutEasingControlPoint1, SlideOutEasingControlPoint2);
+
+        var outOffset = compositor.CreateVector3KeyFrameAnimation();
+        outOffset.InsertKeyFrame(1f, plan.OutEnd, outEasing);
+        outOffset.Duration = HorizontalSlideExitDuration;
+        outVisual.StartAnimation("Offset", outOffset);
+
+        inVisual.Offset = plan.InStart;
+        var inOffset = compositor.CreateVector3KeyFrameAnimation();
+        inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
+        inOffset.Duration = HorizontalSlideEntranceDuration;
+        inOffset.DelayTime = HorizontalSlideExitDuration;
+        inVisual.StartAnimation("Offset", inOffset);
+
+        StartDelayedOpacitySnap(compositor, outVisual, 0f, HorizontalSlideExitDuration);
+        StartDelayedOpacitySnap(compositor, inVisual, 1f, HorizontalSlideExitDuration);
+    }
+
+    private static void RunWinUIVerticalSlide(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        NavigationMode mode)
+    {
+        var offset = new Vector3(0, VerticalSlideOffset, 0);
+        var easingMode = mode == NavigationMode.Pop
+            ? CompositionEasingFunctionMode.In
+            : CompositionEasingFunctionMode.Out;
+        var easing = CompositionEasingFunction.CreateExponentialEasingFunction(
+            compositor, easingMode, VerticalSlideExponent);
+
+        if (mode == NavigationMode.Pop)
+        {
+            var outOffset = compositor.CreateVector3KeyFrameAnimation();
+            outOffset.InsertKeyFrame(1f, offset, easing);
+            outOffset.Duration = VerticalSlideDuration;
+            outVisual.StartAnimation("Offset", outOffset);
+        }
+        else
+        {
+            inVisual.Offset = offset;
+            var inOffset = compositor.CreateVector3KeyFrameAnimation();
+            inOffset.InsertKeyFrame(
+                (float)(VerticalSlideHandoffTime.TotalMilliseconds / VerticalSlideDuration.TotalMilliseconds),
+                offset);
+            inOffset.InsertKeyFrame(1f, Vector3.Zero, easing);
+            inOffset.Duration = VerticalSlideDuration;
+            inVisual.StartAnimation("Offset", inOffset);
+        }
+
+        StartDelayedOpacitySnap(compositor, outVisual, 0f, VerticalSlideHandoffTime);
+        StartDelayedOpacitySnap(compositor, inVisual, 1f, VerticalSlideHandoffTime);
+    }
+
     internal static SlideDirection ReverseDirection(SlideDirection direction) => direction switch
     {
         SlideDirection.FromRight => SlideDirection.FromLeft,
@@ -153,6 +616,71 @@ internal static class TransitionEngine
             SlideDirection.FromTop => (new Vector3(0, distance, 0), new Vector3(0, -distance, 0)),
             _ => (Vector3.Zero, Vector3.Zero),
         };
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  WinUI entrance transition
+    // ════════════════════════════════════════════════════════════════
+
+    internal const float EntranceTranslationOffset = 140f;
+    internal static readonly TimeSpan EntranceExitDuration = TimeSpan.FromMilliseconds(150);
+    internal static readonly TimeSpan EntranceDuration = TimeSpan.FromMilliseconds(300);
+    internal static readonly TimeSpan EntranceOpacitySnapDuration = TimeSpan.FromMilliseconds(1);
+    internal static readonly Vector2 EntranceInEasingControlPoint1 = new(0.1f, 0.9f);
+    internal static readonly Vector2 EntranceInEasingControlPoint2 = new(0.2f, 1.0f);
+    internal static readonly Vector2 EntranceOutEasingControlPoint1 = new(0.7f, 0.0f);
+    internal static readonly Vector2 EntranceOutEasingControlPoint2 = new(1.0f, 0.5f);
+
+    private static void RunEntrance(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        NavigationMode mode)
+    {
+        var inEasing = compositor.CreateCubicBezierEasingFunction(
+            EntranceInEasingControlPoint1, EntranceInEasingControlPoint2);
+        var outEasing = compositor.CreateCubicBezierEasingFunction(
+            EntranceOutEasingControlPoint1, EntranceOutEasingControlPoint2);
+
+        if (mode == NavigationMode.Pop)
+        {
+            var outOffset = compositor.CreateVector3KeyFrameAnimation();
+            outOffset.InsertKeyFrame(1f, new Vector3(0, EntranceTranslationOffset, 0), outEasing);
+            outOffset.Duration = EntranceExitDuration;
+            outVisual.StartAnimation("Offset", outOffset);
+
+            StartDelayedOpacitySnap(compositor, outVisual, 0f, EntranceExitDuration);
+
+            var inFade = compositor.CreateScalarKeyFrameAnimation();
+            inFade.InsertKeyFrame(1f, 1f, inEasing);
+            inFade.Duration = EntranceDuration;
+            inFade.DelayTime = EntranceExitDuration;
+            inVisual.StartAnimation("Opacity", inFade);
+        }
+        else
+        {
+            var outFade = compositor.CreateScalarKeyFrameAnimation();
+            outFade.InsertKeyFrame(1f, 0f, outEasing);
+            outFade.Duration = EntranceExitDuration;
+            outVisual.StartAnimation("Opacity", outFade);
+
+            inVisual.Offset = new Vector3(0, EntranceTranslationOffset, 0);
+            var inOffset = compositor.CreateVector3KeyFrameAnimation();
+            inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
+            inOffset.Duration = EntranceDuration;
+            inOffset.DelayTime = EntranceExitDuration;
+            inVisual.StartAnimation("Offset", inOffset);
+
+            StartDelayedOpacitySnap(compositor, inVisual, 1f, EntranceExitDuration);
+        }
+    }
+
+    private static void StartDelayedOpacitySnap(
+        Compositor compositor, Visual visual, float opacity, TimeSpan delay)
+    {
+        var animation = compositor.CreateScalarKeyFrameAnimation();
+        animation.InsertKeyFrame(1f, opacity);
+        animation.Duration = EntranceOpacitySnapDuration;
+        animation.DelayTime = delay;
+        visual.StartAnimation("Opacity", animation);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -184,11 +712,110 @@ internal static class TransitionEngine
     //  DrillIn transition
     // ════════════════════════════════════════════════════════════════
 
+    internal const float DrillInForwardOutScale = 1.04f;
+    internal const float DrillInForwardInScale = 0.94f;
+    internal const float DrillInBackOutScale = 0.96f;
+    internal const float DrillInBackInScale = 1.06f;
+    internal static readonly TimeSpan DrillInOutScaleDuration = TimeSpan.FromMilliseconds(100);
+    internal static readonly TimeSpan DrillInOutOpacityDuration = TimeSpan.FromMilliseconds(100);
+    internal static readonly TimeSpan DrillInForwardInScaleDuration = TimeSpan.FromMilliseconds(783);
+    internal static readonly TimeSpan DrillInForwardInOpacityDuration = TimeSpan.FromMilliseconds(333);
+    internal static readonly TimeSpan DrillInBackInScaleDuration = TimeSpan.FromMilliseconds(333);
+    internal static readonly TimeSpan DrillInBackInOpacityDuration = TimeSpan.FromMilliseconds(333);
+    internal static readonly Vector2 DrillInScaleEasingControlPoint1 = new(0.1f, 0.9f);
+    internal static readonly Vector2 DrillInScaleEasingControlPoint2 = new(0.2f, 1.0f);
+    internal static readonly Vector2 DrillInBackScaleEasingControlPoint1 = new(0.12f, 0.0f);
+    internal static readonly Vector2 DrillInBackScaleEasingControlPoint2 = new(0.0f, 1.0f);
+    internal static readonly Vector2 DrillInOpacityEasingControlPoint1 = new(0.17f, 0.17f);
+    internal static readonly Vector2 DrillInOpacityEasingControlPoint2 = new(0.0f, 1.0f);
+
+    internal readonly record struct DrillInPlan(
+        float OutEndScale,
+        float InStartScale,
+        TimeSpan OutScaleDuration,
+        TimeSpan OutOpacityDuration,
+        TimeSpan InScaleDuration,
+        TimeSpan InOpacityDuration,
+        Vector2 InScaleEasingControlPoint1,
+        Vector2 InScaleEasingControlPoint2);
+
+    internal static DrillInPlan GetDrillInPlan(NavigationMode mode) =>
+        mode == NavigationMode.Pop
+            ? new(
+                DrillInBackOutScale,
+                DrillInBackInScale,
+                DrillInOutScaleDuration,
+                DrillInOutOpacityDuration,
+                DrillInBackInScaleDuration,
+                DrillInBackInOpacityDuration,
+                DrillInBackScaleEasingControlPoint1,
+                DrillInBackScaleEasingControlPoint2)
+            : new(
+                DrillInForwardOutScale,
+                DrillInForwardInScale,
+                DrillInOutScaleDuration,
+                DrillInOutOpacityDuration,
+                DrillInForwardInScaleDuration,
+                DrillInForwardInOpacityDuration,
+                DrillInScaleEasingControlPoint1,
+                DrillInScaleEasingControlPoint2);
+
     private static void RunDrillIn(
         Compositor compositor, Visual outVisual, Visual inVisual,
         DrillInTransition drill, NavigationMode mode)
     {
-        var duration = drill.Duration ?? TimeSpan.FromMilliseconds(300);
+        if (!UsesWinUIDrillInSpecification(drill))
+        {
+            RunCustomDrillIn(compositor, outVisual, inVisual, drill.Duration!.Value, mode);
+            return;
+        }
+
+        var plan = GetDrillInPlan(mode);
+        var outScaleEasing = compositor.CreateCubicBezierEasingFunction(
+            DrillInScaleEasingControlPoint1, DrillInScaleEasingControlPoint2);
+        var inScaleEasing = compositor.CreateCubicBezierEasingFunction(
+            plan.InScaleEasingControlPoint1, plan.InScaleEasingControlPoint2);
+        var opacityEasing = compositor.CreateCubicBezierEasingFunction(
+            DrillInOpacityEasingControlPoint1, DrillInOpacityEasingControlPoint2);
+
+        var outScale = compositor.CreateVector3KeyFrameAnimation();
+        outScale.InsertKeyFrame(1f, new Vector3(plan.OutEndScale, plan.OutEndScale, 1f), outScaleEasing);
+        outScale.Duration = plan.OutScaleDuration;
+        outVisual.StartAnimation("Scale", outScale);
+
+        var outFade = compositor.CreateScalarKeyFrameAnimation();
+        outFade.InsertKeyFrame(1f, 0f, opacityEasing);
+        outFade.Duration = plan.OutOpacityDuration;
+        outVisual.StartAnimation("Opacity", outFade);
+
+        inVisual.Scale = new Vector3(plan.InStartScale, plan.InStartScale, 1f);
+
+        var inScale = compositor.CreateVector3KeyFrameAnimation();
+        inScale.InsertKeyFrame(1f, Vector3.One, inScaleEasing);
+        inScale.Duration = plan.InScaleDuration;
+        inVisual.StartAnimation("Scale", inScale);
+
+        var inFade = compositor.CreateScalarKeyFrameAnimation();
+        inFade.InsertKeyFrame(1f, 1f, opacityEasing);
+        inFade.Duration = plan.InOpacityDuration;
+        inVisual.StartAnimation("Opacity", inFade);
+    }
+
+    internal static bool UsesWinUIDrillInSpecification(DrillInTransition drill) =>
+        drill.Duration is null;
+
+    private static void BindCenterPointToVisualSize(Compositor compositor, Visual visual)
+    {
+        var centerPoint = compositor.CreateExpressionAnimation(
+            "Vector3(target.Size.X / 2, target.Size.Y / 2, 0)");
+        centerPoint.SetReferenceParameter("target", visual);
+        visual.StartAnimation("CenterPoint", centerPoint);
+    }
+
+    private static void RunCustomDrillIn(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        TimeSpan duration, NavigationMode mode)
+    {
         var easing = compositor.CreateCubicBezierEasingFunction(
             new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1.0f));
 
@@ -205,7 +832,6 @@ internal static class TransitionEngine
             outFade.InsertKeyFrame(1f, 0f, easing);
             outFade.Duration = duration;
 
-            outVisual.CenterPoint = new Vector3(outVisual.Size / 2, 0);
             outVisual.StartAnimation("Scale", outScale);
             outVisual.StartAnimation("Opacity", outFade);
 
@@ -219,7 +845,6 @@ internal static class TransitionEngine
         {
             // Forward: incoming scales up from 0.85 + fades in, outgoing fades out
             inVisual.Scale = new Vector3(0.85f, 0.85f, 1f);
-            inVisual.CenterPoint = new Vector3(inVisual.Size / 2, 0);
 
             var inScale = compositor.CreateVector3KeyFrameAnimation();
             inScale.InsertKeyFrame(0f, new Vector3(0.85f, 0.85f, 1f));
