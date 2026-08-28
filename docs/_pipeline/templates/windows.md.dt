@@ -267,8 +267,8 @@ beside the app, then to the icon embedded in the executable by
 
 ### Which surface shows which icon
 
-This trips people up, so it is worth being precise. The window icon and the
-taskbar button are **not** always the same picture, and which one wins depends on
+This trips people up, so it is worth being precise. Three different assets feed
+four different shell surfaces, and which one wins depends on the surface and on
 whether your app has package identity:
 
 | Surface | Unpackaged | Packaged (MSIX) |
@@ -276,14 +276,26 @@ whether your app has package identity:
 | Window caption | window icon | window icon |
 | Alt-Tab | window icon | window icon |
 | Taskbar button | window icon | `Square44x44Logo` from the manifest |
-| Task Manager | window icon | manifest logo, via package identity |
+| Task Manager, window rows | window icon | `Square44x44Logo` from the manifest |
+| Task Manager, process rows | `<ApplicationIcon>` | `Square44x44Logo` from the manifest |
+| Explorer, the `.exe` itself | `<ApplicationIcon>` | `<ApplicationIcon>` |
 
-So for a **packaged** app, setting `icon:` alone is not enough to change the
-taskbar button — the shell resolves that through package identity and never looks
-at the window handle. Ship a `Square44x44Logo` that matches your `.ico` as well,
-or the two surfaces will legitimately disagree and it will look like the window
-icon "did not apply". For an **unpackaged** app there is no package identity, so
-the window icon drives every surface and `icon:` is all you need.
+Two consequences worth internalising:
+
+- **`icon:` alone never covers everything.** It sets the window handle's `HICON`,
+  which is the caption and Alt-Tab. The process row Task Manager groups windows
+  under, and the `.exe` in Explorer, come from the executable's embedded PE icon
+  — a build-time resource that only `<ApplicationIcon>` can set. Reactor cannot
+  change it at runtime.
+- **A packaged app needs a matching manifest logo too.** The shell resolves the
+  taskbar button through package identity and never looks at the window handle,
+  so a correct `icon:` with a mismatched `Square44x44Logo` looks exactly like the
+  window icon "did not apply".
+
+So an app that wants one icon everywhere sets all three, pointing at the same
+`.ico`: `icon:` (or the `Assets\AppIcon.ico` convention), `<ApplicationIcon>` in
+the csproj, and — when packaged — the manifest logo. `mur --create` scaffolds the
+first two for you.
 
 Caveats:
 
@@ -296,7 +308,8 @@ Caveats:
   which bypasses the window handle entirely — so without an explicit icon the
   caption and Alt-Tab entry still show a generic glyph, even though the taskbar
   button looks right.
-- `<ApplicationIcon>` alone sets the icon Explorer shows for the `.exe`. Reactor's
+- `<ApplicationIcon>` alone sets the icon Explorer shows for the `.exe`, and the icon
+  Task Manager shows on the *process* row that windows are grouped under. Reactor's
   fallback is what carries it onto the window; WinUI does not do so on its own.
 - A `FromPath` source that does not exist is reported as a failure so the fallback
   still runs — a declared-but-missing icon never leaves the window barer than
