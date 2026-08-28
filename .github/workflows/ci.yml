@@ -195,6 +195,53 @@ jobs:
       - name: Test
         run: dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore -p:Platform=x64
 
+  packaged-tests:
+    name: Packaged Selftests (MSIX)
+    needs: changes
+    if: needs.changes.outputs.non-md == 'true'
+    runs-on: windows-latest
+    # Same budget as the unpackaged Selftests job: this runs the same fixture corpus, just
+    # under package identity, plus one package registration.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Registering an unsigned loose MSIX layout (DeploymentOptions.DevelopmentMode)
+      # requires Developer Mode. GitHub's windows runners are administrators, so the
+      # AppModelUnlock switch is settable directly and avoids having to generate and trust
+      # a signing certificate just to run tests.
+      - name: Enable Developer Mode
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name AllowDevelopmentWithoutDevLicense `
+            -PropertyType DWord -Value 1 -Force | Out-Null
+          $v = (Get-ItemProperty -Path $key -Name AllowDevelopmentWithoutDevLicense).AllowDevelopmentWithoutDevLicense
+          if ($v -ne 1) { throw "Developer Mode is not enabled (AllowDevelopmentWithoutDevLicense=$v)." }
+
+      - name: Restore
+        run: dotnet restore tests/Reactor.PackagedTests/Reactor.PackagedTests.csproj -p:Platform=x64
+
+      - name: Test
+        run: dotnet test tests/Reactor.PackagedTests/Reactor.PackagedTests.csproj --no-restore -p:Platform=x64
+
+      # ClassCleanup removes the registration, but a hard failure (or a killed job) can
+      # leave it behind, and a stale registration owning the execution alias would make the
+      # next run on a self-hosted runner exercise the wrong binary.
+      - name: Unregister packaged host
+        if: always()
+        shell: pwsh
+        run: |
+          Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host' |
+            Remove-AppxPackage -ErrorAction SilentlyContinue
+          exit 0
+
   e2e-tests:
     name: E2E Tests (winapp ui)
     needs: changes

@@ -60,6 +60,11 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
+    <!-- Issue #1148 — Reactor.PackagedTests.Host is the MSIX-packaged flavour of
+         Reactor.AppTests.Host and compiles the same linked fixture sources, so it
+         needs the same internal seams. IVT is matched on assembly name, so the two
+         hosts must be listed separately. -->
+    <InternalsVisibleTo Include="Reactor.PackagedTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
     <!-- Spec 062 §7 Track B (B1/B2): the charting, docking, and markdown
          subsystems moved from this assembly into Reactor.Advanced. Each reaches

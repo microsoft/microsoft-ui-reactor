@@ -369,6 +369,11 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="tests/Reactor.PackagedTests.Host/Reactor.PackagedTests.Host.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/Reactor.PackagedTests/Reactor.PackagedTests.csproj" />
     <Project Path="tests/Reactor.SelfTests/Reactor.SelfTests.csproj" />
     <Project Path="tests/Reactor.Tests/Reactor.Tests.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />

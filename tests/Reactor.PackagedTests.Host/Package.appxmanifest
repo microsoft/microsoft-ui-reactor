@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap5 rescap">
+
+  <!-- Name and Publisher are mirrored by AppxLooseLayoutDeployment, which registers and
+       removes this package by name; PackagedHarnessTests asserts they stay in step. -->
+  <Identity
+    Name="Microsoft.UI.Reactor.PackagedTests.Host"
+    Publisher="CN=Microsoft.UI.Reactor.PackagedTests.Host"
+    Version="1.0.0.0" />
+
+  <Properties>
+    <DisplayName>Reactor Packaged Test Host</DisplayName>
+    <PublisherDisplayName>Microsoft.UI.Reactor</PublisherDisplayName>
+    <Logo>Images\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+                 Executable="$targetnametoken$.exe"
+                 EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="Reactor Packaged Test Host"
+        Description="Packaged (MSIX) flavour of the Reactor selftest host — issue #1148"
+        BackgroundColor="transparent"
+        Square150x150Logo="Images\Square150x150Logo.png"
+        Square44x44Logo="Images\Square44x44Logo.png">
+        <uap:DefaultTile
+          ShortName="ReactorPackagedHost"
+          Square71x71Logo="Images\Square71x71Logo.png"
+          Wide310x150Logo="Images\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Images\SplashScreen.png" />
+      </uap:VisualElements>
+
+      <!-- Required, not cosmetic. The tier launches the host through this alias because a
+           CreateProcess of the alias stub inherits stdout while keeping package identity,
+           which AUMID activation cannot do. See TESTING.md "Packaged selftest". -->
+      <Extensions>
+        <uap5:Extension Category="windows.appExecutionAlias">
+          <uap5:AppExecutionAlias>
+            <uap5:ExecutionAlias Alias="reactor-packaged-test-host.exe" />
+          </uap5:AppExecutionAlias>
+        </uap5:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Full trust, not AppContainer: the fixtures drive real WinUI windows and read Win32
+         HICONs, and it is what makes launch arguments arrive as plain argv. -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+</Package>

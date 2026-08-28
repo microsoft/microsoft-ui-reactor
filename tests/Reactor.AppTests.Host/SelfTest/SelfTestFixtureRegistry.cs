@@ -1220,6 +1220,11 @@ internal static class SelfTestFixtureRegistry
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents",
         "WindowModel_WindowIconApplied",
+        // Issue #1148 — packaged (MSIX) tier. These self-skip in the unpackaged host;
+        // Reactor.PackagedTests runs them with real package identity.
+        "Packaged_IdentityGuard",
+        "Packaged_SettingsStoreRoundTrip",
+        "Packaged_WindowIconFromResource",
         "WindowModel_ClosingEventCancels",
         "WindowModel_TaskbarProgressLiveCom",
         "WindowModel_ThumbnailToolbarLiveCom",
@@ -2928,6 +2933,11 @@ internal static class SelfTestFixtureRegistry
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents" => new WindowModelFixtures.WindowLifecycleEvents(harness),
         "WindowModel_WindowIconApplied" => new WindowModelFixtures.WindowIconApplied(harness),
+        // Issue #1148 — packaged (MSIX) tier; self-skip when the entry assembly is not
+        // the packaged host.
+        "Packaged_IdentityGuard" => new PackagedIdentityFixtures.IdentityGuard(harness),
+        "Packaged_SettingsStoreRoundTrip" => new PackagedIdentityFixtures.SettingsStoreRoundTrip(harness),
+        "Packaged_WindowIconFromResource" => new WindowModelFixtures.PackagedWindowIconFromResource(harness),
         "WindowModel_ClosingEventCancels" => new WindowModelFixtures.WindowClosingEventCancels(harness),
         "WindowModel_TaskbarProgressLiveCom" => new WindowModelFixtures.TaskbarProgressLiveCom(harness),
         "WindowModel_ThumbnailToolbarLiveCom" => new WindowModelFixtures.ThumbnailToolbarLiveCom(harness),

@@ -81,13 +81,14 @@ dotnet test  tests/Reactor.Tests -p:Platform=x64
 
 ## Running tests
 
-See [`TESTING.md`](TESTING.md) for the full guide — three suites (unit / selftest / E2E), how to pick a tier, NativeAOT runs, and the code-coverage workflow.
+See [`TESTING.md`](TESTING.md) for the full guide — four suites (unit / selftest / packaged selftest / E2E), how to pick a tier, NativeAOT runs, and the code-coverage workflow.
 
 Quick reference:
 
 ```bash
 dotnet test tests/Reactor.Tests       # unit (xUnit, headless, fast)
 dotnet test tests/Reactor.SelfTests   # selftest (real WinUI, in-process)
+dotnet test tests/Reactor.PackagedTests -p:Platform=x64   # packaged selftest (MSIX identity)
 dotnet test tests/Reactor.AppTests    # E2E (winapp ui)
 ```
 

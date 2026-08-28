@@ -17,6 +17,9 @@ dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 # Selftests — real WinUI window, in-process (~10s)
 dotnet test tests/Reactor.SelfTests
 
+# Packaged selftests — same fixtures under MSIX identity (needs Developer Mode)
+dotnet test tests/Reactor.PackagedTests -p:Platform=x64
+
 # Raw TAP output (faster iteration, supports --filter prefix)
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 
@@ -37,7 +40,7 @@ MSTest accepts **only** `--filter` and rejects `--filter-class` with exit 5),
 `--logger "trx;…"` becomes `--report-trx`, and `--blame-hang-*` becomes
 `--hangdump …`.
 
-CI runs unit tests + selftests + full solution build on every PR. .NET 10 SDK, `windows-latest` runner.
+CI runs unit tests + selftests + packaged selftests + full solution build on every PR. .NET 10 SDK, `windows-latest` runner.
 
 Full testing guide — tier selection, NativeAOT runs, code coverage — in [`TESTING.md`](TESTING.md).
 
@@ -141,9 +144,18 @@ Optionally: a factory method in `src/Reactor/Elements/Dsl.cs`, fluent modifiers 
 |---|---|---|
 | Algorithm, pure function, hook bookkeeping, D3 math | Unit test (xUnit) | `tests/Reactor.Tests/` |
 | Element mount/update against real WinUI controls | Selftest fixture | `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` |
+| Behaviour that differs under MSIX identity (`ms-appx:`, `Package.Current`, MRT, `PackageRuntime.IsPackaged` branches) | Selftest fixture gated with `PackagedIdentityFixtures.RequirePackagedTier` | same folder; runs for real in `tests/Reactor.PackagedTests` |
 | Real user input, UIA properties, cross-process | E2E test (winapp ui) | `tests/Reactor.AppTests/Tests/` |
 
 Start with unit tests. Use selftests only when you need a live WinUI control. E2E is the slowest tier.
+
+The packaged tier (`tests/Reactor.PackagedTests` + `tests/Reactor.PackagedTests.Host`) exists because
+every other tier runs unpackaged and is structurally blind to identity-dependent bugs — issue #1148.
+`Reactor.PackagedTests.Host` owns no source; it links every `.cs` from `Reactor.AppTests.Host` and
+adds only MSIX properties plus a `Package.appxmanifest`. The whole corpus runs under identity.
+**Gotcha worth not re-deriving:** the manifest's `uap5:AppExecutionAlias` is load-bearing — launching
+the alias stub inherits stdout while keeping package identity, which AUMID activation cannot do
+(it is brokered, so stdout can't be redirected at all).
 
 ### Console-mutating tests need collection isolation
 
