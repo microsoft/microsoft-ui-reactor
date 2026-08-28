@@ -12,7 +12,17 @@ internal static partial class DocAssembler
 {
     // ```csharp snippet="topic/id"            or   ```csharp snippet="topic/id" title="Title"
     // ```
-    [GeneratedRegex(@"```csharp\s+snippet=""([^""]+)""(?:\s+title=""([^""]+)"")?\s*[\r\n]+```")]
+    //
+    // The language is captured rather than hard-coded. It used to be literal
+    // `csharp`, which silently broke every non-C# fence: ExtractSnippetRefs (the
+    // discovery side) matches `snippet="..."` in any fence, so an ```xml fence
+    // was extracted, resolved, and reported as "✓ resolved" — and then never
+    // substituted, because only this regex decides what gets replaced. The three
+    // ```xml project-shape fences in packaging.md rendered as *empty* code blocks
+    // under prose that promised to show the shape, and the unexpanded
+    // `snippet="..."` attribute leaked into the fence info string. Keep discovery
+    // and substitution language-agnostic together, or the two disagree silently.
+    [GeneratedRegex(@"```([A-Za-z0-9_+#-]+)\s+snippet=""([^""]+)""(?:\s+title=""([^""]+)"")?\s*[\r\n]+```")]
     private static partial Regex SnippetDirective();
 
     // ![alt text](screenshot://topic/id)
@@ -47,8 +57,9 @@ internal static partial class DocAssembler
         // Replace snippet directives with extracted code
         output = SnippetDirective().Replace(output, match =>
         {
-            var snippetId = match.Groups[1].Value;
-            var title = match.Groups[2].Success ? match.Groups[2].Value : null;
+            var language = match.Groups[1].Value;
+            var snippetId = match.Groups[2].Value;
+            var title = match.Groups[3].Success ? match.Groups[3].Value : null;
 
             if (!snippets.TryGetValue(snippetId, out var snippet))
             {
@@ -58,12 +69,12 @@ internal static partial class DocAssembler
 
             var sb = new StringBuilder();
             if (title != null)
-                sb.AppendLine($"// {title}");
+                sb.AppendLine(TitleComment(language, title));
             // SECURITY (TASK-043): pick a fence longer than the longest run of
             // backticks in the snippet so embedded ``` cannot break out of the
             // fenced block and inject markdown.
             var fence = ChooseFence(snippet.Code);
-            sb.AppendLine(fence + "csharp");
+            sb.AppendLine(fence + language);
             sb.AppendLine(snippet.Code);
             sb.Append(fence);
             return sb.ToString();
@@ -105,6 +116,20 @@ internal static partial class DocAssembler
         warnings = warns;
         return output;
     }
+
+    /// <summary>
+    /// Renders <paramref name="title"/> as a comment valid in
+    /// <paramref name="language"/>. A <c>title=</c> on an ```xml fence used to
+    /// emit <c>// Title</c>, which is not an XML comment — the header rendered
+    /// as malformed markup inside the code block.
+    /// </summary>
+    internal static string TitleComment(string language, string title) =>
+        language.ToLowerInvariant() switch
+        {
+            "xml" or "html" or "xaml" or "svg" or "csproj" or "props" or "targets"
+                => $"<!-- {title} -->",
+            _ => $"// {title}",
+        };
 
     /// <summary>
     /// Returns a fence (sequence of backticks) at least one char longer than

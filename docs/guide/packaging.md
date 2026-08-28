@@ -34,7 +34,16 @@ folder or an MSIX. The decision is usually distribution-channel-first
 `dotnet new reactorapp` scaffolds an unpackaged WinUI 3 project — the
 shape every sample in this repo also uses:
 
-```xml snippet="source:samples/TodoApp/TodoApp.csproj#unpackaged-shape"
+```xml
+<PropertyGroup>
+  <OutputType>WinExe</OutputType>
+  <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+  <Platforms>x64;ARM64</Platforms>
+  <ImplicitUsings>enable</ImplicitUsings>
+  <Nullable>enable</Nullable>
+  <UseWinUI>true</UseWinUI>
+  <WindowsPackageType>None</WindowsPackageType>
+</PropertyGroup>
 ```
 
 The load-bearing properties are `UseWinUI=true` (pulls the WinUI 3
@@ -166,7 +175,19 @@ the framework is built to be AOT-compatible on its hot path. The
 shape is the same as any other AOT publish, with `PublishAot=true`
 and a runtime identifier:
 
-```xml snippet="source:tests/stress_perf/StressPerf.Reactor/StressPerf.Reactor.csproj#aot-stress-shape"
+```xml
+<PropertyGroup>
+  <OutputType>WinExe</OutputType>
+  <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+  <Platforms>x64;ARM64</Platforms>
+  <RootNamespace>StressPerf.Reactor</RootNamespace>
+  <AssemblyName>StressPerf.Reactor</AssemblyName>
+  <ImplicitUsings>enable</ImplicitUsings>
+  <Nullable>enable</Nullable>
+  <UseWinUI>true</UseWinUI>
+  <WindowsPackageType>None</WindowsPackageType>
+  <PublishAot>true</PublishAot>
+</PropertyGroup>
 ```
 
 `dotnet publish -c Release -r win-x64` produces a native binary —
@@ -174,7 +195,50 @@ no `coreclr.dll`, no JIT, ~50 ms cold start versus ~250 ms for the
 JIT-based build on the same hardware. The project template gates
 the same shape behind a `NativeAot` parameter:
 
-```xml snippet="source:tools/Templates/templates/WinUIApp-CSharp/Company.ReactorApp1.csproj#template-shape"
+```xml
+<PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework Condition="'$(TargetFrameworkOverride)' == ''">net10.0-windows10.0.22621.0</TargetFramework>
+    <TargetFramework Condition="'$(TargetFrameworkOverride)' != ''">TargetFrameworkOverride-windows10.0.22621.0</TargetFramework>
+    <!--
+        x64 first so an unqualified `dotnet build` / F5 picks the right default on the
+        majority of dev machines. ARM64 second for Snapdragon X. X86 retained for parity
+        with the WinUI 3 templates even though Reactor itself is only tested on x64 / ARM64.
+    -->
+    <Platforms>x64;ARM64;X86</Platforms>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!--
+        WindowsAppSDKSelfContained bundles the Windows App SDK runtime alongside the
+        published exe so the app:
+          (a) runs from any folder without a separate Windows App Runtime install, and
+          (b) survives `dotnet watch run` hot reload (used by the Reactor Visual Studio
+              embedded-preview extension — spec 056). Incremental rebuilds otherwise
+              double-count transitive Microsoft.WindowsAppSDK.* references and trip
+              Microsoft.WindowsAppSDK.ComponentReference.targets' strict version check
+              ("version 2.0.20;2.0.20 was referenced"). Self-contained bundling
+              sidesteps that check.
+        Tradeoff: ~30 MB extra in the publish output. To ship framework-dependent
+        (smaller publish, requires the user to install Microsoft.WindowsAppRuntime
+        separately) flip this to false and ensure your install instructions tell users
+        to install the runtime first.
+    -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <!--
+        Auto-resolve RuntimeIdentifier from the host SDK when the caller hasn't pinned
+        Platform / RuntimeIdentifier explicitly. Lets `dotnet build` / `dotnet run`
+        succeed without forcing -p:Platform=x64 on every invocation — WindowsAppSDK's
+        self-contained build path requires a concrete RID.
+    -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
+    <!--#if (NativeAot) -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!--#endif -->
+</PropertyGroup>
 ```
 
 Pass `dotnet new reactorapp --NativeAot true` to get the AOT-enabled
