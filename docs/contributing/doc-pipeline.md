@@ -211,9 +211,18 @@ in CI. So the image dimensions committed to this repo are a property of whoever
 last ran capture, not of a build server.
 
 Capture at **150%** display scaling. A doc app's `doc-manifest.yaml` declares a
-window size in *logical* pixels, so the captured PNG is that size times the
-scale factor: `v1-protocol` declares `width: 520` and its committed
-`led-indicator.png` is 640px wide at 125%, 766px at 150%.
+window size in *logical* pixels, so a captured PNG scales roughly with the
+display scale factor — but not by an exact multiple. Most manifests use
+`region: client`, which captures the client area only and so excludes the
+window frame, and the window manager may adjust the requested extent. Treat the
+scale as the thing to match and the pixel dimensions as an observed
+consequence, not a formula to validate against: `v1-protocol` declares
+`width: 520`, and its committed `led-indicator.png` measures 640px wide when
+captured at 125% and 766px at 150%.
+
+The practical check is comparative, not arithmetic — if your regenerated image
+is close in size to the one you replaced, you captured at the same scale as the
+last contributor; if it jumped by ~20%, you did not.
 
 That number is a convention, not a law of the pipeline — it was chosen because
 it is what most of the corpus already used and it renders sharply on modern

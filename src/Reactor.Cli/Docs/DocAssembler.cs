@@ -68,13 +68,18 @@ internal static partial class DocAssembler
             }
 
             var sb = new StringBuilder();
-            if (title != null)
-                sb.AppendLine(TitleComment(language, title));
             // SECURITY (TASK-043): pick a fence longer than the longest run of
             // backticks in the snippet so embedded ``` cannot break out of the
             // fenced block and inject markdown.
             var fence = ChooseFence(snippet.Code);
             sb.AppendLine(fence + language);
+            // Title goes *inside* the fence. It used to be emitted above the
+            // opening fence, which put it in markdown body text rather than in
+            // the code block: as `// Title` it rendered as a stray literal line
+            // of prose, and as an XML/HTML comment it would be parsed as raw
+            // markdown HTML and vanish from the page entirely.
+            if (title != null)
+                sb.AppendLine(TitleComment(language, title));
             sb.AppendLine(snippet.Code);
             sb.Append(fence);
             return sb.ToString();

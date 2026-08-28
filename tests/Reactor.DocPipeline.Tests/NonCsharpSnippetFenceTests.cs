@@ -116,6 +116,36 @@ public class NonCsharpSnippetFenceTests
         Assert.Equal(expected, DocAssembler.TitleComment(language, "Project shape"));
     }
 
+    [Theory]
+    [InlineData("csharp")]
+    [InlineData("xml")]
+    public void Title_is_emitted_inside_the_fence_not_above_it(string language)
+    {
+        // The title used to be appended *before* the opening fence, which put it
+        // in markdown body text instead of the code block. As `// Title` that
+        // rendered as a stray literal line of prose above the example; as an
+        // XML/HTML comment it would be parsed as raw markdown HTML and disappear
+        // from the page entirely — a title that silently does not exist.
+        const string id = "probe/id";
+        var output = DocAssembler.Assemble(
+            $"```{language} snippet=\"{id}\" title=\"My Title\"\n```",
+            OneSnippet(id, "BODY"), NoScreenshots, out _, out _, null, null)
+            .ReplaceLineEndings("\n");
+
+        var lines = output.Split('\n');
+        var fenceIndex = Array.FindIndex(lines, l => l.StartsWith("```"));
+        var titleIndex = Array.FindIndex(lines, l => l.Contains("My Title"));
+
+        Assert.True(fenceIndex >= 0, $"no opening fence in output:\n{output}");
+        Assert.True(titleIndex >= 0, $"title was dropped entirely from output:\n{output}");
+        // The ordering assertion is the whole point: with the old code the title
+        // sat at index 0 and the fence at index 1.
+        Assert.True(
+            titleIndex > fenceIndex,
+            $"title must be inside the fence, but appeared above it:\n{output}");
+        Assert.Contains("BODY", output);
+    }
+
     [Fact]
     public void No_generated_guide_page_carries_an_unexpanded_snippet_attribute()
     {

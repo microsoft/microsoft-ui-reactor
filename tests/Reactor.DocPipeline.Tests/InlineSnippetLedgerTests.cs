@@ -106,22 +106,64 @@ public class InlineSnippetLedgerTests
         // An empty parameter list is a call, not a listing.
         if (parameters.Trim().Length == 0) return false;
 
-        // Every parameter must be a type, or a type followed by a name (with optional default).
-        return parameters
-            .Split(',')
-            .Select(p => p.Trim())
-            .All(p => p.Length > 0 && Regex.IsMatch(
-                p,
-                @"^(params\s+)?[A-Za-z_][\w.<>,\[\]\s]*\??(\s+[a-z_]\w*(\s*=\s*[^,]+)?)?$"));
+        return parameters.Split(',').Select(p => p.Trim()).All(IsParameterDeclaration);
     }
 
     /// <summary>
-    /// Hand-typed examples that are allowed to stay prose, keyed by template, then by the block's
-    /// first non-empty line. Each entry records why the block cannot be snippet-backed.
+    /// True when a single parameter reads as a *declaration* rather than a passed argument.
     /// </summary>
     /// <remarks>
+    /// The previous rule accepted any identifier or dotted expression as a "type", so ordinary
+    /// copyable calls such as <c>TextBlock(message)</c> and <c>Card(item.Title)</c> were classified
+    /// as signature listings and skipped the ledger whenever they omitted a semicolon — a broad
+    /// re-opening of the original <c>ForEach(items, item =&gt; ...)</c> hole. Two things separate a
+    /// declaration from an argument without parsing C#: a declaration is a <c>Type name</c> pair,
+    /// and a lone token is a type only if it looks like one. Member access is never a parameter
+    /// declaration, and by C# convention a bare lowercase token is an argument, not a type.
+    /// </remarks>
+    private static bool IsParameterDeclaration(string parameter)
+    {
+        var p = Regex.Replace(parameter, @"^(params|ref|out|in)\s+", string.Empty).Trim();
+
+        var equals = p.IndexOf('=');
+        if (equals >= 0) p = p[..equals].TrimEnd();
+        if (p.Length == 0) return false;
+
+        // `Type name` — two tokens — is unambiguous, whatever the type looks like.
+        if (Regex.IsMatch(p, @"^[A-Za-z_][\w.<>,\[\]\s]*[\w>\]?]\s+[a-z_]\w*$")) return true;
+
+        // A lone token: member access is an argument, never a declaration.
+        if (p.Contains('.', StringComparison.Ordinal)) return false;
+
+        // Otherwise accept it only if it reads as a type: a built-in keyword, or a
+        // PascalCase name (optionally generic / array / nullable). A bare lowercase
+        // identifier is how a call passes a value.
+        return BuiltInTypeNames.Contains(p)
+            || Regex.IsMatch(p, @"^[A-Z]\w*(<[^>]*>)?(\[\])?\??$");
+    }
+
+    private static readonly HashSet<string> BuiltInTypeNames = new(StringComparer.Ordinal)
+    {
+        "bool", "byte", "sbyte", "char", "decimal", "double", "float", "int", "uint",
+        "long", "ulong", "short", "ushort", "object", "string", "dynamic", "void",
+    };
+
+    /// <summary>
+    /// Hand-typed examples that are allowed to stay prose, keyed by template, then by the block's
+    /// full normalized text. Each entry records why the block cannot be snippet-backed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
     /// Keyed on content rather than line number so ordinary edits above a block do not silently
     /// invalidate — or silently re-authorise — an entry.
+    /// </para>
+    /// <para>
+    /// Keyed on the <em>whole</em> block rather than its first line, because openers are shared.
+    /// <c>hooks-internals</c> has two distinct blocks that both begin
+    /// <c>var (count, setCount) = UseState(0);</c>, and a single first-line entry authorised both —
+    /// only one had ever been reviewed. Generic openers like <c>[Theory]</c>,
+    /// <c>public override Element Render()</c> and <c>// Before</c> had the same latent reach.
+    /// </para>
     /// </remarks>
     private static readonly Dictionary<string, Dictionary<string, string>> AllowedInlineExamples =
         new(StringComparer.OrdinalIgnoreCase)
@@ -131,7 +173,10 @@ public class InlineSnippetLedgerTests
                 // A two-line syntax illustration of the `with { IsOpen = ... }` edge trigger.
                 // Compiling it would mean inventing selection/commands/hasSelection scaffolding
                 // that buries the one line the prose is pointing at.
-                ["CommandBarFlyout(Border(selection), primaryCommands: commands)"] =
+                ["""
+                 CommandBarFlyout(Border(selection), primaryCommands: commands)
+                     with { IsOpen = hasSelection }
+                 """] =
                     "Two-line `with { IsOpen }` syntax fragment; scaffolding it would obscure the point.",
             },
 
@@ -140,22 +185,77 @@ public class InlineSnippetLedgerTests
                 // A counterexample that the prose, not a comment, marks as wrong: "This one looks
                 // like it checks both themes and cannot." The whole lesson is that the assertion is
                 // vacuous, so it must not be made to pass.
-                ["[Theory]"] =
+                ["""
+                 [Theory]
+                 [InlineData(ElementTheme.Light)]
+                 [InlineData(ElementTheme.Dark)]
+                 public void StatusBanner_renders_in_both_themes(ElementTheme theme)
+                 {
+                     var tree = StatusBanner("Saved", InfoBarSeverity.Success)
+                         .RequestedTheme(theme);
+
+                     // Vacuous: the scanner inspects accessibility metadata — names,
+                     // roles, labels — and never resolves a brush. Both cases return
+                     // the same findings, so a banner hardcoded to a light-only colour
+                     // passes just as happily as a correct one. The `theme` parameter
+                     // does not reach anything this assertion reads.
+                     Assert.Empty(AccessibilityScanner.Scan(tree));
+                 }
+                 """] =
                     "Deliberately vacuous test shown as a trap; the prose (not a comment) labels it wrong.",
             },
 
             ["hooks"] = new(StringComparer.Ordinal)
             {
-                ["public override Element Render()"] =
+                ["""
+                 public override Element Render()
+                 {
+                     var (a, setA) = UseState(0);
+                     if (a > 0)
+                         UseEffect(() => { ... }, a);  // WRONG: conditional hook
+                     return TextBlock($"{a}");
+                 }
+                 """] =
                     "Hook-order counterexample; the prose introduces it as the shape to avoid.",
             },
 
             ["hooks-internals"] = new(StringComparer.Ordinal)
             {
-                ["public static (string Value, Action<string> Set) UseDebouncedText("] =
+                ["""
+                 public static (string Value, Action<string> Set) UseDebouncedText(
+                     this RenderContext ctx, string initial, TimeSpan delay)
+                 {
+                     var (value, setValue) = ctx.UseState(initial);
+                     var (debounced, setDebounced) = ctx.UseState(initial);
+                     ctx.UseEffect(() =>
+                     {
+                         var cts = new CancellationTokenSource();
+                         _ = Task.Delay(delay, cts.Token).ContinueWith(
+                             _ => setDebounced(value),
+                             TaskContinuationOptions.OnlyOnRanToCompletion);
+                         return () => { cts.Cancel(); };
+                     }, value);
+                     return (debounced, setValue);
+                 }
+                 """] =
                     "Illustrative custom-hook sketch with no counterpart in src/ to point at.",
-                ["var (count, setCount) = UseState(0);"] =
-                    "Two user-code fragments explaining slot ordering; neither is a runnable program.",
+
+                // These two share a first line. Under the old first-line key a single entry
+                // covered both, so only one was ever actually reviewed.
+                ["""
+                 var (count, setCount) = UseState(0);
+                 var prevCount = UseRef(0);
+                 var previous = prevCount.Current;
+                 UseEffect(() => { prevCount.Current = count; }, count);
+                 """] =
+                    "Previous-value fragment explaining slot ordering; not a runnable program.",
+
+                ["""
+                 var (count, setCount) = UseState(0);
+                 return showCounter ? Button($"{count}", () => setCount(count + 1)) : TextBlock("hidden");
+                 """] =
+                    "The unconditional-hook fix paired with the conditional counterexample above it; "
+                    + "two lines of user code with no surrounding component to compile.",
             },
 
             ["reconciliation"] = new(StringComparer.Ordinal)
@@ -163,21 +263,39 @@ public class InlineSnippetLedgerTests
                 // Deliberate unstable-key counterexample paired with a compiled stable-key snippet.
                 // Compiling it under the docs analyzer gate would either fail or require changing the
                 // exact bug the prose is warning readers not to write.
-                ["// Unstable: changing the title changes the key, remounts the card,"] =
+                ["""
+                 // Unstable: changing the title changes the key, remounts the card,
+                 // loses any state attached via UseState inside Card
+                 ForEach(rows, row => Card(row).WithKey(row.Title))
+                 """] =
                     "Deliberate unstable-key counterexample; the lesson depends on leaving the bad key visible.",
             },
 
             ["input-and-gestures"] = new(StringComparer.Ordinal)
             {
                 // Labelled "// Before —" rather than "// Don't", so the heuristic does not catch it.
-                ["// Before — escapes the declarative surface and bypasses trampoline dispatch."] =
+                ["""
+                 // Before — escapes the declarative surface and bypasses trampoline dispatch.
+                 Rectangle().Set(r =>
+                 {
+                     r.PointerEntered += (_, _) => Hover();
+                     r.PointerExited += (_, _) => Unhover();
+                 });
+                 """] =
                     "The 'before' half of a migration pair; compiling it would trip REACTOR_EVENT_001 by design.",
             },
 
             ["migration/050-optional-t"] = new(StringComparer.Ordinal)
             {
                 // A migration guide's whole job is to show the shape that no longer compiles.
-                ["// Before"] =
+                ["""
+                 // Before
+                 int index = element.SelectedIndex;
+
+                 // After: choose the intent
+                 int tolerant = element.SelectedIndex.GetValueOrDefault(-1); // tolerate control-owned
+                 int asserted = element.SelectedIndex.Value;                 // require HasValue
+                 """] =
                     "Migration before/after pair: the 'before' half is the pre-Optional<T> API and cannot compile by design.",
             },
 
@@ -185,10 +303,26 @@ public class InlineSnippetLedgerTests
             {
                 // Intentional analyzer-diagnostic sample: both .Set shapes are shown because the rule
                 // reports them. Moving them into a doc app would make the analyzer gate fail by design.
-                ["// Both are lost when the pooled control is reused. Only the first one"] =
+                ["""
+                 // Both are lost when the pooled control is reused. Only the first one
+                 // was diagnosed before the attached shape was added.
+                 .Set(fe => fe.Margin = new Thickness(8))
+                 .Set(fe => AutomationProperties.SetName(fe, "Save"))
+                 """] =
                     "Deliberate REACTOR_POOL_001 diagnostic sample; it should remain uncompiled prose.",
             },
         };
+
+    /// <summary>
+    /// <see cref="AllowedInlineExamples"/> with every key run through <see cref="NormalizeBlock"/>.
+    /// The ledger keys are raw string literals, so they carry this file's CRLF endings while
+    /// template blocks are normalized to LF — comparing them raw makes every entry look stale.
+    /// </summary>
+    private static readonly Dictionary<string, HashSet<string>> AllowedNormalized =
+        AllowedInlineExamples.ToDictionary(
+            topic => topic.Key,
+            topic => new HashSet<string>(topic.Value.Keys.Select(NormalizeBlock), StringComparer.Ordinal),
+            StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Every hand-typed "copy this" example must be snippet-backed or explicitly excused.
@@ -202,8 +336,8 @@ public class InlineSnippetLedgerTests
         {
             foreach (var block in UnverifiedExamples(File.ReadAllText(path)))
             {
-                if (AllowedInlineExamples.TryGetValue(topic, out var allowed)
-                    && allowed.ContainsKey(block))
+                if (AllowedNormalized.TryGetValue(topic, out var allowed)
+                    && allowed.Contains(block))
                 {
                     continue;
                 }
@@ -236,10 +370,10 @@ public class InlineSnippetLedgerTests
                 live.Add($"{topic}\u0000{block}");
         }
 
-        var stale = AllowedInlineExamples
-            .SelectMany(t => t.Value.Keys.Select(k => (Topic: t.Key, Block: k)))
+        var stale = AllowedNormalized
+            .SelectMany(t => t.Value.Select(k => (Topic: t.Key, Block: k)))
             .Where(e => !live.Contains($"{e.Topic}\u0000{e.Block}"))
-            .Select(e => $"{e.Topic}: {e.Block}")
+            .Select(e => $"{e.Topic}: {e.Block.Split('\n')[0]}")
             .OrderBy(s => s, StringComparer.Ordinal)
             .ToList();
 
@@ -331,9 +465,18 @@ public class InlineSnippetLedgerTests
     }
 
     /// <summary>
-    /// The first non-empty line of every fenced C# block that is neither snippet-backed, a
-    /// signature listing, nor a labelled counterexample.
+    /// Every fenced C# block that is neither snippet-backed, a signature listing, nor a labelled
+    /// counterexample, normalized so it can be used as a ledger key.
     /// </summary>
+    /// <remarks>
+    /// This used to return only the block's *first non-empty line*. That made a ledger entry far
+    /// broader than the block it was written to excuse: keys like <c>[Theory]</c>,
+    /// <c>public override Element Render()</c>, <c>// Before</c> and
+    /// <c>var (count, setCount) = UseState(0);</c> are openers many unrelated blocks share, so one
+    /// entry silently authorised every future block in that topic starting the same way — and
+    /// <see cref="Ledger_Entries_All_Still_Match_A_Block"/> still passed, because *a* block matched.
+    /// Keying on the whole block makes each entry excuse exactly one example.
+    /// </remarks>
     private static IEnumerable<string> UnverifiedExamples(string templateText)
         => CSharpFence.Matches(templateText)
             // A snippet= fence is only expanded by DocAssembler when its body is EMPTY. A fence
@@ -348,8 +491,20 @@ public class InlineSnippetLedgerTests
             // A signature/reference listing is not code to copy; see IsSignatureListing.
             .Where(body => !IsSignatureListing(body))
             .Where(body => !CounterexampleLabel.IsMatch(body))
-            .Select(body => body.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0))
-            .Where(first => first is not null)!;
+            .Select(NormalizeBlock)
+            .Where(block => block.Length > 0);
+
+    /// <summary>
+    /// Canonical form of a fenced block: LF endings, no trailing whitespace per line, no leading or
+    /// trailing blank lines. Interior indentation is preserved because it is part of the example.
+    /// </summary>
+    internal static string NormalizeBlock(string body)
+    {
+        var lines = body.ReplaceLineEndings("\n").Split('\n').Select(l => l.TrimEnd()).ToList();
+        while (lines.Count > 0 && lines[0].Length == 0) lines.RemoveAt(0);
+        while (lines.Count > 0 && lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
+        return string.Join('\n', lines);
+    }
 
     private static IEnumerable<(string Topic, string Path)> Templates()
     {
