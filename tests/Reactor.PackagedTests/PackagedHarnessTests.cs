@@ -303,6 +303,37 @@ public class PackagedHarnessTests
             AppxLooseLayoutDeployment.ResolveOverrideDirectory(
                 Path.Join("tests", "Reactor.PackagedTests.Host")));
 
+    // ── Diagnostic stream composition ──────────────────────────────────
+
+    /// <summary>
+    /// Both host invocations quote the same composed text, so a failure that only writes to
+    /// stderr stays visible. The guard pass previously dropped stderr, which is precisely the
+    /// case with nothing on stdout to fall back to.
+    /// </summary>
+    [TestMethod]
+    public void CombineStreams_Appends_Stderr_Under_A_Labelled_Heading()
+    {
+        var combined = PackagedSelfTestBatch.CombineStreams("ok 1 Fixture", "Activation failed: 0x80073CF9");
+
+        StringAssert.Contains(combined, "ok 1 Fixture");
+        StringAssert.Contains(combined, "Activation failed: 0x80073CF9");
+        StringAssert.Contains(combined, "--- stderr ---");
+    }
+
+    /// <summary>
+    /// The failure mode that matters most: no TAP at all, stderr the only diagnostic.
+    /// </summary>
+    [TestMethod]
+    public void CombineStreams_Surfaces_Stderr_When_Stdout_Is_Empty() =>
+        StringAssert.Contains(
+            PackagedSelfTestBatch.CombineStreams(string.Empty, "The application could not be started."),
+            "The application could not be started.");
+
+    [TestMethod]
+    public void CombineStreams_Leaves_Stdout_Untouched_When_Stderr_Is_Empty() =>
+        Assert.AreEqual(
+            "ok 1 Fixture", PackagedSelfTestBatch.CombineStreams("ok 1 Fixture", string.Empty));
+
     // ── Manifest / constant parity ─────────────────────────────────────
 
     /// <summary>

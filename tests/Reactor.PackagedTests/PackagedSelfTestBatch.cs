@@ -68,9 +68,7 @@ public class PackagedSelfTestBatch
             var filter = ResolveFilter();
             var (stdout, stderr, exitCode, timedOut) = RunHost(alias, filter);
             _exitCode = exitCode;
-            _fullOutput = stdout;
-            if (!string.IsNullOrEmpty(stderr))
-                _fullOutput += "\n--- stderr ---\n" + stderr;
+            _fullOutput = CombineStreams(stdout, stderr);
 
             if (timedOut)
             {
@@ -110,13 +108,14 @@ public class PackagedSelfTestBatch
             if (!FilterSelects(filter, IdentityGuardFixture))
             {
                 var guard = RunHost(alias, IdentityGuardFixture);
-                _fullOutput += $"\n--- identity guard pass ---\n{guard.Stdout}";
+                var guardOutput = CombineStreams(guard.Stdout, guard.Stderr);
+                _fullOutput += $"\n--- identity guard pass ---\n{guardOutput}";
 
                 if (guard.TimedOut || !guard.Stdout.Contains("# Total failures:", StringComparison.Ordinal))
                 {
                     _initError =
                         "The identity-guard pass did not complete, so nothing establishes that this " +
-                        $"run had package identity.\n{Tail(guard.Stdout, 2000)}";
+                        $"run had package identity.\n{Tail(guardOutput, 2000)}";
                     return;
                 }
 
@@ -478,6 +477,17 @@ public class PackagedSelfTestBatch
 
     /// <summary>Fixture-level abort suffixes the runner appends to a TAP fixture name.</summary>
     private static readonly string[] AbortSuffixes = ["_CRASH", "_TIMEOUT"];
+
+    /// <summary>
+    /// Combines a host invocation's streams into the text every diagnostic quotes, so both
+    /// invocations report identically.
+    /// </summary>
+    /// <remarks>
+    /// stderr matters most exactly when stdout is useless: an activation or CLR failure
+    /// produces no TAP at all, so stderr is the only actionable output there is.
+    /// </remarks>
+    internal static string CombineStreams(string stdout, string stderr) =>
+        string.IsNullOrEmpty(stderr) ? stdout : $"{stdout}\n--- stderr ---\n{stderr}";
 
     /// <summary>
     /// Recognises a runner-level TAP line that names a known fixture which is not the one
