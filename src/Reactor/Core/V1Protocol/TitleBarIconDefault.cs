@@ -139,19 +139,30 @@ internal static class TitleBarIconDefault
     }
 
     /// <summary>
-    /// Re-resolves the inherited icon for an already-mounted title bar. Called by
-    /// <see cref="ReactorWindow"/> when the window's own icon changes, because that is
-    /// ambient state no element diff can see.
+    /// Re-resolves the inherited icon for an already-mounted title bar, against the
+    /// spec of the window that owns it. Called by <see cref="ReactorWindow"/> when the
+    /// window's own icon changes, because that is ambient state no element diff can see.
     /// </summary>
+    /// <param name="control">The mounted WinUI <c>TitleBar</c> to refresh.</param>
+    /// <param name="spec">
+    /// The owning window's spec. Passed in rather than read from
+    /// <c>ReactorApp.ActiveHostInternal</c> on purpose: <c>ReactorHost</c> scopes that
+    /// static around a <em>render</em>, but this runs from <c>ApplyChrome</c>, which an
+    /// app can reach at any time via <c>ReactorWindow.Update</c>. With two windows open,
+    /// resolving ambient state here hands the updating window whichever host happened to
+    /// be active — so updating the window that is <em>not</em> currently ambient would
+    /// write the other window's icon into its title bar.
+    /// </param>
     /// <remarks>
     /// No-op for a control this type never wrote to, and for a title bar whose element
     /// declared its own icon or opted out with <c>.NoIcon()</c> — those own the slot.
     /// </remarks>
-    internal static void ResyncInheritedIcon(Microsoft.UI.Xaml.Controls.TitleBar control)
+    internal static void ResyncInheritedIcon(
+        Microsoft.UI.Xaml.Controls.TitleBar control, WindowSpec spec)
     {
         if (!s_applied.TryGetValue(control, out var last) || last.ElementOwned) return;
 
-        var projected = ResolveDefault();
+        var projected = ResolveForSpec(spec);
         if (EqualityComparer<IconData?>.Default.Equals(last.Value, projected)) return;
 
         control.IconSource = IconResolver.ResolveIconSource(projected);

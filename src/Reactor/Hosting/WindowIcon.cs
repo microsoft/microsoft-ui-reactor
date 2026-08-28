@@ -193,7 +193,7 @@ public sealed class WindowIcon
             if (!TryResolveResourceUri(_source, out resolved))
             {
                 Debug.WriteLine(
-                    $"[Reactor] WindowIcon.Apply: '{_source}' names no asset under {AppContext.BaseDirectory}.");
+                    $"[Reactor] WindowIcon.TryResolvePath: '{_source}' names no asset under {AppContext.BaseDirectory}.");
                 return false;
             }
             return true;
@@ -201,7 +201,7 @@ public sealed class WindowIcon
 
         if (!TryResolveExistingPath(_source, out resolved))
         {
-            Debug.WriteLine($"[Reactor] WindowIcon.Apply: no icon file at '{_source}'.");
+            Debug.WriteLine($"[Reactor] WindowIcon.TryResolvePath: no icon file at '{_source}'.");
             return false;
         }
         return true;
@@ -340,7 +340,7 @@ public sealed class WindowIcon
         }
         catch (Exception ex) when (IsPathProbeFailure(ex))
         {
-            Debug.WriteLine($"[Reactor] WindowIcon.Apply: path probe failed for '{path}': {ex.Message}");
+            Debug.WriteLine($"[Reactor] WindowIcon.TryResolveExistingPath: path probe failed for '{path}': {ex.Message}");
             resolved = path;
             return true;
         }

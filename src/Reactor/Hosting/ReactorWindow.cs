@@ -698,7 +698,7 @@ public sealed partial class ReactorWindow : IDisposable
         // The window's icon is ambient state for a mounted TitleBar(...) element: it is
         // not part of the element, so no element diff can observe it changing. Push it,
         // the same way the caption height is pushed via SyncTitleBarControlHeight.
-        SyncTitleBarIcon();
+        SyncTitleBarIcon(spec);
     }
 
     /// <summary>
@@ -707,14 +707,19 @@ public sealed partial class ReactorWindow : IDisposable
     /// when the element declares its own icon (or opted out with <c>.NoIcon()</c>) —
     /// those own the slot.
     /// </summary>
-    private void SyncTitleBarIcon()
+    /// <param name="spec">
+    /// This window's spec. Passed down rather than resolved from the ambient active
+    /// host: <c>ApplyChrome</c> is reachable from <c>Update</c> at any time, so with two
+    /// windows open the ambient host is routinely some *other* window.
+    /// </param>
+    private void SyncTitleBarIcon(WindowSpec spec)
     {
         if (_titleBarControl is null || !_titleBarControl.TryGetTarget(out var control)) return;
         if (control is not Microsoft.UI.Xaml.Controls.TitleBar bar) return;
 
         try
         {
-            Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(bar);
+            Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(bar, spec);
         }
         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         {

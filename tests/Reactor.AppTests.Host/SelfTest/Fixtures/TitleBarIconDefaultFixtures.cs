@@ -574,4 +574,117 @@ internal static class TitleBarIconDefaultFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Two windows, two icons. The pull direction (a descriptor prop resolving
+    //  through ReactorApp.ActiveHostInternal) is per-window correct only because
+    //  ReactorHost scopes that static around each render. The push direction
+    //  runs from ReactorWindow.ApplyChrome, which is NOT inside a render scope —
+    //  an app can call win.Update(...) from anywhere — so a window has to resolve
+    //  its OWN spec there rather than whatever host happens to be active.
+    //  With a single window there is nothing to be wrong about; this is the only
+    //  arm that can tell the two apart.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultIsPerWindow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(90);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var iconA = global::System.IO.Path.Join(scratch, "WindowA.ico");
+                var iconB = global::System.IO.Path.Join(scratch, "WindowB.ico");
+                var iconC = global::System.IO.Path.Join(scratch, "WindowC.ico");
+                foreach (var p in new[] { iconA, iconB, iconC })
+                    global::System.IO.File.Copy(TestIcoPath, p, overwrite: true);
+
+                var compA = new BarComponent(static e => e);
+                var compB = new BarComponent(static e => e);
+                ReactorWindow? winA = null;
+                ReactorWindow? winB = null;
+                try
+                {
+                    winA = await OpenAndSettle(
+                        Spec("WinA") with { Icon = WindowIcon.FromPath(iconA) }, () => compA);
+                    winB = await OpenAndSettle(
+                        Spec("WinB") with { Icon = WindowIcon.FromPath(iconB) }, () => compB);
+
+                    H.Check("TitleBarIcon_PerWindow_BothMounted",
+                        compA.Bar is not null && compB.Bar is not null);
+                    if (compA.Bar is null || compB.Bar is null) return;
+
+                    var a = IconUri(compA.Bar);
+                    var b = IconUri(compB.Bar);
+                    Console.WriteLine($"# perwindow: A={a}");
+                    Console.WriteLine($"# perwindow: B={b}");
+
+                    H.Check($"TitleBarIcon_PerWindow_A_UsesOwnIcon (uri={a})",
+                        a is not null
+                        && a.LocalPath.EndsWith("WindowA.ico", StringComparison.OrdinalIgnoreCase));
+                    H.Check($"TitleBarIcon_PerWindow_B_UsesOwnIcon (uri={b})",
+                        b is not null
+                        && b.LocalPath.EndsWith("WindowB.ico", StringComparison.OrdinalIgnoreCase));
+                    H.Check("TitleBarIcon_PerWindow_TheyDiffer", a != b);
+
+                    // Update only B. A must not follow it, and B must land on its own
+                    // new icon rather than on whichever host happened to be active.
+                    winB.Update(winB.Spec with { Icon = WindowIcon.FromPath(iconC) });
+                    await winB.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var aAfter = IconUri(compA.Bar);
+                    var bAfter = IconUri(compB.Bar);
+                    Console.WriteLine($"# perwindow: A after={aAfter}");
+                    Console.WriteLine($"# perwindow: B after={bAfter}");
+
+                    H.Check($"TitleBarIcon_PerWindow_B_TracksItsOwnUpdate (uri={bAfter})",
+                        bAfter is not null
+                        && bAfter.LocalPath.EndsWith("WindowC.ico", StringComparison.OrdinalIgnoreCase));
+                    H.Check($"TitleBarIcon_PerWindow_A_Unaffected (uri={aAfter})",
+                        aAfter is not null
+                        && aAfter.LocalPath.EndsWith("WindowA.ico", StringComparison.OrdinalIgnoreCase));
+
+                    // The discriminating case. Updating B above proves little on its
+                    // own: B was opened last, so the ambient ActiveHostInternal was
+                    // already B's and a spec-vs-ambient mix-up would look identical to
+                    // correct behaviour. Update the EARLIER window instead, so the
+                    // window applying chrome is deliberately not the ambient one — that
+                    // is the only arrangement where reading ambient state instead of the
+                    // window's own spec produces a visibly wrong icon.
+                    var iconD = global::System.IO.Path.Join(scratch, "WindowD.ico");
+                    global::System.IO.File.Copy(TestIcoPath, iconD, overwrite: true);
+                    winA.Update(winA.Spec with { Icon = WindowIcon.FromPath(iconD) });
+                    await winA.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var aFinal = IconUri(compA.Bar);
+                    var bFinal = IconUri(compB.Bar);
+                    Console.WriteLine($"# perwindow: A final={aFinal}");
+                    Console.WriteLine($"# perwindow: B final={bFinal}");
+
+                    H.Check($"TitleBarIcon_PerWindow_A_TracksOwnUpdateWhileNotAmbient (uri={aFinal})",
+                        aFinal is not null
+                        && aFinal.LocalPath.EndsWith("WindowD.ico", StringComparison.OrdinalIgnoreCase));
+                    H.Check($"TitleBarIcon_PerWindow_B_UnaffectedByAUpdate (uri={bFinal})",
+                        bFinal is not null
+                        && bFinal.LocalPath.EndsWith("WindowC.ico", StringComparison.OrdinalIgnoreCase));
+                }
+                finally
+                {
+                    await CloseAndSettle(winB);
+                    await CloseAndSettle(winA);
+                }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
 }
