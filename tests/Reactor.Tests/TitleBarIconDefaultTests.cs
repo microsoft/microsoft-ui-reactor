@@ -188,8 +188,7 @@ public class TitleBarIconDefaultTests : IDisposable
         finally
         {
             TitleBarIconDefault.SetBaseDirectoryForTests(_root);
-            global::System.IO.File.Delete(asset);
-            if (created) global::System.IO.Directory.Delete(assets);
+            CleanUp(asset, created ? assets : null);
         }
     }
 
@@ -220,9 +219,29 @@ public class TitleBarIconDefaultTests : IDisposable
         finally
         {
             TitleBarIconDefault.SetBaseDirectoryForTests(_root);
-            global::System.IO.File.Delete(asset);
-            global::System.IO.Directory.Delete(nested);
-            if (created) global::System.IO.Directory.Delete(assets);
+            CleanUp(asset, nested, created ? assets : null);
+        }
+    }
+
+    /// <summary>
+    /// Best-effort cleanup of scratch files created under the test binary's own output
+    /// directory. Deliberately swallowing: this runs in a <c>finally</c>, so a throw here
+    /// would replace the real assertion failure with a cleanup error and hide what
+    /// actually broke. Directories are passed innermost-first, and <c>null</c> entries
+    /// mean "this one already existed, leave it alone".
+    /// </summary>
+    private static void CleanUp(string file, params string?[] directories)
+    {
+        try { global::System.IO.File.Delete(file); }
+        catch (global::System.IO.IOException) { }
+        catch (UnauthorizedAccessException) { }
+
+        foreach (var dir in directories)
+        {
+            if (dir is null) continue;
+            try { global::System.IO.Directory.Delete(dir); }
+            catch (global::System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 

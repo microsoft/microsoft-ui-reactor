@@ -284,6 +284,16 @@ internal static class TitleBarIconDefaultFixtures
             try
             {
                 TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+
+                // Make the negative explicit. The scratch root is freshly created under a
+                // GUID name, so nothing can pre-exist in it — but "the convention probe
+                // finds nothing here" is the entire basis for reading a null IconSource
+                // below as evidence about the feature, so assert it rather than imply it.
+                var scratchConvention = global::System.IO.Path.Join(scratch, "Assets", "AppIcon.ico");
+                var scratchHasIcon = global::System.IO.File.Exists(scratchConvention);
+                Console.WriteLine($"# zero: scratch convention present={scratchHasIcon} ({scratchConvention})");
+                H.Check("TitleBarIcon_Zero_ScratchRootHasNoConventionAsset", !scratchHasIcon);
+
                 var comp = new BarComponent(static e => e);
                 var win = await OpenAndSettle(Spec("Zero"), () => comp);
                 try
