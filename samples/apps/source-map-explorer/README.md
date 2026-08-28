@@ -59,12 +59,14 @@ devtools session controls.
 
 Toggling needs no remount. The flag governs only *new* stamps, so after flipping it
 off an unchanged `TextBlock` produces an element whose `CallSite` is `null` while the
-mounted one's is not. Those differ, so `Reconciler.CallSiteChangedOnSkip` declines the
-shallow skip and refreshes the control's back-pointer in place. An earlier version of
-this sample forced a generation-key remount because without that arm the count read
-`8 of 14` — the retained location was still correct, but it made the gate look
-half-broken. The selftest `SourceMapReadPath_FlagOffClears` pins the behaviour that
-made the workaround unnecessary.
+mounted one's is not. The two are still shallow-equal — `ShallowEquals` ignores
+`CallSite` — so the reconciler still takes its skip path; `CallSiteChangedOnSkip` is
+evaluated inside that skip arm and refreshes the control's back-pointer in place,
+without a full update. An earlier version of this sample forced a generation-key
+remount because without that refresh the count read `8 of 14` — the retained location
+was still correct, but it made the gate look half-broken. The selftest
+`SourceMapReadPath_FlagOffClears` pins the behaviour that made the workaround
+unnecessary.
 
 ## Why the leaves matter
 

@@ -321,12 +321,13 @@ internal static class SourceMapReadPathTests
     ///
     /// <para>This is the mechanism the source-map-explorer sample's toggle relies on.
     /// With the flag off the interceptor returns the element unstamped, so the new
-    /// element's <c>CallSite</c> is null while the mounted one's is not — different,
-    /// therefore <c>Reconciler.CallSiteChangedOnSkip</c> declines the shallow skip and
-    /// refreshes the control's back-pointer. Without that arm the elements are
-    /// shallow-equal, the skip is taken, and the control keeps reporting the location
-    /// it was mounted with — which is what made the sample read "8 of 14 mapped"
-    /// instead of "0 of 14" and forced a generation-key remount to paper over.</para>
+    /// element's <c>CallSite</c> is null while the mounted one's is not. The elements
+    /// are still shallow-equal — <c>ShallowEquals</c> ignores <c>CallSite</c> — so the
+    /// skip is TAKEN, and <c>Reconciler.CallSiteChangedOnSkip</c> is evaluated inside
+    /// the skip arm to refresh the control's back-pointer without a full update. Without
+    /// that refresh the control keeps reporting the location it was mounted with, which
+    /// is what made the sample read "8 of 14 mapped" instead of "0 of 14" and forced a
+    /// generation-key remount to paper over.</para>
     /// </summary>
     internal class FlagOffClearsTheReportedLocation(Harness h) : SelfTestFixtureBase(h)
     {

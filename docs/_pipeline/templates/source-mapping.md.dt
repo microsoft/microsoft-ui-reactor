@@ -105,23 +105,30 @@ site is edited, which is what lets it cover the `params Element?[]
 children` family (`VStack`, `HStack`, `Grid`, …) that `[CallerFilePath]`
 structurally cannot reach.
 
-**You do not turn it on.** It follows the build configuration, the same
-way WPF gates XAML source info behind `XamlDebuggingInformation`:
+**You do not turn it on.** It follows the build configuration by *default*, the
+same way WPF gates XAML source info behind `XamlDebuggingInformation`:
 
-| Configuration | Interceptors generated | Locations populated |
+| Configuration | Interceptors generated (default) | Locations populated |
 |---|---|---|
-| `Debug` | yes | when the process runs with the devtools verb |
+| `Debug` | yes | when the runtime flag is on (see below) |
 | `Release` | no | never — and no source paths ship in the binary |
 
-Override with `<ReactorSourceMap>false</ReactorSourceMap>` (or `true`) if
-you need to. Generation costs roughly 0.5–0.6 ms per intercepted call
-site; on the Reactor gallery (1,660 call sites) that is about one second
-on an incremental rebuild.
+These are defaults, not a hard configuration lock: the generator is gated on the
+`ReactorSourceMap` property alone, so an explicit
+`<ReactorSourceMap>true</ReactorSourceMap>` generates interceptors in Release too.
+**That embeds mapped source paths in the shipped binary**, so only opt in for a
+Release build you do not distribute — a profiling or diagnostic drop. The reverse
+override, `<ReactorSourceMap>false</ReactorSourceMap>`, turns it off in Debug.
+Generation costs roughly 0.5–0.6 ms per intercepted call site; on the Reactor
+gallery (1,660 call sites) that is about one second on an incremental rebuild.
 
-A Debug build that never runs devtools pays nothing at runtime: the
+A Debug build that never turns the runtime flag on pays nothing at runtime: the
 interceptor checks `ReactorSourceMap.Enabled` and returns the original
 element untouched, so per-render allocation is identical to a build with
-no generator at all.
+no generator at all. The devtools verb sets that flag for you; a host embedding
+its own inspector can set `ReactorSourceMap.Enabled` directly, and a process that
+never goes through the CLI (a benchmark host, a repro) can start with
+`REACTOR_SOURCEMAP=1` in the environment.
 
 Read a location back from any realized control:
 

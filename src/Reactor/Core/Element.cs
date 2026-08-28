@@ -53,9 +53,17 @@ public abstract record Element
     /// ships as a Release-built NuGet package, so a <c>#if DEBUG</c> gate would
     /// make the property invisible to consumers). The <em>cost</em> is what is
     /// gated: nothing writes this slot unless a source-map provider is wired
-    /// into the consuming compilation, and the reconciler only starts tagging
-    /// leaf controls for readback when
-    /// <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/> is set.</para>
+    /// into the consuming compilation, and the generated interceptors check
+    /// <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/>
+    /// before stamping.</para>
+    ///
+    /// <para>Tagging is NOT keyed on that runtime flag. A stamped element carries this
+    /// value in its <see cref="Extensions"/> bucket, and <c>Reconciler.NeedsTag</c>
+    /// already tags anything with a non-null bucket — so the back-pointer follows the
+    /// stamp, not the flag. A hand-assigned <c>CallSite</c> is therefore tagged and
+    /// readable even with the flag off (see the <c>HandStampedLeafIsTaggedWithFlagOff</c>
+    /// selftest), and an element the provider never reached stays untagged and reports
+    /// no location rather than a wrong one.</para>
     ///
     /// <para>Populated per call site, so it is a compile-time constant for a
     /// given DSL invocation and survives fluent modifier chains automatically
