@@ -203,6 +203,42 @@ skips it outright, so a compile with that flag leaves every committed screenshot
 byte-identical — the CI `docs-build` job proves this on every PR with
 `git status --porcelain -- docs/guide/images` immediately after the compile.
 
+#### Capture at 150% display scaling
+
+Screenshots are captured **only on a contributor's machine** — every workflow
+runs `--no-screenshots`, and the `docs-build` gate asserts capture never writes
+in CI. So the image dimensions committed to this repo are a property of whoever
+last ran capture, not of a build server.
+
+Capture at **150%** display scaling. A doc app's `doc-manifest.yaml` declares a
+window size in *logical* pixels, so the captured PNG is that size times the
+scale factor: `v1-protocol` declares `width: 520` and its committed
+`led-indicator.png` is 640px wide at 125%, 766px at 150%.
+
+That number is a convention, not a law of the pipeline — it was chosen because
+it is what most of the corpus already used and it renders sharply on modern
+displays. What matters is that it is *written down*: before this section existed
+the corpus silently mixed scales (`docking` and `v1-protocol` at 125%,
+`win2d-canvas` at 150%), because nothing told anyone what to use. If you
+regenerate a page's images at a different scale, that page becomes inconsistent
+with the rest of the docset for no reason a reader can see.
+
+Check your scale before capturing (Settings → System → Display → Scale), and
+regenerate a topic with:
+
+```powershell
+# one topic
+dotnet run --project src/Reactor.Cli -- docs compile --topic layout
+
+# one image (the ref must belong to --topic, or omit --topic entirely)
+dotnet run --project src/Reactor.Cli -- docs compile --screenshots layout/card
+```
+
+Capture needs an **interactive desktop** — it launches each doc app and
+screenshots its window. Over RDP with no console session, or on a locked
+machine, Phase 3 reports `N failed screenshot capture(s)` and leaves the
+existing images untouched rather than writing blanks.
+
 It is *not* the only phase that writes under `docs/guide/images/`, and the
 distinction matters if you are reasoning about that directory rather than about
 screenshots. Phase 5.5 (diagrams) writes there **three** ways: it copies
