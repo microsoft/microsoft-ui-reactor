@@ -473,11 +473,19 @@ Write-Dbg "Local nupkg feed: $feed"
 # apphost) succeeds. The packed IL itself is platform-portable.
 Write-Dbg "Host arch resolved to: $hostArch"
 
+# Stamp a unique, monotonically-increasing local version. Get-ReactorLocalCliVersion
+# (tools/BootstrapFeedResolver.ps1) documents why the encoding looks the way it
+# does; it lives there rather than inline so its shape, bounds, and ordering are
+# covered by tests/vs_reactor/ci/BootstrapFeedResolver.Tests.ps1.
+$cliLocalVersion = Get-ReactorLocalCliVersion
+Write-Dbg "Local mur version stamp: $cliLocalVersion"
+
 $cliPackArgs = @(
     'pack',
     (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj'),
     '-c', $Configuration,
     "-p:Platform=$hostArch",
+    "-p:Version=$cliLocalVersion",
     '-o', $feed,
     '--nologo', '-v:m'
 )
@@ -510,7 +518,8 @@ if ($SkipMurInstall) {
     $toolArgs = Get-ReactorToolArguments `
         -Feed $feed `
         -NuGetConfig $effectiveNuGetConfig `
-        -NuGetSource $effectiveNuGetSource
+        -NuGetSource $effectiveNuGetSource `
+        -Version $cliLocalVersion
     if ($existing) {
         Write-Dbg "Existing global tool detected ($($existing.Line.Trim())); using 'dotnet tool update'"
         & dotnet tool update @toolArgs
@@ -533,6 +542,54 @@ if ($SkipMurInstall) {
             Write-Dbg "$dotnetTools already on current-process PATH"
         }
     }
+
+    # Prove the binary on PATH is the one we just built.
+    #
+    # The exit-code check above cannot detect a stale tool: a no-op `dotnet
+    # tool update` exits 0. That is exactly how installs drifted months behind
+    # HEAD while every bootstrap run reported success. The SDK appends the
+    # source revision to AssemblyInformationalVersion, so `mur --version`
+    # prints `mur <ver>+<40-hex-sha>` — compare that against HEAD.
+    #
+    # git is resolved via Get-Command rather than invoked speculatively: under
+    # $ErrorActionPreference = 'Stop' a missing executable raises a terminating
+    # CommandNotFoundException, so `& git ...` would abort bootstrap instead of
+    # reaching the non-fatal warning below.
+    $expectedSha = $null
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $expectedSha = & git -C $repoRoot rev-parse HEAD 2>$null
+        if ($LASTEXITCODE -ne 0) { $expectedSha = $null }
+    }
+
+    # Collect the output fully before inspecting it. Piping a native command
+    # straight into `Select-Object -First 1` closes the pipeline early, which
+    # can surface as a broken pipe and leaves $LASTEXITCODE non-deterministic —
+    # so the exit code is captured from the unpiped call.
+    $murOutput = & mur --version 2>$null
+    $murExit = $LASTEXITCODE
+    $murVersionLine = @($murOutput) | Select-Object -First 1
+
+    # A `mur` that runs but fails is a broken install, not an unverifiable one.
+    # Falling through to the warning below would mask exactly the class of
+    # defect this block exists to catch.
+    if ($murExit -ne 0) {
+        Fail ("The installed ``mur`` failed to run (``mur --version`` exited $murExit). " +
+              "The global tool is present but broken. Run: dotnet tool uninstall -g Microsoft.UI.Reactor.Cli, then re-run ./bootstrap.ps1.")
+    }
+
+    if ($expectedSha -and $murVersionLine -match '\+([0-9a-fA-F]{40})') {
+        $installedSha = $Matches[1]
+        if ($installedSha -ne $expectedSha) {
+            Fail ("Installed mur reports revision $($installedSha.Substring(0,8)) but HEAD is $($expectedSha.Substring(0,8)). " +
+                  "The global tool was not replaced. Run: dotnet tool uninstall -g Microsoft.UI.Reactor.Cli, then re-run ./bootstrap.ps1.")
+        }
+        Write-Ok "mur verified at revision $($expectedSha.Substring(0,8)) (version $cliLocalVersion)"
+    } else {
+        # Non-fatal: a shallow/exported tree has no git, and a consumer build
+        # may strip the revision suffix. Say so rather than implying success.
+        Write-Host "    [warn] Could not verify the installed mur revision (mur --version returned '$murVersionLine')." -ForegroundColor Yellow
+    }
+
     Write-Ok "mur installed as global tool (also on this shell's PATH)"
 }
 

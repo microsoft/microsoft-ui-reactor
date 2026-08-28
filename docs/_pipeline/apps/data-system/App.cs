@@ -5,8 +5,10 @@ using Microsoft.UI.Reactor.Data.Providers;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Xaml;
 using System.Collections.ObjectModel;
+// <snippet:imports>
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Advanced.Factories;
+// </snippet:imports>
 
 ReactorApp.Run<DataSystemApp>("Data System", width: 900, height: 600
 );

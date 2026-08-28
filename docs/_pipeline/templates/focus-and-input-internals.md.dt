@@ -226,32 +226,7 @@ it. That containment is asserted by the
 What a dialog *does* need is the announcement, so the screen reader is
 told it opened:
 
-```csharp
-public override Element Render()
-{
-    var (open, setOpen) = UseState(false);
-    var announce = UseAnnounce();
-
-    return VStack(
-        announce.Region,
-        Button("Delete…", () => setOpen(true)),
-        ContentDialog(
-            "Confirm delete",
-            TextBlock("Are you sure?"),
-            primaryButtonText: "Delete")
-        with
-        {
-            IsOpen = open,
-            CloseButtonText = "Cancel",
-            OnOpened = () => announce.Announce("Confirm delete dialog opened", assertive: true),
-            OnClosed = result =>
-            {
-                if (result == ContentDialogResult.Primary) Delete();
-                setOpen(false);
-            },
-        }
-    );
-}
+```csharp snippet="focus-and-input-internals/dialog-announcement"
 ```
 
 Note that the dialog is *controlled*: `IsOpen` is a field on the element
@@ -263,20 +238,7 @@ unmount machinery behind the element lifecycle.
 `UseFocusTrap` is for modals you build **in-tree** — an overlay `Grid`
 or `Border` layered over the page rather than hosted in a popup:
 
-```csharp
-var (open, setOpen) = UseState(false);
-var trap = this.UseFocusTrap(isActive: open);
-
-return VStack(
-    Button("Edit…", () => setOpen(true)),
-    open
-        ? Border(VStack(
-              TextBlock("Inline editor"),
-              Button("Close", () => setOpen(false))))
-            .Background(Theme.CardBackground)
-            .FocusTrap(trap)
-        : Empty()
-);
+```csharp snippet="focus-and-input-internals/inline-focus-trap"
 ```
 
 The `UseFocusTrap(open)` call evaluates the active flag on every

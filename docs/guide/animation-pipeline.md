@@ -182,7 +182,8 @@ public override Element Render()
 {
     var (show, setShow) = UseState(false);
     return VStack(
-        Button(show ? "Hide" : "Show", () => setShow(!show)),
+        Button(show ? "Hide" : "Show", () => setShow(!show))
+            .AutomationName(show ? "Hide conditional transition" : "Show conditional transition"),
         show
             ? Card(TextBlock("Hello")).Transition(Transition.Fade + Transition.Slide(Edge.Top))
             : null

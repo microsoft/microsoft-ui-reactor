@@ -206,8 +206,37 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   they disappear before investigating them independently.
 - **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
   XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Reactor.dll' ... used by another process`. If it still races under
-  parallel WinUI builds, prebuild `src/Reactor` alone first, then add `-m:1`
-  `-nodereuse:false` and `$env:MSBUILDDISABLENODEREUSE='1'`. (`-p:CI=true` also skips it.)
+  parallel WinUI builds, prebuild `src/Reactor` alone first, then escalate **on the build
+  command only** — `-m:1 -nodereuse:false` (or `$env:MSBUILDDISABLENODEREUSE='1'`) — and run
+  the suite separately with `--no-build`. (`-p:CI=true` also skips SignaturesGen.)
+  ```powershell
+  dotnet build src/Reactor/Reactor.csproj -p:Platform=x64 -m:1 -nodereuse:false
+  dotnet build tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+  dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64
+  ```
+- **Never append an MSBuild-only switch to `dotnet test`** (issue #1140). `-m:1`,
+  `-nodereuse:false`, `--nologo`, `-warnaserror` and friends are *not* `dotnet test`
+  options, and anything `dotnet test` does not recognise is forwarded to the **test
+  executable**. That forwarding is normal — it is how `--filter-class`, `--parallel` and
+  `--report-trx` reach the runner — but an MSBuild-only switch is recognised by *neither*
+  layer, so MTP rejects it and exits **5 (`InvalidCommandLine`)** before running anything.
+  **The rejected-option message is never surfaced**, so the only signals are the exit code
+  and a summary that reads green in prose:
+  ```text
+  ...\Reactor.Tests.dll (net10.0-windows10.0.22621.0) Zero tests ran
+  Test run summary: Zero tests ran
+    error: 1
+    total: 0   failed: 0   succeeded: 0   skipped: 0
+  ```
+  The reliable tell is the module label: a run that actually started prints the
+  handshake-derived `net10.0|x64`, so the full `net10.0-windows10.0.22621.0` means the test
+  host died before its handshake. Exit 5 is *invalid command line*, **not** MTP's zero-tests
+  policy (that is exit 8). `-p:…` **is** a real `dotnet test` option, which is why
+  `-p:SkipSignaturesGen=true` and `-p:Platform=x64` are safe there; measured on this tree,
+  `$env:MSBUILDDISABLENODEREUSE='1'` is also safe, because an environment variable is not an
+  argv token. Note `dotnet test --help` is not a reliable safe-list — `-t:`/`-target:` and
+  `--property` are accepted but unlisted. See
+  [`TESTING.md`](TESTING.md#msbuild-switches-are-not-dotnet-test-switches).
 - **Fast selftest loop** (TAP `ok`/`not ok`): `dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter "<Prefix>"`.
 - **Headless unit tests cannot construct any `Microsoft.UI.Xaml` object** — control, brush,
   geometry, `BitmapImage`, or **`AutomationPeer`-derived** type — you get a `COMException`.

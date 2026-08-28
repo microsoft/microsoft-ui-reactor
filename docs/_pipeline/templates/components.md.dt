@@ -190,14 +190,8 @@ with their own hook state:
 
 You can also use a function component as the app root:
 
-<!-- ai:lock -->
-```csharp
-ReactorApp.Run("Title", ctx => {
-    var (n, setN) = ctx.UseState(0);
-    return TextBlock($"{n}");
-}, width: 400, height: 300);
+```csharp snippet="components/function-root"
 ```
-<!-- /ai:lock -->
 
 ## Composition
 

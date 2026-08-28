@@ -3,8 +3,10 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Reactor.Charting.Accessibility;
+// <snippet:imports>
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Charting.Charts;
+// </snippet:imports>
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<ChartingApp>("Charting", width: 700, height: 800

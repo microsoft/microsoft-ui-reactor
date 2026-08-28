@@ -204,8 +204,7 @@ keyed child reconciler; two elements with different keys at the same
 position are treated as different elements (force unmount + mount).
 Without a key, identity follows position.
 
-```csharp
-ForEach(items, item => Card(item).WithKey(item.Id))
+```csharp snippet="collections/keyed-foreach"
 ```
 
 Use keys when:
@@ -248,9 +247,12 @@ resolve through the tag at all.
 ```csharp snippet="source:src/Reactor/Core/Element.cs#click-trampoline"
 ```
 
-```csharp
-// Mount / Update: refresh the tag, but only when something will read it
-Reconciler.SetElementTagIfNeeded(control, newElement);
+The descriptor adapter refreshes that live tag on both mount and update:
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/V1HandlerAdapter.cs#element-tag-refresh-mount"
+```
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/V1HandlerAdapter.cs#element-tag-refresh-update"
 ```
 
 Tagging is allocation-gated. `NeedsTag(element)` is true when the
@@ -289,10 +291,10 @@ A keyed list whose items carry per-row state (selection, expansion,
 in-flight load) needs the key to stay stable across re-renders. The
 typical mistake is to derive the key from a value that can change:
 
-```csharp
-// Stable: row identity persists across edits
-ForEach(rows, row => Card(row).WithKey(row.Id))
+```csharp snippet="collections/stable-row-key"
+```
 
+```csharp
 // Unstable: changing the title changes the key, remounts the card,
 // loses any state attached via UseState inside Card
 ForEach(rows, row => Card(row).WithKey(row.Title))

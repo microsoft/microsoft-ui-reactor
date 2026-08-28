@@ -435,8 +435,8 @@ content that isn't a menu — all of them are popups.
 
 The popup itself does not provide a focus trap or an ARIA dialog role.
 For modal-feeling popups, wrap the content in your own focus management
-(`UseFocusTrap` from [accessibility.md](accessibility.md)) and set
-`AutomationProperties.Role = Dialog` on the root through `.Set(...)`.
+(`UseFocusTrap` from [accessibility.md](accessibility.md)) and apply
+dialog semantics to the root with `.Semantics(role: "dialog")`.
 For non-modal popups (tooltips, hover cards), neither is needed.
 
 WinUI primitives reference: [Popup class](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.primitives.popup).
@@ -644,7 +644,7 @@ row's context. The keyed `ListView<T>` overload takes a `Func<T, string>`
 key selector, so project non-string ids to a string:
 
 ```csharp
-ListView(items, x => x.Id.ToString(), (item, _) =>
+ListView(items, item => item.Id.ToString(), (item, _) =>
     MenuFlyout(
         RowContent(item),
         MenuItem(deleteCommand, item),

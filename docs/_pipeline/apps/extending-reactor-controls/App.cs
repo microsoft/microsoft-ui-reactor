@@ -176,3 +176,120 @@ class ExtendingApp : Component
     }
 }
 // </snippet:star-meter-usage>
+
+class InfoBarEdgeTriggeredExample : Component
+{
+    public override Element Render()
+    {
+        // <snippet:infobar-edge-triggered>
+        var (showBanner, setShowBanner) = UseState(true);
+
+        return VStack(
+            InfoBar("Saved", "Your changes were saved.").IsClosable() with
+            {
+                IsOpen  = showBanner,
+                // Without this the dismissal never reaches app state, so a later
+                // `setShowBanner(true)` is a no-op — it is already true.
+                OnClosed = () => setShowBanner(false),
+            },
+            Button("Show again", () => setShowBanner(true)));
+        // </snippet:infobar-edge-triggered>
+    }
+}
+
+static class ReferenceDescriptorExample
+{
+    public static ControlDescriptor<ReferenceDemoElement, ReferenceDemoControl> AddReferenceEntries(
+        ControlDescriptor<ReferenceDemoElement, ReferenceDemoControl> descriptor)
+    {
+        // <snippet:reference-properties>
+        descriptor.Reference<FrameworkElement>(
+            get: static e => e.Target,
+            set: static (c, target) => c.Target = target);
+
+        descriptor.ReferenceList<FrameworkElement>(
+            get: static e => e.Related,
+            apply: static (c, targets) =>
+            {
+                c.Related.Clear();
+                foreach (var target in targets)
+                    c.Related.Add(target);
+            });
+        // </snippet:reference-properties>
+
+        return descriptor;
+    }
+}
+
+sealed record ReferenceDemoElement : Element
+{
+    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? Target { get; init; }
+    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? Related { get; init; }
+}
+
+sealed partial class ReferenceDemoControl : WinUI.Control
+{
+    public FrameworkElement? Target { get; set; }
+    public List<FrameworkElement> Related { get; } = [];
+}
+
+static class GlobalRegistrationExample
+{
+    private static void RegisterGlobalButtonOverride()
+    {
+        // <snippet:global-registration>
+        ControlRegistry.Register<ButtonElement, Microsoft.UI.Xaml.Controls.Button>(
+            static () => new MyButtonHandler());
+        // </snippet:global-registration>
+    }
+}
+
+sealed class MyButtonHandler : IElementHandler<ButtonElement, Microsoft.UI.Xaml.Controls.Button>
+{
+    public Microsoft.UI.Xaml.Controls.Button Mount(MountContext ctx, ButtonElement element) =>
+        new();
+
+    public void Update(
+        UpdateContext ctx,
+        ButtonElement oldEl,
+        ButtonElement newEl,
+        Microsoft.UI.Xaml.Controls.Button control)
+    {
+    }
+}
+
+static class PerHostRegistrationExample
+{
+    private static void RegisterEditorHost()
+    {
+        // <snippet:per-host-registration>
+        ReactorApp.Run<EditorApp>("Monaco Editor", configure: host =>
+        {
+            host.Reconciler.RegisterType<MonacoEditorElement, MonacoEditor>(
+                mount: static (r, el, requestRerender) => new MonacoEditor { Text = el.Text },
+                update: static (r, oldEl, newEl, editor, requestRerender) =>
+                {
+                    if (newEl.Text != oldEl.Text) editor.Text = newEl.Text;
+                    return null;   // null = the same control was patched in place
+                },
+                unmount: static (r, editor) => editor.Dispose());
+        });
+        // </snippet:per-host-registration>
+    }
+}
+
+sealed record MonacoEditorElement(string Text) : Element;
+
+sealed partial class MonacoEditor : WinUI.Control, IDisposable
+{
+    public string Text { get; set; } = string.Empty;
+
+    public void Dispose()
+    {
+    }
+}
+
+sealed class EditorApp : Component
+{
+    public override Element Render() => new MonacoEditorElement("editor text");
+}

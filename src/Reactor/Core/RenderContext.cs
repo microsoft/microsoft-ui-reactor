@@ -205,6 +205,7 @@ public sealed class RenderContext
     /// <paramref name="threadSafe"/>: <c>true</c> for locked in-place updates that
     /// serialize many concurrent writers without an intervening UI tick.
     /// </summary>
+    // <snippet:use-reducer-slot>
     public (T Value, Action<Func<T, T>> Update) UseReducer<T>(T initialValue, bool threadSafe = false)
     {
         if (_hookIndex >= _hooks.Count)
@@ -275,6 +276,7 @@ public sealed class RenderContext
         }
         return Updater;
     }
+    // </snippet:use-reducer-slot>
 
     /// <summary>
     /// Declares a piece of state managed by a reducer function (like Redux).
@@ -788,6 +790,7 @@ public sealed class RenderContext
     /// <summary>
     /// Returns a mutable ref object that persists across renders.
     /// </summary>
+    // <snippet:use-ref-slot>
     public Ref<T> UseRef<T>(T initialValue = default!)
     {
         if (_hookIndex >= _hooks.Count)
@@ -804,6 +807,7 @@ public sealed class RenderContext
                 "Hooks must be called in the same order every render.");
         return hook.Value;
     }
+    // </snippet:use-ref-slot>
 
     // ════════════════════════════════════════════════════════════════
     //  Persisted state hooks

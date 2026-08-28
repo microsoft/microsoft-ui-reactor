@@ -80,44 +80,32 @@ it belongs in a self-test fixture, not in `tests/Reactor.Tests`.
 
 ## Unit-level fixtures
 
-Reactor's component lifecycle (`BeginRender` → `Render` → `FlushEffects` → `RunCleanups`)
-is exposed through the framework's internal API and used directly by
-`ComponentModelIntegrationTests` in `tests/Reactor.Tests/`. The pattern
-is small enough to fit in a helper inside your test class:
+> **This section is for tests inside this repository.** Reactor's component
+> lifecycle (`BeginRender` → `Render` → `FlushEffects` → `RunCleanups`),
+> `Component.Context` and `ContextScope` are **internal**. They are visible to
+> `tests/Reactor.Tests` only because `src/Reactor/Reactor.csproj` grants it
+> `InternalsVisibleTo`, so the helper below **will not compile in a consumer test
+> project** — it is shown to explain how Reactor's own fixtures are written, not
+> as code to copy into your app's tests. To test your own components from
+> outside the repo, use the public surface shown in
+> [Structural assertions](#structural-assertions-on-the-element-tree),
+> or drive a real control from a self-test.
 
-```csharp
-private readonly ContextScope _scope = new();   // internal
+The lifecycle is used directly by `ContextSystemSelfHostTests` and
+`ComponentModelIntegrationTests` in `tests/Reactor.Tests/`, wrapped in a
+per-class helper:
 
-private Element Mount(Component component,
-    Dictionary<ContextBase, object?>? ctx = null,
-    Action? onRerender = null)
-{
-    if (ctx is { Count: > 0 }) _scope.Push(ctx);
-    try
-    {
-        component.Context.BeginRender(onRerender ?? (() => { }), _scope);
-        var el = component.Render();
-        component.Context.FlushEffects();
-        return el;
-    }
-    finally
-    {
-        if (ctx is { Count: > 0 }) _scope.Pop(ctx.Count);
-    }
-}
-
-private Element Rerender(Component c) => Mount(c);
-private void Unmount(Component c) => c.Context.RunCleanups();
+```csharp snippet="source:tests/Reactor.Tests/ContextSystemSelfHostTests.cs#component-mount-helper"
 ```
 
-`Mount` returns the root element. The test then drives state via the
+The helper returns the root element. The test then drives state via the
 component's own public surface (a property the component exposes, or a
-captured setter from `UseState`), calls `Rerender`, and asserts.
-`Unmount` runs the cleanup chain so effects with `dispose` lambdas
-release their resources before the next test starts. Pushing and
-popping the `ContextScope` in a `try/finally` matters: a test that
-throws mid-render would otherwise leak its context values into the
-next test in the class.
+captured setter from `UseState`), calls the helper again to re-render,
+and asserts. When the fixture owns effects with `dispose` lambdas, call
+`component.Context.RunCleanups()` before the next test starts. Pushing
+and popping the `ContextScope` in a `try/finally` matters: a test that
+throws mid-render would otherwise leak its context values into the next
+test in the class.
 
 The full pattern is in `ComponentModelIntegrationTests.cs` — that file
 mounts a component with state + context + effects, drives 5 distinct
@@ -159,17 +147,7 @@ instead of stringifying the whole tree — a structural assertion names
 the property under test, so its failure message points at the defect
 rather than at a 200-line text diff:
 
-```csharp
-[Fact]
-public void Card_renders_name_then_age()
-{
-    var rendered = Mount(new ProfileCard("Ada", "Lovelace", 36));
-
-    var stack = Assert.IsType<StackElement>(rendered);
-    Assert.Collection(stack.Children,
-        c => Assert.Equal("Ada Lovelace", Assert.IsType<TextBlockElement>(c).Content),
-        c => Assert.Equal("36",           Assert.IsType<TextBlockElement>(c).Content));
-}
+```csharp snippet="source:tests/Reactor.Tests/ComponentPropsTests.cs#structural-render-assertion"
 ```
 
 Assert on the slots the component is responsible for, not on every
@@ -190,22 +168,7 @@ control, so it runs in the headless unit suite:
 ```csharp snippet="testing/icon-only"
 ```
 
-```csharp
-[Fact]
-public void IconOnlyButton_flags_missing_accessible_name()
-{
-    var diagnostics = AccessibilityScanner.Scan(new IconOnlyButton().Render());
-
-    Assert.Contains(diagnostics, d => d.Id == "A11Y_001");
-}
-
-[Fact]
-public void NamedButton_passes_a11y_scan()
-{
-    var diagnostics = AccessibilityScanner.Scan(new NamedButton().Render());
-
-    Assert.DoesNotContain(diagnostics, d => d.Id == "A11Y_001");
-}
+```csharp snippet="source:tests/Reactor.Tests/AccessibilityScannerTests.cs#a11y-icon-button-tests"
 ```
 
 Assert `DoesNotContain` on the specific rule id rather than `Empty` on

@@ -165,11 +165,7 @@ plus `Theme.Ref(key)` for anything else in the resource tree.
 
 ### Custom keys
 
-```csharp
-// Reference any XAML resource by string key — covers app-level overrides
-// and any token Reactor doesn't surface as a typed accessor.
-Button("Custom", () => { })
-    .Background(Theme.Ref("MyAppTitleBarBackground"));
+```csharp snippet="theming-tokens/custom-key"
 ```
 
 ## Patterns
@@ -211,9 +207,7 @@ reach for it through `Theme.Ref`:
 </Application.Resources>
 ```
 
-```csharp
-Button("Buy now", BuyAction)
-    .Background(Theme.Ref("BrandPrimaryBrush"));
+```csharp snippet="theming-tokens/brand-primary-button"
 ```
 
 The brand color participates in theme swap because the override has a
@@ -227,8 +221,7 @@ A single sub-tree can opt out of the app theme via
 [`RequestedTheme`](styling.md) — useful for a video player surface or
 a print-preview pane that should always look light:
 
-```csharp
-ScrollView(content).RequestedTheme(ElementTheme.Light);
+```csharp snippet="theming-tokens/per-element-theme"
 ```
 
 The walk in `Theme.Resolve` picks up the local override first, so

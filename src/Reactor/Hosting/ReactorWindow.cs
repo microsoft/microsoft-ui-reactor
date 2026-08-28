@@ -2216,6 +2216,7 @@ public sealed class ReactorWindow : IDisposable
     /// <c>ACCESS_VIOLATION</c> (0xC0000005) that corrupts later windows in the
     /// process — the multi-window batch teardown crash this guards. (issue #647)
     /// </summary>
+    // <snippet:teardown-reentry-diagnostic>
     private void CloseNativeWindowOnce()
     {
         if (_disposed || _nativeCloseRequested) return;
@@ -2224,6 +2225,7 @@ public sealed class ReactorWindow : IDisposable
         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Close", ex); }
     }
+    // </snippet:teardown-reentry-diagnostic>
 
     /// <summary>Force-save the current window placement when placement persistence is enabled.</summary>
     [UIThreadOnly]

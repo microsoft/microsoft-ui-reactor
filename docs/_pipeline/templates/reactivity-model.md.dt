@@ -60,9 +60,9 @@ way it is.
 ```
 
 `UseState` returns `(value, setter)`. The `value` is just a read of
-the slot at the current hook index. The `setter` is a closure over
-that index. Calling the setter does not, by itself, "react". It walks
-to the slot, compares the new value against the old via
+the slot at the current hook index. The `setter` is a cached delegate
+over that slot cell. Calling the setter does not, by itself, "react".
+It compares the new value against the old via
 `EqualityComparer<T>.Default`, writes if different, and calls back
 into the host with `_requestRerender`. The host decides when to render
 next — typically on the next dispatcher tick — and once it does, the
@@ -261,9 +261,7 @@ and nothing is written or re-rendered. Allocate a new list — or use
 [`UseReducer`](hooks.md) so the framework forces you to return a new
 value from the reducer:
 
-```csharp
-var (items, update) = UseReducer(new List<string>());
-update(prev => [.. prev, "new"]);
+```csharp snippet="hooks/reducer-new-value"
 ```
 
 ## Tips

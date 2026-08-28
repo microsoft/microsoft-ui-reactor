@@ -43,9 +43,7 @@ package reference first:
 <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="{{reactorVersion}}" />
 ```
 
-```csharp
-using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Charting.Charts;
+```csharp snippet="charting/imports"
 ```
 
 ## Line Chart

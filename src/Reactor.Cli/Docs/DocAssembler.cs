@@ -12,7 +12,17 @@ internal static partial class DocAssembler
 {
     // ```csharp snippet="topic/id"            or   ```csharp snippet="topic/id" title="Title"
     // ```
-    [GeneratedRegex(@"```csharp\s+snippet=""([^""]+)""(?:\s+title=""([^""]+)"")?\s*[\r\n]+```")]
+    //
+    // The language is captured rather than hard-coded. It used to be literal
+    // `csharp`, which silently broke every non-C# fence: ExtractSnippetRefs (the
+    // discovery side) matches `snippet="..."` in any fence, so an ```xml fence
+    // was extracted, resolved, and reported as "✓ resolved" — and then never
+    // substituted, because only this regex decides what gets replaced. The three
+    // ```xml project-shape fences in packaging.md rendered as *empty* code blocks
+    // under prose that promised to show the shape, and the unexpanded
+    // `snippet="..."` attribute leaked into the fence info string. Keep discovery
+    // and substitution language-agnostic together, or the two disagree silently.
+    [GeneratedRegex(@"```([A-Za-z0-9_+#-]+)\s+snippet=""([^""]+)""(?:\s+title=""([^""]+)"")?\s*[\r\n]+```")]
     private static partial Regex SnippetDirective();
 
     // ![alt text](screenshot://topic/id)
@@ -47,8 +57,9 @@ internal static partial class DocAssembler
         // Replace snippet directives with extracted code
         output = SnippetDirective().Replace(output, match =>
         {
-            var snippetId = match.Groups[1].Value;
-            var title = match.Groups[2].Success ? match.Groups[2].Value : null;
+            var language = match.Groups[1].Value;
+            var snippetId = match.Groups[2].Value;
+            var title = match.Groups[3].Success ? match.Groups[3].Value : null;
 
             if (!snippets.TryGetValue(snippetId, out var snippet))
             {
@@ -57,13 +68,25 @@ internal static partial class DocAssembler
             }
 
             var sb = new StringBuilder();
-            if (title != null)
-                sb.AppendLine($"// {title}");
             // SECURITY (TASK-043): pick a fence longer than the longest run of
             // backticks in the snippet so embedded ``` cannot break out of the
             // fenced block and inject markdown.
             var fence = ChooseFence(snippet.Code);
-            sb.AppendLine(fence + "csharp");
+            sb.AppendLine(fence + language);
+            // Title goes *inside* the fence. It used to be emitted above the
+            // opening fence, which put it in markdown body text rather than in
+            // the code block: as `// Title` it rendered as a stray literal line
+            // of prose, and as an XML/HTML comment it would be parsed as raw
+            // markdown HTML and vanish from the page entirely.
+            if (title != null)
+            {
+                var comment = TitleComment(language, title);
+                if (comment is null)
+                    errs.Add($"title= is not supported for language '{language}' (snippet {snippetId}): "
+                             + "no comment syntax is known for it, so the title would corrupt the example.");
+                else
+                    sb.AppendLine(comment);
+            }
             sb.AppendLine(snippet.Code);
             sb.Append(fence);
             return sb.ToString();
@@ -105,6 +128,36 @@ internal static partial class DocAssembler
         warnings = warns;
         return output;
     }
+
+    /// <summary>
+    /// Renders <paramref name="title"/> as a comment valid in <paramref name="language"/>, or
+    /// <see langword="null"/> when no safe representation is known.
+    /// </summary>
+    /// <remarks>
+    /// A <c>title=</c> on an ```xml fence used to emit <c>// Title</c>, which is not an XML comment.
+    /// Defaulting every non-XML language to <c>//</c> just moved the bug: PowerShell, shell, YAML
+    /// and Python all read <c>//</c> as code, not as a comment. Languages are mapped explicitly and
+    /// an unknown one returns null so <see cref="Assemble"/> can report it, rather than silently
+    /// emitting a line that corrupts the example.
+    /// </remarks>
+    internal static string? TitleComment(string language, string title) =>
+        language.ToLowerInvariant() switch
+        {
+            "xml" or "html" or "xaml" or "svg" or "csproj" or "props" or "targets" or "markdown" or "md"
+                => $"<!-- {title} -->",
+            "powershell" or "ps1" or "pwsh" or "bash" or "sh" or "shell" or "console"
+                or "yaml" or "yml" or "python" or "py" or "ini" or "toml" or "dockerfile" or "r"
+                => $"# {title}",
+            "csharp" or "cs" or "c" or "cpp" or "c++" or "java" or "javascript" or "js"
+                or "typescript" or "ts" or "jsonc" or "json5" or "go" or "rust" or "rs" or "swift" or "kotlin"
+                => $"// {title}",
+            "sql" => $"-- {title}",
+            "vb" or "vbnet" or "vba" => $"' {title}",
+            // Deliberately absent: `json`. JSON has no comment syntax, so a title would make an
+            // otherwise valid snippet invalid. `jsonc` / `json5` do allow comments and are mapped
+            // above. Anything unmapped falls through to null and is reported by Assemble.
+            _ => null,
+        };
 
     /// <summary>
     /// Returns a fence (sequence of backticks) at least one char longer than

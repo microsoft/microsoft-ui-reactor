@@ -14,6 +14,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Roslyn ships ~13 localized satellite assemblies per package. `mur`
+         surfaces compiler diagnostics verbatim, so localized Roslyn resources
+         would only translate a fraction of its output; they cost ~1.9 MB in the
+         packed tool payload and the release publish for no coherent benefit. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Mirror the deployed skill-kit layout under <repo>/bin/<arch>/ so devs
          can put that directory on PATH and `mur` resolves to the freshly-built
          binary. The release workflow produces the same bin/x64 + bin/arm64
@@ -74,7 +79,16 @@
 
   <ItemGroup>
     <PackageReference Include="GitHub.Copilot.SDK" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <!-- No PrivateAssets here. `mur check` *executes* Roslyn at runtime
+         (Check/CompilationLoader.cs, Check/FactoryIndex.cs,
+         Check/SuggesterOrchestrator.cs, Loc/InterpolationConverter.cs).
+         PrivateAssets="all" is the correct idiom for an analyzer project,
+         which must not flow Roslyn to consumers — but this is a PackAsTool
+         global tool, and it excluded Microsoft.CodeAnalysis{,.CSharp}.dll
+         from the packed tools/ payload. The assemblies were present in bin/,
+         so every local `dotnet run` worked, while every bootstrap-installed
+         `mur check` died at startup with FileNotFoundException. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator">

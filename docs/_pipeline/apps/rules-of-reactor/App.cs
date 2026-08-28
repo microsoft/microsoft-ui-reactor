@@ -140,6 +140,37 @@ class TodoListGood : Component
 }
 // </snippet:keys-good>
 
+class StableDepsGood : Component
+{
+    public override Element Render()
+    {
+        var name = "Reactor";
+        var version = 1;
+        void Setup() { }
+
+        // <snippet:stable-deps-good>
+        // Right:
+        UseEffect(Setup, name, version);              // params overload — items
+                                                      // compared by value.
+        // </snippet:stable-deps-good>
+
+        return TextBlock($"{name} v{version}");
+    }
+}
+
+class ThemeTokenGood : Component
+{
+    public override Element Render()
+    {
+        // <snippet:theme-token-good>
+        // Do:
+        Button("Save", () => { }).Background(Theme.Accent);
+        // </snippet:theme-token-good>
+
+        return TextBlock("Theme token example");
+    }
+}
+
 class RuleGood : Component
 {
     public override Element Render() => VStack(8,

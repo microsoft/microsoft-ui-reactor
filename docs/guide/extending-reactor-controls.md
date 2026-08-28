@@ -376,12 +376,12 @@ ordered list of them). The descriptor declares the edge:
 
 ```csharp
 descriptor.Reference<FrameworkElement>(
-    get: e => e.Target,
-    set: (c, target) => c.Target = target);
+    get: static e => e.Target,
+    set: static (c, target) => c.Target = target);
 
 descriptor.ReferenceList<FrameworkElement>(
-    get: e => e.Related,
-    apply: (c, targets) =>
+    get: static e => e.Related,
+    apply: static (c, targets) =>
     {
         c.Related.Clear();
         foreach (var target in targets)

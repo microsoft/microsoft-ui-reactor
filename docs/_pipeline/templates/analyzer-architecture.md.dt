@@ -377,16 +377,7 @@ skipping it is a compile error, not a style nit; the row migrates to
 descriptor with a stable id that follows the
 `REACTOR_<CATEGORY>_<NNN>` convention:
 
-```csharp
-public const string DiagnosticId = "REACTOR_MYTHING_001";
-private static readonly DiagnosticDescriptor Rule = new(
-    DiagnosticId,
-    title: "One-line title",
-    messageFormat: "Specific problem: {0}",
-    category: "Reactor.MyThing",
-    defaultSeverity: DiagnosticSeverity.Warning,
-    isEnabledByDefault: true,
-    description: "Why this is wrong and what to do instead.");
+```csharp snippet="source:src/Reactor.Analyzers/StringForElementArgumentAnalyzer.cs#diagnostic-descriptor"
 ```
 
 Then register the syntax-node action in `Initialize` and write the

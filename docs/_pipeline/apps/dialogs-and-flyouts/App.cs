@@ -321,6 +321,53 @@ class DialogAsyncCommandDemo : Component
 }
 // </snippet:dialog-async-command>
 
+record ContextMenuRow(int Id, string Name);
+
+class RowContextMenuDemo : Component
+{
+    private static readonly ContextMenuRow[] Items =
+    [
+        new(1, "Quarterly plan"),
+        new(2, "Launch checklist"),
+        new(3, "Budget review")
+    ];
+
+    public override Element Render()
+    {
+        var items = Items;
+        var deleteCommand = new Command<ContextMenuRow>
+        {
+            Label = "Delete",
+            Execute = _ => { },
+        };
+        var renameCommand = new Command<ContextMenuRow>
+        {
+            Label = "Rename",
+            Execute = _ => { },
+        };
+        var propertiesCommand = new Command<ContextMenuRow>
+        {
+            Label = "Properties",
+            Execute = _ => { },
+        };
+
+        Element RowContent(ContextMenuRow item) =>
+            HStack(8, TextBlock(item.Name));
+
+        return
+            // <snippet:right-click-list-row>
+            ListView(items, item => item.Id.ToString(), (item, _) =>
+                MenuFlyout(
+                    RowContent(item),
+                    MenuItem(deleteCommand, item),
+                    MenuItem(renameCommand, item),
+                    MenuSeparator(),
+                    MenuItem(propertiesCommand, item)))
+            // </snippet:right-click-list-row>
+            ;
+    }
+}
+
 class DialogsAndFlyoutsApp : Component
 {
     public override Element Render() => ScrollView(
@@ -335,7 +382,8 @@ class DialogsAndFlyoutsApp : Component
             Component<CommandingIntegrationDemo>(),
             Component<TeachingTipTargetDemo>(),
             Component<ModalPopupDemo>(),
-            Component<DialogAsyncCommandDemo>()
+            Component<DialogAsyncCommandDemo>(),
+            Component<RowContextMenuDemo>()
         ).Padding(24)
     );
 }

@@ -166,6 +166,27 @@ class ResponsiveDemo : Component
 }
 // </snippet:responsive>
 
+class UseBreakpointSwitchDemo : Component
+{
+    public override Element Render()
+    {
+        var panelA = BreakpointPanel("Panel A", Theme.SystemNeutralBackground);
+        var panelB = BreakpointPanel("Panel B", Theme.SystemSuccessBackground);
+
+        // <snippet:use-breakpoint-switch>
+        var wide = UseBreakpoint(800);
+        return If(wide,
+            () => HStack(12, panelA, panelB),
+            () => VStack(8, panelA, panelB));
+        // </snippet:use-breakpoint-switch>
+    }
+
+    private static Element BreakpointPanel(string label, ThemeRef background) =>
+        Border(TextBlock(label).Padding(16))
+            .Background(background)
+            .CornerRadius(4);
+}
+
 // <snippet:app-shell>
 // App shell scaffold: title bar + sidebar + content using a single Grid
 // declaration. The two-column / three-row layout is the canonical
@@ -211,18 +232,16 @@ class AutoGridExample : Component
 {
     public override Element Render()
     {
-        return Border(
-            WrapGrid(maxRowsOrColumns: 4,
-                children: Enumerable.Range(1, 11)
-                    .Select(i =>
-                        Border(TextBlock($"Tile {i}").Padding(12))
-                            .Background(Theme.CardBackground)
-                            .CornerRadius(6)
-                            .Width(110).Height(60))
-                    .Cast<Element?>()
-                    .ToArray()
-            )
-        ).Padding(24);
+        return WrapGrid(maxRowsOrColumns: 4,
+            children: Enumerable.Range(1, 11)
+                .Select(i =>
+                    Border(TextBlock($"Tile {i}").Padding(12))
+                        .Background(Theme.CardBackground)
+                        .CornerRadius(6)
+                        .Width(110).Height(60))
+                .Cast<Element?>()
+                .ToArray()
+        );
     }
 }
 // </snippet:auto-grid>
@@ -299,6 +318,24 @@ class DoGridForForms : Component
     }
 }
 // </snippet:do-grid-for-forms>
+
+class GridStarStackDemo : Component
+{
+    public override Element Render() =>
+        // <snippet:grid-star-stack>
+        // Do:
+        Grid(
+            columns: [GridSize.Star(), GridSize.Star()],   // Star, not Auto
+            rows: [GridSize.Star()],
+            HStack(SaveButton(), CancelButton()).Grid(column: 0, columnSpan: 2));
+        // </snippet:grid-star-stack>
+
+    private static Element SaveButton() =>
+        Button("Save", () => { }).AutomationName("Save");
+
+    private static Element CancelButton() =>
+        Button("Cancel", () => { }).AutomationName("Cancel");
+}
 
 // <snippet:alignment-sizing>
 class AlignmentSizingDemo : Component

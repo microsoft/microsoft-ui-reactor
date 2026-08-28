@@ -50,7 +50,7 @@ description: "Reactor essentials in one place — React-to-Reactor mental model,
 
 ## Starting a new app
 
-`dotnet new reactorapp -n <Name>` scaffolds the canonical shape: `App.cs` (entry point + initial component, with the seven-line using block at the top) plus `<Name>.csproj`. See the anti-probe + `mur check` notes under "Use a `.csproj` …" below for what comes out of the scaffold.
+`dotnet new reactorapp -n <Name>` scaffolds the canonical shape: `App.cs` (entry point + initial component, with the `using` block at the top) plus `<Name>.csproj`. See the anti-probe + `mur check` notes under "Use a `.csproj` …" below for what comes out of the scaffold.
 
 For a single-file `dotnet run App.cs` demo (no `.csproj`), prepend the file-level `#:package` / `#:property` headers — see `reactor-build-and-check`'s single-file-scripts section.
 
@@ -58,9 +58,27 @@ For a single-file `dotnet run App.cs` demo (no `.csproj`), prepend the file-leve
 
 … multiple files, **analyzers** (single-file `.cs` builds don't load them), or shared project references. `dotnet new reactorapp` scaffolds the canonical csproj — you don't need to author one from scratch.
 
-`WindowsPackageType` MUST be `None` (unpackaged, no App.xaml). `UseWinUI` MUST be `true`. **No XAML files of any kind.**
+`UseWinUI` MUST be `true`. **No XAML files of any kind.**
 
-**After `dotnet new reactorapp -n <Name>`, the workspace contains exactly two source files: `App.cs` (entry point + initial component) and `<Name>.csproj`, plus a `Properties/launchSettings.json` for F5.** There is no `Program.cs` and no `GlobalUsings.cs` — modify `App.cs` in place. The `.csproj` does **not** enable implicit usings; `App.cs` has its own `using` directives at the top — the same set listed in the *Required imports* section below — which is the only place you add new namespaces (e.g. `using System.Linq;` when you reach for `.Select(...)`). Don't probe the `.csproj` after scaffolding unless you're adding a `PackageReference` or changing a property — `Restore succeeded.` in the scaffold stdout is the only confirmation you need.
+**Don't change the packaging mode of a project you didn't scaffold — keep whatever the scaffold
+produced.** Reactor works in both shapes:
+
+- **Unpackaged** — `<WindowsPackageType>None</WindowsPackageType>`, no `Package.appxmanifest`.
+  `None` wins over `EnableMsixTooling`, so a project carrying both still builds unpackaged. Runs
+  from any folder, no MSIX registration. This is what `dotnet new reactorapp` produces today.
+- **Packaged** — has a `Package.appxmanifest`. Either omit `WindowsPackageType` entirely (the
+  default produces a packaged app) or set it to `MSIX`; pair it with `EnableMsixTooling=true` for
+  the single-project MSIX tooling. Launches with package identity, which is what identity-gated
+  APIs require.
+
+Neither is "the" Reactor shape, and neither is signalled by one property alone. **If a project has a
+`Package.appxmanifest`, it is packaged on purpose — adding
+`<WindowsPackageType>None</WindowsPackageType>` to it silently strips its identity, and the build
+still succeeds, so nothing surfaces the mistake.** Switch modes only when the user asks, and switch
+the whole property *set*, not a single flag — the `packaging` guide has both shapes in full,
+including the explicit-`MSIX` form.
+
+**After `dotnet new reactorapp -n <Name>`, the workspace contains `App.cs` (entry point + initial component) and `<Name>.csproj`, plus a `Properties/launchSettings.json` for F5 — and nothing else you need to touch.** Other Reactor templates scaffold more files (a packaged one adds MSIX packaging inputs); those are not source — leave them alone. There is no `Program.cs` and no `GlobalUsings.cs` — modify `App.cs` in place. `App.cs` has its own `using` directives at the top — see the *Required imports* section below — and that is where you add new namespaces (e.g. `using System.Linq;` when you reach for `.Select(...)`). Some templates enable implicit usings, so a namespace may already be in scope. Don't probe the `.csproj` after scaffolding unless you're adding a `PackageReference` or changing a property — `Restore succeeded.` in the scaffold stdout is the only confirmation you need.
 
 **The scaffolded csproj ships with `WindowsAppSDKSelfContained=true` and a Debug-only ItemGroup that adds `Microsoft.UI.Reactor.Devtools` + `Reactor.DevtoolsSupport=true`.** Together they make `dotnet watch run` (and the very rough, experimental Visual Studio embedded-preview extension) hot-reload safe and F5 (which passes `--devtools` from `Properties/launchSettings.json`) bring up the devtools menu. The VS extension is currently the roughest Reactor surface; do not present it as stable. Release builds drop the devtools package and host-config switch so trim / AOT analyzers stay quiet — see the `packaging` guide for the full rationale before flipping either knob.
 

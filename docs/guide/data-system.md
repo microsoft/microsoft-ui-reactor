@@ -109,8 +109,8 @@ package reference and a second `using static`:
 ```
 
 ```csharp
-using static Microsoft.UI.Reactor.Factories;          // core DSL
-using static Microsoft.UI.Reactor.Advanced.Factories; // DataGrid, Column, AutoColumns
+using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Advanced.Factories;
 ```
 
 ## Auto-Generated Columns
@@ -603,11 +603,12 @@ DataGrid<Order>(source, columns,
 
 The grid does maintain selection internally, but reading it requires a
 ref and the state is invisible to the rest of your component. Lift the
-selection out: `var (selected, setSelected) = UseState<IReadOnlySet<RowKey>>(new HashSet<RowKey>())`
-plus `onSelectionChanged: setSelected`. Declare the state as
-`IReadOnlySet<RowKey>` rather than `HashSet<RowKey>` — that is the exact
-parameter type of the callback, so the setter binds directly. Toolbars,
-badges, and detail panels that need "what's selected" can now read it.
+selection out: `var initialSelection = UseMemo<IReadOnlySet<RowKey>>(() => new HashSet<RowKey>())`
+plus `var (selected, setSelected) = UseState(initialSelection)` and
+`onSelectionChanged: setSelected`. Declare the state as `IReadOnlySet<RowKey>`
+rather than `HashSet<RowKey>` — that is the exact parameter type of the
+callback, so the setter binds directly. Toolbars, badges, and detail panels
+that need "what's selected" can now read it.
 
 ### Using AutoColumns in production
 

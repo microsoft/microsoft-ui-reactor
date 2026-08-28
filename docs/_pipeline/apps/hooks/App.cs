@@ -133,6 +133,80 @@ class EffectDemo : Component
 }
 // </snippet:useeffect>
 
+class BackgroundSetterDemo : Component
+{
+    // <snippet:background-setter>
+    public override Element Render()
+    {
+        var (seconds, updateSeconds) = UseReducer(0);
+
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
+            _ = Task.Run(async () =>
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateSeconds(s => s + 1);   // auto-marshals to the UI thread
+                }
+                catch (OperationCanceledException) { /* expected on cleanup */ }
+            });
+            // Cancel only, and deliberately so. The fire-and-forget worker shares ownership of the
+            // source: disposing here while it is still inside WaitForNextTickAsync can surface an
+            // ObjectDisposedException on the token. Nothing leaks — a CTS with no timer and no
+            // WaitHandle access holds no unmanaged resource, so dropping the reference is enough.
+            // Dispose only where a single owner can prove the worker has finished.
+            return () => { cts.Cancel(); };
+        });
+
+        return TextBlock($"Elapsed: {seconds}s");
+    }
+    // </snippet:background-setter>
+}
+
+class ThreadSafeHooksDemo : Component
+{
+    public override Element Render()
+    {
+        // <snippet:thread-safe-hooks>
+        var (count, setCount) = UseState(0, threadSafe: true);
+        var (sum, addToSum) = UseReducer(0, threadSafe: true);
+        // </snippet:thread-safe-hooks>
+
+        return TextBlock($"Count: {count}, sum: {sum}");
+    }
+}
+
+class HookOrderDoDemo : Component
+{
+    // <snippet:hook-order-do>
+    public override Element Render()
+    {
+        var (a, setA) = UseState(0);     // always first
+        var (b, setB) = UseState("");    // always second
+        UseEffect(() => { /* ... */ }, a);     // always third
+        return TextBlock($"{a} {b}");
+    }
+    // </snippet:hook-order-do>
+}
+
+class ConditionalEffectBodyDemo : Component
+{
+    public override Element Render()
+    {
+        var (a, setA) = UseState(0);
+
+        // <snippet:conditional-effect-body>
+        UseEffect(() => { if (a > 0) { /* ... */ } }, a);
+        // </snippet:conditional-effect-body>
+
+        return TextBlock($"{a}");
+    }
+}
+
 // <snippet:usememo>
 class MemoDemo : Component
 {
@@ -180,6 +254,62 @@ class RefDemo : Component
     }
 }
 // </snippet:useref>
+
+class DeferredRefDemo : Component
+{
+    public override Element Render()
+    {
+        var (current, setCurrent) = UseState(0);
+
+        // <snippet:deferred-ref>
+        var prev = UseRef<int?>(null);
+        UseEffect(() => { /* compare prev.Current to current */ prev.Current = current; }, current);
+        // </snippet:deferred-ref>
+
+        return Button($"Current: {current}", () => setCurrent(current + 1))
+            .AutomationName("Increment current value");
+    }
+}
+
+// Tight fragments for the internals pages, which explain the mechanism in prose and
+// need one illustrative call rather than a whole demo component.
+class RefMutableCellDemo : Component
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState("");
+
+        // <snippet:ref-mutable-cell>
+        var renderCount = UseRef(0);
+        renderCount.Current++;              // does NOT re-render
+
+        var prev = UseRef("");
+        UseEffect(() => { prev.Current = name; }, name);
+        // </snippet:ref-mutable-cell>
+
+        return TextBox(name, setName, placeholderText: "Type")
+            .AutomationName("Ref demo text")
+            .Width(200);
+    }
+}
+
+class ReducerNewValueDemo : Component
+{
+    public override Element Render()
+    {
+        // <snippet:reducer-new-value>
+        var (items, update) = UseReducer(new List<string>());
+
+        // The updater must return a NEW list — mutating and returning the same
+        // instance compares equal, so nothing is written and nothing re-renders.
+        Action addItem = () => update(prev => [.. prev, "new"]);
+        // </snippet:reducer-new-value>
+
+        return VStack(8,
+            TextBlock($"{items.Count} items"),
+            Button("Add", addItem).AutomationName("Add item"));
+    }
+}
 
 // <snippet:usecallback>
 class CallbackDemo : Component
@@ -254,6 +384,7 @@ class ExternalStoreDemo : Component
 // A custom hook is a RenderContext extension method whose name starts with
 // `Use`. It owns three slots — two UseState and one UseEffect — and the caller
 // still gets the simple (value, setter) shape they'd get from UseState.
+// <snippet:custom-hook-debounce-hook>
 static class DebouncedTextHook
 {
     public static (string Value, Action<string> Set) UseDebouncedText(
@@ -274,11 +405,16 @@ static class DebouncedTextHook
                 catch (OperationCanceledException) { return; }
             });
             return () => { cts.Cancel(); };
-        }, value);
+            // Both captured values are dependencies. `ms` is easy to leave out —
+            // it usually comes from a constant at the call site — but omitting it
+            // means a caller that changes the delay keeps the already-armed timer
+            // running on the old interval until `value` happens to change.
+        }, value, ms);
 
         return (debounced, setValue);
     }
 }
+// </snippet:custom-hook-debounce-hook>
 
 class CustomHookDemo : Component
 {
@@ -308,6 +444,23 @@ class SetterChainDontDemo : Component
     }
 }
 // </snippet:setter-chain-dont>
+
+class ConditionalSubscribeFixDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+
+        // <snippet:conditional-subscribe-fix>
+        UseEffect(() => { if (!open) return () => { }; return Subscribe(); }, open);
+        // </snippet:conditional-subscribe-fix>
+
+        return Button(open ? "Close" : "Open", () => setOpen(!open))
+            .AutomationName(open ? "Close subscription demo" : "Open subscription demo");
+    }
+
+    private static Action Subscribe() => () => { };
+}
 
 // <snippet:setter-chain-do>
 class SetterChainDoDemo : Component

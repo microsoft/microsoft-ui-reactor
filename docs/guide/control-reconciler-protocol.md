@@ -366,12 +366,15 @@ Controlled descriptor entries read `Optional<TValue>` from the new
 element before they compare or arm echo suppression:
 
 ```csharp
-var next = get(newElement);              // Optional<TValue>
-if (!next.HasValue) return;              // Unset: control owns the value
-var value = next.Value;
-var current = readBack(control);
-if (comparer.Equals(current, value)) return;
-// HasValue drift: arm value-diff echo suppression, then write value.
+var nvOpt = _get(newEl);
+if (!nvOpt.HasValue) return;
+var nv = nvOpt.Value;
+var current = _readBack(ctrl);
+// Spec 047 §8 echo-suppression contract: write ONLY when the control has
+// drifted from the element's authority. A no-drift write raises no event,
+// so arming would strand the pending flag (the §8 cross-state echo class).
+if (_comparer.Equals(current, nv))
+    return;
 ```
 
 `Unset` is therefore a real authority state, not a sentinel value of

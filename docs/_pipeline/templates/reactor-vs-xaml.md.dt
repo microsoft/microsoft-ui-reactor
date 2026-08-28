@@ -49,7 +49,7 @@ complements.
 | State location | View-model property / dependency property | Hook slot inside `RenderContext` |
 | State signal | `INotifyPropertyChanged.PropertyChanged` | Setter closure from `UseState` |
 | Property write | `BindingExpression.UpdateTarget` pulls VM getter | Reconciler writes after render |
-| Style application | `Style` + `Setter` + triggers | Modifier chain or `Use*` named-style hook |
+| Style application | `Style` + `Setter` + triggers | Element/modifier composition or `Use*` named-style hook |
 | Animation | `Storyboard` defined in XAML, started imperatively | `.Animate(...)` / `.Transition(...)` modifier resolved by reconciler |
 | Layout state | `VisualStateManager` + `VisualState`/Group XAML | `.InteractionStates(...)` modifier on element |
 | Resources | `ResourceDictionary` / `ThemeDictionary` | [`ThemeRef`](theming-tokens.md) record struct |

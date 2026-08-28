@@ -188,15 +188,11 @@ Switch between layouts based on window width. Use a state toggle or
 ![Responsive layout](screenshot://layout/responsive)
 
 For real responsive layouts, use [`UseBreakpoint`](hooks.md)
-`(window, minWidth)` which returns `true` when the window is at least
+`(minWidth)` (or `(window, minWidth)` for an explicit host window), which returns `true` when the window is at least
 `minWidth` pixels wide. Pair it with `If()` to swap layouts:
 
 <!-- ai:lock -->
-```csharp
-var wide = UseBreakpoint(window, 800);
-return If(wide,
-    () => HStack(12, panelA, panelB),
-    () => VStack(8, panelA, panelB));
+```csharp snippet="layout/use-breakpoint-switch"
 ```
 <!-- /ai:lock -->
 
@@ -377,12 +373,7 @@ to its `0`-sized child. The real fixes are:
 - Give the stack's children explicit (or minimum) sizes so they don't
   depend on stretch.
 
-```csharp
-// Do:
-Grid(
-    columns: [GridSize.Star(), GridSize.Star()],   // Star, not Auto
-    rows: [GridSize.Star()],
-    HStack(SaveButton(), CancelButton()).Grid(column: 0))
+```csharp snippet="layout/grid-star-stack"
 ```
 
 Reactor surfaces this footgun at debug time: when

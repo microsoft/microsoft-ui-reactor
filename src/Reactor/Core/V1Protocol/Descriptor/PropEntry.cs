@@ -372,6 +372,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
 
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
     {
+        // <snippet:controlled-update-gate>
         var nvOpt = _get(newEl);
         if (!nvOpt.HasValue) return;
         var nv = nvOpt.Value;
@@ -381,6 +382,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         // so arming would strand the pending flag (the §8 cross-state echo class).
         if (_comparer.Equals(current, nv))
             return;
+        // </snippet:controlled-update-gate>
 
         // §8 value-diff echo suppression (PoC) for the controlled fast path: arm
         // the per-control "expected echo" instead of bumping the causal counter,

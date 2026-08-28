@@ -112,37 +112,13 @@ Every reconcile pass starts here. The event-id pair is `1` / `2`
 (`ReconcileStart` / `ReconcileStop`) and the counters reported on
 `ReconcileStop` are the per-pass cost summary:
 
-```csharp
-// Gate the depth counter and the Start emit on IsEnabled so a session
-// with no consumer attached pays nothing beyond one bool check.
-// `traceEnabled` and `emitTrace` are separate: every enabled call must
-// decrement the depth it incremented, but only the outermost one emits.
-// Decrementing on `emitTrace` alone would leak the counter once a pass
-// contained a nested reconcile, suppressing every later top-level span.
-bool traceEnabled = ReactorEventSource.Log.IsEnabled(
-    EventLevel.Informational, ReactorEventSource.Keywords.Reconcile);
-bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
+```csharp snippet="source:src/Reactor/Core/Reconciler.cs#reconcile-trace-start"
+```
 
-if (emitTrace)
-    ReactorEventSource.Log.ReconcileStart(newElement?.GetType().Name ?? "null");
+The matching `finally` decrements exactly the depth it incremented and
+emits the stop payload only for the outermost pass:
 
-try
-{
-    // ... mount / update walk ...
-}
-finally
-{
-    if (traceEnabled)
-    {
-        _reconcileTraceDepth--;
-        if (emitTrace)
-        {
-            ReactorEventSource.Log.ReconcileStop(
-                DebugElementsDiffed, DebugElementsSkipped,
-                DebugUIElementsCreated, DebugUIElementsModified);
-        }
-    }
-}
+```csharp snippet="source:src/Reactor/Core/Reconciler.cs#reconcile-trace-stop"
 ```
 
 Only *top-level* passes emit — the depth counter suppresses the

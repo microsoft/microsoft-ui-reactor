@@ -231,18 +231,7 @@ declares a *transition*, not a mirror. Reactor writes the control only
 when the declared value *changes*, so a re-render that declares the same
 value again is a no-op and the user's dismissal stands.
 
-```csharp
-var (showBanner, setShowBanner) = UseState(true);
-
-return VStack(
-    InfoBar("Saved", "Your changes were saved.").IsClosable() with
-    {
-        IsOpen  = showBanner,
-        // Without this the dismissal never reaches app state, so a later
-        // `setShowBanner(true)` is a no-op — it is already true.
-        OnClosed = () => setShowBanner(false),
-    },
-    Button("Show again", () => setShowBanner(true)));
+```csharp snippet="extending-reactor-controls/infobar-edge-triggered"
 ```
 
 Wiring the change callback is what makes the value recoverable: the
@@ -319,19 +308,7 @@ properties such as automation `LabeledBy`, or custom owner/source slots
 on a control. The element record stores an `ElementRef<TTarget>` (or an
 ordered list of them). The descriptor declares the edge:
 
-```csharp
-descriptor.Reference<FrameworkElement>(
-    get: e => e.Target,
-    set: (c, target) => c.Target = target);
-
-descriptor.ReferenceList<FrameworkElement>(
-    get: e => e.Related,
-    apply: (c, targets) =>
-    {
-        c.Related.Clear();
-        foreach (var target in targets)
-            c.Related.Add(target);
-    });
+```csharp snippet="extending-reactor-controls/reference-properties"
 ```
 
 `.Reference` writes the current target on mount, subscribes to the
@@ -521,9 +498,7 @@ Two paths already exist for this. Pick by scope, not by taste:
 **Global.** Registers process-wide, and is the path a redistributable
 library should prefer:
 
-```csharp
-ControlRegistry.Register<ButtonElement, Microsoft.UI.Xaml.Controls.Button>(
-    static () => new MyButtonHandler());
+```csharp snippet="extending-reactor-controls/global-registration"
 ```
 
 `Register` takes a handler **factory**, not an instance. The registration
@@ -541,18 +516,7 @@ family through its base type.
 **Per-host.** Registers on one host's reconciler, from the `configure`
 callback that runs before the first render:
 
-```csharp
-ReactorApp.Run<EditorApp>("Monaco Editor", configure: host =>
-{
-    host.Reconciler.RegisterType<MonacoEditorElement, MonacoEditor>(
-        mount: static (r, el, requestRerender) => new MonacoEditor { Text = el.Text },
-        update: static (r, oldEl, newEl, editor, requestRerender) =>
-        {
-            if (newEl.Text != oldEl.Text) editor.Text = newEl.Text;
-            return null;   // null = the same control was patched in place
-        },
-        unmount: static (r, editor) => editor.Dispose());
-});
+```csharp snippet="extending-reactor-controls/per-host-registration"
 ```
 
 `RegisterType` takes **inline** mount/update/unmount delegates, so a

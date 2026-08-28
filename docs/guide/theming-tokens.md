@@ -327,7 +327,7 @@ A single sub-tree can opt out of the app theme via
 a print-preview pane that should always look light:
 
 ```csharp
-ScrollView(content).RequestedTheme(ElementTheme.Light);
+return ScrollView(content).RequestedTheme(ElementTheme.Light);
 ```
 
 The walk in `Theme.Resolve` picks up the local override first, so

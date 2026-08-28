@@ -41,15 +41,21 @@ public class ComponentPropsTests
         Assert.Equal("World", comp.Props);
     }
 
+    // This test is source-backed into docs/guide/testing.md as the structural-assertion
+    // example, so it deliberately stays on Reactor's *public* surface. GreetingComponent
+    // renders without hooks, so the internal `Context.BeginRender` lifecycle call its
+    // siblings make is unnecessary here — and including it would advertise an internal
+    // API that only compiles inside this repo via InternalsVisibleTo.
+    // <snippet:structural-render-assertion>
     [Fact]
     public void Component_TProps_Renders_With_Props()
     {
         var comp = new GreetingComponent { Props = "Alice" };
-        comp.Context.BeginRender(() => { });
         var el = comp.Render();
         Assert.IsType<TextBlockElement>(el);
         Assert.Equal("Hello, Alice!", ((TextBlockElement)el).Content);
     }
+    // </snippet:structural-render-assertion>
 
     [Fact]
     public void Component_TProps_Int_Props()

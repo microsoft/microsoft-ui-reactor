@@ -103,14 +103,7 @@ callbacks that fire exactly once per interaction.
 
 ### Pan
 
-```csharp
-Rectangle()
-    .OnPan(
-        onChanged: g => Translate(g.Translation),
-        onEnded: g => SnapToGrid(g.Translation),
-        minimumDistance: 8.0,
-        axis: PanAxis.Both,
-        withInertia: true);
+```csharp snippet="input-and-gestures/pan-basic"
 ```
 
 `minimumDistance` gates callbacks: until the cumulative translation exceeds the
@@ -161,14 +154,7 @@ lifts.
 
 ### Pinch and rotate
 
-```csharp
-Image(imageUrl)
-    .AutomationName("Photo preview")
-    .OnPinch(
-        onChanged: g => Scale(g.Scale),
-        withInertia: true)
-    .OnRotate(
-        onChanged: g => Rotate(g.Angle));
+```csharp snippet="input-and-gestures/pinch-and-rotate"
 ```
 
 Both gestures share the same `Phase` lifecycle as pan. `ScaleDelta` and
@@ -189,8 +175,7 @@ default because WinUI's `Holding` event doesn't fire for mouse pointers; opt in
 with `enableMouseEmulation: true` and the reconciler arms a `DispatcherTimer`
 that cancels on release, capture loss, or pointer motion past `cancelDistance`.
 
-```csharp
-listItem.OnLongPress(() => ShowContextMenu(), enableMouseEmulation: true);
+```csharp snippet="input-and-gestures/long-press-mouse"
 ```
 
 ## Focus and access keys
@@ -273,11 +258,7 @@ first-class modifier. Replace the `.Set(...)` block with one modifier call per
 event — shorter, re-render-safe, and covered by the reconciler's auto-enable
 logic:
 
-```csharp
-// After
-Rectangle()
-    .OnPointerEntered((_, _) => Hover())
-    .OnPointerExited((_, _) => Unhover());
+```csharp snippet="input-and-gestures/set-event-migration-after"
 ```
 
 ## Drag and drop
@@ -310,17 +291,7 @@ Notepad / Word / File Explorer pick the drop up natively. On the target side,
 `TryGetText(out string)` and `GetTextAsync(CancellationToken)` work the same
 whether the drag originated from the same process or a different one.
 
-```csharp
-Border(TextBlock("Drag me to Notepad"))
-    .OnDragStart<BorderElement>(() => new DragData().WithText("hello world"));
-
-Rectangle()
-    .OnDrop<RectangleElement>(args =>
-    {
-        if (args.Data.TryGetText(out var text))
-            Log(text);
-        args.AcceptedOperation = DragOperations.Copy;
-    });
+```csharp snippet="input-and-gestures/drag-standard-formats"
 ```
 
 ### Lazy providers — pay only when the target asks
@@ -333,11 +304,7 @@ deferral is acquired, your code runs on the thread pool, and the result is
 published when the target requests that format. A target that only reads text
 never pays the HTML cost.
 
-```csharp
-Border(TextBlock("Rich content"))
-    .OnDragStart<BorderElement>(() => new DragData()
-        .WithText("plain fallback")
-        .WithHtml(ct => RenderExpensiveHtmlAsync(ct)));
+```csharp snippet="input-and-gestures/drag-lazy-provider"
 ```
 
 ### Drop indicator overrides
@@ -346,15 +313,7 @@ Drop-over callbacks can tweak the caption, glyph, and content-preview
 visibility via `DragTargetArgs.UIOverride` — Reactor writes the changes back
 onto WinUI's `DragUIOverride` after your callback returns.
 
-```csharp
-VStack(children.ToArray())
-    .OnDragOver(args =>
-    {
-        args.UIOverride.Caption = "Move to Inbox";
-        args.UIOverride.IsGlyphVisible = false;
-        args.AcceptedOperation = DragOperations.Move;
-    })
-    .OnDrop<StackElement, Card>(card => inbox.Add(card));
+```csharp snippet="input-and-gestures/drop-indicator-overrides"
 ```
 
 `VStack(...)` and `HStack(...)` both produce a `StackElement`, so that is
@@ -368,14 +327,7 @@ virtual (non-filesystem) shell items that can redirect a later read off the
 local machine. `TryGetSafeLocalFiles` applies that filter for you and returns
 only real local-filesystem items.
 
-```csharp
-Border(TextBlock("Drop files here"))
-    .OnDrop<BorderElement>(args =>
-    {
-        if (args.Data.TryGetSafeLocalFiles(out var files))
-            Import(files);
-        args.AcceptedOperation = DragOperations.Copy;
-    });
+```csharp snippet="input-and-gestures/drop-safe-files"
 ```
 
 The `REACTOR_INPUT_002` analyzer flags `TryGetFiles` inside an `.OnDrop`
@@ -389,18 +341,7 @@ optimistically in `getPayload`: the user might cancel (ESC), the drop might
 land outside any target, or a Ctrl-drag might downgrade Move to Copy. Wait for
 `onEnd` and branch on `CompletedOperation`:
 
-```csharp
-Border(TextBlock(card.Title))
-    .OnDragStart<BorderElement, Card>(
-        getPayload: () => card,
-        allowedOperations: DragOperations.Move | DragOperations.Copy,
-        onEnd: ctx =>
-        {
-            if (ctx.WasCancelled) return;
-            if (ctx.CompletedOperation == DragOperations.Move)
-                column.Remove(card);  // confirmed move — safe to remove
-            // else: Copy succeeded, source keeps the item
-        });
+```csharp snippet="input-and-gestures/move-on-confirmation"
 ```
 
 `DragEndContext.WasCancelled` is true when the drop fell outside every valid

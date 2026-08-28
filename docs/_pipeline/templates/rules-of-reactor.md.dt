@@ -157,10 +157,7 @@ UseEffect(Setup, new[] { name, version });    // freshly-allocated array
 // REACTOR_HOOKS_004 flags this.
 ```
 
-```csharp
-// Right:
-UseEffect(Setup, name, version);              // params overload — items
-                                              // compared by value.
+```csharp snippet="rules-of-reactor/stable-deps-good"
 ```
 
 **The rule:** pass `deps` via the `params` overload of `UseEffect`/
@@ -197,9 +194,7 @@ theme-aware modifier) and `REACTOR_THEME_004` (hard-coded
 Button("Save", () => { }).Background("#0066CC");   // REACTOR_THEME_001
 ```
 
-```csharp
-// Do:
-Button("Save", () => { }).Background(Theme.Accent);
+```csharp snippet="rules-of-reactor/theme-token-good"
 ```
 
 Full coverage on [Theming Tokens](theming-tokens.md).

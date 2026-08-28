@@ -203,6 +203,51 @@ skips it outright, so a compile with that flag leaves every committed screenshot
 byte-identical — the CI `docs-build` job proves this on every PR with
 `git status --porcelain -- docs/guide/images` immediately after the compile.
 
+#### Capture at 150% display scaling
+
+Screenshots are captured **only on a contributor's machine** — every workflow
+runs `--no-screenshots`, and the `docs-build` gate asserts capture never writes
+in CI. So the image dimensions committed to this repo are a property of whoever
+last ran capture, not of a build server.
+
+Capture at **150%** display scaling. A doc app's `doc-manifest.yaml` declares a
+window size in *logical* pixels, so a captured PNG scales roughly with the
+display scale factor — but not by an exact multiple. Most manifests use
+`region: client`, which captures the client area only and so excludes the
+window frame, and the window manager may adjust the requested extent. Treat the
+scale as the thing to match and the pixel dimensions as an observed
+consequence, not a formula to validate against: `v1-protocol` declares
+`width: 520`, and its committed `led-indicator.png` measures 640px wide when
+captured at 125% and 766px at 150%.
+
+The practical check is comparative, not arithmetic — if your regenerated image
+is close in size to the one you replaced, you captured at the same scale as the
+last contributor; if it jumped by ~20%, you did not.
+
+That number is a convention, not a law of the pipeline — it was chosen because
+it is what most of the corpus already used and it renders sharply on modern
+displays. What matters is that it is *written down*: before this section existed
+the corpus silently mixed scales (`docking` and `v1-protocol` at 125%,
+`win2d-canvas` at 150%), because nothing told anyone what to use. If you
+regenerate a page's images at a different scale, that page becomes inconsistent
+with the rest of the docset for no reason a reader can see.
+
+Check your scale before capturing (Settings → System → Display → Scale), and
+regenerate a topic with:
+
+```powershell
+# one topic
+dotnet run --project src/Reactor.Cli -- docs compile --topic layout
+
+# one image (the ref must belong to --topic, or omit --topic entirely)
+dotnet run --project src/Reactor.Cli -- docs compile --screenshots layout/card
+```
+
+Capture needs an **interactive desktop** — it launches each doc app and
+screenshots its window. Over RDP with no console session, or on a locked
+machine, Phase 3 reports `N failed screenshot capture(s)` and leaves the
+existing images untouched rather than writing blanks.
+
 It is *not* the only phase that writes under `docs/guide/images/`, and the
 distinction matters if you are reasoning about that directory rather than about
 screenshots. Phase 5.5 (diagrams) writes there **three** ways: it copies
@@ -605,3 +650,71 @@ dotnet build docs/_pipeline/apps/<topic>/<topic>.csproj -c Debug -p:Platform=x64
 `csc`, so the analyzers do not run and a dirty app reports zero warnings.
 `-p:BuildProjectReferences=false` keeps several single-app builds from racing
 on `src/Reactor`'s `obj/bin`.
+
+## 10. Inline C# in templates
+
+A ` ```csharp snippet="topic/id" ` block is extracted from a real doc app, so CI compiles it and
+the `docs-snippet-gate` job holds it to the same analyzer rules a reader's own project uses.
+
+A plain ` ```csharp ` block is just text. Nothing compiles it, nothing analyses it, and it renders
+identically on the published page — so a reader cannot tell the verified one from the unverified
+one. That gap shipped real defects: `testing.md` taught a `ProfileCard`/`Mount` API that does not
+exist, `hooks-internals.md` read `Ref<T>.Value` when the property is `.Current`, and `layout.md`
+referenced an undeclared `window`.
+
+`InlineSnippetLedgerTests` now fails the build on any new hand-typed C# example. You have three
+ways to satisfy it.
+
+### A — move it into the topic's doc app
+
+The default for ordinary app-level Reactor code. Wrap the code in `// <snippet:id>` /
+`// </snippet:id>` inside `docs/_pipeline/apps/<topic>/App.cs`, then reference it:
+
+````markdown
+```csharp snippet="<topic>/<id>"
+```
+````
+
+Supporting types the example needs in order to compile go *outside* the markers, so they do not
+appear on the page.
+
+### B — point at real repo source
+
+For code that *is* framework, analyzer, or test code. Add the same markers to the real file and
+reference it by path:
+
+````markdown
+```csharp snippet="source:src/Reactor/Core/RenderContext.cs#use-state-slot"
+```
+````
+
+This is the right choice on the under-the-hood pages, and it is strictly better than copying:
+the page can no longer drift from the implementation it documents. It also works against
+`tests/` — a page that shows a test which is itself a passing test in this repo is the strongest
+guarantee available.
+
+Only ever add **comment markers** to files under `src/` or `tests/`; never change their behaviour.
+
+### C — leave it inline, and say why
+
+Legitimate when the block genuinely cannot compile: a migration guide's "before" half, a two-line
+syntax fragment, or a deliberately-wrong example the prose (rather than a `// Don't` comment)
+introduces as the trap. Add it to `AllowedInlineExamples` in
+`tests/Reactor.DocPipeline.Tests/InlineSnippetLedgerTests.cs`, keyed by template and then by the
+block's **full text**, with the reason.
+
+Use a raw string literal for the key and paste the block verbatim — the gate normalizes both sides
+(LF endings, no trailing whitespace, no leading or trailing blank lines), so indentation inside the
+block is preserved and must match. The failure message prints each offending block in exactly the
+form the key needs. Entries are keyed on the whole block rather than its first line because openers
+are shared: `hooks-internals` has two different examples that both begin
+`var (count, setCount) = UseState(0);`, and a first-line key silently excused both while only one
+had been reviewed.
+
+Two shapes need no ledger entry because they are self-evidently not code to copy: a signature
+listing (no `;` or `{` anywhere, and every parameter reads as a declaration — `Markdown(string
+markdown)`, `Border(Element)` — rather than a passed value like `TextBlock(message)`), and a block
+whose first line labels it a counterexample (`// Don't`, `// Wrong`, `// Avoid`, …).
+
+C is for code that *should not* be compiled — never for code that *will not* compile. If a block
+fails to build, that is the bug this system exists to surface: fix the code, don't ledger it.

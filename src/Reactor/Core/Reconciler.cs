@@ -1444,6 +1444,7 @@ public sealed partial class Reconciler : IDisposable
         // one emits. Decrementing on `emitTrace` alone would leak the counter
         // once a pass contained a nested reconcile, permanently suppressing
         // every later top-level trace.
+        // <snippet:reconcile-trace-start>
         bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
             global::System.Diagnostics.Tracing.EventLevel.Informational,
             Diagnostics.ReactorEventSource.Keywords.Reconcile);
@@ -1453,6 +1454,7 @@ public sealed partial class Reconciler : IDisposable
             Diagnostics.ReactorEventSource.Log.ReconcileStart(
                 newElement?.GetType().Name ?? "null");
         }
+        // </snippet:reconcile-trace-start>
         if (_debugReconcileDepth++ == 0)
         {
             DebugElementsDiffed = 0;
@@ -1502,6 +1504,7 @@ public sealed partial class Reconciler : IDisposable
         }
         finally
         {
+            // <snippet:reconcile-trace-stop>
             if (traceEnabled)
             {
                 _reconcileTraceDepth--;
@@ -1512,6 +1515,7 @@ public sealed partial class Reconciler : IDisposable
                         DebugUIElementsCreated, DebugUIElementsModified);
                 }
             }
+        // </snippet:reconcile-trace-stop>
         }
         } finally
         {

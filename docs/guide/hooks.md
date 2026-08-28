@@ -442,6 +442,11 @@ public override Element Render()
             }
             catch (OperationCanceledException) { /* expected on cleanup */ }
         });
+        // Cancel only, and deliberately so. The fire-and-forget worker shares ownership of the
+        // source: disposing here while it is still inside WaitForNextTickAsync can surface an
+        // ObjectDisposedException on the token. Nothing leaks — a CTS with no timer and no
+        // WaitHandle access holds no unmanaged resource, so dropping the reference is enough.
+        // Dispose only where a single owner can prove the worker has finished.
         return () => { cts.Cancel(); };
     });
 
@@ -492,7 +497,7 @@ public override Element Render()
 {
     var (a, setA) = UseState(0);     // always first
     var (b, setB) = UseState("");    // always second
-    UseEffect(() => { ... }, a);     // always third
+    UseEffect(() => { /* ... */ }, a);     // always third
     return TextBlock($"{a} {b}");
 }
 ```
@@ -566,7 +571,11 @@ static class DebouncedTextHook
                 catch (OperationCanceledException) { return; }
             });
             return () => { cts.Cancel(); };
-        }, value);
+            // Both captured values are dependencies. `ms` is easy to leave out —
+            // it usually comes from a constant at the call site — but omitting it
+            // means a caller that changes the delay keeps the already-armed timer
+            // running on the old interval until `value` happens to change.
+        }, value, ms);
 
         return (debounced, setValue);
     }

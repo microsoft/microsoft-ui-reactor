@@ -63,6 +63,64 @@ packages are already referenced by the projects that need them.
 > `--filter-class "*SwallowedErrorAudit*"` both select the same 11 tests, and
 > `--filter-class` against `tests/Reactor.SelfTests` exits 5.
 
+### MSBuild switches are not `dotnet test` switches
+
+Every flag on a `dotnet test` command line is handled by one of two layers, and it
+matters which:
+
+1. **`dotnet test` itself** recognises a set of options and uses them to drive the build
+   and the run — `-p:` / `--property`, `-c`, `-f`, `-r`, `-a` / `--arch`, `--os`, `-v`,
+   `-e`, `-t:` / `-target:`, `--no-build`, `--no-restore`, `-bl`.
+2. **Everything else is forwarded verbatim to the test executable**, where MTP and the
+   xUnit runner parse it. That is not a failure mode — it is how the whole table above
+   works. `--filter-class`, `--parallel`, `--max-threads`, `--report-trx` and `--hangdump`
+   are all forwarded, and all valid.
+
+The run breaks only when a token is recognised by **neither** layer. MTP then rejects it as
+an unknown option and exits **5 (`InvalidCommandLine`)** before a single test runs.
+MSBuild-only switches are the common way to land in that gap: they look like build flags,
+but `dotnet test` does not accept them and the test host has never heard of them.
+
+| Handled by `dotnet test` | Forwarded, and valid | Recognised by neither — breaks the run |
+|---|---|---|
+| `-p:` / `--property`, `-c`, `-f`, `-r`, `-a` / `--arch`, `--os`, `-v`, `-e`, `-t:` / `-target:`, `--no-build`, `--no-restore`, `-bl`, `--results-directory`, `--minimum-expected-tests` | `--filter`, `--filter-class`, `--filter-trait`, `--parallel`, `--max-threads`, `--report-trx`, `--hangdump` | `-m` / `-maxcpucount`, `-nodereuse` / `-nr`, `--nologo`, `-warnaserror`, `-graphBuild` |
+
+Two of these are counter-intuitive enough to call out. `--nologo` is a real `dotnet build`
+switch and reads like a harmless one, but `dotnet test` does not accept it, so it kills the
+run exactly like `-m:1`. Conversely `-t:`/`-target:` **is** accepted, even though
+`dotnet test --help` does not list it — so "not in `--help`" is not a reliable test for
+whether a flag is safe. When in doubt, run the command against a known-passing filter and
+check that the test count is non-zero.
+
+Environment variables are not argv tokens, so `MSBUILDDISABLENODEREUSE=1` is safe. The test
+host does inherit it — child processes inherit the environment — but it is never parsed as
+an MTP option, which is what the rejection above turns on.
+
+So when a build needs `-m:1 -nodereuse:false` (the `CS2012 …\intermediatexaml\Reactor.dll`
+race — see [`AGENTS.md`](AGENTS.md) field notes), split the command in two:
+
+```bash
+dotnet build tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64
+```
+
+**Recognising the failure.** Nothing prints *why* the command line was rejected — the test
+host's message is not surfaced — so the run looks like this, and the summary prose scans as
+green even though nothing ran:
+
+```text
+...\Reactor.Tests.dll (net10.0-windows10.0.22621.0) Zero tests ran
+Test run summary: Zero tests ran
+  error: 1
+  total: 0   failed: 0   succeeded: 0   skipped: 0
+```
+
+The reliable tell is the module label. A run that started prints the handshake-derived
+`net10.0|x64`; a rejected one falls back to the project's full
+`net10.0-windows10.0.22621.0`, because the test host died before its handshake. Exit 5 is
+*invalid command line* — the same code MSTest returns for `--filter-class` above — and is
+**not** MTP's zero-tests policy, which is exit 8. (Issue #1140.)
+
 ## When to write which test
 
 | If you're testing… | Write a… |

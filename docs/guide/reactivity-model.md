@@ -59,9 +59,9 @@ public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = fa
 ```
 
 `UseState` returns `(value, setter)`. The `value` is just a read of
-the slot at the current hook index. The `setter` is a closure over
-that index. Calling the setter does not, by itself, "react". It walks
-to the slot, compares the new value against the old via
+the slot at the current hook index. The `setter` is a cached delegate
+over that slot cell. Calling the setter does not, by itself, "react".
+It compares the new value against the old via
 `EqualityComparer<T>.Default`, writes if different, and calls back
 into the host with `_requestRerender`. The host decides when to render
 next — typically on the next dispatcher tick — and once it does, the
@@ -398,7 +398,10 @@ value from the reducer:
 
 ```csharp
 var (items, update) = UseReducer(new List<string>());
-update(prev => [.. prev, "new"]);
+
+// The updater must return a NEW list — mutating and returning the same
+// instance compares equal, so nothing is written and nothing re-renders.
+Action addItem = () => update(prev => [.. prev, "new"]);
 ```
 
 ## Tips

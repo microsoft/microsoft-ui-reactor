@@ -112,6 +112,45 @@ class ThemeRefGood : Component
 }
 // </snippet:good-theme-ref>
 
+class CustomKeyButton : Component
+{
+    public override Element Render() =>
+        // <snippet:custom-key>
+        // Reference any XAML resource by string key — covers app-level overrides
+        // and any token Reactor doesn't surface as a typed accessor.
+        Button("Custom", () => { })
+            .Background(Theme.Ref("MyAppTitleBarBackground"));
+        // </snippet:custom-key>
+}
+
+class BrandPrimaryButton : Component
+{
+    public override Element Render() =>
+        // <snippet:brand-primary-button>
+        Button("Buy now", BuyAction)
+            .Background(Theme.Ref("BrandPrimaryBrush"));
+        // </snippet:brand-primary-button>
+
+    private void BuyAction()
+    {
+    }
+}
+
+class LightPreviewPane : Component
+{
+    public override Element Render()
+    {
+        var content = VStack(8,
+            TextBlock("Print preview").Foreground(Theme.PrimaryText),
+            TextBlock("Always rendered with light theme tokens.")
+                .Foreground(Theme.SecondaryText));
+
+        // <snippet:per-element-theme>
+        return ScrollView(content).RequestedTheme(ElementTheme.Light);
+        // </snippet:per-element-theme>
+    }
+}
+
 // <snippet:status-banner>
 // Map a severity onto the Signal token pair (foreground + matching
 // background) so the banner tracks the theme in both light and dark.

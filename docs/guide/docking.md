@@ -195,7 +195,10 @@ the middle, tool strip on the right. `model.Dock(doc, DockTarget.Center)`
 lands in the middle group regardless of where it sits in tree order:
 
 ```csharp
-new DockSplit(Orientation.Horizontal, new DockNode[]
+var galleryItemsToolWindow = new ToolWindow { Title = "Gallery", Key = "tool:gallery" };
+var configurationToolWindow = new ToolWindow { Title = "Configuration", Key = "tool:configuration" };
+
+return new DockSplit(Orientation.Horizontal, new DockNode[]
 {
     new DockTabGroup(
         new[] { galleryItemsToolWindow },
@@ -203,12 +206,12 @@ new DockSplit(Orientation.Horizontal, new DockNode[]
         Role: DockGroupRole.ToolWindowStrip),
     new DockTabGroup(
         Array.Empty<DockableContent>(),
-        Role: DockGroupRole.DocumentArea), // implies ShowWhenEmpty
+        Role: DockGroupRole.DocumentArea),
     new DockTabGroup(
         new[] { configurationToolWindow },
         Width: 320,
         Role: DockGroupRole.ToolWindowStrip),
-})
+});
 ```
 
 > Programmatic `Dock(content, DockTarget.Center)` routes to the first
@@ -234,7 +237,8 @@ tool window may dock to (Qt's `setAllowedAreas` shape). Default
 `DockSides.Bottom` to lock an Errors pane to the bottom strip:
 
 ```csharp
-var errors = new ToolWindow {
+var errors = new ToolWindow
+{
     Title = "Errors",
     Key = "tool:errors",
     AllowedSides = DockSides.Bottom,

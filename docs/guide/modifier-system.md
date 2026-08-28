@@ -245,13 +245,13 @@ instead of forcing the reconciler to walk a delegate dictionary.
 
 ### Authoring a custom modifier
 
-If you find yourself writing `.Padding(8).WithBorder("#DDD").Background(Theme.CardBackground)`
+If you find yourself writing `.Padding(8).WithBorder(Theme.CardStroke).Background(Theme.CardBackground)`
 on every card, hoist it into a single extension that calls the existing
 modifiers in order:
 
 ```csharp
 public static T Card<T>(this T el) where T : Element =>
-    el.Padding(8).WithBorder("#DDD").Background(Theme.CardBackground);
+    el.Padding(8).WithBorder(Theme.CardStroke).Background(Theme.CardBackground);
 ```
 
 The generic constraint `T : Element` is the only ceremony — every
@@ -277,17 +277,20 @@ back out by type:
 ```csharp
 public record BadgeAttached(string Label);
 
-public static T Badge<T>(this T el, string label) where T : Element
+public static class BadgeExtensions
 {
-    // Copy any existing entries first — replacing the dictionary wholesale
-    // would drop another provider's attached record on the same element.
-    var attached = new Dictionary<Type, object>();
-    if (el.Attached is { } existing)
+    public static T Badge<T>(this T el, string label) where T : Element
     {
-        foreach (var kv in existing) attached[kv.Key] = kv.Value;
+        // Copy any existing entries first — replacing the dictionary wholesale
+        // would drop another provider's attached record on the same element.
+        var attached = new Dictionary<Type, object>();
+        if (el.Attached is { } existing)
+        {
+            foreach (var kv in existing) attached[kv.Key] = kv.Value;
+        }
+        attached[typeof(BadgeAttached)] = new BadgeAttached(label);
+        return el with { Attached = attached };
     }
-    attached[typeof(BadgeAttached)] = new BadgeAttached(label);
-    return el with { Attached = attached };
 }
 ```
 

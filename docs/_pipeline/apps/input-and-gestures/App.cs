@@ -6,6 +6,7 @@ using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.Storage;
 using Windows.System;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Advanced.Factories;
@@ -296,3 +297,140 @@ class KanbanDndExample : Component
     }
 }
 // </snippet:kanban-dnd>
+
+sealed record Card(string Title);
+
+static class InlineInputAndGestureSnippets
+{
+    private const string imageUrl = "ms-appx:///Assets/StoreLogo.png";
+
+    static void PanBasics()
+    {
+        // <snippet:pan-basic>
+        Rectangle()
+            .OnPan(
+                onChanged: g => Translate(g.Translation),
+                onEnded: g => SnapToGrid(g.Translation),
+                minimumDistance: 8.0,
+                axis: PanAxis.Both,
+                withInertia: true);
+        // </snippet:pan-basic>
+    }
+
+    static void PinchAndRotate()
+    {
+        // <snippet:pinch-and-rotate>
+        Image(imageUrl)
+            .AutomationName("Photo preview")
+            .OnPinch(
+                onChanged: g => Scale(g.Scale),
+                withInertia: true)
+            .OnRotate(
+                onChanged: g => Rotate(g.Angle));
+        // </snippet:pinch-and-rotate>
+    }
+
+    static void LongPressMouse()
+    {
+        var listItem = Border(TextBlock("Open menu"));
+
+        // <snippet:long-press-mouse>
+        listItem.OnLongPress(() => ShowContextMenu(), enableMouseEmulation: true);
+        // </snippet:long-press-mouse>
+    }
+
+    static void MigrationAfter()
+    {
+        // <snippet:set-event-migration-after>
+        // After
+        Rectangle()
+            .OnPointerEntered((_, _) => Hover())
+            .OnPointerExited((_, _) => Unhover());
+        // </snippet:set-event-migration-after>
+    }
+
+    static void DragStandardFormats()
+    {
+        // <snippet:drag-standard-formats>
+        Border(TextBlock("Drag me to Notepad"))
+            .OnDragStart<BorderElement>(() => new DragData().WithText("hello world"));
+
+        Rectangle()
+            .OnDrop<RectangleElement>(args =>
+            {
+                if (args.Data.TryGetText(out var text))
+                    Log(text);
+                args.AcceptedOperation = DragOperations.Copy;
+            });
+        // </snippet:drag-standard-formats>
+    }
+
+    static void DragLazyProvider()
+    {
+        // <snippet:drag-lazy-provider>
+        Border(TextBlock("Rich content"))
+            .OnDragStart<BorderElement>(() => new DragData()
+                .WithText("plain fallback")
+                .WithHtml(ct => RenderExpensiveHtmlAsync(ct)));
+        // </snippet:drag-lazy-provider>
+    }
+
+    static void DropIndicatorOverrides()
+    {
+        var children = new[] { TextBlock("Inbox") };
+        var inbox = new List<Card>();
+
+        // <snippet:drop-indicator-overrides>
+        VStack(children.ToArray())
+            .OnDragOver(args =>
+            {
+                args.UIOverride.Caption = "Move to Inbox";
+                args.UIOverride.IsGlyphVisible = false;
+                args.AcceptedOperation = DragOperations.Move;
+            })
+            .OnDrop<StackElement, Card>(card => inbox.Add(card));
+        // </snippet:drop-indicator-overrides>
+    }
+
+    static void DropSafeFiles()
+    {
+        // <snippet:drop-safe-files>
+        Border(TextBlock("Drop files here"))
+            .OnDrop<BorderElement>(args =>
+            {
+                if (args.Data.TryGetSafeLocalFiles(out var files))
+                    Import(files);
+                args.AcceptedOperation = DragOperations.Copy;
+            });
+        // </snippet:drop-safe-files>
+    }
+
+    static void MoveOnConfirmation(Card card, List<Card> column)
+    {
+        // <snippet:move-on-confirmation>
+        Border(TextBlock(card.Title))
+            .OnDragStart<BorderElement, Card>(
+                getPayload: () => card,
+                allowedOperations: DragOperations.Move | DragOperations.Copy,
+                onEnd: ctx =>
+                {
+                    if (ctx.WasCancelled) return;
+                    if (ctx.CompletedOperation == DragOperations.Move)
+                        column.Remove(card);  // confirmed move — safe to remove
+                    // else: Copy succeeded, source keeps the item
+                });
+        // </snippet:move-on-confirmation>
+    }
+
+    static void Translate(Windows.Foundation.Point translation) { }
+    static void SnapToGrid(Windows.Foundation.Point translation) { }
+    static void Scale(double scale) { }
+    static void Rotate(double angle) { }
+    static void ShowContextMenu() { }
+    static void Hover() { }
+    static void Unhover() { }
+    static void Log(string text) { }
+    static Task<string> RenderExpensiveHtmlAsync(CancellationToken cancellationToken) =>
+        Task.FromResult("<p>rich content</p>");
+    static void Import(IReadOnlyList<IStorageItem> files) { }
+}

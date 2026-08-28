@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 <#
 .SYNOPSIS
     Parallelized code review orchestrator using Claude Code CLI agents.
@@ -55,7 +56,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RepoRoot = Split-Path -Parent $PSScriptRoot
+# tools/reviewer -> tools -> repo root. Two levels, not one: manifest paths are
+# resolved against this, so an off-by-one here silently fails every path.
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $ReviewerDir = $PSScriptRoot
 $ReportsDir = Join-Path $ReviewerDir "reports"
 $ManifestPath = Join-Path $ReviewerDir "manifest.json"
@@ -98,7 +101,6 @@ if ($ConsolidateOnly) {
     Write-Host "`nSkipping agent runs — consolidation only" -ForegroundColor Yellow
     $batches = @()
 }
-
 # ------------------------------------------------------------------
 # Phase 1: Run specialist agents (safety, lifecycle, interop, security, test-quality)
 # ------------------------------------------------------------------
@@ -106,15 +108,124 @@ if ($ConsolidateOnly) {
 $specialistBatches = @($batches | Where-Object { $_.agent -ne "general" })
 $generalBatches = @($batches | Where-Object { $_.agent -eq "general" })
 
+# ------------------------------------------------------------------
+# Shared batch helpers
+#
+# Defined once as source text because ForEach-Object -Parallel runs each
+# iteration in a fresh runspace that does NOT inherit this scope's functions.
+# Both parallel blocks below dot-source this via $using: so the resolution and
+# reporting rules exist in exactly one place.
+# ------------------------------------------------------------------
+
+$SharedBatchFunctions = @'
+# Reject a path whose shape the CI gate (ReviewerManifestTests) would reject, before it
+# ever reaches the filesystem. Without this the run and the gate disagree: a traversal
+# entry such as "src/Reactor/../../<repo>/README.md" satisfies Test-Path and would be
+# counted as reviewed here, while the gate fails the build on it. Rooted paths are
+# rejected for the same reason -- Join-Path's handling of a rooted child is provider- and
+# version-dependent, so this does not rely on it concatenating.
+function Test-ManifestPathShape {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if ($Path.Contains('\')) { return $false }
+    if ($Path.StartsWith('./')) { return $false }
+    if ([System.IO.Path]::IsPathRooted($Path)) { return $false }
+    if (($Path -split '/') -contains '..') { return $false }
+    return $true
+}
+
+# Split a batch's declared files into those that actually exist and those that don't.
+# The reviewer never opens these files itself -- it asks an agent to -- so a path that
+# does not resolve is a file that cannot be reviewed, and must not be counted as one.
+# -PathType Leaf matters: the CI gate uses File.Exists, so accepting a directory here
+# would let the run report coverage the gate would reject.
+function Resolve-BatchFiles {
+    param([string[]]$Files, [string]$Root)
+
+    $resolved = [System.Collections.Generic.List[string]]::new()
+    $missing = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in $Files) {
+        if ((Test-ManifestPathShape -Path $f) -and (Test-Path -LiteralPath (Join-Path $Root $f) -PathType Leaf)) {
+            $resolved.Add($f)
+        }
+        else { $missing.Add($f) }
+    }
+    return [pscustomobject]@{
+        Resolved = $resolved.ToArray()
+        Missing  = $missing.ToArray()
+        Declared = $Files.Count
+    }
+}
+
+# Report header. "Files reviewed" counts what resolved, not what the manifest
+# declared, and any shortfall is named rather than absorbed.
+function New-ReportHeader {
+    param([string]$BatchId, [string]$AgentName, [string]$Description, [object]$Scan)
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("# Review Report: $BatchId")
+    $lines.Add("")
+    $lines.Add("**Agent**: $AgentName")
+    $lines.Add("**Description**: $Description")
+    $lines.Add("**Files reviewed**: $($Scan.Resolved.Count) of $($Scan.Declared)")
+    $lines.Add("**Generated**: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+    if ($Scan.Missing.Count -gt 0) {
+        $lines.Add("")
+        $lines.Add("> **Incomplete coverage**: $($Scan.Missing.Count) manifest path(s) did not resolve")
+        $lines.Add("> under the repo root and were not reviewed. Fix them in tools/reviewer/manifest.json.")
+        foreach ($m in $Scan.Missing) { $lines.Add("> - ``$m``") }
+    }
+    return ($lines -join "`n")
+}
+
+# One-line progress, honest about the shortfall.
+function Get-BatchProgressText {
+    param([string]$BatchId, [object]$Scan)
+    if ($Scan.Missing.Count -gt 0) {
+        return "  [$BatchId] Starting ($($Scan.Resolved.Count) of $($Scan.Declared) files -- $($Scan.Missing.Count) missing)..."
+    }
+    return "  [$BatchId] Starting ($($Scan.Declared) files)..."
+}
+'@
+
+. ([scriptblock]::Create($SharedBatchFunctions))
+
+# Pre-flight coverage. Stated up front so the operator knows before spending an
+# LLM run whether the manifest can actually deliver the coverage it claims.
+$declaredTotal = 0
+$missingAll = [System.Collections.Generic.List[string]]::new()
+foreach ($b in $batches) {
+    $s = Resolve-BatchFiles -Files $b.files -Root $RepoRoot
+    $declaredTotal += $s.Declared
+    foreach ($m in $s.Missing) { $missingAll.Add("$($b.id): $m") }
+}
+if ($batches.Count -gt 0) {
+    $reviewable = $declaredTotal - $missingAll.Count
+    # "entries", not "files": a file can appear in several batches on purpose, so this
+    # run-level total exceeds the distinct file count. The per-batch header below says
+    # "Files reviewed" and is accurate there, because no batch may list a path twice.
+    if ($missingAll.Count -gt 0) {
+        Write-Warning "Manifest coverage: $reviewable of $declaredTotal entries resolve; $($missingAll.Count) path(s) are stale and will NOT be reviewed."
+        foreach ($m in $missingAll) { Write-Host "    $m" -ForegroundColor DarkYellow }
+        Write-Host "  Fix these in tools/reviewer/manifest.json (paths are relative to the repo root)." -ForegroundColor DarkYellow
+    }
+    else {
+        Write-Host "Manifest coverage: $declaredTotal of $declaredTotal entries resolve." -ForegroundColor Green
+    }
+}
+
 function Build-AgentPrompt {
     param(
-        [object]$BatchObj
+        [object]$BatchObj,
+        [Parameter(Mandatory)][object]$Scan
     )
     $agentName = $BatchObj.agent
     $promptTemplate = Get-Content (Join-Path $PromptsDir "$agentName.md") -Raw
 
-    # Build file list for this batch
-    $fileList = ($BatchObj.files | ForEach-Object { "- $_" }) -join "`n"
+    # Scan is passed in rather than recomputed so the prompt's file list and the report
+    # header's "N of M" cannot disagree: one resolution, one source of truth.
+    $fileList = ($Scan.Resolved | ForEach-Object { "- $_" }) -join "`n"
 
     $fullPrompt = @"
 $promptTemplate
@@ -127,6 +238,8 @@ $promptTemplate
 
 **Primary files to review:**
 $fileList
+
+All paths are relative to the repository root.
 
 Review each file thoroughly. For each file, read it completely before analyzing.
 You may read other files in the repo for context (e.g., to understand types, base classes, callers).
@@ -147,19 +260,26 @@ function Invoke-ReviewAgent {
     $batchId = $BatchObj.id
     $reportPath = Join-Path $ReportsDir "$batchId.md"
 
-    $prompt = Build-AgentPrompt -BatchObj $BatchObj
+    # Resolved once and threaded through both the prompt and the report, so the agent's
+    # file list and the reported coverage are guaranteed to describe the same set.
+    # Only hand the agent files that exist: listing an unopenable path invites it to guess,
+    # or to silently skip the file and report the batch as done.
+    $scan = Resolve-BatchFiles -Files $BatchObj.files -Root $RepoRoot
+    $prompt = Build-AgentPrompt -BatchObj $BatchObj -Scan $scan
 
-    Write-Host "  [$batchId] Starting ($($BatchObj.files.Count) files)..." -ForegroundColor Gray
+    Write-Host (Get-BatchProgressText -BatchId $batchId -Scan $scan) -ForegroundColor Gray
+    if ($scan.Missing.Count -gt 0) {
+        Write-Warning "  [$batchId] $($scan.Missing.Count) manifest path(s) not found; not reviewed: $($scan.Missing -join ', ')"
+    }
 
     if ($DryRun) {
         Write-Host "  [$batchId] DRY RUN — would invoke claude --print" -ForegroundColor Yellow
         # Write a placeholder
         @"
-# Review Report: $batchId
-## Agent: $agentName
-## Status: DRY RUN — no findings generated
-## Files: $($BatchObj.files -join ', ')
-"@ | Set-Content $reportPath
+$(New-ReportHeader -BatchId $batchId -AgentName $agentName -Description $BatchObj.description -Scan $scan)
+
+**Status**: DRY RUN — no findings generated
+"@ | Set-Content $reportPath -Encoding UTF8
         return
     }
 
@@ -174,12 +294,7 @@ function Invoke-ReviewAgent {
 
         # Write report
         @"
-# Review Report: $batchId
-
-**Agent**: $agentName
-**Description**: $($BatchObj.description)
-**Files reviewed**: $($BatchObj.files.Count)
-**Generated**: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+$(New-ReportHeader -BatchId $batchId -AgentName $agentName -Description $BatchObj.description -Scan $scan)
 
 ---
 
@@ -191,9 +306,8 @@ $result
     catch {
         Write-Warning "  [$batchId] FAILED: $_"
         @"
-# Review Report: $batchId
+$(New-ReportHeader -BatchId $batchId -AgentName $agentName -Description $BatchObj.description -Scan $scan)
 
-**Agent**: $agentName
 **Status**: FAILED
 **Error**: $_
 "@ | Set-Content $reportPath -Encoding UTF8
@@ -210,13 +324,16 @@ if ($specialistBatches.Count -gt 0) {
         $ReportsDir = $using:ReportsDir
         $PromptsDir = $using:PromptsDir
         $DryRun = $using:DryRun
+        $RepoRoot = $using:RepoRoot
+        . ([scriptblock]::Create($using:SharedBatchFunctions))
         $BatchObj = $_
         $agentName = $BatchObj.agent
         $batchId = $BatchObj.id
         $reportPath = Join-Path $ReportsDir "$batchId.md"
 
         $promptTemplate = Get-Content (Join-Path $PromptsDir "$agentName.md") -Raw
-        $fileList = ($BatchObj.files | ForEach-Object { "- $_" }) -join "`n"
+        $scan = Resolve-BatchFiles -Files $BatchObj.files -Root $RepoRoot
+        $fileList = ($scan.Resolved | ForEach-Object { "- $_" }) -join "`n"
 
         $fullPrompt = @"
 $promptTemplate
@@ -230,6 +347,8 @@ $promptTemplate
 **Primary files to review:**
 $fileList
 
+All paths are relative to the repository root.
+
 Review each file thoroughly. For each file, read it completely before analyzing.
 You may read other files in the repo for context.
 
@@ -238,11 +357,18 @@ Output your findings in the exact format specified above. If you find no issues 
 Begin your review now.
 "@
 
-        Write-Host "  [$batchId] Starting ($($BatchObj.files.Count) files)..." -ForegroundColor Gray
+        Write-Host (Get-BatchProgressText -BatchId $batchId -Scan $scan) -ForegroundColor Gray
+        if ($scan.Missing.Count -gt 0) {
+            Write-Warning "  [$batchId] $($scan.Missing.Count) manifest path(s) not found; not reviewed: $($scan.Missing -join ', ')"
+        }
 
         if ($DryRun) {
             Write-Host "  [$batchId] DRY RUN" -ForegroundColor Yellow
-            "# Review Report: $batchId`n## Agent: $agentName`n## Status: DRY RUN" | Set-Content $reportPath
+            @"
+$(New-ReportHeader -BatchId $batchId -AgentName $agentName -Description $BatchObj.description -Scan $scan)
+
+**Status**: DRY RUN
+"@ | Set-Content $reportPath -Encoding UTF8
         }
         else {
             try {
@@ -270,12 +396,7 @@ Begin your review now.
                 }
 
                 @"
-# Review Report: $batchId
-
-**Agent**: $agentName
-**Description**: $($BatchObj.description)
-**Files reviewed**: $($BatchObj.files.Count)
-**Generated**: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+$(New-ReportHeader -BatchId $batchId -AgentName $agentName -Description $BatchObj.description -Scan $scan)
 
 ---
 
@@ -286,7 +407,12 @@ $result
             }
             catch {
                 Write-Warning "  [$batchId] FAILED: $_"
-                "# Review Report: $batchId`n**Status**: FAILED`n**Error**: $_" | Set-Content $reportPath
+                @"
+$(New-ReportHeader -BatchId $batchId -AgentName $agentName -Description $BatchObj.description -Scan $scan)
+
+**Status**: FAILED
+**Error**: $_
+"@ | Set-Content $reportPath -Encoding UTF8
             }
         }
     }
@@ -315,13 +441,16 @@ if ($generalBatches.Count -gt 0) {
         $ReportsDir = $using:ReportsDir
         $PromptsDir = $using:PromptsDir
         $DryRun = $using:DryRun
+        $RepoRoot = $using:RepoRoot
+        . ([scriptblock]::Create($using:SharedBatchFunctions))
         $specialistFindings = $using:specialistFindings
         $BatchObj = $_
         $batchId = $BatchObj.id
         $reportPath = Join-Path $ReportsDir "$batchId.md"
 
         $promptTemplate = Get-Content (Join-Path $PromptsDir "general.md") -Raw
-        $fileList = ($BatchObj.files | ForEach-Object { "- $_" }) -join "`n"
+        $scan = Resolve-BatchFiles -Files $BatchObj.files -Root $RepoRoot
+        $fileList = ($scan.Resolved | ForEach-Object { "- $_" }) -join "`n"
 
         $fullPrompt = @"
 $promptTemplate
@@ -337,16 +466,25 @@ $specialistFindings
 **Primary files to review:**
 $fileList
 
+All paths are relative to the repository root.
+
 Review each file. Focus on what the specialists missed. Do NOT re-report their findings.
 
 Begin your review now.
 "@
 
-        Write-Host "  [$batchId] Starting ($($BatchObj.files.Count) files)..." -ForegroundColor Gray
+        Write-Host (Get-BatchProgressText -BatchId $batchId -Scan $scan) -ForegroundColor Gray
+        if ($scan.Missing.Count -gt 0) {
+            Write-Warning "  [$batchId] $($scan.Missing.Count) manifest path(s) not found; not reviewed: $($scan.Missing -join ', ')"
+        }
 
         if ($DryRun) {
             Write-Host "  [$batchId] DRY RUN" -ForegroundColor Yellow
-            "# Review Report: $batchId`n## Agent: general`n## Status: DRY RUN" | Set-Content $reportPath
+            @"
+$(New-ReportHeader -BatchId $batchId -AgentName 'general' -Description $BatchObj.description -Scan $scan)
+
+**Status**: DRY RUN
+"@ | Set-Content $reportPath -Encoding UTF8
         }
         else {
             try {
@@ -374,12 +512,7 @@ Begin your review now.
                 }
 
                 @"
-# Review Report: $batchId
-
-**Agent**: general
-**Description**: $($BatchObj.description)
-**Files reviewed**: $($BatchObj.files.Count)
-**Generated**: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+$(New-ReportHeader -BatchId $batchId -AgentName 'general' -Description $BatchObj.description -Scan $scan)
 
 ---
 
@@ -390,7 +523,12 @@ $result
             }
             catch {
                 Write-Warning "  [$batchId] FAILED: $_"
-                "# Review Report: $batchId`n**Status**: FAILED`n**Error**: $_" | Set-Content $reportPath
+                @"
+$(New-ReportHeader -BatchId $batchId -AgentName 'general' -Description $BatchObj.description -Scan $scan)
+
+**Status**: FAILED
+**Error**: $_
+"@ | Set-Content $reportPath -Encoding UTF8
             }
         }
     }
