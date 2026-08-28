@@ -16,15 +16,18 @@ its source location:
 ```
 14 of 14 controls mapped
 
-StackPanel  App.cs:126
-  TextBlock  App.cs:127
-  TextBlock  App.cs:128
-  Border  App.cs:129
-    StackPanel  App.cs:130
-      TextBlock  App.cs:131
-      TextBlock  App.cs:132
+StackPanel  App.cs:181
+  TextBlock  App.cs:183
+  Border  App.cs:184
+    StackPanel  App.cs:185
+      TextBlock  App.cs:186
+      TextBlock  App.cs:187
   ...
 ```
+
+Line numbers here are a capture from one run and move whenever `App.cs` is
+edited — which is the feature working, not the transcript rotting. Compare the
+shape, and open the lines your own run prints.
 
 Open `App.cs` at those lines and you will find exactly the factory call named.
 `StackPanel` entries come from `VStack` / `HStack` — the `params Element?[]`
@@ -41,10 +44,10 @@ coordinates, hit-tests that point, and compares the two answers:
 
 ```
 TextBlock
-App.cs:188
+App.cs:187
 
 hit-test at its own centre (102,261)
-  -> TextBlock  App.cs:188
+  -> TextBlock  App.cs:187
   AGREES with the tree walk
 ```
 
@@ -104,3 +107,4 @@ checks the flag and returns the original element untouched.
   implicit `string` -> `Element` conversion, whose `TextBlock` call lives in the
   framework rather than your code, so those report no location rather than a
   misleading framework one.
+
