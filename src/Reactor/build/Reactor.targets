@@ -47,6 +47,16 @@
 
   <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
     <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+    <!--
+      Compile-time signal that this assembly was BUILT with source mapping. It is
+      deliberately a build fact rather than a runtime probe: code that needs to
+      know whether locations are available must not infer it from "GetSource
+      returned null", because that cannot distinguish "not compiled in" from
+      "compiled in but broken". Tests use it to skip honestly on a Release build
+      while still asserting hard on a Debug one; consumers can use it to guard
+      inspector UI that would otherwise show empty locations.
+    -->
+    <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

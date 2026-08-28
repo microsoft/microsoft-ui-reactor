@@ -24,6 +24,24 @@ internal static class SourceMapReadPathTests
 {
     private static int Line([CallerLineNumber] int line = 0) => line;
 
+    /// <summary>
+    /// Why the interceptor-dependent checks below skip rather than fail when
+    /// REACTOR_SOURCEMAP is not defined.
+    ///
+    /// <para>The gate is a BUILD fact, not a runtime probe. Skipping on "GetSource
+    /// returned null" would be the classic comforting negative: a generator that
+    /// silently stopped emitting would skip green forever. Keying on the compile
+    /// constant means a Debug build (which is what PR CI runs) always asserts
+    /// hard, and only a build that genuinely has no interceptors compiled in can
+    /// skip — e.g. the AOT selftests job, which publishes Release.</para>
+    ///
+    /// <para>Each fixture still asserts an observable precondition (the control
+    /// mounted) before skipping, so a broken harness stays red rather than
+    /// disappearing into a skip.</para>
+    /// </summary>
+    private const string SkipReason =
+        "assembly built without REACTOR_SOURCEMAP (Release) - no interceptors compiled in, so there is no call site to read";
+
     private static readonly SourceLocation HandStamp = new(@"C:\fixture\HandStamped.cs", 4242);
 
     /// <summary>
@@ -52,6 +70,7 @@ internal static class SourceMapReadPathTests
                 H.Check("SourceMapReadPath_LeafMounted", target is not null);
                 if (target is null) return;
 
+#if REACTOR_SOURCEMAP
                 var resolved = ReactorSourceMap.GetSource(target);
 
                 // Non-null alone would be satisfied by any stamp reaching any
@@ -61,6 +80,12 @@ internal static class SourceMapReadPathTests
                     resolved?.LineNumber == expectedLine);
                 H.Check("SourceMapReadPath_FileIsThisFixture",
                     resolved?.FilePath.EndsWith("SourceMapReadPathTests.cs", StringComparison.Ordinal) == true);
+#else
+                _ = expectedLine;
+                H.Skip("SourceMapReadPath_Resolved", SkipReason);
+                H.Skip("SourceMapReadPath_LineIsRealCallSite", SkipReason);
+                H.Skip("SourceMapReadPath_FileIsThisFixture", SkipReason);
+#endif
             }
             finally
             {
@@ -95,6 +120,7 @@ internal static class SourceMapReadPathTests
                 H.Check("SourceMapReadPath_BothLeavesMounted", a is not null && b is not null);
                 if (a is null || b is null) return;
 
+#if REACTOR_SOURCEMAP
                 var ra = ReactorSourceMap.GetSource(a);
                 var rb = ReactorSourceMap.GetSource(b);
 
@@ -102,6 +128,12 @@ internal static class SourceMapReadPathTests
                 H.Check("SourceMapReadPath_SecondLine", rb?.LineNumber == secondLine);
                 H.Check("SourceMapReadPath_LinesDiffer",
                     ra is not null && rb is not null && ra.Value.LineNumber != rb.Value.LineNumber);
+#else
+                _ = firstLine; _ = secondLine;
+                H.Skip("SourceMapReadPath_FirstLine", SkipReason);
+                H.Skip("SourceMapReadPath_SecondLine", SkipReason);
+                H.Skip("SourceMapReadPath_LinesDiffer", SkipReason);
+#endif
             }
             finally
             {
@@ -205,8 +237,13 @@ internal static class SourceMapReadPathTests
                 H.Check("SourceMapReadPath_ButtonMounted", target is not null);
                 if (target is null) return;
 
+#if REACTOR_SOURCEMAP
                 H.Check("SourceMapReadPath_ButtonCarriesRealCallSite",
                     ReactorSourceMap.GetSource(target)?.LineNumber == expectedLine);
+#else
+                _ = expectedLine;
+                H.Skip("SourceMapReadPath_ButtonCarriesRealCallSite", SkipReason);
+#endif
             }
             finally
             {

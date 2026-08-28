@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using System.Linq;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace SourceMapExplorer;
@@ -62,14 +63,10 @@ internal sealed class App : Component
         // the innermost element under it that carries a source location. Shared by
         // the pointer handler and the "Inspect deepest leaf" button so both drive
         // identical code.
-        UIElement? InspectAtPoint(global::Windows.Foundation.Point point, UIElement root)
-        {
-            foreach (var candidate in VisualTreeHelper.FindElementsInHostCoordinates(point, root))
-            {
-                if (ReactorSourceMap.GetSource(candidate) is not null) return candidate;
-            }
-            return null;
-        }
+        UIElement? InspectAtPoint(global::Windows.Foundation.Point point, UIElement root) =>
+            VisualTreeHelper.FindElementsInHostCoordinates(point, root)
+                .Where(candidate => ReactorSourceMap.GetSource(candidate) is not null)
+                .FirstOrDefault();
 
         // Hit-test from the panel root rather than putting a handler on each leaf:
         // a leaf with a callback would be tagged anyway, which would prove nothing.

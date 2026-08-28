@@ -183,10 +183,9 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
 
         int index = 0;
-        foreach (var site in sites)
+        foreach (var site in sites.Where(static s => s is not null))
         {
-            if (site is null) continue;
-            var sig = site.Signature;
+            var sig = site!.Signature;
             var mapped = ApplyPathMap(site.FilePath, pathMap);
             var name = $"__Reactor_{sig.MethodName}_{index}";
 
@@ -233,10 +232,8 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     internal static string ApplyPathMap(string path, ImmutableArray<KeyValuePair<string, string>> pathMap)
     {
         if (pathMap.IsDefaultOrEmpty || string.IsNullOrEmpty(path)) return path;
-        foreach (var entry in pathMap)
+        foreach (var entry in pathMap.Where(entry => path.StartsWith(entry.Key, StringComparison.OrdinalIgnoreCase)))
         {
-            if (!path.StartsWith(entry.Key, StringComparison.OrdinalIgnoreCase)) continue;
-
             var suffix = path.Substring(entry.Key.Length);
             if (entry.Value.IndexOf('/') >= 0 && entry.Value.IndexOf('\\') < 0)
                 suffix = suffix.Replace('\\', '/');
