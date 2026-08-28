@@ -150,9 +150,12 @@ public sealed class WindowIcon
     /// while the path form yields a real per-window icon. (It appears to work in an
     /// <i>unpackaged</i> process only because <c>ms-appx:</c> maps to the executable
     /// directory there, which is why this needs a packaged app to observe.)</para>
-    /// <para>If the translated path does not exist the original URI is passed through
-    /// unchanged, so an asset the platform can resolve some other way — an MRT
-    /// scale/target-size qualified variant, say — still gets its chance.</para>
+    /// <para>A URI that names no file therefore reports failure rather than being passed
+    /// through to the platform. Passing it through would call <c>SetIcon</c> with a value
+    /// the same measurement shows resolves to a default icon, and — because that call
+    /// does not throw — would report success and suppress the fallback, locking in a
+    /// blank icon for a window that had a perfectly good convention or PE icon
+    /// available.</para>
     /// </remarks>
     internal bool Apply(AppWindow appWindow)
     {
@@ -161,8 +164,12 @@ public sealed class WindowIcon
         var target = _source;
         if (_isResource)
         {
-            // Best-effort: fall through with the raw URI when it cannot be mapped.
-            if (TryResolveResourceUri(_source, out var fromResource)) target = fromResource;
+            if (!TryResolveResourceUri(_source, out target))
+            {
+                Debug.WriteLine(
+                    $"[Reactor] WindowIcon.Apply: '{_source}' names no asset under {AppContext.BaseDirectory}.");
+                return false;
+            }
         }
         else if (!TryResolveExistingPath(_source, out target))
         {
@@ -189,8 +196,9 @@ public sealed class WindowIcon
     /// </summary>
     /// <returns>
     /// <c>false</c> when the URI is not <c>ms-appx:</c>, names no asset, or maps to a file
-    /// that does not exist — the caller then passes the original URI to the platform
-    /// rather than second-guessing it.
+    /// that does not exist. <paramref name="resolved"/> is left as the original URI in
+    /// that case, but callers should treat it as unusable — see the remarks on
+    /// <see cref="Apply"/> for why handing a URI to <c>SetIcon</c> is worse than failing.
     /// </returns>
     internal static bool TryResolveResourceUri(string uri, out string resolved)
     {

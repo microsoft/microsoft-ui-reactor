@@ -71,10 +71,12 @@ public class WindowIconResourceUriTests
     }
 
     [Fact]
-    public void Uri_Whose_Asset_Is_Absent_Is_Left_For_The_Platform()
+    public void Uri_Whose_Asset_Is_Absent_Is_Rejected()
     {
-        // No file created — Reactor must not invent a path that does not exist; the
-        // caller passes the original URI through instead.
+        // No file created. Reactor must not invent a path that does not exist, and must
+        // not hand the raw URI to SetIcon either: in a packaged app that call succeeds
+        // while applying a *default* icon, which would report success and suppress the
+        // exe/convention fallback.
         const string uri = "ms-appx:///Assets/DefinitelyNotThere.ico";
 
         Assert.False(WindowIcon.TryResolveResourceUri(uri, out var resolved));

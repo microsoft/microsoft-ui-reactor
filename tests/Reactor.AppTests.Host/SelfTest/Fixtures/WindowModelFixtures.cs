@@ -316,6 +316,33 @@ internal static partial class WindowModelFixtures
                 finally { await CloseAndSettle(missing); }
 
                 H.Check("WindowIcon_MissingDeclared_Falls_Back_To_Convention", missingIcon != 0);
+
+                // Same, for the resource spelling: a declared icon whose URI names no
+                // asset must not leave the window worse off than declaring nothing.
+                //
+                // Be clear about what this does and does not prove. It reddens if
+                // ReactorWindow stops running the fallback after a failed resource
+                // Apply. It does *not* discriminate the "unmappable URI must report
+                // failure" fix: measured by mutation, it passes with and without it,
+                // because in this unpackaged host SetIcon rejects the bad URI anyway
+                // and Apply returns false by the other route. The behaviour that fix
+                // targets — SetIcon *succeeding* on a URI while applying a default
+                // icon — only exists in a packaged process, which no tier here can
+                // reach (see #1148).
+                var missingResource = await OpenAndSettle(
+                    new WindowSpec
+                    {
+                        Title = "Icon Missing Resource",
+                        Width = 200,
+                        Height = 160,
+                        Icon = WindowIcon.FromResource("ms-appx:///Assets/DoesNotExist.ico"),
+                    },
+                    () => new StubComponent());
+                nint missingResourceIcon;
+                try { missingResourceIcon = IconOf(missingResource); }
+                finally { await CloseAndSettle(missingResource); }
+
+                H.Check("WindowIcon_MissingResource_Falls_Back_To_Convention", missingResourceIcon != 0);
             }
             finally
             {
