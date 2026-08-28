@@ -39,14 +39,15 @@ public class InlineSnippetLedgerTests
 
     /// <summary>A fenced C# block, with the fence's info string.</summary>
     /// <remarks>
-    /// The fence is variable-length and matched by backreference. Hard-coding three backticks made
-    /// the gate blind to a four-backtick block — the form CommonMark requires when the example
-    /// itself contains a triple-backtick run — so hand-typed copyable C# could enter the guides
-    /// without a ledger entry simply by being fenced one character wider. The closing fence must be
-    /// at least as long as the opening one, which is also CommonMark's rule.
+    /// The fence is variable-length and matched by backreference, and accepts both fence characters
+    /// CommonMark defines. Hard-coding three backticks made the gate blind to a four-backtick block
+    /// — the form CommonMark requires when the example itself contains a triple-backtick run — and
+    /// to a tilde fence, so hand-typed copyable C# could enter the guides without a ledger entry
+    /// just by being fenced one character wider or with a different character. The closing fence
+    /// must repeat the opening run, which is also CommonMark's rule.
     /// </remarks>
     private static readonly Regex CSharpFence =
-        new(@"(?im)^(?<fence>`{3,})csharp([^\r\n]*)\r?\n(?<body>.*?)^\k<fence>`*[ \t]*\r?$",
+        new(@"(?im)^(?<fence>`{3,}|~{3,})csharp([^\r\n]*)\r?\n(?<body>.*?)^\k<fence>[`~]*[ \t]*\r?$",
             RegexOptions.Compiled | RegexOptions.Singleline);
 
     /// <summary>
@@ -373,6 +374,8 @@ public class InlineSnippetLedgerTests
     [InlineData("```")]
     [InlineData("````")]
     [InlineData("`````")]
+    [InlineData("~~~")]
+    [InlineData("~~~~")]
     public void Gate_Sees_Csharp_Blocks_At_Any_Fence_Length(string fence)
     {
         var template = $"{fence}csharp\nvar x = Button(\"hi\", () => {{ }});\n{fence}\n";

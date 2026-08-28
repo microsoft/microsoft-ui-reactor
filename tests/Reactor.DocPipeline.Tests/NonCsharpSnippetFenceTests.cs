@@ -107,7 +107,7 @@ public class NonCsharpSnippetFenceTests
     [InlineData("xaml", "<!-- Project shape -->")]
     [InlineData("html", "<!-- Project shape -->")]
     [InlineData("csharp", "// Project shape")]
-    [InlineData("json", "// Project shape")]
+    [InlineData("jsonc", "// Project shape")]
     [InlineData("powershell", "# Project shape")]
     [InlineData("bash", "# Project shape")]
     [InlineData("yaml", "# Project shape")]
@@ -121,23 +121,27 @@ public class NonCsharpSnippetFenceTests
         Assert.Equal(expected, DocAssembler.TitleComment(language, "Project shape"));
     }
 
-    [Fact]
-    public void Title_on_an_unmapped_language_is_reported_rather_than_guessed()
+    [Theory]
+    [InlineData("json")]      // JSON has no comment syntax at all; `//` makes it invalid.
+    [InlineData("brainfuck")] // simply unmapped
+    public void Title_on_a_language_without_a_comment_syntax_is_reported_rather_than_guessed(string language)
     {
-        // Fail-closed: emitting a plausible-looking comment for a language we do not
-        // actually know is how the `//`-for-everything bug happened. An unmapped
-        // language must surface as an error, not as a silently wrong line.
-        Assert.Null(DocAssembler.TitleComment("brainfuck", "Title"));
+        // Fail-closed: emitting a plausible-looking comment for a language that has none
+        // is how the `//`-for-everything bug happened. It must surface as an error, not
+        // as a silently wrong line that invalidates the snippet.
+        Assert.Null(DocAssembler.TitleComment(language, "Title"));
 
         const string id = "probe/id";
         var output = DocAssembler.Assemble(
-            $"```brainfuck snippet=\"{id}\" title=\"T\"\n```",
-            OneSnippet(id, "BODY"), NoScreenshots, out var errors, out _, null, null);
+            $"```{language} snippet=\"{id}\" title=\"MyTitle\"\n```",
+            OneSnippet(id, "BODY"), NoScreenshots, out var errors, out _, null, null)
+            .ReplaceLineEndings("\n");
 
-        Assert.Contains(errors, e => e.Contains("title=") && e.Contains("brainfuck"));
-        // The snippet body still ships; only the unrepresentable title is dropped.
-        Assert.Contains("BODY", output);
-        Assert.DoesNotContain("T\n", output.Replace("BODY", string.Empty));
+        Assert.Contains(errors, e => e.Contains("title=") && e.Contains(language));
+        // Exact output: the body still ships, and nothing else was emitted. Asserting the
+        // whole block rather than "does not contain" avoids a negative that can never fire
+        // (an earlier cut checked for "MyTitle\n" against `\r\n` output on Windows).
+        Assert.Equal($"```{language}\nBODY\n```", output.Trim());
     }
 
     [Theory]

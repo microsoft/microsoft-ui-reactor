@@ -149,10 +149,13 @@ internal static partial class DocAssembler
                 or "yaml" or "yml" or "python" or "py" or "ini" or "toml" or "dockerfile" or "r"
                 => $"# {title}",
             "csharp" or "cs" or "c" or "cpp" or "c++" or "java" or "javascript" or "js"
-                or "typescript" or "ts" or "json" or "jsonc" or "go" or "rust" or "rs" or "swift" or "kotlin"
+                or "typescript" or "ts" or "jsonc" or "json5" or "go" or "rust" or "rs" or "swift" or "kotlin"
                 => $"// {title}",
             "sql" => $"-- {title}",
             "vb" or "vbnet" or "vba" => $"' {title}",
+            // Deliberately absent: `json`. JSON has no comment syntax, so a title would make an
+            // otherwise valid snippet invalid. `jsonc` / `json5` do allow comments and are mapped
+            // above. Anything unmapped falls through to null and is reported by Assemble.
             _ => null,
         };
 
