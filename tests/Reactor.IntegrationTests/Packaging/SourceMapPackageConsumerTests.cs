@@ -22,10 +22,11 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 /// "Integration Tests" job). On a network-restricted machine both fail identically with
 /// NU1301 during restore.</para>
 /// </summary>
-public sealed class SourceMapPackageConsumerTests : IClassFixture<TemplatePackageTestFixture>, IDisposable
+[Collection(LocalPackageFeedCollection.Name)]
+public sealed class SourceMapPackageConsumerTests : IDisposable
 {
     private readonly TemplatePackageTestFixture _fixture;
-    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"reactor-sourcemap-pkg-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"reactor-sourcemap-pkg-{Guid.NewGuid():N}");
 
     public SourceMapPackageConsumerTests(TemplatePackageTestFixture fixture)
     {
@@ -36,7 +37,7 @@ public sealed class SourceMapPackageConsumerTests : IClassFixture<TemplatePackag
     [Fact]
     public void PackageConsumerGetsStampedCallSitesInDebugButNotRelease()
     {
-        var appDir = Path.Combine(_tempRoot, "consumer");
+        var appDir = Path.Join(_tempRoot, "consumer");
         Directory.CreateDirectory(appDir);
 
         WriteConsumerProject(appDir);
@@ -83,7 +84,7 @@ public sealed class SourceMapPackageConsumerTests : IClassFixture<TemplatePackag
 
             """;
 
-        File.WriteAllText(Path.Combine(appDir, "Program.cs"), program);
+        File.WriteAllText(Path.Join(appDir, "Program.cs"), program);
     }
 
     private void WriteConsumerProject(string appDir)
@@ -109,7 +110,7 @@ public sealed class SourceMapPackageConsumerTests : IClassFixture<TemplatePackag
             </Project>
             """;
 
-        File.WriteAllText(Path.Combine(appDir, "Consumer.csproj"), csproj);
+        File.WriteAllText(Path.Join(appDir, "Consumer.csproj"), csproj);
     }
 
     private string RunConsumer(string appDir, string configuration)
@@ -129,7 +130,7 @@ public sealed class SourceMapPackageConsumerTests : IClassFixture<TemplatePackag
             _fixture.CommandEnvironment,
             timeoutMs: 30_000);
 
-        var configPath = Path.Combine(appDir, "nuget.config");
+        var configPath = Path.Join(appDir, "nuget.config");
 
         RunHelpers.RunDotnet(
             $"nuget config set globalPackagesFolder \"{_fixture.NugetPackagesDir}\" --configfile \"{configPath}\"",
@@ -153,9 +154,15 @@ public sealed class SourceMapPackageConsumerTests : IClassFixture<TemplatePackag
                 Directory.Delete(_tempRoot, recursive: true);
             }
         }
-        catch
+        catch (IOException)
         {
-            // Best-effort cleanup for temporary smoke-test artifacts.
+            // Best-effort cleanup for temporary smoke-test artifacts. A locked file
+            // (a build server still releasing handles) must not fail a passing test.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Same: a read-only artifact left by the SDK is not a test failure.
         }
     }
 }
+

@@ -38,7 +38,14 @@ public abstract record Element
 
     /// <summary>
     /// Spec 010 — the C# source location that created this element, or
-    /// <c>null</c> when source mapping is not active.
+    /// <c>null</c> when nothing stamped it.
+    ///
+    /// <para>This is a property of the ELEMENT, not of the current flag state. An
+    /// element stamped while mapping was on keeps its location after the flag is turned
+    /// off, and a hand-assigned value is honoured regardless of the flag; conversely an
+    /// element built while mapping was off, or produced by a factory the provider does
+    /// not reach, stays <c>null</c> forever. Elements are immutable, so this is fixed at
+    /// construction.</para>
     ///
     /// <para>NOTE ON THE NAME: spec 010 proposes <c>Element.Source</c>. That name
     /// is unusable — five existing element records already declare a positional

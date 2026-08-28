@@ -11,7 +11,9 @@ both.
 
 > **Status.** Per-element source tagging ships as `Element.CallSite` plus
 > `Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap`. It is **on by
-> default in Debug builds** and absent from Release, mirroring how WPF
+> default in Debug builds** and **off by default in Release** (an explicit
+> `<ReactorSourceMap>true</ReactorSourceMap>` does enable it there, and
+> embeds source paths — see below), mirroring how WPF
 > gates XAML source info behind `XamlDebuggingInformation`. The design
 > reference is
 > [spec 010](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/010-source-mapping-design.md);
@@ -146,7 +148,7 @@ same way WPF gates XAML source info behind `XamlDebuggingInformation`:
 | Configuration | Interceptors generated (default) | Locations populated |
 |---|---|---|
 | `Debug` | yes | when the runtime flag is on (see below) |
-| `Release` | no | never — and no source paths ship in the binary |
+| `Release` | no (unless explicitly opted in) | only if opted in — and then source paths ship in the binary |
 
 These are defaults, not a hard configuration lock: the generator is gated on the
 `ReactorSourceMap` property alone, so an explicit

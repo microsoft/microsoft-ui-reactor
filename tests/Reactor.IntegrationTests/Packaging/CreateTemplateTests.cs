@@ -6,7 +6,8 @@ using Xunit.Sdk;
 
 namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 
-public sealed class CreateTemplateTests : IClassFixture<TemplatePackageTestFixture>, IDisposable
+[Collection(LocalPackageFeedCollection.Name)]
+public sealed class CreateTemplateTests : IDisposable
 {
     private readonly TemplatePackageTestFixture _fixture;
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"reactor-template-smoke-{Guid.NewGuid():N}");
