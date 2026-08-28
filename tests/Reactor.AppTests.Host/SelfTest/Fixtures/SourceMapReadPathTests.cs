@@ -314,4 +314,70 @@ internal static class SourceMapReadPathTests
             }
         }
     }
+
+    /// <summary>
+    /// Spec 010 — flipping the runtime flag OFF between renders must clear the
+    /// reported location, without remounting the subtree.
+    ///
+    /// <para>This is the mechanism the source-map-explorer sample's toggle relies on.
+    /// With the flag off the interceptor returns the element unstamped, so the new
+    /// element's <c>CallSite</c> is null while the mounted one's is not — different,
+    /// therefore <c>Reconciler.CallSiteChangedOnSkip</c> declines the shallow skip and
+    /// refreshes the control's back-pointer. Without that arm the elements are
+    /// shallow-equal, the skip is taken, and the control keeps reporting the location
+    /// it was mounted with — which is what made the sample read "8 of 14 mapped"
+    /// instead of "0 of 14" and forced a generation-key remount to paper over.</para>
+    /// </summary>
+    internal class FlagOffClearsTheReportedLocation(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static int Line([CallerLineNumber] int line = 0) => line;
+
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            try
+            {
+                ReactorSourceMap.Enabled = true;
+                var stamped = TextBlock("toggle"); var stampedLine = Line();
+
+                var host = H.CreateHost();
+                var current = stamped;
+                host.Mount(ctx => VStack(current));
+                await Harness.Render();
+
+                var target = H.FindControl<TextBlock>(t => t.Text == "toggle");
+                H.Check("SourceMapToggle_Mounted", target is not null);
+                if (target is null) return;
+
+#if REACTOR_SOURCEMAP
+                H.Check("SourceMapToggle_MappedWhileOn",
+                    ReactorSourceMap.GetSource(target)?.LineNumber == stampedLine);
+
+                // Flag off, then build the element AGAIN so it goes through the
+                // interceptor in its disabled state. Re-using the already-stamped
+                // instance would prove nothing: it would still carry its location.
+                ReactorSourceMap.Enabled = false;
+                current = TextBlock("toggle");
+                host.Mount(ctx => VStack(current));
+                await Harness.Render();
+
+                var after = H.FindControl<TextBlock>(t => t.Text == "toggle");
+                H.Check("SourceMapToggle_StillMounted", after is not null);
+                if (after is null) return;
+
+                H.Check("SourceMapToggle_ClearsWithoutRemount",
+                    ReactorSourceMap.GetSource(after) is null);
+#else
+                _ = stampedLine;
+                H.Skip("SourceMapToggle_MappedWhileOn", SkipReason);
+                H.Skip("SourceMapToggle_StillMounted", SkipReason);
+                H.Skip("SourceMapToggle_ClearsWithoutRemount", SkipReason);
+#endif
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
 }

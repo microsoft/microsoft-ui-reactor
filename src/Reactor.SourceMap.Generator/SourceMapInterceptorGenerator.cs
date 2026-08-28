@@ -11,8 +11,10 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Microsoft.UI.Reactor.SourceMap.Generator;
 
 /// <summary>
-/// Spec 010 Route B — stamps <c>Element.Source</c> onto every Reactor DSL call
-/// site using C# interceptors (stable in C# 14 / .NET 10).
+/// Spec 010 Route B — stamps <c>Element.CallSite</c> onto every Reactor DSL call
+/// site using C# interceptors (stable in C# 14 / .NET 10). (The spec proposes
+/// <c>Element.Source</c>; that name does not compile, because several element
+/// records already declare an incompatible positional <c>Source</c> member.)
 ///
 /// <para>The generator runs in the <em>consumer's</em> compilation and, for each
 /// <c>Microsoft.UI.Reactor.Factories.*</c> invocation that returns an
@@ -133,13 +135,45 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         var location = ctx.SemanticModel.GetInterceptableLocation(invocation, ct);
         if (location is null) return null;
 
-        var lineSpan = invocation.SyntaxTree.GetLineSpan(invocation.Span, ct);
+        // MAPPED span, and a mapped path resolved the way Roslyn resolves it.
+        //
+        // Tooling that emits C# on a developer's behalf (T4, Razor, custom codegen)
+        // marks its output with #line so positions resolve back to the file the
+        // developer actually edits; [CallerLineNumber], [CallerFilePath] and the
+        // debugger all honour it. GetLineSpan does not, so reading the unmapped span
+        // would report a position in generated .cs that nobody edits and break the
+        // CallerInfo parity this route claims.
+        //
+        // The subtlety is the path. A directive names its file relatively
+        // (`#line 5000 "virtual-source.cs"`), and [CallerFilePath] reports it RESOLVED
+        // against the directory of the physical file, not as the bare relative name.
+        // Emitting FileLinePositionSpan.Path verbatim yields "virtual-source.cs" where
+        // CallerInfo yields "...\\ProjectDir\\virtual-source.cs" — same file, different
+        // string, and consumers compare these as strings. LineDirectiveParityTests pins
+        // both halves against live CallerInfo probes under a real directive.
+        var lineSpan = invocation.SyntaxTree.GetMappedLineSpan(invocation.Span, ct);
 
         return new CallSite(
             attribute: location.GetInterceptsLocationAttributeSyntax(),
-            filePath: invocation.SyntaxTree.FilePath,
+            filePath: ResolveMappedPath(lineSpan, invocation.SyntaxTree.FilePath),
             line: lineSpan.StartLinePosition.Line + 1,
             signature: Signature.From(method));
+    }
+
+    /// <summary>
+    /// The path <c>[CallerFilePath]</c> would report for a position: the syntax tree's
+    /// own path normally, or a <c>#line</c> directive's file resolved against that
+    /// tree's directory when one is in effect.
+    /// </summary>
+    private static string ResolveMappedPath(FileLinePositionSpan span, string treePath)
+    {
+        if (!span.HasMappedPath || string.IsNullOrEmpty(span.Path)) return treePath;
+        if (System.IO.Path.IsPathRooted(span.Path)) return span.Path;
+
+        var dir = System.IO.Path.GetDirectoryName(treePath);
+        return string.IsNullOrEmpty(dir)
+            ? span.Path
+            : System.IO.Path.Combine(dir, span.Path);
     }
 
     /// <summary>

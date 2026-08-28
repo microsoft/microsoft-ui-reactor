@@ -33,15 +33,6 @@ internal sealed class App : Component
         var (scan, setScan) = UseState<string?>(null);
         var (mapping, setMapping) = UseState(ReactorSourceMap.Enabled);
 
-        // Bumped whenever the flag flips, and used as the panel's key so the whole
-        // subtree genuinely remounts. Without it the toggle looks half-broken: the
-        // flag only governs NEW stamps, and an unchanged TextBlock takes the
-        // reconciler's shallow-skip path, keeping the ReactorState (and the
-        // location) it was mounted with. That is correct — the element really did
-        // come from that line — but it makes "off" read as "8 of 14 mapped"
-        // instead of "0 of 14", which obscures what the gate does.
-        var (generation, setGeneration) = UseState(0);
-
         // Stable across renders so the scan button can reach the realized panel.
         var canvasRef = UseMemo(() => new ElementRef(), []);
 
@@ -172,7 +163,6 @@ internal sealed class App : Component
                 {
                     ReactorSourceMap.Enabled = !mapping;
                     setMapping(!mapping);
-                    setGeneration(generation + 1);
                     setHit(null);
                     setScan(null);
                 }),
@@ -208,8 +198,7 @@ internal sealed class App : Component
                 .Width(360)
                 .Background(Theme.CardBackground)
                 .Ref(canvasRef)
-                .OnPointerPressed(OnPanelPressed)
-                .WithKey($"panel-{generation}"),
+                .OnPointerPressed(OnPanelPressed),
 
                 // ── Inspector ───────────────────────────────────────────────
                 Border(

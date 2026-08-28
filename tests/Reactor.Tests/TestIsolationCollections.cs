@@ -41,6 +41,21 @@ public sealed class PersistedStateCacheCollection { }
 public sealed class JumpListGlobalsCollection { }
 
 /// <summary>
+/// xUnit collection marker for tests that mutate the process-wide source-map /
+/// devtools flags — <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/>
+/// and <c>ReactorApp.DevtoolsEnabled</c>.
+///
+/// <para>These are one flag in two guises: the <c>DevtoolsEnabled</c> setter mirrors
+/// its value into <c>ReactorSourceMap.Enabled</c>, and
+/// <c>ResetDevtoolsEnabledForTests()</c> writes it to false directly. So a devtools
+/// test's constructor or Dispose can clear the flag out from under a source-map test
+/// that just set it, in a different class, mid-assertion. Both families therefore
+/// share this collection rather than each getting their own.</para>
+/// </summary>
+[CollectionDefinition("SourceMapGlobals", DisableParallelization = true)]
+public sealed class SourceMapGlobalsCollection { }
+
+/// <summary>
 /// xUnit collection marker for tests that mutate
 /// <see cref="Microsoft.UI.Reactor.Hosting.HotReloadService"/> process-wide
 /// state (the pending-update flag via <c>UpdateApplication</c>). These tests

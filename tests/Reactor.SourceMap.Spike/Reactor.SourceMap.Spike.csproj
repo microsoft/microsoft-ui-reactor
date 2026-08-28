@@ -63,10 +63,12 @@
                       ReferenceOutputAssembly="false" />
     <!-- Spec 010 — the wrapper generator emits its public factory as a static ON
          the generated element type (`FooWrapperElement.Foo(...)`), not on
-         Microsoft.UI.Reactor.Factories. Referenced here so WrapperFactoryInterceptionTests
-         can prove the source-map generator reaches that shape too; without it the
-         "every DSL call site" claim would be untested for the documented
-         third-party extension path. -->
+         Microsoft.UI.Reactor.Factories. Referenced here so
+         WrapperFactoryInterceptionTests can exercise that shape for real. Note what
+         that test asserts: the shape is NOT stamped. It is a characterization test
+         pinning a documented limitation (one generator cannot see another's output),
+         not positive coverage — with a same-file positive control so the asserted
+         null cannot be mistaken for the generator simply being off. -->
     <ProjectReference Include="..\..\src\Reactor.Wrappers.Generator\Reactor.Wrappers.Generator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Reactor.Wrappers.Abstractions\Reactor.Wrappers.Abstractions.csproj" />

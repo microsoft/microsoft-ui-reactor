@@ -11,7 +11,13 @@ namespace Microsoft.UI.Reactor.Tests;
 /// which provider populates it. These are the tests that must hold for BOTH the
 /// CallerInfo route and the interceptor route, so they live here rather than in
 /// the Route B spike consumer.
+///
+/// <para>In the SourceMapGlobals collection because the last few cases read and write
+/// <see cref="ReactorSourceMap.Enabled"/>, which <c>ReactorApp.DevtoolsEnabled</c>
+/// mirrors — without the collection a devtools test in the parallel pool can clear the
+/// flag between this class's set and its assert.</para>
 /// </summary>
+[Collection("SourceMapGlobals")]
 public sealed class SourceMapElementSlotTests
 {
     // ── The slot must be invisible to reconciliation ──────────────────────

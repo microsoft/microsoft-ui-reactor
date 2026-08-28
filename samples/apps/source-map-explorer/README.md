@@ -57,12 +57,14 @@ plausible-looking location.
 the same scan reports `0 of 14 controls mapped`. That is the runtime gate the
 devtools session controls.
 
-Toggling also remounts the panel on purpose. Without the remount the count reads
-`8 of 14`, because the flag only governs *new* stamps: an unchanged `TextBlock`
-takes the reconciler's shallow-skip path and keeps the `ReactorState` it mounted
-with. That retained location is still correct — the element really did come from
-that line — but it makes the gate look half-broken, so the sample forces a clean
-remount rather than leaving a confusing number on screen.
+Toggling needs no remount. The flag governs only *new* stamps, so after flipping it
+off an unchanged `TextBlock` produces an element whose `CallSite` is `null` while the
+mounted one's is not. Those differ, so `Reconciler.CallSiteChangedOnSkip` declines the
+shallow skip and refreshes the control's back-pointer in place. An earlier version of
+this sample forced a generation-key remount because without that arm the count read
+`8 of 14` — the retained location was still correct, but it made the gate look
+half-broken. The selftest `SourceMapReadPath_FlagOffClears` pins the behaviour that
+made the workaround unnecessary.
 
 ## Why the leaves matter
 

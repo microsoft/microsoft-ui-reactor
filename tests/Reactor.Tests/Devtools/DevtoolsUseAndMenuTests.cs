@@ -10,7 +10,13 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// <see cref="ReactorApp.DevtoolsEnabled"/> flag; the <c>DevtoolsMenu</c>
 /// factory renders to <c>Empty</c> (and skips the items lambda) when the
 /// flag is off so retail builds pay only the bool check.
+///
+/// <para>In the SourceMapGlobals collection (spec 010): the <c>DevtoolsEnabled</c>
+/// setter and <c>ResetDevtoolsEnabledForTests()</c> both write
+/// <c>ReactorSourceMap.Enabled</c>, so the ctor/Dispose here would otherwise clear
+/// that flag out from under <c>SourceMapElementSlotTests</c> running in parallel.</para>
 /// </summary>
+[Collection("SourceMapGlobals")]
 public class DevtoolsUseAndMenuTests : IDisposable
 {
     public DevtoolsUseAndMenuTests() => ReactorApp.ResetDevtoolsEnabledForTests();
