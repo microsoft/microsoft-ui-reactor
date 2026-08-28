@@ -2715,6 +2715,15 @@ public sealed partial class Reconciler : IDisposable
         node.SelfTriggered = true;
         ReconcileComponent(oldEl, newEl, existingControl, requestRerender);
 
+        // Spec 010 — the wrapper is PRESERVED across the migration (that is the whole
+        // point), so its back-pointer still names the pre-edit element. Refresh it, or
+        // the reported location survives an edit that moved the call site — which is
+        // exactly the staleness this route exists to avoid. ReconcileComponent is called
+        // directly here rather than through UpdateComponent, so it does not inherit that
+        // path's refresh.
+        if (existingControl is FrameworkElement migratedFe)
+            SetElementTagIfNeeded(migratedFe, newEl);
+
         Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(newType.FullName ?? newType.Name);
         return true;
     }
