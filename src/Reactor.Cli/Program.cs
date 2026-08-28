@@ -318,8 +318,8 @@ string GenerateProgram(string name) =>
     // Custom control descriptor scaffolds can declare reactive reference edges:
     // .Reference<FrameworkElement>(get: e => e.Target, set: (c, t) => c.Target = t) // spec 057
 
-    // `icon:` sets the Win32 window icon — the one Windows shows in the taskbar,
-    // Alt-Tab, and Task Manager. Use an .ico. This is separate from
+    // `icon:` sets the Win32 window icon — the one Windows shows in the window
+    // caption and Alt-Tab. Use an .ico. This is separate from
     // TitleBar(...).Icon(...), which draws an app mark inside the window.
     ReactorApp.Run<App>("{{name}}", width: 800, height: 600,
         icon: WindowIcon.FromPath("Assets/AppIcon.ico"));

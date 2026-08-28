@@ -102,7 +102,10 @@ internal static partial class WindowModelFixtures
 
     /// <summary>
     /// Verifies that a declared <see cref="WindowSpec.Icon"/> reaches the live window's
-    /// Win32 <c>HICON</c> — the handle Alt-Tab, the taskbar, and Task Manager read.
+    /// Win32 <c>HICON</c> — the handle the caption and Alt-Tab read. (In an unpackaged
+    /// process, which this host is, the taskbar button and Task Manager read it too; in a
+    /// packaged app those two come from package identity instead, which is why this
+    /// fixture cannot speak for them.)
     /// </summary>
     /// <remarks>
     /// <para>The oracle is differential rather than a bare non-null check. This host ships

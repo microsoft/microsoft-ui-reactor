@@ -919,8 +919,11 @@ public sealed partial class ReactorWindow : IDisposable
 
     /// <summary>
     /// Best-effort: when no explicit <see cref="WindowSpec.Icon"/> was supplied (or the one
-    /// supplied could not be resolved), find an icon for the window so the taskbar /
+    /// supplied could not be resolved), find an icon for the window so the caption /
     /// Alt-Tab / Win11 thumbnail show the developer's icon instead of the WinUI default.
+    /// Unpackaged, this also reaches the taskbar button and Task Manager; packaged, those
+    /// two come from package identity and the manifest logo instead (see
+    /// <see cref="WindowSpec.Icon"/>).
     /// </summary>
     /// <remarks>
     /// <para>Two sources are tried, in order:</para>
