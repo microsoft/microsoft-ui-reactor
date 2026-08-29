@@ -84,7 +84,37 @@ public static class ReactorSourceMap
     /// reasons (callbacks, a key, other extras) and still report no location, and an
     /// element hand-stamped with a <c>CallSite</c> reports one even with the flag
     /// off.</para>
+    /// <para>Target-wrapping decorators are resolved through. <c>Flyout</c>,
+    /// <c>MenuFlyout</c> and <c>CommandBarFlyout</c> mount their <c>Target</c>'s control
+    /// and then deliberately replace that control's tag with themselves, because their
+    /// Opened/Closed handlers read it back. The realized control is still the target's —
+    /// a <c>Button</c> inside a <c>Flyout(...)</c> was created by the <c>Button(</c>
+    /// line — so reporting the decorator's line would name the wrong creator, the same
+    /// misattribution the generator avoids for pass-through factories. The walk is a
+    /// loop so nested decorators resolve to the innermost target.</para>
     /// </summary>
     public static SourceLocation? GetSource(UIElement control)
-        => Reconciler.GetElementTag(control)?.CallSite;
+    {
+        var element = Reconciler.GetElementTag(control);
+        while (element is not null && DecoratorTarget(element) is { } target)
+        {
+            element = target;
+        }
+        return element?.CallSite;
+    }
+
+    /// <summary>
+    /// The wrapped element for a target-wrapping decorator, or null for anything else.
+    ///
+    /// <para><c>internal</c> so DecoratorTargetDriftTests can assert this covers every
+    /// element shaped like a decorator. A hand-maintained switch drifts silently, and
+    /// the symptom would be a confidently wrong line rather than a crash.</para>
+    /// </summary>
+    internal static Element? DecoratorTarget(Element element) => element switch
+    {
+        FlyoutElement f => f.Target,
+        MenuFlyoutElement m => m.Target,
+        CommandBarFlyoutElement c => c.Target,
+        _ => null,
+    };
 }

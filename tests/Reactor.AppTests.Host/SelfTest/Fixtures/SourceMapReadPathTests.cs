@@ -444,4 +444,64 @@ internal static class SourceMapReadPathTests
             return element;
         }
     }
+
+    /// <summary>
+    /// Spec 010 — a control wrapped by a target-wrapping decorator must report the
+    /// TARGET's call site, not the decorator's.
+    ///
+    /// <para><c>Flyout</c> mounts its <c>Target</c>'s control and then replaces that
+    /// control's tag with the <c>FlyoutElement</c>, because its Opened/Closed handlers
+    /// read it back. The realized control is still the Button, created by the
+    /// <c>Button(</c> line — so without the decorator walk in <c>GetSource</c> an
+    /// inspector would name the <c>Flyout(</c> line as the Button's creator. Same
+    /// misattribution the generator avoids for pass-through factories.</para>
+    /// </summary>
+    internal class DecoratedControlReportsItsTargetsCallSite(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = true;
+            try
+            {
+                var host = H.CreateHost();
+                int buttonLine = 0, flyoutLine = 0;
+                host.Mount(ctx => VStack(
+                    At(out flyoutLine, Flyout(
+                        At(out buttonLine, Button("decorated", () => { })),
+                        TextBlock("menu")))
+                ));
+                await Harness.Render();
+
+                var btn = H.FindControl<Microsoft.UI.Xaml.Controls.Button>(b => (b.Content as string) == "decorated");
+                H.Check("SourceMapDecorator_Mounted", btn is not null);
+                if (btn is null) return;
+
+#if REACTOR_SOURCEMAP
+                // Guard the premise: the two calls really are on different lines, so the
+                // assertion below cannot pass by coincidence.
+                H.Check("SourceMapDecorator_LinesDiffer", buttonLine != 0 && buttonLine != flyoutLine);
+
+                var reported = ReactorSourceMap.GetSource(btn)?.LineNumber;
+                H.Check("SourceMapDecorator_ReportsTheButtonLine", reported == buttonLine);
+                H.Check("SourceMapDecorator_NotTheFlyoutLine", reported != flyoutLine);
+#else
+                _ = buttonLine; _ = flyoutLine;
+                H.Skip("SourceMapDecorator_LinesDiffer", SkipReason);
+                H.Skip("SourceMapDecorator_ReportsTheButtonLine", SkipReason);
+                H.Skip("SourceMapDecorator_NotTheFlyoutLine", SkipReason);
+#endif
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+
+        private static Element At(out int line, Element element, [global::System.Runtime.CompilerServices.CallerLineNumber] int caller = 0)
+        {
+            line = caller;
+            return element;
+        }
+    }
 }

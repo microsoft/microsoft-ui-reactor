@@ -17,6 +17,7 @@ internal static class SelfTestFixtureRegistry
         "SourceMapReadPath_BranchSwitch",
         "SourceMapReadPath_FlagOffClears",
         "SourceMapReadPath_ComponentWrapper",
+        "SourceMapReadPath_Decorator",
         "ErrorBoundary_CatchesRenderError",
         "ErrorBoundary_Recovery",
         "Reconciler_MountText",
@@ -2308,6 +2309,7 @@ internal static class SelfTestFixtureRegistry
         "SourceMapReadPath_BranchSwitch" => new SourceMapReadPathTests.BranchSwitchRefreshesTheReportedLine(harness),
         "SourceMapReadPath_FlagOffClears" => new SourceMapReadPathTests.FlagOffClearsTheReportedLocation(harness),
         "SourceMapReadPath_ComponentWrapper" => new SourceMapReadPathTests.ComponentWrapperIsResolvable(harness),
+        "SourceMapReadPath_Decorator" => new SourceMapReadPathTests.DecoratedControlReportsItsTargetsCallSite(harness),
         // Animation system — .Animate() modifier
         "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),
@@ -3419,6 +3421,7 @@ internal static class SelfTestFixtureRegistry
         _ => null,
     };
 }
+
 
 
 
