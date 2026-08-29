@@ -206,17 +206,16 @@
     <!-- Spec 010 Route B — source-map interceptor generator. Packed OUTSIDE
          analyzers/dotnet/cs on purpose: everything in that folder is loaded into
          every consumer compilation, and this generator classifies every
-         invocation semantically. build\Reactor.targets adds it as an <Analyzer>
-         only when ReactorSourceMap is true, which by default is Debug-only — so a
-         Release consumer does not load it and pays nothing. Setting the property
-         true explicitly does load it in Release, and then source paths are baked
-         into the binary. -->
-    <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
-          Pack="true" PackagePath="build/sourcemap" Visible="false" />
-    <!-- Second copy for the buildTransitive targets, whose Exists() probe and
-         <Analyzer Include> are both relative to their own folder. NuGet flows
-         build\ only to a DIRECT PackageReference, so a project that picks Reactor
-         up through an intermediate library needs its own pair. -->
+         invocation semantically. The targets add it as an <Analyzer> only when
+         ReactorSourceMap is true, which by default is Debug-only — so a Release
+         consumer does not load it and pays nothing. Setting the property true
+         explicitly does load it in Release, and then source paths are baked into
+         the binary.
+
+         One copy, under buildTransitive\, because that is where the targets BODY
+         lives; build\Microsoft.UI.Reactor.targets is only a forwarder, and the
+         body's Exists() probe and <Analyzer Include> resolve relative to its own
+         folder. -->
     <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
           Pack="true" PackagePath="buildTransitive/sourcemap" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
@@ -225,7 +224,7 @@
     <!-- Packed under the PackageId-matching name so NuGet auto-imports it into
          consuming projects (build/<PackageId>.targets). The source file keeps
          the short name for the repo's own Directory.Build.props import. -->
-    <None Include="build\Reactor.targets" Pack="true" PackagePath="build\Microsoft.UI.Reactor.targets" Visible="false" />
+    <None Include="build\Reactor.Forwarder.targets" Pack="true" PackagePath="build\Microsoft.UI.Reactor.targets" Visible="false" />
     <!-- Same file again under buildTransitive\, which is the only folder NuGet flows
          to a project that references Reactor INDIRECTLY. Without it such a project
          compiles against the DSL with no generator and no REACTOR_SOURCEMAP, so every
@@ -318,3 +317,4 @@
   </ItemGroup>
 
 </Project>
+

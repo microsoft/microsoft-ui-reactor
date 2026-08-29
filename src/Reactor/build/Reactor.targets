@@ -1,18 +1,22 @@
 <Project>
   <!--
-    Idempotence guard. This file is packed to BOTH build\ and buildTransitive\:
-    NuGet only flows build\ to a DIRECT PackageReference, so without the
-    buildTransitive\ copy an app that gets Reactor through an intermediate library
-    would compile against the DSL with no generator and no REACTOR_SOURCEMAP, and
-    every CallSite would silently be null. Packing both means the file can be
-    imported twice in one evaluation, which would append the <Analyzer> item and
-    the InterceptorsNamespaces entry twice, so bail on the second import.
+    Single-evaluation sentinel. This body is packed ONLY to buildTransitive\, and
+    build\Microsoft.UI.Reactor.targets is a one-line forwarder that imports it —
+    because NuGet flows build\ to a DIRECT PackageReference only, so an app that
+    gets Reactor through an intermediate library needs the buildTransitive\ copy or
+    it compiles against the DSL with no generator and no REACTOR_SOURCEMAP, and
+    every CallSite is silently null.
+
+    One body, imported once, rather than two copies with a skip guard. A guard does
+    not work here: MSBuild evaluates every PropertyGroup in the file before any
+    ItemGroup, so a property set by the "second" import is already visible when the
+    FIRST import's items are evaluated — measured, and it suppressed the wiring
+    entirely rather than just the duplicate. The forwarder reads this property in an
+    <Import Condition>, which IS evaluated in order, so it is skipped when NuGet has
+    already imported this file directly.
   -->
-  <PropertyGroup Condition="'$(_MicrosoftUIReactorSourceMapTargetsImported)' == 'true'">
-    <_MicrosoftUIReactorSourceMapSkip>true</_MicrosoftUIReactorSourceMapSkip>
-  </PropertyGroup>
   <PropertyGroup>
-    <_MicrosoftUIReactorSourceMapTargetsImported>true</_MicrosoftUIReactorSourceMapTargetsImported>
+    <_MicrosoftUIReactorTargetsLoaded>true</_MicrosoftUIReactorTargetsLoaded>
   </PropertyGroup>
 
   <!--
@@ -61,7 +65,7 @@
     A PackageReference consumer imports this file after the project body, where
     $(Configuration) is always set, so the empty arm is inert for them.
   -->
-  <PropertyGroup Condition="'$(_MicrosoftUIReactorSourceMapSkip)' != 'true' and '$(ReactorSourceMap)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
     <ReactorSourceMap>true</ReactorSourceMap>
   </PropertyGroup>
 
@@ -88,11 +92,11 @@
     project reference, so they add the generator ProjectReference and the
     constant themselves. Only the handful that opt in get either.
   -->
-  <ItemGroup Condition="'$(_MicrosoftUIReactorSourceMapSkip)' != 'true' and '$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+  <ItemGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
     <Analyzer Include="$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(_MicrosoftUIReactorSourceMapSkip)' != 'true' and '$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
     <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
     <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
   </PropertyGroup>
@@ -142,7 +146,7 @@
 
   <Target Name="_NormalizeReactorDevtoolsSupportSwitch"
           BeforeTargets="_GenerateRuntimeConfigurationFilesInputCache;GenerateBuildRuntimeConfigurationFiles;PrepareForILLink">
-    <ItemGroup Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
+  <ItemGroup Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
       <RuntimeHostConfigurationOption Remove="Reactor.DevtoolsSupport" />
       <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                       Value="true"
@@ -154,7 +158,7 @@
           AfterTargets="PrepareForILLink"
           BeforeTargets="WriteIlcRspFileForCompilation"
           Condition="'@(_TrimmerFeatureSettings->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
-    <ItemGroup>
+  <ItemGroup>
       <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                       Value="true" />
     </ItemGroup>
