@@ -29,9 +29,7 @@ public class TitleBarIconDefaultTests : IDisposable
     public void Dispose()
     {
         TitleBarIconDefault.SetBaseDirectoryForTests(null);
-        try { global::System.IO.Directory.Delete(_root, recursive: true); }
-        catch (global::System.IO.IOException) { /* best-effort scratch cleanup */ }
-        catch (UnauthorizedAccessException) { /* ditto */ }
+        BestEffortDelete(() => global::System.IO.Directory.Delete(_root, recursive: true), _root);
         global::System.GC.SuppressFinalize(this);
     }
 
@@ -225,23 +223,42 @@ public class TitleBarIconDefaultTests : IDisposable
 
     /// <summary>
     /// Best-effort cleanup of scratch files created under the test binary's own output
-    /// directory. Deliberately swallowing: this runs in a <c>finally</c>, so a throw here
-    /// would replace the real assertion failure with a cleanup error and hide what
-    /// actually broke. Directories are passed innermost-first, and <c>null</c> entries
-    /// mean "this one already existed, leave it alone".
+    /// directory. Deliberately non-throwing: this runs in a <c>finally</c>, so an
+    /// exception here would replace the real assertion failure with a cleanup error and
+    /// hide what actually broke. Directories are passed innermost-first, and <c>null</c>
+    /// entries mean "this one already existed, leave it alone".
     /// </summary>
     private static void CleanUp(string file, params string?[] directories)
     {
-        try { global::System.IO.File.Delete(file); }
-        catch (global::System.IO.IOException) { }
-        catch (UnauthorizedAccessException) { }
+        BestEffortDelete(() => global::System.IO.File.Delete(file), file);
 
-        foreach (var dir in directories)
+        foreach (var dir in directories.Where(static d => d is not null))
+            BestEffortDelete(() => global::System.IO.Directory.Delete(dir!), dir!);
+    }
+
+    /// <summary>
+    /// Runs a scratch delete, reporting rather than throwing when the filesystem refuses.
+    /// The two caught types are the ones a delete can legitimately raise here — a handle
+    /// still open on the file, or a permission the test host lacks. Anything else is a
+    /// real bug and propagates.
+    /// </summary>
+    private static void BestEffortDelete(Action delete, string target)
+    {
+        try
         {
-            if (dir is null) continue;
-            try { global::System.IO.Directory.Delete(dir); }
-            catch (global::System.IO.IOException) { }
-            catch (UnauthorizedAccessException) { }
+            delete();
+        }
+        catch (global::System.IO.IOException ex)
+        {
+            // Reported, not swallowed silently: a leaked scratch path is worth seeing in
+            // the log, but never worth failing (or masking) the test over.
+            global::System.Diagnostics.Trace.WriteLine(
+                $"[TitleBarIconDefaultTests] could not delete scratch '{target}': {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            global::System.Diagnostics.Trace.WriteLine(
+                $"[TitleBarIconDefaultTests] not permitted to delete scratch '{target}': {ex.Message}");
         }
     }
 

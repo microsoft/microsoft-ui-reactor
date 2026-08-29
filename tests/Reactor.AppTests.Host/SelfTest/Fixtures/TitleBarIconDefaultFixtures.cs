@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
@@ -58,8 +59,14 @@ internal static class TitleBarIconDefaultFixtures
         // Best-effort teardown, matching the house pattern: the WinUI TitleBar control
         // throws teardown-reentry COMExceptions (issue #537), and anything escaping
         // here would replace a real assertion result with a teardown error.
+        //
+        // The set is the one the window can plausibly be in at close: mid-native-teardown
+        // (COMException), already disposed (ObjectDisposedException, which derives from
+        // InvalidOperationException), or already closing. Mirrors the predicate
+        // ReactorWindow.IsIconApplyFailure uses at the same boundary. Anything outside it
+        // is a genuine bug in the fixture and should surface.
         try { win?.Close(); }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or ArgumentException)
         {
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "SelfTest.TitleBarIconDefault.Close", ex);
         }
@@ -311,7 +318,7 @@ internal static class TitleBarIconDefaultFixtures
                         bar.ActualWidth > 0 && bar.ActualHeight > 0);
                     var part = FindIconPart(bar);
                     Console.WriteLine($"# zero: PART_Icon={(part is null ? "<absent>" : $"{part.ActualWidth:0.##}")}");
-                    H.Check("TitleBarIcon_Zero_NoIconPart", part is null || part.ActualWidth == 0);
+                    H.Check("TitleBarIcon_Zero_NoIconPart", IconPartIsAbsentOrCollapsed(part));
                 }
                 finally { await CloseAndSettle(win); }
             }
@@ -445,7 +452,7 @@ internal static class TitleBarIconDefaultFixtures
                     {
                         H.Check($"TitleBarIcon_NoIcon_BarLaidOut (w={bar.ActualWidth:0.##})", bar.ActualWidth > 0);
                         var part = FindIconPart(bar);
-                        H.Check("TitleBarIcon_NoIcon_NoIconPart", part is null || part.ActualWidth == 0);
+                        H.Check("TitleBarIcon_NoIcon_NoIconPart", IconPartIsAbsentOrCollapsed(part));
                     }
                 }
                 finally { await CloseAndSettle(winNone); }
@@ -461,6 +468,18 @@ internal static class TitleBarIconDefaultFixtures
     /// <summary>The URI behind a title bar's current image icon, or null.</summary>
     private static Uri? IconUri(WinUI.TitleBar bar) =>
         ((bar.IconSource as WinUI.ImageIconSource)?.ImageSource as BitmapImage)?.UriSource;
+
+    /// <summary>
+    /// True when the template's icon part is absent or has collapsed to nothing.
+    /// <para>
+    /// Compared against a tolerance rather than <c>== 0</c>: <c>ActualWidth</c> is a
+    /// layout double, so exact equality is the wrong instrument even when the value is
+    /// nominally zero. Measured shape is that <c>PART_Icon</c> is absent from the tree
+    /// entirely when there is no <c>IconSource</c>, so the width arm is a fallback.
+    /// </para>
+    /// </summary>
+    private static bool IconPartIsAbsentOrCollapsed(FrameworkElement? part)
+        => part is null || Math.Abs(part.ActualWidth) < 0.001;
 
     // ════════════════════════════════════════════════════════════════════════
     //  Regression: the inherited icon is AMBIENT window state, not element
