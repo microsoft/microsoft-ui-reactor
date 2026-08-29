@@ -14,12 +14,14 @@ namespace SourceMapExplorer;
 ///
 /// <para>Click anything in the left panel. The inspector on the right reports
 /// the control you hit and the exact <c>file:line</c> of the DSL call that
-/// created it. The interesting ones are the <em>descendants</em> that
-/// <c>Walk</c> traverses: plain display leaves with no callback and no key, the
-/// ones the reconciler deliberately does NOT tag (PR #468), addressable only
-/// because the source-map stamp puts them back on the map. The panel root and
-/// the toolbar buttons are not examples of that — they carry a ref, a pointer
-/// handler and callbacks, so they would be tagged regardless.</para>
+/// created it. The interesting ones are the callback-free <c>TextBlock</c>s and
+/// stacks that <c>Walk</c> traverses: no callback, no key, no reference modifier,
+/// so the reconciler deliberately does NOT tag them (PR #468), and they are
+/// addressable only because the source-map stamp puts them back on the map. The
+/// panel root and the toolbar buttons are not examples of that — they carry a ref,
+/// a pointer handler and callbacks — and neither are the <c>Border</c>s using
+/// <c>.Background(Theme...)</c>, whose <c>ThemeBindings</c> put a non-null extras
+/// bucket on the element, which <c>NeedsTag</c> already tags on its own.</para>
 ///
 /// <para>The "Source mapping" toggle flips
 /// <see cref="ReactorSourceMap.Enabled"/> live. Turn it off and re-click: the

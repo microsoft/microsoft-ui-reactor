@@ -1,5 +1,21 @@
 <Project>
   <!--
+    Idempotence guard. This file is packed to BOTH build\ and buildTransitive\:
+    NuGet only flows build\ to a DIRECT PackageReference, so without the
+    buildTransitive\ copy an app that gets Reactor through an intermediate library
+    would compile against the DSL with no generator and no REACTOR_SOURCEMAP, and
+    every CallSite would silently be null. Packing both means the file can be
+    imported twice in one evaluation, which would append the <Analyzer> item and
+    the InterceptorsNamespaces entry twice, so bail on the second import.
+  -->
+  <PropertyGroup Condition="'$(_MicrosoftUIReactorSourceMapTargetsImported)' == 'true'">
+    <_MicrosoftUIReactorSourceMapSkip>true</_MicrosoftUIReactorSourceMapSkip>
+  </PropertyGroup>
+  <PropertyGroup>
+    <_MicrosoftUIReactorSourceMapTargetsImported>true</_MicrosoftUIReactorSourceMapTargetsImported>
+  </PropertyGroup>
+
+  <!--
     Spec 010 — source mapping.
 
     Mirrors the platform precedent rather than inventing one. WPF gates XAML
@@ -45,7 +61,7 @@
     A PackageReference consumer imports this file after the project body, where
     $(Configuration) is always set, so the empty arm is inert for them.
   -->
-  <PropertyGroup Condition="'$(ReactorSourceMap)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
+  <PropertyGroup Condition="'$(_MicrosoftUIReactorSourceMapSkip)' != 'true' and '$(ReactorSourceMap)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
     <ReactorSourceMap>true</ReactorSourceMap>
   </PropertyGroup>
 
@@ -72,11 +88,11 @@
     project reference, so they add the generator ProjectReference and the
     constant themselves. Only the handful that opt in get either.
   -->
-  <ItemGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+  <ItemGroup Condition="'$(_MicrosoftUIReactorSourceMapSkip)' != 'true' and '$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
     <Analyzer Include="$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+  <PropertyGroup Condition="'$(_MicrosoftUIReactorSourceMapSkip)' != 'true' and '$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
     <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
     <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
   </PropertyGroup>
@@ -144,3 +160,4 @@
     </ItemGroup>
   </Target>
 </Project>
+

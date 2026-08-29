@@ -73,11 +73,17 @@ unnecessary.
 
 ## Why the leaves matter
 
-Nothing in the inspected panel carries a callback, a key, or a reference
-modifier. Those are precisely the elements the reconciler deliberately does *not*
-tag (`Reconciler.NeedsTag`, PR #468) — tagging every leaf cost ~301 B/op. They
-are addressable here only because the source-map stamp puts them back on the map
-via the extras bucket.
+The callback-free `TextBlock`s and stacks in the inspected panel carry no
+callback, key, or reference modifier. Those are precisely the elements the
+reconciler deliberately does *not* tag (`Reconciler.NeedsTag`, PR #468) — tagging
+every leaf cost ~301 B/op. They are addressable here only because the source-map
+stamp puts them back on the map via the extras bucket.
+
+It is not the whole panel, and the distinction is worth keeping straight: the
+`Border`s calling `.Background(Theme.CardBackground)` / `.Background(Theme.SubtleFill)`
+carry `ThemeBindings` in `Element.Extensions`, and `NeedsTag` already tags anything
+with a non-null extras bucket — so those are tagged with or without source mapping.
+The leaves are the part that demonstrates the gap.
 
 ## Two flags, and why both exist
 

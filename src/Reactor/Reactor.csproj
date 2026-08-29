@@ -213,6 +213,12 @@
          into the binary. -->
     <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
           Pack="true" PackagePath="build/sourcemap" Visible="false" />
+    <!-- Second copy for the buildTransitive targets, whose Exists() probe and
+         <Analyzer Include> are both relative to their own folder. NuGet flows
+         build\ only to a DIRECT PackageReference, so a project that picks Reactor
+         up through an intermediate library needs its own pair. -->
+    <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
+          Pack="true" PackagePath="buildTransitive/sourcemap" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
@@ -220,6 +226,12 @@
          consuming projects (build/<PackageId>.targets). The source file keeps
          the short name for the repo's own Directory.Build.props import. -->
     <None Include="build\Reactor.targets" Pack="true" PackagePath="build\Microsoft.UI.Reactor.targets" Visible="false" />
+    <!-- Same file again under buildTransitive\, which is the only folder NuGet flows
+         to a project that references Reactor INDIRECTLY. Without it such a project
+         compiles against the DSL with no generator and no REACTOR_SOURCEMAP, so every
+         CallSite is silently null. The file carries an idempotence guard so being
+         imported from both folders in one evaluation is harmless. -->
+    <None Include="build\Reactor.targets" Pack="true" PackagePath="buildTransitive\Microsoft.UI.Reactor.targets" Visible="false" />
     <!-- WinUI LoadComponent needs the compiled XBF sidecar at runtime for
          ReactorApplication.xaml. SDK pack includes the XAML but not the XBF by
          default, so PackageReference consumers otherwise crash in native XAML
