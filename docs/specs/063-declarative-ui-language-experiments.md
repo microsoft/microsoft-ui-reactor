@@ -2,8 +2,27 @@
 
 ## Status
 
-**Experimental results** — 2026-08-18. Input to the working group formed by
-[LDM 2026-07-15](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-07-15.md).
+**Experimental results** — 2026-08-18, **substantially revised 2026-08-28**.  Input to the working group
+formed by [LDM 2026-07-15](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-07-15.md).
+
+> **⚠️ Revision 2026-08-28 — two headline numbers in this spec were wrong, and the conclusion changed.**
+> Both errors were mine and both overstated the case against `[Factory]`:
+>
+> 1. **"876 annotations required" → ~165–171.** Rounds 2–3 of the §6.0 fixpoint annotated the fluent
+>    extension methods *by choice*; the proposal never required it. Initializer syntax binds to the
+>    factory-call result, so `Text("hi") { … }.Margin(4)` needs no modifier annotated. Verified against the
+>    prototype compiler, by static closure analysis, and by an independent recount. §6.0.
+> 2. **"+17 % tokens" → +1.2 %.** §4 wrote every modifier as `Modifiers = new ElementModifiers { … }`, but
+>    `Element` exposes **init shims** making `Margin = 8` the real spelling. Re-measured across the real
+>    336-file sample corpus, the initializer form is a **wash**, not a regression. §4, §6.0.
+>
+> The correction that matters most is neither of those. §10 ¶4 rejected putting modifier properties on
+> `Element` on per-node memory grounds. That is right for promoted **fields** and wrong for **shims**
+> (computed accessors, no backing field): measured, 10 shims cost **0 bytes/instance** where 10 fields cost
+> **80**. `Element` already has 17 shims. **Adding ~15–20 more is the highest-leverage change available and
+> requires no language feature at all** — see the new **§6.7**. Until they exist,
+> `Text("x") { Background = b }` cannot compile for want of a property to bind to, which is why this spec
+> under-measured the feature it set out to evaluate.
 
 > **Update — [LDM 2026-08-05](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-08-05.md)
 > (13 days after that meeting, found while fact-checking this spec).** In the C# 16 feature-focus
@@ -164,6 +183,15 @@ returned expression), not a regex approximation. Whitespace is excluded from `ch
 
 *"Ceremony" counts tokens that exist only to satisfy the construction shape rather than to describe UI: the
 `new` keyword, the `Children`/`Child` property name and its `=`, and the `[` `]` wrapping children.*
+
+> **⚠️ Correction (2026-08-28): these figures are inflated and measure one hand-written component.**
+> Every variant above writes modifiers as `Modifiers = new ElementModifiers { … }`, but `Element` exposes
+> **init shims** (§6.7) making `Margin = 8` the real spelling — so the penalties are overstated, and
+> variant 3 is additionally a hybrid that kept fluent modifiers for everything bucket-resident.
+> Re-measured across the **real sample corpus** (336 files, 2307 chains) assuming shims, the initializer
+> form costs **+1.2 %**, not +17 %. §4.1's conclusion — that the narrow feature is a regression — is
+> **directionally right but quantitatively wrong**; the true result is a wash. See §6.0's second correction
+> block. §4.2 and §4.3 are unaffected.
 
 ### 4.1 The narrow feature makes real code bigger
 
@@ -371,22 +399,28 @@ with the prototype compiler. Iterating to a fixpoint:
 | 2 — plus 673 public `ElementExtensions` methods | 871 | **145** ⬆ |
 | 3 — plus 5 **private** `Modify*` helpers | 876 | **10** |
 
+> **⚠️ Correction (2026-08-28): rounds 2–3 were self-inflicted. The real cost is ~165–171, not 876.**
+> The rewriter (`AnnotateFactories.cs`) takes `--class=` arguments; including `ElementExtensions` was a
+> *choice*, and the resulting violations were then reported as though the restriction had demanded them.
+> It does not. See the correction block below — findings 1 and 2 do not survive; finding 3 does.
+
 Three findings, none of which were visible from the earlier syntax-only audit (which predicted 6):
 
-**1. The cost is ~876, not 203 — a 4.3× underestimate.** Every fluent modifier is
-`=> ModifyLayout(el, …)`, so the moment a factory ends in `.ApplyStyle(…)` or `.Background(…)`, the callee
-needs `[Factory]` too, and so does *its* callee.
+**1. ~~The cost is ~876, not 203~~ — withdrawn, see the correction below.** The transitive pressure is real
+*in form* — a `[Factory]` method whose body is `=> ModifyLayout(el, …)` does force `[Factory]` onto the
+callee — but it only applies to the 13 factories that actually end in a fluent call, not to all 198.
 
-**2. The attribute reaches private implementation details.** Round 2 made things *worse* — 15 → 145 —
-because annotating the public extensions exposed that they all delegate to `private static T ModifyLayout<T>`
-and friends. `[Factory]` is a public capability marker; the restriction forces it onto private plumbing that
-is not part of any contract.
+**2. ~~The attribute reaches private implementation details~~ — conditional, see the correction below.** True
+only if the fluent extensions are annotated. Restricted to the genuine forced set, the reach is 2 private
+helpers (`Modify`, `ModifyLayout`), not 5-plus-the-whole-public-surface.
 
 **3. Combinator factories can never satisfy the restriction, at any annotation count.** `When`, `If` and
 `Expr` take a `Func<Element>` and return `then()`. A **delegate invocation cannot be annotated** — there is
 no member to put `[Factory]` on. These are not fixable by more annotation, or by rewriting the singleton out;
 they are structurally excluded. Higher-order factories are a routine pattern in declarative UI, so this is
-worth raising on #10292 directly.
+worth raising on #10292 directly. **This finding survives re-audit** — and extends: `Empty()` returns
+`EmptyElement.Instance`, a *static field read*, which is likewise not in the allowed return set. Seven
+bodies across six names (`When`, `If`, `Expr`, `Empty`, `Markdown`, `DevtoolsMenu`) can never conform.
 
 After 876 annotations, 10 violations remain. **A follow-up investigation showed these are false positives, not
 caught bugs** — see below. The safety mechanism is conservative and its blast radius is the finding.
@@ -426,6 +460,140 @@ in [discussions/6602](https://github.com/dotnet/csharplang/discussions/6602#disc
 the rule is a syntactic stand-in for an ownership property, sound but incomplete.
 
 The experiment was reverted; the framework is unchanged.
+
+#### Correction (2026-08-28): the annotation cost was ~5× overstated
+
+The 876 figure rests on the premise *"annotate every fluent modifier."* The proposal does not require that,
+and three independent methods agree it is unnecessary.
+
+**Compiler evidence.** `[Factory]` is opt-in; the return restriction only binds methods you choose to mark.
+Initializer syntax binds to the result of the **factory call**, not to the tail of a fluent chain. Probed
+directly against the prototype (`PropagationA.cs` / `PropagationB.cs`):
+
+| written | result |
+|---|---|
+| `Make() { X = 1 }` | ✅ compiles — only the factory needs `[Factory]` |
+| `Make() { Key = "c" }.Margin(4)` | ✅ compiles — fluent *after* an initializer needs **nothing** |
+| `Make().Margin(4) { Key = "b" }` | ❌ CS9700 — *only this* shape forces annotating the modifiers |
+
+The third shape is the sole thing 673 annotations buy, and it is not an idiom anyone needs to write: the
+initializer-then-chain form expresses the same thing.
+
+**Structural evidence.** Only **13 of 171** factories return a fluent-chain tail (`Card`→`.Padding`,
+`Title`/`Subtitle`/`Body*`→`.ApplyStyle`, `DataGrid`/`PropertyGrid`/`VirtualList`→`.WithKey`,
+`NavigationHost`→`.Provide`). Their entire transitive closure forces exactly **5** modifiers
+(`ApplyStyle`, `OnMount`, `Padding`, `WithKey`, `Provide`) plus **2** helpers (`Modify`, `ModifyLayout`).
+Every other chain terminates at a `new` or `with`.
+
+**Population evidence.** The original counts were also imprecise. Re-derived by Roslyn syntax analysis
+rather than line regex:
+
+| population | spec's figure | verified |
+|---|---:|---:|
+| `Factories` methods returning an `Element` | 198 | **171** (163 core + 8 `.Advanced`) |
+| fluent modifiers returning an `Element` | 673 | **681** (628 in `ElementExtensions` + 53 elsewhere) |
+| private `Modify*` helpers | 5 | 5 ✓ |
+
+The 673 was *file*-scoped: it counted 46 non-`Element` RichText builders inside `ElementExtensions.cs` while
+missing 53 genuine modifiers in 14 other classes.
+
+**Revised cost: ~165–171 annotations**, one-time — 164 annotatable factories (171 minus the 7 that can never
+conform) plus the 5 forced modifiers and 2 helpers. Inlining the 13 fluent-tail factory bodies would drop the
+last 7. Also verified: every factory and modifier in these populations is `static`, so the `IsFactory` modreq,
+override-matching, and binary-breaking-change rules contribute **zero** risk here.
+
+An assembly- or type-level blanket default would make this *worse*, not better — it would turn every
+non-conforming body into a compile error. Selective annotation is the only viable path.
+
+#### The benefit was measured against the wrong baseline
+
+§4's token comparison used `Modifiers = new ElementModifiers { … }` at every call site. That is not how the
+property would be written: `Element` exposes **init shims** (§6.7) that route into the bucket, so `Margin = 8`
+is the real spelling. The §4 penalties are therefore inflated, and the +17% is additionally a hybrid that kept
+fluent modifiers for everything bucket-resident.
+
+Re-measured on the **real sample corpus** (336 files, 2307 factory chains, `ChainStats.cs`), assuming shims
+exist and scoring generously for initializers (non-convertible modifiers stay fluent and cost nothing):
+
+| chain length | share |
+|---|---:|
+| 1 modifier | 1212 (53%) |
+| 2 modifiers | 520 |
+| ≥3 modifiers | 575 |
+
+Braces cost 2 tokens; each 1-argument modifier converts from `.Name(v)` to `Name = v,` and saves 1. So the
+break-even is **3 modifiers**, and **76% of real chains have ≤2**. Totals: 33 353 tokens fluent vs 33 737
+initializer — **+1.2%**, with 415 chains shorter, 1099 longer, 793 tied.
+
+**So the honest verdict is a wash on tokens, not a 17% regression** — and the reason is not the language, it
+is that Reactor chains are short. A further 342 call sites are zero-argument curated shorthands (`.SemiBold()`
+×174, `.Center()` ×54) that have no initializer equivalent at all.
+
+The remaining case for `[Factory]` is therefore qualitative — discoverability (43 `.Set(x => …)`
+escape-hatches in samples reach control properties with no fluent modifier; 242 of 383 modifiers are never
+used in 42 K lines) and not hand-curating ~681 extension methods in perpetuity. It is affordable at ~171
+annotations, but it does not make application code smaller.
+
+### 6.7 Shims are the actual unlock — and they need no language feature
+
+§10 rejects "property promotion" because inlining ~87 modifier fields onto `Element` would add a slot to
+every node whether set or not. **That reasoning is correct for fields and does not apply to shims**, and the
+two were conflated in earlier drafts of this document.
+
+A shim is a computed `get`/`init` accessor with **no backing field**, forwarding into the bucket:
+
+```csharp
+public Thickness? Margin
+{
+    get => Modifiers?.Margin;
+    init => Modifiers = Modifiers is null
+        ? new ElementModifiers { Margin = value }
+        : Modifiers with { Margin = value };
+}
+```
+
+This is already the codebase's own pattern — `Element` carries **17** shims and `ElementModifiers` a further
+**29** (spec 034 §A). Measured (`ShimCost2.cs`, empty instances, 200 K samples):
+
+| record shape | bytes/instance |
+|---|---:|
+| baseline, 0 shims | 31 |
+| **+10 shims** | **31** (+0) |
+| +10 promoted fields | 111 (**+80**) |
+
+Shims compile to methods, which live once per type; fields live once per instance. **Adding shims is free.**
+
+The gap this exposes: `Margin` and `Padding` are shimmed on `Element`, but `Background`, `Foreground`,
+`Width`, `Height`, `CornerRadius`, `FontSize` and `IsEnabled` are **not reachable on `Element` at all**. So
+`Text("x") { Background = b }` cannot compile — not for want of a language feature, but for want of a
+property to bind to. §4 measured `[Factory]` against a type that had almost nothing for it to bind to.
+
+Usage-ranked shim candidates from the sample corpus: `Foreground` (651), `Background` (343), `Padding` (309),
+`CornerRadius` (306), `Margin` (284 ✓), `Width` (275), `FontSize` (193), `Height` (185), `VAlign` (130),
+`HAlign` (112), `IsEnabled` (73), `TextWrapping` (70). Roughly 15–20 shims cover the bulk of real usage.
+
+**Crucially this pays off on shipping C# today**, with no language change: `new TextElement("hi") { Background = b }`
+and `el with { Background = b }` begin working immediately. That is precisely why the `Margin`/`Padding` shims
+already exist (`Element.cs:41-44`).
+
+A concern was raised that each shim write does `Modifiers with { … }`, so setting *k* properties copies the
+bucket *k* times — the same copy-per-write shape that sank nested member paths (§6.5). Measured
+(`ShimWriteCost.cs`), **this inverts**: the fluent API has the same shape *and additionally copies the
+`Element` itself* on every call, whereas an initializer sets properties during construction.
+
+| properties set | shim-initializer copies | fluent-chain copies |
+|---|---:|---:|
+| 1 | **0** | 2 |
+| 2 | **2** | 5 |
+| 4 | **5** | 10 |
+
+Allocation for a 4-property element: **304 B (shims) vs 464 B (fluent)** — a 34% reduction, with a
+value-equality oracle confirming both forms produce the same result. So shims are *cheaper* than the status
+quo, not more expensive.
+
+**Recommendation: add the shims regardless of what csharplang does with `[Factory]`.** They are zero-memory,
+follow an established in-repo pattern, reduce allocation, and unlock initializer authoring on current C#.
+`[Factory]` then adds only the shorter factory spelling over the constructor form.
 
 ### 6.1 Content elements must be trailing
 
@@ -791,14 +959,22 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
 
 ## 10. Recommendations to the working group
 
-1. **Do not ship factory initializers as a standalone narrow feature.** Measured on non-golden-path code it is
-   a 17 % regression against the API this framework ships today. Bundle it with content elements or drop it.
+1. **Do not ship factory initializers as a standalone narrow feature.** ~~Measured on non-golden-path code it is
+   a 17 % regression against the API this framework ships today.~~ **Revised 2026-08-28:** measured across the
+   real sample corpus with shims assumed, it is a **wash (+1.2 %)**, not a regression — because 76 % of real
+   factory chains carry ≤2 modifiers while the brace pair costs 2 tokens. The recommendation stands on the
+   revised evidence: as a token-neutral change it does not justify itself alone, so bundle it with content
+   elements or drop it. The remaining case is qualitative (discoverability, not curating ~681 extension
+   methods forever), not size.
 2. **Do not adopt either opt-in as specified.** Member-level `[Factory]` fails the LDM's composability
-   requirement and its churn is larger than it looks (§5.1: the annotation spreads from 203 factories into
-   the 473 fluent extension methods). Type-level `[FactoryInitializable]` is composable and costs one
-   attribute, but is **unsound without the body restriction** — demonstrated by corrupting Reactor's
-   `EmptyElement.Instance` singleton. Adopt the synthesis in §5.2: permission at the type, proof inferred at
-   the member, explicit `[Factory]` retained as an assertion.
+   requirement. ~~and its churn is larger than it looks (§5.1: the annotation spreads from 203 factories into
+   the 473 fluent extension methods)~~ — **withdrawn 2026-08-28**: the spread is *optional*, not forced.
+   Initializer syntax binds to the factory-call result, so `Text("hi") { … }.Margin(4)` needs no modifier
+   annotated; only the unnecessary `Text("hi").Margin(4) { … }` shape would. Verified cost is **~165–171**
+   annotations, which is affordable — see §6.0's correction. Type-level `[FactoryInitializable]` is composable
+   and costs one attribute, but is **unsound without the body restriction** — demonstrated by corrupting
+   Reactor's `EmptyElement.Instance` singleton. Adopt the synthesis in §5.2: permission at the type, proof
+   inferred at the member, explicit `[Factory]` retained as an assertion.
 3. **Require content elements to be trailing.** Cheap, well-precedented, and it retires a standing objection.
 4. **Stop attributing the allocation win to construction syntax.** It comes from setting modifiers **once at
    construction** instead of merging one copy per fluent call, and it is available today.
@@ -808,6 +984,10 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
    plausibly a worse regression than the allocation win. Note also that §4's variant 5 measured
    construct-once vs. merge-repeatedly on a flat mini-model with no buckets — it does **not** measure
    promotion, and should not be cited as evidence for it.
+   **Clarification (2026-08-28): this rejection applies to promoted *fields*, not to *shims*.** A shim is a
+   computed accessor with no backing field; measured, 10 shims add **0 bytes** per instance where 10 promoted
+   fields add **80**. `Element` already carries 17 shims. Adding ~15–20 more is the highest-leverage change
+   available and needs **no language feature at all** — see §6.7.
 5. **Statement-form `if` in content position is implemented** (§6.4) and is the strongest remaining
    candidate. It is genuinely open ground — no championed csharplang proposal covers `if` inside a
    collection expression — and it demonstrates that Swift's `@ViewBuilder` type-checking cost does **not**
@@ -819,6 +999,11 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
    rule is already settled and agrees with this prototype; the open questions that decide whether the feature
    is usable for immutable UI trees — `Add` versus a content property, spread inside `{ }`, and trailing-only
    ordering — are still live and are exactly where this experiment has data.
+7. **Reactor-side, independent of csharplang: add the modifier shims (§6.7).** Zero per-instance memory,
+   an established in-repo pattern, ~34 % lower allocation than the equivalent fluent chain, and it makes
+   `new TextElement("hi") { Background = b }` and `el with { Background = b }` work on **shipping C# today**.
+   Until this exists, `Text("x") { Background = b }` cannot compile for want of a property to bind to — which
+   is why §4 under-measured the feature's value.
 
 ---
 

@@ -19,8 +19,12 @@ namespace Microsoft.UI.Reactor.Core;
 /// A lightweight, immutable description of a UI node (the "virtual DOM").
 /// Elements are cheap to create and diff — they never touch real controls directly.
 /// </summary>
+// EXPERIMENTAL: LDM 2026-07-15 working group. Inert with a stock compiler.
+// NOTE (spec 063 §6.0): the prototype no longer honors type-level opt-in — it was removed in favour of
+// csharplang#10292's member-level [Factory]. Retained only as the marker for the §5.2 synthesis
+// (permission at the type, proof inferred at the member), which is proposed but not implemented.
 // <snippet:element-record>
-[global::System.Runtime.CompilerServices.FactoryInitializable]  // EXPERIMENTAL: LDM 2026-07-15 working group
+[global::System.Runtime.CompilerServices.FactoryInitializable]
 public abstract record Element
 {
     /// <summary>
