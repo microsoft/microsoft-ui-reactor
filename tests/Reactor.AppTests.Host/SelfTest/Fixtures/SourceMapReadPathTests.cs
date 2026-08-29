@@ -504,4 +504,76 @@ internal static class SourceMapReadPathTests
             return element;
         }
     }
+
+    /// <summary>
+    /// Spec 010 — a decorated target that switches branches reports the live line.
+    ///
+    /// <para>CHARACTERIZATION, not a regression guard for the skip predicate. It passes
+    /// with and without the decorator unwrap in
+    /// <c>Reconciler.CallSiteChangedOnSkip</c> — verified by mutation — because this
+    /// shape does not reach the skip arm: something upstream routes the decorator
+    /// through a full update, which re-tags the control via the decorator adapter. The
+    /// unwrap in the predicate is therefore defensive, kept because
+    /// <c>ShallowEquals</c> DOES return true for <c>(FlyoutElement, FlyoutElement)</c>
+    /// regardless of Target, so the skip is reachable in principle; I could not
+    /// construct a shape that reaches it.</para>
+    ///
+    /// <para>What this fixture does prove is worth having on its own: a decorated
+    /// target's reported location follows the live branch rather than the retired one.</para>
+    /// </summary>
+    internal class DecoratedTargetBranchSwitchRefreshes(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = true;
+            try
+            {
+                // Two identical buttons on different lines: identical for rendering, so
+                // the decorator compares shallow-equal and the skip path is reached.
+                var fromA = Button("decorated-branch", () => { }); var lineA = Line();
+                var fromB = Button("decorated-branch", () => { }); var lineB = Line();
+
+                var host = H.CreateHost();
+                var useA = true;
+                host.Mount(ctx => VStack(Flyout(useA ? fromA : fromB, TextBlock("menu"))));
+                await Harness.Render();
+
+                var btn = H.FindControl<Microsoft.UI.Xaml.Controls.Button>(b => (b.Content as string) == "decorated-branch");
+                H.Check("SourceMapDecoBranch_Mounted", btn is not null);
+                if (btn is null) return;
+
+#if REACTOR_SOURCEMAP
+                H.Check("SourceMapDecoBranch_LinesDiffer", lineA != 0 && lineA != lineB);
+                H.Check("SourceMapDecoBranch_InitialIsA",
+                    ReactorSourceMap.GetSource(btn)?.LineNumber == lineA);
+
+                useA = false;
+                host.Mount(ctx => VStack(Flyout(useA ? fromA : fromB, TextBlock("menu"))));
+                await Harness.Render();
+
+                var after = H.FindControl<Microsoft.UI.Xaml.Controls.Button>(b => (b.Content as string) == "decorated-branch");
+                H.Check("SourceMapDecoBranch_StillMounted", after is not null);
+                if (after is null) return;
+
+                var reported = ReactorSourceMap.GetSource(after)?.LineNumber;
+                H.Check("SourceMapDecoBranch_FollowsTheLiveBranch", reported == lineB);
+                H.Check("SourceMapDecoBranch_NotStale", reported != lineA);
+#else
+                _ = lineA; _ = lineB;
+                H.Skip("SourceMapDecoBranch_LinesDiffer", SkipReason);
+                H.Skip("SourceMapDecoBranch_InitialIsA", SkipReason);
+                H.Skip("SourceMapDecoBranch_StillMounted", SkipReason);
+                H.Skip("SourceMapDecoBranch_FollowsTheLiveBranch", SkipReason);
+                H.Skip("SourceMapDecoBranch_NotStale", SkipReason);
+#endif
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+
+        private static int Line([global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => line;
+    }
 }

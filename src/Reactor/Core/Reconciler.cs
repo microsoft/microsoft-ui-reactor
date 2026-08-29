@@ -632,12 +632,38 @@ public sealed partial class Reconciler : IDisposable
     /// wrong line. Same class of problem as the #721 gesture/drag slots, and
     /// handled the same way: refresh on skip.</para>
     ///
+    /// <para>Compares the EFFECTIVE call site — the one <c>GetSource</c> would report —
+    /// which for a target-wrapping decorator is its innermost target's, not its own. A
+    /// stable <c>Flyout(...)</c> whose target switches between two otherwise-equal
+    /// elements built on different lines has an unchanged <c>CallSite</c> of its own, so
+    /// comparing only the outer element would take the skip and leave the control
+    /// reporting the target line that is no longer live.</para>
+    ///
     /// <para>Costs one nullable-struct compare when source mapping is off, where
     /// both sides are null and this is always false — so no control fetch and no
-    /// DependencyProperty write on the flag-off path.</para>
+    /// DependencyProperty write on the flag-off path. The decorator unwrap runs only
+    /// when one side actually is a decorator.</para>
     /// </summary>
     internal static bool CallSiteChangedOnSkip(Element oldEl, Element newEl)
-        => oldEl.CallSite != newEl.CallSite;
+    {
+        if (oldEl.CallSite != newEl.CallSite) return true;
+
+        var oldTarget = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(oldEl);
+        var newTarget = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(newEl);
+        if (oldTarget is null && newTarget is null) return false;
+
+        return EffectiveCallSite(oldTarget ?? oldEl) != EffectiveCallSite(newTarget ?? newEl);
+    }
+
+    /// <summary>The call site <c>ReactorSourceMap.GetSource</c> would report for an element.</summary>
+    private static SourceLocation? EffectiveCallSite(Element element)
+    {
+        while (global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(element) is { } target)
+        {
+            element = target;
+        }
+        return element.CallSite;
+    }
 
     /// <summary>
     /// True when the element carries any reactive reference modifier — the imperative
@@ -5737,3 +5763,4 @@ public sealed partial class Reconciler : IDisposable
         _pool.Clear();
     }
 }
+
