@@ -50,8 +50,8 @@ public abstract record Element
     /// <para>NOTE ON THE NAME: spec 010 proposes <c>Element.Source</c>. That name
     /// is unusable — five existing element records already declare a positional
     /// <c>Source</c> member of an incompatible type (<c>ImageElement(string
-    /// Source)</c>, <c>WebViewElement(Uri? Source)</c>,
-    /// <c>MediaPlayerElement(string? Source)</c>, plus <c>AnimatedIconElement</c>
+    /// Source)</c>, <c>WebView2Element(Uri? Source)</c>,
+    /// <c>MediaPlayerElementElement(string? Source)</c>, plus <c>AnimatedIconElement</c>
     /// and <c>ParallaxViewElement</c>), and a base property of a different type
     /// makes their positional parameters fail to bind (CS8866). <c>CallSite</c>
     /// is the collision-free equivalent.</para>

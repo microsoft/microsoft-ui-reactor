@@ -172,6 +172,14 @@ mapping, or when nothing stamped that element.
   Those elements report `null` rather than a wrong line. If you need a
   location for a wrapped control, call it from a named component and use
   the component's identity.
+- **Entry points outside `Factories` are not stamped.** A few
+  element-producing APIs live elsewhere — `Pending(fallback, child)`
+  (`PendingFactory`) and `intl.RichMessage(...)` (`IntlAccessor`) are the
+  built-in examples. They build their element by calling `Factories` from
+  inside Reactor's own assembly, where there is no call site in your
+  compilation to intercept, so the element they return reports `null`. The
+  elements you pass *into* them are ordinary call sites and are stamped
+  normally.
 
 ## Tips
 

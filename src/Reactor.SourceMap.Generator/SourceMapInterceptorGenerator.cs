@@ -126,6 +126,13 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         // single-pass library. Both halves of that were measured — see
         // WrapperFactoryInterceptionTests, which pins the limitation. Coverage that
         // varies with project shape is worse than a documented, uniform gap.
+        // Corollary of the same filter: element-producing entry points that live
+        // OUTSIDE Factories are likewise unstamped — `PendingFactory.Pending(...)`
+        // builds its element by calling `Factories.Component<,>` from inside Reactor's
+        // own assembly, where there is no call site in the consumer's compilation to
+        // intercept, and instance members such as `IntlAccessor.RichMessage(...)` are
+        // already excluded by the IsStatic check above. Both report no location rather
+        // than a framework line, and are pinned by NonFactoriesEntryPointTests.
         if (method.ContainingType?.ToDisplayString() != FactoriesMetadataName) return null;
 
         // Pass-throughs are never stamped, because they did not create the element.
