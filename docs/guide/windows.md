@@ -279,10 +279,31 @@ if one was declared, otherwise the `Assets\AppIcon.ico` convention. An app that
 already ships an icon does not restate it:
 
 ```csharp
-ReactorApp.Run<App>("MyApp", icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
+// A TitleBar(...) with no .Icon(...) inherits the window's icon, so an app that
+// already ships one does not restate it.
+static class TitleBarIconSetup
+{
+    public static void Run() =>
+        ReactorApp.Run<InheritedIconApp>("My app",
+            icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
+}
 
-// ...and in Render(), nothing more to say:
-var titleBar = TitleBar("MyApp");
+class InheritedIconApp : Component
+{
+    public override Element Render() =>
+        VStack(
+            TitleBar("My app"),          // shows Assets/AppIcon.ico, nothing to declare
+            TextBlock("Body"));
+}
+
+// Opt out where a bare title bar is what you want:
+class BareTitleBarApp : Component
+{
+    public override Element Render() =>
+        VStack(
+            TitleBar("My app").NoIcon(),
+            TextBlock("Body"));
+}
 ```
 
 The WinUI control does not do this itself. Two limits are worth knowing:

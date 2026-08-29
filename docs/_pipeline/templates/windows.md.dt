@@ -183,11 +183,7 @@ A `TitleBar(...)` with no `.Icon(...)` shows the **window's** icon: `WindowSpec.
 if one was declared, otherwise the `Assets\AppIcon.ico` convention. An app that
 already ships an icon does not restate it:
 
-```csharp
-ReactorApp.Run<App>("MyApp", icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
-
-// ...and in Render(), nothing more to say:
-var titleBar = TitleBar("MyApp");
+```csharp snippet="windows/title-bar-icon"
 ```
 
 The WinUI control does not do this itself. Two limits are worth knowing:
