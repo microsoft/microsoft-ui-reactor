@@ -60,6 +60,106 @@ public sealed class SourceMapPackageConsumerTests : IDisposable
     }
 
     /// <summary>
+    /// The TRANSITIVE delivery path: an app that never names Microsoft.UI.Reactor,
+    /// receiving it only through an intermediate library package.
+    ///
+    /// <para>NuGet flows <c>build/</c> to a direct <c>PackageReference</c> only, so this
+    /// case is served by <c>buildTransitive/</c> and nothing else. It needs its own test
+    /// because the targets guard the analyzer with <c>Exists(...)</c>: a wrong or missing
+    /// transitive path does not fail the build, it silently produces null locations
+    /// everywhere — which the direct-consumer test above cannot detect.</para>
+    /// </summary>
+    [Fact]
+    public void TransitiveConsumerAlsoGetsStampedCallSites()
+    {
+        // 1. An intermediate library that references Reactor directly, packed to the
+        //    same local feed the fixture already set up.
+        var libDir = Path.Join(_tempRoot, "intermediate");
+        Directory.CreateDirectory(libDir);
+        WriteIntermediateLibrary(libDir);
+        CreateNuGetConfig(libDir);
+        RunHelpers.RunDotnet(
+            $"pack -c Release -o \"{_fixture.PackageSourceDir}\"",
+            libDir,
+            _fixture.CommandEnvironment,
+            timeoutMs: 420_000);
+
+        // 2. A downstream app that references ONLY that library. Reactor arrives
+        //    transitively, so build/ never applies to it.
+        var appDir = Path.Join(_tempRoot, "downstream");
+        Directory.CreateDirectory(appDir);
+        WriteDownstreamProject(appDir);
+        WriteConsumerProgram(appDir);
+        CreateNuGetConfig(appDir);
+
+        var debug = RunConsumer(appDir, "Debug");
+        Assert.Contains($"CALLSITE=Program.cs:{TextBlockCallLine}", debug, StringComparison.Ordinal);
+
+        var release = RunConsumer(appDir, "Release");
+        Assert.Contains("CALLSITE=<null>", release, StringComparison.Ordinal);
+    }
+
+    private void WriteIntermediateLibrary(string libDir)
+    {
+        var csproj = $"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+                <Nullable>enable</Nullable>
+                <UseWinUI>true</UseWinUI>
+                <!-- A library must not own self-contained WindowsAppSDK packaging. -->
+                <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+                <PackageId>Reactor.SourceMap.IntermediateLib</PackageId>
+                <Version>{_fixture.PackageVersion}</Version>
+                <Platforms>{_fixture.RunArchitecture}</Platforms>
+                <Platform>{_fixture.RunArchitecture}</Platform>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.UI.Reactor" Version="{_fixture.PackageVersion}" />
+              </ItemGroup>
+            </Project>
+            """;
+
+        File.WriteAllText(Path.Join(libDir, "IntermediateLib.csproj"), csproj);
+
+        // Uses the DSL so the reference is real rather than declarative.
+        File.WriteAllText(Path.Join(libDir, "Widget.cs"), """
+            using Microsoft.UI.Reactor.Core;
+
+            namespace Reactor.SourceMap.IntermediateLib;
+
+            public static class Widget
+            {
+                public static Element Build() => Microsoft.UI.Reactor.Factories.TextBlock("from-lib");
+            }
+            """);
+    }
+
+    private void WriteDownstreamProject(string appDir)
+    {
+        // Note: NO PackageReference to Microsoft.UI.Reactor. That is the whole point.
+        var csproj = $"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <OutputType>Exe</OutputType>
+                <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+                <Nullable>enable</Nullable>
+                <UseWinUI>true</UseWinUI>
+                <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+                <Platform>{_fixture.RunArchitecture}</Platform>
+                <Platforms>{_fixture.RunArchitecture}</Platforms>
+                <RuntimeIdentifier>win-{_fixture.RunArchitecture}</RuntimeIdentifier>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Reactor.SourceMap.IntermediateLib" Version="{_fixture.PackageVersion}" />
+              </ItemGroup>
+            </Project>
+            """;
+
+        File.WriteAllText(Path.Join(appDir, "Downstream.csproj"), csproj);
+    }
+
+    /// <summary>
     /// 1-based line of the <c>TextBlock("hello")</c> call in the generated Program.cs.
     /// Kept adjacent to the writer below so the two cannot drift apart unnoticed.
     /// </summary>
