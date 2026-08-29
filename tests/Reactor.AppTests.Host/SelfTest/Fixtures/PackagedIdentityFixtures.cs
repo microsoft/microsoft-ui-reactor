@@ -10,16 +10,26 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// </summary>
 /// <remarks>
 /// <para>These live in the shared fixture corpus rather than in a packaged-only source
-/// set, so the two hosts stay a single body of tests and <c>--list-fixtures</c> agrees
-/// across both tiers. What differs is the <see cref="IsPackagedTier"/> gate below.</para>
+/// set, so the two hosts stay a single body of tests. What differs is <i>selection</i>:
+/// they are declared <c>SelfTestTier.Packaged</c> in
+/// <c>SelfTestFixtureRegistry.TierRequirements</c>, so the unpackaged host neither lists
+/// nor runs them — <c>--list-fixtures</c> is deliberately tier-dependent (issue #1154).
+/// They previously ran everywhere and self-skipped, which restated a permanent structural
+/// fact as a per-run observation and left three entries in the amber skip inventory on
+/// every unpackaged run.</para>
+/// <para><b>The gate below is not redundant with that declaration.</b> Selection cannot
+/// observe identity — it keys off which binary is running, and the packaged host binary is
+/// a different binary. The gate is what catches the packaged host being launched
+/// <i>without</i> identity: a broken registration, a stale alias resolving to something
+/// else, someone running the .exe out of the build output. There the fixtures skip and
+/// <c>PackagedSelfTestBatch.IdentityDependentFixtures_Actually_Asserted</c> turns that into
+/// a red, rather than the suite reporting green while measuring nothing.</para>
 /// <para><b>Why the gate keys off the entry assembly.</b> A fixture that merely skipped
-/// whenever <c>PackageRuntime.IsPackaged</c> was false would be worse than useless: if
-/// the packaged tier ever launched the app without identity — a broken registration, a
-/// stale alias resolving to something else, someone running the .exe out of the build
-/// output — every identity check would quietly skip and the suite would report green
-/// while measuring nothing. That is precisely the failure mode this tier exists to
-/// remove. Keying off the entry assembly instead makes the requirement structural: the
-/// packaged host binary <i>must</i> have identity, and says so by failing.</para>
+/// whenever <c>PackageRuntime.IsPackaged</c> was false would be worse than useless: it
+/// would treat the missing-identity case as an excuse rather than a fault, which is
+/// precisely the failure mode this tier exists to remove. Keying off the entry assembly
+/// instead makes the requirement structural: the packaged host binary <i>must</i> have
+/// identity, and says so by failing.</para>
 /// </remarks>
 internal static class PackagedIdentityFixtures
 {
@@ -48,10 +58,17 @@ internal static class PackagedIdentityFixtures
     /// <c>false</c>.
     /// </summary>
     /// <remarks>
-    /// The skip's check name is derived from <paramref name="fixture"/> rather than passed
+    /// <para>The skip's check name is derived from <paramref name="fixture"/> rather than passed
     /// in, so callers cannot invent three different spellings for the same concept and the
     /// name always points at the fixture a reader has to go look at. Call it as
-    /// <c>RequirePackagedTier(H, this)</c>.
+    /// <c>RequirePackagedTier(H, this)</c>.</para>
+    /// <para><b>On the normal unpackaged path this is unreachable</b>, because the fixture is
+    /// declared <c>SelfTestTier.Packaged</c> and never selected there (issue #1154). It stays
+    /// because it guards a case selection cannot see: the <i>packaged</i> host running without
+    /// package identity. There the skip is what
+    /// <c>PackagedSelfTestBatch.IdentityDependentFixtures_Actually_Asserted</c> converts into a
+    /// failure — so this must keep skipping rather than assert, or that guard would never see
+    /// the condition it exists to report.</para>
     /// </remarks>
     internal static bool RequirePackagedTier(Harness h, SelfTestFixtureBase fixture)
     {

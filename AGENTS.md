@@ -144,7 +144,7 @@ Optionally: a factory method in `src/Reactor/Elements/Dsl.cs`, fluent modifiers 
 |---|---|---|
 | Algorithm, pure function, hook bookkeeping, D3 math | Unit test (xUnit) | `tests/Reactor.Tests/` |
 | Element mount/update against real WinUI controls | Selftest fixture | `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` |
-| Behaviour that differs under MSIX identity (`ms-appx:`, `Package.Current`, MRT, `PackageRuntime.IsPackaged` branches) | Selftest fixture gated with `PackagedIdentityFixtures.RequirePackagedTier` | same folder; runs for real in `tests/Reactor.PackagedTests` |
+| Behaviour that differs under MSIX identity (`ms-appx:`, `Package.Current`, MRT, `PackageRuntime.IsPackaged` branches) | Selftest fixture gated with `PackagedIdentityFixtures.RequirePackagedTier` **and** declared `SelfTestTier.Packaged` | same folder; runs for real in `tests/Reactor.PackagedTests` |
 | Real user input, UIA properties, cross-process | E2E test (winapp ui) | `tests/Reactor.AppTests/Tests/` |
 
 Start with unit tests. Use selftests only when you need a live WinUI control. E2E is the slowest tier.
@@ -156,6 +156,13 @@ adds only MSIX properties plus a `Package.appxmanifest`. The whole corpus runs u
 **Gotcha worth not re-deriving:** the manifest's `uap5:AppExecutionAlias` is load-bearing — launching
 the alias stub inherits stdout while keeping package identity, which AUMID activation cannot do
 (it is brokered, so stdout can't be redirected at all).
+**Second gotcha:** a packaged fixture needs *two* declarations, not one. The
+`RequirePackagedTier` gate decides whether the body asserts; `SelfTestFixtureRegistry.TierRequirements`
+decides whether the unpackaged host runs it at all. Skip the second and the fixture self-skips
+into the amber skip inventory on every unpackaged run forever (issue #1154). Consequence worth
+knowing: **`--list-fixtures` is tier-dependent**, and both hosts print
+`# Total not-applicable fixtures:` / `# Not applicable fixture list:` after `# Total failures:`
+so the exclusion is an assertable fact rather than a silent absence.
 
 ### Console-mutating tests need collection isolation
 

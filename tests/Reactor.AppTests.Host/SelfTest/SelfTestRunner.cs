@@ -90,6 +90,51 @@ internal static class SelfTestRunner
     /// </remarks>
     internal const string SuiteElapsedMarker = "# Suite elapsed: ";
 
+    /// <summary>
+    /// TAP comment for the count of fixtures this tier deliberately did not run:
+    /// <c># Total not-applicable fixtures: &lt;n&gt;</c>, followed by
+    /// <see cref="NotApplicableListMarker"/> when non-zero.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Why an absence gets a trailer.</b> Issue #1154 removed three <c>Packaged_*</c>
+    /// fixtures from the unpackaged corpus rather than letting them self-skip into the amber
+    /// inventory. But "the fixtures are not here" and "the fixtures were deleted" look identical
+    /// from outside, and so do "the tier filter works" and "the tier filter silently matched
+    /// nothing". Naming the excluded set turns the exclusion into an observation both wrappers
+    /// can assert on — the unpackaged one that it happened, the packaged one that it did
+    /// <i>not</i>.</para>
+    /// <para>Emitted after <c># Total failures:</c>, for the same reason the skip trailer is:
+    /// that line is the documented "the Host reached the end of its run" discriminator. The
+    /// prefixes are deliberately distinct from <c># Total skipped fixtures:</c> /
+    /// <c># Skipped fixture list:</c> so a grep for one cannot match the other. Both literals are
+    /// duplicated in the two wrappers, which cannot reference this assembly
+    /// (<c>ReferenceOutputAssembly=false</c>) — change one, change all three.</para>
+    /// </remarks>
+    internal const string NotApplicableCountMarker = "# Total not-applicable fixtures: ";
+
+    /// <summary>
+    /// TAP comment listing the excluded fixture names, comma-separated. See
+    /// <see cref="NotApplicableCountMarker"/>.
+    /// </summary>
+    internal const string NotApplicableListMarker = "# Not applicable fixture list: ";
+
+    /// <summary>
+    /// Reports the fixtures this tier does not run. Shared by <c>--self-test</c> and
+    /// <c>--list-fixtures</c> so the two can never disagree about the exclusion.
+    /// </summary>
+    /// <remarks>
+    /// Reports the whole tier-excluded set regardless of <see cref="Filter"/>: applicability is a
+    /// property of the tier, and a <c>--filter</c> run narrowing this list would make the
+    /// wrappers' assertions depend on which subset happened to be selected.
+    /// </remarks>
+    internal static void WriteNotApplicableTrailer()
+    {
+        var excluded = SelfTestFixtureRegistry.FixturesNotApplicableToCurrentTier;
+        Console.WriteLine(NotApplicableCountMarker + excluded.Length);
+        if (excluded.Length > 0)
+            Console.WriteLine(NotApplicableListMarker + string.Join(", ", excluded));
+    }
+
     private static TimeSpan ResolveHangTimeout()
     {
         var env = Environment.GetEnvironmentVariable("REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS");
@@ -339,12 +384,21 @@ internal static class SelfTestRunner
                     // committed skip is a configuration error, so it aborts the run
                     // via the catch below rather than being reported as a result.
                     // Validated against the full registry, not `fixtures`, so a
-                    // --filter run doesn't flag every unrelated pattern.
+                    // --filter run doesn't flag every unrelated pattern. It stays the
+                    // FULL registry rather than the tier's slice for the same reason:
+                    // a pattern naming a fixture this tier doesn't run is still a valid
+                    // pattern, not a stale one.
                     ValidateDefaultSkipPatterns(allFixtures);
 
+                    // The tier's corpus, not the registry's. A fixture declared for the other
+                    // tier is structurally unable to assert here, so it is not run at all —
+                    // rather than run and self-skip, which put a permanent amber entry in the
+                    // run's skip inventory on every run (issue #1154).
+                    var tierFixtures = SelfTestFixtureRegistry.FixturesForCurrentTier;
+
                     var fixtures = Filter is not null
-                        ? allFixtures.Where(f => f.Contains(Filter, StringComparison.OrdinalIgnoreCase)).ToArray()
-                        : allFixtures;
+                        ? tierFixtures.Where(f => f.Contains(Filter, StringComparison.OrdinalIgnoreCase)).ToArray()
+                        : tierFixtures;
                     harness.SetupTitleBar(fixtures.Length);
                     window.Activate();
                     await Harness.Render(); // wait for initial layout
@@ -550,6 +604,7 @@ internal static class SelfTestRunner
                     Console.WriteLine($"# Total skipped fixtures: {skippedFixtures.Count}");
                     if (skippedFixtures.Count > 0)
                         Console.WriteLine($"# Skipped fixture list: {string.Join(", ", skippedFixtures)}");
+                    WriteNotApplicableTrailer();
                     Console.WriteLine(SuiteElapsedMarker +
                         Stopwatch.GetElapsedTime(suiteStart).TotalSeconds
                             .ToString("F1", global::System.Globalization.CultureInfo.InvariantCulture));

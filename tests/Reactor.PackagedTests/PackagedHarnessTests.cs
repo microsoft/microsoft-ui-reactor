@@ -242,6 +242,74 @@ public class PackagedHarnessTests
         CollectionAssert.AreEqual(new[] { "Packaged_One", "packaged_three" }, names);
     }
 
+    // ── Tier applicability (issue #1154) ───────────────────────────────
+
+    /// <summary>
+    /// The distinction <c>EveryFixture_IsApplicableToThePackagedTier</c> rests on. That assertion
+    /// demands a count of <b>zero</b>, so if a missing trailer parsed as zero, a host that stopped
+    /// reporting altogether would satisfy it by silence — this tier would go green having
+    /// established nothing about whether it ran its identity fixtures at all, which is the exact
+    /// failure mode the tier exists to remove.
+    /// </summary>
+    [TestMethod]
+    public void Not_Applicable_Trailer_Absent_Is_Not_Zero()
+    {
+        const string run = "# Running: F\nok F_Check\n# Total failures: 0\n";
+
+        var missing = PackagedSelfTestBatch.ExtractNotApplicableFixtures(run);
+        var zero = PackagedSelfTestBatch.ExtractNotApplicableFixtures(
+            run + PackagedSelfTestBatch.NotApplicableCountMarker + "0\n");
+
+        Assert.IsNull(missing.Count, "Absent trailer must not be reported as a count.");
+        Assert.AreEqual(0, zero.Count, "An explicit zero is a measurement, not an absence.");
+    }
+
+    /// <summary>
+    /// Names have to survive, because the failure message is the only thing that tells a reader
+    /// <i>which</i> fixtures the packaged host decided it could not run — and the answer is
+    /// almost certainly the identity set.
+    /// </summary>
+    [TestMethod]
+    public void Not_Applicable_Trailer_Names_Are_Parsed()
+    {
+        var report = PackagedSelfTestBatch.ExtractNotApplicableFixtures(
+            PackagedSelfTestBatch.NotApplicableCountMarker + "2\n" +
+            PackagedSelfTestBatch.NotApplicableListMarker +
+            "Packaged_IdentityGuard, Packaged_SettingsStoreRoundTrip\n");
+
+        Assert.AreEqual(2, report.Count);
+        CollectionAssert.AreEqual(
+            new[] { "Packaged_IdentityGuard", "Packaged_SettingsStoreRoundTrip" },
+            report.Names.ToArray());
+    }
+
+    /// <summary>
+    /// The skip trailers sit two lines above the exclusion trailer in the same stream and share
+    /// its shape. Reading one as the other would let a run with a single skipped fixture report a
+    /// non-zero exclusion count and redden this tier for the wrong reason.
+    /// </summary>
+    [TestMethod]
+    public void Skip_Trailers_Are_Not_The_Not_Applicable_Trailer()
+    {
+        var report = PackagedSelfTestBatch.ExtractNotApplicableFixtures(
+            "# Total skipped fixtures: 1\n# Skipped fixture list: Some_Fixture\n");
+
+        Assert.IsNull(report.Count);
+    }
+
+    /// <summary>
+    /// A garbled count must not default to zero: zero is the answer this tier wants to hear, so a
+    /// malformed line must not be able to supply it.
+    /// </summary>
+    [TestMethod]
+    public void Not_Applicable_Malformed_Count_Is_Not_Zero()
+    {
+        var report = PackagedSelfTestBatch.ExtractNotApplicableFixtures(
+            PackagedSelfTestBatch.NotApplicableCountMarker + "several\n");
+
+        Assert.IsNull(report.Count);
+    }
+
     // ── Host-directory override ────────────────────────────────────────
 
     /// <summary>

@@ -1220,8 +1220,8 @@ internal static class SelfTestFixtureRegistry
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents",
         "WindowModel_WindowIconApplied",
-        // Packaged (MSIX) tier. These self-skip in the unpackaged host;
-        // Reactor.PackagedTests runs them with real package identity.
+        // Packaged (MSIX) tier. Declared SelfTestTier.Packaged in TierRequirements below, so the
+        // unpackaged host does not run them at all — see issue #1154.
         "Packaged_IdentityGuard",
         "Packaged_SettingsStoreRoundTrip",
         "Packaged_WindowIconFromResource",
@@ -1745,6 +1745,99 @@ internal static class SelfTestFixtureRegistry
         // its SKIPPED result is what SelfTestBatch.SkippedFixtures_AreReported checks for.
         SkipVerdictPositiveControl.FixtureName,
     ];
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Tier applicability
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Which host a fixture needs. <see cref="SelfTestTier.Any"/> — the overwhelming default —
+    /// means "runs everywhere"; the other two mean the fixture is <b>structurally</b> unable to
+    /// assert anywhere else.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SelfTestTier.Unpackaged"/> is unused today and is defined because the concept is
+    /// symmetric, not speculatively: Reactor branches on <c>PackageRuntime.IsPackaged</c> in both
+    /// directions (<c>FileSettingsStore</c> is the mirror of <c>PackagedSettingsStore</c>), so the
+    /// opposite gate is one declaration away. It costs no extra code path — the test is
+    /// <c>required == Any || required == current</c>.
+    /// </remarks>
+    internal enum SelfTestTier
+    {
+        /// <summary>Runs in every tier. The default for a fixture with no declaration.</summary>
+        Any,
+
+        /// <summary>Needs MSIX package identity; only <c>Reactor.PackagedTests</c> can run it.</summary>
+        Packaged,
+
+        /// <summary>Needs the absence of package identity; only the unpackaged host can run it.</summary>
+        Unpackaged,
+    }
+
+    /// <summary>
+    /// Fixtures that only apply to one tier. Everything absent from this map is
+    /// <see cref="SelfTestTier.Any"/>.
+    ///
+    /// <para><b>This is the declaration that removes a fixture from the other tier's corpus
+    /// entirely</b> — it is not run there, emits no TAP, and gets no test case. Before issue #1154
+    /// these fixtures ran everywhere and self-skipped, which put three permanent entries in
+    /// <c>SkippedFixtures_AreReported</c>'s amber inventory on every unpackaged run: a channel
+    /// whose value depends on being rare, describing a condition that is structural rather than
+    /// incidental. Declaring the requirement says the same thing once, as data.</para>
+    ///
+    /// <para><b>Keep the runtime gate too.</b> A fixture declared here must still call
+    /// <c>PackagedIdentityFixtures.RequirePackagedTier</c>: this map governs <i>selection</i>,
+    /// the gate governs whether the body <i>asserts</i>, and the two are deliberately
+    /// independent. If the packaged host is ever launched without identity the gate skips and
+    /// <c>PackagedSelfTestBatch.IdentityDependentFixtures_Actually_Asserted</c> turns that into a
+    /// red — which a selection-only mechanism could not do, because selection cannot observe
+    /// identity.</para>
+    /// </summary>
+    private static readonly Dictionary<string, SelfTestTier> TierRequirements =
+        new(StringComparer.Ordinal)
+        {
+            ["Packaged_IdentityGuard"] = SelfTestTier.Packaged,
+            ["Packaged_SettingsStoreRoundTrip"] = SelfTestTier.Packaged,
+            ["Packaged_WindowIconFromResource"] = SelfTestTier.Packaged,
+        };
+
+    /// <summary>The tier this process is, derived from the same entry-assembly probe the fixtures use.</summary>
+    internal static SelfTestTier CurrentTier =>
+        PackagedIdentityFixtures.IsPackagedTier ? SelfTestTier.Packaged : SelfTestTier.Unpackaged;
+
+    /// <summary>The tier <paramref name="fixture"/> requires; <see cref="SelfTestTier.Any"/> when undeclared.</summary>
+    internal static SelfTestTier RequiredTier(string fixture) =>
+        TierRequirements.TryGetValue(fixture, out var tier) ? tier : SelfTestTier.Any;
+
+    private static bool AppliesToCurrentTier(string fixture)
+    {
+        var required = RequiredTier(fixture);
+        return required == SelfTestTier.Any || required == CurrentTier;
+    }
+
+    /// <summary>
+    /// The corpus this host actually runs. Both <c>--self-test</c> and <c>--list-fixtures</c> use
+    /// it, so discovery and execution cannot disagree about the set.
+    /// </summary>
+    /// <remarks>
+    /// A property rather than a cached <c>static readonly</c> array on purpose: the cached form
+    /// would silently depend on being declared textually after <see cref="AllFixtures"/> and
+    /// <see cref="TierRequirements"/>, and moving either — an ordinary-looking edit in a 3000-line
+    /// registry — would evaluate it against a null array or an empty map and quietly return the
+    /// wrong corpus. Recomputing costs one scan of ~1500 strings, on the two or three calls a
+    /// process makes, against a suite measured in minutes.
+    /// </remarks>
+    public static string[] FixturesForCurrentTier => Array.FindAll(AllFixtures, AppliesToCurrentTier);
+
+    /// <summary>
+    /// The corpus this host deliberately does <b>not</b> run, named so the exclusion is a reported
+    /// fact rather than a silent absence. The Host prints these as a TAP trailer and both wrappers
+    /// assert on them: the unpackaged one that they really were excluded, the packaged one that
+    /// this list is <i>empty</i> — because a packaged run that filtered its identity fixtures out
+    /// would go green having measured nothing.
+    /// </summary>
+    public static string[] FixturesNotApplicableToCurrentTier =>
+        Array.FindAll(AllFixtures, name => !AppliesToCurrentTier(name));
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {

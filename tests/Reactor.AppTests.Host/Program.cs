@@ -12,8 +12,14 @@ if (args.Contains("--list-fixtures"))
 {
     // Fast path: emit the selftest fixture registry, one name per line, and exit.
     // Used by Reactor.SelfTests to discover fixtures without launching WinUI.
-    foreach (var name in SelfTestFixtureRegistry.AllFixtures)
+    //
+    // Deliberately the CURRENT TIER's corpus, not the whole registry: a fixture this host
+    // cannot run must not get a test case that could only ever report "skipped" (issue #1154).
+    // The two wrappers' list parsers both drop `#` lines, so the trailer below is inert to
+    // discovery while still naming the exclusions for a human running this by hand.
+    foreach (var name in SelfTestFixtureRegistry.FixturesForCurrentTier)
         Console.WriteLine(name);
+    SelfTestRunner.WriteNotApplicableTrailer();
     return;
 }
 

@@ -53,6 +53,25 @@ public class PackagedSelfTestBatch
 
     internal sealed record FixtureOutcome(FixtureStatus Status, string Detail);
 
+    /// <summary>
+    /// The host's <c># Total not-applicable fixtures:</c> trailer. Duplicated from
+    /// <c>SelfTestRunner.NotApplicableCountMarker</c>, which this project cannot reference.
+    /// </summary>
+    internal const string NotApplicableCountMarker = "# Total not-applicable fixtures: ";
+
+    /// <summary>
+    /// The host's <c># Not applicable fixture list:</c> trailer. Duplicated from
+    /// <c>SelfTestRunner.NotApplicableListMarker</c>.
+    /// </summary>
+    internal const string NotApplicableListMarker = "# Not applicable fixture list: ";
+
+    /// <summary>
+    /// What the host said it deliberately did not run. A <see langword="null"/>
+    /// <paramref name="Count"/> means the trailer was absent, which is not the same fact as a
+    /// count of zero: absent means nothing reported, zero means everything applied.
+    /// </summary>
+    internal sealed record NotApplicableReport(int? Count, IReadOnlyList<string> Names);
+
     // ────────────────────────────────────────────────────────────────────
     //  Run
     // ────────────────────────────────────────────────────────────────────
@@ -217,6 +236,88 @@ public class PackagedSelfTestBatch
             $"asserted nothing:\n  {string.Join("\n  ", skipped)}\n" +
             "A fixture gated on RequirePackagedTier must always run here — a skip means the " +
             "host lacked package identity or the gate itself is broken.");
+    }
+
+    /// <summary>
+    /// The mirror of <c>SelfTestBatch.NotApplicableFixtures_AreExcludedFromThisTier</c>, and the
+    /// half that guards the dangerous direction.
+    /// </summary>
+    /// <remarks>
+    /// <para>Identity-dependent fixtures are declared <c>SelfTestTier.Packaged</c> in
+    /// <c>SelfTestFixtureRegistry.TierRequirements</c>, so the unpackaged host filters them out of
+    /// its corpus entirely (issue #1154). That filter keys off the same entry-assembly probe the
+    /// fixtures' own gate uses — and if it ever answered "unpackaged" <i>here</i>, this tier would
+    /// silently drop the only fixtures it exists to run, discover a corpus without them, and go
+    /// green having measured nothing. No other assertion catches that: they would not be missing
+    /// results, they would not be skips, they simply would not be part of the run, so
+    /// <see cref="Fixture"/> is never asked about them and
+    /// <see cref="IdentityDependentFixtures_Actually_Asserted"/> finds nothing to complain
+    /// about.</para>
+    /// <para>Hence the assertion is on the count the host itself reports, not on the discovered
+    /// set: the trailer is emitted before any filtering this shim does, so it describes the host's
+    /// own view of its corpus.</para>
+    /// </remarks>
+    [TestMethod]
+    public void EveryFixture_IsApplicableToThePackagedTier()
+    {
+        FailIfNotInitialized();
+
+        var report = ExtractNotApplicableFixtures(_fullOutput);
+
+        Assert.IsNotNull(
+            report.Count,
+            $"The packaged host emitted no '{NotApplicableCountMarker.Trim()}' trailer, so nothing " +
+            "establishes that it considered its identity-dependent fixtures applicable. Either " +
+            "SelfTestRunner.WriteNotApplicableTrailer stopped being called, or the marker literal " +
+            "drifted between the host and this file — they are duplicated, not shared, because " +
+            $"the host is referenced with ReferenceOutputAssembly=false.\n{Tail(_fullOutput, 2000)}");
+
+        Assert.AreEqual(
+            0, report.Count!.Value,
+            "The packaged host excluded fixtures from its own corpus as 'not applicable to this " +
+            $"tier':\n  {string.Join("\n  ", report.Names)}\n" +
+            "Every fixture must be applicable here — this is the tier that runs the " +
+            $"'{IdentityFixturePrefix}' set for real. The most likely cause is " +
+            "SelfTestFixtureRegistry.CurrentTier resolving to Unpackaged inside the packaged host, " +
+            "which would remove exactly those fixtures and leave the run green having measured " +
+            "nothing.");
+    }
+
+    /// <summary>
+    /// Reads the host's <c># Total not-applicable fixtures:</c> / <c># Not applicable fixture
+    /// list:</c> trailers. Marker literals duplicated from <c>SelfTestRunner</c>.
+    /// </summary>
+    /// <remarks>
+    /// The count is parsed independently of the list rather than derived from it, so a stream
+    /// truncated between the two lines is visible as a disagreement instead of silently reading
+    /// as an empty exclusion set — which is the answer this tier wants to hear.
+    /// </remarks>
+    internal static NotApplicableReport ExtractNotApplicableFixtures(string stdout)
+    {
+        if (string.IsNullOrEmpty(stdout)) return new NotApplicableReport(null, []);
+
+        int? count = null;
+        string[] names = [];
+
+        foreach (var line in stdout.Split('\n').Select(static raw => raw.Trim()))
+        {
+            if (line.StartsWith(NotApplicableCountMarker, StringComparison.Ordinal))
+            {
+                if (int.TryParse(line[NotApplicableCountMarker.Length..].Trim(),
+                        System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                {
+                    count = parsed;
+                }
+            }
+            else if (line.StartsWith(NotApplicableListMarker, StringComparison.Ordinal))
+            {
+                names = line[NotApplicableListMarker.Length..]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
+        }
+
+        return new NotApplicableReport(count, names);
     }
 
     /// <summary>

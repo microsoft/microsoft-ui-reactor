@@ -132,7 +132,7 @@ The reliable tell is the module label. A run that started prints the handshake-d
 | An algorithm, pure function, record equality, hook bookkeeping, D3 math — anything that doesn't need a WinUI window | **Unit test** in `tests/Reactor.Tests/` |
 | How an element mounts/updates against a real WinUI control, layout math against real Yoga+XAML, reconciler behavior end-to-end, assertions via `VisualTreeHelper` | **Selftest fixture** in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` (registered in `SelfTestFixtureRegistry`, wrapped by a `[TestMethod]` in `SelfTestBatch`) |
 | Real user input (clicks, keystrokes, tab navigation), UIA properties as seen by assistive tech, cross-process behavior, XAML Island interop | **E2E test** in `tests/Reactor.AppTests/Tests/` |
-| Anything that changes under **MSIX package identity** — `ms-appx:` resolution, `Package.Current`, MRT lookups, `PackageRuntime.IsPackaged` branches | **Selftest fixture** as above, gated with `PackagedIdentityFixtures.RequirePackagedTier` so it self-skips in the unpackaged tier |
+| Anything that changes under **MSIX package identity** — `ms-appx:` resolution, `Package.Current`, MRT lookups, `PackageRuntime.IsPackaged` branches | **Selftest fixture** as above, gated with `PackagedIdentityFixtures.RequirePackagedTier` **and** declared `SelfTestTier.Packaged` so the unpackaged tier does not run it |
 
 Rule of thumb: start with a unit test. Drop to selftest only when you need a live control. Reach for E2E only when you need cross-process UIA — E2E is the slowest and flakiest tier.
 
@@ -302,12 +302,20 @@ why SKIPPED is not just a politer green. Always put an issue number in the reaso
 one; the reason string is all a reader of the skip report gets. And if you are reaching for a skip
 to silence a flake, fix the flake instead — a skip makes the flake invisible rather than absent.
 
+**"This tier structurally cannot run it" is not on that list, and must not be expressed as a skip.**
+A skip is a per-run observation; tier applicability is a fixed property of the fixture, so a skip
+would restate the same permanent fact on every run and accumulate in the amber inventory — which is
+what [#1154](https://github.com/microsoft/microsoft-ui-reactor/issues/1154) was. Declare the tier in
+`SelfTestFixtureRegistry.TierRequirements` instead and the fixture is simply not selected; see §3.
+
 For raw-TAP consumers (the AOT job pipes `--self-test` straight to a `.tap` artifact and greps
 `^not ok `), the Host emits a `# Total skipped fixtures: N` trailer — placed *after*
 `# Total failures:` so the abort discriminator below is unaffected — followed by
 `# Skipped fixture list: <names>` when non-zero. Each fully-skipped fixture also gets its own
-`# Fully skipped fixture: <name> - N check(s) skipped, 0 assertions ran` line as it happens. The
-three prefixes are deliberately distinct so a grep for one does not match the others.
+`# Fully skipped fixture: <name> - N check(s) skipped, 0 assertions ran` line as it happens.
+Alongside them, and reporting a different thing, come `# Total not-applicable fixtures: N` and
+`# Not applicable fixture list: <names>` (§3) — fixtures that deliberately did **not** run here.
+All five prefixes are deliberately distinct so a grep for one does not match the others.
 
 One fixture, `SelfTestVerdict_OnlySkips_PositiveControl`, is **expected** to be Skipped on every
 run. It asserts nothing on purpose: it is the positive control that proves the SKIPPED verdict
@@ -520,19 +528,57 @@ while still inheriting stdout — so the TAP contract and flags from tier 2 are 
 
 ### Writing a packaged fixture
 
-Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`) and gate
-themselves:
+Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Two steps,
+and both are load-bearing. **Gate** the fixture body:
 
 ```csharp
 if (!PackagedIdentityFixtures.RequirePackagedTier(H, this)) return;
 ```
 
-They run for real here and emit a single TAP skip in the unpackaged tier. Register them with the
-**`Packaged_`** prefix — that is what the shim's `IdentityDependentFixtures_Actually_Asserted`
-guard uses to decide which fixtures must never skip.
+and **declare** its tier in `SelfTestFixtureRegistry.TierRequirements`, beside its entry in
+`AllFixtures`:
+
+```csharp
+["Packaged_MyNewThing"] = SelfTestTier.Packaged,
+```
+
+Register it with the **`Packaged_`** prefix — that is what the shim's
+`IdentityDependentFixtures_Actually_Asserted` guard uses to decide which fixtures must never skip.
+
+The two steps do different jobs and neither replaces the other. The **declaration** governs
+*selection*: an undeclared fixture is offered to every tier, so the unpackaged host runs it, hits
+the gate, and emits a skip that lands in the run's amber skip inventory — a permanent entry
+describing a condition that is structural rather than incidental
+([#1154](https://github.com/microsoft/microsoft-ui-reactor/issues/1154)). The **gate** governs
+whether the body *asserts*: if this tier were ever launched without identity, it skips, and
+`IdentityDependentFixtures_Actually_Asserted` turns that into a red. Selection cannot do that job,
+because selection cannot observe identity — it keys off the entry assembly, and the unpackaged
+binary is a different binary.
+
+So `--list-fixtures` is **tier-dependent**: the unpackaged host does not list, and does not run,
+the fixtures declared `SelfTestTier.Packaged`. Both hosts print what they excluded, after
+`# Total failures:`:
+
+```
+# Total not-applicable fixtures: 3
+# Not applicable fixture list: Packaged_IdentityGuard, Packaged_SettingsStoreRoundTrip, …
+```
+
+That trailer exists because the fix for #1154 was a *removal*, and success and catastrophe produce
+the same observation when you fix something by removing it: "no amber" is what you get whether the
+filter works or whether somebody deleted the packaged corpus. Both shims assert on the trailer,
+and they demand opposite things — `SelfTestBatch.NotApplicableFixtures_AreExcludedFromThisTier`
+requires a non-empty list and that none of those names reached discovery or the run;
+`PackagedSelfTestBatch.EveryFixture_IsApplicableToThePackagedTier` requires **zero**. A tier probe
+stuck on one answer would otherwise look correct from whichever side agreed with it. For the same
+reason a *missing* trailer is never read as a count of zero — that would let a host which stopped
+reporting satisfy the packaged assertion by silence.
 
 The gate keys off the entry assembly, not `PackageRuntime.IsPackaged`: a fixture that skipped
 whenever identity was missing would report green if this tier ever ran without it.
+
+If a fixture needs the *absence* of identity, `SelfTestTier.Unpackaged` is the mirror declaration;
+nothing uses it yet.
 
 ### Scope and knobs
 

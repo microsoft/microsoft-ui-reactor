@@ -1266,6 +1266,178 @@ public class SelfTestBatch
     /// </summary>
     internal const string SkipVerdictControlFixture = "SelfTestVerdict_OnlySkips_PositiveControl";
 
+    // ════════════════════════════════════════════════════════════════════
+    //  Tier applicability (issue #1154)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The Host's <c># Total not-applicable fixtures:</c> trailer. Duplicated from
+    /// <c>SelfTestRunner.NotApplicableCountMarker</c>, which cannot be referenced from here.
+    /// </summary>
+    internal const string NotApplicableCountMarker = "# Total not-applicable fixtures: ";
+
+    /// <summary>
+    /// The Host's <c># Not applicable fixture list:</c> trailer. Duplicated from
+    /// <c>SelfTestRunner.NotApplicableListMarker</c>.
+    /// </summary>
+    internal const string NotApplicableListMarker = "# Not applicable fixture list: ";
+
+    /// <summary>
+    /// What the Host said it deliberately did not run. <paramref name="Count"/> is
+    /// <see langword="null"/> when the trailer was absent entirely, which is a different fact from
+    /// a count of zero: absent means the mechanism is silent, zero means it ran everything.
+    /// </summary>
+    internal sealed record NotApplicableReport(int? Count, IReadOnlyList<string> Names);
+
+    /// <summary>
+    /// Reads the Host's tier-exclusion trailer.
+    /// </summary>
+    /// <remarks>
+    /// Last-wins on both markers, for the same reason <see cref="ExtractSuiteElapsedSeconds"/> is:
+    /// a re-entered Host can emit the trailer twice and the final one describes the run being
+    /// reported on. The count is parsed independently of the list so the two can be <i>compared</i>
+    /// — a truncated stream that drops the list line while keeping the count is exactly the case
+    /// worth catching, and a parser that derived the count from the list could not see it.
+    /// </remarks>
+    internal static NotApplicableReport ExtractNotApplicableFixtures(string stdout)
+    {
+        if (string.IsNullOrEmpty(stdout)) return new NotApplicableReport(null, []);
+
+        int? count = null;
+        string[] names = [];
+
+        foreach (var line in stdout.Split('\n', StringSplitOptions.TrimEntries))
+        {
+            if (line.StartsWith(NotApplicableCountMarker, StringComparison.Ordinal))
+            {
+                if (int.TryParse(line[NotApplicableCountMarker.Length..].Trim(),
+                        System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                {
+                    count = parsed;
+                }
+            }
+            else if (line.StartsWith(NotApplicableListMarker, StringComparison.Ordinal))
+            {
+                names = line[NotApplicableListMarker.Length..]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
+        }
+
+        return new NotApplicableReport(count, names);
+    }
+
+    /// <summary>
+    /// Proves the tier filter actually removed the fixtures this host cannot run, rather than the
+    /// fixtures having quietly ceased to exist.
+    ///
+    /// <para><b>Why an absence needs an assertion.</b> Issue #1154's fix is a removal: three
+    /// <c>Packaged_*</c> fixtures used to run here, self-skip, and put a permanent amber entry in
+    /// <see cref="SkippedFixtures_AreReported"/>. They now aren't selected at all. The trouble with
+    /// fixing something by removal is that success and catastrophe produce the identical
+    /// observation — "no amber" is what you get whether the filter works or whether somebody
+    /// deleted the packaged corpus. Nothing else in this suite can tell those apart: the packaged
+    /// tier is a separate project in a separate CI job, and every other test here reasons about
+    /// fixtures that <i>did</i> report.</para>
+    ///
+    /// <para>So this asserts the mechanism positively, in the tier where it fires. This wrapper
+    /// always drives the <b>unpackaged</b> Host, so a non-empty exclusion set is deterministic
+    /// rather than machine-dependent — there is no configuration in which zero is the healthy
+    /// answer here.</para>
+    ///
+    /// <para>The mirror assertion lives in <c>PackagedSelfTestBatch</c> and demands the opposite:
+    /// zero exclusions there. Together they pin the filter in both directions, which matters
+    /// because a tier probe stuck on one answer would otherwise look correct from whichever side
+    /// happened to agree with it.</para>
+    /// </summary>
+    [TestMethod]
+    public void NotApplicableFixtures_AreExcludedFromThisTier()
+    {
+        Assert.IsTrue(_initialized, "Self-test batch did not run.");
+        if (_initError is not null)
+            Assert.Fail(_initError);
+
+        if (_timedOut || _abortedReason is not null)
+        {
+            Assert.Inconclusive(
+                $"{_abortedReason ?? "The suite was killed by its process budget"}; the Host never " +
+                $"reached its trailers, so the absence of the exclusion report says nothing about " +
+                $"the tier filter.");
+        }
+
+        var report = ExtractNotApplicableFixtures(_fullOutput);
+
+        Assert.IsNotNull(report.Count,
+            $"The Host completed its run but emitted no '{NotApplicableCountMarker.Trim()}' " +
+            $"trailer, so nothing reports which fixtures this tier declined to run. Either " +
+            $"SelfTestRunner.WriteNotApplicableTrailer stopped being called, or the marker literal " +
+            $"drifted between SelfTestRunner and this file — they are duplicated, not shared, " +
+            $"because the Host is referenced with ReferenceOutputAssembly=false.");
+
+        Assert.AreEqual(report.Count!.Value, report.Names.Count,
+            $"The Host reported {report.Count} not-applicable fixture(s) but named " +
+            $"{report.Names.Count}. The TAP stream is inconsistent with itself — most likely " +
+            $"truncated between the two trailer lines, which would make every check below reason " +
+            $"about a partial list.\nNamed: {string.Join(", ", report.Names)}");
+
+        Assert.IsTrue(report.Count.Value > 0,
+            $"This wrapper always runs the UNPACKAGED Host, where the '{PackagedFixturePrefix}' " +
+            $"fixtures are declared SelfTestTier.Packaged and must therefore be excluded — so zero " +
+            $"is never the healthy answer here. Something removed the mechanism or its subject:\n" +
+            $"  (a) SelfTestFixtureRegistry.TierRequirements was emptied, so nothing is declared " +
+            $"tier-specific any more and those fixtures are back to self-skipping into the amber " +
+            $"inventory (issue #1154 restored).\n" +
+            $"  (b) SelfTestFixtureRegistry.CurrentTier mis-evaluates — if it answered 'Packaged' " +
+            $"here, the filter would be a no-op in both tiers while still looking like it worked.\n" +
+            $"  (c) The packaged fixtures were deleted. Their coverage is the only thing that runs " +
+            $"under real MSIX identity; restore them rather than this assertion.");
+
+        // Discovery and the run must agree. `--list-fixtures` and the run list are fed from the
+        // same registry property precisely so they cannot diverge, and this is what would catch
+        // it if one of them were repointed at the unfiltered corpus: an excluded fixture that
+        // still had a `[TestMethod]` would report "was not reported by the Host" — a red that
+        // names the wrong cause entirely.
+        var discovered = new HashSet<string>(FixtureNames.Value, StringComparer.Ordinal);
+        var leakedIntoDiscovery = report.Names.Where(discovered.Contains).ToArray();
+
+        Assert.AreEqual(0, leakedIntoDiscovery.Length,
+            $"`--list-fixtures` offered fixture(s) the run then declared not applicable:\n  " +
+            $"{string.Join("\n  ", leakedIntoDiscovery)}\n" +
+            $"Discovery and execution must be fed from the same tier-filtered set " +
+            $"(SelfTestFixtureRegistry.FixturesForCurrentTier), or each of these gets a test case " +
+            $"that can only ever fail for want of a result.");
+
+        var leakedIntoRun = report.Names.Where(_byFixture.ContainsKey).ToArray();
+
+        Assert.AreEqual(0, leakedIntoRun.Length,
+            $"Fixture(s) declared not applicable to this tier nonetheless produced TAP output:\n  " +
+            $"{string.Join("\n  ", leakedIntoRun)}\n" +
+            $"The trailer and the run disagree, so one of them is lying about what executed.");
+
+        // Informational, not a warning: this is the channel that replaces what the amber used to
+        // carry, and the whole point of the change is that a structural exclusion is not a
+        // finding. Best-effort because the assertions above are the load-bearing half — unlike the
+        // duration and skip reports, nothing here is silent without it.
+        var markdown =
+            $"### ℹ️ Selftest fixtures not applicable to this tier\n\n" +
+            $"{report.Count} fixture(s) were excluded from this run because they require a " +
+            $"different host, and were not executed:\n\n" +
+            string.Join("", report.Names.Select(n => $"- `{n}`\n")) +
+            $"\n<sub>Declared in `SelfTestFixtureRegistry.TierRequirements`. These are asserted " +
+            $"for real by `Reactor.PackagedTests`. Background: issue #1154.</sub>";
+
+        Console.WriteLine($"Not applicable to this tier ({report.Count}): {string.Join(", ", report.Names)}");
+        PublishBestEffort(
+            () => TryAppendSummary(Environment.GetEnvironmentVariable(StepSummaryEnvVar), markdown),
+            "the tier-exclusion report");
+    }
+
+    /// <summary>
+    /// Naming convention for identity-dependent fixtures, quoted in the diagnostic above so it
+    /// points at a real set of names. Mirrors <c>PackagedSelfTestBatch.IdentityFixturePrefix</c>.
+    /// </summary>
+    internal const string PackagedFixturePrefix = "Packaged_";
+
     /// <summary>
     /// The one assertion that observes the <b>real</b> Host's real skip output, and the only thing
     /// that can catch the two projects drifting apart.
@@ -1628,10 +1800,7 @@ public class SelfTestBatch
             throw new InvalidOperationException(
                 $"`--list-fixtures` failed with exit code {exitCode}.\nstdout:\n{stdout}\nstderr:\n{stderr}");
 
-        var names = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(l => l.Trim())
-            .Where(l => l.Length > 0)
-            .ToArray();
+        var names = ParseFixtureNames(stdout);
 
         if (names.Length == 0)
             throw new InvalidOperationException(
@@ -1639,6 +1808,25 @@ public class SelfTestBatch
 
         return names;
     }
+
+    /// <summary>
+    /// Reduces a <c>--list-fixtures</c> dump to fixture names.
+    /// </summary>
+    /// <remarks>
+    /// TAP comments are not fixture names. The Host appends its tier-exclusion trailer to this
+    /// stream (issue #1154), and <c>--list-fixtures</c> is free to grow further comments; treating
+    /// one as a name would manufacture a <c>[TestMethod]</c> for a fixture that cannot exist, which
+    /// would then fail as "was not reported by the Host" — a red naming the wrong cause entirely.
+    /// Mirrors <c>PackagedSelfTestBatch.ParseFixtureList</c>, which has always filtered them.
+    /// <para>Split out from <see cref="LoadFixtureNames"/> so the filter is testable without
+    /// launching a Host: the whole point of a guard against a malformed line is that it holds for
+    /// lines the current Host does not happen to emit.</para>
+    /// </remarks>
+    internal static string[] ParseFixtureNames(string stdout) =>
+        stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.StartsWith('#'))
+            .ToArray();
 
     // -- Process runner: async reads + timeout race with kill ------------------
 
