@@ -19,9 +19,9 @@ formed by [LDM 2026-07-15](https://github.com/dotnet/csharplang/blob/main/meetin
 > The correction that matters most is neither of those. §10 ¶4 rejected putting modifier properties on
 > `Element` on per-node memory grounds. That is right for promoted **fields** and wrong for **shims**
 > (computed accessors, no backing field): measured, 10 shims cost **0 bytes/instance** where 10 fields cost
-> **80**. `Element` already has 17 shims. **Adding ~15–20 more is the highest-leverage change available and
+> **80**. `Element` already has 16 shims. **Adding ~15–20 more is the highest-leverage change available and
 > requires no language feature at all** — see the new **§6.7**. Until they exist,
-> `Text("x") { Background = b }` cannot compile for want of a property to bind to, which is why this spec
+> `TextBlock("x") { Background = b }` cannot compile for want of a property to bind to, which is why this spec
 > under-measured the feature it set out to evaluate.
 
 > **Update — [LDM 2026-08-05](https://github.com/dotnet/csharplang/blob/main/meetings/2026/LDM-2026-08-05.md)
@@ -552,8 +552,10 @@ public Thickness? Margin
 }
 ```
 
-This is already the codebase's own pattern — `Element` carries **17** shims and `ElementModifiers` a further
-**29** (spec 034 §A). Measured (`ShimCost2.cs`, empty instances, 200 K samples):
+This is already the codebase's own pattern — `Element` carries **16** shims and `ElementModifiers` a further
+**29** (spec 034 §A). Counted by reflection over the built `Reactor.dll` (a real auto-property has a
+`<Name>k__BackingField`; a shim has none), not by source pattern-matching, which over-counted.
+Measured (`ShimCost2.cs`, empty instances, 200 K samples):
 
 | record shape | bytes/instance |
 |---|---:|
@@ -563,16 +565,34 @@ This is already the codebase's own pattern — `Element` carries **17** shims an
 
 Shims compile to methods, which live once per type; fields live once per instance. **Adding shims is free.**
 
-The gap this exposes: `Margin` and `Padding` are shimmed on `Element`, but `Background`, `Foreground`,
-`Width`, `Height`, `CornerRadius`, `FontSize` and `IsEnabled` are **not reachable on `Element` at all**. So
-`Text("x") { Background = b }` cannot compile — not for want of a language feature, but for want of a
+The gap this exposes: of `Element`'s 16 shims, only `Margin` and `Padding` are common modifiers — the other
+14 are cross-cutting extras (`Attached`, `ThemeBindings`, `AnimationConfig`, …). `Background`, `Foreground`,
+`Width`, `Height`, `CornerRadius`, `FontSize`, `IsEnabled`, `TextWrapping` and `Opacity` are **not reachable
+on `Element` at all**. Verified by compiling against the real `Reactor.dll` (`ReachProbe.cs`, 200 references):
+
+| written | result |
+|---|---|
+| `new TextBlockElement("x") { Margin = … }` | ✅ compiles (shim) |
+| `new TextBlockElement("x") { Padding = … }` | ✅ compiles (shim) |
+| `new BorderElement(null) { Background = … }` | ✅ compiles — `BorderElement` declares it itself |
+| `new TextBlockElement("x") { Background = … }` | ❌ **CS0117** |
+| `new TextBlockElement("x") { Width = … }` | ❌ **CS0117** |
+
+The three passing rows are positive controls: the probe *can* see `Background` where a record declares it, so
+the two failures are a measurement rather than a broken probe. Note the third row — a handful of element
+records (`BorderElement`, `CanvasElement`) declare `Background` directly, so the gap is uneven rather than
+total, which is itself an argument for shimming it once on the base record.
+
+So `TextBlock("x") { Background = b }` cannot compile — not for want of a language feature, but for want of a
 property to bind to. §4 measured `[Factory]` against a type that had almost nothing for it to bind to.
+(Elsewhere this spec writes `Text(…)` illustratively; the real factory is `TextBlock(string)` — there is no
+`Factories.Text(string)`. The `Text(…)` in `samples/` is `D3Charts.Text(double x, double y, …)`.)
 
 Usage-ranked shim candidates from the sample corpus: `Foreground` (651), `Background` (343), `Padding` (309),
 `CornerRadius` (306), `Margin` (284 ✓), `Width` (275), `FontSize` (193), `Height` (185), `VAlign` (130),
 `HAlign` (112), `IsEnabled` (73), `TextWrapping` (70). Roughly 15–20 shims cover the bulk of real usage.
 
-**Crucially this pays off on shipping C# today**, with no language change: `new TextElement("hi") { Background = b }`
+**Crucially this pays off on shipping C# today**, with no language change: `new TextBlockElement("hi") { Background = b }`
 and `el with { Background = b }` begin working immediately. That is precisely why the `Margin`/`Padding` shims
 already exist (`Element.cs:41-44`).
 
@@ -986,7 +1006,7 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
    promotion, and should not be cited as evidence for it.
    **Clarification (2026-08-28): this rejection applies to promoted *fields*, not to *shims*.** A shim is a
    computed accessor with no backing field; measured, 10 shims add **0 bytes** per instance where 10 promoted
-   fields add **80**. `Element` already carries 17 shims. Adding ~15–20 more is the highest-leverage change
+   fields add **80**. `Element` already carries 16 shims. Adding ~15–20 more is the highest-leverage change
    available and needs **no language feature at all** — see §6.7.
 5. **Statement-form `if` in content position is implemented** (§6.4) and is the strongest remaining
    candidate. It is genuinely open ground — no championed csharplang proposal covers `if` inside a
@@ -1002,7 +1022,7 @@ Repro: `ContentPropertyAnswer.cs` against `MixedInitLimit2.cs`.
 7. **Reactor-side, independent of csharplang: add the modifier shims (§6.7).** Zero per-instance memory,
    an established in-repo pattern, ~34 % lower allocation than the equivalent fluent chain, and it makes
    `new TextElement("hi") { Background = b }` and `el with { Background = b }` work on **shipping C# today**.
-   Until this exists, `Text("x") { Background = b }` cannot compile for want of a property to bind to — which
+   Until this exists, `TextBlock("x") { Background = b }` cannot compile for want of a property to bind to — which
    is why §4 under-measured the feature's value.
 
 ---
