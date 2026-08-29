@@ -6,7 +6,7 @@ namespace Microsoft.UI.Reactor.PackagedTests;
 
 /// <summary>
 /// Runs the packaged selftest host under real MSIX package identity and reports one
-/// <c>[TestMethod]</c> per fixture (issue #1148).
+/// <c>[TestMethod]</c> per fixture.
 /// </summary>
 /// <remarks>
 /// <para>The unpackaged shim (<c>Reactor.SelfTests.SelfTestBatch</c>) and this one differ
@@ -16,7 +16,7 @@ namespace Microsoft.UI.Reactor.PackagedTests;
 /// contract — <c>--self-test</c>, <c>--list-fixtures</c>, <c>--filter</c>, the
 /// <c># Running:</c> markers, the exit code — is reused unchanged.</para>
 /// <para><b>Fail, never skip.</b> A tier that quietly skips is indistinguishable from a
-/// tier that passes, which is the failure mode issue #1148 exists to remove. Registration
+/// tier that passes, which is the failure mode this tier exists to remove. Registration
 /// failures, an unresolvable alias, missing TAP, a truncated stream, and an identity guard
 /// that did not actually assert are all hard failures here.</para>
 /// </remarks>

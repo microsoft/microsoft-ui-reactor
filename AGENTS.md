@@ -150,7 +150,7 @@ Optionally: a factory method in `src/Reactor/Elements/Dsl.cs`, fluent modifiers 
 Start with unit tests. Use selftests only when you need a live WinUI control. E2E is the slowest tier.
 
 The packaged tier (`tests/Reactor.PackagedTests` + `tests/Reactor.PackagedTests.Host`) exists because
-every other tier runs unpackaged and is structurally blind to identity-dependent bugs — issue #1148.
+every other tier runs unpackaged and is structurally blind to identity-dependent bugs.
 `Reactor.PackagedTests.Host` owns no source; it links every `.cs` from `Reactor.AppTests.Host` and
 adds only MSIX properties plus a `Package.appxmanifest`. The whole corpus runs under identity.
 **Gotcha worth not re-deriving:** the manifest's `uap5:AppExecutionAlias` is load-bearing — launching

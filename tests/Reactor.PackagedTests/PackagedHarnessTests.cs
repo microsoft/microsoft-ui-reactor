@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Microsoft.UI.Reactor.PackagedTests;
 
 /// <summary>
-/// Headless tests for the packaged tier's own plumbing (issue #1148).
+/// Headless tests for the packaged tier's own plumbing.
 /// </summary>
 /// <remarks>
 /// The harness is the thing deciding whether the tier reports green, so leaving it untested

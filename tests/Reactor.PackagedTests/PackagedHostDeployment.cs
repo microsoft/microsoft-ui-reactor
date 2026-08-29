@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.PackagedTests;
 
 /// <summary>
 /// Registers the packaged host's loose MSIX layout and resolves the execution-alias stub
-/// used to launch it (issue #1148).
+/// used to launch it.
 /// </summary>
 /// <remarks>
 /// <para>Deliberately behind an interface. Registration and activation are the only part

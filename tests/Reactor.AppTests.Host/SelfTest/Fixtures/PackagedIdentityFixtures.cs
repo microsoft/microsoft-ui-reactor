@@ -6,8 +6,7 @@ using Microsoft.UI.Reactor.Hosting.Shell;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Fixtures that are only meaningful inside a process with MSIX package identity
-/// (issue #1148).
+/// Fixtures that are only meaningful inside a process with MSIX package identity.
 /// </summary>
 /// <remarks>
 /// <para>These live in the shared fixture corpus rather than in a packaged-only source
@@ -18,7 +17,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// the packaged tier ever launched the app without identity — a broken registration, a
 /// stale alias resolving to something else, someone running the .exe out of the build
 /// output — every identity check would quietly skip and the suite would report green
-/// while measuring nothing. That is precisely the failure mode issue #1148 exists to
+/// while measuring nothing. That is precisely the failure mode this tier exists to
 /// remove. Keying off the entry assembly instead makes the requirement structural: the
 /// packaged host binary <i>must</i> have identity, and says so by failing.</para>
 /// </remarks>

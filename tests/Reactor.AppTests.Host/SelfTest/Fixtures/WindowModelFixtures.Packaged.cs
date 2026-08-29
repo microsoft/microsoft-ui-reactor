@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Packaged-only window-icon coverage (issue #1148). Lives alongside
+/// Packaged-only window-icon coverage. Lives alongside
 /// <c>WindowIconApplied</c> so it can reuse that file's window helpers and
 /// <c>StubComponent</c>.
 /// </summary>
