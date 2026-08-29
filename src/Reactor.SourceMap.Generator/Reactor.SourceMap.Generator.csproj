@@ -17,7 +17,7 @@
     <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
 
     <!-- Spec 010 (Route B). Bundled into Microsoft.UI.Reactor.nupkg under
-         build/sourcemap (see Reactor.csproj) rather than shipping as its own
+         buildTransitive/sourcemap (see Reactor.csproj) rather than shipping as its own
          package. Deliberately NOT analyzers/dotnet/cs, where Reactor.Analyzers and
          Reactor.Wrappers.Generator live: everything in that folder loads into every
          consumer compilation, and this generator classifies every invocation
@@ -45,4 +45,5 @@
   </ItemGroup>
 
 </Project>
+
 

@@ -40,7 +40,7 @@
     <!--
       In-repo projects consume Reactor by project reference, so they wire the
       generator up by hand. A real consumer gets it from the Microsoft.UI.Reactor
-      package, which ships it at build/sourcemap and adds it as an <Analyzer> only
+      package, which ships it at buildTransitive/sourcemap and adds it as an <Analyzer> only
       when ReactorSourceMap is true — so it is not loaded in a Release build.
     -->
     <ProjectReference Include="..\..\..\src\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
@@ -50,3 +50,4 @@
   </ItemGroup>
 
 </Project>
+

@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 ///
 /// <para>Every other source-map test loads the generator through a direct
 /// <c>ProjectReference</c>, which is not how a consumer receives it. A consumer gets it
-/// from <c>build/sourcemap/</c> inside the nupkg, added as an <c>&lt;Analyzer&gt;</c> by
+/// from <c>buildTransitive/sourcemap/</c> inside the nupkg, added as an <c>&lt;Analyzer&gt;</c> by
 /// <c>build/Microsoft.UI.Reactor.targets</c>. That wiring is guarded by
 /// <c>Exists(...)</c>, so a packing or path regression does not fail — it silently
 /// disables mapping, and every ProjectReference-based test stays green. This is the only
@@ -45,7 +45,7 @@ public sealed class SourceMapPackageConsumerTests : IDisposable
         CreateNuGetConfig(appDir);
 
         // Debug: the package's targets default ReactorSourceMap to true, add the
-        // generator from build/sourcemap, and the interceptor stamps the call site.
+        // generator from buildTransitive/sourcemap, and the interceptor stamps the call site.
         var debug = RunConsumer(appDir, "Debug");
         Assert.Contains("CALLSITE=Program.cs:", debug, StringComparison.Ordinal);
 
@@ -294,4 +294,5 @@ public sealed class SourceMapPackageConsumerTests : IDisposable
         }
     }
 }
+
 

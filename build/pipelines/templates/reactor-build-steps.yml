@@ -312,7 +312,7 @@ steps:
     #   analyzers/dotnet/cs/Reactor.Analyzers.dll
     #   analyzers/dotnet/cs/Reactor.Localization.Generator.dll
     #   analyzers/dotnet/cs/Reactor.Wrappers.Generator.dll
-    #   build/sourcemap/Reactor.SourceMap.Generator.dll
+    #   buildTransitive/sourcemap/Reactor.SourceMap.Generator.dll
     #     (packed outside analyzers/ so it is loaded only when ReactorSourceMap
     #      is true; the sign glob below is by project bin\, not package path,
     #      so it is unaffected by where the DLL lands in the nupkg)
@@ -563,3 +563,4 @@ steps:
             --api-key az `
             --skip-duplicate
         displayName: 'Publish NuGet packages (internal nightly feed)'
+

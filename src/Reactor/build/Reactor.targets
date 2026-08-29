@@ -71,7 +71,7 @@
 
   <!--
     Wire the generator and its compile-time signal TOGETHER, and only for a
-    PackageReference consumer (the DLL sits under build\sourcemap\ in the
+    PackageReference consumer (the DLL sits under buildTransitive\sourcemap\ in the
     package, not analyzers\dotnet\cs, precisely so it is not auto-loaded).
 
     Two reasons this is conditional rather than always-on:
@@ -164,4 +164,5 @@
     </ItemGroup>
   </Target>
 </Project>
+
 
