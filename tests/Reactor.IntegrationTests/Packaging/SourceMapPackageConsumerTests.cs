@@ -213,14 +213,43 @@ public sealed class SourceMapPackageConsumerTests : IDisposable
         File.WriteAllText(Path.Join(appDir, "Consumer.csproj"), csproj);
     }
 
-    private string RunConsumer(string appDir, string configuration)
+    private string RunConsumer(string appDir, string configuration, string? extraProperty = null)
         => RunHelpers.RunProcess(
             "dotnet",
-            $"run -c {configuration} -a {_fixture.RunArchitecture}",
+            $"run -c {configuration} -a {_fixture.RunArchitecture}{(extraProperty is null ? "" : " " + extraProperty)}",
             appDir,
             _fixture.CommandEnvironment,
             timeoutMs: 420_000,
             throwOnFailure: true).Stdout;
+
+    /// <summary>
+    /// The documented overrides, in both directions.
+    ///
+    /// <para>The Debug/Release rows are defaults, not a configuration lock: the targets
+    /// gate on <c>ReactorSourceMap</c> alone. The Release opt-in is the safety-sensitive
+    /// one — it is what embeds mapped source paths into a shipped binary — so if it
+    /// silently stopped loading the packaged analyzer, the guide would be promising
+    /// something that no longer happens while the default-path tests stayed green.</para>
+    /// </summary>
+    [Fact]
+    public void ExplicitOverridesWinOverTheConfigurationDefault()
+    {
+        var appDir = Path.Join(_tempRoot, "overrides");
+        Directory.CreateDirectory(appDir);
+
+        WriteConsumerProject(appDir);
+        WriteConsumerProgram(appDir);
+        CreateNuGetConfig(appDir);
+
+        // Release + explicit true: generates interceptors despite the Release default.
+        var releaseOptIn = RunConsumer(appDir, "Release", "-p:ReactorSourceMap=true");
+        Assert.Contains($"CALLSITE=Program.cs:{TextBlockCallLine}", releaseOptIn, StringComparison.Ordinal);
+
+        // Debug + explicit false: the symmetric opt-out, so this is not just asserting
+        // that the property is read in one direction.
+        var debugOptOut = RunConsumer(appDir, "Debug", "-p:ReactorSourceMap=false");
+        Assert.Contains("CALLSITE=<null>", debugOptOut, StringComparison.Ordinal);
+    }
 
     private void CreateNuGetConfig(string appDir)
     {

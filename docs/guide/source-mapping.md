@@ -130,7 +130,7 @@ what `Element.CallSite` provides — see the next section.
 ## Per-element source mapping
 
 Per-element attribution is produced by a Roslyn **interceptor generator**
-that ships in the `Microsoft.UI.Reactor` package under `build/sourcemap`,
+that ships in the `Microsoft.UI.Reactor` package under `buildTransitive/sourcemap`,
 and is added to your compilation only when `ReactorSourceMap` is true.
 (It deliberately does *not* live in `analyzers/dotnet/cs`, where everything
 is loaded into every build: this generator inspects every invocation in your
