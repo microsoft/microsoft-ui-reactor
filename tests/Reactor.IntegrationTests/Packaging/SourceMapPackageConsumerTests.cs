@@ -294,5 +294,3 @@ public sealed class SourceMapPackageConsumerTests : IDisposable
         }
     }
 }
-
-

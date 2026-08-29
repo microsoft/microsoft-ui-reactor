@@ -117,4 +117,3 @@
     <Content Include="Images\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
-
