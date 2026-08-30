@@ -2770,10 +2770,10 @@ ToString() → string
 ### struct GridSize
 new(double value, GridUnitType type, double? min = null, double? max = null)
 GridSize Auto { get; }
-GridUnitType Type { get; init; }
-double Value { get; init; }
-double? Max { get; init; }
-double? Min { get; init; }
+GridUnitType Type { get; }
+double Value { get; }
+double? Max { get; }
+double? Min { get; }
 Deconstruct(ref double value, ref GridUnitType type) → void
 Deconstruct(ref double value, ref GridUnitType type, ref double? min, ref double? max) → void
 Equals(GridSize other) → bool
