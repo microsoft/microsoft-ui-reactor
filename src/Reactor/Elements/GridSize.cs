@@ -42,7 +42,7 @@ public readonly record struct GridSize
         // Validate the min and max values
         if(min.HasValue && !IsFiniteAndNonNegative(min.Value))
             throw new ArgumentOutOfRangeException(nameof(min), min, "Min size must be a number and >= 0.");
-        if(max.HasValue && !IsFiniteAndNonNegative(max.Value))
+        if(max.HasValue && !double.IsNaN(max.Value) && max.Value < 0)
             throw new ArgumentOutOfRangeException(nameof(max), max, "Max size must be a number and >= 0.");
 
         // Validate the value based on the type
@@ -57,10 +57,25 @@ public readonly record struct GridSize
         Max = max;
     }
 
-    public double Value { get; init; }
-    public GridUnitType Type { get; init; }
-    public double? Min { get; init; }
-    public double? Max { get; init; }
+    /// <summary>
+    /// The value of the track size. For <c>Pixel</c> types, this is the pixel size; for <c>Star</c> types, this is the star weight; for <c>Auto</c>, this is always 1.
+    /// </summary>
+    public double Value { get; }
+
+    /// <summary>
+    /// The type of the track size: <c>Auto</c>, <c>Star</c>, or <c>Pixel</c>.
+    /// </summary>
+    public GridUnitType Type { get; }
+
+    /// <summary>
+    /// The minimum size of the track. If specified, the track size will not be less than this value.
+    /// </summary>
+    public double? Min { get; }
+
+    /// <summary>
+    /// The maximum size of the track. If specified, the track size will not be greater than this value.
+    /// </summary>
+    public double? Max { get; }
 
     public void Deconstruct(out double value, out GridUnitType type) => (value, type) = (Value, Type);
     public void Deconstruct(
