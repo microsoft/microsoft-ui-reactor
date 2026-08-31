@@ -2846,7 +2846,7 @@ GetPageAsync(DataRequest request, CancellationToken cancellationToken = default)
 GetRowKey(T item) → RowKey
 
 ### interface IDecoratorElementHandler<TElement>
-GetSourceTarget(TElement element) → Element?
+GetSourceTarget(TElement element) → Element
 Mount(MountContext ctx, TElement element) → UIElement
 Unmount(UnmountContext ctx, TElement element, UIElement control) → V1UnmountDisposition
 Update(UpdateContext ctx, TElement oldEl, TElement newEl, UIElement control) → UIElement
