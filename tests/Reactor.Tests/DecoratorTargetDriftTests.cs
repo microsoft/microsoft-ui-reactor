@@ -221,19 +221,28 @@ public class DecoratorTargetDriftTests
     /// </summary>
     private static string LocateRepoFile(string repoRelativePath)
     {
+        // Reject a rooted input up front. Every combine below then has an unambiguously
+        // relative second operand, so none of them can silently discard its base.
+        if (Path.IsPathRooted(repoRelativePath))
+        {
+            throw new ArgumentException(
+                "Expected a repo-relative path.", nameof(repoRelativePath));
+        }
+
         var fromCaller = ThisFilePath();
         if (Path.IsPathRooted(fromCaller) && File.Exists(fromCaller))
         {
-            var repoRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fromCaller)!, "..", ".."));
-            var candidate = Path.Combine(repoRoot, repoRelativePath);
+            var repoRoot = Path.GetFullPath(
+                Path.Combine("..", ".."), Path.GetDirectoryName(fromCaller)!);
+            var candidate = Path.GetFullPath(repoRelativePath, repoRoot);
             if (File.Exists(candidate)) return candidate;
         }
 
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            if (!File.Exists(Path.Combine(dir.FullName, "Reactor.slnx"))) continue;
+            if (!File.Exists(Path.GetFullPath("Reactor.slnx", dir.FullName))) continue;
 
-            var candidate = Path.Combine(dir.FullName, repoRelativePath);
+            var candidate = Path.GetFullPath(repoRelativePath, dir.FullName);
             if (File.Exists(candidate)) return candidate;
         }
 
