@@ -97,8 +97,10 @@ Conventions for contributors:
   comma also broke the round-trip in a silent way: `Parse` saw five components instead of
   four and read the opacity from `"0"`, turning a half-transparent color fully transparent
   rather than throwing. Both arms now format with `CultureInfo.InvariantCulture`, matching
-  `PathBuilder.F()` elsewhere in the same D3 port. `mur loc status` had the same defect in
-  its coverage column (`100,0%`) and is fixed alongside. Output on en-US hosts is unchanged,
+  `PathBuilder.F()` elsewhere in the same D3 port. Two `mur` sites had the same defect and
+  are fixed alongside: the `mur loc status` coverage column (`100,0%`), and the similarity
+  score in `mur check` suggestion evidence (`similarity 0,95`), which is printed to stdout
+  *and* written into the structured trace. Output on en-US hosts is unchanged,
   which is exactly why CI — whose runner is en-US — was structurally blind to this. The
   regression guards are `[CulturedFact(new[] { "nl-NL" })]`, which pins the culture per test
   case and therefore bites on the en-US CI runner too; `REACTOR_TESTS_CULTURE` additionally

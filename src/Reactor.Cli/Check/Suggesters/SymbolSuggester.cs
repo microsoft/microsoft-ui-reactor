@@ -118,7 +118,7 @@ internal sealed class SymbolSuggester : ISuggester
         return new SuggestionResult(
             Text: fullName,
             Confidence: confidence,
-            Evidence: $"member of {ctx.Receiver.Name}, similarity {top.Score:F2}");
+            Evidence: SimilarityEvidence($"member of {ctx.Receiver.Name}", top.Score));
     }
 
     // ── CS0103 ─────────────────────────────────────────────────────
@@ -145,7 +145,7 @@ internal sealed class SymbolSuggester : ISuggester
         return new SuggestionResult(
             Text: top.Item,
             Confidence: confidence,
-            Evidence: $"Reactor factory, similarity {top.Score:F2}");
+            Evidence: SimilarityEvidence("Reactor factory", top.Score));
     }
 
     // ── CS0117 ─────────────────────────────────────────────────────
@@ -170,7 +170,7 @@ internal sealed class SymbolSuggester : ISuggester
         return new SuggestionResult(
             Text: $"{ctx.Receiver.Name}.{top.Item.Name}",
             Confidence: confidence,
-            Evidence: $"static member of {ctx.Receiver.Name}, similarity {top.Score:F2}");
+            Evidence: SimilarityEvidence($"static member of {ctx.Receiver.Name}", top.Score));
     }
 
     // ── CS1503 ─────────────────────────────────────────────────────
@@ -330,6 +330,20 @@ internal sealed class SymbolSuggester : ISuggester
 
     internal readonly record struct Ranked<T>(T Item, double Score);
 
+    /// <summary>
+    /// Builds the "…, similarity 0.95" evidence string carried on a suggestion.
+    /// </summary>
+    /// <remarks>
+    /// Issue #1159: invariant on purpose. This text is printed by <c>mur check</c> and is
+    /// also written into the structured trace via <c>TraceWriter.WriteRuleFired</c>, so it
+    /// is machine-readable dev-tool output that must read the same on every machine —
+    /// under the current culture a comma-decimal locale emitted "similarity 0,95".
+    /// Guarded by <c>SymbolSuggesterEvidenceTests</c>.
+    /// </remarks>
+    internal static string SimilarityEvidence(string prefix, double score) =>
+        string.Create(
+            global::System.Globalization.CultureInfo.InvariantCulture,
+            $"{prefix}, similarity {score:F2}");
     internal static List<Ranked<T>> RankByJaroWinkler<T>(string needle, IReadOnlyCollection<T> haystack, Func<T, string> nameOf)
     {
         var ranked = new List<Ranked<T>>(haystack.Count);
