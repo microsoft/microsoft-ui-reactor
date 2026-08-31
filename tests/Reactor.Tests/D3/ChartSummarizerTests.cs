@@ -224,6 +224,33 @@ public class ChartSummarizerTests
         Assert.Contains("max", formatted);
     }
 
+    [CulturedFact(new[] { "nl-NL" })]
+    public void FormatSummary_Honors_CurrentCulture_Not_Invariant()
+    {
+        // Issue #1159. ChartSummarizer.FormatValue formats with the current culture on
+        // purpose: this string is surfaced to a screen reader, so a Dutch user should hear
+        // "1,50", not "1.50".
+        //
+        // Every other ChartSummarizer test uses whole numbers or asserts keywords, so all
+        // of them pass whether FormatValue is culture-sensitive or invariant — they could
+        // not notice someone "hardening" it and silently changing the accessibility text
+        // for every comma-decimal user. Fractional values are what reach the "N2" branch
+        // and make the assertion discriminate.
+        var points = new[]
+        {
+            new ChartPointDescriptor("P0", 1.5),
+            new ChartPointDescriptor("P1", 2.25),
+        };
+        // No axes: keeps the asserted string to the series-stats sentence.
+        var data = new MockChartData([new ChartSeriesDescriptor("Revenue", points)], []);
+
+        var formatted = ChartSummarizer.FormatSummary(ChartSummarizer.Summarize(data, "Line"));
+
+        Assert.Contains("min 1,50", formatted);
+        Assert.Contains("max 2,25", formatted);
+        Assert.DoesNotContain("1.50", formatted);
+    }
+
     // ── Test helpers ─────────────────────────────────────────────────
 
     private static MockChartData MakeData(

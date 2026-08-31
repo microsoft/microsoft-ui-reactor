@@ -163,6 +163,9 @@ internal static class ChartSummarizer
 
     private static string FormatValue(double value)
     {
+        // Issue #1159: current-culture on purpose — this text is surfaced to a screen
+        // reader, so a Dutch user should hear "1,50". Guarded by
+        // ChartSummarizerTests.FormatSummary_Honors_CurrentCulture_Not_Invariant.
         return value == Math.Truncate(value)
             ? value.ToString("N0")
             : value.ToString("N2");
