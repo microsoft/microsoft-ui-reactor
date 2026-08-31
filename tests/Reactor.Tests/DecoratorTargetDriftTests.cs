@@ -207,6 +207,68 @@ public class DecoratorTargetDriftTests
 
     private static string ThisFilePath([CallerFilePath] string path = "") => path;
 
+    /// <summary>
+    /// A decorator whose handler is registered but deliberately names no source target.
+    /// </summary>
+    private sealed record NullTargetDecoratorElement(Element Target) : Element;
+
+    private sealed record UnregisteredProbeElement : Element;
+
+    private sealed class NullTargetDecoratorHandler : IDecoratorElementHandler<NullTargetDecoratorElement>
+    {
+        public UIElement Mount(MountContext ctx, NullTargetDecoratorElement element)
+            => throw new NotSupportedException();
+
+        public UIElement Update(UpdateContext ctx, NullTargetDecoratorElement oldEl, NullTargetDecoratorElement newEl, UIElement control)
+            => throw new NotSupportedException();
+
+        public V1UnmountDisposition Unmount(UnmountContext ctx, NullTargetDecoratorElement? element, UIElement control)
+            => V1UnmountDisposition.ContinueDefaultTraversal;
+
+        // Deliberately null: "I am registered and I name no target."
+        public Element? GetSourceTarget(NullTargetDecoratorElement element) => null;
+    }
+
+    [Fact]
+    public void ARegistrationThatNamesNoTargetIsDistinguishableFromNoRegistration()
+    {
+        // The tri-state that lets a registered override beat the hard-coded built-in
+        // unwrap. Collapsing these two onto a plain Element? is what made a registration
+        // that deliberately names no target look identical to "nothing is registered",
+        // so ReactorSourceMap fell through and unwrapped to Target anyway — reporting
+        // the target factory's line instead of the factory that created the control.
+        //
+        // Asserted at the registry contract rather than end-to-end through
+        // DecoratorTarget: exercising the built-in path would mean hijacking the
+        // framework's own FlyoutElement registration, and a custom stand-in element is
+        // not matched by the built-in switch, so that version of the test passes whether
+        // or not the tri-state exists (verified — it did, which is why it is not here).
+        ControlRegistry.RegisterDecorator<NullTargetDecoratorElement>(
+            static () => new NullTargetDecoratorHandler());
+
+        var registered = ControlRegistry.TryGetSourceTarget(
+            new NullTargetDecoratorElement(new TextBlockElement("t")), out var namedTarget);
+
+        Assert.True(registered);
+        Assert.Null(namedTarget);
+
+        // Negative control: an element type with no registration at all reports false,
+        // so "true" above is not simply what this method always returns.
+        Assert.False(ControlRegistry.TryGetSourceTarget(
+            new UnregisteredProbeElement(), out _));
+    }
+
+    [Fact]
+    public void UnregisteredBuiltInDecoratorStillFallsBackToItsTarget()
+    {
+        // The built-in fallback must keep working, so the change above cannot pass by
+        // having disabled unwrapping altogether.
+        var target = new TextBlockElement("t") with { CallSite = new SourceLocation("Target.cs", 41) };
+        var flyout = new FlyoutElement(target, new TextBlockElement("c"));
+
+        Assert.Same(target, ReactorSourceMap.DecoratorTarget(flyout));
+    }
+
     private static Element? TryConstruct(Type t, Element target)
     {
         var ctor = t.GetConstructors(BindingFlags.Public | BindingFlags.Instance)

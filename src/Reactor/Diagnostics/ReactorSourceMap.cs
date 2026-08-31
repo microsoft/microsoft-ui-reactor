@@ -145,14 +145,21 @@ public static class ReactorSourceMap
     /// </summary>
     internal static Element? DecoratorTarget(Element element)
     {
-        // Registry first, but only when a decorator has actually been registered. This
-        // runs on the reconciler's shallow-skip path for every callback-free element,
-        // so the no-custom-decorators case (almost every app) must not pay a dictionary
-        // lookup here — see ControlRegistry.HasDecoratorRegistrations.
-        if (ControlRegistry.HasDecoratorRegistrations)
+        // The built-in shapes below are only a FALLBACK for records constructed directly,
+        // before their factory-triggered registration latch has run. A registration, when
+        // one exists, owns the answer — including when it deliberately names no target,
+        // e.g. an app that registers its own ordinary handler for FlyoutElement and
+        // mounts its own control. Overriding that with the hard-coded Target unwrap would
+        // report the target factory's line instead of the factory that actually created
+        // the realized control.
+        //
+        // Consulting the registry is gated so ordinary elements stay off it entirely:
+        // this runs on the reconciler's shallow-skip path for every callback-free
+        // element. The built-in shapes are checked too, since those are exactly the types
+        // an app may have overridden even with no decorator of its own registered.
+        if (ControlRegistry.HasDecoratorRegistrations || IsBuiltInDecoratorShape(element))
         {
-            var registered = ControlRegistry.SourceTarget(element);
-            if (registered is not null)
+            if (ControlRegistry.TryGetSourceTarget(element, out var registered))
                 return registered;
         }
 
@@ -164,4 +171,7 @@ public static class ReactorSourceMap
             _ => null,
         };
     }
+
+    private static bool IsBuiltInDecoratorShape(Element element)
+        => element is FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement;
 }
