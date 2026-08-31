@@ -14,7 +14,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// file, and a "go to source" consumer behaves differently depending on which provider
 /// is wired in.</para>
 ///
-/// <para>The end-to-end check in the spike
+/// <para>The end-to-end check in Reactor.SourceMap.Tests
 /// (<c>InterceptorPath_MatchesWhatCallerFilePathWouldProduce</c>) only exercises whatever
 /// map the current build happens to set, which is an exact-cased one. These call
 /// <c>ApplyPathMap</c> directly to reach the edges that build cannot produce.</para>

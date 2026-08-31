@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Diagnostics;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 
-namespace Microsoft.UI.Reactor.SourceMap.Spike;
+namespace Microsoft.UI.Reactor.SourceMap.Tests;
 
 /// <summary>
 /// Spec 010 Route B — measurement 1 (coverage).
@@ -330,4 +330,5 @@ public sealed class SourceMapInterceptorTests : IDisposable
         Assert.DoesNotContain(global::System.IO.Path.DirectorySeparatorChar, text);
     }
 }
+
 

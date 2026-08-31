@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Hooks;
 using Xunit;
 
-namespace Microsoft.UI.Reactor.SourceMap.Spike;
+namespace Microsoft.UI.Reactor.SourceMap.Tests;
 
 /// <summary>
 /// Spec 010 — pins the limitation that element-producing entry points which do NOT
@@ -85,3 +85,4 @@ public sealed class NonFactoriesEntryPointTests : IDisposable
         Assert.Null(el.CallSite);
     }
 }
+

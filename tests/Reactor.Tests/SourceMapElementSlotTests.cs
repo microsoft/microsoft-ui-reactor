@@ -8,9 +8,9 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <summary>
 /// Spec 010 — headless contract tests for the source-map slot itself
 /// (<see cref="SourceLocation"/> and <c>Element.CallSite</c>), independent of
-/// which provider populates it. These are the tests that must hold for BOTH the
-/// CallerInfo route and the interceptor route, so they live here rather than in
-/// the Route B spike consumer.
+/// which provider populates it. These are the tests that must hold for any
+/// provider, so they live here rather than in the interception-enabled
+/// Reactor.SourceMap.Tests consumer.
 ///
 /// <para>In the SourceMapGlobals collection because the last few cases read and write
 /// <see cref="ReactorSourceMap.Enabled"/>, which <c>ReactorApp.DevtoolsEnabled</c>

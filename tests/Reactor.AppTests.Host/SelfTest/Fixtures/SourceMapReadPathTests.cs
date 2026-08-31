@@ -16,7 +16,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// from <c>build/Reactor.targets</c>), so the DSL calls below are really
 /// intercepted — these fixtures exercise the shipping path rather than a
 /// hand-written stand-in. The headless generator-side assertions live in
-/// <c>tests/Reactor.SourceMap.Spike</c>; what needs a live control, and so lives
+/// <c>tests/Reactor.SourceMap.Tests</c>; what needs a live control, and so lives
 /// here, is the reconciler half: whether a stamped element actually gets a
 /// <c>ReactorState</c> back-pointer and survives to be read back.</para>
 /// </summary>
@@ -577,3 +577,4 @@ internal static class SourceMapReadPathTests
         private static int Line([global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => line;
     }
 }
+

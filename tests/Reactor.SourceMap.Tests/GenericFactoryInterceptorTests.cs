@@ -4,10 +4,10 @@ using Microsoft.UI.Reactor.Diagnostics;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 
-namespace Microsoft.UI.Reactor.SourceMap.Spike;
+namespace Microsoft.UI.Reactor.SourceMap.Tests;
 
 /// <summary>
-/// Spec 010 Route B — generic-factory spike.
+/// Spec 010 Route B — generic-factory interception.
 ///
 /// <para>The question is binary: can a correctly-binding interceptor be emitted
 /// for a generic factory? The trap is that an interceptor which silently fails
@@ -139,3 +139,4 @@ public sealed class GenericFactoryInterceptorTests : IDisposable
         public override Element Render() => TextBlock(Props.Text);
     }
 }
+

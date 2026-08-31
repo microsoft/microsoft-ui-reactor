@@ -376,7 +376,7 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
     <Project Path="tests/Reactor.SelfTests/Reactor.SelfTests.csproj" />
-    <Project Path="tests/Reactor.SourceMap.Spike/Reactor.SourceMap.Spike.csproj">
+    <Project Path="tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
@@ -525,3 +525,4 @@
     <Platform Solution="*|x64" Project="AnyCPU" />
   </Project>
 </Solution>
+

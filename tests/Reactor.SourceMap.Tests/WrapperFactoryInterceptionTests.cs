@@ -5,14 +5,14 @@ using Microsoft.UI.Reactor.Wrappers;
 using Xunit;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
-namespace Microsoft.UI.Reactor.SourceMap.Spike;
+namespace Microsoft.UI.Reactor.SourceMap.Tests;
 
 /// <summary>
 /// Spec 010 — pins the one known gap in the "every DSL call site is stamped" contract:
 /// factories that <c>Reactor.Wrappers.Generator</c> emits are NOT stamped.
 ///
 /// <para><c>[GenerateReactorWrapper]</c> emits its public factory as a static ON the
-/// generated element type (<c>SpikeBorderWrapperElement.Border(...)</c>) rather than on
+/// generated element type (<c>WrappedBorderElement.Border(...)</c>) rather than on
 /// <c>Microsoft.UI.Reactor.Factories</c>. Widening the interceptor's containing-type
 /// filter to reach it does not work, and the reason is architectural rather than a
 /// rendering bug: Roslyn runs every source generator against the same input
@@ -49,7 +49,7 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
     [Fact]
     public void WrapperGeneratedFactoryIsNotStamped()
     {
-        var el = SpikeBorderWrapperElement.Border();
+        var el = WrappedBorderElement.Border();
 
         Assert.True(el.CallSite is null,
             "A wrapper-generated factory now carries a source location. That is an " +
@@ -82,7 +82,7 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
     [Fact]
     public void UnstampedWrapperElementIsStillUsable()
     {
-        var el = SpikeBorderWrapperElement.Border();
+        var el = WrappedBorderElement.Border();
 
         Assert.NotNull(el);
         Assert.Null(el.CallSite);
@@ -95,4 +95,5 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
 /// wrapper path, so the wrapper has to be part of the test.
 /// </summary>
 [GenerateReactorWrapper(typeof(WinUI.Border))]
-internal partial record SpikeBorderWrapperElement;
+internal partial record WrappedBorderElement;
+

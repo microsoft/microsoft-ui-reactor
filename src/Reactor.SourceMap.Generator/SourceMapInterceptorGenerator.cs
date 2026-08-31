@@ -155,8 +155,8 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
 
         // Generic factories (Component<T>, Component<T,TProps>, ForEach<T>, Memo<TKey>,
         // ListView<T>, …). An interceptor for a generic method has to restate the
-        // type parameters AND their constraints; whether Roslyn accepts that is
-        // the point of the generic spike, so they are emitted rather than skipped.
+        // type parameters AND their constraints; Roslyn accepts that (proven by
+        // GenericFactoryInterceptorTests), so they are emitted rather than skipped.
         if (method.IsGenericMethod && method.TypeParameters.Any(HasUnrenderableConstraint))
             return null;
 

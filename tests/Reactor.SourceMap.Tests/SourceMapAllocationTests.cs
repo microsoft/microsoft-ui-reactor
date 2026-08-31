@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Diagnostics;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 
-namespace Microsoft.UI.Reactor.SourceMap.Spike;
+namespace Microsoft.UI.Reactor.SourceMap.Tests;
 
 /// <summary>
 /// Spec 010 Route B — measurement 2 supplement.
@@ -87,3 +87,4 @@ public sealed class SourceMapAllocationTests
         Assert.True(on > off, $"expected the stamp to cost something; off={off} on={on}");
     }
 }
+
