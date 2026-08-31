@@ -905,15 +905,6 @@ internal static class TitleBarIconDefaultFixtures
         {
             EnsureUIDispatcher();
 
-            // Ships with the WinUI framework package rather than this host, so the path is
-            // asserted rather than assumed — a moved asset must fail loudly, not silently
-            // turn this fixture into a no-op.
-            var replacement = global::System.IO.Path.Join(
-                AppContext.BaseDirectory, "Microsoft.UI.Xaml", "Assets", "NoiseAsset_256x256_PNG.png");
-            H.Check($"TitleBarIcon_Replace_ReplacementAssetPresent ({replacement})",
-                global::System.IO.File.Exists(replacement));
-            if (!global::System.IO.File.Exists(replacement)) return;
-
             var scratch = CreateScratchAppRoot(withConventionAsset: false);
             try
             {
@@ -937,7 +928,7 @@ internal static class TitleBarIconDefaultFixtures
                     // Same path, different bytes. Changing Title (not Icon) is what makes
                     // this discriminating: the projected Uri is identical, so only a
                     // forced re-decode can move the reading.
-                    global::System.IO.File.Copy(replacement, iconPath, overwrite: true);
+                    global::System.IO.File.WriteAllBytes(iconPath, OnePixelPng);
                     win.Update(win.Spec with { Title = "Replace (updated)" });
                     await win.Host.WaitForIdleAsync();
                     await Harness.Render(300);
@@ -955,6 +946,18 @@ internal static class TitleBarIconDefaultFixtures
                 DeleteScratch(scratch);
             }
         }
+
+        /// <summary>
+        /// A minimal 1x1 PNG, written in place of the 32x32 test icon so the decoded size
+        /// moves measurably.
+        /// <para>Embedded rather than copied from a shipped asset on purpose: this fixture
+        /// is tier-<c>Any</c>, so it also runs under MSIX package identity, where a path
+        /// into the WinUI framework package's assets is not guaranteed to resolve. Carrying
+        /// the bytes keeps the fixture self-sufficient in both tiers. WIC sniffs content
+        /// rather than trusting the <c>.ico</c> extension, so the swap decodes.</para>
+        /// </summary>
+        private static byte[] OnePixelPng => Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
 
         /// <summary>Decoded pixel width of the title bar's current image icon, or 0.</summary>
         private static async Task<int> DecodedSize(WinUI.TitleBar bar)
