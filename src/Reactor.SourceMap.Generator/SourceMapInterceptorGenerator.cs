@@ -188,7 +188,19 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         // CallerInfo yields "...\\ProjectDir\\virtual-source.cs" — same file, different
         // string, and consumers compare these as strings. LineDirectiveParityTests pins
         // both halves against live CallerInfo probes under a real directive.
-        var lineSpan = invocation.SyntaxTree.GetMappedLineSpan(invocation.Span, ct);
+        //
+        // The position within that file is the argument list's OPENING PAREN, not the
+        // start of the invocation. Roslyn derives [CallerLineNumber] from the open paren,
+        // so for a call split across lines the two disagree: in
+        //     Factories
+        //         .TextBlock("x")
+        // the invocation starts on the `Factories` line while CallerInfo reports the
+        // `.TextBlock(` line. Measured both shapes against live CallerInfo probes,
+        // including `Fact.TextBlock\n    ("y")` where the name and the paren land on
+        // different lines and CallerInfo follows the PAREN, not the name.
+        // MultilineCallSiteTests pins it.
+        var parenSpan = invocation.ArgumentList.OpenParenToken.Span;
+        var lineSpan = invocation.SyntaxTree.GetMappedLineSpan(parenSpan, ct);
 
         return new CallSite(
             attribute: location.GetInterceptsLocationAttributeSyntax(),
