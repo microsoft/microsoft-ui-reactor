@@ -150,7 +150,13 @@ public sealed partial class Reconciler
         // .Tall() without an explicit .Height(...) still sizes the control.
         // (issue #917)
         if (element is TitleBarElement tbEl && control is WinUI.TitleBar tbCtl)
+        {
             TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+            // Setters have run by now, so this is the first point at which "did a raw
+            // .Set(...) claim the icon slot?" is observable rather than guessable.
+            global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
+                .ObserveAfterSetters(tbCtl);
+        }
 
         // After modifiers + setters have had a chance to set an explicit
         // AutomationName, fall back to the control's visible caption so UIA

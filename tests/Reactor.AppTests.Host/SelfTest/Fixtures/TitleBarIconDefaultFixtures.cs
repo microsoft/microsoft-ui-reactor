@@ -46,6 +46,24 @@ internal static class TitleBarIconDefaultFixtures
             VStack(configure(TitleBar("IconDefault")).Set(b => Bar = b), TextBlock("body"));
     }
 
+    /// <summary>
+    /// A title bar whose configuration can be flipped at runtime, so a mounted control
+    /// can be re-rendered on demand. <c>ReactorWindow.Update</c> does not schedule a
+    /// render, so any assertion about what happens on the *next* render needs this.
+    /// </summary>
+    private sealed class ToggleBarComponent(Func<int, TitleBarElement, TitleBarElement> configure) : Component
+    {
+        public WinUI.TitleBar? Bar;
+        public Action<int>? SetPhase;
+
+        public override Element Render()
+        {
+            var (phase, set) = UseState(0);
+            SetPhase = set;
+            return VStack(configure(phase, TitleBar("IconToggle")).Set(b => Bar = b), TextBlock("body"));
+        }
+    }
+
     private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
     {
         var win = ReactorApp.OpenWindow(spec, root);
@@ -789,7 +807,7 @@ internal static class TitleBarIconDefaultFixtures
                 TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
                 var icon = CreateExternalIcon(scratch);
 
-                var comp = new BarComponent(static e => e.Set(static b => b.IconSource = null));
+                var comp = new ToggleBarComponent(static (_, e) => e.Set(static b => b.IconSource = null));
                 var win = await OpenAndSettle(Spec("NullSetter"), () => comp);
                 try
                 {
@@ -802,10 +820,92 @@ internal static class TitleBarIconDefaultFixtures
                     win.Update(win.Spec with { Icon = WindowIcon.FromPath(icon) });
                     await win.Host.WaitForIdleAsync();
                     await Harness.Render(200);
+                    Console.WriteLine($"# nullsetter: after update={bar.IconSource?.GetType().Name ?? "<null>"}");
 
-                    Console.WriteLine($"# nullsetter: after={bar.IconSource?.GetType().Name ?? "<null>"}");
-                    H.Check("TitleBarIcon_NullSetter_NotOverwrittenByWindowIcon",
-                        bar.IconSource is null);
+                    // The contract: a setter writing IconSource = null over a null
+                    // projection holds the same reference this type wrote, so the push
+                    // cannot see it and may write once. The next render re-runs the
+                    // setter and ObserveAfterSetters latches ownership — from then on the
+                    // author's null is permanent. Assert the settled state, and then that
+                    // it stays settled across a further window-icon change.
+                    comp.SetPhase?.Invoke(1);
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    Console.WriteLine($"# nullsetter: after render={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_NullSetter_SetterWinsOnNextRender", bar.IconSource is null);
+
+                    var other = global::System.IO.Path.Join(scratch, "Other.ico");
+                    global::System.IO.File.Copy(TestIcoPath, other, overwrite: true);
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(other) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    Console.WriteLine($"# nullsetter: after 2nd update={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_NullSetter_OwnershipLatches", bar.IconSource is null);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Toggling a MOUNTED title bar between the inherited default and .NoIcon().
+    //  Element.ShallowEquals gates Reconciler.Update's whole-element skip, so if
+    //  its TitleBarElement arm does not compare SuppressIcon (or Icon), a render
+    //  that changes only those takes the skip path and the descriptor entry never
+    //  runs — leaving the previous icon mounted.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultTogglesOnRerender(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: true);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+
+                // phase 0: inherit. phase 1: .NoIcon(). phase 2: explicit glyph.
+                var comp = new ToggleBarComponent(static (phase, e) => phase switch
+                {
+                    1 => e.NoIcon(),
+                    2 => e.Icon(new FontIconData("\uE734", "Segoe Fluent Icons")),
+                    _ => e,
+                });
+                var win = await OpenAndSettle(Spec("Toggle"), () => comp);
+                try
+                {
+                    var bar = comp.Bar;
+                    H.Check("TitleBarIcon_Toggle_BarMounted", bar is not null);
+                    if (bar is null) return;
+
+                    Console.WriteLine($"# toggle: p0={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Toggle_InheritsAtStart", bar.IconSource is WinUI.ImageIconSource);
+
+                    comp.SetPhase?.Invoke(1);
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    Console.WriteLine($"# toggle: p1={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Toggle_NoIconClearsMountedIcon", bar.IconSource is null);
+
+                    comp.SetPhase?.Invoke(2);
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    Console.WriteLine($"# toggle: p2={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Toggle_ExplicitIconApplies", bar.IconSource is WinUI.FontIconSource);
+
+                    comp.SetPhase?.Invoke(0);
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    Console.WriteLine($"# toggle: p0again={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Toggle_ReturnsToInherited", bar.IconSource is WinUI.ImageIconSource);
                 }
                 finally { await CloseAndSettle(win); }
             }

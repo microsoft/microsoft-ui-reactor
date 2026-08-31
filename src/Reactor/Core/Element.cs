@@ -928,6 +928,15 @@ public abstract record Element
                 && ta.IsBackButtonVisible == tb.IsBackButtonVisible
                 && ta.IsBackButtonEnabled == tb.IsBackButtonEnabled
                 && ta.IsPaneToggleButtonVisible == tb.IsPaneToggleButtonVisible
+                // Icon and SuppressIcon decide what the icon slot renders, so a change to
+                // either is a change to the element's own WinUI-mapped props — which is
+                // exactly what this method reports. Without them the highlight overlay
+                // would leave a title bar unmarked on a render that swapped its icon.
+                // (Note this method gates the devtools overlay only; the reconciler's
+                // skip gate is ShallowEquals, which has no TitleBarElement arm and so
+                // returns false for every TitleBar pair.)
+                && Equals(ta.Icon, tb.Icon)
+                && ta.SuppressIcon == tb.SuppressIcon
                 && SettersEqual(ta.Setters, tb.Setters),
 
             // Pure composition wrappers — they never write their own WinUI

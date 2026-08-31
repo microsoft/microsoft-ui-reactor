@@ -473,4 +473,54 @@ public class TitleBarIconDefaultTests : IDisposable
         Assert.NotNull(first);
         Assert.Equal(first, second);
     }
+
+    // ── Skip-gate and overlay equality ──────────────────────────────────────
+    //
+    // Two different methods, and the distinction matters. Element.ShallowEquals gates
+    // Reconciler.Update's whole-element skip (via CanSkipUpdate). Element.OwnPropsEqual
+    // gates only the devtools highlight overlay (Reconciler.Update.cs, behind
+    // ReactorFeatureFlags.HighlightReconcileChanges).
+    //
+    // A review flagged that TitleBar("x") -> .NoIcon() would take the shallow-skip and
+    // strand the old icon. It does not: ShallowEquals has no TitleBarElement arm, so it
+    // falls to `_ => false` and a TitleBar pair never skips. These tests pin that, so a
+    // future arm added there cannot silently introduce the stranding.
+
+    [Fact]
+    public void ShallowEquals_Never_Skips_A_TitleBar_So_Icon_Changes_Always_Reconcile()
+    {
+        // Positive control: ShallowEquals does return true for a type it knows about, so
+        // the falses below are about TitleBarElement, not about a broken call.
+        Assert.True(Element.ShallowEquals(new TextBlockElement("x"), new TextBlockElement("x")));
+
+        Assert.False(Element.ShallowEquals(new TitleBarElement("t"), new TitleBarElement("t")));
+        Assert.False(Element.ShallowEquals(
+            new TitleBarElement("t"), new TitleBarElement("t").NoIcon()));
+        Assert.False(Element.ShallowEquals(
+            new TitleBarElement("t"),
+            new TitleBarElement("t").Icon(new SymbolIconData("Home"))));
+    }
+
+    [Fact]
+    public void OwnPropsEqual_Reports_An_Icon_Change_So_The_Overlay_Marks_It()
+    {
+        var plain = new TitleBarElement("t");
+
+        // Positive control: an unchanged title bar still compares equal, so the arm has
+        // not simply been made to always return false.
+        Assert.True(Element.OwnPropsEqual(plain, new TitleBarElement("t")));
+
+        Assert.False(Element.OwnPropsEqual(plain, new TitleBarElement("t").NoIcon()));
+        Assert.False(Element.OwnPropsEqual(
+            plain, new TitleBarElement("t").Icon(new SymbolIconData("Home"))));
+        Assert.False(Element.OwnPropsEqual(
+            new TitleBarElement("t").Icon(new SymbolIconData("Home")),
+            new TitleBarElement("t").Icon(new SymbolIconData("Save"))));
+
+        // Value-equal icons still compare equal — the comparison is by value, so an
+        // equivalent IconData rebuilt each render does not spuriously mark the overlay.
+        Assert.True(Element.OwnPropsEqual(
+            new TitleBarElement("t").Icon(new SymbolIconData("Home")),
+            new TitleBarElement("t").Icon(new SymbolIconData("Home"))));
+    }
 }

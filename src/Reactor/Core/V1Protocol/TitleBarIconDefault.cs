@@ -116,19 +116,21 @@ internal static class TitleBarIconDefault
     private sealed class AppliedIcon(
         IconData? value,
         bool elementOwned,
-        bool elementHasSetters,
+        bool authorOwned,
         Microsoft.UI.Xaml.Controls.IconSource? source)
     {
         internal readonly IconData? Value = value;
         internal readonly bool ElementOwned = elementOwned;
 
         /// <summary>
-        /// Whether the element carried any raw <c>.Set(...)</c> setters. Those run after
-        /// every descriptor prop and may write <c>IconSource</c>, including writing it to
-        /// <c>null</c> deliberately — which value identity cannot detect, because a null
-        /// the setter wrote is indistinguishable from a null this type wrote.
+        /// Set once the control was observed carrying an <c>IconSource</c> this type did
+        /// not write — i.e. a raw <c>.Set(...)</c> setter claimed the slot. Recorded from
+        /// ground truth after the setters have actually run, rather than guessed from
+        /// whether the element declares any setters at all: the common
+        /// <c>.Set(b =&gt; capture = b)</c> idiom has nothing to do with the icon, and
+        /// treating it as ownership would disable inheritance wholesale.
         /// </summary>
-        internal readonly bool ElementHasSetters = elementHasSetters;
+        internal readonly bool AuthorOwned = authorOwned;
 
         /// <summary>
         /// The exact <c>IconSource</c> instance this type wrote. Used by the out-of-band
@@ -180,7 +182,38 @@ internal static class TitleBarIconDefault
         var written = IconResolver.ResolveIconSource(projected);
         control.IconSource = written;
         s_applied.AddOrUpdate(control, new AppliedIcon(
-            projected, owned, element.Setters.Length > 0, written));
+            projected, owned, authorOwned: false, written));
+    }
+
+    /// <summary>
+    /// Records whether a raw <c>.Set(...)</c> setter claimed the icon slot. Called by the
+    /// reconciler after modifiers and setters have run, on both mount and update.
+    /// </summary>
+    /// <remarks>
+    /// <para>Setters run <em>after</em> every descriptor prop — the documented "setters
+    /// apply last / win" rule (spec 058) — so this is the first point at which the truth
+    /// is observable. Comparing the control's actual <c>IconSource</c> against the
+    /// instance <see cref="Apply"/> wrote answers "did a setter take the slot?" exactly,
+    /// with no need to guess from <c>Setters.Length</c>.</para>
+    /// <para>It also refreshes the record on the render where <see cref="Apply"/> took
+    /// its equality fast path and wrote nothing, so ownership can never go stale behind a
+    /// skipped write.</para>
+    /// <para>One case stays ambiguous by construction: a setter writing
+    /// <c>IconSource = null</c> when the projection was <em>also</em> null holds the same
+    /// reference this type wrote, so it is invisible here. The out-of-band resync may then
+    /// write an inherited icon over it once; the next render re-runs the setter, this
+    /// observation sees the divergence, and ownership latches. That trade is deliberate —
+    /// the alternative (treating any setter-bearing element as owning the slot) blocks
+    /// inheritance for the common capture-only idiom indefinitely, because
+    /// <c>ReactorWindow.Update</c> does not schedule a render.</para>
+    /// </remarks>
+    internal static void ObserveAfterSetters(Microsoft.UI.Xaml.Controls.TitleBar control)
+    {
+        if (!s_applied.TryGetValue(control, out var last)) return;
+        if (ReferenceEquals(control.IconSource, last.Source)) return;
+
+        s_applied.AddOrUpdate(control, new AppliedIcon(
+            last.Value, last.ElementOwned, authorOwned: true, control.IconSource));
     }
 
     /// <summary>
@@ -213,30 +246,21 @@ internal static class TitleBarIconDefault
     /// window's own icon teardown the same way.
     /// </para>
     /// <para>
-    /// The setter check is narrower than it looks, and deliberately so. Identity settles
-    /// every case except one: when the projection this type wrote was itself
-    /// <c>null</c>, a setter that deliberately wrote <c>IconSource = null</c> holds the
-    /// same reference this type would have, so the two are indistinguishable. The push
-    /// declines only in that window. Skipping for <em>any</em> setter-bearing element
-    /// would be wrong — <c>.Set(b =&gt; capture = b)</c> is a common idiom that has
-    /// nothing to do with the icon, and treating it as ownership disables inheritance
-    /// wholesale. A title bar caught by the narrow case still picks the icon up on its
-    /// next render, where <see cref="Apply"/> re-projects and the setters re-run after it.
+    /// Ownership is ground truth, not a guess. <see cref="ObserveAfterSetters"/> runs
+    /// after the setters and records whether the control ended up carrying an
+    /// <c>IconSource</c> this type did not write; that flag, plus the identity check
+    /// below, is what stops the push clobbering an author's value. Deriving it from
+    /// <c>Setters.Length</c> instead would be wrong in both directions — the common
+    /// <c>.Set(b =&gt; capture = b)</c> idiom does not own the icon, and a setter added on
+    /// a later render would not be reflected on a skipped write.
     /// </para>
     /// </remarks>
     internal static void ResyncInheritedIcon(
         Microsoft.UI.Xaml.Controls.TitleBar control, WindowSpec spec)
     {
-        if (!s_applied.TryGetValue(control, out var last) || last.ElementOwned) return;
+        if (!s_applied.TryGetValue(control, out var last)) return;
+        if (last.ElementOwned || last.AuthorOwned) return;
         if (!ReferenceEquals(control.IconSource, last.Source)) return;
-
-        // Identity settles every case but one: when the projection this type wrote was
-        // itself null, "the author's null" and "our null" are the same reference, so a
-        // setter that deliberately wrote IconSource = null is indistinguishable from no
-        // setter at all. Decline the push only in that narrow window. Anything broader —
-        // skipping for any setter-bearing element — would disable inheritance for the
-        // very common `.Set(b => capture = b)` idiom.
-        if (last.Source is null && last.ElementHasSetters) return;
 
         // ApplyChrome has just re-probed the filesystem for the caption; re-probe here too
         // rather than serving a cached hit or miss, so the two surfaces cannot drift.
@@ -248,7 +272,7 @@ internal static class TitleBarIconDefault
         var written = IconResolver.ResolveIconSource(projected);
         control.IconSource = written;
         s_applied.AddOrUpdate(control, new AppliedIcon(
-            projected, elementOwned: false, elementHasSetters: false, written));
+            projected, elementOwned: false, authorOwned: false, written));
     }
 
     /// <summary>

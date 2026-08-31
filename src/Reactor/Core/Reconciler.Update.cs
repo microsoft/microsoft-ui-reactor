@@ -254,7 +254,14 @@ public sealed partial class Reconciler
         // removing an explicit .Height(...) from a still-tall TitleBar falls
         // back to the implied tall height rather than to auto. (issue #917)
         if (newEl is TitleBarElement tbEl && target is WinUI.TitleBar tbCtl)
+        {
             TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+            // Setters have run by now, so this is the first point at which "did a raw
+            // .Set(...) claim the icon slot?" is observable rather than guessable. Also
+            // refreshes ownership on renders where the icon write took its fast path.
+            global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
+                .ObserveAfterSetters(tbCtl);
+        }
 
         // Re-apply the caption-derived default after modifiers have run so a
         // label change ("+ 1" → "+ 2") updates UIA Name when the author never
