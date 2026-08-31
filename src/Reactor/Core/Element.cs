@@ -1723,6 +1723,40 @@ public partial record SemanticElement(Element Child, SemanticDescription Semanti
 /// measured on the baseline box, as those are the construction-cost-sensitive
 /// scenarios.</para>
 /// </summary>
+/// <summary>
+/// Storage wrapper that keeps its payload out of a containing record's
+/// synthesized equality. A C# record compares and hashes every instance field,
+/// so a field whose value is inert metadata — carried for diagnostics but not
+/// part of the value's identity — has to opt out at the storage level.
+/// <see cref="Equals(EqualityIgnored{T})"/> is unconditionally true and
+/// <see cref="GetHashCode"/> unconditionally zero, so the containing record's
+/// generated members treat the slot as constant while every other field is
+/// still compared normally.
+///
+/// <para>Used for <see cref="ElementExtras.CallSite"/> (spec 010): stamping a
+/// source location must not make two otherwise identical elements unequal.
+/// Preferred over hand-writing <c>Equals</c>/<c>GetHashCode</c> on
+/// <see cref="ElementExtras"/>, which would silently stop comparing any field
+/// added to that record later.</para>
+/// </summary>
+internal readonly struct EqualityIgnored<T> : global::System.IEquatable<EqualityIgnored<T>>
+    where T : struct
+{
+    internal EqualityIgnored(T? value) => Value = value;
+
+    internal T? Value { get; }
+
+    public bool Equals(EqualityIgnored<T> other) => true;
+
+    public override bool Equals(object? obj) => obj is EqualityIgnored<T>;
+
+    public override int GetHashCode() => 0;
+
+    public static bool operator ==(EqualityIgnored<T> left, EqualityIgnored<T> right) => true;
+
+    public static bool operator !=(EqualityIgnored<T> left, EqualityIgnored<T> right) => false;
+}
+
 /// <remarks>Spec 047 §4.4.</remarks>
 public record ElementExtras
 {
@@ -1854,7 +1888,24 @@ public record ElementExtras
     /// bucket is an implementation detail.</para>
     /// </summary>
     /// <remarks>Spec 047 §4.4 bucketing; spec 010 slot.</remarks>
-    public SourceLocation? CallSite { get; init; }
+    public SourceLocation? CallSite
+    {
+        get => _callSite.Value;
+        init => _callSite = new EqualityIgnored<SourceLocation>(value);
+    }
+
+    /// <summary>
+    /// Backing store for <see cref="CallSite"/>. Deliberately an
+    /// <see cref="EqualityIgnored{T}"/> rather than a plain auto-property: a record
+    /// synthesizes <c>Equals</c>/<c>GetHashCode</c> over EVERY instance field, so
+    /// storing the location directly would make two otherwise identical elements
+    /// built on different lines compare unequal and hash differently. A source
+    /// location is inert diagnostic metadata and must not change element semantics
+    /// (spec 010), so the wrapper makes the field equality-neutral while leaving
+    /// every other field — including ones added later — compared normally.
+    /// <c>SourceMapElementSlotTests.RecordEquality_*</c> pins this.
+    /// </summary>
+    private readonly EqualityIgnored<SourceLocation> _callSite;
 
     /// <summary>
     /// True when every bucketed field is null. The <see cref="Element"/> shim

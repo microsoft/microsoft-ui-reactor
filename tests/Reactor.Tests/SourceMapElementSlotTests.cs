@@ -54,6 +54,88 @@ public sealed class SourceMapElementSlotTests
         Assert.True(Element.CanSkipUpdate(a, b));
     }
 
+    // ── The slot must be invisible to synthesized record equality ─────────
+
+    [Fact]
+    public void RecordEquality_IgnoresCallSite()
+    {
+        // ShallowEquals/CanSkipUpdate above cover the reconciler, but Element is a
+        // record, so `==` and GetHashCode are part of its public surface too. A
+        // diagnostic stamp must not make two otherwise identical elements unequal:
+        // with source mapping on in a Debug run, `Assert.Equal(expected, actual)`
+        // over elements would otherwise start failing purely because the two were
+        // constructed on different lines.
+        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999) };
+
+        Assert.Equal(a, b);
+        Assert.True(a == b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void RecordEquality_PositiveControl_StillDetectsRealDifferences()
+    {
+        // Guards the test above from passing for the wrong reason: if Element
+        // equality had degenerated into "always true", the CallSite test would
+        // look green while proving nothing.
+        var a = TextBlock("one") with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void RecordEquality_IgnoresCallSiteAlongsideRealExtras()
+    {
+        // The CallSite-only case can collapse its bucket to null via
+        // NormalizeExtras, which would hide a real inequality behind
+        // "both buckets are null". Pin the case where the bucket must
+        // survive because it carries a behavioral extra as well.
+        //
+        // Both elements are derived from one base so the behavioral extra is the
+        // SAME reference in each: Attached is an IReadOnlyDictionary, which has
+        // reference equality, so building the two independently would make them
+        // unequal for a reason that has nothing to do with CallSite.
+        var withExtras = TextBlock("same").Grid(row: 1);
+        var a = withExtras with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = withExtras with { CallSite = new SourceLocation("B.cs", 999) };
+
+        Assert.NotNull(a.Extensions);
+        Assert.NotNull(b.Extensions);
+        Assert.NotNull(a.Attached);
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void RecordEquality_AttachedControl_IndependentBucketsAreUnequalWithoutAnyCallSite()
+    {
+        // Control for the test above, and the reason it derives from a shared base:
+        // two independently-built .Grid() elements are already unequal with NO
+        // CallSite involved, because Attached is a reference-equality dictionary.
+        // Without this, a future reader could "fix" the test above by building the
+        // two elements separately and conclude CallSite had regressed.
+        var a = TextBlock("same").Grid(row: 1);
+        var b = TextBlock("same").Grid(row: 1);
+
+        Assert.Null(a.CallSite);
+        Assert.Null(b.CallSite);
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void RecordEquality_ExtrasBucket_IgnoresCallSiteDirectly()
+    {
+        // Same invariant one level down, on the bucket itself, so a regression
+        // is attributed to ElementExtras rather than to Element.
+        var a = new ElementExtras { CallSite = new SourceLocation("A.cs", 1) };
+        var b = new ElementExtras { CallSite = new SourceLocation("B.cs", 999) };
+
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
     // ── Record plumbing ───────────────────────────────────────────────────
 
     [Fact]
