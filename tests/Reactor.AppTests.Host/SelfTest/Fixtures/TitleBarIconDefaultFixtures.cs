@@ -751,8 +751,9 @@ internal static class TitleBarIconDefaultFixtures
 
                 // No .Icon(...) and no .NoIcon() -- the element does not own the slot by
                 // declaration, so only the setter marks it as author-owned.
-                var comp = new BarComponent(static e => e.Set(static b =>
-                    b.IconSource = new WinUI.FontIconSource { Glyph = "\uE8A5" }));
+                var comp = new ToggleBarComponent(static (phase, e) => phase == 0
+                    ? e.Set(static b => b.IconSource = new WinUI.FontIconSource { Glyph = "\uE8A5" })
+                    : e);
                 var win = await OpenAndSettle(
                     Spec("SetterIcon") with { Icon = WindowIcon.FromPath(first) }, () => comp);
                 try
@@ -761,12 +762,46 @@ internal static class TitleBarIconDefaultFixtures
                     H.Check("TitleBarIcon_Setter_BarMounted", bar is not null);
                     if (bar is null) return;
 
-                    // Positive control: the setter must have won at mount, or the arm
+                    // Positive control: the setter must have won at mount, or the arms
                     // below would pass for the wrong reason.
                     Console.WriteLine($"# setter: before={bar.IconSource?.GetType().Name ?? "<null>"}");
                     H.Check("TitleBarIcon_Setter_WinsAtMount", bar.IconSource is WinUI.FontIconSource);
 
+                    // Drop the setter with the window icon UNTOUCHED. Ordering is the
+                    // whole point: the projection still equals what Apply last recorded,
+                    // so its equality fast path is live and would skip the write, leaving
+                    // the setter's icon stranded forever. Changing the window icon first
+                    // makes `projected` differ, routes around the fast path, and tests
+                    // nothing — I confirmed that by mutation-checking the other ordering
+                    // and watching it stay green.
+                    comp.SetPhase?.Invoke(1);
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    Console.WriteLine($"# setter: dropped={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Setter_RemovalRestoresInheritedIcon",
+                        bar.IconSource is WinUI.ImageIconSource);
+
+                    // Ownership released: a later window-icon change tracks again.
                     win.Update(win.Spec with { Icon = WindowIcon.FromPath(second) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    var uri = IconUri(bar);
+                    Console.WriteLine($"# setter: tracks again={uri}");
+                    H.Check($"TitleBarIcon_Setter_TracksAgainAfterRelease (uri={uri})",
+                        uri is not null
+                        && uri.LocalPath.EndsWith("Second.ico", StringComparison.OrdinalIgnoreCase));
+
+                    // Re-add the setter, then change the window icon underneath it: the
+                    // out-of-band push must not clobber the author's value.
+                    comp.SetPhase?.Invoke(0);
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    H.Check("TitleBarIcon_Setter_ReclaimsSlot", bar.IconSource is WinUI.FontIconSource);
+
+                    var third = global::System.IO.Path.Join(scratch, "Third.ico");
+                    global::System.IO.File.Copy(TestIcoPath, third, overwrite: true);
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(third) });
                     await win.Host.WaitForIdleAsync();
                     await Harness.Render(200);
 
@@ -853,11 +888,15 @@ internal static class TitleBarIconDefaultFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  Toggling a MOUNTED title bar between the inherited default and .NoIcon().
-    //  Element.ShallowEquals gates Reconciler.Update's whole-element skip, so if
-    //  its TitleBarElement arm does not compare SuppressIcon (or Icon), a render
-    //  that changes only those takes the skip path and the descriptor entry never
-    //  runs — leaving the previous icon mounted.
+    //  Toggling a MOUNTED title bar between the inherited default, .NoIcon()
+    //  and an explicit icon. Every transition must reach the control.
+    //
+    //  Note this does NOT exercise a shallow-skip hazard: Element.ShallowEquals
+    //  (which gates Reconciler.Update's whole-element skip) has no
+    //  TitleBarElement arm, so a TitleBar pair falls to `_ => false` and never
+    //  skips. TitleBarIconDefaultTests pins that invariant, so if someone later
+    //  adds such an arm without comparing Icon/SuppressIcon, the unit test
+    //  catches it. This fixture covers the live apply path instead.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultTogglesOnRerender(Harness h) : SelfTestFixtureBase(h)
     {

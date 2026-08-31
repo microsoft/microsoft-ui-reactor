@@ -166,6 +166,15 @@ internal static class TitleBarIconDefault
     /// and the control keeps the previous icon forever. Comparing against what was last
     /// written to the control instead of against the previous element is what makes an
     /// ambient change observable.
+    /// <para>The fast path is deliberately bypassed for an author-owned record. Once
+    /// <see cref="ObserveAfterSetters"/> has seen a setter claim the slot, the control no
+    /// longer holds what this type wrote — so "the projection did not change" says
+    /// nothing about whether the control is correct. Skipping there would strand the
+    /// setter's icon forever once the setter was removed, because <c>owned</c> and
+    /// <c>projected</c> still compare equal on the setter-free render. Writing instead
+    /// costs one redundant assignment per render while a setter owns the slot, which is
+    /// exactly what any descriptor prop under a setter already pays: the write lands
+    /// first and the setter overwrites it immediately afterwards.</para>
     /// </remarks>
     internal static void Apply(Microsoft.UI.Xaml.Controls.TitleBar control, TitleBarElement element, bool force)
     {
@@ -173,6 +182,7 @@ internal static class TitleBarIconDefault
         var projected = Project(element);
         if (!force
             && s_applied.TryGetValue(control, out var last)
+            && !last.AuthorOwned
             && last.ElementOwned == owned
             && EqualityComparer<IconData?>.Default.Equals(last.Value, projected))
         {
@@ -235,15 +245,24 @@ internal static class TitleBarIconDefault
     /// No-op for a control this type never wrote to, and for a title bar whose element
     /// declared its own icon or opted out with <c>.NoIcon()</c> — those own the slot.
     /// <para>
-    /// Also a no-op when the element carries raw <c>.Set(...)</c> setters, or when the
-    /// control no longer holds the <c>IconSource</c> this type last wrote. Setters run
-    /// <em>after</em> every descriptor prop — the documented "setters apply last / win"
-    /// rule (spec 058, <c>DescriptorHandler.ApplySetters</c>) — so
-    /// <c>.Set(b =&gt; b.IconSource = ...)</c> legitimately owns the slot even though the
-    /// element declares no <c>Icon</c>. This push runs out of band from
+    /// Also a no-op when a raw <c>.Set(...)</c> setter was <em>observed</em> to claim the
+    /// icon slot, or when the control no longer holds the <c>IconSource</c> this type
+    /// last wrote. Setters run <em>after</em> every descriptor prop — the documented
+    /// "setters apply last / win" rule (spec 058, <c>DescriptorHandler.ApplySetters</c>)
+    /// — so <c>.Set(b =&gt; b.IconSource = ...)</c> legitimately owns the slot even
+    /// though the element declares no <c>Icon</c>. This push runs out of band from
     /// <c>ApplyChrome</c> with no setters to replay, so it must not clobber a value it
     /// did not write. Mirrors <c>ReactorWindow._reactorAppliedIcon</c>, which gates the
     /// window's own icon teardown the same way.
+    /// </para>
+    /// <para>
+    /// "Observed" is the operative word, and the distinction is load-bearing: merely
+    /// <em>carrying</em> setters does not claim the slot. <see cref="ObserveAfterSetters"/>
+    /// compares the control's actual <c>IconSource</c> against the instance
+    /// <see cref="Apply"/> wrote, so a capture-only <c>.Set(b =&gt; captured = b)</c> —
+    /// which touches no icon — leaves ownership with Reactor and keeps inheriting. An
+    /// earlier revision inferred ownership from <c>Setters.Length</c> instead and broke
+    /// exactly that case; do not reintroduce it.
     /// </para>
     /// <para>
     /// Ownership is ground truth, not a guess. <see cref="ObserveAfterSetters"/> runs

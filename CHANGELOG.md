@@ -70,6 +70,10 @@ Conventions for contributors:
   ordinary method calls, never operators), so they previously reported no location at
   all. Applies to any user-defined conversion to `Element`, respects first-stamp-wins,
   and never writes into a `params` array the caller owns.
+- **`TitleBarElement.NoIcon()` — opt out of the inherited title-bar icon (spec 036 §4.1).**
+  The companion to the inheritance change below: use it where a bare title bar is the intent
+  on an app that ships an icon. `.Icon(...)` still wins where a *different* mark belongs in
+  the title bar than in the window caption.
 - **`NavigationTransition.Entrance()` — the WinUI page-refresh motion as a first-class
   transition (spec 011 §6).** The incoming page slides up a short distance and fades in,
   mirroring WinUI's `EntranceNavigationTransitionInfo`. `EntranceTransition` is public and
@@ -92,6 +96,16 @@ Conventions for contributors:
 - **The `with { ... }` construct returns `CS0200`.**
   To allow for reliable validation the only path to initialize the record is the constructor. This also means that something like `var grid2 = grid1 with { Size = -1 }` would succeed in the past but fail now. This is the desired behavior as the old way led to potential unrendered content.
 
+- **`TitleBar(...)` inherits the window's icon when it declares none (spec 036 §4.1).**
+  Previously a title bar with no `.Icon(...)` rendered no icon, so apps that already set a
+  window icon had to restate it. It now shows `WindowSpec.Icon` when declared, otherwise the
+  `Assets\AppIcon.ico` convention beside the app. An icon that exists *only* as an
+  executable PE resource (`<ApplicationIcon>`) is not inherited — that stage of the window's
+  own icon chain yields a raw `HICON` with no path, and a XAML `IconSource` needs an image
+  source — and an embedded window never receives a window icon, so it has none to inherit.
+  **An app that ships an icon and deliberately wants a bare title bar should add the new
+  `.NoIcon()` to preserve its previous appearance;** apps that set `.Icon(...)` explicitly
+  are unaffected.
 - **`NavigationTransition.Default` is now the entrance motion, not a slide from the right
   (spec 011 §6, issue #1144).** A WinUI `Frame` navigated with no `NavigationTransitionInfo`
   plays `EntranceNavigationTransitionInfo`, so a Reactor app now animates like its WinUI XAML
