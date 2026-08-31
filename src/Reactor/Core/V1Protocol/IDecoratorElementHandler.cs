@@ -89,4 +89,11 @@ public interface IDecoratorElementHandler<TElement>
     /// null if the tag was already detached (defensive — should not
     /// happen for well-behaved decorator handlers).</summary>
     V1UnmountDisposition Unmount(UnmountContext ctx, TElement? element, UIElement control);
+
+    /// <summary>Optional source-map override for target-wrapping decorators
+    /// that return a child element's control but tag that control with the
+    /// decorator element. Return the child element that created the control so
+    /// <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(UIElement)"/> reports
+    /// the target's call site rather than the decorator's.</summary>
+    Element? GetSourceTarget(TElement element) => null;
 }

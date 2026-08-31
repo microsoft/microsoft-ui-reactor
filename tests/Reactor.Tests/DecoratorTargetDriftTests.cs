@@ -6,18 +6,20 @@ using System.Reflection;
 // warnings describe a scenario that does not exist here.
 #pragma warning disable IL2026, IL2070, IL2072, IL2075
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Diagnostics;
+using Microsoft.UI.Xaml;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Spec 010 — guards <c>ReactorSourceMap.DecoratorTarget</c>'s hand-maintained switch.
+/// Spec 010 — guards <c>ReactorSourceMap.DecoratorTarget</c>'s source-target resolver.
 ///
 /// <para>Target-wrapping decorators mount their <c>Target</c>'s control and then replace
 /// that control's tag with themselves, so <c>GetSource</c> has to resolve through them or
 /// it names the decorator as the creator of a control the target factory built. The
-/// resolver lists the decorator types explicitly, and a list drifts.</para>
+/// built-in fallback used when a record is constructed directly can drift.</para>
 ///
 /// <para>The failure mode is why this matters: a fourth decorator added later would not
 /// crash or return null, it would report a confidently wrong line — the hardest kind of
@@ -78,7 +80,7 @@ public class DecoratorTargetDriftTests
             $"resolve them: [{string.Join(", ", missing)}]. A control decorated by one of these " +
             "is tagged with the DECORATOR, so GetSource would report the decorator's line as the " +
             "creator of a control the target factory built — a confidently wrong location. Add " +
-            "the type to the switch in ReactorSourceMap.DecoratorTarget.");
+            "a source-target resolver or the direct-record fallback in ReactorSourceMap.DecoratorTarget.");
     }
 
     /// <summary>
@@ -103,6 +105,18 @@ public class DecoratorTargetDriftTests
     {
         Assert.False(LooksLikeDecorator(typeof(TextBlockElement)));
         Assert.Null(ReactorSourceMap.DecoratorTarget(new TextBlockElement("x")));
+    }
+
+    [Fact]
+    public void RegisteredExternalDecoratorCanProvideItsSourceTarget()
+    {
+        ControlRegistry.RegisterDecorator<ExternalTargetDecoratorElement>(
+            static () => new ExternalTargetDecoratorHandler());
+
+        var target = new TextBlockElement("target") with { CallSite = new SourceLocation("Target.cs", 7) };
+        var decorator = new ExternalTargetDecoratorElement(target) with { CallSite = new SourceLocation("Decorator.cs", 11) };
+
+        Assert.Same(target, ReactorSourceMap.DecoratorTarget(decorator));
     }
 
     private static Element? TryConstruct(Type t, Element target)
@@ -132,7 +146,22 @@ public class DecoratorTargetDriftTests
             return null;
         }
     }
+
+    private sealed record ExternalTargetDecoratorElement(Element Target) : Element;
+
+    private sealed class ExternalTargetDecoratorHandler : IDecoratorElementHandler<ExternalTargetDecoratorElement>
+    {
+        public UIElement Mount(MountContext ctx, ExternalTargetDecoratorElement element)
+            => throw new NotSupportedException();
+
+        public UIElement Update(UpdateContext ctx, ExternalTargetDecoratorElement oldEl, ExternalTargetDecoratorElement newEl, UIElement control)
+            => throw new NotSupportedException();
+
+        public V1UnmountDisposition Unmount(UnmountContext ctx, ExternalTargetDecoratorElement? element, UIElement control)
+            => V1UnmountDisposition.ContinueDefaultTraversal;
+
+        public Element? GetSourceTarget(ExternalTargetDecoratorElement element) => element.Target;
+    }
 }
 
 #pragma warning restore IL2026, IL2070, IL2072, IL2075
-

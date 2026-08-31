@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Diagnostics;
@@ -106,15 +107,23 @@ public static class ReactorSourceMap
     /// <summary>
     /// The wrapped element for a target-wrapping decorator, or null for anything else.
     ///
-    /// <para><c>internal</c> so DecoratorTargetDriftTests can assert this covers every
-    /// element shaped like a decorator. A hand-maintained switch drifts silently, and
-    /// the symptom would be a confidently wrong line rather than a crash.</para>
+    /// <para>Globally registered decorator handlers can opt in through
+    /// <see cref="IDecoratorElementHandler{TElement}.GetSourceTarget(TElement)"/>. The
+    /// fallback covers built-in decorator records that may have been constructed
+    /// directly, before their factory-triggered registration latch ran.</para>
     /// </summary>
-    internal static Element? DecoratorTarget(Element element) => element switch
+    internal static Element? DecoratorTarget(Element element)
     {
-        FlyoutElement f => f.Target,
-        MenuFlyoutElement m => m.Target,
-        CommandBarFlyoutElement c => c.Target,
-        _ => null,
-    };
+        var registered = ControlRegistry.SourceTarget(element);
+        if (registered is not null)
+            return registered;
+
+        return element switch
+        {
+            FlyoutElement f => f.Target,
+            MenuFlyoutElement m => m.Target,
+            CommandBarFlyoutElement c => c.Target,
+            _ => null,
+        };
+    }
 }

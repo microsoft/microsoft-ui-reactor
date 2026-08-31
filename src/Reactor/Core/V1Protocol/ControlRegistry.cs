@@ -294,6 +294,20 @@ public static class ControlRegistry
     }
 
     /// <summary>
+    /// Resolves the source-map target for a globally registered decorator
+    /// element, if its handler provides one.
+    /// </summary>
+    internal static Element? SourceTarget(Element element)
+    {
+        if (!TryResolve(element.GetType(), out var factory))
+            return null;
+
+        return factory() is IV1SourceTargetResolver resolver
+            ? resolver.GetSourceTarget(element)
+            : null;
+    }
+
+    /// <summary>
     /// Spec §8 — true if a global registration exists for the given element
     /// type. Used by diagnostics; the Reconciler's dispatch path uses
     /// <see cref="TryResolve"/> directly. Reports <i>exact-type</i> entries

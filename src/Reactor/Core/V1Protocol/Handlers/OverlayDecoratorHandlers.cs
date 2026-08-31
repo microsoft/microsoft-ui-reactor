@@ -111,6 +111,8 @@ internal sealed class FlyoutHandler : IDecoratorElementHandler<FlyoutElement>
         }
         return V1UnmountDisposition.ContinueDefaultTraversal;
     }
+
+    public Element? GetSourceTarget(FlyoutElement element) => element.Target;
 }
 
 /// <summary>§4.0.1 — MenuBar (normal control; plain-WinUI menu items).</summary>
@@ -150,6 +152,8 @@ internal sealed class MenuFlyoutHandler : IDecoratorElementHandler<MenuFlyoutEle
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, MenuFlyoutElement? element, UIElement control)
         => V1UnmountDisposition.ContinueDefaultTraversal;
+
+    public Element? GetSourceTarget(MenuFlyoutElement element) => element.Target;
 }
 
 /// <summary>§4.0.1 — Popup (StackPanel wrapper hosting a WinUI Popup).</summary>
@@ -207,4 +211,6 @@ internal sealed class CommandBarFlyoutHandler : IDecoratorElementHandler<Command
         }
         return V1UnmountDisposition.ContinueDefaultTraversal;
     }
+
+    public Element? GetSourceTarget(CommandBarFlyoutElement element) => element.Target;
 }

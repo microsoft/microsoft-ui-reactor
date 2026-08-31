@@ -21,7 +21,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 ///   are managed by the handler's Mount/Update bodies directly.</item>
 /// </list></para>
 /// </summary>
-internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry
+internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1SourceTargetResolver
     where TElement : Element
 {
     private readonly IDecoratorElementHandler<TElement> _handler;
@@ -76,4 +76,7 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry
         var ctx = new UnmountContext(reconciler);
         return _handler.Unmount(ctx, typedEl, control);
     }
+
+    public Element? GetSourceTarget(Element element)
+        => element is TElement typed ? _handler.GetSourceTarget(typed) : null;
 }
