@@ -139,6 +139,9 @@ file static class ColumnHelpers
     {
         if (value is null) return "";
         if (value is IFormattable formattable)
+            // Issue #1159: null provider == current culture, on purpose — this string is
+            // rendered in a grid cell. Guarded by
+            // DataGridColumnTests.Column_Format_Honors_CurrentCulture.
             return formattable.ToString(format, null);
         return value.ToString() ?? "";
     }

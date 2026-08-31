@@ -697,6 +697,17 @@ public class EditorsBehaviorTests
         Assert.Equal("2.5", el.Items[1]);
     }
 
+    [CulturedFact(new[] { "nl-NL" })]
+    public void Combo_NameMapping_Honors_CurrentCulture()
+    {
+        // Issue #1159. Companion to the en-US test above, which cannot detect the
+        // projection being switched to invariant — both render 2.5 as "2.5". These are
+        // user-facing choice labels, so a Dutch user should see "2,5".
+        var factory = Editors.Combo(new object?[] { 1, 2.5, "x" });
+        var el = (ComboBoxElement)factory(2.5, _ => { });
+        Assert.Equal("2,5", el.Items[1]);
+    }
+
     [Fact]
     public void Combo_NameMapping_Null_Choice_Renders_Empty()
     {

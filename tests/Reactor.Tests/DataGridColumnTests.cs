@@ -89,6 +89,21 @@ public class DataGridColumnTests
         Assert.Contains("42.50", formatted);
     }
 
+    [CulturedFact(new[] { "nl-NL" })]
+    public void Column_Format_Honors_CurrentCulture()
+    {
+        // Issue #1159. Companion to the en-US test above, which cannot detect the contract
+        // changing: ColumnHelpers.FormatWithSpec passes a null IFormatProvider — i.e. the
+        // current culture — and invariant would also render "42.50", so the en-US
+        // assertion holds either way. A grid cell is user-facing, so a Dutch user should
+        // read "42,50". Asserted without the currency symbol, whose glyph and spacing are
+        // not the point here.
+        FieldDescriptor col = Column<TestProduct>("Price", p => p.Price, format: "C2");
+        var formatted = col.FormatValue!(42.5);
+        Assert.Contains("42,50", formatted);
+        Assert.DoesNotContain("42.50", formatted);
+    }
+
     [Fact]
     public void Column_GetValue_Returns_Correct_Value()
     {

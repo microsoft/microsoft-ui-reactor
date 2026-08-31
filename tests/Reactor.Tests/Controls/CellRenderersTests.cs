@@ -303,6 +303,21 @@ public class CellRenderersTests
         Assert.Contains("3.14159", el.Content);
     }
 
+    [CulturedFact(new[] { "nl-NL" })]
+    public void FormatValue_NoFormat_Fallback_Honors_CurrentCulture()
+    {
+        // Issue #1159. Companion to the en-US test above, which is vacuous for the
+        // *contract*: the `format is null` arm falls through to `value.ToString()`, and a
+        // plain double renders identically under invariant and en-US, so changing that arm
+        // to invariant would leave the test above green. This is the no-format branch's
+        // discriminating half — `FormatValue_Honors_CurrentCulture_Not_Invariant` below
+        // only exercises the `format is not null` arm.
+        var r = CellRenderers.Text();
+        var el = (TextBlockElement)r(3.14159);
+        Assert.Contains("3,14159", el.Content);
+        Assert.DoesNotContain("3.14159", el.Content);
+    }
+
     [Fact]
     public void FormatValue_NonFormattable_Without_Format_Uses_ToString()
     {

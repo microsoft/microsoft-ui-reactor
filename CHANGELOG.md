@@ -103,9 +103,12 @@ Conventions for contributors:
   regression guards are `[CulturedFact(new[] { "nl-NL" })]`, which pins the culture per test
   case and therefore bites on the en-US CI runner too; `REACTOR_TESTS_CULTURE` additionally
   re-runs the whole suite under another locale to find the tests nobody thought to pin (see
-  [`TESTING.md`](TESTING.md)). Deliberately *not* changed: `CellRenderers.FormatValue` and
-  `ChartSummarizer.FormatValue` stay on the current culture, because a grid cell and a
-  screen-reader summary are user-facing text — a Dutch user should read `1,5`.
+  [`TESTING.md`](TESTING.md)). Deliberately *not* changed: the user-facing formatting seams
+  — `CellRenderers.FormatValue`, `ColumnHelpers.FormatWithSpec`, `Editors.Combo`'s label
+  projection and `ChartSummarizer.FormatValue` — stay on the current culture, because a grid
+  cell, a choice label and a screen-reader summary are text a person reads: a Dutch user
+  should see `1,5`. Each of those now carries a comma-decimal test that fails if it is ever
+  "hardened" to invariant, which an en-US-pinned assertion cannot detect.
 
 - **A fully-skipped selftest fixture is no longer reported as PASSED (issue #1061).**
   `Harness.Skip` emits `ok <name> # SKIP <reason>`, and `SelfTestBatch.ParseTap` treated any
