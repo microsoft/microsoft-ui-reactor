@@ -1367,20 +1367,29 @@ public class SelfTestBatch
 
         var report = ExtractNotApplicableFixtures(_fullOutput);
 
-        Assert.IsNotNull(report.Count,
-            $"The Host completed its run but emitted no '{NotApplicableCountMarker.Trim()}' " +
-            $"trailer, so nothing reports which fixtures this tier declined to run. Either " +
-            $"SelfTestRunner.WriteNotApplicableTrailer stopped being called, or the marker literal " +
-            $"drifted between SelfTestRunner and this file — they are duplicated, not shared, " +
-            $"because the Host is referenced with ReferenceOutputAssembly=false.");
+        // Pattern-matched into a non-nullable local rather than asserting and then dereferencing
+        // `report.Count`. `Assert.IsNotNull` is invisible to nullable flow analysis, so the three
+        // reads below would each need a `!` — an unchecked claim, and one that would quietly
+        // become wrong if the guard were ever relaxed. This states the same test where the
+        // compiler and CodeQL can both see it.
+        if (report.Count is not { } reportedCount)
+        {
+            Assert.Fail(
+                $"The Host completed its run but emitted no '{NotApplicableCountMarker.Trim()}' " +
+                $"trailer, so nothing reports which fixtures this tier declined to run. Either " +
+                $"SelfTestRunner.WriteNotApplicableTrailer stopped being called, or the marker literal " +
+                $"drifted between SelfTestRunner and this file — they are duplicated, not shared, " +
+                $"because the Host is referenced with ReferenceOutputAssembly=false.");
+            return;
+        }
 
-        Assert.AreEqual(report.Count!.Value, report.Names.Count,
-            $"The Host reported {report.Count} not-applicable fixture(s) but named " +
+        Assert.AreEqual(reportedCount, report.Names.Count,
+            $"The Host reported {reportedCount} not-applicable fixture(s) but named " +
             $"{report.Names.Count}. The TAP stream is inconsistent with itself — most likely " +
             $"truncated between the two trailer lines, which would make every check below reason " +
             $"about a partial list.\nNamed: {string.Join(", ", report.Names)}");
 
-        Assert.IsTrue(report.Count.Value > 0,
+        Assert.IsTrue(reportedCount > 0,
             $"This wrapper always runs the UNPACKAGED Host, where the '{PackagedFixturePrefix}' " +
             $"fixtures are declared SelfTestTier.Packaged and must therefore be excluded — so zero " +
             $"is never the healthy answer here. Something removed the mechanism or its subject:\n" +

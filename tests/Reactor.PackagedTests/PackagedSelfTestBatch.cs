@@ -264,16 +264,24 @@ public class PackagedSelfTestBatch
 
         var report = ExtractNotApplicableFixtures(_fullOutput);
 
-        Assert.IsNotNull(
-            report.Count,
-            $"The packaged host emitted no '{NotApplicableCountMarker.Trim()}' trailer, so nothing " +
-            "establishes that it considered its identity-dependent fixtures applicable. Either " +
-            "SelfTestRunner.WriteNotApplicableTrailer stopped being called, or the marker literal " +
-            "drifted between the host and this file — they are duplicated, not shared, because " +
-            $"the host is referenced with ReferenceOutputAssembly=false.\n{Tail(_fullOutput, 2000)}");
+        // Pattern-matched into a non-nullable local rather than asserting and then dereferencing
+        // `report.Count`. `Assert.IsNotNull` is invisible to nullable flow analysis, so the reads
+        // below would each need a `!` — an unchecked claim, and one that would quietly become
+        // wrong if the guard were ever relaxed. This states the same test where the compiler and
+        // CodeQL can both see it.
+        if (report.Count is not { } reportedCount)
+        {
+            Assert.Fail(
+                $"The packaged host emitted no '{NotApplicableCountMarker.Trim()}' trailer, so nothing " +
+                "establishes that it considered its identity-dependent fixtures applicable. Either " +
+                "SelfTestRunner.WriteNotApplicableTrailer stopped being called, or the marker literal " +
+                "drifted between the host and this file — they are duplicated, not shared, because " +
+                $"the host is referenced with ReferenceOutputAssembly=false.\n{Tail(_fullOutput, 2000)}");
+            return;
+        }
 
         Assert.AreEqual(
-            0, report.Count!.Value,
+            0, reportedCount,
             "The packaged host excluded fixtures from its own corpus as 'not applicable to this " +
             $"tier':\n  {string.Join("\n  ", report.Names)}\n" +
             "Every fixture must be applicable here — this is the tier that runs the " +
