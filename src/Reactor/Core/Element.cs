@@ -1701,29 +1701,6 @@ public partial record SemanticElement(Element Child, SemanticDescription Semanti
 }
 
 /// <summary>
-/// Cross-cutting "extras" bucket for <see cref="Element"/> (spec 047 §4.4).
-/// Holds the 14 rarely-set fields (attached properties, transitions, theme
-/// bindings, animation configs, resource overrides, context values) that used
-/// to sit inline on every element. Bucketing them into a lazy sub-record lets
-/// the common case (a leaf with none of these) pay one reference slot instead
-/// of 14. The fields are exposed on <see cref="Element"/> via get/init shim
-/// properties that read from / write into this record, so call sites see no
-/// API change. Value-equality (default record) so equality helpers and
-/// <c>with</c>-writers behave exactly as before. Unlike
-/// <see cref="ElementModifiers"/> nothing merges Extras, so there is no Merge.
-///
-/// <para><b>Construction-cost tradeoff (spec 047 §4.4 / §11.6):</b> the common
-/// no-extras leaf now saves a reference slot (the §4.4 win), but each
-/// extra-setting fluent call (<c>.Grid()</c>, <c>.Background(Theme…)</c>,
-/// <c>.Animate()</c>, <c>.Provide()</c>, …) clones this sub-record <em>in
-/// addition to</em> the <see cref="Element"/> clone — so an element that sets
-/// several extras does N small <c>ElementExtras</c> allocations during
-/// construction where the inline layout did zero. Net win for the common case;
-/// watch the §11.6 byte-gate M2/M3 (callback/modifier-heavy leaves) when it is
-/// measured on the baseline box, as those are the construction-cost-sensitive
-/// scenarios.</para>
-/// </summary>
-/// <summary>
 /// Storage wrapper that keeps its payload out of a containing record's
 /// synthesized equality. A C# record compares and hashes every instance field,
 /// so a field whose value is inert metadata — carried for diagnostics but not
@@ -1757,6 +1734,29 @@ internal readonly struct EqualityIgnored<T> : global::System.IEquatable<Equality
     public static bool operator !=(EqualityIgnored<T> left, EqualityIgnored<T> right) => false;
 }
 
+/// <summary>
+/// Cross-cutting "extras" bucket for <see cref="Element"/> (spec 047 §4.4).
+/// Holds the 14 rarely-set fields (attached properties, transitions, theme
+/// bindings, animation configs, resource overrides, context values) that used
+/// to sit inline on every element. Bucketing them into a lazy sub-record lets
+/// the common case (a leaf with none of these) pay one reference slot instead
+/// of 14. The fields are exposed on <see cref="Element"/> via get/init shim
+/// properties that read from / write into this record, so call sites see no
+/// API change. Value-equality (default record) so equality helpers and
+/// <c>with</c>-writers behave exactly as before. Unlike
+/// <see cref="ElementModifiers"/> nothing merges Extras, so there is no Merge.
+///
+/// <para><b>Construction-cost tradeoff (spec 047 §4.4 / §11.6):</b> the common
+/// no-extras leaf now saves a reference slot (the §4.4 win), but each
+/// extra-setting fluent call (<c>.Grid()</c>, <c>.Background(Theme…)</c>,
+/// <c>.Animate()</c>, <c>.Provide()</c>, …) clones this sub-record <em>in
+/// addition to</em> the <see cref="Element"/> clone — so an element that sets
+/// several extras does N small <c>ElementExtras</c> allocations during
+/// construction where the inline layout did zero. Net win for the common case;
+/// watch the §11.6 byte-gate M2/M3 (callback/modifier-heavy leaves) when it is
+/// measured on the baseline box, as those are the construction-cost-sensitive
+/// scenarios.</para>
+/// </summary>
 /// <remarks>Spec 047 §4.4.</remarks>
 public record ElementExtras
 {

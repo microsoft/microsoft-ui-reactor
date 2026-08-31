@@ -251,6 +251,38 @@ public sealed class SourceMapPackageConsumerTests : IDisposable
         Assert.Contains("CALLSITE=<null>", debugOptOut, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A consumer pinned to an older C# language version still builds, and still gets
+    /// stamped call sites.
+    ///
+    /// <para>The concern this answers: the package turns the interceptor generator on by
+    /// default in Debug, so if <c>[InterceptsLocation]</c> required the latest language
+    /// version, simply upgrading Reactor would break any consumer pinned to an older
+    /// <c>LangVersion</c> — a silent breaking change for a supported project shape.</para>
+    ///
+    /// <para>Measured, not assumed: interceptors are gated by the
+    /// <c>InterceptorsNamespaces</c> opt-in the targets already supply, not by
+    /// <c>LangVersion</c>, so this passes today. It is here so that if a future Roslyn
+    /// ever adds a language-version gate, CI reports it as the consumer-breaking change
+    /// it would be, rather than a user discovering it on upgrade.</para>
+    /// </summary>
+    [Fact]
+    public void ConsumerPinnedToAnOlderLangVersionStillBuildsAndGetsStampedCallSites()
+    {
+        var appDir = Path.Join(_tempRoot, "langversion");
+        Directory.CreateDirectory(appDir);
+
+        WriteConsumerProject(appDir);
+        WriteConsumerProgram(appDir);
+        CreateNuGetConfig(appDir);
+
+        // Debug, so the generator is on by DEFAULT — the upgrade path a pinned consumer
+        // would actually hit, rather than one they opted into.
+        var pinned = RunConsumer(appDir, "Debug", "-p:LangVersion=13");
+
+        Assert.Contains($"CALLSITE=Program.cs:{TextBlockCallLine}", pinned, StringComparison.Ordinal);
+    }
+
     private void CreateNuGetConfig(string appDir)
     {
         RunHelpers.RunDotnet(

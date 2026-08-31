@@ -69,7 +69,7 @@ on every tick".
 | `EffectsFlushStart` / `Stop` | Component CLR type name | ETW `Render` keyword |
 | `StateChange` | Hook kind + value type | ETW `State` keyword |
 | `RenderError` | Component name + exception type only (message redacted) | ETW `Errors` keyword |
-| Per-element file:line | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (Debug builds) |
+| Per-element file:line | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (when source mapping is enabled at build time) |
 
 The reconcile pass also emits a counter summary on stop:
 
