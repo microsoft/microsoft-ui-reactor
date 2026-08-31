@@ -126,6 +126,27 @@ public class TierApplicabilityTests
     }
 
     /// <summary>
+    /// The asymmetric half of last-wins, and the one that is easy to get wrong: a <b>zero</b>
+    /// trailer carries no list line, so a parser that only overwrites <c>Names</c> when it sees a
+    /// list would leave the earlier trailer's entries in place and report "zero exclusions — here
+    /// are three of them". Two host invocations in one buffer is the packaged shim's normal case
+    /// (main run plus the identity-guard second pass), so this is a reachable shape rather than a
+    /// contrived one.
+    /// </summary>
+    [TestMethod]
+    public void ZeroTrailerAfterNonZero_DoesNotInheritTheOlderNames()
+    {
+        var report = SelfTestBatch.ExtractNotApplicableFixtures(
+            $"{Count}2\n{List}Packaged_IdentityGuard, Packaged_SettingsStoreRoundTrip\n"
+            + RunBody + $"{Count}0\n");
+
+        Assert.AreEqual(0, report.Count);
+        Assert.AreEqual(0, report.Names.Count,
+            "The later trailer reported zero exclusions, so the earlier trailer's names must not " +
+            $"survive it. Carried over: {string.Join(", ", report.Names)}");
+    }
+
+    /// <summary>
     /// A malformed later marker must not discard a value already parsed, or a stray line could
     /// silence the whole report. Mirrors the rule <c>SuiteElapsed_LastParseableMarkerWins</c>
     /// pins for the duration trailer.

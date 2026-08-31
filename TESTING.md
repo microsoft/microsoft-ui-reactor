@@ -549,11 +549,19 @@ The two steps do different jobs and neither replaces the other. The **declaratio
 *selection*: an undeclared fixture is offered to every tier, so the unpackaged host runs it, hits
 the gate, and emits a skip that lands in the run's amber skip inventory — a permanent entry
 describing a condition that is structural rather than incidental
-([#1154](https://github.com/microsoft/microsoft-ui-reactor/issues/1154)). The **gate** governs
-whether the body *asserts*: if this tier were ever launched without identity, it skips, and
-`IdentityDependentFixtures_Actually_Asserted` turns that into a red. Selection cannot do that job,
-because selection cannot observe identity — it keys off the entry assembly, and the unpackaged
-binary is a different binary.
+([#1154](https://github.com/microsoft/microsoft-ui-reactor/issues/1154)). The **gate** is what
+makes that mistake degrade gracefully: without it the fixture would reach `ApplicationData.Current`
+unpackaged and report an opaque `COMException` instead of a skip that states its reason.
+
+> **The gate is not a second, independent identity check — do not read it as one.** It and the
+> tier filter both call `PackagedIdentityFixtures.IsPackagedTier`, which compares the *entry
+> assembly name* and nothing else. Inside the packaged host it returns true whether or not the
+> process actually has MSIX identity, so the gate can never skip there. A mis-launched packaged
+> host — broken registration, stale alias, running the `.exe` straight out of the build output —
+> is caught by **`Packaged_IdentityGuard`**, which asserts `PackageRuntime.IsPackaged`,
+> `Package.Current` and the install location and **fails** when they don't hold. That failure, and
+> `IdentityDependentFixtures_Actually_Asserted` requiring the guard to have *passed*, is the whole
+> of the identity evidence.
 
 So `--list-fixtures` is **tier-dependent**: the unpackaged host does not list, and does not run,
 the fixtures declared `SelfTestTier.Packaged`. Both hosts print what they excluded, after
@@ -575,7 +583,9 @@ reason a *missing* trailer is never read as a count of zero — that would let a
 reporting satisfy the packaged assertion by silence.
 
 The gate keys off the entry assembly, not `PackageRuntime.IsPackaged`: a fixture that skipped
-whenever identity was missing would report green if this tier ever ran without it.
+whenever identity was missing would treat the fault as an excuse, reporting green where the tier
+should be red. The guard fixture fails instead — which is the behaviour that makes the requirement
+structural.
 
 If a fixture needs the *absence* of identity, `SelfTestTier.Unpackaged` is the mirror declaration;
 nothing uses it yet.

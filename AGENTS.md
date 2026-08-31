@@ -159,8 +159,11 @@ the alias stub inherits stdout while keeping package identity, which AUMID activ
 **Second gotcha:** a packaged fixture needs *two* declarations, not one. The
 `RequirePackagedTier` gate decides whether the body asserts; `SelfTestFixtureRegistry.TierRequirements`
 decides whether the unpackaged host runs it at all. Skip the second and the fixture self-skips
-into the amber skip inventory on every unpackaged run forever (issue #1154). Consequence worth
-knowing: **`--list-fixtures` is tier-dependent**, and both hosts print
+into the amber skip inventory on every unpackaged run forever (issue #1154). **The gate is not an
+independent identity check** — it and the tier filter share one entry-assembly predicate, so inside
+the packaged host it always returns true; `Packaged_IdentityGuard` failing its
+`PackageRuntime.IsPackaged` / `Package.Current` assertions is what detects a mis-launched packaged
+host. Consequence worth knowing: **`--list-fixtures` is tier-dependent**, and both hosts print
 `# Total not-applicable fixtures:` / `# Not applicable fixture list:` after `# Total failures:`
 so the exclusion is an assertable fact rather than a silent absence.
 

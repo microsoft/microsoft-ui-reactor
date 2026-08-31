@@ -17,13 +17,18 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// They previously ran everywhere and self-skipped, which restated a permanent structural
 /// fact as a per-run observation and left three entries in the amber skip inventory on
 /// every unpackaged run.</para>
-/// <para><b>The gate below is not redundant with that declaration.</b> Selection cannot
-/// observe identity — it keys off which binary is running, and the packaged host binary is
-/// a different binary. The gate is what catches the packaged host being launched
-/// <i>without</i> identity: a broken registration, a stale alias resolving to something
-/// else, someone running the .exe out of the build output. There the fixtures skip and
-/// <c>PackagedSelfTestBatch.IdentityDependentFixtures_Actually_Asserted</c> turns that into
-/// a red, rather than the suite reporting green while measuring nothing.</para>
+/// <para><b>Selection and the gate share one predicate, and that is deliberate.</b> Both
+/// <c>SelfTestFixtureRegistry.CurrentTier</c> and <see cref="RequirePackagedTier"/> read
+/// <see cref="IsPackagedTier"/>, which compares the <i>entry assembly name</i> and nothing
+/// else. So inside the packaged host the gate always returns <c>true</c> and never skips —
+/// including when that host was launched without MSIX identity. The gate is therefore
+/// <b>not</b> an independent identity check, and nothing here should be read as one.</para>
+/// <para><b>What actually catches a mis-launched packaged host is <see cref="IdentityGuard"/></b>
+/// — a broken registration, a stale alias, someone running the .exe straight out of the build
+/// output. It asserts <c>PackageRuntime.IsPackaged</c>, <c>Package.Current</c> and the install
+/// location, and <b>fails</b> when they do not hold;
+/// <c>PackagedSelfTestBatch.IdentityDependentFixtures_Actually_Asserted</c> additionally
+/// requires that fixture to have <i>passed</i>. That is the whole of the identity evidence.</para>
 /// <para><b>Why the gate keys off the entry assembly.</b> A fixture that merely skipped
 /// whenever <c>PackageRuntime.IsPackaged</c> was false would be worse than useless: it
 /// would treat the missing-identity case as an excuse rather than a fault, which is
@@ -62,13 +67,18 @@ internal static class PackagedIdentityFixtures
     /// in, so callers cannot invent three different spellings for the same concept and the
     /// name always points at the fixture a reader has to go look at. Call it as
     /// <c>RequirePackagedTier(H, this)</c>.</para>
-    /// <para><b>On the normal unpackaged path this is unreachable</b>, because the fixture is
-    /// declared <c>SelfTestTier.Packaged</c> and never selected there (issue #1154). It stays
-    /// because it guards a case selection cannot see: the <i>packaged</i> host running without
-    /// package identity. There the skip is what
-    /// <c>PackagedSelfTestBatch.IdentityDependentFixtures_Actually_Asserted</c> converts into a
-    /// failure — so this must keep skipping rather than assert, or that guard would never see
-    /// the condition it exists to report.</para>
+    /// <para><b>The skip arm is unreachable through either tier's runner</b>, and deliberately so.
+    /// In the packaged host <see cref="IsPackagedTier"/> is true, so this returns <c>true</c>
+    /// whether or not the process has MSIX identity — missing identity is reported by
+    /// <see cref="IdentityGuard"/> <i>failing</i>, not by anything here skipping. In the unpackaged
+    /// host the fixture is declared <c>SelfTestTier.Packaged</c> and never selected (issue #1154).
+    /// This is <b>not</b> a second, independent identity check.</para>
+    /// <para>It is kept because it is the safety net for a <i>missing or wrong tier
+    /// declaration</i>, which is the mistake a contributor will actually make. Drop the
+    /// <c>TierRequirements</c> entry and the fixture runs unpackaged again — with the gate it
+    /// degrades to a clean skip plus an amber inventory entry naming the reason, which is the
+    /// "you forgot to declare it" signal; without it, <c>ApplicationData.Current</c> throws and
+    /// the fixture reports an opaque <c>COMException</c> instead.</para>
     /// </remarks>
     internal static bool RequirePackagedTier(Harness h, SelfTestFixtureBase fixture)
     {

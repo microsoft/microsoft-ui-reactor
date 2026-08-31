@@ -1295,9 +1295,13 @@ public class SelfTestBatch
     /// <remarks>
     /// Last-wins on both markers, for the same reason <see cref="ExtractSuiteElapsedSeconds"/> is:
     /// a re-entered Host can emit the trailer twice and the final one describes the run being
-    /// reported on. The count is parsed independently of the list so the two can be <i>compared</i>
-    /// — a truncated stream that drops the list line while keeping the count is exactly the case
-    /// worth catching, and a parser that derived the count from the list could not see it.
+    /// reported on. A parseable count <b>starts</b> a new trailer and clears any names carried
+    /// from an earlier one — a zero trailer legitimately omits its list line, so without the reset
+    /// a later `0` would inherit the previous trailer's names and report an internally
+    /// contradictory "zero exclusions, here are three of them".
+    /// <para>The count is parsed independently of the list so the two can be <i>compared</i> — a
+    /// truncated stream that drops the list line while keeping the count is exactly the case worth
+    /// catching, and a parser that derived the count from the list could not see it.</para>
     /// </remarks>
     internal static NotApplicableReport ExtractNotApplicableFixtures(string stdout)
     {
@@ -1315,6 +1319,7 @@ public class SelfTestBatch
                         System.Globalization.CultureInfo.InvariantCulture, out var parsed))
                 {
                     count = parsed;
+                    names = [];
                 }
             }
             else if (line.StartsWith(NotApplicableListMarker, StringComparison.Ordinal))

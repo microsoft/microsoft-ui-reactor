@@ -1785,13 +1785,15 @@ internal static class SelfTestFixtureRegistry
     /// whose value depends on being rare, describing a condition that is structural rather than
     /// incidental. Declaring the requirement says the same thing once, as data.</para>
     ///
-    /// <para><b>Keep the runtime gate too.</b> A fixture declared here must still call
-    /// <c>PackagedIdentityFixtures.RequirePackagedTier</c>: this map governs <i>selection</i>,
-    /// the gate governs whether the body <i>asserts</i>, and the two are deliberately
-    /// independent. If the packaged host is ever launched without identity the gate skips and
-    /// <c>PackagedSelfTestBatch.IdentityDependentFixtures_Actually_Asserted</c> turns that into a
-    /// red — which a selection-only mechanism could not do, because selection cannot observe
-    /// identity.</para>
+    /// <para><b>Keep the runtime gate too, but not because it re-checks identity.</b> A fixture
+    /// declared here must still call <c>PackagedIdentityFixtures.RequirePackagedTier</c> — yet
+    /// that gate reads the <i>same</i> <c>IsPackagedTier</c> entry-assembly predicate
+    /// <see cref="CurrentTier"/> does, so once selection admits a fixture the gate necessarily
+    /// returns true. It is not an independent identity check, and a mis-launched packaged host is
+    /// caught by <c>Packaged_IdentityGuard</c> failing its <c>PackageRuntime.IsPackaged</c> /
+    /// <c>Package.Current</c> assertions instead. The gate earns its place as the safety net for
+    /// a <i>missing</i> declaration: delete an entry from this map and the fixture degrades to a
+    /// clean skip with a stated reason rather than an opaque <c>COMException</c>.</para>
     /// </summary>
     private static readonly Dictionary<string, SelfTestTier> TierRequirements =
         new(StringComparer.Ordinal)
@@ -1801,7 +1803,12 @@ internal static class SelfTestFixtureRegistry
             ["Packaged_WindowIconFromResource"] = SelfTestTier.Packaged,
         };
 
-    /// <summary>The tier this process is, derived from the same entry-assembly probe the fixtures use.</summary>
+    /// <summary>
+    /// The tier this process is. Derived from <c>PackagedIdentityFixtures.IsPackagedTier</c>, the
+    /// same entry-assembly probe <c>RequirePackagedTier</c> uses — so selection and that gate are
+    /// one predicate, not two independent ones. Neither observes MSIX identity;
+    /// <c>Packaged_IdentityGuard</c> is what does.
+    /// </summary>
     internal static SelfTestTier CurrentTier =>
         PackagedIdentityFixtures.IsPackagedTier ? SelfTestTier.Packaged : SelfTestTier.Unpackaged;
 
@@ -1833,8 +1840,12 @@ internal static class SelfTestFixtureRegistry
     /// The corpus this host deliberately does <b>not</b> run, named so the exclusion is a reported
     /// fact rather than a silent absence. The Host prints these as a TAP trailer and both wrappers
     /// assert on them: the unpackaged one that they really were excluded, the packaged one that
-    /// this list is <i>empty</i> — because a packaged run that filtered its identity fixtures out
-    /// would go green having measured nothing.
+    /// this list is <i>empty</i>. The packaged direction is a narrower guard than it first looks —
+    /// dropping the <i>whole</i> identity set is already caught by
+    /// <c>IdentityDependentFixtures_Actually_Asserted</c>, which fails when
+    /// <c>Packaged_IdentityGuard</c> is missing. What it adds is the selectively-misdeclared case
+    /// (a non-guard fixture dropped while the guard survives) and proof that the trailer itself
+    /// still works.
     /// </summary>
     public static string[] FixturesNotApplicableToCurrentTier =>
         Array.FindAll(AllFixtures, name => !AppliesToCurrentTier(name));

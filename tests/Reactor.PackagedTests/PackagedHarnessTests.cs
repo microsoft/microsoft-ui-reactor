@@ -310,6 +310,26 @@ public class PackagedHarnessTests
         Assert.IsNull(report.Count);
     }
 
+    /// <summary>
+    /// Two trailers in one buffer is this shim's <i>normal</i> case — <c>_fullOutput</c> holds the
+    /// main run and, under a narrow filter, the identity-guard second pass. A zero trailer omits
+    /// its list line, so a parser that only overwrites the names when it sees a list would let the
+    /// earlier trailer's entries survive and report "zero exclusions" alongside a stale list.
+    /// </summary>
+    [TestMethod]
+    public void Not_Applicable_Zero_Trailer_Clears_Earlier_Names()
+    {
+        var report = PackagedSelfTestBatch.ExtractNotApplicableFixtures(
+            PackagedSelfTestBatch.NotApplicableCountMarker + "2\n" +
+            PackagedSelfTestBatch.NotApplicableListMarker + "Packaged_IdentityGuard, Packaged_Other\n" +
+            "--- identity guard pass ---\n" +
+            PackagedSelfTestBatch.NotApplicableCountMarker + "0\n");
+
+        Assert.AreEqual(0, report.Count);
+        Assert.AreEqual(0, report.Names.Count,
+            $"Stale names survived a later zero trailer: {string.Join(", ", report.Names)}");
+    }
+
     // ── Host-directory override ────────────────────────────────────────
 
     /// <summary>
