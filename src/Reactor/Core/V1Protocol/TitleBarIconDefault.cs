@@ -71,14 +71,19 @@ internal static class TitleBarIconDefault
     /// Drops the resolved-path caches so the next resolve re-probes the filesystem.
     /// </summary>
     /// <remarks>
-    /// Called from the out-of-band resync, because <c>ApplyChrome</c> has just re-probed
-    /// for the window caption. Without this the two surfaces desynchronize permanently in
-    /// both directions: an asset that appears after a cached miss updates the caption
-    /// while the title bar stays blank, and one deleted after a cached hit leaves the
-    /// title bar showing an icon the caption has dropped. Keeping the probes in lockstep
-    /// is the whole point of sharing the resolver. Resync only runs on a spec change, so
-    /// this costs one or two <c>File.Exists</c> calls at a moment the window is already
-    /// making them.
+    /// <para>Test-only. Production code deliberately never invalidates, because the window
+    /// chain it mirrors does not either: <c>ReactorWindow.TryApplyExeIconFallback</c>
+    /// caches <em>both</em> outcomes for the window's lifetime — a hit via
+    /// <c>_exeFallbackHIcon</c> and a miss via <c>_exeFallbackAttempted</c> — on the stated
+    /// assumption that "neither source can appear while the window is alive". Re-probing
+    /// here would <em>create</em> the divergence it looks like it prevents: an
+    /// <c>AppIcon.ico</c> appearing mid-run would light up the title bar while the caption
+    /// kept serving its cached miss.</para>
+    /// <para>The two caches are still not scope-identical — this one is process-wide,
+    /// the window's is per-window — so a second window opened after the asset appeared
+    /// would re-probe for its caption while this memo stays cold. That residue is
+    /// accepted rather than engineered away: it needs the asset to materialize while the
+    /// app runs, which is the case both layers already document as out of scope.</para>
     /// </remarks>
     private static void InvalidateCaches()
     {
@@ -290,10 +295,10 @@ internal static class TitleBarIconDefault
         if (last.ElementOwned || last.AuthorOwned) return;
         if (!ReferenceEquals(control.IconSource, last.Source)) return;
 
-        // ApplyChrome has just re-probed the filesystem for the caption; re-probe here too
-        // rather than serving a cached hit or miss, so the two surfaces cannot drift.
-        InvalidateCaches();
-
+        // No cache invalidation here: the window's own fallback caches both a hit and a
+        // miss for the window's lifetime, so re-probing would make the title bar notice a
+        // mid-run asset change the caption cannot. See InvalidateCaches. A *declared*
+        // icon still re-resolves on change, because that cache is keyed on the WindowIcon.
         var projected = ResolveForSpec(spec);
         var written = ResolveForResync(projected);
         control.IconSource = written;

@@ -5158,7 +5158,7 @@ public partial record TitleBarElement(
             // The control corrupts the heap on teardown when the window is NOT in
             // content-extended mode, so the window flips ExtendsContentIntoTitleBar
             // back to true just before native close. (issue #537)
-            owningWindow?.MarkTitleBarControlPresent();
+            owningWindow?.MarkTitleBarControlPresent(titleBar);
 
             var explicitValue = owningWindow?.Spec.ExtendsContentIntoTitleBar;
             if (explicitValue == false) return;

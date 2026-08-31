@@ -570,6 +570,84 @@ internal static class TitleBarIconDefaultFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  ExtendsContentIntoTitleBar = false still tracks a window icon change.
+    //
+    //  A supported mode — Phase7WindowingFixtures covers several windows in it.
+    //  The element mounts a real WinUI TitleBar; Reactor just does not hand it to
+    //  SetTitleBar. The mount-time icon was always correct here. What was broken
+    //  is the out-of-band *push*: RegisterWindowTitleBar returns before
+    //  ApplyTitleBarHeightOption in this mode, and that call is the only thing
+    //  that ever assigned _titleBarControl — so the window held no reference to
+    //  push to and SyncTitleBarIcon was a permanent no-op. Nothing else would
+    //  have corrected it, because ReactorWindow.Update does not schedule a render.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultTracksIconWhenNotExtended(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var first = CreateExternalIcon(scratch);
+                var second = global::System.IO.Path.Join(scratch, "Second.ico");
+                global::System.IO.File.Copy(TestIcoPath, second, overwrite: true);
+
+                var comp = new BarComponent(static e => e);
+                var win = await OpenAndSettle(
+                    Spec("NotExtended") with
+                    {
+                        ExtendsContentIntoTitleBar = false,
+                        Icon = WindowIcon.FromPath(first),
+                    },
+                    () => comp);
+                try
+                {
+                    var bar = comp.Bar;
+                    H.Check("TitleBarIcon_NotExtended_BarMounted", bar is not null);
+                    if (bar is null) return;
+
+                    // Positive control. Without it this fixture silently degrades into a
+                    // duplicate of the extended-mode Follows fixture the moment anything
+                    // flips the window back to extended, and stops being evidence about
+                    // the mode it is named for.
+                    H.Check("TitleBarIcon_NotExtended_ModeInEffect",
+                        !win.NativeWindow.ExtendsContentIntoTitleBar);
+
+                    var before = IconUri(bar);
+                    Console.WriteLine($"# notExtended: before={before}");
+                    H.Check($"TitleBarIcon_NotExtended_InitialIcon (uri={before})",
+                        before is not null
+                        && before.LocalPath.EndsWith("External.ico", StringComparison.OrdinalIgnoreCase));
+
+                    // Window icon only. The element is untouched, so the push is the sole
+                    // route by which this can change.
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(second) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var after = IconUri(bar);
+                    Console.WriteLine($"# notExtended: after={after}");
+                    H.Check($"TitleBarIcon_NotExtended_TracksWindowIconChange (uri={after})",
+                        after is not null
+                        && after.LocalPath.EndsWith("Second.ico", StringComparison.OrdinalIgnoreCase));
+                    H.Check("TitleBarIcon_NotExtended_IconActuallyChanged", before != after);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  An element that owns its icon slot keeps it across a window icon change.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultExplicitSurvivesWindowIconChange(Harness h) : SelfTestFixtureBase(h)

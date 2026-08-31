@@ -156,6 +156,7 @@ public sealed partial class ReactorWindow : IDisposable
     // not to the declaration, so the two halves never disagree.
     private WindowTitleBarHeight? _effectiveTitleBarHeight;
     private WeakReference<FrameworkElement>? _titleBarControl;
+    private WeakReference<Microsoft.UI.Xaml.Controls.TitleBar>? _titleBarIconControl;
     private bool _titleBarControlExplicitHeight;
     private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
@@ -714,8 +715,7 @@ public sealed partial class ReactorWindow : IDisposable
     /// </param>
     private void SyncTitleBarIcon(WindowSpec spec)
     {
-        if (_titleBarControl is null || !_titleBarControl.TryGetTarget(out var control)) return;
-        if (control is not Microsoft.UI.Xaml.Controls.TitleBar bar) return;
+        if (_titleBarIconControl is null || !_titleBarIconControl.TryGetTarget(out var bar)) return;
 
         try
         {
@@ -1778,11 +1778,24 @@ public sealed partial class ReactorWindow : IDisposable
     /// including the <c>ExtendsContentIntoTitleBar=false</c> case where Reactor
     /// deliberately skips <c>SetTitleBar</c>. Drives
     /// <see cref="PrepareTitleBarForClose"/>. (issue #537)
+    /// <para>Also captures the control itself, which is what <see cref="SyncTitleBarIcon"/>
+    /// pushes the inherited icon to. Deliberately <b>not</b> reusing
+    /// <see cref="_titleBarControl"/>: that reference is assigned only by
+    /// <see cref="SetElementTitleBarHeight"/>, which <c>RegisterWindowTitleBar</c> skips
+    /// entirely when <see cref="WindowSpec.ExtendsContentIntoTitleBar"/> is explicitly
+    /// <c>false</c> (the native caption-height setter throws <c>ERROR_INVALID_STATE</c> on
+    /// a non-extended window). Reusing it would leave the icon push a permanent no-op in
+    /// that supported mode — the icon would be right at mount and then never track a
+    /// <c>WindowSpec.Icon</c> change. Tracking separately also keeps this out of the
+    /// height state machine, whose <c>sameControl</c> fast path would otherwise start
+    /// skipping caption writes it previously performed.</para>
     /// </summary>
-    internal void MarkTitleBarControlPresent()
+    /// <param name="control">The mounted WinUI <c>TitleBar</c> control.</param>
+    internal void MarkTitleBarControlPresent(Microsoft.UI.Xaml.Controls.TitleBar control)
     {
         _titleBarControlPresent = true;
         _titleBarControlMounted = true;
+        _titleBarIconControl = new WeakReference<Microsoft.UI.Xaml.Controls.TitleBar>(control);
     }
 
     /// <summary>
@@ -1802,6 +1815,7 @@ public sealed partial class ReactorWindow : IDisposable
     {
         _titleBarControlMounted = false;
         _titleBarControl = null;
+        _titleBarIconControl = null;
         _titleBarControlExplicitHeight = false;
         _titleBarControlHeightOwned = false;
         _elementTitleBarHeight = null;
