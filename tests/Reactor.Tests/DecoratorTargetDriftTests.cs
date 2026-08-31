@@ -175,7 +175,7 @@ public class DecoratorTargetDriftTests
     {
         // NOTE: no [CallerFilePath] parameter — an xUnit [Fact] with parameters is not
         // discovered at all, so the first version of this test silently never ran.
-        var thisFile = ThisFilePath();
+        //
         // The latch must be true ONLY if a decorator was registered. Setting it from
         // Register<TElement,TControl> — which every built-in factory reaches — makes it
         // true in every app and silently defeats the fast path, so DecoratorTarget goes
@@ -187,11 +187,11 @@ public class DecoratorTargetDriftTests
         // So this reads the source and checks WHERE the assignment appears. A bulk edit
         // that catches the neighbouring ordinary-control registration (exactly how this
         // regressed once) fails here.
-        var registry = Path.Combine(
-            Path.GetDirectoryName(thisFile)!, "..", "..",
-            "src", "Reactor", "Core", "V1Protocol", "ControlRegistry.cs");
+        var testDir = Path.GetDirectoryName(ThisFilePath())!;
+        var registry = Path.GetFullPath(
+            Path.Combine(testDir, @"..\..\src\Reactor\Core\V1Protocol\ControlRegistry.cs"));
 
-        var lines = File.ReadAllLines(Path.GetFullPath(registry));
+        var lines = File.ReadAllLines(registry);
 
         var owningMethods = lines
             .Select((line, i) => (line, i))

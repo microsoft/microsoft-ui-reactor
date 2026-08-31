@@ -97,11 +97,42 @@ public static class ReactorSourceMap
     public static SourceLocation? GetSource(UIElement control)
     {
         var element = Reconciler.GetElementTag(control);
-        while (element is not null && DecoratorTarget(element) is { } target)
+        return element is null ? null : UnwrapDecorators(element)?.CallSite;
+    }
+
+    /// <summary>
+    /// Walks a decorator chain to its innermost target, or returns null if the chain is
+    /// cyclic.
+    ///
+    /// <para>The walk has to be cycle-safe because <c>GetSourceTarget</c> is an
+    /// extension point: a third-party <see cref="IDecoratorElementHandler{TElement}"/>
+    /// can return its own element, or two decorators can point at each other. A naive
+    /// loop then spins forever — hanging the inspector here, and hanging RECONCILIATION
+    /// where <c>Reconciler.CallSiteChangedOnSkip</c> uses this on the shallow-skip path.
+    /// Both call sites share this helper so neither can regain that failure mode.</para>
+    ///
+    /// <para>Uses tortoise-and-hare rather than a visited set: this runs per element on
+    /// a hot path, so it must not allocate. A cycle means the resolver chain is
+    /// malformed and there is no meaningful creator to report, hence null rather than an
+    /// arbitrary participant.</para>
+    /// </summary>
+    internal static Element? UnwrapDecorators(Element element)
+    {
+        var slow = element;
+        var fast = element;
+
+        while (true)
         {
-            element = target;
+            if (DecoratorTarget(fast) is not { } firstStep) return fast;
+            fast = firstStep;
+
+            if (DecoratorTarget(fast) is not { } secondStep) return fast;
+            fast = secondStep;
+
+            slow = DecoratorTarget(slow)!;
+
+            if (ReferenceEquals(slow, fast)) return null;
         }
-        return element?.CallSite;
     }
 
     /// <summary>

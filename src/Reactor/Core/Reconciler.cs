@@ -656,14 +656,14 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>The call site <c>ReactorSourceMap.GetSource</c> would report for an element.</summary>
+    /// <remarks>
+    /// Shares <c>ReactorSourceMap.UnwrapDecorators</c> with <c>GetSource</c> so the two
+    /// cannot disagree, and so this path is cycle-safe: a third-party
+    /// <c>GetSourceTarget</c> that returns its own element would otherwise hang
+    /// reconciliation here, not merely the inspector.
+    /// </remarks>
     private static SourceLocation? EffectiveCallSite(Element element)
-    {
-        while (global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(element) is { } target)
-        {
-            element = target;
-        }
-        return element.CallSite;
-    }
+        => global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(element)?.CallSite;
 
     /// <summary>
     /// True when the element carries any reactive reference modifier — the imperative
