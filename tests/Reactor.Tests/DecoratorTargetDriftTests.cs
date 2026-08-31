@@ -202,12 +202,11 @@ public class DecoratorTargetDriftTests
             Assert.Contains("RegisterDecorator", m, StringComparison.Ordinal));
     }
 
-    private static string ThisFilePath([CallerFilePath] string path = "") => path;
-
     /// <summary>
     /// Resolves a repo-relative source file for a test that inspects source text.
     ///
-    /// <para>Cannot simply trust <c>[CallerFilePath]</c>: CI sets
+    /// <para>Deliberately walks up from the test binary rather than deriving the repo
+    /// root from <c>[CallerFilePath]</c>. CI sets
     /// <c>DeterministicSourcePaths</c> (Directory.Build.props), which rewrites caller
     /// paths through a PathMap to a non-rooted form like <c>/_/tests/…</c>. Passing that
     /// to <c>Path.GetFullPath(relative, basePath)</c> throws
@@ -227,15 +226,6 @@ public class DecoratorTargetDriftTests
         {
             throw new ArgumentException(
                 "Expected a repo-relative path.", nameof(repoRelativePath));
-        }
-
-        var fromCaller = ThisFilePath();
-        if (Path.IsPathRooted(fromCaller) && File.Exists(fromCaller))
-        {
-            var repoRoot = Path.GetFullPath(
-                Path.Combine("..", ".."), Path.GetDirectoryName(fromCaller)!);
-            var candidate = Path.GetFullPath(repoRelativePath, repoRoot);
-            if (File.Exists(candidate)) return candidate;
         }
 
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
