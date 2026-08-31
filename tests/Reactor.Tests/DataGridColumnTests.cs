@@ -81,8 +81,8 @@ public class DataGridColumnTests
     [CulturedFact(new[] { "en-US" })]
     public void Column_Format_Creates_FormatValue()
     {
-        // Pinned (issue #1159): "C2" is currency, so the separators and symbol follow
-        // the host locale — nl-NL renders "€ 42,50".
+        // Pinned: "C2" is currency, so the separators and symbol follow the host locale
+        // — nl-NL renders "€ 42,50".
         FieldDescriptor col = Column<TestProduct>("Price", p => p.Price, format: "C2");
         Assert.NotNull(col.FormatValue);
         var formatted = col.FormatValue!(42.5);
@@ -92,7 +92,7 @@ public class DataGridColumnTests
     [CulturedFact(new[] { "nl-NL" })]
     public void Column_Format_Honors_CurrentCulture()
     {
-        // Issue #1159. Companion to the en-US test above, which cannot detect the contract
+        // Companion to the en-US test above, which cannot detect the contract
         // changing: ColumnHelpers.FormatWithSpec passes a null IFormatProvider — i.e. the
         // current culture — and invariant would also render "42.50", so the en-US
         // assertion holds either way. A grid cell is user-facing, so a Dutch user should
@@ -260,8 +260,8 @@ public class DataGridColumnTests
     [CulturedFact(new[] { "en-US" })]
     public void AutoColumns_Uses_Registry_Formatter()
     {
-        // Pinned (issue #1159): the "N2" in this test's own formatter is
-        // culture-sensitive, so the expectation is host-dependent without the pin.
+        // Pinned: the "N2" in this test's own formatter is culture-sensitive, so the
+        // expectation is host-dependent without the pin.
         var registry = new TypeRegistry();
         registry.RegisterFormatter<double>(val => val is null ? "" : $"${(double)val:N2}");
 

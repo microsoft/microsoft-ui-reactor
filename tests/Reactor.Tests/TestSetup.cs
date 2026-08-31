@@ -29,7 +29,7 @@ internal static class TestSetup
     }
 
     /// <summary>
-    /// Issue #1159: CI only ever runs en-US, so culture-sensitive defects — a machine-readable
+    /// CI only ever runs en-US, so culture-sensitive defects — a machine-readable
     /// string built with the current culture, or a test asserting an en-US literal against a
     /// deliberately culture-sensitive path — are invisible to it and surface only on a
     /// contributor's non-en-US machine. Setting <c>REACTOR_TESTS_CULTURE</c> (e.g. <c>nl-NL</c>)

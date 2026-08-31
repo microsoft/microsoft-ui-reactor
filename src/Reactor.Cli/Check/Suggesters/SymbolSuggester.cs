@@ -334,10 +334,10 @@ internal sealed class SymbolSuggester : ISuggester
     /// Builds the "…, similarity 0.95" evidence string carried on a suggestion.
     /// </summary>
     /// <remarks>
-    /// Issue #1159: invariant on purpose. This text is printed by <c>mur check</c> and is
-    /// also written into the structured trace via <c>TraceWriter.WriteRuleFired</c>, so it
-    /// is machine-readable dev-tool output that must read the same on every machine —
-    /// under the current culture a comma-decimal locale emitted "similarity 0,95".
+    /// Invariant on purpose. This text is printed by <c>mur check</c> and is also written
+    /// into the structured trace via <c>TraceWriter.WriteRuleFired</c>, so it is
+    /// machine-readable dev-tool output that must read the same on every machine — under
+    /// the current culture a comma-decimal locale emitted "similarity 0,95".
     /// Guarded by <c>SymbolSuggesterEvidenceTests</c>.
     /// </remarks>
     internal static string SimilarityEvidence(string prefix, double score) =>

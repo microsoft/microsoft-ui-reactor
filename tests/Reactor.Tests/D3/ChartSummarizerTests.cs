@@ -227,7 +227,7 @@ public class ChartSummarizerTests
     [CulturedFact(new[] { "nl-NL" })]
     public void FormatSummary_Honors_CurrentCulture_Not_Invariant()
     {
-        // Issue #1159. ChartSummarizer.FormatValue formats with the current culture on
+        // ChartSummarizer.FormatValue formats with the current culture on
         // purpose: this string is surfaced to a screen reader, so a Dutch user should hear
         // "1,50", not "1.50".
         //

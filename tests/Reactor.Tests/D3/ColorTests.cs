@@ -223,7 +223,7 @@ public class ColorTests
     [CulturedFact(new[] { "nl-NL" })]
     public void ToRgb_With_Alpha_Is_Invariant_Under_Comma_Decimal_Culture()
     {
-        // Issue #1159: rgba() is machine-readable CSS, so it must not pick up the
+        // rgba() is machine-readable CSS, so it must not pick up the
         // ambient decimal separator. Interpolating the opacity with the current
         // culture emitted "rgba(128, 64, 32, 0,5)" on nl-NL/de-DE/fr-FR/pt-BR/… —
         // an invalid color for every consumer.

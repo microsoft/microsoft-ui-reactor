@@ -61,7 +61,7 @@ public class StatusCommandTests : IDisposable
     [CulturedFact(new[] { "nl-NL" })]
     public void Status_Percentage_Is_Invariant_Under_Comma_Decimal_Culture()
     {
-        // Issue #1159: `mur loc status` prints a dev-tool table that should read the same
+        // `mur loc status` prints a dev-tool table that should read the same
         // on every machine, but the coverage column was formatted with the current
         // culture and rendered "100,0%" on any comma-decimal locale.
         WriteResw("en-US", "Common", Resw(

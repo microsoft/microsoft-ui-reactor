@@ -41,10 +41,10 @@ public readonly struct D3Color
 
     public string ToHex() => $"#{R:X2}{G:X2}{B:X2}";
 
-    // Issue #1159: rgba()/rgb() is a machine-readable CSS format, so the opacity must not pick
-    // up the ambient decimal separator — interpolating the double with the current culture
-    // emitted the malformed "rgba(128, 64, 32, 0,5)" on every comma-decimal locale. Invariant
-    // also makes Parse(c.ToRgb()) round-trip everywhere, since Parse already reads invariant.
+    // rgba()/rgb() is a machine-readable CSS format, so the opacity must not pick up the
+    // ambient decimal separator — interpolating the double with the current culture emitted
+    // the malformed "rgba(128, 64, 32, 0,5)" on every comma-decimal locale. Invariant also
+    // makes Parse(c.ToRgb()) round-trip everywhere, since Parse already reads invariant.
     public string ToRgb() => Opacity < 1
         ? string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"rgba({R}, {G}, {B}, {Opacity})")
         : string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"rgb({R}, {G}, {B})");

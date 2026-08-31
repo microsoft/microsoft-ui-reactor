@@ -4,7 +4,7 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests.Tooling;
 
 /// <summary>
-/// Issue #1159. `mur check` suggestion evidence carries a similarity score. It is printed to
+/// `mur check` suggestion evidence carries a similarity score. It is printed to
 /// stdout and written into the structured trace (<c>TraceWriter.WriteRuleFired</c>), so it is
 /// machine-readable dev-tool output and must not pick up the ambient decimal separator.
 /// </summary>
