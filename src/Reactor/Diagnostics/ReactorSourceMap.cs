@@ -175,10 +175,10 @@ public static class ReactorSourceMap
         // this runs on the reconciler's shallow-skip path for every callback-free
         // element. The built-in shapes are checked too, since those are exactly the types
         // an app may have overridden even with no decorator of its own registered.
-        if (ControlRegistry.HasDecoratorRegistrations || IsBuiltInDecoratorShape(element))
+        if ((ControlRegistry.HasDecoratorRegistrations || IsBuiltInDecoratorShape(element))
+            && ControlRegistry.TryGetSourceTarget(element, out var registered))
         {
-            if (ControlRegistry.TryGetSourceTarget(element, out var registered))
-                return registered;
+            return registered;
         }
 
         return element switch
