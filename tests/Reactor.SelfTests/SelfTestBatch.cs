@@ -1401,7 +1401,7 @@ public class SelfTestBatch
             $"  (a) SelfTestFixtureRegistry.TierRequirements was emptied, so nothing is declared " +
             $"tier-specific any more and those fixtures are back to self-skipping into the amber " +
             $"inventory (issue #1154 restored).\n" +
-            $"  (b) SelfTestFixtureRegistry.CurrentTier mis-evaluates — if it answered 'Packaged' " +
+            $"  (b) PackagedIdentityFixtures.IsPackagedTier mis-evaluates — if it answered true " +
             $"here, the filter would be a no-op in both tiers while still looking like it worked.\n" +
             $"  (c) The packaged fixtures were deleted. Their coverage is the only thing that runs " +
             $"under real MSIX identity; restore them rather than this assertion.");

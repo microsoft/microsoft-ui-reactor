@@ -1744,6 +1744,9 @@ internal static class SelfTestFixtureRegistry
         // Positive control for the three-state verdict (issue #1061). Asserts nothing on purpose;
         // its SKIPPED result is what SelfTestBatch.SkippedFixtures_AreReported checks for.
         SkipVerdictPositiveControl.FixtureName,
+
+        // Guards TierRequirements below against outliving its fixtures (issue #1154).
+        TierDeclarationConsistencyFixture.FixtureName,
     ];
 
     // ════════════════════════════════════════════════════════════════════
@@ -1752,15 +1755,21 @@ internal static class SelfTestFixtureRegistry
 
     /// <summary>
     /// Which host a fixture needs. <see cref="SelfTestTier.Any"/> — the overwhelming default —
-    /// means "runs everywhere"; the other two mean the fixture is <b>structurally</b> unable to
-    /// assert anywhere else.
+    /// means "runs everywhere"; <see cref="SelfTestTier.Packaged"/> means the fixture is
+    /// <b>structurally</b> unable to assert in the unpackaged host.
     /// </summary>
     /// <remarks>
-    /// <see cref="SelfTestTier.Unpackaged"/> is unused today and is defined because the concept is
-    /// symmetric, not speculatively: Reactor branches on <c>PackageRuntime.IsPackaged</c> in both
-    /// directions (<c>FileSettingsStore</c> is the mirror of <c>PackagedSettingsStore</c>), so the
-    /// opposite gate is one declaration away. It costs no extra code path — the test is
-    /// <c>required == Any || required == current</c>.
+    /// <para><b>There is deliberately no <c>Unpackaged</c> member</b>, although the concept is
+    /// symmetric and Reactor does branch on <c>PackageRuntime.IsPackaged</c> in both directions.
+    /// An earlier revision defined one "because it costs no extra code path"; that was wrong.
+    /// <c>PackagedSelfTestBatch.EveryFixture_IsApplicableToThePackagedTier</c> requires the
+    /// packaged host to exclude <b>nothing</b>, so the first legitimately unpackaged-only fixture
+    /// would fail that assertion while behaving perfectly — an enum member that cannot be used
+    /// without breaking a test in another project, and one nothing here could test today because
+    /// no such fixture exists.</para>
+    /// <para>Adding it later is a small change, but it is <i>two</i> changes: this enum, and
+    /// relaxing that packaged assertion to reject only excluded <see cref="SelfTestTier.Packaged"/>
+    /// fixtures. Do both at once, with a real fixture to pin the contract against.</para>
     /// </remarks>
     internal enum SelfTestTier
     {
@@ -1769,9 +1778,6 @@ internal static class SelfTestFixtureRegistry
 
         /// <summary>Needs MSIX package identity; only <c>Reactor.PackagedTests</c> can run it.</summary>
         Packaged,
-
-        /// <summary>Needs the absence of package identity; only the unpackaged host can run it.</summary>
-        Unpackaged,
     }
 
     /// <summary>
@@ -1788,12 +1794,17 @@ internal static class SelfTestFixtureRegistry
     /// <para><b>Keep the runtime gate too, but not because it re-checks identity.</b> A fixture
     /// declared here must still call <c>PackagedIdentityFixtures.RequirePackagedTier</c> — yet
     /// that gate reads the <i>same</i> <c>IsPackagedTier</c> entry-assembly predicate
-    /// <see cref="CurrentTier"/> does, so once selection admits a fixture the gate necessarily
-    /// returns true. It is not an independent identity check, and a mis-launched packaged host is
-    /// caught by <c>Packaged_IdentityGuard</c> failing its <c>PackageRuntime.IsPackaged</c> /
-    /// <c>Package.Current</c> assertions instead. The gate earns its place as the safety net for
-    /// a <i>missing</i> declaration: delete an entry from this map and the fixture degrades to a
-    /// clean skip with a stated reason rather than an opaque <c>COMException</c>.</para>
+    /// <see cref="AppliesToCurrentTier"/> does, so once selection admits a fixture the gate
+    /// necessarily returns true. It is not an independent identity check, and a mis-launched
+    /// packaged host is caught by <c>Packaged_IdentityGuard</c> failing its
+    /// <c>PackageRuntime.IsPackaged</c> / <c>Package.Current</c> assertions instead. The gate
+    /// earns its place as the safety net for a <i>missing</i> declaration: delete an entry from
+    /// this map and the fixture degrades to a clean skip with a stated reason rather than an
+    /// opaque <c>COMException</c>.</para>
+    ///
+    /// <para>Every key must also name a live entry in <see cref="AllFixtures"/> — see
+    /// <see cref="StaleTierDeclarations"/> for why a stale one is invisible to every other guard
+    /// here.</para>
     /// </summary>
     private static readonly Dictionary<string, SelfTestTier> TierRequirements =
         new(StringComparer.Ordinal)
@@ -1804,23 +1815,54 @@ internal static class SelfTestFixtureRegistry
         };
 
     /// <summary>
-    /// The tier this process is. Derived from <c>PackagedIdentityFixtures.IsPackagedTier</c>, the
-    /// same entry-assembly probe <c>RequirePackagedTier</c> uses — so selection and that gate are
-    /// one predicate, not two independent ones. Neither observes MSIX identity;
-    /// <c>Packaged_IdentityGuard</c> is what does.
+    /// The tier <paramref name="fixture"/> requires; <see cref="SelfTestTier.Any"/> when undeclared.
     /// </summary>
-    internal static SelfTestTier CurrentTier =>
-        PackagedIdentityFixtures.IsPackagedTier ? SelfTestTier.Packaged : SelfTestTier.Unpackaged;
-
-    /// <summary>The tier <paramref name="fixture"/> requires; <see cref="SelfTestTier.Any"/> when undeclared.</summary>
     internal static SelfTestTier RequiredTier(string fixture) =>
         TierRequirements.TryGetValue(fixture, out var tier) ? tier : SelfTestTier.Any;
 
-    private static bool AppliesToCurrentTier(string fixture)
-    {
-        var required = RequiredTier(fixture);
-        return required == SelfTestTier.Any || required == CurrentTier;
-    }
+    /// <summary>
+    /// Whether this host runs <paramref name="fixture"/>.
+    /// </summary>
+    /// <remarks>
+    /// Keys off <c>PackagedIdentityFixtures.IsPackagedTier</c> — the <i>same</i> entry-assembly
+    /// probe <c>RequirePackagedTier</c> uses, so selection and that gate are one predicate rather
+    /// than two independent ones. Neither observes MSIX identity; <c>Packaged_IdentityGuard</c>
+    /// is what does.
+    /// </remarks>
+    private static bool AppliesToCurrentTier(string fixture) =>
+        RequiredTier(fixture) switch
+        {
+            SelfTestTier.Packaged => PackagedIdentityFixtures.IsPackagedTier,
+            _ => true,
+        };
+
+    /// <summary>
+    /// Names in <see cref="TierRequirements"/> that are not in <see cref="AllFixtures"/>, i.e.
+    /// declarations for fixtures that no longer exist. Empty is the healthy answer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Why a stale key is worse than dead weight.</b> Both filtered corpora scan
+    /// <see cref="AllFixtures"/>, so a key naming a deleted fixture is <i>invisible</i> to every
+    /// other guard in this mechanism: the unpackaged trailer just drops from 3 to 2 — still
+    /// satisfying <c>NotApplicableFixtures_AreExcludedFromThisTier</c>'s <c>&gt; 0</c> — and the
+    /// packaged trailer stays 0, so both new assertions pass while a fixture has silently
+    /// vanished from the corpus. That is precisely the partial-deletion case this whole
+    /// mechanism exists to make visible, and it would have walked straight through it.</para>
+    /// <para>Asserted by the <c>SelfTestRegistry_TierDeclarationsMatchCorpus</c> fixture, which
+    /// runs in both tiers.</para>
+    /// </remarks>
+    internal static string[] StaleTierDeclarations() =>
+        TierRequirements.Keys
+            .Where(name => Array.IndexOf(AllFixtures, name) < 0)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>
+    /// How many fixtures carry a tier declaration. Exposed so
+    /// <c>SelfTestRegistry_TierDeclarationsMatchCorpus</c> can assert the map is non-empty —
+    /// without that, its "no stale keys" check would pass vacuously against an emptied map.
+    /// </summary>
+    internal static int DeclaredTierFixtureCount => TierRequirements.Count;
 
     /// <summary>
     /// The corpus this host actually runs. Both <c>--self-test</c> and <c>--list-fixtures</c> use
@@ -3511,6 +3553,7 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks" => new CommandBarFlyoutWiringFixtures.TargetKeepsItsOwnCallbacks(harness),
 
         SkipVerdictPositiveControl.FixtureName => new SkipVerdictPositiveControl(harness),
+        TierDeclarationConsistencyFixture.FixtureName => new TierDeclarationConsistencyFixture(harness),
 
         _ => null,
     };

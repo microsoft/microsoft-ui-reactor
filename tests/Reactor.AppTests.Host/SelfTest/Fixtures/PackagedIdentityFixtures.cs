@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// fact as a per-run observation and left three entries in the amber skip inventory on
 /// every unpackaged run.</para>
 /// <para><b>Selection and the gate share one predicate, and that is deliberate.</b> Both
-/// <c>SelfTestFixtureRegistry.CurrentTier</c> and <see cref="RequirePackagedTier"/> read
+/// <c>SelfTestFixtureRegistry</c>'s tier filter and <see cref="RequirePackagedTier"/> read
 /// <see cref="IsPackagedTier"/>, which compares the <i>entry assembly name</i> and nothing
 /// else. So inside the packaged host the gate always returns <c>true</c> and never skips —
 /// including when that host was launched without MSIX identity. The gate is therefore

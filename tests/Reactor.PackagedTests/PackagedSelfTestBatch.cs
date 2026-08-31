@@ -291,7 +291,7 @@ public class PackagedSelfTestBatch
             $"tier':\n  {string.Join("\n  ", report.Names)}\n" +
             "Every fixture must be applicable here — this is the tier that runs the " +
             $"'{IdentityFixturePrefix}' set for real. The most likely cause is " +
-            "SelfTestFixtureRegistry.CurrentTier resolving to Unpackaged inside the packaged host, " +
+            "PackagedIdentityFixtures.IsPackagedTier evaluating false inside the packaged host, " +
             "which would remove exactly those fixtures from the run.");
     }
 

@@ -587,8 +587,11 @@ whenever identity was missing would treat the fault as an excuse, reporting gree
 should be red. The guard fixture fails instead — which is the behaviour that makes the requirement
 structural.
 
-If a fixture needs the *absence* of identity, `SelfTestTier.Unpackaged` is the mirror declaration;
-nothing uses it yet.
+If a fixture ever needs the *absence* of identity, adding a mirror `SelfTestTier.Unpackaged` is
+deliberately **two** changes, not one: the enum member, and relaxing
+`EveryFixture_IsApplicableToThePackagedTier` — which today requires the packaged host to exclude
+nothing, so the first unpackaged-only fixture would fail it while behaving correctly. Do both at
+once, with a real fixture to pin the contract against.
 
 ### Scope and knobs
 
