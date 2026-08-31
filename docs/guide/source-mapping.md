@@ -197,18 +197,98 @@ already stores -> `Element.CallSite`. It returns `null` when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.
 
+### Helper methods and `[ReactorSourceTransparent]`
+
+By default a helper is attributed to *itself*. In
+
+```csharp
+static Element MyHeader() => TextBlock("header");
+```
+
+the call site of `TextBlock` is inside `MyHeader`, so every caller of `MyHeader`
+collapses onto that one line. That default is deliberate: for most
+element-returning methods — a `Component.Render()` body above all — the body line
+is exactly where the author wrote the UI, and deferring it to the caller would be
+a regression.
+
+For a *thin forwarder*, whose own line carries no information anyone wants, mark
+it `[ReactorSourceTransparent]`:
+
+```csharp
+using Microsoft.UI.Reactor.Diagnostics;
+
+[ReactorSourceTransparent]
+internal static Element Field(string label, string value)
+    => HStack(TextBlock(label), TextBlock(value));
+
+// Each row now reports ITS OWN line, instead of both reporting
+// the HStack( line inside Field.
+var form = VStack(
+    Field("Name", name),
+    Field("Email", email));
+```
+
+Two rules do the work, and they compose. The generator emits no interceptor for
+DSL calls *inside* an annotated method, and instead intercepts calls *to* it,
+stamping the caller's line. An annotated helper calling another annotated helper
+therefore keeps deferring outward until it reaches a caller that is not
+annotated. First-stamp-wins still applies, so a helper that merely passes an
+element through does not relabel it.
+
+The annotated method has to be one the generator can emit a forwarding call to:
+
+| Requirement | Why |
+|---|---|
+| `static` | Intercepting an instance method needs an extension-method interceptor, a different shape that is not supported |
+| Returns an `Element` (including `Element?`) | There is nothing else to stamp |
+| `public` or `internal`, never `private` or `protected` | The interceptor lives in a generated file and must be able to name the method |
+| Not a local function | C# interceptors cannot intercept local functions |
+| Not declared in a `file`-local or generic type | Generated code cannot name the first; interceptors cannot be declared for the second |
+
+An annotation that fails any of these is reported as **`REACTOR_SOURCEMAP_001`**
+(a warning) rather than silently doing nothing, and attribution falls back to the
+helper's own line — so a bad annotation is never worse than no annotation. The
+usual `#pragma warning disable REACTOR_SOURCEMAP_001` suppresses it if you
+annotated a method deliberately knowing it cannot be honoured.
+
+The attribute also works across assemblies: it is read from metadata, so a
+library can annotate its own forwarders and consumers get the benefit.
+`Pending(fallback, child)` is annotated this way inside Reactor itself.
+
+### Bare strings and other implicit conversions
+
+`Element` declares `implicit operator Element(string)`, so `VStack("hi")` builds
+its child by calling `TextBlock` *inside Reactor's own assembly*. That call site
+cannot be intercepted — interceptors work on ordinary method calls, never on
+operators, and the operator body is already compiled into `Reactor.dll`.
+
+Instead, the enclosing factory call stamps the converted argument as it passes
+it through, using **the argument expression's own line**:
+
+```csharp
+VStack(
+    "a",   // reports this line
+    "b");  // and this one
+```
+
+This applies to any implicit user-defined conversion to `Element`, including ones
+your own types declare — not just `string`. Two limits are worth knowing:
+
+- It only fills in locations nothing else supplies. An argument that already
+  carries a `CallSite` (an explicitly written `TextBlock("x")`, or a conversion
+  whose operator body lives in *your* compilation and was therefore intercepted)
+  keeps the location it already had.
+- It applies only to arguments written at the call site. `VStack(myArray)` passes
+  an array you own, whose elements were converted where the array was built, so
+  nothing is stamped and your array is never written to.
+
 ### Known limitations
 
-- **Helper methods attribute to themselves.** A helper `MyHeader()` that
-  calls `TextBlock(...)` reports the line inside `MyHeader`, not the line
-  that called it — interceptors replace the call site, and that *is* the
-  call site. Wrap reusable UI in a named component when you want the
-  caller's identity.
-- **Bare-string children are not stamped.** `VStack("hi")` goes through
-  the implicit `string` → `Element` conversion, whose `TextBlock` call
-  lives in the framework, not your code. Those elements report `null`
-  rather than a misleading framework location. Write `TextBlock("hi")`
-  explicitly if you need the location.
+- **Unannotated helper methods attribute to themselves.** A helper `MyHeader()`
+  that calls `TextBlock(...)` reports the line inside `MyHeader`, not the line
+  that called it — interceptors replace the call site, and that *is* the call
+  site. Mark a thin forwarder `[ReactorSourceTransparent]` (above) to defer to
+  the caller, or wrap reusable UI in a named component.
 - **Wrapped third-party controls are not stamped.** A factory generated by
   `[GenerateReactorWrapper]` lives on the element type
   (`MyControlElement.MyControl(...)`), not on `Factories`, and is invisible
@@ -217,14 +297,15 @@ mapping, or when nothing stamped that element.
   Those elements report `null` rather than a wrong line. If you need a
   location for a wrapped control, call it from a named component and use
   the component's identity.
-- **Entry points outside `Factories` are not stamped.** A few
-  element-producing APIs live elsewhere — `Pending(fallback, child)`
-  (`PendingFactory`) and `intl.RichMessage(...)` (`IntlAccessor`) are the
-  built-in examples. They build their element by calling `Factories` from
-  inside Reactor's own assembly, where there is no call site in your
-  compilation to intercept, so the element they return reports `null`. The
-  elements you pass *into* them are ordinary call sites and are stamped
-  normally.
+- **Unannotated entry points outside `Factories` are not stamped.** A few
+  element-producing APIs live elsewhere — `PropertyGridDefaults`'s templates and
+  `intl.RichMessage(...)` (`IntlAccessor`) are built-in examples. They build their
+  element by calling `Factories` from inside Reactor's own assembly, where there is
+  no call site in your compilation to intercept, so the element they return reports
+  `null`. The elements you pass *into* them are ordinary call sites and are stamped
+  normally. A static forwarder in this position can opt in with
+  `[ReactorSourceTransparent]`, which is what `Pending(fallback, child)` does;
+  `intl.RichMessage` cannot, because it is an instance method.
 
 ## Tips
 

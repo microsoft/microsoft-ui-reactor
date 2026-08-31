@@ -32,8 +32,11 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <!-- RS2008: this component ships no diagnostics of its own, so the analyzer
-         release-tracking files do not apply. -->
+    <!-- RS2008: the one diagnostic this component reports (REACTOR_SOURCEMAP_001)
+         belongs to the source-map generator, not to the Reactor.Analyzers bundle, so
+         it is documented in docs/guide/source-mapping.md rather than tracked in that
+         package's AnalyzerReleases files. Adding a row there would claim an id the
+         analyzer assembly does not declare. -->
     <NoWarn>$(NoWarn);RS2008</NoWarn>
   </PropertyGroup>
 

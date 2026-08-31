@@ -45,6 +45,31 @@ Conventions for contributors:
   `ReactorSourceMap.Enabled` switch, which the devtools verb sets automatically. When
   the runtime switch is off, no locations are populated; in Release, the generator is
   not loaded unless the MSBuild property is explicitly enabled.
+- **`[ReactorSourceTransparent]` — attribute a thin helper to its caller, and per-argument
+  source mapping for implicitly converted children (spec 010).** Two follow-ups that close
+  the attribution gaps the initial source-mapping drop documented.
+
+  Marking a static, `Element`-returning helper
+  `[Microsoft.UI.Reactor.Diagnostics.ReactorSourceTransparent]` stops the generator
+  stamping DSL calls inside it and instead stamps calls *to* it, so a forwarder like
+  `Field(label, value)` reports each caller's own line rather than collapsing every call
+  site onto one line in its body. Annotated helpers compose: the deferral walks outward
+  until it reaches a caller that is not annotated. It is deliberately opt-in — for a
+  `Component.Render()` body the body line is the correct answer. An annotation the
+  generator cannot honour (a `private` helper, an instance method, a local function)
+  reports **`REACTOR_SOURCEMAP_001`** and leaves attribution exactly as it would be
+  without the attribute, so a bad annotation is never worse than none. The attribute is
+  read from metadata, so libraries can annotate their own forwarders;
+  `PendingFactory.Pending` now does, and its callers get a location where they
+  previously got `null`.
+
+  Separately, arguments that reach an `Element` parameter through an implicit
+  user-defined conversion — `VStack("a", "b")`, via `implicit operator Element(string)` —
+  are now stamped at **the argument's own line**. Those elements are built by an operator
+  body inside Reactor, which interceptors structurally cannot reach (they intercept
+  ordinary method calls, never operators), so they previously reported no location at
+  all. Applies to any user-defined conversion to `Element`, respects first-stamp-wins,
+  and never writes into a `params` array the caller owns.
 - **`NavigationTransition.Entrance()` — the WinUI page-refresh motion as a first-class
   transition (spec 011 §6).** The incoming page slides up a short distance and fades in,
   mirroring WinUI's `EntranceNavigationTransitionInfo`. `EntranceTransition` is public and

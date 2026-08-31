@@ -118,37 +118,40 @@ public sealed class SourceMapInterceptorTests : IDisposable
         Assert.NotNull(control.CallSite);
     }
 
-    // ── Route-independent coverage hole: the string → Element operator ────
+    // ── Route-independent coverage hole: CLOSED by argument-position stamping ──
 
     [Fact]
-    public void BareStringChild_IsNotAttributedToUserCode()
+    public void BareStringChild_IsAttributedToTheStringsOwnLine()
     {
-        // Element.cs:383 declares
+        // Element.cs declares
         //     public static implicit operator Element(string text) => Factories.TextBlock(text);
-        // so a bare-string child's TextBlock call site lives inside Element.cs,
-        // in the Reactor assembly, NOT in user code. The generator only sees
-        // invocations in the CONSUMER's syntax trees, so that call site is never
-        // intercepted at all.
+        // so a bare-string child's TextBlock call site lives inside Element.cs, in the
+        // Reactor assembly, NOT in user code — and it is structurally unreachable:
+        // interceptors cannot intercept operators, and the operator's body is already
+        // compiled into Reactor.dll. Layer 1 therefore left these children null.
+        //
+        // Argument-position stamping closes it from the other side: the enclosing
+        // VStack call IS intercepted, and its interceptor stamps the converted argument
+        // on the way past, using the argument expression's own line.
         var stack = VStack("bare string child"); var thisLine = Line();
 
         var child = global::System.Linq.Enumerable.Single(stack.Children);
 
-        // Positive control: the VStack call site itself IS attributed here, so a
-        // null child stamp is a real hole and not the generator having silently
-        // emitted nothing for this file.
-        Assert.Equal(thisLine, stack.CallSite!.Value.LineNumber);
+        Assert.Equal(thisLine, child.CallSite!.Value.LineNumber);
+        Assert.EndsWith("SourceMapInterceptorTests.cs", child.CallSite!.Value.FilePath, StringComparison.Ordinal);
 
-        // The hole: no stamp at all. Route B yields null rather than a
-        // confidently-wrong location inside framework source.
-        Assert.Null(child.CallSite);
+        // The container still reports its own call site, so the child's stamp is an
+        // addition rather than the outer stamp leaking downwards.
+        Assert.Equal(thisLine, stack.CallSite!.Value.LineNumber);
     }
 
     [Fact]
     public void ExplicitTextBlockChild_IsAttributed_PositiveControlForTheHole()
     {
-        // Same shape, but the child is written explicitly. This is the control
-        // that proves the null above is caused by the implicit operator and not
-        // by children being unreachable in general.
+        // Same shape, but the child is written explicitly. This is the control that
+        // proves the stamp above did not come from the argument path taking over
+        // children in general — an explicit child is stamped by its OWN interceptor,
+        // and first-stamp-wins keeps the argument path from relabelling it.
         var stack = VStack(TextBlock("explicit child")); var thisLine = Line();
 
         var child = global::System.Linq.Enumerable.Single(stack.Children);
@@ -292,18 +295,24 @@ public sealed class SourceMapInterceptorTests : IDisposable
         Assert.Equal(stackLine, stack.CallSite!.Value.LineNumber);
     }
 
-    // ── Helper-method attribution (reported, not aspirational) ────────────
+    // ── Helper-method attribution: the UNANNOTATED default ────────────────
 
     private static TextBlockElement MyHeader() => TextBlock("header");
 
     [Fact]
-    public void HelperMethod_AttributesToTheHelperNotItsCaller()
+    public void UnannotatedHelperMethod_StillAttributesToTheHelperNotItsCaller()
     {
         var element = MyHeader(); var callerLine = Line();
 
-        // Interceptors replace the CALL SITE, and the call site of TextBlock is
-        // inside MyHeader. So Route B reports the helper's own line — exactly the
-        // same limitation CallerInfo has. Asserted rather than assumed.
+        // Interceptors replace the CALL SITE, and the call site of TextBlock is inside
+        // MyHeader. So an ordinary helper reports the helper's own line — exactly the
+        // same limitation CallerInfo has.
+        //
+        // This is the NEGATIVE CONTROL for [ReactorSourceTransparent] (see
+        // TransparentHelperTests): deferring to the caller is opt-in, not the default,
+        // because for most element-returning methods — a Component.Render() body above
+        // all — the body line is the correct answer. If the attribute ever became a
+        // blanket rule for helpers, this test reddens.
         Assert.NotEqual(callerLine, element.CallSite!.Value.LineNumber);
         Assert.True(element.CallSite!.Value.LineNumber < callerLine);
     }

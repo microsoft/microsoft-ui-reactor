@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hooks;
 
@@ -24,7 +25,16 @@ public static class PendingFactory
     /// The child subtree is always mounted so its hooks register with the scope. The
     /// element simply chooses which rendered tree to show — there is no unwinding
     /// of rendering, and no reconciler involvement.
+    /// <para>
+    /// Marked <see cref="ReactorSourceTransparentAttribute"/> (spec 010) because it is a
+    /// pure forwarder: the element is really built by the <c>Component&lt;,&gt;</c> call
+    /// on the next line, inside Reactor's own assembly, where no consumer call site
+    /// exists to intercept. Without the annotation a <c>Pending(...)</c> element reports
+    /// no location at all. With it, the interceptor in the consumer's compilation stamps
+    /// the line they wrote <c>Pending(</c> on, which is the answer they were looking for.
+    /// </para>
     /// </remarks>
+    [ReactorSourceTransparent]
     public static Element Pending(Element fallback, Element child)
         => Microsoft.UI.Reactor.Factories.Component<PendingComponent, PendingProps>(new PendingProps(fallback, child));
 }
