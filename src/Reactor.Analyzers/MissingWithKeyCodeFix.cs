@@ -12,7 +12,8 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// <summary>
 /// Code fix for <see cref="MissingWithKeyAnalyzer"/> (<c>REACTOR_DSL_001</c>) —
 /// appends <c>.WithKey(...)</c> to the lambda body of a <c>.Select(item => …)</c>
-/// projection whose result is consumed by a layout factory.
+/// or Reactor <c>ForEach(items, item => …)</c> projection whose result is
+/// consumed by a layout factory.
 ///
 /// Three offers, in order of preference:
 /// <list type="number">
@@ -53,11 +54,7 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
             var selectInv = root.FindNode(diagnostic.Location.SourceSpan) as InvocationExpressionSyntax;
             if (selectInv is null) continue;
 
-            // The analyzer only fires when:
-            //   .Select(lambda) — single argument, lambda body is an Invocation
-            // so we can re-derive the same shape without re-running the heuristic.
-            if (selectInv.ArgumentList.Arguments.Count != 1) continue;
-            if (selectInv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) continue;
+            if (!TryGetProjectionLambda(selectInv, out var lambda)) continue;
 
             var body = lambda.Body;
             ExpressionSyntax? targetExpr = null;
@@ -122,7 +119,7 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
     static string? ExtractParameterName(LambdaExpressionSyntax lambda) => lambda switch
     {
         SimpleLambdaExpressionSyntax simple => simple.Parameter.Identifier.ValueText,
-        ParenthesizedLambdaExpressionSyntax paren when paren.ParameterList.Parameters.Count == 1
+        ParenthesizedLambdaExpressionSyntax paren when paren.ParameterList.Parameters.Count >= 1
             => paren.ParameterList.Parameters[0].Identifier.ValueText,
         _ => null,
     };
@@ -153,6 +150,47 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
 
         return null;
     }
+
+    static bool TryGetProjectionLambda(InvocationExpressionSyntax inv, out LambdaExpressionSyntax lambda)
+    {
+        lambda = null!;
+
+        var methodName = inv.Expression switch
+        {
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            IdentifierNameSyntax id => id.Identifier.ValueText,
+            _ => null,
+        };
+        if (methodName is null) return false;
+
+        var lambdaIndex = methodName switch
+        {
+            "Select" => 0,
+            "ForEach" when IsReactorForEachReceiver(inv.Expression) => 1,
+            _ => -1,
+        };
+        if (lambdaIndex < 0) return false;
+        if (inv.ArgumentList.Arguments.Count <= lambdaIndex) return false;
+        if (inv.ArgumentList.Arguments[lambdaIndex].Expression is not LambdaExpressionSyntax found) return false;
+
+        lambda = found;
+        return true;
+    }
+
+    static bool IsReactorForEachReceiver(ExpressionSyntax invoked) => invoked switch
+    {
+        IdentifierNameSyntax => true,
+        MemberAccessExpressionSyntax m => SimpleName(m.Expression) == "Factories",
+        _ => false,
+    };
+
+    static string? SimpleName(ExpressionSyntax expr) => expr switch
+    {
+        IdentifierNameSyntax id => id.Identifier.ValueText,
+        MemberAccessExpressionSyntax m => m.Name.Identifier.ValueText,
+        QualifiedNameSyntax q => q.Right.Identifier.ValueText,
+        _ => null,
+    };
 
     static bool ImplementsIReactorKeyed(ITypeSymbol type)
     {

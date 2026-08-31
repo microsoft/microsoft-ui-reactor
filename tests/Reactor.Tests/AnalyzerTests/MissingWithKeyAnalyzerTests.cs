@@ -107,6 +107,80 @@ namespace TestApp
     }
 
     [Fact]
+    public async Task Fires_On_ForEach_Into_FlexColumn_Without_WithKey()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn({|REACTOR_DSL_001:ForEach(rows, (r, i) => TextBlock(r.Text))|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_On_Qualified_Factories_ForEach_Without_WithKey()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => Factories.FlexColumn({|REACTOR_DSL_001:Factories.ForEach(rows, (r, i) => Factories.TextBlock(r.Text))|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_When_WithKey_Already_Present_On_ForEach()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, (r, i) => TextBlock(r.Text).WithKey(r.Id)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task No_Diagnostic_When_Select_Goes_To_Plain_List()
     {
         // The result of Select is materialized to List<Element>, not consumed
@@ -229,6 +303,55 @@ namespace TestApp
             TestCode = before,
             FixedCode = after,
             CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.Id}_WithKey_Item_Id",
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Offers_WithKey_Item_On_ForEach()
+    {
+        var before = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text) : IReactorKeyed
+    {
+        string IReactorKeyed.Key => Id;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn({|REACTOR_DSL_001:ForEach(rows, (r, i) => TextBlock(r.Text))|});
+    }
+}";
+
+        var after = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text) : IReactorKeyed
+    {
+        string IReactorKeyed.Key => Id;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, (r, i) => TextBlock(r.Text).WithKey(r)));
+    }
+}";
+
+        await new CSharpCodeFixTest<MissingWithKeyAnalyzer, MissingWithKeyCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.Id}_WithKey_Item",
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 

@@ -10,14 +10,16 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
-/// <c>REACTOR_DSL_001</c> — when a LINQ <c>Select</c> projects to Reactor
-/// elements and the result is materialized into a layout container's children
+/// <c>REACTOR_DSL_001</c> — when a LINQ <c>Select</c> or Reactor
+/// <c>ForEach</c> projects to Reactor elements and the result is materialized
+/// into a layout container's children
 /// (<c>VStack</c>, <c>HStack</c>, <c>FlexRow</c>, <c>FlexColumn</c>, <c>Grid</c>, ...),
 /// every projected element should call <c>.WithKey(...)</c>. Without keys, the
 /// reconciler matches positionally and re-mounts every row on insert / reorder
 /// — losing focus, animation state, and ElementRef identity.
 ///
-/// Heuristic: a <c>Select(x =&gt; expr)</c> invocation whose lambda body
+/// Heuristic: a <c>Select(x =&gt; expr)</c> or Reactor <c>ForEach(items, x =&gt; expr)</c>
+/// invocation whose lambda body
 /// (a) returns a Reactor element-shaped expression, and
 /// (b) contains no <c>.WithKey(</c> token anywhere in the lambda body.
 ///
@@ -44,7 +46,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         Id,
         "Dynamic list item missing .WithKey",
-        "Element produced by Select(...) doesn't call .WithKey(...). Without a key, the reconciler matches by position and re-mounts every row on insert/reorder, losing focus, animation, and ElementRef state.",
+        "Element produced by Select(...) or ForEach(...) doesn't call .WithKey(...). Without a key, the reconciler matches by position and re-mounts every row on insert/reorder, losing focus, animation, and ElementRef state.",
         "Reactor.Dsl",
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
@@ -73,8 +75,13 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     {
         var inv = (InvocationExpressionSyntax)ctx.Node;
 
-        if (inv.Expression is not MemberAccessExpressionSyntax member) return;
-        var methodName = member.Name.Identifier.ValueText;
+        var methodName = inv.Expression switch
+        {
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            IdentifierNameSyntax id => id.Identifier.ValueText,
+            _ => null,
+        };
+        if (methodName is null) return;
 
         // REACTOR_DSL_002 — a present-but-non-stable key. The analysis is
         // triggered by each `.WithKey(...)` invocation (not the enclosing
@@ -89,16 +96,21 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // REACTOR_DSL_001 — a missing key on a Select projection.
         if (methodName == "Select")
         {
-            AnalyzeMissingKey(ctx, inv);
+            AnalyzeMissingKey(ctx, inv, lambdaIndex: 0);
+            return;
+        }
+
+        if (methodName == "ForEach" && IsReactorForEachReceiver(inv.Expression))
+        {
+            AnalyzeMissingKey(ctx, inv, lambdaIndex: 1);
         }
     }
 
     // <snippet:with-key-rule>
-    static void AnalyzeMissingKey(SyntaxNodeAnalysisContext ctx, InvocationExpressionSyntax inv)
+    static void AnalyzeMissingKey(SyntaxNodeAnalysisContext ctx, InvocationExpressionSyntax inv, int lambdaIndex)
     {
-        // Single lambda argument with an invocation body.
-        if (inv.ArgumentList.Arguments.Count != 1) return;
-        if (inv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) return;
+        if (inv.ArgumentList.Arguments.Count <= lambdaIndex) return;
+        if (inv.ArgumentList.Arguments[lambdaIndex].Expression is not LambdaExpressionSyntax lambda) return;
 
         var body = lambda.Body;
         if (body is BlockSyntax block) body = ExtractReturnExpression(block) ?? body;
