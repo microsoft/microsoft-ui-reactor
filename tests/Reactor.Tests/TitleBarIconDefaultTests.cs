@@ -394,6 +394,52 @@ public class TitleBarIconDefaultTests : IDisposable
     }
 
     [Fact]
+    public void SuppressIcon_Wins_Over_A_Directly_Initialized_Icon()
+    {
+        // Both are public init properties, so a record initializer can set both. The
+        // fluent pair normalizes the other field, but the contract on SuppressIcon says
+        // it suppresses the icon entirely — so the contradictory record must honour it.
+        var contradictory = new TitleBarElement("t")
+        {
+            Icon = new SymbolIconData("Home"),
+            SuppressIcon = true,
+        };
+
+        Assert.Null(TitleBarIconDefault.Project(contradictory));
+    }
+
+    [Fact]
+    public void Invalidating_Caches_Picks_Up_An_Asset_That_Appeared_After_A_Cached_Miss()
+    {
+        // The window re-probes the filesystem on every ApplyChrome. A cache that never
+        // revalidates would let the caption show an icon the title bar does not, which is
+        // exactly what sharing the resolver exists to prevent.
+        TitleBarIconDefault.ResetForTests();
+        Assert.Null(TitleBarIconDefault.ResolveDefault());
+
+        WriteFile("Assets", "AppIcon.ico");
+
+        // Still the cached miss until something invalidates.
+        Assert.Null(TitleBarIconDefault.ResolveDefault());
+
+        TitleBarIconDefault.ResetForTests();
+        Assert.NotNull(TitleBarIconDefault.ResolveDefault());
+    }
+
+    [Fact]
+    public void Invalidating_Caches_Drops_An_Asset_That_Was_Removed_After_A_Cached_Hit()
+    {
+        var asset = WriteFile("Assets", "AppIcon.ico");
+        TitleBarIconDefault.ResetForTests();
+        Assert.NotNull(TitleBarIconDefault.ResolveDefault());
+
+        global::System.IO.File.Delete(asset);
+        TitleBarIconDefault.ResetForTests();
+
+        Assert.Null(TitleBarIconDefault.ResolveDefault());
+    }
+
+    [Fact]
     public void NoIcon_Clears_A_Previously_Declared_Icon()
     {
         var el = new TitleBarElement("t").Icon(new SymbolIconData("Home")).NoIcon();

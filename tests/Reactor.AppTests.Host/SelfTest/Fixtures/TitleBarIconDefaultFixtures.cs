@@ -765,4 +765,55 @@ internal static class TitleBarIconDefaultFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  The null-setter case that value identity alone cannot see. Starting with
+    //  no window icon, the inherited projection is null and a setter writing
+    //  IconSource = null leaves the control holding the same null reference --
+    //  so "is it still the value I wrote?" answers yes for the author's null.
+    //  Adding a window icon must still not overwrite it.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultDoesNotClobberNullSetterIcon(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // No convention asset and no spec icon: the projection starts null, which is
+            // the arrangement that makes the author's null indistinguishable by identity.
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var icon = CreateExternalIcon(scratch);
+
+                var comp = new BarComponent(static e => e.Set(static b => b.IconSource = null));
+                var win = await OpenAndSettle(Spec("NullSetter"), () => comp);
+                try
+                {
+                    var bar = comp.Bar;
+                    H.Check("TitleBarIcon_NullSetter_BarMounted", bar is not null);
+                    if (bar is null) return;
+
+                    H.Check("TitleBarIcon_NullSetter_StartsNull", bar.IconSource is null);
+
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(icon) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    Console.WriteLine($"# nullsetter: after={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_NullSetter_NotOverwrittenByWindowIcon",
+                        bar.IconSource is null);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
 }

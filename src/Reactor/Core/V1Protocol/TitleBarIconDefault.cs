@@ -65,20 +65,44 @@ internal static class TitleBarIconDefault
         ResetForTests();
     }
 
-    internal static void ResetForTests()
+    internal static void ResetForTests() => InvalidateCaches();
+
+    /// <summary>
+    /// Drops the resolved-path caches so the next resolve re-probes the filesystem.
+    /// </summary>
+    /// <remarks>
+    /// Called from the out-of-band resync, because <c>ApplyChrome</c> has just re-probed
+    /// for the window caption. Without this the two surfaces desynchronize permanently in
+    /// both directions: an asset that appears after a cached miss updates the caption
+    /// while the title bar stays blank, and one deleted after a cached hit leaves the
+    /// title bar showing an icon the caption has dropped. Keeping the probes in lockstep
+    /// is the whole point of sharing the resolver. Resync only runs on a spec change, so
+    /// this costs one or two <c>File.Exists</c> calls at a moment the window is already
+    /// making them.
+    /// </remarks>
+    private static void InvalidateCaches()
     {
         Volatile.Write(ref s_declared, null);
         Volatile.Write(ref s_convention, null);
     }
 
     /// <summary>
-    /// The icon a <c>TitleBar</c> element should actually show: its own declaration
-    /// when it has one, nothing when it opted out, otherwise the app's icon.
+    /// The icon a <c>TitleBar</c> element should actually show: nothing when it opted
+    /// out, its own declaration when it has one, otherwise the app's icon.
     /// </summary>
+    /// <remarks>
+    /// <see cref="TitleBarElement.SuppressIcon"/> is checked <em>first</em>. Both it and
+    /// <see cref="TitleBarElement.Icon"/> are public <c>init</c> properties, so a record
+    /// initializer or <c>with</c> expression can set both — and the documented contract
+    /// for <c>SuppressIcon</c> is that it suppresses the icon entirely. The fluent
+    /// <c>.Icon()</c> / <c>.NoIcon()</c> pair normalizes the other field, so this
+    /// ordering only matters for the directly-constructed contradictory case, where
+    /// honouring the suppression is what the property says it does.
+    /// </remarks>
     internal static IconData? Project(TitleBarElement element)
     {
-        if (element.Icon is not null) return element.Icon;
         if (element.SuppressIcon) return null;
+        if (element.Icon is not null) return element.Icon;
         return ResolveDefault();
     }
 
@@ -89,10 +113,22 @@ internal static class TitleBarIconDefault
     /// <c>Reconciler.SetElementTagIfNeeded</c>, so <c>GetElementTag</c> returns null for
     /// exactly the common case this feature exists to serve.
     /// </summary>
-    private sealed class AppliedIcon(IconData? value, bool elementOwned, Microsoft.UI.Xaml.Controls.IconSource? source)
+    private sealed class AppliedIcon(
+        IconData? value,
+        bool elementOwned,
+        bool elementHasSetters,
+        Microsoft.UI.Xaml.Controls.IconSource? source)
     {
         internal readonly IconData? Value = value;
         internal readonly bool ElementOwned = elementOwned;
+
+        /// <summary>
+        /// Whether the element carried any raw <c>.Set(...)</c> setters. Those run after
+        /// every descriptor prop and may write <c>IconSource</c>, including writing it to
+        /// <c>null</c> deliberately — which value identity cannot detect, because a null
+        /// the setter wrote is indistinguishable from a null this type wrote.
+        /// </summary>
+        internal readonly bool ElementHasSetters = elementHasSetters;
 
         /// <summary>
         /// The exact <c>IconSource</c> instance this type wrote. Used by the out-of-band
@@ -143,7 +179,8 @@ internal static class TitleBarIconDefault
 
         var written = IconResolver.ResolveIconSource(projected);
         control.IconSource = written;
-        s_applied.AddOrUpdate(control, new AppliedIcon(projected, owned, written));
+        s_applied.AddOrUpdate(control, new AppliedIcon(
+            projected, owned, element.Setters.Length > 0, written));
     }
 
     /// <summary>
@@ -165,15 +202,26 @@ internal static class TitleBarIconDefault
     /// No-op for a control this type never wrote to, and for a title bar whose element
     /// declared its own icon or opted out with <c>.NoIcon()</c> — those own the slot.
     /// <para>
-    /// Also a no-op when the control no longer carries the <c>IconSource</c> this type
-    /// last wrote. Raw <c>.Set(...)</c> setters run <em>after</em> every descriptor prop
-    /// — the documented "setters apply last / win" rule (spec 058,
-    /// <c>DescriptorHandler.ApplySetters</c>) — so an author writing
+    /// Also a no-op when the element carries raw <c>.Set(...)</c> setters, or when the
+    /// control no longer holds the <c>IconSource</c> this type last wrote. Setters run
+    /// <em>after</em> every descriptor prop — the documented "setters apply last / win"
+    /// rule (spec 058, <c>DescriptorHandler.ApplySetters</c>) — so
     /// <c>.Set(b =&gt; b.IconSource = ...)</c> legitimately owns the slot even though the
     /// element declares no <c>Icon</c>. This push runs out of band from
     /// <c>ApplyChrome</c> with no setters to replay, so it must not clobber a value it
     /// did not write. Mirrors <c>ReactorWindow._reactorAppliedIcon</c>, which gates the
     /// window's own icon teardown the same way.
+    /// </para>
+    /// <para>
+    /// The setter check is narrower than it looks, and deliberately so. Identity settles
+    /// every case except one: when the projection this type wrote was itself
+    /// <c>null</c>, a setter that deliberately wrote <c>IconSource = null</c> holds the
+    /// same reference this type would have, so the two are indistinguishable. The push
+    /// declines only in that window. Skipping for <em>any</em> setter-bearing element
+    /// would be wrong — <c>.Set(b =&gt; capture = b)</c> is a common idiom that has
+    /// nothing to do with the icon, and treating it as ownership disables inheritance
+    /// wholesale. A title bar caught by the narrow case still picks the icon up on its
+    /// next render, where <see cref="Apply"/> re-projects and the setters re-run after it.
     /// </para>
     /// </remarks>
     internal static void ResyncInheritedIcon(
@@ -182,12 +230,25 @@ internal static class TitleBarIconDefault
         if (!s_applied.TryGetValue(control, out var last) || last.ElementOwned) return;
         if (!ReferenceEquals(control.IconSource, last.Source)) return;
 
+        // Identity settles every case but one: when the projection this type wrote was
+        // itself null, "the author's null" and "our null" are the same reference, so a
+        // setter that deliberately wrote IconSource = null is indistinguishable from no
+        // setter at all. Decline the push only in that narrow window. Anything broader —
+        // skipping for any setter-bearing element — would disable inheritance for the
+        // very common `.Set(b => capture = b)` idiom.
+        if (last.Source is null && last.ElementHasSetters) return;
+
+        // ApplyChrome has just re-probed the filesystem for the caption; re-probe here too
+        // rather than serving a cached hit or miss, so the two surfaces cannot drift.
+        InvalidateCaches();
+
         var projected = ResolveForSpec(spec);
         if (EqualityComparer<IconData?>.Default.Equals(last.Value, projected)) return;
 
         var written = IconResolver.ResolveIconSource(projected);
         control.IconSource = written;
-        s_applied.AddOrUpdate(control, new AppliedIcon(projected, elementOwned: false, written));
+        s_applied.AddOrUpdate(control, new AppliedIcon(
+            projected, elementOwned: false, elementHasSetters: false, written));
     }
 
     /// <summary>

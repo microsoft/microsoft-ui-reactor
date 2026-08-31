@@ -185,6 +185,14 @@ public sealed class WindowIcon
     /// <c>false</c> when the source names no existing file. See the remarks on
     /// <see cref="Apply"/> for why a <c>ms-appx:</c> URI that maps to nothing is a
     /// failure rather than something to pass through.
+    /// <para><b>One permissive edge:</b> <c>true</c> does <em>not</em> guarantee the path
+    /// exists. When the existence probe itself throws — a locked-down filesystem, a path
+    /// shape the platform rejects — <see cref="TryResolveExistingPath"/> reports success
+    /// with the original, unverified source, so that a filesystem which merely refuses
+    /// the probe never suppresses an icon that would otherwise have worked. Callers that
+    /// do more than hand the result to a catch-wrapped <c>SetIcon</c> must defend against
+    /// an unusable value; the <c>TitleBar</c> projection does so by building its URI with
+    /// <c>Uri.TryCreate</c> rather than <c>new Uri</c>.</para>
     /// </returns>
     internal bool TryResolvePath(out string resolved)
     {
