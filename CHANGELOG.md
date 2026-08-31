@@ -90,6 +90,23 @@ Conventions for contributors:
 
 ### Fixed
 
+- **`D3Color.ToRgb()` / `ToString()` no longer emit malformed CSS on comma-decimal locales
+  (issue #1159).** The `double` opacity was interpolated with the ambient culture, so
+  `rgba(...)` — a machine-readable format — came out as `rgba(128, 64, 32, 0,5)` on nl-NL,
+  de-DE, fr-FR, pt-BR and friends. Because `Parse` has always read invariant, that stray
+  comma also broke the round-trip in a silent way: `Parse` saw five components instead of
+  four and read the opacity from `"0"`, turning a half-transparent color fully transparent
+  rather than throwing. Both arms now format with `CultureInfo.InvariantCulture`, matching
+  `PathBuilder.F()` elsewhere in the same D3 port. `mur loc status` had the same defect in
+  its coverage column (`100,0%`) and is fixed alongside. Output on en-US hosts is unchanged,
+  which is exactly why CI — whose runner is en-US — was structurally blind to this. The
+  regression guards are `[CulturedFact(new[] { "nl-NL" })]`, which pins the culture per test
+  case and therefore bites on the en-US CI runner too; `REACTOR_TESTS_CULTURE` additionally
+  re-runs the whole suite under another locale to find the tests nobody thought to pin (see
+  [`TESTING.md`](TESTING.md)). Deliberately *not* changed: `CellRenderers.FormatValue` and
+  `ChartSummarizer.FormatValue` stay on the current culture, because a grid cell and a
+  screen-reader summary are user-facing text — a Dutch user should read `1,5`.
+
 - **A fully-skipped selftest fixture is no longer reported as PASSED (issue #1061).**
   `Harness.Skip` emits `ok <name> # SKIP <reason>`, and `SelfTestBatch.ParseTap` treated any
   `ok ` line as proof the fixture had asserted something — satisfying the very flag that exists

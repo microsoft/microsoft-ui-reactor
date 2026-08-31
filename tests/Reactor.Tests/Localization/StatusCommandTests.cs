@@ -58,8 +58,7 @@ public class StatusCommandTests : IDisposable
         Assert.Contains("100.0%", output);
     }
 
-    [Fact]
-    [UseCulture("nl-NL")]
+    [CulturedFact(new[] { "nl-NL" })]
     public void Status_Percentage_Is_Invariant_Under_Comma_Decimal_Culture()
     {
         // Issue #1159: `mur loc status` prints a dev-tool table that should read the same

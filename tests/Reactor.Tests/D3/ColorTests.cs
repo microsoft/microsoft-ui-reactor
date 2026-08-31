@@ -220,8 +220,7 @@ public class ColorTests
         Assert.Equal("rgba(128, 64, 32, 0.5)", c.ToRgb());
     }
 
-    [Fact]
-    [UseCulture("nl-NL")]
+    [CulturedFact(new[] { "nl-NL" })]
     public void ToRgb_With_Alpha_Is_Invariant_Under_Comma_Decimal_Culture()
     {
         // Issue #1159: rgba() is machine-readable CSS, so it must not pick up the
@@ -234,8 +233,7 @@ public class ColorTests
         Assert.Equal("rgba(128, 64, 32, 0.5)", c.ToString());
     }
 
-    [Fact]
-    [UseCulture("nl-NL")]
+    [CulturedFact(new[] { "nl-NL" })]
     public void ToRgb_Round_Trips_Through_Parse_Under_Comma_Decimal_Culture()
     {
         // Parse has always read invariant, so the culture-sensitive ToRgb() broke the

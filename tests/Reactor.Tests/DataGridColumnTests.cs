@@ -78,8 +78,7 @@ public class DataGridColumnTests
         Assert.Equal(typeof(double), col.FieldType);
     }
 
-    [Fact]
-    [UseCulture("en-US")]
+    [CulturedFact(new[] { "en-US" })]
     public void Column_Format_Creates_FormatValue()
     {
         // Pinned (issue #1159): "C2" is currency, so the separators and symbol follow
@@ -243,8 +242,7 @@ public class DataGridColumnTests
         Assert.Equal(80, idCol.Width);
     }
 
-    [Fact]
-    [UseCulture("en-US")]
+    [CulturedFact(new[] { "en-US" })]
     public void AutoColumns_Uses_Registry_Formatter()
     {
         // Pinned (issue #1159): the "N2" in this test's own formatter is

@@ -35,8 +35,8 @@ internal static class TestSetup
     /// contributor's non-en-US machine. Setting <c>REACTOR_TESTS_CULTURE</c> (e.g. <c>nl-NL</c>)
     /// reproduces that locally without changing the OS locale.
     /// <para>
-    /// This sets the *default* culture for the assembly, so a <c>[UseCulture]</c> test — which
-    /// assigns the thread's culture directly — still wins over it.
+    /// This sets the *default* culture for the assembly, so a <c>[CulturedFact]</c> test — which
+    /// pins the culture around its own invocation — still wins over it.
     /// </para>
     /// </summary>
     private static void ApplyRequestedCulture()

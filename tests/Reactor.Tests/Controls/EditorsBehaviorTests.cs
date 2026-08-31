@@ -683,8 +683,7 @@ public class EditorsBehaviorTests
         Assert.Equal(Color.Blue, captured);
     }
 
-    [Fact]
-    [UseCulture("en-US")]
+    [CulturedFact(new[] { "en-US" })]
     public void Combo_NameMapping_Uses_ToString()
     {
         var factory = Editors.Combo(new object?[] { 1, 2.5, "x" });

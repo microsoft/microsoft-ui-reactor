@@ -288,8 +288,7 @@ public class CellRenderersTests
     //  via Text and Number renderers.
     // ══════════════════════════════════════════════════════════════
 
-    [Fact]
-    [UseCulture("en-US")]
+    [CulturedFact(new[] { "en-US" })]
     public void FormatValue_IFormattable_Without_Format_Uses_Default_ToString()
     {
         // format == null + IFormattable value → fall through to ToString().
@@ -314,8 +313,7 @@ public class CellRenderersTests
         Assert.Equal("True", el.Content);
     }
 
-    [Fact]
-    [UseCulture("en-US")]
+    [CulturedFact(new[] { "en-US" })]
     public void FormatValue_Format_With_Decimal()
     {
         // Use "G" — it's the documented general-format specifier for decimal.
@@ -333,8 +331,7 @@ public class CellRenderersTests
         Assert.Equal("1.5", el.Content);
     }
 
-    [Fact]
-    [UseCulture("nl-NL")]
+    [CulturedFact(new[] { "nl-NL" })]
     public void FormatValue_Honors_CurrentCulture_Not_Invariant()
     {
         // Issue #1159. CellRenderers.FormatValue passes CultureInfo.CurrentCulture on
