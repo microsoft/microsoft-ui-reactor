@@ -273,6 +273,15 @@ internal static class TitleBarIconDefault
     /// <c>.Set(b =&gt; capture = b)</c> idiom does not own the icon, and a setter added on
     /// a later render would not be reflected on a skipped write.
     /// </para>
+    /// <para>
+    /// Unlike <see cref="Apply"/>, this does <em>not</em> skip when the projected value is
+    /// unchanged. The value is a <see cref="Uri"/>, so it compares equal even when the
+    /// bytes at that path have been replaced — and <c>ApplyChrome</c> has just reloaded
+    /// the caption's <c>HICON</c> from disk, so skipping here would leave the title bar
+    /// showing a stale decode of a file the caption has already refreshed. That is exactly
+    /// the divergence sharing the resolver exists to prevent. The rebuild is bounded to
+    /// spec changes; the per-render fast path in <see cref="Apply"/> is untouched.
+    /// </para>
     /// </remarks>
     internal static void ResyncInheritedIcon(
         Microsoft.UI.Xaml.Controls.TitleBar control, WindowSpec spec)
@@ -286,12 +295,33 @@ internal static class TitleBarIconDefault
         InvalidateCaches();
 
         var projected = ResolveForSpec(spec);
-        if (EqualityComparer<IconData?>.Default.Equals(last.Value, projected)) return;
-
-        var written = IconResolver.ResolveIconSource(projected);
+        var written = ResolveForResync(projected);
         control.IconSource = written;
         s_applied.AddOrUpdate(control, new AppliedIcon(
             projected, elementOwned: false, authorOwned: false, written));
+    }
+
+    /// <summary>
+    /// Builds the <c>IconSource</c> for the out-of-band resync, bypassing the XAML image
+    /// cache for image-backed icons.
+    /// </summary>
+    /// <remarks>
+    /// A plain <c>BitmapImage</c> is keyed on its URI, so re-creating one for a path whose
+    /// bytes changed can serve the previous decode. <c>IgnoreImageCache</c> forces the
+    /// re-read. Only this path pays for it: normal renders go through
+    /// <see cref="IconResolver.ResolveIconSource(IconData?)"/> and keep the cache.
+    /// </remarks>
+    private static Microsoft.UI.Xaml.Controls.IconSource? ResolveForResync(IconData? projected)
+    {
+        if (projected is not ImageIconData image)
+            return IconResolver.ResolveIconSource(projected);
+
+        var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage
+        {
+            CreateOptions = Microsoft.UI.Xaml.Media.Imaging.BitmapCreateOptions.IgnoreImageCache,
+        };
+        bitmap.UriSource = image.Source;
+        return new Microsoft.UI.Xaml.Controls.ImageIconSource { ImageSource = bitmap };
     }
 
     /// <summary>

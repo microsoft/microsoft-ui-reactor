@@ -888,6 +888,85 @@ internal static class TitleBarIconDefaultFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  Same path, different bytes. ApplyChrome reloads the caption's HICON from
+    //  disk on every apply, so if the resync skips on Uri equality the title bar
+    //  keeps a stale decode of a file the caption has already refreshed — the
+    //  exact divergence sharing the resolver is meant to prevent.
+    //
+    //  The oracle is decoded pixel size, not the URI: the path is unchanged by
+    //  construction, so only the decode can tell the two states apart. The test
+    //  icon decodes at 32x32 and the replacement PNG at 256x256.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultRefreshesReplacedFile(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // Ships with the WinUI framework package rather than this host, so the path is
+            // asserted rather than assumed — a moved asset must fail loudly, not silently
+            // turn this fixture into a no-op.
+            var replacement = global::System.IO.Path.Join(
+                AppContext.BaseDirectory, "Microsoft.UI.Xaml", "Assets", "NoiseAsset_256x256_PNG.png");
+            H.Check($"TitleBarIcon_Replace_ReplacementAssetPresent ({replacement})",
+                global::System.IO.File.Exists(replacement));
+            if (!global::System.IO.File.Exists(replacement)) return;
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var iconPath = global::System.IO.Path.Join(scratch, "Swappable.ico");
+                global::System.IO.File.Copy(TestIcoPath, iconPath, overwrite: true);
+
+                var comp = new BarComponent(static e => e);
+                var win = await OpenAndSettle(
+                    Spec("Replace") with { Icon = WindowIcon.FromPath(iconPath) }, () => comp);
+                try
+                {
+                    var bar = comp.Bar;
+                    H.Check("TitleBarIcon_Replace_BarMounted", bar is not null);
+                    if (bar is null) return;
+
+                    var before = await DecodedSize(bar);
+                    Console.WriteLine($"# replace: before={before}");
+                    H.Check($"TitleBarIcon_Replace_InitialDecode (px={before})", before > 0);
+
+                    // Same path, different bytes. Changing Title (not Icon) is what makes
+                    // this discriminating: the projected Uri is identical, so only a
+                    // forced re-decode can move the reading.
+                    global::System.IO.File.Copy(replacement, iconPath, overwrite: true);
+                    win.Update(win.Spec with { Title = "Replace (updated)" });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(300);
+
+                    var after = await DecodedSize(bar);
+                    Console.WriteLine($"# replace: after={after}");
+                    H.Check($"TitleBarIcon_Replace_PicksUpNewBytes (before={before} after={after})",
+                        after > 0 && after != before);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+
+        /// <summary>Decoded pixel width of the title bar's current image icon, or 0.</summary>
+        private static async Task<int> DecodedSize(WinUI.TitleBar bar)
+        {
+            if ((bar.IconSource as WinUI.ImageIconSource)?.ImageSource is not BitmapImage bmp)
+                return 0;
+            var (opened, _, w, _) = await AwaitDecode(bmp);
+            return opened ? w : 0;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  Toggling a MOUNTED title bar between the inherited default, .NoIcon()
     //  and an explicit icon. Every transition must reach the control.
     //
