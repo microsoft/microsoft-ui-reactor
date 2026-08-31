@@ -25,9 +25,10 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// with no icon, which is exactly the behaviour it had before this feature existed.</para>
 /// <para><b>Why <c>ImageIconData</c> and not a live <c>IconSource</c>.</b>
 /// <see cref="ImageIconData"/> is a record over a <see cref="Uri"/>, so the projected
-/// value compares equal across renders and the descriptor's <c>OneWay</c> diff skips
-/// the rewrite. Handing back a fresh <c>IconSource</c> instead would rebuild a
-/// <c>BitmapImage</c> — and re-run its decode — on every single render.</para>
+/// value compares equal across renders and <see cref="Apply"/> can skip the rewrite by
+/// comparing it against what it last wrote. Handing back a fresh <c>IconSource</c>
+/// instead would rebuild a <c>BitmapImage</c> — and re-run its decode — on every single
+/// render, because two freshly-built ones never compare equal.</para>
 /// </remarks>
 internal static class TitleBarIconDefault
 {
@@ -88,10 +89,16 @@ internal static class TitleBarIconDefault
     /// <c>Reconciler.SetElementTagIfNeeded</c>, so <c>GetElementTag</c> returns null for
     /// exactly the common case this feature exists to serve.
     /// </summary>
-    private sealed class AppliedIcon(IconData? value, bool elementOwned)
+    private sealed class AppliedIcon(IconData? value, bool elementOwned, Microsoft.UI.Xaml.Controls.IconSource? source)
     {
         internal readonly IconData? Value = value;
         internal readonly bool ElementOwned = elementOwned;
+
+        /// <summary>
+        /// The exact <c>IconSource</c> instance this type wrote. Used by the out-of-band
+        /// resync to tell "still mine" from "someone else has since written here".
+        /// </summary>
+        internal readonly Microsoft.UI.Xaml.Controls.IconSource? Source = source;
     }
 
     private static readonly ConditionalWeakTable<Microsoft.UI.Xaml.Controls.TitleBar, AppliedIcon>
@@ -134,8 +141,9 @@ internal static class TitleBarIconDefault
             return;
         }
 
-        control.IconSource = IconResolver.ResolveIconSource(projected);
-        s_applied.AddOrUpdate(control, new AppliedIcon(projected, owned));
+        var written = IconResolver.ResolveIconSource(projected);
+        control.IconSource = written;
+        s_applied.AddOrUpdate(control, new AppliedIcon(projected, owned, written));
     }
 
     /// <summary>
@@ -156,24 +164,32 @@ internal static class TitleBarIconDefault
     /// <remarks>
     /// No-op for a control this type never wrote to, and for a title bar whose element
     /// declared its own icon or opted out with <c>.NoIcon()</c> — those own the slot.
+    /// <para>
+    /// Also a no-op when the control no longer carries the <c>IconSource</c> this type
+    /// last wrote. Raw <c>.Set(...)</c> setters run <em>after</em> every descriptor prop
+    /// — the documented "setters apply last / win" rule (spec 058,
+    /// <c>DescriptorHandler.ApplySetters</c>) — so an author writing
+    /// <c>.Set(b =&gt; b.IconSource = ...)</c> legitimately owns the slot even though the
+    /// element declares no <c>Icon</c>. This push runs out of band from
+    /// <c>ApplyChrome</c> with no setters to replay, so it must not clobber a value it
+    /// did not write. Mirrors <c>ReactorWindow._reactorAppliedIcon</c>, which gates the
+    /// window's own icon teardown the same way.
+    /// </para>
     /// </remarks>
     internal static void ResyncInheritedIcon(
         Microsoft.UI.Xaml.Controls.TitleBar control, WindowSpec spec)
     {
         if (!s_applied.TryGetValue(control, out var last) || last.ElementOwned) return;
+        if (!ReferenceEquals(control.IconSource, last.Source)) return;
 
         var projected = ResolveForSpec(spec);
         if (EqualityComparer<IconData?>.Default.Equals(last.Value, projected)) return;
 
-        control.IconSource = IconResolver.ResolveIconSource(projected);
-        s_applied.AddOrUpdate(control, new AppliedIcon(projected, elementOwned: false));
+        var written = IconResolver.ResolveIconSource(projected);
+        control.IconSource = written;
+        s_applied.AddOrUpdate(control, new AppliedIcon(projected, elementOwned: false, written));
     }
 
-    /// <summary>
-    /// The app's icon as an <see cref="IconData"/>, or <c>null</c> when none is
-    /// resolvable. See the type-level remarks for precedence and the one divergence
-    /// from the window chain.
-    /// </summary>
     /// <summary>
     /// The app's icon as an <see cref="IconData"/>, or <c>null</c> when none is
     /// resolvable. See the type-level remarks for precedence and the one divergence
@@ -247,8 +263,8 @@ internal static class TitleBarIconDefault
     /// template's 16x16 <c>PART_Icon</c> viewbox downscales, which is the
     /// quality-preserving direction.</para>
     /// </remarks>
-    private static ImageIconData BuildIconData(string resolvedPath) =>
-        new(BuildUri(resolvedPath));
+    private static ImageIconData? BuildIconData(string resolvedPath)
+        => BuildUri(resolvedPath) is { } uri ? new ImageIconData(uri) : null;
 
     /// <summary>
     /// Prefers <c>ms-appx:///</c> for anything under the app root, falling back to a
@@ -272,18 +288,32 @@ internal static class TitleBarIconDefault
     /// <see cref="ConventionProbeRoot"/>. Anything outside that root takes the
     /// <c>file:</c> form, which is built straight from the verified path and needs no
     /// mapping assumption at all.</para>
+    /// <para>Returns <c>null</c> rather than throwing when the path will not form a URI.
+    /// <c>WindowIcon.TryResolvePath</c> is permissive by design at one edge: when its
+    /// filesystem probe itself fails (a locked-down or malformed path) it reports success
+    /// with the original, unverified source, so that a filesystem which merely refuses
+    /// the probe never suppresses an icon that would otherwise have worked. That is
+    /// sound for the window, whose consumer hands the value to <c>SetIcon</c> inside a
+    /// catch — but this projection runs inside a render, where an escaping
+    /// <c>UriFormatException</c> would take the frame down over a cosmetic icon. A path
+    /// that cannot become a URI degrades to no title-bar icon, matching what the rest of
+    /// this type does when nothing is resolvable.</para>
     /// </remarks>
-    private static Uri BuildUri(string resolvedPath)
+    private static Uri? BuildUri(string resolvedPath)
     {
-        if (TryGetAppRelativeSegments(resolvedPath, out var relative))
-            return new Uri("ms-appx:///" + relative);
+        if (TryGetAppRelativeSegments(resolvedPath, out var relative)
+            && Uri.TryCreate("ms-appx:///" + relative, UriKind.Absolute, out var packaged))
+        {
+            return packaged;
+        }
 
-        return new Uri(resolvedPath);
+        return Uri.TryCreate(resolvedPath, UriKind.Absolute, out var file) ? file : null;
     }
 
     /// <summary>Test seam for <see cref="BuildUri"/> — the URI form is a decision worth
-    /// asserting on directly, without staging a whole window to observe it.</summary>
-    internal static Uri BuildUriForTests(string resolvedPath) => BuildUri(resolvedPath);
+    /// asserting on directly, without staging a whole window to observe it. Null when the
+    /// path will not form a URI at all.</summary>
+    internal static Uri? BuildUriForTests(string resolvedPath) => BuildUri(resolvedPath);
 
     /// <summary>
     /// Expresses <paramref name="fullPath"/> as a slash-separated, percent-escaped path

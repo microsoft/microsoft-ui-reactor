@@ -206,7 +206,7 @@ public class TitleBarIconDefaultTests : IDisposable
         try
         {
             TitleBarIconDefault.SetBaseDirectoryForTests(AppContext.BaseDirectory);
-            var uri = TitleBarIconDefault.BuildUriForTests(asset);
+            var uri = Assert.IsType<Uri>(TitleBarIconDefault.BuildUriForTests(asset));
 
             Assert.Equal("ms-appx", uri.Scheme);
             Assert.Equal("ms-appx:///Assets/sub%20dir%231/AppIcon.ico", uri.OriginalString);
@@ -412,7 +412,7 @@ public class TitleBarIconDefaultTests : IDisposable
     }
 
     [Fact]
-    public void Default_Is_Value_Equal_Across_Calls_So_The_Descriptor_Diff_Skips_Rewrites()
+    public void Default_Is_Value_Equal_Across_Calls_So_Apply_Skips_Redundant_Writes()
     {
         WriteFile("Assets", "AppIcon.ico");
         TitleBarIconDefault.ResetForTests();
@@ -421,8 +421,9 @@ public class TitleBarIconDefaultTests : IDisposable
         TitleBarIconDefault.ResetForTests();
         var second = TitleBarIconDefault.ResolveDefault();
 
-        // Record value equality is what lets OneWay's diff skip the write, and with it
-        // a fresh BitmapImage decode, on every render after the first.
+        // Record value equality is what lets TitleBarIconDefault.Apply compare the new
+        // projection against the one it last wrote and skip the write — and with it a
+        // fresh BitmapImage decode — on every render after the first.
         Assert.NotNull(first);
         Assert.Equal(first, second);
     }

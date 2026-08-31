@@ -706,4 +706,63 @@ internal static class TitleBarIconDefaultFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Raw .Set(...) setters run AFTER every descriptor prop -- the documented
+    //  "setters apply last / win" rule (spec 058, DescriptorHandler.ApplySetters).
+    //  So an author writing .Set(b => b.IconSource = ...) owns the slot even
+    //  though the element declares no Icon. The out-of-band push from
+    //  ApplyChrome has no setters to replay, so it must not clobber a value it
+    //  did not write.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultDoesNotClobberSetterIcon(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var first = CreateExternalIcon(scratch);
+                var second = global::System.IO.Path.Join(scratch, "Second.ico");
+                global::System.IO.File.Copy(TestIcoPath, second, overwrite: true);
+
+                // No .Icon(...) and no .NoIcon() -- the element does not own the slot by
+                // declaration, so only the setter marks it as author-owned.
+                var comp = new BarComponent(static e => e.Set(static b =>
+                    b.IconSource = new WinUI.FontIconSource { Glyph = "\uE8A5" }));
+                var win = await OpenAndSettle(
+                    Spec("SetterIcon") with { Icon = WindowIcon.FromPath(first) }, () => comp);
+                try
+                {
+                    var bar = comp.Bar;
+                    H.Check("TitleBarIcon_Setter_BarMounted", bar is not null);
+                    if (bar is null) return;
+
+                    // Positive control: the setter must have won at mount, or the arm
+                    // below would pass for the wrong reason.
+                    Console.WriteLine($"# setter: before={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Setter_WinsAtMount", bar.IconSource is WinUI.FontIconSource);
+
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(second) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    Console.WriteLine($"# setter: after={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Setter_SurvivesWindowIconChange",
+                        bar.IconSource is WinUI.FontIconSource);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
 }

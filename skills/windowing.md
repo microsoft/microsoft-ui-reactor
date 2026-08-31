@@ -112,6 +112,26 @@ wins over inference.
 > the window is alive is unchanged. Prefer simply omitting `TitleBar(...)` when
 > you genuinely want the system title bar. See the Windows guide for details.
 
+### Title bar icon
+
+```csharp
+ReactorApp.Run<App>("My App", icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
+
+TitleBar("My App");            // inherits the window icon -- nothing to declare
+TitleBar("My App").NoIcon();   // opt out, for a deliberately bare title bar
+```
+
+A `TitleBar(...)` with no `.Icon(...)` inherits the **window's** icon:
+`WindowSpec.Icon` if declared, otherwise the `Assets\AppIcon.ico` convention
+beside the app. Do not restate the app icon on the title bar — that is the
+default. Reach for `.Icon(...)` only to show a *different* mark there (a
+monochrome glyph against a full-colour caption icon, say).
+
+Two limits: an icon that exists only as an executable PE resource
+(`<ApplicationIcon>`) is **not** inherited — that stage yields a raw `HICON` with
+no path, and a XAML `IconSource` needs an image source — and an embedded window
+(`WindowSpec.Embed`) never receives a window icon, so it has none to inherit.
+
 ### Tall title bar
 
 ```csharp
