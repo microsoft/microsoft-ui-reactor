@@ -1,3 +1,5 @@
+using System.IO;
+using System.Runtime.CompilerServices;
 using System.Reflection;
 
 // Trim analysis is on for this project, and this file reflects over the Reactor
@@ -167,6 +169,43 @@ public class DecoratorTargetDriftTests
 
         Assert.Same(target, ReactorSourceMap.DecoratorTarget(decorator));
     }
+
+    [Fact]
+    public void TheDecoratorLatchIsOnlySetByDecoratorRegistrationPaths()
+    {
+        // NOTE: no [CallerFilePath] parameter — an xUnit [Fact] with parameters is not
+        // discovered at all, so the first version of this test silently never ran.
+        var thisFile = ThisFilePath();
+        // The latch must be true ONLY if a decorator was registered. Setting it from
+        // Register<TElement,TControl> — which every built-in factory reaches — makes it
+        // true in every app and silently defeats the fast path, so DecoratorTarget goes
+        // back to doing dictionary lookups (and a first-touch handler construction) on
+        // every shallow skip. That regression is invisible to behavioural tests: results
+        // stay correct, only the cost changes, and the flag is a process-global one-way
+        // latch so its value cannot be asserted in isolation mid-suite.
+        //
+        // So this reads the source and checks WHERE the assignment appears. A bulk edit
+        // that catches the neighbouring ordinary-control registration (exactly how this
+        // regressed once) fails here.
+        var registry = Path.Combine(
+            Path.GetDirectoryName(thisFile)!, "..", "..",
+            "src", "Reactor", "Core", "V1Protocol", "ControlRegistry.cs");
+
+        var lines = File.ReadAllLines(Path.GetFullPath(registry));
+
+        var owningMethods = lines
+            .Select((line, i) => (line, i))
+            .Where(x => x.line.Contains("s_hasDecoratorRegistrations = true", StringComparison.Ordinal))
+            .Select(x => lines.Take(x.i)
+                .Last(l => l.Contains("static void Register", StringComparison.Ordinal)))
+            .ToArray();
+
+        Assert.NotEmpty(owningMethods);
+        Assert.All(owningMethods, m =>
+            Assert.Contains("RegisterDecorator", m, StringComparison.Ordinal));
+    }
+
+    private static string ThisFilePath([CallerFilePath] string path = "") => path;
 
     private static Element? TryConstruct(Type t, Element target)
     {

@@ -61,7 +61,7 @@ public static class ControlRegistry
     // O(1) per derived type.
     private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>> s_baseEntries = new();
     private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>?> s_baseCache = new();
-    private static readonly ConcurrentDictionary<Type, IV1SourceTargetResolver> s_sourceTargetResolvers = new();
+    private static readonly ConcurrentDictionary<Type, (int Generation, IV1SourceTargetResolver Resolver)> s_sourceTargetResolvers = new();
 
     /// <summary>
     /// True once any decorator registration has been made. Latched, never cleared on
@@ -142,9 +142,15 @@ public static class ControlRegistry
         // process-wide monitor.
         if (s_entries.TryAdd(typeof(TElement), adapterFactory))
         {
+            // Invalidate + bump: a new registration changes what TryResolve returns for
+            // this type, so any cached source-target resolution for it is stale.
+            //
+            // The decorator latch is deliberately NOT set here. This registers an
+            // ORDINARY control, and every built-in factory reaches this method, so
+            // latching would make HasDecoratorRegistrations true in every app and
+            // defeat the fast path that keeps the registry off the shallow-skip path.
             s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
             global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
-            s_hasDecoratorRegistrations = true;
         }
     }
 
@@ -344,27 +350,28 @@ public static class ControlRegistry
     internal static Element? SourceTarget(Element element)
     {
         var elementType = element.GetType();
+        var generation = s_registryGeneration;
 
-        if (!s_sourceTargetResolvers.TryGetValue(elementType, out var resolver))
+        // The generation is stored WITH the entry and validated on lookup, rather than
+        // checked just before publishing. A check-then-publish is not atomic: a
+        // registration can invalidate and bump between the check and the assignment, so
+        // the stale entry (usually the null sentinel) would be reinserted and then used
+        // forever, and a concurrently registered decorator would never expose its
+        // source target. Validating on READ makes a stale entry self-correcting — it is
+        // simply ignored and re-resolved the next time it is asked for.
+        if (!s_sourceTargetResolvers.TryGetValue(elementType, out var cached)
+            || cached.Generation != generation)
         {
-            // Read the generation BEFORE resolving. ConcurrentDictionary.GetOrAdd runs
-            // its value factory outside the lock, so a registration that invalidates the
-            // cache between resolve and insert would otherwise have its clear undone by
-            // this insert, leaving a stale resolver cached for the process lifetime.
-            // Publishing only when the generation is unchanged makes the loser of that
-            // race re-resolve instead of winning with stale data.
-            var generation = s_registryGeneration;
-
-            resolver = TryResolve(elementType, out var factory)
-                       && factory() is IV1SourceTargetResolver sourceResolver
+            var resolver = TryResolve(elementType, out var factory)
+                           && factory() is IV1SourceTargetResolver sourceResolver
                 ? sourceResolver
                 : NullSourceTargetResolver.Instance;
 
-            if (generation == s_registryGeneration)
-                s_sourceTargetResolvers[elementType] = resolver;
+            cached = (generation, resolver);
+            s_sourceTargetResolvers[elementType] = cached;
         }
 
-        return resolver.GetSourceTarget(element);
+        return cached.Resolver.GetSourceTarget(element);
     }
 
     private sealed class NullSourceTargetResolver : IV1SourceTargetResolver
