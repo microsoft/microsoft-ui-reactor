@@ -136,6 +136,48 @@ public sealed class SourceMapElementSlotTests
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
     }
 
+    [Fact]
+    public void RecordEquality_BareVersusStamped()
+    {
+        // The half the EqualityIgnored<T> field fix does NOT cover on its own:
+        // stamping materializes the Extensions bucket, so a bare element holds
+        // null while a stamped one holds a CallSite-only ElementExtras. Those
+        // compare unequal on the bucket's presence, before the ignored field is
+        // ever reached. This is the case that actually bites: with source mapping
+        // on, factory-built elements are stamped while an expected value built
+        // with `new TextBlockElement(...)` is not.
+        var bare = TextBlock("same");
+        var stamped = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.Null(bare.Extensions);
+        Assert.NotNull(stamped.Extensions);
+        Assert.Equal(bare, stamped);
+        Assert.Equal(bare.GetHashCode(), stamped.GetHashCode());
+    }
+
+    [Fact]
+    public void RecordEquality_BareVersusStamped_PositiveControl()
+    {
+        // Pins that the bare-vs-stamped path still detects a real difference,
+        // so the test above cannot pass by equality collapsing to "always true".
+        var bare = TextBlock("one");
+        var stamped = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.NotEqual(bare, stamped);
+    }
+
+    [Fact]
+    public void RecordEquality_BareVersusStamped_RealExtrasStillCompared()
+    {
+        // Guards the normalization from going too far: a bucket carrying a
+        // behavioral extra must NOT be treated as equivalent to no bucket just
+        // because the other side is bare.
+        var bare = TextBlock("same");
+        var withRealExtra = TextBlock("same").Grid(row: 1) with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.NotEqual(bare, withRealExtra);
+    }
+
     // ── Record plumbing ───────────────────────────────────────────────────
 
     [Fact]

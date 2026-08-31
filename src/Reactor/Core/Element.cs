@@ -135,7 +135,19 @@ public abstract record Element
     /// still set it directly.
     /// </summary>
     /// <remarks>Spec 047 §4.4.</remarks>
-    public ElementExtras? Extensions { get; internal init; }
+    public ElementExtras? Extensions
+    {
+        get => _extensions.Value;
+        internal init => _extensions = new ExtrasSlot(value);
+    }
+
+    /// <summary>
+    /// Backing store for <see cref="Extensions"/>. An <see cref="ExtrasSlot"/> rather
+    /// than a plain auto-property so that a bucket holding nothing but a
+    /// <see cref="ElementExtras.CallSite"/> compares equal to no bucket at all —
+    /// see that type for why the equality-ignored field alone is not enough.
+    /// </summary>
+    private readonly ExtrasSlot _extensions;
 
     /// <summary>
     /// Collapses an all-null <see cref="ElementExtras"/> back to a null
@@ -1732,6 +1744,46 @@ internal readonly struct EqualityIgnored<T> : global::System.IEquatable<Equality
     public static bool operator ==(EqualityIgnored<T> left, EqualityIgnored<T> right) => true;
 
     public static bool operator !=(EqualityIgnored<T> left, EqualityIgnored<T> right) => false;
+}
+
+/// <summary>
+/// Backing slot for <see cref="Element.Extensions"/> that compares two buckets by
+/// their <em>behavioral</em> content only.
+///
+/// <para>Making <see cref="ElementExtras.CallSite"/> an equality-ignored field is
+/// necessary but not sufficient. Stamping a previously bare element materializes the
+/// bucket, so a bare element holds <c>null</c> while a stamped one holds a
+/// CallSite-only <see cref="ElementExtras"/> — and those differ on the bucket's
+/// <em>presence</em>, before the ignored field is ever compared. That is the case that
+/// actually bites: with source mapping on, factory-built elements are stamped while an
+/// expected value built with <c>new SomeElement(...)</c> is not.</para>
+///
+/// <para>A bucket carrying nothing but a source location is therefore treated as
+/// equivalent to no bucket at all. A bucket carrying any real extra is still compared
+/// normally, so this normalization cannot mask a behavioral difference.</para>
+/// </summary>
+internal readonly struct ExtrasSlot : global::System.IEquatable<ExtrasSlot>
+{
+    internal ExtrasSlot(ElementExtras? value) => Value = value;
+
+    internal ElementExtras? Value { get; }
+
+    /// <summary>
+    /// The bucket if it carries behavior, otherwise null — collapsing "no bucket" and
+    /// "diagnostic-metadata-only bucket" onto the same value.
+    /// </summary>
+    private ElementExtras? Behavioral => Value is { IsBehaviorallyEmpty: false } ? Value : null;
+
+    public bool Equals(ExtrasSlot other)
+        => global::System.Collections.Generic.EqualityComparer<ElementExtras?>.Default.Equals(Behavioral, other.Behavioral);
+
+    public override bool Equals(object? obj) => obj is ExtrasSlot other && Equals(other);
+
+    public override int GetHashCode() => Behavioral?.GetHashCode() ?? 0;
+
+    public static bool operator ==(ExtrasSlot left, ExtrasSlot right) => left.Equals(right);
+
+    public static bool operator !=(ExtrasSlot left, ExtrasSlot right) => !left.Equals(right);
 }
 
 /// <summary>
