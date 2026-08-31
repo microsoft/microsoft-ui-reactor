@@ -46,14 +46,15 @@ internal static class TestSetup
             return;
 
         // Under invariant globalization every CultureInfo silently collapses to invariant
-        // behaviour: `new CultureInfo("nl-NL")` succeeds and still formats 1.5 as "1.5". The run
-        // would look green while proving nothing, so refuse rather than mislead.
-        if (AppContext.TryGetSwitch("System.Globalization.Invariant", out bool invariant) && invariant)
+        // behaviour, so the run would look green while proving nothing. Refuse rather than
+        // mislead.
+        if (IsInvariantGlobalization())
         {
             throw new global::System.InvalidOperationException(
                 $"REACTOR_TESTS_CULTURE='{requested}' cannot take effect: this process runs in " +
                 "invariant globalization mode, where every culture formats identically. " +
-                "Unset InvariantGlobalization or the environment variable.");
+                "Unset InvariantGlobalization / DOTNET_SYSTEM_GLOBALIZATION_INVARIANT, or unset " +
+                "the REACTOR_TESTS_CULTURE environment variable.");
         }
 
         global::System.Globalization.CultureInfo culture;
@@ -71,5 +72,32 @@ internal static class TestSetup
 
         global::System.Globalization.CultureInfo.DefaultThreadCurrentCulture = culture;
         global::System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = culture;
+    }
+
+    /// <summary>
+    /// Reports whether the process is running under invariant globalization, mirroring the
+    /// runtime's own resolution order (<c>GlobalizationMode.GetSwitchValue</c>): the
+    /// <c>System.Globalization.Invariant</c> AppContext switch wins when it is present,
+    /// otherwise the <c>DOTNET_SYSTEM_GLOBALIZATION_INVARIANT</c> environment variable decides.
+    /// </summary>
+    /// <remarks>
+    /// Checking only the AppContext switch is not enough, and the gap is worst exactly where
+    /// this guard matters. Measured on this runtime: with the environment-variable form set,
+    /// <c>AppContext.TryGetSwitch</c> reports <c>false</c>, so the guard would not fire — and
+    /// then either <c>new CultureInfo("nl-NL")</c> throws, making this code blame a perfectly
+    /// valid culture name, or, if <c>DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY=false</c>
+    /// is also set, it *succeeds* and formats 1.5 as "1.50" — the whole suite then runs
+    /// invariantly while believing it is under nl-NL, and reports the meaningless pass this
+    /// guard exists to prevent.
+    /// </remarks>
+    private static bool IsInvariantGlobalization()
+    {
+        if (AppContext.TryGetSwitch("System.Globalization.Invariant", out bool configured))
+            return configured;
+
+        var env = Environment.GetEnvironmentVariable("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT");
+        return env is not null
+            && (env == "1"
+                || env.Equals("true", global::System.StringComparison.OrdinalIgnoreCase));
     }
 }
