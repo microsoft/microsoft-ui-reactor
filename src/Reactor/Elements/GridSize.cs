@@ -42,7 +42,7 @@ public readonly record struct GridSize
         // Validate the min and max values
         if(min.HasValue && !IsFiniteAndNonNegative(min.Value))
             throw new ArgumentOutOfRangeException(nameof(min), min, "Min size must be a number and >= 0.");
-        if(max.HasValue && !double.IsNaN(max.Value) && max.Value < 0)
+        if (max.HasValue && (max.Value < 0 || double.IsNaN(max.Value)))
             throw new ArgumentOutOfRangeException(nameof(max), max, "Max size must be a number and >= 0.");
 
         // Validate the value based on the type

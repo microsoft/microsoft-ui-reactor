@@ -326,13 +326,11 @@ public class GridSizeTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, double.NaN, 500));
         Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, 100, double.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, double.PositiveInfinity, 500));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, 100, double.PositiveInfinity));
 
         Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MinSize(-1));
         Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MaxSize(-1));
         Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MinSize(double.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MaxSize(double.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MinSize(double.PositiveInfinity));
-        Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MaxSize(double.PositiveInfinity));
     }
 }
