@@ -79,8 +79,11 @@ public class DataGridColumnTests
     }
 
     [Fact]
+    [UseCulture("en-US")]
     public void Column_Format_Creates_FormatValue()
     {
+        // Pinned (issue #1159): "C2" is currency, so the separators and symbol follow
+        // the host locale — nl-NL renders "€ 42,50".
         FieldDescriptor col = Column<TestProduct>("Price", p => p.Price, format: "C2");
         Assert.NotNull(col.FormatValue);
         var formatted = col.FormatValue!(42.5);
@@ -241,8 +244,11 @@ public class DataGridColumnTests
     }
 
     [Fact]
+    [UseCulture("en-US")]
     public void AutoColumns_Uses_Registry_Formatter()
     {
+        // Pinned (issue #1159): the "N2" in this test's own formatter is
+        // culture-sensitive, so the expectation is host-dependent without the pin.
         var registry = new TypeRegistry();
         registry.RegisterFormatter<double>(val => val is null ? "" : $"${(double)val:N2}");
 

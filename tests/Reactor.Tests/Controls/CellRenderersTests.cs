@@ -289,11 +289,16 @@ public class CellRenderersTests
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
+    [UseCulture("en-US")]
     public void FormatValue_IFormattable_Without_Format_Uses_Default_ToString()
     {
         // format == null + IFormattable value → fall through to ToString().
         // Decimal.ToString() ≠ Decimal.ToString("F2"), so the test
         // distinguishes the two paths.
+        //
+        // Pinned (issue #1159): the "3.14159" literal is incidental to the branch
+        // being covered, but ToString() is culture-sensitive, so without the pin the
+        // test tracks the host locale rather than the code path.
         var r = CellRenderers.Text();
         var el = (TextBlockElement)r(3.14159);
         Assert.Contains("3.14159", el.Content);
@@ -310,14 +315,38 @@ public class CellRenderersTests
     }
 
     [Fact]
-    public void FormatValue_Invariant_Format_With_Decimal()
+    [UseCulture("en-US")]
+    public void FormatValue_Format_With_Decimal()
     {
-        // Pin invariant-culture formatting. Use "G" — it's the documented
-        // general-format specifier for decimal. "R" is documented only for
-        // Single/Double/Half; on decimal it's implementation-defined and
-        // historically has thrown FormatException on some runtimes.
+        // Use "G" — it's the documented general-format specifier for decimal.
+        // "R" is documented only for Single/Double/Half; on decimal it's
+        // implementation-defined and historically has thrown FormatException on
+        // some runtimes.
+        //
+        // Issue #1159: this was named ..._Invariant_... and claimed to "pin
+        // invariant-culture formatting", but FormatValue deliberately formats with
+        // CultureInfo.CurrentCulture — so the literal only ever held on en-US hosts.
+        // The pin makes that dependency explicit; see the nl-NL test below for the
+        // half that actually proves the current-culture contract.
         var r = CellRenderers.Number("G");
         var el = (TextBlockElement)r(1.5m);
         Assert.Equal("1.5", el.Content);
+    }
+
+    [Fact]
+    [UseCulture("nl-NL")]
+    public void FormatValue_Honors_CurrentCulture_Not_Invariant()
+    {
+        // Issue #1159. CellRenderers.FormatValue passes CultureInfo.CurrentCulture on
+        // purpose: a grid cell is user-facing text, and a Dutch user should read "1,5".
+        //
+        // This is the non-vacuous half of the pair. Under en-US, invariant and current
+        // culture format identically, so an en-US-pinned assertion passes whichever the
+        // product uses — it could not notice someone "hardening" FormatValue to
+        // invariant and silently breaking every comma-decimal user's grid. Only the
+        // comma discriminates.
+        var r = CellRenderers.Number("G");
+        var el = (TextBlockElement)r(1.5m);
+        Assert.Equal("1,5", el.Content);
     }
 }

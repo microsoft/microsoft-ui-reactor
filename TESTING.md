@@ -183,6 +183,28 @@ dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 
 Tests that write to `Console.Out`/`Console.Error` must be grouped with `[Collection("ConsoleTests")]` to prevent cross-test interference.
 
+### Running the suite under a non-en-US locale
+
+CI only ever runs `en-US`, so this tier is structurally blind to culture-sensitive defects — a machine-readable string built with the ambient culture, or a test asserting an en-US literal against a deliberately culture-sensitive path. Both stay green in CI and fail only on a contributor's machine. Issue #1159 was exactly this: `D3Color.ToRgb()` emitted `rgba(128, 64, 32, 0,5)` on every comma-decimal locale, and 12 tests failed for anyone outside en-US.
+
+Set `REACTOR_TESTS_CULTURE` to reproduce without touching your OS locale:
+
+```powershell
+$env:REACTOR_TESTS_CULTURE = 'nl-NL'
+dotnet test tests/Reactor.Tests --no-build -p:Platform=x64
+```
+
+`TestSetup.Initialize()` (the `[ModuleInitializer]`) applies it as the assembly's *default* culture, so a `[UseCulture]` test still overrides it. An unrecognised name, or a process running under invariant globalization, throws rather than silently leaving the run on en-US — a switch that quietly did nothing would report a meaningless pass.
+
+**Which culture to pin in a test.** `[UseCulture]` serves two different purposes, and picking the wrong one produces a test that cannot fail:
+
+- **`[UseCulture("en-US")]`** when the formatted literal is *incidental* — the test covers a branch and merely needs a stable string. This makes an otherwise silently host-dependent expectation explicit.
+- **A comma-decimal culture (e.g. `[UseCulture("nl-NL")]`)** when the point *is* that the product honours the ambient culture. An en-US pin cannot prove that: invariant and en-US format identically, so the assertion holds whichever the product uses. Only the comma output discriminates.
+
+`CellRenderersTests` carries both halves of that pair as a worked example. Note `[UseCulture]` is for **synchronous tests only** — `CultureInfo.CurrentCulture` is thread-static and does not flow across `await`.
+
+Product code is the mirror image: pin `CultureInfo.InvariantCulture` for anything machine-readable (`rgba(...)`, SVG path data, a dev-tool table meant to read the same everywhere), and leave user-facing text — grid cells, screen-reader summaries — on the current culture.
+
 ### Repo lints ride in this tier
 
 Some tests here parse repo *sources* with Roslyn rather than exercising Reactor at runtime, so a gallery or docs edit can fail `dotnet test tests/Reactor.Tests` with no code change at all. The ones under `Tooling/`:

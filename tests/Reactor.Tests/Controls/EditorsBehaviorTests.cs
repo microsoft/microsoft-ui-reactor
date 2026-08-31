@@ -684,12 +684,16 @@ public class EditorsBehaviorTests
     }
 
     [Fact]
+    [UseCulture("en-US")]
     public void Combo_NameMapping_Uses_ToString()
     {
         var factory = Editors.Combo(new object?[] { 1, 2.5, "x" });
         var el = (ComboBoxElement)factory(2.5, _ => { });
         // ToString() on each → "1", "2.5", "x". Verifies the projection
         // doesn't crash on heterogeneous lists.
+        //
+        // Pinned (issue #1159): double.ToString() follows the host locale, so the
+        // "2.5" literal is about en-US, not about the projection under test.
         Assert.Equal(3, el.Items.Length);
         Assert.Equal("2.5", el.Items[1]);
     }

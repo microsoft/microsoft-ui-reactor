@@ -125,8 +125,12 @@ internal static class StatusCommand
                 ? (row.Keys - row.Missing) * 100.0 / row.Keys
                 : 100.0;
 
-            Console.WriteLine(
-                $"{row.Locale,-10} {row.Keys,6} {row.Translated,12} {row.AiDraft,10} {row.Missing,9} {coverage,9:F1}%");
+            // Issue #1159: `mur loc status` is a dev-tool table whose numbers are meant to be
+            // stable across machines — under the current culture this printed "100,0%" on any
+            // comma-decimal locale.
+            Console.WriteLine(string.Create(
+                global::System.Globalization.CultureInfo.InvariantCulture,
+                $"{row.Locale,-10} {row.Keys,6} {row.Translated,12} {row.AiDraft,10} {row.Missing,9} {coverage,9:F1}%"));
         }
 
         Console.WriteLine();
