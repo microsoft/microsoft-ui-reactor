@@ -187,10 +187,7 @@ public class DecoratorTargetDriftTests
         // So this reads the source and checks WHERE the assignment appears. A bulk edit
         // that catches the neighbouring ordinary-control registration (exactly how this
         // regressed once) fails here.
-        var testDir = Path.GetDirectoryName(ThisFilePath())!;
-        var registry = Path.GetFullPath(
-            @"..\..\src\Reactor\Core\V1Protocol\ControlRegistry.cs", testDir);
-
+        var registry = LocateRepoFile(@"src\Reactor\Core\V1Protocol\ControlRegistry.cs");
         var lines = File.ReadAllLines(registry);
 
         var owningMethods = lines
@@ -206,6 +203,45 @@ public class DecoratorTargetDriftTests
     }
 
     private static string ThisFilePath([CallerFilePath] string path = "") => path;
+
+    /// <summary>
+    /// Resolves a repo-relative source file for a test that inspects source text.
+    ///
+    /// <para>Cannot simply trust <c>[CallerFilePath]</c>: CI sets
+    /// <c>DeterministicSourcePaths</c> (Directory.Build.props), which rewrites caller
+    /// paths through a PathMap to a non-rooted form like <c>/_/tests/…</c>. Passing that
+    /// to <c>Path.GetFullPath(relative, basePath)</c> throws
+    /// "Basepath argument is not fully qualified" — which is exactly how this failed in
+    /// CI while passing locally.</para>
+    ///
+    /// <para>So: use the caller path only when it is rooted and real, otherwise walk up
+    /// from the test binary to the repo root. Throws rather than skipping if neither
+    /// works, because a guard that quietly stops reading its subject is worse than one
+    /// that fails.</para>
+    /// </summary>
+    private static string LocateRepoFile(string repoRelativePath)
+    {
+        var fromCaller = ThisFilePath();
+        if (Path.IsPathRooted(fromCaller) && File.Exists(fromCaller))
+        {
+            var repoRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fromCaller)!, "..", ".."));
+            var candidate = Path.Combine(repoRoot, repoRelativePath);
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (!File.Exists(Path.Combine(dir.FullName, "Reactor.slnx"))) continue;
+
+            var candidate = Path.Combine(dir.FullName, repoRelativePath);
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        throw new FileNotFoundException(
+            $"Could not locate '{repoRelativePath}'. This guard reads source text, so it must " +
+            "not silently pass when it cannot find its subject.",
+            repoRelativePath);
+    }
 
     /// <summary>
     /// A decorator whose handler is registered but deliberately names no source target.
