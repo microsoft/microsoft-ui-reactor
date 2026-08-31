@@ -825,4 +825,3 @@ jobs:
       # single docs build.
       - name: mkdocs build --strict
         run: python -m mkdocs build --strict
-
