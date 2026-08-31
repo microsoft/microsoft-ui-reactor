@@ -61,6 +61,7 @@ public static class ControlRegistry
     // O(1) per derived type.
     private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>> s_baseEntries = new();
     private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>?> s_baseCache = new();
+    private static readonly ConcurrentDictionary<Type, IV1SourceTargetResolver> s_sourceTargetResolvers = new();
 
     /// <summary>
     /// Spec §8 — register a handler factory for <typeparamref name="TElement"/>.
@@ -115,7 +116,8 @@ public static class ControlRegistry
         // First-wins: TryAdd silently no-ops on repeat. Lock-free — relies on
         // ConcurrentDictionary's per-bucket fine-grained locking, not a
         // process-wide monitor.
-        s_entries.TryAdd(typeof(TElement), adapterFactory);
+        if (s_entries.TryAdd(typeof(TElement), adapterFactory))
+            s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
     }
 
     /// <summary>
@@ -190,7 +192,8 @@ public static class ControlRegistry
         Func<IV1HandlerEntry> adapterFactory = () =>
             new V1DecoratorHandlerAdapter<TElement>(handlerFactory());
 
-        s_entries.TryAdd(typeof(TElement), adapterFactory);
+        if (s_entries.TryAdd(typeof(TElement), adapterFactory))
+            s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
     }
 
     /// <summary>
@@ -228,6 +231,7 @@ public static class ControlRegistry
             // on its next dispatch. Exact-match cache entries don't apply
             // here (s_entries is consulted before s_baseCache).
             s_baseCache.Clear();
+            s_sourceTargetResolvers.Clear();
         }
     }
 
@@ -246,6 +250,7 @@ public static class ControlRegistry
         if (s_baseEntries.TryAdd(typeof(TBase), adapterFactory))
         {
             s_baseCache.Clear();
+            s_sourceTargetResolvers.Clear();
         }
     }
 
@@ -299,12 +304,28 @@ public static class ControlRegistry
     /// </summary>
     internal static Element? SourceTarget(Element element)
     {
-        if (!TryResolve(element.GetType(), out var factory))
-            return null;
+        var resolver = s_sourceTargetResolvers.GetOrAdd(
+            element.GetType(),
+            static elementType =>
+            {
+                if (!TryResolve(elementType, out var factory))
+                    return NullSourceTargetResolver.Instance;
 
-        return factory() is IV1SourceTargetResolver resolver
-            ? resolver.GetSourceTarget(element)
-            : null;
+                return factory() is IV1SourceTargetResolver sourceResolver
+                    ? sourceResolver
+                    : NullSourceTargetResolver.Instance;
+            });
+
+        return resolver.GetSourceTarget(element);
+    }
+
+    private sealed class NullSourceTargetResolver : IV1SourceTargetResolver
+    {
+        internal static readonly NullSourceTargetResolver Instance = new();
+
+        private NullSourceTargetResolver() { }
+
+        public Element? GetSourceTarget(Element element) => null;
     }
 
     /// <summary>

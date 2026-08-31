@@ -110,6 +110,7 @@ public class DecoratorTargetDriftTests
     [Fact]
     public void RegisteredExternalDecoratorCanProvideItsSourceTarget()
     {
+        var before = ExternalTargetDecoratorHandler.CreatedCount;
         ControlRegistry.RegisterDecorator<ExternalTargetDecoratorElement>(
             static () => new ExternalTargetDecoratorHandler());
 
@@ -117,6 +118,10 @@ public class DecoratorTargetDriftTests
         var decorator = new ExternalTargetDecoratorElement(target) with { CallSite = new SourceLocation("Decorator.cs", 11) };
 
         Assert.Same(target, ReactorSourceMap.DecoratorTarget(decorator));
+        var afterFirstLookup = ExternalTargetDecoratorHandler.CreatedCount;
+        Assert.Same(target, ReactorSourceMap.DecoratorTarget(decorator));
+        Assert.Equal(afterFirstLookup, ExternalTargetDecoratorHandler.CreatedCount);
+        Assert.InRange(afterFirstLookup - before, 0, 1);
     }
 
     private static Element? TryConstruct(Type t, Element target)
@@ -151,6 +156,10 @@ public class DecoratorTargetDriftTests
 
     private sealed class ExternalTargetDecoratorHandler : IDecoratorElementHandler<ExternalTargetDecoratorElement>
     {
+        public static int CreatedCount { get; set; }
+
+        public ExternalTargetDecoratorHandler() => CreatedCount++;
+
         public UIElement Mount(MountContext ctx, ExternalTargetDecoratorElement element)
             => throw new NotSupportedException();
 
