@@ -114,9 +114,16 @@ public static class ReactorSourceMap
     /// </summary>
     internal static Element? DecoratorTarget(Element element)
     {
-        var registered = ControlRegistry.SourceTarget(element);
-        if (registered is not null)
-            return registered;
+        // Registry first, but only when a decorator has actually been registered. This
+        // runs on the reconciler's shallow-skip path for every callback-free element,
+        // so the no-custom-decorators case (almost every app) must not pay a dictionary
+        // lookup here — see ControlRegistry.HasDecoratorRegistrations.
+        if (ControlRegistry.HasDecoratorRegistrations)
+        {
+            var registered = ControlRegistry.SourceTarget(element);
+            if (registered is not null)
+                return registered;
+        }
 
         return element switch
         {

@@ -124,6 +124,50 @@ public class DecoratorTargetDriftTests
         Assert.InRange(afterFirstLookup - before, 0, 1);
     }
 
+    [Fact]
+    public void EveryDecoratorRegistrationEntryPointIsAccountedForByTheFastPathLatch()
+    {
+        // DecoratorTarget short-circuits the registry entirely unless a decorator has
+        // been registered, because it runs on the reconciler's shallow-skip path for
+        // every callback-free element. That gate is only safe while EVERY decorator
+        // registration path latches ControlRegistry.HasDecoratorRegistrations —
+        // RegisterDecoratorForDerivedTypes did not at first, which would have made a
+        // base-derived decorator's source attribution silently vanish.
+        //
+        // A behavioural test cannot guard this: the latch is a process-global one-way
+        // flag, so any earlier decorator registration in the run leaves it true and the
+        // assertion passes whether or not the path under test sets it (verified — the
+        // obvious behavioural version stayed green with the latch deleted). What CAN
+        // fail is drift in the set of entry points, so pin that instead: adding a new
+        // registration path breaks this test and forces a decision about the latch.
+        var entryPoints = typeof(ControlRegistry)
+            .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+            .Where(m => m.Name.StartsWith("RegisterDecorator", StringComparison.Ordinal))
+            .Select(m => m.Name)
+            .Distinct()
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            new[] { "RegisterDecorator", "RegisterDecoratorForDerivedTypes" },
+            entryPoints);
+    }
+
+    [Fact]
+    public void BaseDerivedRegisteredDecoratorResolvesItsSourceTarget()
+    {
+        // Coverage for the base-derived path itself. Not a guard for the latch (see
+        // above for why that cannot be tested behaviourally) — this asserts the
+        // registration actually resolves a target through the inheritance chain.
+        ControlRegistry.RegisterDecoratorForDerivedTypes<BaseDerivedDecoratorElement>(
+            static () => new BaseDerivedDecoratorHandler());
+
+        var target = new TextBlockElement("target") with { CallSite = new SourceLocation("Target.cs", 21) };
+        var decorator = new DerivedDecoratorElement(target) with { CallSite = new SourceLocation("Decorator.cs", 22) };
+
+        Assert.Same(target, ReactorSourceMap.DecoratorTarget(decorator));
+    }
+
     private static Element? TryConstruct(Type t, Element target)
     {
         var ctor = t.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
@@ -170,6 +214,24 @@ public class DecoratorTargetDriftTests
             => V1UnmountDisposition.ContinueDefaultTraversal;
 
         public Element? GetSourceTarget(ExternalTargetDecoratorElement element) => element.Target;
+    }
+
+    private record BaseDerivedDecoratorElement(Element Target) : Element;
+
+    private sealed record DerivedDecoratorElement(Element Target) : BaseDerivedDecoratorElement(Target);
+
+    private sealed class BaseDerivedDecoratorHandler : IDecoratorElementHandler<BaseDerivedDecoratorElement>
+    {
+        public UIElement Mount(MountContext ctx, BaseDerivedDecoratorElement element)
+            => throw new NotSupportedException();
+
+        public UIElement Update(UpdateContext ctx, BaseDerivedDecoratorElement oldEl, BaseDerivedDecoratorElement newEl, UIElement control)
+            => throw new NotSupportedException();
+
+        public V1UnmountDisposition Unmount(UnmountContext ctx, BaseDerivedDecoratorElement? element, UIElement control)
+            => V1UnmountDisposition.ContinueDefaultTraversal;
+
+        public Element? GetSourceTarget(BaseDerivedDecoratorElement element) => element.Target;
     }
 }
 

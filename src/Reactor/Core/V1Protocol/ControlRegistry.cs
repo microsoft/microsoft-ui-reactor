@@ -64,6 +64,30 @@ public static class ControlRegistry
     private static readonly ConcurrentDictionary<Type, IV1SourceTargetResolver> s_sourceTargetResolvers = new();
 
     /// <summary>
+    /// True once any decorator registration has been made. Latched, never cleared on
+    /// unregister — a stale <c>true</c> only costs the slower path, while a stale
+    /// <c>false</c> would lose source attribution, so the safe direction is one-way.
+    ///
+    /// <para>This exists so the common case can skip the registry entirely.
+    /// <c>ReactorSourceMap.DecoratorTarget</c> runs on the reconciler's shallow-skip
+    /// path for EVERY callback-free element, and most apps register no decorators of
+    /// their own, so an unguarded <see cref="SourceTarget"/> call added a
+    /// <see cref="ConcurrentDictionary{TKey,TValue}"/> lookup (and a handler-factory
+    /// invocation on first touch) to every skip.</para>
+    /// </summary>
+    internal static bool HasDecoratorRegistrations => s_hasDecoratorRegistrations;
+
+    private static volatile bool s_hasDecoratorRegistrations;
+
+    /// <summary>
+    /// Bumped whenever a registration invalidates <see cref="s_sourceTargetResolvers"/>.
+    /// <see cref="SourceTarget"/> reads it before resolving and publishes only if it is
+    /// unchanged, so a resolve that raced an invalidation is discarded rather than
+    /// cached forever.
+    /// </summary>
+    private static volatile int s_registryGeneration;
+
+    /// <summary>
     /// Spec §8 — register a handler factory for <typeparamref name="TElement"/>.
     /// Idempotent first-wins: if an entry already exists for
     /// <c>typeof(TElement)</c>, this call is a silent no-op. The handler
@@ -117,7 +141,11 @@ public static class ControlRegistry
         // ConcurrentDictionary's per-bucket fine-grained locking, not a
         // process-wide monitor.
         if (s_entries.TryAdd(typeof(TElement), adapterFactory))
+        {
             s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
+            global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
+            s_hasDecoratorRegistrations = true;
+        }
     }
 
     /// <summary>
@@ -193,7 +221,11 @@ public static class ControlRegistry
             new V1DecoratorHandlerAdapter<TElement>(handlerFactory());
 
         if (s_entries.TryAdd(typeof(TElement), adapterFactory))
+        {
             s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
+            global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
+            s_hasDecoratorRegistrations = true;
+        }
     }
 
     /// <summary>
@@ -232,6 +264,7 @@ public static class ControlRegistry
             // here (s_entries is consulted before s_baseCache).
             s_baseCache.Clear();
             s_sourceTargetResolvers.Clear();
+            global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
         }
     }
 
@@ -251,6 +284,12 @@ public static class ControlRegistry
         {
             s_baseCache.Clear();
             s_sourceTargetResolvers.Clear();
+            global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
+
+            // Base-derived decorators are decorators too. Missing this would make
+            // DecoratorTarget's fast path skip the registry and silently drop their
+            // source attribution — see ControlRegistry.HasDecoratorRegistrations.
+            s_hasDecoratorRegistrations = true;
         }
     }
 
@@ -304,17 +343,26 @@ public static class ControlRegistry
     /// </summary>
     internal static Element? SourceTarget(Element element)
     {
-        var resolver = s_sourceTargetResolvers.GetOrAdd(
-            element.GetType(),
-            static elementType =>
-            {
-                if (!TryResolve(elementType, out var factory))
-                    return NullSourceTargetResolver.Instance;
+        var elementType = element.GetType();
 
-                return factory() is IV1SourceTargetResolver sourceResolver
-                    ? sourceResolver
-                    : NullSourceTargetResolver.Instance;
-            });
+        if (!s_sourceTargetResolvers.TryGetValue(elementType, out var resolver))
+        {
+            // Read the generation BEFORE resolving. ConcurrentDictionary.GetOrAdd runs
+            // its value factory outside the lock, so a registration that invalidates the
+            // cache between resolve and insert would otherwise have its clear undone by
+            // this insert, leaving a stale resolver cached for the process lifetime.
+            // Publishing only when the generation is unchanged makes the loser of that
+            // race re-resolve instead of winning with stale data.
+            var generation = s_registryGeneration;
+
+            resolver = TryResolve(elementType, out var factory)
+                       && factory() is IV1SourceTargetResolver sourceResolver
+                ? sourceResolver
+                : NullSourceTargetResolver.Instance;
+
+            if (generation == s_registryGeneration)
+                s_sourceTargetResolvers[elementType] = resolver;
+        }
 
         return resolver.GetSourceTarget(element);
     }

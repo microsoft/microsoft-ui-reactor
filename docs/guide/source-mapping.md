@@ -10,12 +10,18 @@ call site carries the file and line that produced it. This page covers
 both.
 
 > **Status.** Per-element source tagging ships as `Element.CallSite` plus
-> `Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap`. It is **on by
-> default in Debug builds** and **off by default in Release** (an explicit
+> `Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap`. There are two
+> independent gates. The **build** gate decides whether interceptors are
+> generated at all: on by default in Debug, off in Release (an explicit
 > `<ReactorSourceMap>true</ReactorSourceMap>` does enable it there, and
-> embeds source paths — see below), mirroring how WPF
-> gates XAML source info behind `XamlDebuggingInformation`. The design
-> reference is
+> embeds source paths — see below), mirroring how WPF gates XAML source
+> info behind `XamlDebuggingInformation`. The **runtime** gate,
+> `ReactorSourceMap.Enabled`, decides whether those interceptors actually
+> stamp anything, and it defaults to **false even in Debug** — the
+> devtools verb turns it on, and a host can set it directly or start the
+> process with `REACTOR_SOURCEMAP=1`. So a plain Debug build generates
+> interceptors but stamps no elements until something enables it. The
+> design reference is
 > [spec 010](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/010-source-mapping-design.md);
 > note that the shipped implementation uses C# interceptors rather than
 > the `[CallerFilePath]` approach the spec originally proposed, because
