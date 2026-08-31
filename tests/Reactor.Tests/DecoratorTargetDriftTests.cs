@@ -189,7 +189,7 @@ public class DecoratorTargetDriftTests
         // regressed once) fails here.
         var testDir = Path.GetDirectoryName(ThisFilePath())!;
         var registry = Path.GetFullPath(
-            Path.Combine(testDir, @"..\..\src\Reactor\Core\V1Protocol\ControlRegistry.cs"));
+            @"..\..\src\Reactor\Core\V1Protocol\ControlRegistry.cs", testDir);
 
         var lines = File.ReadAllLines(registry);
 
