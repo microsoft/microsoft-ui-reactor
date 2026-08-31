@@ -139,6 +139,22 @@ public sealed class CallSiteChangedOnSkipTests
         Assert.Same(target, ReactorSourceMap.UnwrapDecorators(element));
     }
 
+    [Fact]
+    public void ResolverReturningAFreshElementEachCall_TerminatesInsteadOfHanging()
+    {
+        // The case tortoise-and-hare alone does NOT catch: every call returns a new
+        // object, so no two nodes in the chain are ever reference-equal and the cycle
+        // check never fires. `element with { }` is the easy way to write this by
+        // accident. Only the depth cap bounds it.
+        ControlRegistry.RegisterDecorator<FreshTargetElement>(
+            static () => new FreshTargetHandler());
+
+        var element = new FreshTargetElement() with { CallSite = A };
+
+        Assert.Null(ReactorSourceMap.UnwrapDecorators(element));
+        Assert.False(Reconciler.CallSiteChangedOnSkip(element, element));
+    }
+
     private sealed record SelfTargetingElement : Element;
 
     private sealed class SelfTargetingHandler : IDecoratorElementHandler<SelfTargetingElement>
@@ -152,6 +168,22 @@ public sealed class CallSiteChangedOnSkipTests
             => V1UnmountDisposition.ContinueDefaultTraversal;
 
         public Element? GetSourceTarget(SelfTargetingElement element) => element;
+    }
+
+    private sealed record FreshTargetElement : Element;
+
+    private sealed class FreshTargetHandler : IDecoratorElementHandler<FreshTargetElement>
+    {
+        public UIElement Mount(MountContext ctx, FreshTargetElement element) => throw new NotSupportedException();
+
+        public UIElement Update(UpdateContext ctx, FreshTargetElement oldEl, FreshTargetElement newEl, UIElement control)
+            => throw new NotSupportedException();
+
+        public V1UnmountDisposition Unmount(UnmountContext ctx, FreshTargetElement? element, UIElement control)
+            => V1UnmountDisposition.ContinueDefaultTraversal;
+
+        // A brand-new instance every call: an unbounded chain with no repeated identity.
+        public Element? GetSourceTarget(FreshTargetElement element) => element with { };
     }
 
     private sealed record CycleAElement : Element;

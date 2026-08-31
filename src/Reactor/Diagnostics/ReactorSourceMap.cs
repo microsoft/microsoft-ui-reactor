@@ -115,13 +115,21 @@ public static class ReactorSourceMap
     /// a hot path, so it must not allocate. A cycle means the resolver chain is
     /// malformed and there is no meaningful creator to report, hence null rather than an
     /// arbitrary participant.</para>
+    ///
+    /// <para>The depth cap is NOT redundant with the cycle check. Tortoise-and-hare only
+    /// detects repeated object IDENTITY, so a resolver that returns a fresh element each
+    /// call — <c>element with { }</c> is the easy way to write that by accident — builds
+    /// an unbounded chain in which no two nodes are ever reference-equal, and the walk
+    /// would never terminate. The cap bounds that case; the cycle check still earns its
+    /// place by catching true cycles immediately instead of after
+    /// <see cref="MaxDecoratorDepth"/> steps.</para>
     /// </summary>
     internal static Element? UnwrapDecorators(Element element)
     {
         var slow = element;
         var fast = element;
 
-        while (true)
+        for (var depth = 0; depth < MaxDecoratorDepth; depth++)
         {
             if (DecoratorTarget(fast) is not { } firstStep) return fast;
             fast = firstStep;
@@ -133,7 +141,17 @@ public static class ReactorSourceMap
 
             if (ReferenceEquals(slow, fast)) return null;
         }
+
+        return null;
     }
+
+    /// <summary>
+    /// Depth ceiling for <see cref="UnwrapDecorators"/>. Real decorator nesting is a
+    /// handful deep at most (a flyout wrapping a menu flyout wrapping its target), so
+    /// this is far above any legitimate chain while still bounding a malformed
+    /// third-party resolver that manufactures a new element on every call.
+    /// </summary>
+    private const int MaxDecoratorDepth = 64;
 
     /// <summary>
     /// The wrapped element for a target-wrapping decorator, or null for anything else.
