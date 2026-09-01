@@ -27,6 +27,18 @@ Conventions for contributors:
 ## [Unreleased]
 
 ### Added
+
+- **`REACTOR_DSL_004` — a `.WithKey(...)` that only restates what `ForEach` already
+  supplies (spec 042 §5, issue #1156).** The complement to `ForEach`'s new auto-keying:
+  once the factory keys `IReactorKeyed` items itself, `.WithKey(item)` and
+  `.WithKey(item.Key)` inside that projection are noise. Info severity with a code fix
+  that deletes the call — the explicit key wins either way, so behaviour is identical and
+  a warning would break builds for a cosmetic gain. Deliberately narrow: only those two
+  spellings are reported, because they are the only ones provably equal to what the
+  factory assigns. `.WithKey(item.Id)` is left alone even where `Key => Id`, since
+  proving that means reading through the `Key` property body, and it is exactly how an
+  author expresses a deliberate override. Silent inside `Select`, which does no keying.
+
 - **`MinSize(double min)` and `MaxSize(double max)` (issue #1106).**
   Added fluent extension for `GridSize` to allow for defining minimum and maximum sizes. 
 - **Strict validation checks for `GridSize`.**

@@ -160,6 +160,7 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 | `REACTOR_DSL_001` | Warning | Dynamic list item missing .WithKey | `MissingWithKeyAnalyzer.cs` |
 | `REACTOR_DSL_002` | Info | Non-stable .WithKey (index / Guid.NewGuid / DateTime.Now) | `MissingWithKeyAnalyzer.cs` |
 | `REACTOR_DSL_003` | Warning | Typed collection keySelector never keys by item (returns constant/null or ignores the item), forcing a keyed-diff bailout | `ConstantKeySelectorAnalyzer.cs` |
+| `REACTOR_DSL_004` | Info | Redundant .WithKey inside a ForEach over IReactorKeyed items; the factory already supplies that exact key | `MissingWithKeyAnalyzer.cs` |
 | `REACTOR_DOCK_001` | Warning | OnLiveLayoutChanged feeds the live layout back into state | `OnLiveLayoutRoundTripAnalyzer.cs` |
 | `REACTOR_DOC_001` | Warning | Public API missing XML doc summary | `XmlDocSummaryAnalyzer.cs` |
 | `REACTOR_EVENT_001` | Warning | Event wired via .Set(+=/-=) re-subscribes every render; use a declarative On* modifier or .OnMountAdd/.OnUnmountAdd | `SetEventSubscriptionAnalyzer.cs` |

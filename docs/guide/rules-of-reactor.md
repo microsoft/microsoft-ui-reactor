@@ -48,7 +48,7 @@ class HookOrderBad : Component
 | Deps are stable | `REACTOR_HOOKS_004` | [Hooks](hooks.md) |
 | Debounced commands need UseCommand | `REACTOR_HOOKS_009` | [Commanding](commanding.md) |
 | Render is pure | *(convention)* | [Components](components.md) |
-| Lists need stable keys | `REACTOR_DSL_001..003` | [Collections](collections.md) |
+| Lists need stable keys | `REACTOR_DSL_001..004` | [Collections](collections.md) |
 | Theme tokens not literals | `REACTOR_THEME_001`, `REACTOR_THEME_004` | [Theming Tokens](theming-tokens.md) |
 | Lightweight styling | `REACTOR_THEME_002` | [Styling](styling.md) |
 | Accessible names | `REACTOR_A11Y_001..004` | [Accessibility](accessibility.md) |
@@ -193,11 +193,15 @@ the right state to the right row.
 
 **The rule:** every element produced inside a list-like construct gets
 a `.WithKey(stableId)` whose value persists across re-renders. The id
-must be the record's primary key, not the array index.
+must be the record's primary key, not the array index. If the item
+implements `IReactorKeyed`, `ForEach` fills the key for you — write it
+only when you mean something other than `item.Key`.
 
 **Analyzer:** `REACTOR_DSL_001` (dynamic list item missing `.WithKey`),
-`REACTOR_DSL_002` (non-stable `.WithKey`), and
-`REACTOR_DSL_003` (typed collection `keySelector` never keys by item).
+`REACTOR_DSL_002` (non-stable `.WithKey`),
+`REACTOR_DSL_003` (typed collection `keySelector` never keys by item), and
+`REACTOR_DSL_004` (a `.WithKey` that only restates the key `ForEach`
+already supplies for an `IReactorKeyed` item).
 
 Before:
 
@@ -329,7 +333,7 @@ Full coverage on [Theming Tokens](theming-tokens.md).
 | UseMemoCells builder must close over deps | `REACTOR_HOOKS_007` | [Hooks](hooks.md) |
 | Debounced commands routed through UseCommand | `REACTOR_HOOKS_009` | [Commanding](commanding.md) |
 | Render must be pure | *(convention — no analyzer)* | [Components](components.md), [Effects](effects.md) |
-| Lists need stable keys | `REACTOR_DSL_001..003` | [Collections](collections.md), [Reconciliation](reconciliation.md) |
+| Lists need stable keys | `REACTOR_DSL_001..004` | [Collections](collections.md), [Reconciliation](reconciliation.md) |
 | Theme-aware modifiers want a token | `REACTOR_THEME_001`, `REACTOR_THEME_004` | [Theming Tokens](theming-tokens.md) |
 | Lightweight styling, not implicit resources | `REACTOR_THEME_002` | [Styling](styling.md) |
 | `RequestedTheme` is a render input, not a setter | `REACTOR_THEME_003` | [Styling](styling.md) |

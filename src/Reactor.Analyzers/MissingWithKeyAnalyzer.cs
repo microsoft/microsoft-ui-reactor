@@ -42,6 +42,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
 {
     public const string Id = "REACTOR_DSL_001";
     public const string NonStableKeyId = "REACTOR_DSL_002";
+    public const string RedundantKeyId = "REACTOR_DSL_004";
 
     private static readonly DiagnosticDescriptor Rule = new(
         Id,
@@ -61,8 +62,17 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         description: "A positional key (the Select/ForEach index parameter) or a per-render-random key identifies a slot, not a row: it is identical to — or worse than — no key when items are inserted or reordered. Prefer a value carried by the data, e.g. .WithKey(item.Id).");
 
+    private static readonly DiagnosticDescriptor RedundantKeyRule = new(
+        RedundantKeyId,
+        "Redundant .WithKey on a self-keying ForEach item",
+        "ForEach already keys this element from {0}.Key because the item implements IReactorKeyed. The .WithKey(...) call restates the framework's own default and can be removed.",
+        "Reactor.Dsl",
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Spec 042 §5 — ForEach fills a null key from IReactorKeyed items itself, so repeating that exact value adds nothing. Only the two provably-identical spellings are reported (.WithKey(item) and .WithKey(item.Key)); any other expression is treated as a deliberate override and left alone. Info severity: the explicit key wins, so behaviour is identical either way.");
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(Rule, NonStableKeyRule);
+        ImmutableArray.Create(Rule, NonStableKeyRule, RedundantKeyRule);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -190,8 +200,25 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // Scope to list items: the WithKey must live inside a Select/ForEach
         // projection lambda. A key on a single, static element never reorders,
         // and the `.WithKey` anchor keeps this off unrelated fluent chains.
-        var lambda = EnclosingProjectionLambda(ctx, withKeyInv);
+        var lambda = EnclosingProjectionLambda(ctx, withKeyInv, out var projection);
         if (lambda is null) return;
+
+        // REACTOR_DSL_004 — the key restates what ForEach already supplies.
+        // Only for ForEach (Select does no keying) over an IReactorKeyed item,
+        // and only for the two spellings provably identical to AutoKey's:
+        // `.WithKey(item)` and `.WithKey(item.Key)`. Anything else — including
+        // `.WithKey(item.Id)` on a type whose Key happens to be Id — is a
+        // deliberate override, because proving equivalence would mean reading
+        // through the Key property body.
+        if (projection is not null
+            && SimpleName(projection.Expression) == "ForEach"
+            && RestatesTheItemKey(arg, lambda)
+            && ProjectsSelfKeyingItems(projection, ctx))
+        {
+            ctx.ReportDiagnostic(Diagnostic.Create(
+                RedundantKeyRule, withKeyInv.GetLocation(), FirstParameterName(lambda)));
+            return;
+        }
 
         // Shape 2 — a per-render-random key (regenerates every render, so it
         // matches nothing across renders). Independent of parameter count.
@@ -218,8 +245,12 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     // lambda is the projection argument to a LINQ `Select` or Reactor's `ForEach`
     // factory (per the per-branch conditions below). Returns null when the
     // WithKey sits in some other (non-projection) lambda or none at all.
-    static LambdaExpressionSyntax? EnclosingProjectionLambda(SyntaxNodeAnalysisContext ctx, SyntaxNode node)
+    static LambdaExpressionSyntax? EnclosingProjectionLambda(
+        SyntaxNodeAnalysisContext ctx,
+        SyntaxNode node,
+        out InvocationExpressionSyntax? projection)
     {
+        projection = null;
         for (var cur = node.Parent; cur is not null; cur = cur.Parent)
         {
             if (cur is LambdaExpressionSyntax lambda)
@@ -231,7 +262,11 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
                     var name = SimpleName(outer.Expression);
                     // LINQ Select — `collection.Select(lambda)`; the projection
                     // lambda is the (first) argument.
-                    if (name == "Select") return lambda;
+                    if (name == "Select")
+                    {
+                        projection = outer;
+                        return lambda;
+                    }
                     // Reactor's ForEach factory only, with the collection
                     // leading, so the lambda is never argument 0. Same helper
                     // DSL_001 uses, so the two rules cannot drift into
@@ -239,12 +274,42 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
                     if (name == "ForEach"
                         && argList.Arguments.IndexOf(arg) >= 1
                         && IsReactorForEach(outer, ctx))
+                    {
+                        projection = outer;
                         return lambda;
+                    }
                 }
                 return null;
             }
         }
         return null;
+    }
+
+    // The item parameter of a projection lambda: `item` in both `item => …`
+    // and `(item, i) => …`.
+    static string? FirstParameterName(LambdaExpressionSyntax lambda) => lambda switch
+    {
+        SimpleLambdaExpressionSyntax simple => simple.Parameter.Identifier.ValueText,
+        ParenthesizedLambdaExpressionSyntax { ParameterList.Parameters.Count: > 0 } paren
+            => paren.ParameterList.Parameters[0].Identifier.ValueText,
+        _ => null,
+    };
+
+    // True when the key expression is one of the two spellings that provably
+    // equal what Dsl.AutoKey would assign: the item itself (the IReactorKeyed
+    // WithKey overload) or `item.Key`.
+    static bool RestatesTheItemKey(ExpressionSyntax arg, LambdaExpressionSyntax lambda)
+    {
+        var itemName = FirstParameterName(lambda);
+        if (itemName is null) return false;
+
+        return arg switch
+        {
+            IdentifierNameSyntax id => id.Identifier.ValueText == itemName,
+            MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Key" } m
+                => m.Expression is IdentifierNameSyntax owner && owner.Identifier.ValueText == itemName,
+            _ => false,
+        };
     }
 
     // True when `inv` really is Reactor's static `ForEach` factory.
