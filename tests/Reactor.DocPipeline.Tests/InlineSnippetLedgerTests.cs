@@ -183,6 +183,33 @@ public class InlineSnippetLedgerTests
     private static readonly Dictionary<string, Dictionary<string, string>> AllowedInlineExamples =
         new(StringComparer.OrdinalIgnoreCase)
         {
+            ["source-mapping"] = new(StringComparer.Ordinal)
+            {
+                // The "before" half of the [ReactorSourceTransparent] explanation: a helper
+                // WITHOUT the attribute, shown so the prose can say why its callers collapse
+                // onto one line. Snippet-backing it would mean shipping a deliberately
+                // badly-attributed helper in a sample purely so the docs can point at it; the
+                // "after" half IS snippet-backed, against the real annotated helper in
+                // samples/apps/source-map-explorer/App.cs#transparent-helper.
+                ["""
+                 static Element MyHeader() => TextBlock("header");
+                 """] =
+                    "One-line illustration of the UNannotated default; its annotated counterpart is snippet-backed.",
+
+                // Line-number attribution cannot be shown by a compiled snippet: the whole
+                // point is which physical line each argument sits on, and the trailing
+                // comments ARE the assertion. A snippet would render the same three lines
+                // while making the comments look like output rather than the claim.
+                // The behaviour itself is covered by
+                // ImplicitConversionArgumentTests.EachConvertedArgument_TakesItsOwnLine.
+                ["""
+                 VStack(
+                     "a",   // reports this line
+                     "b");  // and this one
+                 """] =
+                    "Per-argument line attribution; the comments are the claim, and it is tested by EachConvertedArgument_TakesItsOwnLine.",
+            },
+
             ["dialogs-and-flyouts"] = new(StringComparer.Ordinal)
             {
                 // A two-line syntax illustration of the `with { IsOpen = ... }` edge trigger.

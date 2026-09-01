@@ -41,6 +41,19 @@ public sealed class SourceMapTransparentGeneratorTests
             public abstract record Element
             {
                 public SourceLocation? CallSite { get; init; }
+
+                // The conversion argument-position stamping exists for. Without it the
+                // stand-in cannot express a convertible argument at all, and every
+                // driver test that thinks it is exercising one is really exercising
+                // a compile error.
+                //
+                // Built with a CONSTRUCTOR, not `Factories.TextBlock`, to stay faithful to
+                // the real thing: `Element.cs`'s operator lives in Reactor.dll, a different
+                // compilation, so its body is never intercepted and the converted element
+                // arrives unstamped. Calling a factory here would put an extra
+                // interceptable call site inside this compilation and inflate every
+                // interceptor count in this file.
+                public static implicit operator Element(string text) => new TextBlockElement(text);
             }
             public record TextBlockElement(string Content) : Element;
             public record EmptyElement : Element;
@@ -52,6 +65,12 @@ public sealed class SourceMapTransparentGeneratorTests
             {
                 public static Microsoft.UI.Reactor.Core.TextBlockElement TextBlock(string content)
                     => new(content);
+
+                public static Microsoft.UI.Reactor.Core.Element VStack(
+                    params Microsoft.UI.Reactor.Core.Element?[] children)
+                    => children.Length > 0 && children[0] is { } first
+                        ? first
+                        : new Microsoft.UI.Reactor.Core.EmptyElement();
             }
         }
         namespace Microsoft.UI.Reactor.Diagnostics
@@ -77,16 +96,30 @@ public sealed class SourceMapTransparentGeneratorTests
     /// <summary>
     /// Runs the generator over <paramref name="userCode"/> plus the stand-in surface and
     /// returns what it produced.
+    ///
+    /// <para>Asserts the snippet binds BEFORE generation and that the compilation still
+    /// binds AFTER it. The second half is the one that matters: this generator's whole
+    /// job is emitting C# that forwards to arbitrary consumer methods, and every failure
+    /// mode worth catching — an unnameable type, a parameter whose open and constructed
+    /// forms differ, a `params` slot written with the wrong type — shows up as a compile
+    /// error in the emitted file rather than as a wrong string in it.</para>
     /// </summary>
     private static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource) Run(
         string userCode, bool enabled = true)
     {
+        // Interceptors are opt-in per namespace; without this the emitted
+        // [InterceptsLocation] attributes are CS9137 and the post-generation check below
+        // would fail for a reason that has nothing to do with the code under test.
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Preview)
+            .WithFeatures([new KeyValuePair<string, string>(
+                "InterceptorsNamespaces", SourceMapInterceptorGenerator.InterceptorNamespace)]);
+
         var compilation = CSharpCompilation.Create(
             "SourceMapDriverProbe",
             new[]
             {
-                CSharpSyntaxTree.ParseText(ReactorSurface, path: "Surface.cs"),
-                CSharpSyntaxTree.ParseText(userCode, path: "User.cs"),
+                CSharpSyntaxTree.ParseText(ReactorSurface, parseOptions, path: "Surface.cs"),
+                CSharpSyntaxTree.ParseText(userCode, parseOptions, path: "User.cs"),
             },
             s_references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
@@ -100,11 +133,20 @@ public sealed class SourceMapTransparentGeneratorTests
         Assert.True(bindErrors.Count == 0, "probe snippet failed to compile: " + string.Join("; ", bindErrors));
 
         var driver = CSharpGeneratorDriver.Create(
-            new[] { new SourceMapInterceptorGenerator().AsSourceGenerator() },
-            optionsProvider: new StubOptions(enabled));
+            [new SourceMapInterceptorGenerator().AsSourceGenerator()],
+            optionsProvider: new StubOptions(enabled),
+            parseOptions: parseOptions);
 
-        driver = (CSharpGeneratorDriver)driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out _);
+        driver = (CSharpGeneratorDriver)driver.RunGeneratorsAndUpdateCompilation(
+            compilation, out var outputCompilation, out _);
         var result = driver.GetRunResult();
+
+        var emitErrors = outputCompilation.GetDiagnostics()
+            .Where(static d => d.Severity == DiagnosticSeverity.Error)
+            .ToList();
+        Assert.True(
+            emitErrors.Count == 0,
+            "the GENERATED code does not compile: " + string.Join("; ", emitErrors));
 
         var generated = string.Concat(result.GeneratedTrees.Select(static t => t.ToString()));
         return (result.Diagnostics, generated);
@@ -255,6 +297,111 @@ public sealed class SourceMapTransparentGeneratorTests
             """);
 
         Assert.Contains("does not return", Assert.Single(diagnostics).GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ByRefParameterHelper_IsReported()
+    {
+        // The interceptor must call the original with exactly the arguments it received,
+        // which needs matching ref kinds on both sides.
+        var (diagnostics, _) = Run("""
+            using Microsoft.UI.Reactor.Core;
+            using Microsoft.UI.Reactor.Diagnostics;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public class Host
+            {
+                [ReactorSourceTransparent]
+                public static Element Helper(string s, out int len)
+                {
+                    len = s.Length;
+                    return TextBlock(s);
+                }
+            }
+            """);
+
+        Assert.Contains("by-ref parameter", Assert.Single(diagnostics).GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NonOrdinaryMethodHelper_IsReported()
+    {
+        // A conversion operator is a method as far as `AttributeTargets.Method` is
+        // concerned, but interceptors reach only ordinary methods.
+        var (diagnostics, _) = Run("""
+            using Microsoft.UI.Reactor.Core;
+            using Microsoft.UI.Reactor.Diagnostics;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public class Badge
+            {
+                [ReactorSourceTransparent]
+                public static implicit operator Element(Badge b) => TextBlock("badge");
+            }
+            """);
+
+        Assert.Contains("ordinary methods", Assert.Single(diagnostics).GetMessage(), StringComparison.Ordinal);
+    }
+
+    // ── The post-generation compile check earns its place ─────────────────
+
+    [Fact]
+    public void GenericHelperInstantiatedAtElement_EmitsCompilingCode()
+    {
+        // The shape that makes `Run`'s post-generation compile assertion load-bearing.
+        // `Wrap<Element>("x")` has a constructed parameter of exactly `Element` and a real
+        // implicit user-defined conversion, so it looks like it should get an argument
+        // stamp — but the emitted interceptor declares that parameter from the OPEN
+        // definition as `T __a0`, and writing an `Element?` into it is
+        // CS1503. The generator therefore declines, and this test fails the moment someone
+        // "improves" CouldHaveConvertedArguments to consult the constructed method.
+        //
+        // Verified to be a real tripwire rather than a hopeful one: switching that filter
+        // over makes this assertion fail with the CS1503 quoted above.
+        var (diagnostics, generated) = Run("""
+            using Microsoft.UI.Reactor.Core;
+            using Microsoft.UI.Reactor.Diagnostics;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public class Host
+            {
+                [ReactorSourceTransparent]
+                internal static Element Wrap<T>(T value) => (Element)(object)value!;
+
+                public static Element Render() => Wrap<Element>("x");
+            }
+            """);
+
+        Assert.Empty(diagnostics);
+
+        // The call IS intercepted — the guard is specific to the argument slot, not a
+        // blanket refusal to touch generic helpers.
+        Assert.Equal(1, InterceptorCount(generated));
+        Assert.DoesNotContain("__ReactorStampArgument(__a0", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ConvertedArgumentOnANonGenericFactory_IsStamped_ControlForTheGenericGuard()
+    {
+        // The positive control for the test above: the same converted-string argument on a
+        // NON-generic params factory does get an argument stamp. Without it, the
+        // DoesNotContain assertion above would also pass if argument stamping had stopped
+        // working entirely, or if the stand-in surface could not express a conversion at
+        // all — which was in fact true until this suite's `Element` gained the implicit
+        // operator, and is exactly how that omission was found.
+        var (diagnostics, generated) = Run("""
+            using Microsoft.UI.Reactor.Core;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public class Host
+            {
+                public static Element Render() => VStack("a", "b");
+            }
+            """);
+
+        Assert.Empty(diagnostics);
+        Assert.Contains("__ReactorStampArgument(__a0[0]", generated, StringComparison.Ordinal);
+        Assert.Contains("__ReactorStampArgument(__a0[1]", generated, StringComparison.Ordinal);
     }
 
     // ── Usable annotations report nothing ─────────────────────────────────

@@ -173,20 +173,11 @@ is exactly where the author wrote the UI, and deferring it to the caller would b
 a regression.
 
 For a *thin forwarder*, whose own line carries no information anyone wants, mark
-it `[ReactorSourceTransparent]`:
+it `[ReactorSourceTransparent]`. This is the helper the source-map explorer
+sample uses for its two order rows — click them in the running app and they
+report their own distinct call sites, not this helper's body:
 
-```csharp
-using Microsoft.UI.Reactor.Diagnostics;
-
-[ReactorSourceTransparent]
-internal static Element Field(string label, string value)
-    => HStack(TextBlock(label), TextBlock(value));
-
-// Each row now reports ITS OWN line, instead of both reporting
-// the HStack( line inside Field.
-var form = VStack(
-    Field("Name", name),
-    Field("Email", email));
+```csharp snippet="source:samples/apps/source-map-explorer/App.cs#transparent-helper"
 ```
 
 Two rules do the work, and they compose. The generator emits no interceptor for
@@ -196,6 +187,11 @@ therefore keeps deferring outward until it reaches a caller that is not
 annotated. First-stamp-wins still applies, so a helper that merely passes an
 element through does not relabel it.
 
+Because rule 1 suppresses stamping for *everything* inside an annotated method,
+that includes argument-position stamps (below): a bare-string child written
+inside a transparent helper is not stamped either, since the element belongs to
+whoever called the helper.
+
 The annotated method has to be one the generator can emit a forwarding call to:
 
 | Requirement | Why |
@@ -203,7 +199,8 @@ The annotated method has to be one the generator can emit a forwarding call to:
 | `static` | Intercepting an instance method needs an extension-method interceptor, a different shape that is not supported |
 | Returns an `Element` (including `Element?`) | There is nothing else to stamp |
 | `public` or `internal`, never `private` or `protected` | The interceptor lives in a generated file and must be able to name the method |
-| Not a local function | C# interceptors cannot intercept local functions |
+| An ordinary method — not an operator, accessor, constructor or local function | C# interceptors can only intercept calls to ordinary methods |
+| No `ref` / `out` / `in` parameters | The interceptor has to restate the signature and call the original with exactly the arguments it received |
 | Not declared in a `file`-local or generic type | Generated code cannot name the first; interceptors cannot be declared for the second |
 
 An annotation that fails any of these is reported as **`REACTOR_SOURCEMAP_001`**

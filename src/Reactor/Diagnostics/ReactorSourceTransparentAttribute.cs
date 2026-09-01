@@ -50,7 +50,7 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// <see langword="internal"/> (never <see langword="private"/>), not declared in
 /// a <c>file</c>-local or generic type, and not a local function (C# interceptors
 /// cannot intercept those). An annotation the generator cannot honour is reported
-/// as <c>REACTOR_SOURCEMAP001</c> rather than silently doing nothing, and
+/// as <c>REACTOR_SOURCEMAP_001</c> rather than silently doing nothing, and
 /// attribution falls back to today's behaviour — the helper's own line — so a bad
 /// annotation never makes attribution worse than no annotation.
 /// </para>

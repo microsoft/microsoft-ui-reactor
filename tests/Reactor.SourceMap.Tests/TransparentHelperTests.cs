@@ -74,6 +74,34 @@ public sealed class TransparentHelperTests : IDisposable
         return build();
     }
 
+    /// <summary>
+    /// A generic transparent helper, explicitly instantiated at <c>Element</c> so its
+    /// constructed parameter is an <c>Element</c> a <c>string</c> converts to.
+    /// </summary>
+    [ReactorSourceTransparent]
+    internal static Element TransparentWrap<T>(T value) => (Element)(object)value!;
+
+    [Fact]
+    public void GenericHelperInstantiatedAtElement_IsStampedAtTheCallerAndStillCompiles()
+    {
+        // A PR reviewer read the argument-stamp filter's use of the OPEN definition as a
+        // missed case: `TransparentWrap<Element>("converted")` genuinely does have a
+        // constructed `Element` parameter and a genuine user-defined conversion. Switching
+        // the filter to the constructed method was measured, and it makes the consumer's
+        // build fail — the emitted interceptor declares the parameter as `T __a0`, so
+        // writing an `Element?` into it is CS1503. Declining to stamp the argument is what
+        // keeps generated code compiling.
+        //
+        // The fact that this test COMPILES AT ALL is therefore half its value: this file is
+        // compiled with interception on, so a generator that stamped here would break the
+        // build rather than fail an assertion. The other half is that the element still
+        // gets a location — from rule 2's return-path stamp — so the guard costs nothing
+        // an author can observe here.
+        var element = TransparentWrap<Element>("converted"); var callerLine = Line();
+
+        Assert.Equal(callerLine, element.CallSite!.Value.LineNumber);
+    }
+
     // Deliberately unusable: a private method cannot be named from a generated file, so
     // the generator reports REACTOR_SOURCEMAP_001 and leaves attribution exactly as it
     // would be with no attribute at all. Suppressed locally because this file is compiled
@@ -192,6 +220,45 @@ public sealed class TransparentHelperTests : IDisposable
         // Behaviour preservation: the interceptor forwards, it does not change what the
         // helper decides. Also exercises the emitted null guard for a nullable return.
         Assert.Null(TransparentMaybeField(false, "Maybe"));
+    }
+
+    /// <summary>
+    /// A transparent helper whose body uses a bare-string child, so rule 1's reach over
+    /// argument-position stamping is observable.
+    /// </summary>
+    [ReactorSourceTransparent]
+    internal static Element TransparentWithConvertedChild(string label) => VStack(label);
+
+    [Fact]
+    public void RuleOne_AlsoSuppressesArgumentStampsInsideATransparentHelper()
+    {
+        // Rule 1 returns before argument analysis runs, so a converted child written inside
+        // an annotated helper gets no location at all — not the helper's line, and not the
+        // caller's. That follows from the model rather than being an oversight: the element
+        // belongs to whoever called the helper, and stamping the helper's own line is
+        // exactly what the attribute exists to stop. The RESULT still defers to the caller.
+        //
+        // Pinned because it is the one place the two mechanisms interact, and because
+        // silence here is otherwise indistinguishable from argument stamping being broken.
+        var stack = TransparentWithConvertedChild("child"); var callerLine = Line();
+
+        Assert.Equal(callerLine, stack.CallSite!.Value.LineNumber);
+
+        var child = global::System.Linq.Enumerable.Single(((StackElement)stack).Children);
+        Assert.Null(child.CallSite);
+    }
+
+    [Fact]
+    public void ConvertedChildOutsideATransparentHelper_IsStamped_ControlForRuleOneReach()
+    {
+        // The control that makes the null above mean something: the identical bare-string
+        // child, written at an ordinary call site in the same file, IS stamped. Without
+        // this, a generator that had stopped emitting argument stamps entirely would make
+        // the test above pass for the wrong reason.
+        var stack = VStack("child"); var line = Line();
+
+        var child = global::System.Linq.Enumerable.Single(stack.Children);
+        Assert.Equal(line, child.CallSite!.Value.LineNumber);
     }
 
     // ── Precedence and gating ─────────────────────────────────────────────

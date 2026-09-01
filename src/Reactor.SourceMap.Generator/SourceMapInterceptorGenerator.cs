@@ -172,6 +172,17 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         // one of them is a private nested type). Everything about the SIGNATURE
         // must come from the open definition; only the call site comes from the
         // constructed symbol.
+        //
+        // Argument stamping is bound to the SIGNATURE, not to the call, and therefore
+        // also uses the open definition — see CouldHaveConvertedArguments. A reviewer
+        // read that as a missed case (`Wrap<Element>("x")` really does have a constructed
+        // `Element` parameter and a genuine user-defined conversion, both confirmed
+        // against Roslyn 5.9) and it is not: the emitted interceptor declares that
+        // parameter as `T __a0`, so writing an `Element?` back into it is
+        // `CS1503: cannot convert from 'T' to 'Element?'`. Measured — switching the
+        // filter to the constructed method makes the consumer's build fail. Declining
+        // to stamp is what keeps the emitted code compiling; the element still gets a
+        // location from the interceptor's own return-path stamp.
         method = method.OriginalDefinition;
 
         // Only the Reactor DSL surface, plus (spec 010 mechanism 1) any static
@@ -405,6 +416,13 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     /// <c>Element</c>. Purely a cost filter for
     /// <see cref="DescribeArgumentStamps"/> — the per-argument analysis re-checks
     /// everything it depends on.
+    ///
+    /// <para>Deliberately asked of the OPEN definition. The emitted interceptor declares
+    /// its parameters from the open signature, so a generic parameter is rendered as
+    /// <c>T __a0</c> even when the call substitutes <c>T = Element</c>; stamping it would
+    /// emit <c>CS1503: cannot convert from 'T' to 'Element?'</c> into the consumer's
+    /// build. Answering from the constructed method therefore looks more thorough and is
+    /// actively wrong — verified by building the suite with it switched over.</para>
     /// </summary>
     private static bool CouldHaveConvertedArguments(IMethodSymbol method, INamedTypeSymbol elementSymbol)
     {

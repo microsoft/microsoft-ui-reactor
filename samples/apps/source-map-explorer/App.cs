@@ -164,7 +164,6 @@ internal sealed class App : Component
             Heading("Reactor source map explorer"),
             TextBlock("Click anything on the left. Every element below is a plain display leaf — no callbacks, no keys.")
                 .Foreground(Theme.SecondaryText),
-
             HStack(
                 Button(mapping ? "Source mapping: ON" : "Source mapping: OFF", () =>
                 {
@@ -184,16 +183,10 @@ internal sealed class App : Component
                         Heading("Order summary"),
                         TextBlock("Two items, ready to ship."),
                         Border(
-                            VStack(
-                                TextBlock("Wireless keyboard"),
-                                TextBlock("$79.00").Bold()
-                            ).Spacing(2)
+                            OrderLine("Wireless keyboard", "$79.00")
                         ).Padding(10).Background(Theme.SubtleFill),
                         Border(
-                            VStack(
-                                TextBlock("USB-C cable"),
-                                TextBlock("$12.00").Bold()
-                            ).Spacing(2)
+                            OrderLine("USB-C cable", "$12.00")
                         ).Padding(10).Background(Theme.SubtleFill),
                         HStack(
                             TextBlock("Total").Bold(),
@@ -227,4 +220,28 @@ internal sealed class App : Component
             ).Spacing(16)
         ).Spacing(14).Padding(20);
     }
+
+    // <snippet:transparent-helper>
+    /// <summary>
+    /// A thin forwarder: its own line carries nothing a reader wants, so it is marked
+    /// source-transparent and each element it returns is attributed to the CALLER's
+    /// line instead of to the <c>VStack(</c> below.
+    /// </summary>
+    /// <remarks>
+    /// Click the two order rows in the running sample: without the attribute both report
+    /// this method's body line, because that is genuinely where <c>VStack</c> was called.
+    /// With it they report the two distinct <c>OrderLine(</c> call sites above.
+    /// <para>
+    /// It must be <c>internal</c> rather than <c>private</c> — the generated interceptor
+    /// lives in another file and has to be able to name it. A <c>private</c> helper here
+    /// would report <c>REACTOR_SOURCEMAP_001</c> instead of taking effect.
+    /// </para>
+    /// </remarks>
+    [ReactorSourceTransparent]
+    internal static Element OrderLine(string label, string amount) =>
+        VStack(
+            TextBlock(label),
+            TextBlock(amount).Bold()
+        ).Spacing(2);
+    // </snippet:transparent-helper>
 }
