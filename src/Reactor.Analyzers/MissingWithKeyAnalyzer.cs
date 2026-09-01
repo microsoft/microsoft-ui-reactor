@@ -220,6 +220,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         if (projection is not null
             && SimpleName(projection.Expression) == "ForEach"
             && RestatesTheItemKey(arg, lambda)
+            && !OverridesAnEarlierKey(withKeyInv)
             && ProjectsSelfKeyingItems(projection, ctx))
         {
             ctx.ReportDiagnostic(Diagnostic.Create(
@@ -301,6 +302,16 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
             => paren.ParameterList.Parameters[0].Identifier.ValueText,
         _ => null,
     };
+
+    // True when the chain already set a key before this call, which makes this
+    // one an override rather than a restatement. `Element.Key` is last-write-
+    // wins and AutoKey only fills a *null*, so dropping the trailing call in
+    // `TextBlock(x).WithKey("a").WithKey(item)` does not fall back to
+    // `item.Key` — it leaves `"a"`. Reporting that would be a false positive
+    // whose fix silently changes the key.
+    static bool OverridesAnEarlierKey(InvocationExpressionSyntax withKeyInv) =>
+        withKeyInv.Expression is MemberAccessExpressionSyntax member
+        && member.Expression.ToString().Contains(".WithKey(");
 
     // True when the key expression is one of the two spellings that provably
     // equal what Dsl.AutoKey would assign: the item itself (the IReactorKeyed

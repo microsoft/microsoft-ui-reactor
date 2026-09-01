@@ -1353,4 +1353,31 @@ namespace TestApp
             CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.Id}_WithKey_Item",
         }.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    [Fact]
+    public async Task DSL_004_Does_Not_Fire_When_The_Call_Overrides_An_Earlier_Key()
+    {
+        // Element.Key is last-write-wins and AutoKey only fills a *null*, so
+        // deleting the trailing call here would leave "other" as the key rather
+        // than falling back to r.Key. Reporting it would be a false positive
+        // whose fix silently changes behaviour.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Text).WithKey(""other"").WithKey(r)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
 }
