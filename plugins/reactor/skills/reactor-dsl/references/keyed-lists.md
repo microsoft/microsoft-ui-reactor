@@ -30,8 +30,8 @@ Four call sites need a key. Pick the matching pattern and move on.
 `Select` does no keying, so a key is always required there. Inside a
 `ForEach` over `IReactorKeyed` items, `.WithKey(item)` and `.WithKey(item.Key)`
 merely restate what the factory already assigned — `REACTOR_DSL_004` reports
-those and ships a fix that deletes the call. Any other expression is treated as
-a deliberate override and left alone.
+those. Any other expression is treated as a deliberate override and left alone,
+as is a receiver that already set a key.
 
 (spec 042 §3, §5)
 

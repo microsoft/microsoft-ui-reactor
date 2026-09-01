@@ -25,7 +25,7 @@ namespace System.Runtime.CompilerServices
 namespace Microsoft.UI.Reactor.Core
 {
     public interface IReactorKeyed { string Key { get; } }
-    public abstract record Element { }
+    public abstract record Element { public string? Key { get; init; } }
     public sealed record TextBlockElement(string Text) : Element { }
 
     public static class Factories
@@ -1199,91 +1199,6 @@ namespace TestApp
     }
 
     [Fact]
-    public async Task DSL_004_CodeFix_Removes_The_Redundant_Call()
-    {
-        var before = Stubs + @"
-namespace TestApp
-{
-    using System.Collections.Generic;
-    using Microsoft.UI.Reactor.Core;
-    using static Microsoft.UI.Reactor.Core.Factories;
-" + KeyedRowStub + @"
-    public static class C
-    {
-        public static Element Build(IReadOnlyList<Row> rows)
-            => FlexColumn(ForEach(rows, r => {|REACTOR_DSL_004:TextBlock(r.Text).WithKey(r)|}));
-    }
-}";
-
-        var after = Stubs + @"
-namespace TestApp
-{
-    using System.Collections.Generic;
-    using Microsoft.UI.Reactor.Core;
-    using static Microsoft.UI.Reactor.Core.Factories;
-" + KeyedRowStub + @"
-    public static class C
-    {
-        public static Element Build(IReadOnlyList<Row> rows)
-            => FlexColumn(ForEach(rows, r => TextBlock(r.Text)));
-    }
-}";
-
-        await new CSharpCodeFixTest<MissingWithKeyAnalyzer, RedundantWithKeyCodeFix, DefaultVerifier>
-        {
-            TestCode = before,
-            FixedCode = after,
-            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.RedundantKeyId}_Remove",
-        }.RunAsync(TestContext.Current.CancellationToken);
-    }
-
-    [Fact]
-    public async Task DSL_004_CodeFix_Keeps_The_Formatting_Of_A_Wrapped_Chain()
-    {
-        // The fix replaces the whole `….WithKey(r)` invocation with its
-        // receiver, so a chain split across lines must not collapse onto one.
-        var before = Stubs + @"
-namespace TestApp
-{
-    using System.Collections.Generic;
-    using Microsoft.UI.Reactor.Core;
-    using static Microsoft.UI.Reactor.Core.Factories;
-" + KeyedRowStub + @"
-    public static class C
-    {
-        public static Element Build(IReadOnlyList<Row> rows)
-            => FlexColumn(ForEach(rows, r =>
-                {|REACTOR_DSL_004:TextBlock(r.Text)
-                    .Bold()
-                    .WithKey(r)|}));
-    }
-}";
-
-        var after = Stubs + @"
-namespace TestApp
-{
-    using System.Collections.Generic;
-    using Microsoft.UI.Reactor.Core;
-    using static Microsoft.UI.Reactor.Core.Factories;
-" + KeyedRowStub + @"
-    public static class C
-    {
-        public static Element Build(IReadOnlyList<Row> rows)
-            => FlexColumn(ForEach(rows, r =>
-                TextBlock(r.Text)
-                    .Bold()));
-    }
-}";
-
-        await new CSharpCodeFixTest<MissingWithKeyAnalyzer, RedundantWithKeyCodeFix, DefaultVerifier>
-        {
-            TestCode = before,
-            FixedCode = after,
-            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.RedundantKeyId}_Remove",
-        }.RunAsync(TestContext.Current.CancellationToken);
-    }
-
-    [Fact]
     public async Task DSL_001_Does_Not_Fire_When_T_Is_IReactorKeyed_Itself()
     {
         // AllInterfaces does not include the interface itself, so a collection
@@ -1398,6 +1313,32 @@ namespace TestApp
     {
         public static Element Build(IReadOnlyList<Row> rows)
             => FlexColumn(ForEach(rows, r => TextBlock(r.Text).WithKey /* pinned */ (""other"").WithKey(r)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_Does_Not_Fire_When_The_Receiver_Sets_Key_In_A_With_Expression()
+    {
+        // `with { Key = ... }` sets the key just as .WithKey does, so the
+        // trailing call is an override. AutoKey only fills a null, so treating
+        // this as redundant would misread it.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => (TextBlock(r.Text) with { Key = ""other"" }).WithKey(r)));
     }
 }";
 

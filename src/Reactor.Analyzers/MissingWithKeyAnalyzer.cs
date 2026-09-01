@@ -65,11 +65,11 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor RedundantKeyRule = new(
         RedundantKeyId,
         "Redundant .WithKey on a self-keying ForEach item",
-        "ForEach already keys this element from {0}.Key because the item implements IReactorKeyed. The .WithKey(...) call restates the framework's own default and can be removed.",
+        "ForEach already keys this element from {0}.Key because the item implements IReactorKeyed. The .WithKey(...) call restates the framework's own default and can usually be removed.",
         "Reactor.Dsl",
         DiagnosticSeverity.Info,
         isEnabledByDefault: true,
-        description: "Spec 042 §5 — ForEach fills a null key from IReactorKeyed items itself, so repeating that exact value adds nothing. Only the two provably-identical spellings are reported (.WithKey(item) and .WithKey(item.Key)); any other expression is treated as a deliberate override and left alone. Info severity: the explicit key wins, so behaviour is identical either way.");
+        description: "Spec 042 §5 — ForEach fills a null key from IReactorKeyed items itself, so repeating that exact value adds nothing. Only the two provably-identical spellings are reported (.WithKey(item) and .WithKey(item.Key)); any other expression is treated as a deliberate override and left alone, as is a receiver that already sets Key via an earlier .WithKey, a with-expression, or an object initializer. Info severity + no fix: the key a receiver picks up inside a called factory is invisible to syntax, so removing the call cannot be proven safe to automate — and where the receiver has no key, keeping the call is merely redundant, not wrong.");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Rule, NonStableKeyRule, RedundantKeyRule);
@@ -220,7 +220,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         if (projection is not null
             && SimpleName(projection.Expression) == "ForEach"
             && RestatesTheItemKey(arg, lambda)
-            && !OverridesAnEarlierKey(withKeyInv)
+            && !ReceiverAlreadySetsAKey(withKeyInv)
             && ProjectsSelfKeyingItems(projection, ctx))
         {
             ctx.ReportDiagnostic(Diagnostic.Create(
@@ -303,25 +303,43 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         _ => null,
     };
 
-    // True when the chain already set a key before this call, which makes this
-    // one an override rather than a restatement. `Element.Key` is last-write-
-    // wins and AutoKey only fills a *null*, so dropping the trailing call in
+    // True when the receiver already carries a key, which makes this call an
+    // override rather than a restatement. `Element.Key` is last-write-wins and
+    // AutoKey only fills a *null*, so dropping the trailing call in
     // `TextBlock(x).WithKey("a").WithKey(item)` does not fall back to
-    // `item.Key` — it leaves `"a"`. Reporting that would be a false positive
-    // whose fix silently changes the key.
+    // `item.Key` — it leaves `"a"`.
     //
     // Matched on syntax rather than the `.Contains(".WithKey(")` probe the
     // rules use elsewhere. Those probes fail safe — a miss just means no
-    // diagnostic — but a miss here means an unsafe fix, and trivia between the
-    // name and the argument list (`.WithKey /* note */ ("a")`) defeats the
-    // substring form.
-    static bool OverridesAnEarlierKey(InvocationExpressionSyntax withKeyInv) =>
-        withKeyInv.Expression is MemberAccessExpressionSyntax member
-        && member.Expression
-            .DescendantNodesAndSelf()
-            .OfType<InvocationExpressionSyntax>()
-            .Any(inner => inner.Expression is MemberAccessExpressionSyntax innerMember
-                          && innerMember.Name.Identifier.ValueText == "WithKey");
+    // diagnostic — but a miss here means a false positive on a call that is
+    // doing real work, and trivia between the name and the argument list
+    // (`.WithKey /* note */ ("a")`) defeats the substring form.
+    //
+    // Covers the three spellings that set Key in source: `.WithKey(...)`,
+    // `with { Key = ... }`, and an object initializer. It cannot see a key set
+    // *inside* a called factory (`MyRow(item).WithKey(item)`), which is why
+    // this rule ships no automatic fix — see the descriptor.
+    static bool ReceiverAlreadySetsAKey(InvocationExpressionSyntax withKeyInv)
+    {
+        if (withKeyInv.Expression is not MemberAccessExpressionSyntax member) return false;
+
+        foreach (var node in member.Expression.DescendantNodesAndSelf())
+        {
+            switch (node)
+            {
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax inner }
+                    when inner.Name.Identifier.ValueText == "WithKey":
+                    return true;
+
+                // `expr with { Key = … }` and `new X { Key = … }` both reach
+                // here as an assignment to a member named Key.
+                case AssignmentExpressionSyntax { Left: IdentifierNameSyntax { Identifier.ValueText: "Key" } }
+                    when node.Parent is InitializerExpressionSyntax:
+                    return true;
+            }
+        }
+        return false;
+    }
 
     // True when the key expression is one of the two spellings that provably
     // equal what Dsl.AutoKey would assign: the item itself (the IReactorKeyed

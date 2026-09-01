@@ -31,9 +31,10 @@ Conventions for contributors:
 - **`REACTOR_DSL_004` — a `.WithKey(...)` that only restates what `ForEach` already
   supplies (spec 042 §5, issue #1156).** The complement to `ForEach`'s new auto-keying:
   once the factory keys `IReactorKeyed` items itself, `.WithKey(item)` and
-  `.WithKey(item.Key)` inside that projection are noise. Info severity with a code fix
-  that deletes the call — the explicit key wins either way, so behaviour is identical and
-  a warning would break builds for a cosmetic gain. Deliberately narrow: only those two
+  `.WithKey(item.Key)` inside that projection are noise. Info severity, and — like
+  `REACTOR_DSL_002` — no automatic fix: a key the receiver picks up inside a called
+  factory is invisible to syntax, so deleting the call cannot be proven safe to
+  automate. Deliberately narrow: only those two
   spellings are reported, because they are the only ones provably equal to what the
   factory assigns. `.WithKey(item.Id)` is left alone even where `Key => Id`, since
   proving that means reading through the `Key` property body, and it is exactly how an
