@@ -279,8 +279,9 @@ public sealed class VersionSingleSourceTests
     }
 
     /// <summary>
-    /// Returns the lines of the named job (a 4-space-indented `&lt;name&gt;:` key
-    /// under `jobs:`) up to the next job at the same indent, or null.
+    /// Returns the lines of the named job (a two-space-indented
+    /// <c>&lt;name&gt;:</c> key under <c>jobs:</c>) up to the next job at the
+    /// same indent, or null.
     /// </summary>
     static string? ExtractYamlJob(string yaml, string jobName)
     {
