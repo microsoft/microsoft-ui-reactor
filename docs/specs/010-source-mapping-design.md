@@ -58,9 +58,10 @@ Several concrete recommendations did not survive implementation — following th
 document as originally written produces a feature covering 79% of the DSL that is
 silently wrong after any reformat and source-breaking for consumers.
 
-Two spikes were built and measured head-to-head before implementation —
-`azchohfi-source-map-callerinfo-spike` (Approach 1) and
-`azchohfi-source-map-interceptors-spike` (Approach 3):
+Two throwaway spikes were built and measured head-to-head before implementation,
+one per candidate mechanism (Approach 1 and Approach 3). The spike branches were
+not retained — the measurements they produced are recorded inline below and in
+[Measured results](#measured-results-2026-08-26), which is the durable record:
 
 | Section | Original claim | Outcome |
 |---|---|---|
@@ -254,8 +255,8 @@ wrappers."*
 > **stable in C# 14 / .NET 10**, which is this repo's target framework
 > (`net10.0-windows10.0.22621.0`). They were preview-gated when this spec was written.
 >
-> A spike (`azchohfi-source-map-interceptors-spike`) proved this out end to end,
-> and PR #1147 shipped it as `src/Reactor.SourceMap.Generator/`:
+> A spike proved this out end to end, and PR #1147 shipped it as
+> `src/Reactor.SourceMap.Generator/`:
 >
 > - **Full coverage — 189 of 189 factories**, including all 40 `params` and all
 >   22 generic ones. Validated at scale: 5,247 interception sites in
@@ -823,9 +824,13 @@ or PDB files.
 
 ## Measured results (2026-08-26)
 
-Two spikes, built in parallel and measured head-to-head. Branches:
-`azchohfi-source-map-callerinfo-spike` (Approach 1) and
-`azchohfi-source-map-interceptors-spike` (Approach 3).
+Two throwaway spikes, built in parallel and measured head-to-head, one per
+candidate mechanism. **The spike branches were not retained**, so this section is
+the durable record — it is deliberately specific enough (error codes, byte counts,
+reproduction method) to be re-derived rather than merely believed. Approach 3's
+half is additionally verifiable against the shipped generator; Approach 1 never
+shipped, so its rows below are the only surviving evidence for why it was
+rejected.
 
 | Axis | Approach 1 (CallerInfo) | Approach 3 (interceptors) |
 |---|---|---|
