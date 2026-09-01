@@ -58,6 +58,19 @@ dotnet build Reactor.slnx
 dotnet build src/Reactor/Reactor.csproj
 ```
 
+### Reproducing the CI build gate
+
+The plain `dotnet build Reactor.slnx` above is a **Debug** build, and a green Debug build does not clear the `Build solution` CI job. `TreatWarningsAsErrors` is scoped to `Configuration=Release` in `Directory.Build.props`, so Debug stays warning-tolerant for a fast inner loop while the CI PR-gate builds Release and fails on any compiler or analyzer warning.
+
+Before opening a PR, reproduce that job — restore first, then build Release with `--no-restore`:
+
+```bash
+dotnet restore Reactor.slnx
+dotnet build Reactor.slnx --no-restore -c Release
+```
+
+Keep those as two steps, the way [`ci.yml`](.github/workflows/ci.yml) does. A combined `dotnet build Reactor.slnx -c Release` runs its implicit restore under `Configuration=Release` as well, and NuGet honors `TreatWarningsAsErrors` during restore — so `NU`-prefixed restore warnings (an unreachable feed, missing package vulnerability data) become hard errors that CI, which restores without `-c Release`, never hits.
+
 ### From Visual Studio
 
 1. Open `Reactor.slnx` in Visual Studio 2022 (17.8+)

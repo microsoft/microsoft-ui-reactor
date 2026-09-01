@@ -223,7 +223,15 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   solution defaults; single app/test projects usually do not.)
 - **A green Debug build does not clear the `Build solution` CI job.**
   `TreatWarningsAsErrors` is Release-only and CI builds Release, so verify with
-  `dotnet build Reactor.slnx -c Release`. If `WMC0110` / `WMC1509` follows a C# error,
+  `dotnet restore Reactor.slnx` followed by `dotnet build Reactor.slnx --no-restore -c Release`.
+  Keep those two steps split, exactly as `ci.yml` has them (L326/L329). The one-shot
+  `dotnet build Reactor.slnx -c Release` also restores under `Configuration=Release`, and NuGet
+  honors `TreatWarningsAsErrors` during restore, so on a proxied or offline feed `NU1900`
+  ("unable to get package vulnerability data") becomes a hard error — measured on this repo, the
+  one-shot form raised NU errors across **127 projects** versus **12** for the split form, burying
+  the real result before a single file compiles. On a healthy feed neither form emits `NU1900` and
+  the distinction is invisible; it only bites behind a TLS-inspecting proxy or offline. CI is
+  immune because it restores without `-c Release`. If `WMC0110` / `WMC1509` follows a C# error,
   treat the markup errors as a likely cascade: fix the earlier error first, then confirm
   they disappear before investigating them independently.
 - **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
