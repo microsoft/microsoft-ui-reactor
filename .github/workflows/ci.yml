@@ -892,22 +892,25 @@ jobs:
       # its own. A clean tree only means "fresh" if the compile that was
       # supposed to rewrite the tree actually rewrote it, so the verdict and the
       # thing it depends on belong together — a separate step would pass or fail
-      # on its own and leave the reader to connect them. Two ways the compile
-      # can exit 0 without having regenerated what this gate covers:
+      # on its own and leave the reader to connect them.
       #
-      #   * `RunReferenceGeneration` returns null and only *prints* when there is
-      #     no Reactor.xml (or no reference-map.yaml). Phase 5.7's header still
-      #     appears, the compile still says it succeeded, and ~117 reference
-      #     pages silently go unwritten.
-      #   * a `--skip-*` flag added to the invocation above turns a writing phase
-      #     off. Phases 2 (build) and 3 (capture) are expected to be skipped —
-      #     neither writes a page, and skipping capture is the whole point of
-      #     --no-screenshots — and Phase 5 isn't implemented. Any *other* skipped
-      #     phase silently narrows this gate, so it fails here instead.
+      # Only one class of "exited 0 without regenerating" is checked here, and
+      # it is the one only the workflow can see: a `--skip-*` flag added to the
+      # invocation above turning a writing phase off. Phases 2 (build) and 3
+      # (capture) are expected to be skipped — neither writes a page, and
+      # skipping capture is the whole point of --no-screenshots — and Phase 5
+      # isn't implemented. Any *other* skipped phase silently narrows this gate,
+      # so it fails here instead.
       #
-      # Both are checked against the log rather than assumed away, because each
-      # of them turns this gate into a check that cannot fail — which is the
-      # defect the gate was added to fix, reintroduced one level up.
+      # The other class — Phase 5.7 bailing on a missing Reactor.xml or
+      # reference-map.yaml and leaving ~117 reference pages unwritten — used to
+      # be checked here too, by grepping stdout for those two "not found"
+      # strings. That was the wrong owner and the wrong direction of failure: a
+      # reword in CompileCommand.cs would have made the check silently stop
+      # matching, i.e. fail *open*, which is the defect this whole job exists to
+      # fix reintroduced one level up. `docs compile --ci` now returns non-zero
+      # for it, so the exit-code check in the Compile docs step catches it and
+      # this gate does not need to re-derive it from prose.
       #
       # Matching avoids the box-drawing characters in the phase banners on
       # purpose: every pattern here is ASCII, so the gate cannot be defeated by
@@ -927,13 +930,6 @@ jobs:
           if ($log -notmatch [regex]::Escape('Documentation compiled successfully.')) {
             Write-Error 'The docs compile did not report success, so docs/guide was not fully regenerated and a clean tree below would prove nothing. Treating as a failure. See the Compile docs step output.'
             exit 1
-          }
-
-          foreach ($missing in @('Reactor.xml not found', 'reference-map.yaml not found')) {
-            if ($log -match [regex]::Escape($missing)) {
-              Write-Error "Phase 5.7 skipped reference generation ($missing), so docs/guide/reference was not regenerated and this gate cannot judge it. Treating as a failure."
-              exit 1
-            }
           }
 
           # Phase 2 (build), 3 (capture) and 5 (AI author, unimplemented) are the

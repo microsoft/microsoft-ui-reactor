@@ -161,10 +161,25 @@ public sealed class VersionSingleSourceTests
         Assert.Contains("exit 1", step!, global::System.StringComparison.Ordinal);
 
         // A clean tree only means "fresh" if the compile actually rewrote the
-        // tree. Both ways a compile can exit 0 without doing so must stay
-        // checked, or the gate silently becomes a check that cannot fail.
+        // tree, so the gate's own precondition must stay.
         Assert.Contains("Documentation compiled successfully.", step!, global::System.StringComparison.Ordinal);
-        Assert.Contains("Reactor.xml not found", step!, global::System.StringComparison.Ordinal);
+
+        // The skipped-phase detector, and the allow-list that keeps it from
+        // firing on the skips this invocation legitimately produces (Phase 3
+        // capture, via --no-screenshots) plus the unimplemented Phase 5 and the
+        // build phase. Assert the allow-list contents, not just that a regex
+        // exists: widening it to include 5.5 (diagrams) or 5.7 (reference)
+        // would silently stop the gate covering those pages.
+        //
+        // The other way a compile can exit 0 without regenerating — Phase 5.7
+        // bailing on a missing Reactor.xml / reference-map.yaml — is deliberately
+        // NOT pinned here. It moved into `docs compile --ci` itself, where the
+        // state lives, and is covered by ReferenceStalenessWiringTests. Grepping
+        // the log for those messages failed open on a reword; the exit code does
+        // not.
+        Assert.Contains(@"Phase (?<n>[0-9.]+):", step!, global::System.StringComparison.Ordinal);
+        Assert.Contains(@"-notin @('2', '3', '5')", step!, global::System.StringComparison.Ordinal);
+        Assert.Contains("$unexpected", step!, global::System.StringComparison.Ordinal);
     }
 
     [Fact]

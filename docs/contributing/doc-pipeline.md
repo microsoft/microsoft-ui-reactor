@@ -179,12 +179,20 @@ separately: the phase compares the chosen XML against the newest `.cs` under
 with [`REACTOR_DOC_REFGEN_W002`](#6-snippet--image--diagram-error-codes) when the
 source is newer. Run `dotnet build src/Reactor` and compile again.
 
-If no `Reactor.xml` exists at all the phase skips reference generation rather
-than failing, printing:
+If no `Reactor.xml` exists at all, **a local compile** skips reference generation
+rather than failing, printing:
 
 ```
   (Reactor.xml not found — run `dotnet build src/Reactor` first)
 ```
+
+That degradation is deliberate: on a first compile you should still get your
+guide pages. Under `--ci` the same condition **exits 1** instead. CI always
+builds, so a missing input there means the run is not the run that was asked
+for, and skipping the phase would leave the ~117 pages under
+`docs/guide/reference/` silently at whatever was committed. The same applies to
+a missing `reference-map.yaml`. `ReferenceStalenessWiringTests` pins both
+directions.
 
 CI does build it. The `docs-build` job runs `docs compile --no-screenshots --ci`
 *without* `--no-build`, so Phase 2 builds every doc app, each of which
@@ -194,9 +202,10 @@ an ordering reason rather than a missing-build one: `actions/checkout` writes th
 sources before that build runs, so the emitted XML always postdates every `.cs`.
 
 That is no longer left as a property of how the job happens to be spelled. The
-freshness gate ([§10](#10-compiled-output-freshness-gate)) reads the compile log
-and fails if this phase reported `Reactor.xml not found`, because the ~117 pages
-it would have skipped are pages that gate is judging.
+freshness gate ([§10](#10-compiled-output-freshness-gate)) reads a clean
+`git status -- docs/guide` as proof the committed output matches a fresh
+compile, and that reading is only sound if every page was actually written — so
+the non-zero exit above is what the gate stands on.
 
 [i1068]: https://github.com/microsoft/microsoft-ui-reactor/issues/1068
 
@@ -696,16 +705,31 @@ the gate refuses to return a verdict unless the log shows the run completed:
   case: `--ci` builds Release, `TreatWarningsAsErrors` promotes `NU1900`, and the
   run dies before assembling anything. Pass `-p:WarningsNotAsErrors=NU1900` when
   measuring from a machine that cannot reach the NuGet vulnerability API.
-- `Reactor.xml not found` / `reference-map.yaml not found` must be **absent**.
-  Phase 5.7 prints its header, skips generation, and the compile still exits 0
-  (§ *Which `Reactor.xml` the reference phase reads*) — leaving ~117 reference
-  pages unwritten and scoring clean.
 - No phase other than 2 (build), 3 (capture) and 5 (AI author) may report
   `(skipped)`. Those three write no page; anything else does, so a `--skip-*`
   added to the invocation would silently narrow the gate instead of failing it.
+  Only the workflow can see this one — the CLI cannot know that a flag it was
+  handed was a mistake.
 
 Each of those is a way for the gate to become a check that cannot fail — which
 is the defect it was added to fix, one level up.
+
+There is a third way a compile can exit 0 without regenerating, and it is
+**not** checked here on purpose. Phase 5.7 prints its header and then bails when
+`Reactor.xml` or `reference-map.yaml` is missing (see *Which `Reactor.xml` the
+reference phase reads*), leaving ~117 reference pages unwritten. `mur docs
+compile --ci` now **returns non-zero** for that, so the compile step catches it
+and the gate never sees it. The first version of this gate grepped stdout for
+`Reactor.xml not found` instead, which was both the wrong owner and the wrong
+direction of failure: reword the message in `CompileCommand.cs` and the grep
+silently stops matching — it fails *open*. `ReferenceStalenessWiringTests` pins
+the exit code, in both the `--ci` and the local direction, so the contract is a
+test rather than a string.
+
+Note the asymmetry that makes this correct rather than merely stricter: locally,
+a missing `Reactor.xml` is the first-compile case and still just skips with a
+message, because an author who hasn't built yet should still get their guide
+pages. Under `--ci` there is no such case — CI always builds.
 
 ### Why `git status` and not `git diff`
 
