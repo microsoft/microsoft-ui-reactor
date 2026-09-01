@@ -231,7 +231,7 @@ project and edit the `.csproj`:
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.13" />
+    <PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.14" />
   </ItemGroup>
 </Project>
 ```

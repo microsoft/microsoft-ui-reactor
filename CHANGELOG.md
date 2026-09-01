@@ -28,6 +28,20 @@ Conventions for contributors:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.0-preview.14] — 2026-09-01
+
+### Added
+
 - **`REACTOR_DSL_004` — a `.WithKey(...)` that only restates what `ForEach` already
   supplies (spec 042 §5, issue #1156).** The complement to `ForEach`'s new auto-keying:
   once the factory keys `IReactorKeyed` items itself, `.WithKey(item)` and
@@ -83,6 +97,18 @@ Conventions for contributors:
   ordinary method calls, never operators), so they previously reported no location at
   all. Applies to any user-defined conversion to `Element`, respects first-stamp-wins,
   and never writes into a `params` array the caller owns.
+- **A declarative window icon — `icon:` on `ReactorApp.Run`, plus `Run(WindowSpec, …)`
+  overloads (spec 036 §4.1 and §4.3, issue #1143).** The Win32 `HICON` Windows draws in
+  the window caption and Alt-Tab had no declarative route: `TitleBar(...).Icon(...)` only
+  sets the app mark drawn *inside* the client area, and `WindowSpec.Icon` was unreachable
+  because `ReactorApp.Run<TRoot>(...)` accepted no `WindowSpec` — leaving five lines of
+  `WinRT.Interop` / `Win32Interop` in a `configure:` callback as the only route, which is
+  exactly what `samples/apps/chat` and `samples/apps/demo-script-tool` both did. Both flat
+  `Run` overloads now take `WindowIcon? icon` (placed after `fullScreen:` and before the
+  trailing `configure:`, where it reads as one more window property), and new
+  `Run<TRoot>(WindowSpec, …)` / `Run(WindowSpec, Func<…>, …)` overloads close the wider
+  structural gap — min/max size, backdrop, corner style and placement persistence were all
+  unreachable on the primary window too.
 - **`TitleBarElement.NoIcon()` — opt out of the inherited title-bar icon (spec 036 §4.1).**
   The companion to the inheritance change below: use it where a bare title bar is the intent
   on an app that ships an icon. `.Icon(...)` still wins where a *different* mark belongs in
@@ -174,6 +200,14 @@ Conventions for contributors:
   `SizeToContent` on a maximized window, and now unresolved style keys — was silently
   discarded in shipped apps. It now emits ETW like its `SwallowedError` / `HResultFailed`
   siblings.
+- **`dotnet new reactorapp` references the latest Windows App SDK at scaffold time (spec 022,
+  PR #1096).** The template pinned whatever Windows App SDK version was current when the
+  template package was built, so a scaffold from an older `ProjectTemplates` package started
+  life on a stale runtime. It now resolves the newest release through a templating
+  `add-reference` post-action, so the generated app is current without reinstalling the
+  template. The framework reference itself is still stamped at pack time (see the release
+  runbook) — the conditional-section support needed to float it the same way is not yet
+  available in the SDK ([dotnet/sdk#55927](https://github.com/dotnet/sdk/issues/55927)).
 
 ### Deprecated
 
@@ -237,6 +271,115 @@ Conventions for contributors:
   `SelfTestVerdict_OnlySkips_PositiveControl`, asserts nothing on purpose so the SKIPPED verdict
   has an end-to-end positive control on every run — the Host half of the mechanism lives in a
   project no test can reference, so a fabricated TAP stream cannot reach it.
+
+- **`.ConnectedAnimation(key)` now actually plays across a replaced subtree (PR #1124).**
+  The list-to-detail shape every hero animation uses never animated: `Mount()` resolved the
+  key against `ConnectedAnimationService` immediately, but the reconciler mounts a
+  replacement *before* unmounting what it replaces — `ChildReconciler` calls `Mount(newEl)`,
+  then `ReplaceChildWithExitTransition`, which unmounts the old control and runs
+  `PrepareToAnimate`. The lookup therefore ran before the snapshot existed, returned `null`,
+  and the animation was dropped in silence; the destination simply appeared at its final
+  position, which is why the *settled* state looked correct and the bug hid. Resolution now
+  happens in `FlushConnectedAnimations`, after the whole pass, so visit order no longer
+  matters. Deliberately **not** included: withdrawing the unclaimed snapshots Reactor
+  prepares for every outgoing keyed sibling (it cannot know which one was activated).
+  `ConnectedAnimation.Cancel()` at flush time crashes the process with `0xC0000005` inside
+  `Microsoft.UI.Xaml.dll`, because by then the source has been unmounted and returned to
+  `ElementPool`, so the animation holds an already-reset visual. The ~1s of ghosting from
+  unclaimed snapshots remains.
+
+- **A controlled `SelectedIndex` that WinUI cannot honor no longer eats the user's next real
+  selection (issue #1090, PRs #1091 and #1097).** Echo suppression arms one token per
+  *expected* change event, and the controlled write was gated only on drift
+  (`control != requested`). That is not sufficient: **WinUI will not honor a selection past
+  the end of its `ItemsSource`** — the property stays put, no `SelectionChanged` is raised,
+  and the armed token strands, later swallowing a genuine selection. The common trigger is
+  an items array still empty on mount while its data loads, which is idiomatic for
+  `UseState<T[]>([])` plus a fetch: two clamped writes arm two tokens, the single coalesced
+  materialization event consumes one, and the leftover eats the first real click. The
+  signature is a suppress counter that never returns to 0 after startup. The guard is
+  reachability, not emptiness — an index past the end of a *short non-empty* source has the
+  same defect, and on the typed path additionally throws `ArgumentException` from the setter
+  rather than merely swallowing an event. `-1` stays always-reachable: it is the spec-050
+  force-clear sentinel and is meaningful against any source. The rule is centralized in
+  `SelectionWriteGuard` and covers the untyped `ListView` / `GridView` handlers plus the
+  typed/templated lifecycle path (Mount and Update × `ListView` / `GridView` / `FlipView`)
+  that the first fix missed.
+
+- **Legacy text-node `TreeView` renders under NativeAOT (PR #1108).** Node text goes through
+  a classic `{Binding}` that hops `TreeViewNode.Content` (native WinRT) →
+  `TreeViewNodeData.Content` (a *managed* record property). That managed hop runs through
+  CsWinRT's reflection-based `ICustomPropertyProvider`, which trimming removes — so the
+  `TextBlock` rendered empty **with no build-time warning**, because the reflection crosses
+  the WinRT ABI where the IL trim analyzers cannot see it (the publish reports zero
+  IL2xxx/IL3xxx). `TreeViewNodeData` now carries `[WinRT.GeneratedBindableCustomProperty]`
+  so CsWinRT emits strongly-typed binding metadata; no public API surface is added. Scoped to
+  `"Content"` deliberately — it is the only member the template binds, and the unscoped
+  overload also emits an accessor for the `[Obsolete]` `ContentElement`, which fails the
+  warnings-as-errors Release build with `CS0618`. This retires an unexplained
+  `DefaultAotSkipPatterns` entry: `ControlUpdate_Collections` was skipped under AOT as a
+  *"control-collection assertion still under investigation"* and was this bug all along, so
+  it now guards the fix.
+
+- **Devtools `properties` / `setProperty` find DependencyProperties again (issue #1109).**
+  Discovery went exclusively through `Type.GetField` / `Type.GetFields`, but CsWinRT projects
+  WinUI `DependencyProperty` statics as static **properties**, not fields — `typeof(Button)`
+  exposes 0 DP-typed static fields and 112 DP-typed static properties, and `Grid.RowProperty`
+  exists only as a property. Every lookup on every element therefore returned
+  `{"count":0,"properties":[]}`, and a by-name lookup always failed. Both member kinds are now
+  resolved, **fields first** so C#-authored DPs (Reactor's own, and third-party controls,
+  which really are fields) are unchanged, deduped on the trimmed name. Because reading a
+  property executes a getter, a failing static initializer or WinRT activation maps to "not
+  found" rather than escaping through the MCP transport, and a write-only DP-typed static is
+  skipped before `GetValue(null)` throws. Under NativeAOT the metadata is trimmed away and the
+  lookups still come back empty — previously indistinguishable from an element that genuinely
+  has no DPs — so the tool now **detects an AOT build and says so**, naming the fix, instead
+  of returning the same message it gives for a typo.
+
+- **The window-icon fallbacks work (issue #1143).** Two defects surfaced while verifying the
+  new `icon:` parameter above. The executable-icon fallback had been dead code since it was
+  written: it called `LoadImageW` with `LR_LOADFROMFILE` against `Environment.ProcessPath`,
+  but that flag reads standalone image files and returns 0 for every `.exe` — measured against
+  `C:\Windows\explorer.exe`, which demonstrably has an icon and still yielded 0 while
+  `ExtractIconExW` on the same binary returned a valid handle. It now uses `ExtractIconExW`,
+  which is why apps setting `<ApplicationIcon>` reported `ICON_BIG=0 ICON_SMALL=0 class
+  HICON=0`. Separately, `WindowIcon.FromResource` did not work in a packaged app — the case it
+  exists for: `AppWindow.SetIcon` wants a filesystem path, and handed an `ms-appx:` URI inside
+  an MSIX process it does not fault, it silently applies a *default* icon. `WindowIcon.Apply`
+  now maps `ms-appx:` onto a path under `AppContext.BaseDirectory` and reports failure when
+  that names no file, so the fallback runs instead of locking in a blank icon. Worth knowing
+  for anyone re-measuring this: in the **unpackaged** selftest host `ms-appx:` happens to map
+  to the executable directory, so the URI form looks fine there; inside two real MSIX
+  processes it produced the *same shared handle* while path forms produced distinct real ones.
+
+- **An installed `mur` is no longer frozen at the version you first bootstrapped, and
+  `mur check` runs (PR #1130).** Two independent packaging bugs, each invisible from a dev
+  machine because the local path worked and only the shipped path was broken.
+  `dotnet pack src/Reactor.Cli` ran without `-p:Version`, so every commit packed as `1.0.0`;
+  `bootstrap.ps1` detects an existing install and calls `dotnet tool update`, which compared
+  `1.0.0` to `1.0.0` and **no-opped with exit 0**. Since the only guard was the exit code,
+  bootstrap printed success while leaving the old binary in place — and `mur upgrade`
+  explicitly disclaims updating the tool itself and refers you back to `bootstrap.ps1`, so
+  both documented refresh paths dead-ended. Packing now stamps a per-run version pinned on
+  install, and bootstrap compares the SHA in `mur --version` against `HEAD` and fails loudly
+  with remediation steps, because an exit-code check structurally cannot detect a no-op —
+  which is what let this drift for months. Second, `Reactor.Cli` referenced Roslyn with
+  `PrivateAssets="all"` — correct for an *analyzer* project, wrong for a `PackAsTool` global
+  tool — so `Microsoft.CodeAnalysis{,.CSharp}.dll` were excluded from the shipped payload and
+  every installed `mur check` threw `FileNotFoundException` at startup. The CLI does not just
+  compile against Roslyn, it executes it.
+
+- **`mur loc` and `mur docs` help output names `mur`, not `duct` (PR #1129).** Every
+  `mur loc <sub> --help` and `mur docs --help` printed usage lines and unknown-command errors
+  for `duct loc …` / `duct docs …` — a command name that does not exist — left over from the
+  Duct → Reactor rename. Live docs describing the current CLI surface are corrected alongside;
+  the historical record is deliberately untouched.
+
+- **A project scaffolded from the template runs in Visual Studio 26 (issue #1084).** The
+  template's `launchSettings.json` carried comments as repeated single-line `"//"` keys.
+  Visual Studio 26 refuses to launch a project with that shape, so a freshly created app built
+  but would not run, and the comments are now consolidated into a single array of strings
+  under one `"//"` key — which also removes the duplicate JSON keys the old form relied on.
 
 ### Security
 

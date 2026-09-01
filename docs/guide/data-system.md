@@ -105,7 +105,7 @@ optional `Microsoft.UI.Reactor.Advanced` package (spec 062 §7). Add the
 package reference and a second `using static`:
 
 ```xml
-<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.13" />
+<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.14" />
 ```
 
 ```csharp
