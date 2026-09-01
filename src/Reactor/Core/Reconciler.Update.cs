@@ -267,7 +267,7 @@ public sealed partial class Reconciler
             // Anything that changed since the pre-modifier observation came from a
             // one-shot modifier, which nothing re-applies.
             global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
-                .ObserveAfterModifiers(tbCtl);
+                .ObserveAfterModifiers(tbCtl, isMount: false);
         }
 
         // Re-apply the caption-derived default after modifiers have run so a

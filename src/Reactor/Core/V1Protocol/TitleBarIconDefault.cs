@@ -326,15 +326,23 @@ internal static class TitleBarIconDefault
     /// over it. Misclassifying here is self-correcting rather than permanent: if a setter
     /// really does own the slot, its next render diverges at the setter stage and
     /// <see cref="ObserveAfterSetters"/> upgrades the record back to repeating.
-    /// </remarks>
-    internal static void ObserveAfterModifiers(Microsoft.UI.Xaml.Controls.TitleBar control)
+    /// </remarks>    /// <param name="control">The mounted WinUI <c>TitleBar</c> to observe.</param>
+    /// <param name="isMount">
+    /// <c>true</c> on the mount pass. <c>ApplyModifiers</c> runs <c>OnMountAction</c> on
+    /// mount and <c>OnUpdateAction</c> on every in-place update, so the stage alone does
+    /// not settle repeatability — the phase does. A mount-time modifier write happens once;
+    /// an update-time one happens again on the next update, and treating it as one-shot
+    /// would strand its value on the control after the modifier was removed.
+    /// </param>
+    internal static void ObserveAfterModifiers(
+        Microsoft.UI.Xaml.Controls.TitleBar control, bool isMount)
     {
         if (!s_applied.TryGetValue(control, out var last)) return;
         if (ReferenceEquals(control.IconSource, last.Source)) return;
 
         s_applied.AddOrUpdate(control, new AppliedIcon(
             last.Value, last.ElementOwned, authorOwned: true, control.IconSource,
-            last.FileStamp, authorRepeats: false));
+            last.FileStamp, authorRepeats: !isMount));
     }
 
     /// <summary>

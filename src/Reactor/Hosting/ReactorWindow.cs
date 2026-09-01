@@ -222,11 +222,14 @@ public sealed partial class ReactorWindow : IDisposable
     /// one native element. That duplicate-RCW hazard is documented in
     /// <c>Reconciler.cs</c>'s <c>ReactorAttached.StateProperty</c> notes, where it caused a
     /// real event-subscription bug.
-    /// <para>Not a leak: entries are dropped by <see cref="ClearTitleBarControl"/> on
-    /// unmount, and the list itself is per-window, so anything still in it dies with the
-    /// window.</para>
+    /// <para>Released on unmount by <see cref="ClearTitleBarControl"/>, and unconditionally
+    /// in <see cref="Dispose"/> — the close path does not unmount the root tree, so
+    /// without that a retained closed window would keep every wrapper alive.</para>
     /// </remarks>
     private readonly List<Microsoft.UI.Xaml.Controls.TitleBar> _titleBarIconControls = new();
+
+    /// <summary>Test hook: how many mounted title bars this window is holding.</summary>
+    internal int TitleBarIconControlCountForTests => _titleBarIconControls.Count;
     private bool _titleBarControlExplicitHeight;
     private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
@@ -3296,6 +3299,14 @@ public sealed partial class ReactorWindow : IDisposable
         // alive. Idempotent and a no-op when a close path already prepared it
         // (the usual order: Window.Closed → Dispose). (issue #537)
         PrepareTitleBarForClose();
+
+        // The mounted title bars are held strongly for the icon push, and nothing else
+        // drops them on this path: Reconciler.Dispose runs component cleanups and unmounts
+        // navigation-host children, but never the root visual tree, so
+        // ClearTitleBarControl is not reached on an ordinary native close. An app that
+        // keeps a reference to a closed ReactorWindow would otherwise keep every TitleBar
+        // wrapper and its applied-icon record alive with it.
+        _titleBarIconControls.Clear();
 
         _embedWatchdog?.Stop();
         DetachBackgroundDragRoot();

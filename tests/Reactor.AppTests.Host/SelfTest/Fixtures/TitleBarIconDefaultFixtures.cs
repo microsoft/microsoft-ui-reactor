@@ -1244,6 +1244,35 @@ internal static class TitleBarIconDefaultFixtures
             }
         }
 
+        private sealed class OnUpdateComponent : Component
+        {
+            public Action<int>? SetPhase;
+            public WinUI.TitleBar? Bar;
+
+            public override Element Render()
+            {
+                var (phase, set) = UseState(0);
+                SetPhase = set;
+
+                // A benign modifier in EVERY phase: OnUpdateAction only runs when the
+                // element already had modifiers on the previous render (oldM is not null),
+                // so without this the phase 0 -> 1 update would never invoke it and the
+                // fixture would assert against a write that never happened.
+                var bar = TitleBar("Upd").Set(b => Bar = b).Margin(0);
+
+                // Present only in phase 1. OnUpdateAction runs on every in-place update,
+                // so this write repeats for as long as the modifier is declared.
+                if (phase == 1)
+                    bar = bar.OnUpdateAdd(fe =>
+                    {
+                        if (fe is WinUI.TitleBar b)
+                            b.IconSource = new WinUI.FontIconSource { Glyph = "\uE8A5" };
+                    });
+
+                return VStack(bar, TextBlock($"phase {phase}"));
+            }
+        }
+
         public override async Task RunAsync()
         {
             EnsureUIDispatcher();
@@ -1328,6 +1357,48 @@ internal static class TitleBarIconDefaultFixtures
                         stable.Bar?.IconSource is WinUI.ImageIconSource);
                 }
                 finally { await CloseAndSettle(stableWin); }
+
+                // (d) an .OnUpdate(...) icon write repeats, so removing it must restore the
+                //     inherited icon. Distinct from (a)/(b): OnUpdateAction runs on EVERY
+                //     in-place update, unlike OnMountAction, so classifying every
+                //     modifier-stage write as one-shot would strand this one.
+                var upd = new OnUpdateComponent();
+                var updWin = await OpenAndSettle(Spec("OneShotUpdate"), () => upd);
+                try
+                {
+                    H.Check("TitleBarIcon_OneShot_UpdateMounted", upd.Bar is not null);
+
+                    upd.SetPhase?.Invoke(1);   // adds the OnUpdate icon write
+                    await updWin.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    H.Check($"TitleBarIcon_OneShot_UpdateModifierTookSlot ({upd.Bar?.IconSource?.GetType().Name})",
+                        upd.Bar?.IconSource is WinUI.FontIconSource);
+
+                    upd.SetPhase?.Invoke(2);   // removes it again
+                    await updWin.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var updKind = upd.Bar?.IconSource?.GetType().Name ?? "<null>";
+                    Console.WriteLine($"# oneShot: updateAfterRemoval={updKind}");
+                    H.Check($"TitleBarIcon_OneShot_UpdateModifierRemovalRestoresInherited ({updKind})",
+                        upd.Bar?.IconSource is WinUI.ImageIconSource);
+                }
+                finally { await CloseAndSettle(updWin); }
+
+                // (e) the close path releases the strongly-held title bars. Reconciler
+                //     .Dispose never unmounts the root tree, so nothing else drops them.
+                var leakComp = new BarComponent(static e => e);
+                var leakWin = await OpenAndSettle(Spec("OneShotLeak"), () => leakComp);
+                var heldWhileOpen = leakWin.TitleBarIconControlCountForTests;
+                await CloseAndSettle(leakWin);
+
+                Console.WriteLine($"# oneShot: heldOpen={heldWhileOpen} heldClosed={leakWin.TitleBarIconControlCountForTests}");
+
+                // Positive control: it really was holding one, so the zero below is a
+                // release rather than a bar that was never tracked.
+                H.Check($"TitleBarIcon_OneShot_HeldWhileOpen ({heldWhileOpen})", heldWhileOpen == 1);
+                H.Check($"TitleBarIcon_OneShot_ReleasedOnClose ({leakWin.TitleBarIconControlCountForTests})",
+                    leakWin.TitleBarIconControlCountForTests == 0);
             }
             finally
             {
