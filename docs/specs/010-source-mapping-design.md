@@ -30,6 +30,12 @@ amendments where the original text is wrong.
 > | Interceptor generator (1,169 lines) | `src/Reactor.SourceMap.Generator/` |
 > | `REACTOR_SOURCEMAP_001` | emitted when a `[ReactorSourceTransparent]` helper is not forwardable |
 >
+> **On citations.** This document cites code by **file and symbol name**, never by
+> line number. `Element.cs` alone is >7,600 lines and moved every previously-cited
+> line by hundreds when source mapping landed; a line number in a long-lived design
+> record is stale the moment the next PR merges. Every symbol named here is
+> greppable.
+>
 > **Two independent gates**, which is a refinement on this spec's single
 > `#if DEBUG` idea:
 >
@@ -170,10 +176,10 @@ values are baked into IL as constants. Zero runtime cost, zero allocations.
 
 > **The principle is right and the work is already done.** Storing the mapping on
 > the realized control via an attached `DependencyProperty` is exactly correct —
-> but Reactor **already does this**, so no new property is needed. `ReactorState`
-> (`Reconciler.cs:384`) carries an `Element` back-pointer, is stored on the control
-> via `ReactorAttached.StateProperty` (`Reconciler.cs:469`), and is refreshed on
-> every update (`Reconciler.cs:592`). Reading `CallSite` is:
+> but Reactor **already does this**, so no new property is needed.
+> `Reconciler.ReactorState` carries an `Element` back-pointer, is stored on the
+> control via `ReactorAttached.StateProperty`, and is refreshed on every update by
+> `SetElementTagIfNeeded`. Reading `CallSite` is:
 >
 > ```
 > UIElement → ReactorAttached.StateProperty → ReactorState.Element → Element.CallSite
@@ -358,12 +364,12 @@ instead of a custom compiler.
 >
 > | Site | Declaration | Error |
 > |---|---|---|
-> | `Element.cs:3967` | `ImageElement(string Source)` | CS8866 |
-> | `Element.cs:4036` | `WebView2Element(Uri? Source = null)` | CS8866 |
-> | `Element.cs:6554` | `MediaPlayerElementElement(string? Source = null)` | CS8866 |
-> | `Element.cs:7070` | `AnimatedIconElement` → `object? Source` | CS0108 |
-> | `Element.cs:7094` | `ParallaxViewElement` → `UIElement? Source` | CS0108 |
-> | `ElementExtensions.cs:1167` | `Source(this ParallaxViewElement, UIElement)` — a fluent **extension method** | An instance property shadows it during member lookup, risking `CS1955` at `el.Source(...)` call sites |
+> | `Element.cs` | `ImageElement(string Source)` | CS8866 |
+> | `Element.cs` | `WebView2Element(Uri? Source = null)` | CS8866 |
+> | `Element.cs` | `MediaPlayerElementElement(string? Source = null)` | CS8866 |
+> | `Element.cs` | `AnimatedIconElement` → `object? Source` | CS0108 |
+> | `Element.cs` | `ParallaxViewElement` → `UIElement? Source` | CS0108 |
+> | `ElementExtensions.cs` | `Source(this ParallaxViewElement, UIElement)` — a fluent **extension method** | An instance property shadows it during member lookup, risking `CS1955` at `el.Source(...)` call sites |
 >
 > The sixth site is why a rename is mandatory rather than cosmetic — working around
 > the five records individually leaves it to surface later. **Use `CallSite`**
@@ -383,7 +389,8 @@ instead of a custom compiler.
 > Two consequences of bucketing, both benign: a stamped element has non-null
 > `Extensions`, so it already satisfies `NeedsTag` (making the runtime flag relevant
 > only to *unstamped* elements); and it declines the `Extensions is null` fast paths
-> at `ElementFactory.cs:231` and `:757` while the flag is on.
+> in `ElementFactory.cs` (the keyed-memo and component-compare arms) while the flag
+> is on.
 
 **As shipped** (`src/Reactor/Core/SourceLocation.cs`, abridged — see the file for
 the full doc comments):
@@ -480,10 +487,10 @@ spike confirmed the stamp survives fluent chaining.
 > UIElement → Reconciler.ReactorAttached.StateProperty → ReactorState.Element → Element.CallSite
 > ```
 >
-> `ReactorState.Element` is declared at `Reconciler.cs:386` and stored via the
-> attached DP registered at `Reconciler.cs:469`. It is refreshed on every update at
-> `Reconciler.cs:592`, so it tracks the current render rather than a mount-time
-> snapshot. `Reactor.csproj` already grants
+> `ReactorState.Element` is a field on `Reconciler.ReactorState`, stored via the
+> attached DP registered as `ReactorAttached.StateProperty`. It is refreshed on
+> every update by `SetElementTagIfNeeded`, so it tracks the current render rather
+> than a mount-time snapshot. `Reactor.csproj` already grants
 > `<InternalsVisibleTo Include="Microsoft.UI.Reactor.Devtools" />`, so devtools can
 > read it with no new public API.
 >
@@ -491,7 +498,7 @@ spike confirmed the stamp survives fluent chaining.
 > `CallSite` is one DP read.
 >
 > **One caveat that is real:** the back-pointer is deliberately sparse. `NeedsTag`
-> (`Reconciler.cs:607`) tags only elements with callbacks, a `Key`, `Extensions`, or
+> tags only elements with callbacks, a `Key`, `Extensions`, or
 > reference modifiers — TextBlock/Border/StackPanel/Image leaves stay untagged, which
 > PR #468 (`2f4f0c50`) introduced to save ~301 B/op on M12. Bucketing `CallSite` into
 > `ElementExtras` (§1.1) satisfies `NeedsTag` automatically for stamped elements, so
@@ -531,12 +538,12 @@ public static class SourceInfo
 
 > **Amended (2026-08-26): do not implement this either.** It exists only to feed
 > the §1.3 attached property, which is itself redundant. `SetElementTagIfNeeded`
-> (`Reconciler.cs:586`) already refreshes `ReactorState.Element` on every mount and
+> (`SetElementTagIfNeeded`) already refreshes `ReactorState.Element` on every mount and
 > update, so `CallSite` is reachable from any tagged control with no mount-path
 > change at all.
 >
 > The original text's claim that `Mount` is "a single insertion point" is
-> **correct** and still worth knowing — `Reconciler.Mount.cs:33` is a single public
+> **correct** and still worth knowing — `Reconciler.Mount` is a single public
 > choke point where all four dispatch arms converge, with a common post-dispatch
 > tail at `:145`. It simply is not needed for this feature.
 
@@ -658,7 +665,7 @@ When `--preview` is running with dev tools enabled, add an inspect mode:
 > recording why, because the spec's own instinct was better than the spike's
 > conclusion.
 >
-> The spike checked `Element.ShallowEquals` (`Element.cs:421`) — the reconciler's
+> The spike checked `Element.ShallowEquals` — the reconciler's
 > explicit allow-list — confirmed it never reads `CallSite`, and stopped there.
 > That single check was sound but incomplete: it verified the path the spec
 > *named*, not the paths bucketing subsequently created. Shipping needed three
@@ -750,7 +757,7 @@ solve this:
 >
 > The practical surfaces, in ascending cost:
 >
-> 1. **MCP tool** — no UI. `SelectorResolver.cs:90` and `DevtoolsUiaTools.cs:532`
+> 1. **MCP tool** — no UI. `SelectorResolver.cs` and `DevtoolsUiaTools.cs`
 >    are already stubbed and hard-erroring on this; wiring them is devtools §3.2.
 > 2. **VS Code** — pick mode in the embedded preview, then
 >    `vscode.window.showTextDocument(uri, { selection })`. No CLI shell-out needed.
@@ -831,7 +838,7 @@ Two spikes, built in parallel and measured head-to-head. Branches:
 | Unstamped alloc (bucketed) | +0.00 B/op | +0.00 B/op |
 | Stamped alloc | **+152 B/site** | +312 B/site |
 | Build-time cost | none | **+16–22% wall, +20–27% `Csc`** (incremental) |
-| `string → Element` operator | wrong (`Element.cs:383`) | null ("unknown") |
+| `string → Element` operator | wrong (`Element.cs`) | null ("unknown") |
 
 Method: M12 `Pool_Rent_HotPath`, Release, 1000 iterations × 5 reps. Allocation
 bytes are the comparable axis — the timing axis is environment-contaminated (spec
@@ -867,13 +874,14 @@ declared them unfixable was wrong in an instructive way: each was treated as a
 property of the *capture mechanism*, when both were actually properties of *where
 the generator chose to intercept*.
 
-- **`implicit operator Element(string)`** (`Element.cs:383`) calls `TextBlock`
-  from inside the Reactor assembly, so bare-string children (`VStack("hi")`) were
-  not attributable to user code — CallerInfo reported `Element.cs`, interceptors
-  reported `null`, and an operator body inside Reactor is structurally unreachable
-  by an interceptor. **Fixed by argument-position stamping:** the *enclosing*
-  interceptor stamps each converted argument at its own line, respecting
-  first-stamp-wins and never writing into a `params` array the caller owns.
+- **`implicit operator Element(string)`** (declared on `Element` in `Element.cs`)
+  calls `TextBlock` from inside the Reactor assembly, so bare-string children
+  (`VStack("hi")`) were not attributable to user code — CallerInfo reported
+  `Element.cs` itself, interceptors reported `null`, and an operator body inside
+  Reactor is structurally unreachable by an interceptor. **Fixed by
+  argument-position stamping:** the *enclosing* interceptor stamps each converted
+  argument at its own line, respecting first-stamp-wins and never writing into a
+  `params` array the caller owns.
 - **Helper-method attribution** — see
   [Stack-based resolution for helper methods](#stack-based-resolution-for-helper-methods)
   above. **Fixed by `[ReactorSourceTransparent]`.**
