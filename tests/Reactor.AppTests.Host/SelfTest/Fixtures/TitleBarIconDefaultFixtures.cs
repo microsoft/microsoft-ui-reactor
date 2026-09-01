@@ -985,12 +985,24 @@ internal static class TitleBarIconDefaultFixtures
 
         private sealed class TallBar : Component
         {
-            internal static Action<int>? Setter;
+            // The static write lives in the constructor, not Render: assigning a static
+            // from an instance method trips a code-quality rule, and there is no reason to
+            // re-publish the pointer on every render.
+            private static TallBar? s_current;
+            private Action<int>? _setter;
+
+            public TallBar() => s_current = this;
+
+            internal static bool Ready => s_current?._setter is not null;
+
+            internal static void SetPhase(int value) => s_current?._setter?.Invoke(value);
+
+            internal static void Reset() => s_current = null;
 
             public override Element Render()
             {
                 var (phase, set) = UseState(0);
-                Setter = set;
+                _setter = set;
                 return phase == 0
                     ? TitleBar("Tall").HeightOption(WindowTitleBarHeight.Tall)
                     : TextBlock("gone");
@@ -1016,7 +1028,7 @@ internal static class TitleBarIconDefaultFixtures
         {
             EnsureUIDispatcher();
 
-            TallBar.Setter = null;
+            TallBar.Reset();
             var win = await OpenAndSettle(Spec("TwoBarHeights"), () => new HeightBarsComponent());
             try
             {
@@ -1028,8 +1040,8 @@ internal static class TitleBarIconDefaultFixtures
                 H.Check($"TitleBarIcon_BarHeights_TallApplied ({tallApplied})",
                     tallApplied == Microsoft.UI.Windowing.TitleBarHeightOption.Tall);
 
-                H.Check("TitleBarIcon_BarHeights_SetterCaptured", TallBar.Setter is not null);
-                TallBar.Setter?.Invoke(1);
+                H.Check("TitleBarIcon_BarHeights_SetterCaptured", TallBar.Ready);
+                TallBar.SetPhase(1);
                 await win.Host.WaitForIdleAsync();
                 await Harness.Render(300);
 
@@ -1045,7 +1057,7 @@ internal static class TitleBarIconDefaultFixtures
             }
             finally
             {
-                TallBar.Setter = null;
+                TallBar.Reset();
                 await CloseAndSettle(win);
             }
         }
