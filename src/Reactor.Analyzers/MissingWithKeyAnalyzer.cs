@@ -309,9 +309,19 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     // `TextBlock(x).WithKey("a").WithKey(item)` does not fall back to
     // `item.Key` — it leaves `"a"`. Reporting that would be a false positive
     // whose fix silently changes the key.
+    //
+    // Matched on syntax rather than the `.Contains(".WithKey(")` probe the
+    // rules use elsewhere. Those probes fail safe — a miss just means no
+    // diagnostic — but a miss here means an unsafe fix, and trivia between the
+    // name and the argument list (`.WithKey /* note */ ("a")`) defeats the
+    // substring form.
     static bool OverridesAnEarlierKey(InvocationExpressionSyntax withKeyInv) =>
         withKeyInv.Expression is MemberAccessExpressionSyntax member
-        && member.Expression.ToString().Contains(".WithKey(");
+        && member.Expression
+            .DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(inner => inner.Expression is MemberAccessExpressionSyntax innerMember
+                          && innerMember.Name.Identifier.ValueText == "WithKey");
 
     // True when the key expression is one of the two spellings that provably
     // equal what Dsl.AutoKey would assign: the item itself (the IReactorKeyed

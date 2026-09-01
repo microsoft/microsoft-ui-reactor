@@ -1380,4 +1380,30 @@ namespace TestApp
             TestCode = source,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    [Fact]
+    public async Task DSL_004_Override_Guard_Survives_Trivia_Between_Name_And_Args()
+    {
+        // The guard matches syntax, not `.Contains(".WithKey(")`. A comment
+        // between the name and the argument list defeats the substring form,
+        // and a miss here is an unsafe fix rather than a missed diagnostic.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Text).WithKey /* pinned */ (""other"").WithKey(r)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
 }
