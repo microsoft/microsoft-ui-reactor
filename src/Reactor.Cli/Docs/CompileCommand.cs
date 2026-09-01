@@ -560,6 +560,32 @@ internal static partial class CompileCommand
                 }
                 Console.WriteLine($"  Generated: {phaseRefResult.Pages.Count} page(s)");
             }
+            else if (ci)
+            {
+                // A null result means RunReferenceGeneration bailed on a missing
+                // input — no Reactor.xml, or no reference-map.yaml — having
+                // already said so on stdout. Locally that is a reasonable
+                // degradation: an author who hasn't built yet still gets their
+                // guide pages. Under --ci it is not. CI always builds, so a
+                // missing input means the run is not the run that was asked
+                // for, and the ~117 pages under docs/guide/reference/ are
+                // silently left at whatever was committed.
+                //
+                // Exiting 0 there is what let the freshness gate in
+                // .github/workflows/ci.yml be lied to: a compile that wrote no
+                // reference page leaves a clean tree, which is indistinguishable
+                // from an up-to-date one by `git status`. The gate used to
+                // re-derive this by grepping stdout for the two "not found"
+                // strings, which fails *open* the moment either string is
+                // reworded here. Owning the verdict where the state lives makes
+                // it a typed exit code instead (issue #1052).
+                Console.Error.WriteLine(
+                    "Reference generation was skipped for want of an input (see above), so no page " +
+                    "under docs/guide/reference was written. That is a failure in --ci mode: pass " +
+                    "--skip-reference to skip the phase deliberately, or build src/Reactor so " +
+                    "Reactor.xml exists.");
+                return 1;
+            }
             if (hasErrors && ci)
             {
                 Console.Error.WriteLine("Reference generation failed.");

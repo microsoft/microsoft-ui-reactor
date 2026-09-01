@@ -111,19 +111,102 @@ public class ReferenceStalenessWiringTests
 
     /// <summary>
     /// No build at all is a skip, not a failure — the first-compile case, and
-    /// the one the "not found" message exists for.
+    /// the one the "not found" message exists for. Scoped to a local run: see
+    /// the <c>--ci</c> pair below, which must fail on the same fixture.
     /// </summary>
     [Fact]
-    public void No_build_at_all_skips_reference_generation_without_failing()
+    public void No_build_at_all_skips_reference_generation_without_failing_locally()
+    {
+        using var repo = new FakeRepo();
+        repo.PlantSource("Core/Widget.cs", Base);
+
+        var (exitCode, output) = repo.CompileWithReferenceLocally();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Reactor.xml not found", output);
+        Assert.DoesNotContain("REACTOR_DOC_REFGEN_W002", output);
+    }
+
+    /// <summary>
+    /// Issue #1052. Under <c>--ci</c> the same missing input is a failure, not a
+    /// degradation: CI always builds, so no <c>Reactor.xml</c> means the run is
+    /// not the run that was asked for, and the ~117 pages under
+    /// <c>docs/guide/reference/</c> are silently left at whatever was committed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what the <c>docs-build</c> freshness gate stands on. That gate
+    /// reads a clean <c>git status -- docs/guide</c> as "the committed output
+    /// matches a fresh compile" — a reading that is only true if the compile
+    /// wrote every page it was supposed to. A skipped Phase 5.7 leaves the tree
+    /// clean for the wrong reason, and exiting 0 there made the gate
+    /// unfailable for that whole class of drift.
+    /// </para>
+    /// <para>
+    /// The gate used to re-derive this by grepping stdout for
+    /// <c>Reactor.xml not found</c>. That failed <em>open</em>: reword the
+    /// message in <c>CompileCommand</c> and the grep silently stops matching.
+    /// The exit code is the contract now, and this test is what pins it — the
+    /// pair with the local case above is what shows it is <c>--ci</c> doing the
+    /// work and not the fixture.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void No_build_at_all_fails_reference_generation_under_ci()
     {
         using var repo = new FakeRepo();
         repo.PlantSource("Core/Widget.cs", Base);
 
         var (exitCode, output) = repo.CompileWithReference();
 
-        Assert.Equal(0, exitCode);
+        Assert.Equal(1, exitCode);
         Assert.Contains("Reactor.xml not found", output);
-        Assert.DoesNotContain("REACTOR_DOC_REFGEN_W002", output);
+        Assert.Contains("Reference generation was skipped for want of an input", output);
+        // The compile must not claim success on the way out — that string is
+        // the freshness gate's own precondition.
+        Assert.DoesNotContain("Documentation compiled successfully.", output);
+    }
+
+    /// <summary>
+    /// The second missing input Phase 5.7 bails on. Same contract, different
+    /// cause — asserting only the <c>Reactor.xml</c> case would leave this one
+    /// free to regress back to a silent exit 0.
+    /// </summary>
+    [Fact]
+    public void Missing_reference_map_fails_under_ci_but_not_locally()
+    {
+        using var repo = new FakeRepo();
+        repo.PlantXml("x64/Release/net10.0-windows10.0.22621.0", Base.AddMinutes(30));
+        repo.PlantSource("Core/Widget.cs", Base);
+        repo.RemoveReferenceMap();
+
+        var (ciExit, ciOutput) = repo.CompileWithReference();
+        var (localExit, localOutput) = repo.CompileWithReferenceLocally();
+
+        Assert.Contains("reference-map.yaml not found", ciOutput);
+        Assert.Equal(1, ciExit);
+
+        Assert.Contains("reference-map.yaml not found", localOutput);
+        Assert.Equal(0, localExit);
+    }
+
+    /// <summary>
+    /// The non-vacuity control for the two <c>--ci</c> failures above: with both
+    /// inputs present, <c>--ci</c> passes. Without this, those tests would look
+    /// identical against a build that failed <c>--ci</c> for any reason at all.
+    /// </summary>
+    [Fact]
+    public void Both_inputs_present_passes_under_ci()
+    {
+        using var repo = new FakeRepo();
+        repo.PlantXml("x64/Release/net10.0-windows10.0.22621.0", Base.AddMinutes(30));
+        repo.PlantSource("Core/Widget.cs", Base);
+
+        var (exitCode, output) = repo.CompileWithReference();
+
+        Assert.Equal(0, exitCode);
+        Assert.DoesNotContain("Reference generation was skipped for want of an input", output);
+        Assert.Contains("Documentation compiled successfully.", output);
     }
 
     /// <summary>
@@ -251,6 +334,20 @@ public class ReferenceStalenessWiringTests
         /// </summary>
         public (int ExitCode, string Output) CompileWithReference() =>
             Compile("--no-screenshots", "--no-build", "--skip-diagrams", "--no-ai", "--ci");
+
+        /// <summary>
+        /// Same, minus <c>--ci</c>. The pair is what shows a missing-input
+        /// failure is scoped to CI rather than being a blanket hard error.
+        /// </summary>
+        public (int ExitCode, string Output) CompileWithReferenceLocally() =>
+            Compile("--no-screenshots", "--no-build", "--skip-diagrams", "--no-ai");
+
+        /// <summary>
+        /// Removes the fixture's <c>reference-map.yaml</c>, the other input
+        /// whose absence makes Phase 5.7 bail.
+        /// </summary>
+        public void RemoveReferenceMap() =>
+            File.Delete(Path.Join(_root, "docs", "_pipeline", "reference-map.yaml"));
 
         private (int ExitCode, string Output) Compile(params string[] args)
         {

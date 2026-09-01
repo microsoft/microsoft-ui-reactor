@@ -179,12 +179,20 @@ separately: the phase compares the chosen XML against the newest `.cs` under
 with [`REACTOR_DOC_REFGEN_W002`](#6-snippet--image--diagram-error-codes) when the
 source is newer. Run `dotnet build src/Reactor` and compile again.
 
-If no `Reactor.xml` exists at all the phase skips reference generation rather
-than failing, printing:
+If no `Reactor.xml` exists at all, **a local compile** skips reference generation
+rather than failing, printing:
 
 ```
   (Reactor.xml not found — run `dotnet build src/Reactor` first)
 ```
+
+That degradation is deliberate: on a first compile you should still get your
+guide pages. Under `--ci` the same condition **exits 1** instead. CI always
+builds, so a missing input there means the run is not the run that was asked
+for, and skipping the phase would leave the ~117 pages under
+`docs/guide/reference/` silently at whatever was committed. The same applies to
+a missing `reference-map.yaml`. `ReferenceStalenessWiringTests` pins both
+directions.
 
 CI does build it. The `docs-build` job runs `docs compile --no-screenshots --ci`
 *without* `--no-build`, so Phase 2 builds every doc app, each of which
@@ -192,6 +200,12 @@ CI does build it. The `docs-build` job runs `docs compile --no-screenshots --ci`
 runs for real on every PR. `REACTOR_DOC_REFGEN_W002` still stays quiet there, for
 an ordering reason rather than a missing-build one: `actions/checkout` writes the
 sources before that build runs, so the emitted XML always postdates every `.cs`.
+
+That is no longer left as a property of how the job happens to be spelled. The
+freshness gate ([§10](#10-compiled-output-freshness-gate)) reads a clean
+`git status -- docs/guide` as proof the committed output matches a fresh
+compile, and that reading is only sound if every page was actually written — so
+the non-zero exit above is what the gate stands on.
 
 [i1068]: https://github.com/microsoft/microsoft-ui-reactor/issues/1068
 
@@ -651,7 +665,116 @@ dotnet build docs/_pipeline/apps/<topic>/<topic>.csproj -c Debug -p:Platform=x64
 `-p:BuildProjectReferences=false` keeps several single-app builds from racing
 on `src/Reactor`'s `obj/bin`.
 
-## 10. Inline C# in templates
+## 10. Compiled-output freshness gate
+
+`docs/guide/**` is generated. The `docs-build` job recompiles all of it on every
+PR — 72 topic pages, `README.md`, and ~117 pages under `reference/` — and then
+asserts that recompiling changed nothing:
+
+```pwsh
+git status --porcelain --untracked-files=all -- docs/guide
+```
+
+Non-empty output fails the PR. The fix is never to edit the reported file:
+
+```powershell
+dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots
+```
+
+then commit the result.
+
+Until [issue #1052][i1052] this check covered **two** of those files. CI ran the
+full compile, produced a complete answer about all of them, and threw it away —
+so a `src/` edit that moved a `snippet="source:..."` region left the published
+page stale with the job green. It bit twice in a month: `architecture-overview.md`
+published a `GetElement` body that no longer existed, and [PR #1157][p1157]
+would have shipped an analyzer alongside ten guide pages that the analyzer
+itself rejects. The doc-app snippet gate (§9) does not catch that second one —
+it checks the *source* a page is generated from, not the generated page.
+
+### Why the gate reads the compile log first
+
+A clean tree only means *fresh* if the compile that was supposed to rewrite the
+tree actually rewrote it. An empty diff produced by a compile that never wrote
+anything looks exactly like an empty diff produced by an up-to-date corpus, so
+the gate refuses to return a verdict unless the log shows the run completed:
+
+- `Documentation compiled successfully.` must be present. A compile that dies in
+  Phase 2 prints `✗ build failed` and returns 1 — and locally that is easy to
+  miss, because the tree it leaves behind is clean. Offline this is the common
+  case: `--ci` builds Release, `TreatWarningsAsErrors` promotes `NU1900`, and the
+  run dies before assembling anything. Pass `-p:WarningsNotAsErrors=NU1900` when
+  measuring from a machine that cannot reach the NuGet vulnerability API.
+- No phase other than 2 (build), 3 (capture) and 5 (AI author) may report
+  `(skipped)`. Those three write no page; anything else does, so a `--skip-*`
+  added to the invocation would silently narrow the gate instead of failing it.
+  Only the workflow can see this one — the CLI cannot know that a flag it was
+  handed was a mistake.
+
+Each of those is a way for the gate to become a check that cannot fail — which
+is the defect it was added to fix, one level up.
+
+There is a third way a compile can exit 0 without regenerating, and it is
+**not** checked here on purpose. Phase 5.7 prints its header and then bails when
+`Reactor.xml` or `reference-map.yaml` is missing (see *Which `Reactor.xml` the
+reference phase reads*), leaving ~117 reference pages unwritten. `mur docs
+compile --ci` now **returns non-zero** for that, so the compile step catches it
+and the gate never sees it. The first version of this gate grepped stdout for
+`Reactor.xml not found` instead, which was both the wrong owner and the wrong
+direction of failure: reword the message in `CompileCommand.cs` and the grep
+silently stops matching — it fails *open*. `ReferenceStalenessWiringTests` pins
+the exit code, in both the `--ci` and the local direction, so the contract is a
+test rather than a string.
+
+Note the asymmetry that makes this correct rather than merely stricter: locally,
+a missing `Reactor.xml` is the first-compile case and still just skips with a
+message, because an author who hasn't built yet should still get their guide
+pages. Under `--ci` there is no such case — CI always builds.
+
+### Why `git status` and not `git diff`
+
+The same reason given for the images gate above, and it bites harder here:
+`git diff` reports tracked modifications only. A new topic template or a newly
+generated reference page lands as an *untracked* file, which `git diff` reports
+as nothing at all. Measured against a planted
+`docs/guide/reference/hooks/PlantedProbe.md`: `git status` reports
+`?? docs/guide/reference/hooks/PlantedProbe.md`, `git diff --name-only` reports
+an empty string.
+
+### It does not replace the images gate
+
+The freshness gate watches a superset of `docs/guide/images`, but the two say
+opposite things. The images gate says *nothing may be written here* and you fix
+it by removing the write; the freshness gate says *what was written must be
+committed* and you fix it by committing. Merged, a reintroduced screenshot write
+would be answered with "commit the regenerated output" — the exact wrong
+instruction, and the one [issue #989][i989] exists to prevent. The images gate
+therefore runs **first**, so the specific diagnosis lands before the general one.
+
+### Consequence for ordinary PRs
+
+Any `src/` change that alters a region a guide page snippets from now turns
+`docs-build` red until the page is recompiled. That is the point, but it means a
+red docs job is a routine outcome of framework work rather than a sign something
+is broken — recompile and commit, and check the diff belongs to your change.
+
+### The job has to be armed for a docs-only edit
+
+`docs-build` runs on the `non-md` change filter, which is false when every
+changed file ends in `.md`. Hand-editing a generated page under `docs/guide` is
+exactly that shape — and it is the likeliest way to introduce the drift this
+gate catches, so the gate would have skipped the change it exists for. A
+separate `compiled-docs` filter (`^docs/guide/`) re-arms the job, ORed into its
+`if:`. Unrelated pure-Markdown edits still skip it, so this costs nothing
+elsewhere. Same fix as the `audit-ledger` filter beside it
+([issue #959][i959]). `VersionSingleSourceTests` pins both halves.
+
+[i959]: https://github.com/microsoft/microsoft-ui-reactor/issues/959
+
+[i1052]: https://github.com/microsoft/microsoft-ui-reactor/issues/1052
+[p1157]: https://github.com/microsoft/microsoft-ui-reactor/pull/1157
+
+## 11. Inline C# in templates
 
 A ` ```csharp snippet="topic/id" ` block is extracted from a real doc app, so CI compiles it and
 the `docs-snippet-gate` job holds it to the same analyzer rules a reader's own project uses.
