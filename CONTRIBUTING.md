@@ -69,7 +69,7 @@ dotnet restore Reactor.slnx
 dotnet build Reactor.slnx --no-restore -c Release
 ```
 
-Keep those as two steps, the way [`ci.yml`](.github/workflows/ci.yml) does. A combined `dotnet build Reactor.slnx -c Release` runs its implicit restore under `Configuration=Release` as well, and NuGet honors `TreatWarningsAsErrors` during restore — so `NU`-prefixed restore warnings (an unreachable feed, missing package vulnerability data) become hard errors that CI, which restores without `-c Release`, never hits.
+Keep those as two steps, the way the `Restore` and `Build` steps of the `build-solution` job in [`ci.yml`](.github/workflows/ci.yml) do. The one-shot `dotnet build Reactor.slnx -c Release` runs its implicit restore under `Configuration=Release` as well, and NuGet honors `TreatWarningsAsErrors` during restore — so `NU`-prefixed restore warnings (an unreachable feed, missing package vulnerability data) become hard errors that CI, which restores without `-c Release`, never hits.
 
 ### From Visual Studio
 

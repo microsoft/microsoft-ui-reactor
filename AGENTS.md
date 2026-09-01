@@ -224,7 +224,8 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
 - **A green Debug build does not clear the `Build solution` CI job.**
   `TreatWarningsAsErrors` is Release-only and CI builds Release, so verify with
   `dotnet restore Reactor.slnx` followed by `dotnet build Reactor.slnx --no-restore -c Release`.
-  Keep those two steps split, exactly as `ci.yml` has them (L326/L329). The one-shot
+  Keep those two steps split, exactly as the `Restore` and `Build` steps of the
+  `build-solution` job in `ci.yml` do. The one-shot
   `dotnet build Reactor.slnx -c Release` also restores under `Configuration=Release`, and NuGet
   honors `TreatWarningsAsErrors` during restore, so on a proxied or offline feed `NU1900`
   ("unable to get package vulnerability data") becomes a hard error — measured on this repo, the

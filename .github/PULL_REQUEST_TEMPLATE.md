@@ -7,8 +7,9 @@ Thanks for contributing to Reactor! A few notes before you open this PR:
 - Before pushing, reproduce the CI `Build solution` gate: `dotnet restore Reactor.slnx`, then
   `dotnet build Reactor.slnx --no-restore -c Release`. Then `dotnet test tests/Reactor.Tests`.
   (`-c Release` matters — `TreatWarningsAsErrors` is Release-only, so a green Debug build does
-  not clear CI. Keep restore separate, as CI does: a combined `-c Release` restore additionally
-  turns NuGet restore warnings into errors CI never sees. See CONTRIBUTING.md.)
+  not clear CI. Keep restore a separate step, as CI does: the one-shot
+  `dotnet build Reactor.slnx -c Release` runs its implicit restore under Release too, which
+  additionally turns NuGet restore warnings into errors CI never sees. See CONTRIBUTING.md.)
 - First-time contributors: the Microsoft CLA bot will comment automatically; sign once and you're set.
 -->
 
