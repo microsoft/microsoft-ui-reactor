@@ -212,7 +212,21 @@ public sealed partial class ReactorWindow : IDisposable
     /// leave every other bar showing a stale icon after a <see cref="WindowSpec.Icon"/>
     /// change.
     /// </summary>
-    private readonly List<WeakReference<Microsoft.UI.Xaml.Controls.TitleBar>> _titleBarIconControls = new();
+    /// <remarks>
+    /// <b>Strong</b> references, removed at explicit unmount. A <c>WeakReference</c> here
+    /// would track the managed RCW rather than the native control: the wrapper can be
+    /// collected while XAML still owns the element, after which the entry is pruned and the
+    /// visible title bar silently stops following the window icon. Holding the wrapper also
+    /// keeps the <c>TitleBarIconDefault</c> record — which is keyed on it — reachable and
+    /// consistent, so the push and the record can never end up on different wrappers for
+    /// one native element. That duplicate-RCW hazard is documented in
+    /// <c>Reconciler.cs</c>'s <c>ReactorAttached.StateProperty</c> notes, where it caused a
+    /// real event-subscription bug.
+    /// <para>Not a leak: entries are dropped by <see cref="ClearTitleBarControl"/> on
+    /// unmount, and the list itself is per-window, so anything still in it dies with the
+    /// window.</para>
+    /// </remarks>
+    private readonly List<Microsoft.UI.Xaml.Controls.TitleBar> _titleBarIconControls = new();
     private bool _titleBarControlExplicitHeight;
     private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
@@ -778,14 +792,10 @@ public sealed partial class ReactorWindow : IDisposable
     {
         if (_titleBarIconControls.Count == 0) return;
 
-        for (var i = _titleBarIconControls.Count - 1; i >= 0; i--)
+        // Snapshot: ResyncInheritedIcon touches the visual tree, and a teardown-reentry
+        // path could in principle re-enter and mutate the list mid-iteration.
+        foreach (var bar in _titleBarIconControls.ToArray())
         {
-            if (!_titleBarIconControls[i].TryGetTarget(out var bar))
-            {
-                _titleBarIconControls.RemoveAt(i);
-                continue;
-            }
-
             try
             {
                 Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(
@@ -1897,19 +1907,8 @@ public sealed partial class ReactorWindow : IDisposable
         _titleBarControlPresent = true;
         _titleBarControlMounted = true;
 
-        // Prune dead entries opportunistically. A control whose window content was
-        // replaced without an unmount reaching us would otherwise sit here forever; the
-        // list is tiny, so this is cheaper than any bookkeeping alternative.
-        for (var i = _titleBarIconControls.Count - 1; i >= 0; i--)
-        {
-            if (!_titleBarIconControls[i].TryGetTarget(out var existing))
-                _titleBarIconControls.RemoveAt(i);
-            else if (ReferenceEquals(existing, control))
-                return;
-        }
-
-        _titleBarIconControls.Add(
-            new WeakReference<Microsoft.UI.Xaml.Controls.TitleBar>(control));
+        if (!_titleBarIconControls.Contains(control))
+            _titleBarIconControls.Add(control);
     }
 
     /// <summary>
@@ -1948,14 +1947,7 @@ public sealed partial class ReactorWindow : IDisposable
         }
         else
         {
-            for (var i = _titleBarIconControls.Count - 1; i >= 0; i--)
-            {
-                if (!_titleBarIconControls[i].TryGetTarget(out var tracked)
-                    || ReferenceEquals(tracked, unmounting))
-                {
-                    _titleBarIconControls.RemoveAt(i);
-                }
-            }
+            _titleBarIconControls.Remove(unmounting);
 
             // Another title bar is still mounted, so the window-wide state below stays.
             if (_titleBarIconControls.Count > 0)
