@@ -140,6 +140,12 @@ public sealed partial class Reconciler
         if (global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.AlwaysOnInDebug || ReactorFeatureFlags.WarnLayoutFootguns)
             global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.Inspect(element);
 
+        if (control is WinUI.TitleBar preModCtl)
+        {
+            global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
+                .ObserveAfterSetters(preModCtl);
+        }
+
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)
             ApplyModifiers(fe, modifiers, requestRerender);
@@ -152,10 +158,10 @@ public sealed partial class Reconciler
         if (element is TitleBarElement tbEl && control is WinUI.TitleBar tbCtl)
         {
             TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
-            // Setters have run by now, so this is the first point at which "did a raw
-            // .Set(...) claim the icon slot?" is observable rather than guessable.
+            // Anything that changed since the pre-modifier observation came from a
+            // one-shot modifier such as .OnMount(...), which nothing re-applies.
             global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
-                .ObserveAfterSetters(tbCtl, tbEl, isMount: true);
+                .ObserveAfterModifiers(tbCtl);
         }
 
         // After modifiers + setters have had a chance to set an explicit

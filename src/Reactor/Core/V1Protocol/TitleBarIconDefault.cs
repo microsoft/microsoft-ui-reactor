@@ -293,36 +293,48 @@ internal static class TitleBarIconDefault
     /// same as above: the next render re-runs the setter. Replacing the value is the
     /// supported way to claim the slot; reaching into the instance this type created is
     /// outside that contract.</para>
-    /// <para>What it cannot see from the control alone is whether the write will
-    /// <em>happen again</em>. A <c>.Set(...)</c> setter re-runs on every render; a
-    /// <c>.OnMount(...)</c> action runs once, and <c>ApplyModifiers</c> runs it before this
-    /// observation, so both look identical here. <paramref name="isMount"/> resolves it
-    /// without a second observation point: the mount action can only have run on the mount
-    /// pass, so a divergence seen on any <em>later</em> render is necessarily a setter's
-    /// and therefore repeats. On the mount pass an element that carries a mount action is
-    /// treated as one-shot, which is the safe direction — the value is preserved, and if a
-    /// setter really did write it, the next render re-writes it and this observation
-    /// upgrades the record to repeating.</para>
-    /// <para>Deliberately not <c>Setters.Length &gt; 0</c> alone: that cannot tell a
-    /// capture-only <c>.Set(b =&gt; captured = b)</c> from an icon setter, so
-    /// <c>.OnMount(set icon).Set(capture)</c> would be recorded as repeating on the
-    /// strength of a setter that never touches the icon, and the mount value would be
-    /// overwritten with nothing to restore it. Nor is any of this the discredited
-    /// "<c>Setters.Length</c> implies ownership" test — ownership is still ground truth
-    /// from the control; this only classifies how the observed write behaves over time.</para>
+    /// <para>Two observation points, not one, and that is what makes the classification
+    /// exact rather than heuristic. Setters run inside the descriptor handler, before
+    /// <c>ApplyModifiers</c>; <c>.OnMount(...)</c> runs inside it. So a divergence seen
+    /// <em>here</em> — before modifiers — is a setter's by construction and therefore
+    /// repeats, and one that appears only in
+    /// <see cref="ObserveAfterModifiers"/> came from a modifier and does not.</para>
+    /// <para>An earlier revision tried to infer this from the element instead
+    /// (<c>Setters.Length</c>, then a mount-pass flag) and was wrong in both directions:
+    /// a capture-only <c>.Set(b =&gt; captured = b)</c> made a mount write look repeatable,
+    /// and an unrelated <c>.OnMount(...)</c> made a stable-instance icon setter look
+    /// one-shot. Neither is inferable from the element, because the element does not say
+    /// what its callbacks touch. Observing at both stages answers it directly.</para>
     /// </remarks>
-    internal static void ObserveAfterSetters(
-        Microsoft.UI.Xaml.Controls.TitleBar control, TitleBarElement element, bool isMount)
+    internal static void ObserveAfterSetters(Microsoft.UI.Xaml.Controls.TitleBar control)
     {
         if (!s_applied.TryGetValue(control, out var last)) return;
         if (ReferenceEquals(control.IconSource, last.Source)) return;
 
-        var mountActionCouldHaveWritten = isMount && element.Modifiers?.OnMountAction is not null;
-        var repeats = element.Setters.Length > 0 && !mountActionCouldHaveWritten;
+        s_applied.AddOrUpdate(control, new AppliedIcon(
+            last.Value, last.ElementOwned, authorOwned: true, control.IconSource,
+            last.FileStamp, authorRepeats: true));
+    }
+
+    /// <summary>
+    /// Second half of the ownership observation: runs after <c>ApplyModifiers</c>, and
+    /// attributes anything that changed since <see cref="ObserveAfterSetters"/> to a
+    /// one-shot modifier such as <c>.OnMount(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// A one-shot has nothing that re-applies it, so <see cref="Apply"/> must not write
+    /// over it. Misclassifying here is self-correcting rather than permanent: if a setter
+    /// really does own the slot, its next render diverges at the setter stage and
+    /// <see cref="ObserveAfterSetters"/> upgrades the record back to repeating.
+    /// </remarks>
+    internal static void ObserveAfterModifiers(Microsoft.UI.Xaml.Controls.TitleBar control)
+    {
+        if (!s_applied.TryGetValue(control, out var last)) return;
+        if (ReferenceEquals(control.IconSource, last.Source)) return;
 
         s_applied.AddOrUpdate(control, new AppliedIcon(
             last.Value, last.ElementOwned, authorOwned: true, control.IconSource,
-            last.FileStamp, authorRepeats: repeats));
+            last.FileStamp, authorRepeats: false));
     }
 
     /// <summary>

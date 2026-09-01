@@ -1214,6 +1214,36 @@ internal static class TitleBarIconDefaultFixtures
             }
         }
 
+        private sealed class StableSourceComponent : Component
+        {
+            // ONE IconSource instance for the control's whole life. That is what defeats a
+            // ReferenceEquals-only re-observation: on later renders the setter writes the
+            // same object, so nothing looks like it changed.
+            private readonly WinUI.FontIconSource _shared = new() { Glyph = "\uE7C3" };
+
+            public Action<int>? SetPhase;
+            public WinUI.TitleBar? Bar;
+
+            public override Element Render()
+            {
+                var (phase, set) = UseState(0);
+                SetPhase = set;
+
+                var bar = TitleBar("Stable").Set(b => Bar = b);
+
+                // Phase 0 and 1 keep the icon setter; phase 2 removes it, and the
+                // inherited icon must come back.
+                if (phase < 2)
+                    bar = bar.Set(b => b.IconSource = _shared);
+
+                // An unrelated mount action, which must not make the icon setter look
+                // one-shot.
+                bar = bar.OnMount(_ => { });
+
+                return VStack(bar, TextBlock($"phase {phase}"));
+            }
+        }
+
         public override async Task RunAsync()
         {
             EnsureUIDispatcher();
@@ -1265,6 +1295,39 @@ internal static class TitleBarIconDefaultFixtures
                         declared.Bar?.IconSource is WinUI.FontIconSource);
                 }
                 finally { await CloseAndSettle(declaredWin); }
+
+                // (c) a STABLE-instance icon setter alongside an unrelated .OnMount(...)
+                //     must stay classified as repeating, so removing it restores the
+                //     inherited icon. The stable instance is the trap: a re-observation
+                //     that only compares references sees nothing change on later renders.
+                var stable = new StableSourceComponent();
+                var stableWin = await OpenAndSettle(Spec("OneShotStable"), () => stable);
+                try
+                {
+                    H.Check("TitleBarIcon_OneShot_StableMounted", stable.Bar is not null);
+                    H.Check($"TitleBarIcon_OneShot_StableSetterTookSlot ({stable.Bar?.IconSource?.GetType().Name})",
+                        stable.Bar?.IconSource is WinUI.FontIconSource);
+
+                    // A render that keeps the setter — the record must survive it.
+                    stable.SetPhase?.Invoke(1);
+                    await stableWin.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+                    H.Check($"TitleBarIcon_OneShot_StableSetterStillWins ({stable.Bar?.IconSource?.GetType().Name})",
+                        stable.Bar?.IconSource is WinUI.FontIconSource);
+
+                    // ...and now remove it. The convention asset is present, so the
+                    // inherited icon is an ImageIconSource — a value distinguishable from
+                    // both the setter's icon and from nothing.
+                    stable.SetPhase?.Invoke(2);
+                    await stableWin.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var kindAfter = stable.Bar?.IconSource?.GetType().Name ?? "<null>";
+                    Console.WriteLine($"# oneShot: stableAfterRemoval={kindAfter}");
+                    H.Check($"TitleBarIcon_OneShot_StableSetterRemovalRestoresInherited ({kindAfter})",
+                        stable.Bar?.IconSource is WinUI.ImageIconSource);
+                }
+                finally { await CloseAndSettle(stableWin); }
             }
             finally
             {

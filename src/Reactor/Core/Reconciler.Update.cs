@@ -245,6 +245,14 @@ public sealed partial class Reconciler
             && _highlightModified is not null
             && (!Element.OwnPropsEqual(oldEl, newEl) || !Element.ModifiersEqual(oldModifiers, modifiers)))
             _highlightModified.Add(control);
+        if (target is WinUI.TitleBar preModCtl)
+        {
+            // Setters have already run (inside the descriptor handler) but modifiers have
+            // not, so a divergence observed here is a setter's by construction.
+            global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
+                .ObserveAfterSetters(preModCtl);
+        }
+
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
         if (target is FrameworkElement dragFe)
@@ -256,11 +264,10 @@ public sealed partial class Reconciler
         if (newEl is TitleBarElement tbEl && target is WinUI.TitleBar tbCtl)
         {
             TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
-            // Setters have run by now, so this is the first point at which "did a raw
-            // .Set(...) claim the icon slot?" is observable rather than guessable. Also
-            // refreshes ownership on renders where the icon write took its fast path.
+            // Anything that changed since the pre-modifier observation came from a
+            // one-shot modifier, which nothing re-applies.
             global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
-                .ObserveAfterSetters(tbCtl, tbEl, isMount: false);
+                .ObserveAfterModifiers(tbCtl);
         }
 
         // Re-apply the caption-derived default after modifiers have run so a
