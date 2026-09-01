@@ -138,6 +138,20 @@ Conventions for contributors:
 
 ### Fixed
 
+- **`REACTOR_DSL_001` no longer false-positives on a non-Reactor `ForEach`, and the
+  guide's list samples are keyed (spec 042 Q2, issue #1156).** Follow-up to #1157, which
+  widened the rule from `Select(...)` to Reactor's `ForEach(items, item => …)`. Three
+  gaps remained. The `ForEach` arm matched on receiver *shape* alone, so a bare
+  `ForEach(items, lambda)` from any other `using static` — same shape, element-typed, in
+  a layout-child slot — raised a warning that `TreatWarningsAsErrors` turns into a build
+  break; it now confirms the callee's namespace through the semantic model, after every
+  cheap syntactic gate, and `REACTOR_DSL_002` shares that one helper so the two rules
+  cannot drift into disagreeing about what a Reactor projection is. An explicitly generic
+  `ForEach<T>(...)` was skipped entirely, because the name extraction handled
+  `IdentifierNameSyntax` but not `GenericNameSyntax`. And the 10 guide pages whose
+  snippets #1157 keyed were never regenerated, so the published docs still taught the
+  unkeyed `ForEach` the rule now flags — nothing in CI covers that today (see #1052).
+
 - **`D3Color.ToRgb()` / `ToString()` no longer emit malformed CSS on comma-decimal locales
   (issue #1159).** The `double` opacity was interpolated with the ambient culture, so
   `rgba(...)` — a machine-readable format — came out as `rgba(128, 64, 32, 0,5)` on nl-NL,

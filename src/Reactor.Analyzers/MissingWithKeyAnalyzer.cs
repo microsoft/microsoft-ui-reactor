@@ -46,7 +46,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         Id,
         "Dynamic list item missing .WithKey",
-        "Element produced by Select(...) or ForEach(...) doesn't call .WithKey(...). Without a key, the reconciler matches by position and re-mounts every row on insert/reorder, losing focus, animation, and ElementRef state.",
+        "Element produced by {0}(...) doesn't call .WithKey(...). Without a key, the reconciler matches by position and re-mounts every row on insert/reorder, losing focus, animation, and ElementRef state.",
         "Reactor.Dsl",
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
@@ -75,12 +75,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     {
         var inv = (InvocationExpressionSyntax)ctx.Node;
 
-        var methodName = inv.Expression switch
-        {
-            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
-            IdentifierNameSyntax id => id.Identifier.ValueText,
-            _ => null,
-        };
+        var methodName = SimpleName(inv.Expression);
         if (methodName is null) return;
 
         // REACTOR_DSL_002 — a present-but-non-stable key. The analysis is
@@ -96,18 +91,26 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // REACTOR_DSL_001 — a missing key on a Select projection.
         if (methodName == "Select")
         {
-            AnalyzeMissingKey(ctx, inv, lambdaIndex: 0);
+            AnalyzeMissingKey(ctx, inv, lambdaIndex: 0, projectionName: "Select");
             return;
         }
 
+        // Reactor's ForEach factory. The receiver shape is only the cheap half
+        // of IsReactorForEach — the symbol half runs at the end of
+        // AnalyzeMissingKey, after every syntactic gate. See the note there.
         if (methodName == "ForEach" && IsReactorForEachReceiver(inv.Expression))
         {
-            AnalyzeMissingKey(ctx, inv, lambdaIndex: 1);
+            AnalyzeMissingKey(ctx, inv, lambdaIndex: 1, projectionName: "ForEach", confirmReactorFactory: true);
         }
     }
 
     // <snippet:with-key-rule>
-    static void AnalyzeMissingKey(SyntaxNodeAnalysisContext ctx, InvocationExpressionSyntax inv, int lambdaIndex)
+    static void AnalyzeMissingKey(
+        SyntaxNodeAnalysisContext ctx,
+        InvocationExpressionSyntax inv,
+        int lambdaIndex,
+        string projectionName,
+        bool confirmReactorFactory = false)
     {
         if (inv.ArgumentList.Arguments.Count <= lambdaIndex) return;
         if (inv.ArgumentList.Arguments[lambdaIndex].Expression is not LambdaExpressionSyntax lambda) return;
@@ -128,14 +131,25 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // to elements (e.g., to a List<Element>).
         if (!IsConsumedAsLayoutChildren(inv)) return;
 
-        ctx.ReportDiagnostic(Diagnostic.Create(Rule, inv.GetLocation()));
+        // Last, and only for the handful of candidates that survived every
+        // cheap gate: confirm the callee really is Reactor's factory. Syntax
+        // cannot separate a bare `ForEach(items, lambda)` under
+        // `using static …Factories` from someone else's identically-shaped
+        // static import, and DSL_001 is a Warning — an error under
+        // TreatWarningsAsErrors — so a false positive breaks a build.
+        if (confirmReactorFactory && !IsReactorForEach(inv, ctx)) return;
+
+        ctx.ReportDiagnostic(Diagnostic.Create(Rule, inv.GetLocation(), projectionName));
     }
 
     // REACTOR_DSL_002 — inspect the key expression of a `.WithKey(arg)` call.
-    // Purely syntactic (no GetSymbolInfo): identifiers are matched by name
-    // against the enclosing Select/ForEach lambda's parameters, and the
-    // per-render-random sources are matched by their well-known type and
-    // member names.
+    // The key expression itself is matched syntactically: identifiers are
+    // compared by name against the enclosing Select/ForEach lambda's
+    // parameters, and the per-render-random sources are matched by their
+    // well-known type and member names. Only the "is this Reactor's ForEach"
+    // question reaches for the semantic model, via the shared IsReactorForEach,
+    // and only once the WithKey anchor and the receiver shape have already
+    // narrowed the candidates.
     static void AnalyzeNonStableKey(SyntaxNodeAnalysisContext ctx, InvocationExpressionSyntax withKeyInv)
     {
         // WithKey takes exactly one argument (the key).
@@ -145,7 +159,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // Scope to list items: the WithKey must live inside a Select/ForEach
         // projection lambda. A key on a single, static element never reorders,
         // and the `.WithKey` anchor keeps this off unrelated fluent chains.
-        var lambda = EnclosingProjectionLambda(withKeyInv);
+        var lambda = EnclosingProjectionLambda(ctx, withKeyInv);
         if (lambda is null) return;
 
         // Shape 2 — a per-render-random key (regenerates every render, so it
@@ -173,7 +187,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     // lambda is the projection argument to a LINQ `Select` or Reactor's `ForEach`
     // factory (per the per-branch conditions below). Returns null when the
     // WithKey sits in some other (non-projection) lambda or none at all.
-    static LambdaExpressionSyntax? EnclosingProjectionLambda(SyntaxNode node)
+    static LambdaExpressionSyntax? EnclosingProjectionLambda(SyntaxNodeAnalysisContext ctx, SyntaxNode node)
     {
         for (var cur = node.Parent; cur is not null; cur = cur.Parent)
         {
@@ -187,16 +201,13 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
                     // LINQ Select — `collection.Select(lambda)`; the projection
                     // lambda is the (first) argument.
                     if (name == "Select") return lambda;
-                    // Reactor's ForEach factory only: a bare `ForEach(items, lambda)`
-                    // imported via `using static …Factories`, or a
-                    // `Factories.ForEach(items, lambda)` receiver — with the
-                    // collection leading, so the lambda is never argument 0.
-                    // Restricting to that shape avoids matching unrelated ForEach
-                    // APIs: the BCL `list.ForEach(action)`, `Parallel.ForEach(
-                    // source, body)`, or any custom `X.ForEach(items, lambda)`.
+                    // Reactor's ForEach factory only, with the collection
+                    // leading, so the lambda is never argument 0. Same helper
+                    // DSL_001 uses, so the two rules cannot drift into
+                    // disagreeing about what a Reactor projection is.
                     if (name == "ForEach"
                         && argList.Arguments.IndexOf(arg) >= 1
-                        && IsReactorForEachReceiver(outer.Expression))
+                        && IsReactorForEach(outer, ctx))
                         return lambda;
                 }
                 return null;
@@ -205,13 +216,36 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         return null;
     }
 
-    // The receiver shape of Reactor's static `ForEach` factory: either a bare
-    // identifier (`using static …Factories; ForEach(...)`) or a member access
-    // whose immediate receiver is `Factories` (`Factories.ForEach(...)` /
-    // `…Factories.ForEach(...)`).
-    static bool IsReactorForEachReceiver(ExpressionSyntax invoked) => invoked switch
+    // True when `inv` really is Reactor's static `ForEach` factory.
+    //
+    // The syntactic half is the receiver shape (IsReactorForEachReceiver), which
+    // already rules out the BCL `list.ForEach(action)`, `Parallel.ForEach(source,
+    // body)`, and any custom `X.ForEach(items, lambda)`. What it cannot rule out
+    // is a *different* static import that also exposes a bare
+    // `ForEach(items, lambda)` — syntax can't tell those apart. So the symbol is
+    // resolved and its namespace checked. Callers reach here only after their
+    // cheap syntactic gates have passed, so the hot path never pays for it. When
+    // resolution fails (incomplete code mid-edit) fall back to the syntactic
+    // answer, so the footgun still surfaces while the user is typing.
+    internal static bool IsReactorForEach(InvocationExpressionSyntax inv, SyntaxNodeAnalysisContext ctx)
     {
-        IdentifierNameSyntax => true,
+        if (!IsReactorForEachReceiver(inv.Expression)) return false;
+
+        if (ctx.SemanticModel.GetSymbolInfo(inv, ctx.CancellationToken).Symbol is IMethodSymbol method)
+            return CommandDebounceAnalyzer.IsReactorNamespace(method.ContainingNamespace?.ToDisplayString());
+
+        return true;
+    }
+
+    // The receiver shape of Reactor's static `ForEach` factory: either a bare
+    // name (`using static …Factories; ForEach(...)`, including the explicitly
+    // generic `ForEach<T>(...)`) or a member access whose immediate receiver is
+    // `Factories` (`Factories.ForEach(...)` / `…Factories.ForEach(...)`).
+    // Shared with MissingWithKeyCodeFix so the analyzer and its fix cannot
+    // disagree about which `ForEach` is Reactor's.
+    internal static bool IsReactorForEachReceiver(ExpressionSyntax invoked) => invoked switch
+    {
+        SimpleNameSyntax => true,
         MemberAccessExpressionSyntax m => SimpleName(m.Expression) == "Factories",
         _ => false,
     };
@@ -278,12 +312,13 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
     }
 
     // Rightmost simple name of an expression: for `Guid` (IdentifierName) →
-    // "Guid"; for `System.Guid` / `items.Select` (MemberAccess) or `System.Random`
-    // (QualifiedName, in type position) → the trailing name. Lets a bare and a
-    // qualified/instance form match by the same name.
-    static string? SimpleName(ExpressionSyntax expr) => expr switch
+    // "Guid"; for `ForEach<T>` (GenericName) → "ForEach"; for `System.Guid` /
+    // `items.Select` (MemberAccess) or `System.Random` (QualifiedName, in type
+    // position) → the trailing name. Lets a bare, generic, and
+    // qualified/instance form all match by the same name.
+    internal static string? SimpleName(ExpressionSyntax expr) => expr switch
     {
-        IdentifierNameSyntax id => id.Identifier.ValueText,
+        SimpleNameSyntax simple => simple.Identifier.ValueText,
         MemberAccessExpressionSyntax m => m.Name.Identifier.ValueText,
         QualifiedNameSyntax q => q.Right.Identifier.ValueText,
         _ => null,

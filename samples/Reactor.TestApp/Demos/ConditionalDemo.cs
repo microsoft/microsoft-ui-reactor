@@ -89,7 +89,7 @@ class ConditionalDemo : Component
                         i => HStack(4,
                             TextBlock($"Item {i}").Width(80),
                             Progress(i * 100.0 / itemCount).Width(150)
-                        )
+                        ).WithKey(i.ToString())
                     )
                 ),
 
@@ -105,6 +105,7 @@ class ConditionalDemo : Component
                         i => Border(
                             TextBlock($"Custom item {i}")
                         ).CornerRadius(4).Background(SubtleFill).Padding(horizontal: 8, vertical: 4)
+                         .WithKey(i.ToString())
                     )
                 ),
 

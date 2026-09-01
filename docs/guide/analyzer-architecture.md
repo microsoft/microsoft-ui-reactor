@@ -211,11 +211,15 @@ flags an `async`-void `UseEffect` body (spec 060 §4.1).
 ## Symbol-grounded matching — the WithKey case
 
 ```csharp
-static void AnalyzeMissingKey(SyntaxNodeAnalysisContext ctx, InvocationExpressionSyntax inv)
+static void AnalyzeMissingKey(
+    SyntaxNodeAnalysisContext ctx,
+    InvocationExpressionSyntax inv,
+    int lambdaIndex,
+    string projectionName,
+    bool confirmReactorFactory = false)
 {
-    // Single lambda argument with an invocation body.
-    if (inv.ArgumentList.Arguments.Count != 1) return;
-    if (inv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) return;
+    if (inv.ArgumentList.Arguments.Count <= lambdaIndex) return;
+    if (inv.ArgumentList.Arguments[lambdaIndex].Expression is not LambdaExpressionSyntax lambda) return;
 
     var body = lambda.Body;
     if (body is BlockSyntax block) body = ExtractReturnExpression(block) ?? body;
@@ -227,18 +231,36 @@ static void AnalyzeMissingKey(SyntaxNodeAnalysisContext ctx, InvocationExpressio
     if (bodyText.Contains(".WithKey(")) return;
 ```
 
-[`REACTOR_DSL_001`](rules-of-reactor.md) is the loudest example of
-syntactic-only matching done right. It fires on
-`items.Select(x => Row(x))` where `Row(...)` doesn't end in
-`.WithKey(...)`, and the entire decision is a substring check on
-`body.ToString()`. The trade-off is conservative: a `Select` projecting
-to a non-Reactor element type also gets the substring check, but the
-follow-on `IsConsumedAsLayoutChildren` walk filters to
+[`REACTOR_DSL_001`](rules-of-reactor.md) is the clearest example of
+cheap matching done right. It fires on a projection — either
+`items.Select(x => Row(x))` or Reactor's own
+`ForEach(items, x => Row(x))` — where `Row(...)` doesn't end in
+`.WithKey(...)`, and the keyed/unkeyed decision itself is nothing but a
+substring check on `body.ToString()`. The trade-off is conservative: a
+projection to a non-Reactor element type also gets the substring check,
+but the follow-on `IsConsumedAsLayoutChildren` walk filters to
 [`VStack`](layout.md) / `HStack` / `FlexRow` / `Grid` / `WrapGrid`
-parents by name. False positives require the user to be inside one of
-those layout factories *and* projecting a method that happens not to
-end in `.WithKey` — rare enough that the syntactic-only approach is
-correct.
+parents by name.
+
+The two shapes need different amounts of evidence, and that is the
+lesson. `Select` is safe on syntax alone: it is always a member access
+on a collection, so a same-named method would have to be an extension
+on the same receiver. `ForEach` is not. Under
+`using static …Factories` it is a bare `IdentifierNameSyntax` — the
+reason it originally slipped past the rule's member-access early return
+(issue #1156) — and a bare identifier is exactly what *someone else's*
+`using static` also produces. Receiver shape rules out the BCL
+`list.ForEach(action)`, `Parallel.ForEach(source, body)`, and any
+`X.ForEach(items, lambda)`, but it cannot separate two bare imports. So
+`IsReactorForEach` resolves the symbol and checks the namespace,
+running last — after the argument shape, the lambda body, the substring
+probe and the layout walk have all passed — so the hot path never pays
+for it. `REACTOR_DSL_002` calls the same helper, which is what stops the
+two rules from disagreeing about what a projection is.
+
+The severity is what justifies the extra evidence: DSL_001 is a
+Warning, and an error under `TreatWarningsAsErrors`, so a false
+positive breaks a build. DSL_002 is Info, and can afford to be looser.
 
 ```csharp
 private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)

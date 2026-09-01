@@ -157,18 +157,18 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
     {
         lambda = null!;
 
-        var methodName = inv.Expression switch
-        {
-            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
-            IdentifierNameSyntax id => id.Identifier.ValueText,
-            _ => null,
-        };
+        // Same receiver test the analyzer applies, called rather than copied:
+        // a second private copy here is exactly the drift that let DSL_001 and
+        // DSL_002 disagree about `ForEach` in the first place (#1156). The
+        // symbol half isn't needed — this only runs on a diagnostic the
+        // analyzer already gated.
+        var methodName = MissingWithKeyAnalyzer.SimpleName(inv.Expression);
         if (methodName is null) return false;
 
         var lambdaIndex = methodName switch
         {
             "Select" => 0,
-            "ForEach" when IsReactorForEachReceiver(inv.Expression) => 1,
+            "ForEach" when MissingWithKeyAnalyzer.IsReactorForEachReceiver(inv.Expression) => 1,
             _ => -1,
         };
         if (lambdaIndex < 0) return false;
@@ -178,21 +178,6 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
         lambda = found;
         return true;
     }
-
-    static bool IsReactorForEachReceiver(ExpressionSyntax invoked) => invoked switch
-    {
-        IdentifierNameSyntax => true,
-        MemberAccessExpressionSyntax m => SimpleName(m.Expression) == "Factories",
-        _ => false,
-    };
-
-    static string? SimpleName(ExpressionSyntax expr) => expr switch
-    {
-        IdentifierNameSyntax id => id.Identifier.ValueText,
-        MemberAccessExpressionSyntax m => m.Name.Identifier.ValueText,
-        QualifiedNameSyntax q => q.Right.Identifier.ValueText,
-        _ => null,
-    };
 
     static bool ImplementsIReactorKeyed(ITypeSymbol type)
     {

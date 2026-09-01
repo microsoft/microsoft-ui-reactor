@@ -189,6 +189,11 @@ public UIElement GetElement(ElementFactoryGetArgs args)
                 && _reconciler.TryAdoptRealizedReplacement(reused, replacement))
             {
                 control = reused;
+                // Same as the adopt path above: refresh the back-pointer the
+                // adoption itself does not move, so the reported source
+                // location follows the row that is actually live (spec 010).
+                if (reused is FrameworkElement adoptedFe)
+                    Reconciler.SetElementTagIfNeeded(adoptedFe, element);
             }
             else
             {

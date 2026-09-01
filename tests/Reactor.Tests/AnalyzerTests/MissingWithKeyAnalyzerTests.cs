@@ -181,6 +181,168 @@ namespace TestApp
     }
 
     [Fact]
+    public async Task Fires_On_Explicitly_Generic_ForEach()
+    {
+        // `ForEach<T>(...)` is a GenericNameSyntax, not an IdentifierNameSyntax —
+        // a shape that slipped past the name extraction until SimpleName started
+        // covering SimpleNameSyntax.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn({|REACTOR_DSL_001:ForEach<Row>(rows, r => TextBlock(r.Text))|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_When_ForEach_Is_Not_Consumed_As_Layout_Children()
+    {
+        // Same layout-children gate the Select arm uses: a projection that isn't
+        // handed to a layout factory is left alone.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => ForEach(rows, r => TextBlock(r.Text));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_On_A_NonReactor_Static_ForEach()
+    {
+        // Why the ForEach arm resolves the symbol instead of trusting syntax.
+        // A bare `ForEach(items, lambda)` from someone else's `using static` is
+        // syntactically identical to Reactor's factory, sits in a layout-child
+        // position, and returns an Element — every syntactic gate passes. Only
+        // the namespace check keeps DSL_001 (a Warning, and an error under
+        // TreatWarningsAsErrors) off it.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static TestApp.Helpers;
+
+    public record Row(string Id, string Text);
+
+    public static class Helpers
+    {
+        public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render) => null!;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => Factories.FlexColumn(ForEach(rows, r => Factories.TextBlock(r.Text)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_On_A_Custom_Receiver_ForEach()
+    {
+        // `X.ForEach(items, lambda)` — right argument shape, right return type,
+        // right position, wrong receiver. Excluded by the receiver check alone,
+        // so this reddens if that check is ever loosened.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class Helpers
+    {
+        public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render) => null!;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(Helpers.ForEach(rows, r => TextBlock(r.Text)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_On_The_Bcl_ForEach_Shapes()
+    {
+        // `List<T>.ForEach` returns void and `Parallel.ForEach` returns
+        // ParallelLoopResult, so neither can occupy a layout-child slot at all —
+        // they are excluded by type before any gate runs. Pinned here anyway
+        // because DSL_001 and DSL_002 now share one receiver check: this is the
+        // DSL_001 half of the pair that DSL_002_Does_Not_Fire_On_Bcl_List_ForEach
+        // and DSL_002_Does_Not_Fire_On_Parallel_ForEach hold up from the other side.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(List<Row> rows)
+        {
+            rows.ForEach(r => { _ = TextBlock(r.Text); });
+            Parallel.ForEach(rows, r => { _ = TextBlock(r.Text); });
+            return VStack();
+        }
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task No_Diagnostic_When_Select_Goes_To_Plain_List()
     {
         // The result of Select is materialized to List<Element>, not consumed
