@@ -1066,16 +1066,18 @@ internal static class TitleBarIconDefaultFixtures
     // ════════════════════════════════════════════════════════════════════════
     //  A .OnMount(...) icon survives later renders.
     //
-    //  .OnMount and .Set both land after the descriptor props, so they look
-    //  identical to ObserveAfterSetters -- but they need opposite handling.
-    //  A .Set setter re-runs every render, so Reactor writing over it is
-    //  harmless (the setter immediately wins again) and is what lets the
-    //  projection return if the setter is removed. .OnMount runs ONCE, so
-    //  writing over it destroys the author's value with nothing to restore it.
+    //  .OnMount and .Set need opposite handling. A .Set setter re-runs every
+    //  render, so Reactor writing over it is harmless (the setter immediately
+    //  wins again) and is what lets the projection return if the setter is
+    //  removed. .OnMount runs ONCE, so writing over it destroys the author's
+    //  value with nothing to restore it.
     //
-    //  The element deliberately carries NO setters, which is what makes the
-    //  write one-shot. A capture-only .Set here would make it "repeating" and
-    //  the fixture would assert the opposite behaviour.
+    //  They are told apart by WHEN the divergence appears, not by inspecting
+    //  the element: setters run before ApplyModifiers and mount actions inside
+    //  it, so ObserveAfterSetters and ObserveAfterModifiers each see exactly
+    //  one of them. Consequently a capture-only .Set alongside this .OnMount
+    //  would NOT make the write look repeating -- TitleBarIconDefaultOneShot
+    //  Boundaries arm (a) pins that; this fixture is the plain case.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultKeepsOnMountIcon(Harness h) : SelfTestFixtureBase(h)
     {
