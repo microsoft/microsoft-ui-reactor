@@ -112,15 +112,21 @@ public sealed partial class ReactorWindow : IDisposable
     internal bool? DeclaredIconApplied { get; private set; }
 
     /// <summary>
-    /// The <c>Assets\AppIcon.ico</c> the window's fallback probed and <b>failed to
-    /// load</b>, or <c>null</c> when there was no such file or it loaded fine.
+    /// The <c>Assets\AppIcon.ico</c> the window's fallback probed but did <b>not</b> end
+    /// up displaying, or <c>null</c> when there was no such file or the window adopted it.
     /// </summary>
     /// <remarks>
     /// Read by the <c>TitleBar</c> icon default for the same reason as
     /// <see cref="DeclaredIconApplied"/>: the asset existing is not evidence the window
-    /// adopted it. <c>LoadConventionAssetIcon</c> goes through <c>LoadImageW</c>, which
-    /// returns <c>0</c> for a file it cannot decode, and <c>LoadExecutablePeIcon</c> then
-    /// wins — a source the title bar cannot project at all.
+    /// adopted it. Two things can go wrong after <c>File.Exists</c> succeeds —
+    /// <c>LoadImageW</c> can refuse to decode the file, and the
+    /// <c>GetIconIdFromIcon</c>/<c>SetIcon</c> boundary can throw — and in both cases the
+    /// window ends up showing something else.
+    /// <para>Recorded <b>pessimistically</b>: set as soon as a candidate file is found and
+    /// cleared only after <c>SetIcon</c> has returned, so neither failure path can leave it
+    /// claiming an adoption that did not happen. A PE icon adopted after the convention
+    /// asset failed to load does not clear it either — the convention really was not
+    /// adopted, and the title bar cannot project a PE resource.</para>
     /// <para>A <b>path</b> rather than a <c>bool</c>, deliberately. The title bar must act
     /// on this verdict only when it is a verdict about <em>the same file</em> the title bar
     /// resolved. The two probe roots are independent (the title bar's is redirectable for
@@ -1051,11 +1057,16 @@ public sealed partial class ReactorWindow : IDisposable
         // own file probe).
         var hIcon = LoadConventionAssetIcon(out var conventionCandidate);
 
-        // An asset that exists but will not load is the one case the TitleBar projection
-        // cannot see for itself: File.Exists succeeds there, so without this it would
-        // project a file the caption is not showing. Recorded as the path so the title bar
-        // can confirm the verdict is about the file it resolved.
-        UnloadableConventionIconPath = hIcon == 0 ? conventionCandidate : null;
+        // Which loader produced the handle. Captured before the reassignment below,
+        // because after it `hIcon` no longer says where it came from.
+        var fromConvention = hIcon != 0;
+
+        // Pessimistic: an existing convention asset counts as "not adopted" until the
+        // window has actually taken it. Set optimistically it would be wrong on both of
+        // the failure paths below — a LoadImageW miss, and a throw out of the SetIcon
+        // boundary — and in each case the title bar would project a file the caption is
+        // not showing. Cleared only after SetIcon returns.
+        UnloadableConventionIconPath = conventionCandidate;
 
         if (hIcon == 0) hIcon = LoadExecutablePeIcon();
         if (hIcon == 0) return false;
@@ -1074,6 +1085,11 @@ public sealed partial class ReactorWindow : IDisposable
             // finally below.
             _exeFallbackHIcon = hIcon;
             owned = false;
+
+            // Adopted. Only a convention-sourced handle clears the record: a PE icon
+            // adopted after the convention asset failed to load leaves the convention
+            // genuinely unadopted, which is what the record should keep saying.
+            if (fromConvention) UnloadableConventionIconPath = null;
             return true;
         }
         catch (Exception ex) when (IsIconApplyFailure(ex))
