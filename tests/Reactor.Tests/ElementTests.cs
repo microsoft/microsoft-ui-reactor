@@ -721,6 +721,23 @@ public class ElementTests
     }
 
     [Fact]
+    public void ForEach_Keys_From_A_Struct_IReactorKeyed_Item()
+    {
+        // The per-T static cache exists so the interface probe doesn't box a
+        // struct on every row; this pins that the struct path still keys.
+        var rows = new[] { new KeyedStructRow("a"), new KeyedStructRow("b") };
+
+        var group = (GroupElement)ForEach(rows, r => TextBlock(r.Id));
+
+        Assert.Equal(["a", "b"], group.Children.Select(c => c.Key));
+    }
+
+    private readonly record struct KeyedStructRow(string Id) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+
+    [Fact]
     public void ForEach_Group_Flattened_In_Parent()
     {
         var el = HStack(

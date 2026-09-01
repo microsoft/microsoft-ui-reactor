@@ -174,14 +174,25 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
 
     internal static bool ImplementsReactorKeyed(ITypeSymbol type)
     {
+        // The type itself counts: `ForEach(IReadOnlyList<IReactorKeyed> items, …)`
+        // is auto-keyed at runtime, because
+        // typeof(IReactorKeyed).IsAssignableFrom(typeof(IReactorKeyed)) is true.
+        // AllInterfaces does NOT include the interface itself, so checking only
+        // that would leave the analyzer demanding a key the factory supplies.
+        if (IsReactorKeyedInterface(type)) return true;
+
         foreach (var iface in type.AllInterfaces)
         {
-            if (iface.Name == "IReactorKeyed"
-                && iface.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Reactor.Core")
-                return true;
+            if (IsReactorKeyedInterface(iface)) return true;
         }
         return false;
     }
+
+    // Matched by name + namespace so the analyzer needs no hard reference to
+    // Reactor.Core.
+    static bool IsReactorKeyedInterface(ITypeSymbol type) =>
+        type.Name == "IReactorKeyed"
+        && type.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Reactor.Core";
 
     // REACTOR_DSL_002 — inspect the key expression of a `.WithKey(arg)` call.
     // The key expression itself is matched syntactically: identifiers are

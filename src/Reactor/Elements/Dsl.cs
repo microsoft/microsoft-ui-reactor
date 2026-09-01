@@ -1372,7 +1372,11 @@ public static partial class Factories
         // would box every row when T is a struct implementing IReactorKeyed,
         // against #170's allocation budget.
         if (!SelfKeyingItem<T>.Supported) return element;
-        if (element.Key is not null) return element;
+        // `Func<T, Element>` is non-nullable, but ChildReconciler.Filter drops
+        // null children rather than throwing, so a renderer that returns null
+        // used to survive as far as the diff. Keep that tolerance instead of
+        // turning it into a NullReferenceException here.
+        if (element is null || element.Key is not null) return element;
         return item is IReactorKeyed keyed ? element with { Key = keyed.Key } : element;
     }
 

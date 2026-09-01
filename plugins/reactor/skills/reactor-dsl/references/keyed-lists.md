@@ -18,14 +18,20 @@ otherwise it tears down the realized container and rebuilds it, losing
 focus, animation state, ElementRef identity, and triggering a full
 re-paint of the affected viewport.
 
-Three call sites in three APIs need a key. Pick the matching pattern and
-move on.
+Four call sites need a key. Pick the matching pattern and move on.
 
 | Where | API | Key comes from |
 |---|---|---|
 | Templated `ListView<T>` / `GridView<T>` / `FlipView<T>` / `LazyVStack<T>` / `LazyHStack<T>` | `keySelector: t => …` (3-arg overload) **or** omit when `T : IReactorKeyed` (2-arg overload) | A `Func<T, string>` |
+| `ForEach(items, render)` | Nothing when `T : IReactorKeyed` — the factory keys each element from `t.Key`. `.WithKey(string)` per child otherwise | A string per child, or nothing |
 | Hand-built children (`.Select(...)` into a panel) | `.WithKey(string)` per child **or** `.WithKey(item)` when `item : IReactorKeyed` | A string per child |
 | `Component<TChild>(props)` siblings of the same type | `.WithKey(string)` per sibling | A string per sibling |
+
+`Select` does no keying, so a key is always required there. Inside a
+`ForEach` over `IReactorKeyed` items, `.WithKey(item)` and `.WithKey(item.Key)`
+merely restate what the factory already assigned — `REACTOR_DSL_004` reports
+those and ships a fix that deletes the call. Any other expression is treated as
+a deliberate override and left alone.
 
 (spec 042 §3, §5)
 

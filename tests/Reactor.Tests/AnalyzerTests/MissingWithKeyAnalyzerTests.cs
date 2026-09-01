@@ -45,6 +45,7 @@ namespace Microsoft.UI.Reactor.Core
 
     public static class ElementExtensions
     {
+        public static T Bold<T>(this T el) where T : Element => el;
         public static T WithKey<T>(this T el, string key) where T : Element => el;
         public static T WithKey<T, TKey>(this T el, TKey item)
             where T : Element where TKey : IReactorKeyed => el;
@@ -1233,6 +1234,78 @@ namespace TestApp
             TestCode = before,
             FixedCode = after,
             CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.RedundantKeyId}_Remove",
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_CodeFix_Keeps_The_Formatting_Of_A_Wrapped_Chain()
+    {
+        // The fix replaces the whole `….WithKey(r)` invocation with its
+        // receiver, so a chain split across lines must not collapse onto one.
+        var before = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r =>
+                {|REACTOR_DSL_004:TextBlock(r.Text)
+                    .Bold()
+                    .WithKey(r)|}));
+    }
+}";
+
+        var after = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r =>
+                TextBlock(r.Text)
+                    .Bold()));
+    }
+}";
+
+        await new CSharpCodeFixTest<MissingWithKeyAnalyzer, RedundantWithKeyCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.RedundantKeyId}_Remove",
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_When_T_Is_IReactorKeyed_Itself()
+    {
+        // AllInterfaces does not include the interface itself, so a collection
+        // typed directly as IReactorKeyed was auto-keyed at runtime while the
+        // analyzer still demanded a key.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<IReactorKeyed> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Key)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 }
