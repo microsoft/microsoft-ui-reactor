@@ -336,7 +336,8 @@ internal static class TitleBarIconDefault
     /// rather than permanent: if a setter really does own the slot, its next render
     /// diverges at the setter stage and <see cref="ObserveAfterSetters"/> upgrades the
     /// record back to repeating.
-    /// </remarks>    /// <param name="control">The mounted WinUI <c>TitleBar</c> to observe.</param>
+    /// </remarks>
+    /// <param name="control">The mounted WinUI <c>TitleBar</c> to observe.</param>
     /// <param name="isMount">
     /// <c>true</c> on the mount pass. <c>ApplyModifiers</c> runs <c>OnMountAction</c> on
     /// mount and <c>OnUpdateAction</c> on every in-place update, so the stage alone does

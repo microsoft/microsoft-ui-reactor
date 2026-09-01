@@ -734,12 +734,16 @@ internal static class TitleBarIconDefaultFixtures
     //  A TitleBar replaced by a subtree containing one, then a window-icon update.
     //
     //  ChildReconciler's type-mismatch branch mounts the replacement subtree
-    //  BEFORE unmounting the old control. The new mount records
-    //  _titleBarIconControl; the old control's unmount then reaches
-    //  ClearTitleBarControl. An unconditional clear there wipes the reference the
-    //  replacement just recorded, and because that field is written only at mount
-    //  it is never re-established -- SyncTitleBarIcon returns at its first line
-    //  for the rest of the window's life.
+    //  BEFORE unmounting the old control, so the old control's unmount reaches
+    //  ClearTitleBarControl when the window state already describes the
+    //  replacement. Withdrawing that state there strands the live bar:
+    //  SyncTitleBarIcon has nothing to push to, and _titleBarControlMounted is
+    //  cleared with a title bar still mounted.
+    //
+    //  Today ClearTitleBarControl removes only the departing control from the
+    //  tracked list and withdraws the window-wide state only once the list is
+    //  empty, so the replacement's own entry survives its predecessor's
+    //  unmount. This fixture is what keeps that true.
     //
     //  The shape matters and was measured, not assumed. A *keyed* swap does not
     //  reproduce this: its order is unmount-then-mount, so the clear lands
