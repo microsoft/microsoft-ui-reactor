@@ -343,6 +343,69 @@ namespace TestApp
     }
 
     [Fact]
+    public async Task DSL_001_Does_Not_Fire_When_ForEach_Items_Are_IReactorKeyed()
+    {
+        // ForEach keys IReactorKeyed items itself, so there is nothing to add.
+        // Without this suppression the rule would demand a key the framework
+        // already supplies — and DSL_004 would then call that key redundant.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Text)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Still_Fires_For_Select_Over_IReactorKeyed_Items()
+    {
+        // The suppression is a property of the ForEach *factory*, not of the
+        // item type: LINQ Select does no keying, so an IReactorKeyed item
+        // projected through it still needs an explicit .WithKey.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Linq;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn({|REACTOR_DSL_001:rows.Select(r => TextBlock(r.Text))|}.ToArray());
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task No_Diagnostic_When_Select_Goes_To_Plain_List()
     {
         // The result of Select is materialized to List<Element>, not consumed
@@ -469,8 +532,16 @@ namespace TestApp
     }
 
     [Fact]
-    public async Task CodeFix_Offers_WithKey_Item_On_ForEach()
+    public async Task CodeFix_Offers_WithKey_ItemId_On_ForEach()
     {
+        // Was CodeFix_Offers_WithKey_Item_On_ForEach over an IReactorKeyed Row.
+        // ForEach now keys those itself, so DSL_001 no longer fires there and
+        // there is no diagnostic left to fix. The coverage that matters here is
+        // the *shape* — lambda at argument 1, and the argument/invocation span
+        // tie that FindNode has to resolve — so the type is plain and the offer
+        // is the Id one. The IReactorKeyed `.WithKey(item)` offer stays covered
+        // by CodeFix_Offers_WithKey_Item_When_Type_Is_IReactorKeyed, which goes
+        // through Select and is therefore unaffected by the auto-keying.
         var before = Stubs + @"
 namespace TestApp
 {
@@ -478,10 +549,7 @@ namespace TestApp
     using Microsoft.UI.Reactor.Core;
     using static Microsoft.UI.Reactor.Core.Factories;
 
-    public record Row(string Id, string Text) : IReactorKeyed
-    {
-        string IReactorKeyed.Key => Id;
-    }
+    public record Row(string Id, string Text);
 
     public static class C
     {
@@ -497,15 +565,12 @@ namespace TestApp
     using Microsoft.UI.Reactor.Core;
     using static Microsoft.UI.Reactor.Core.Factories;
 
-    public record Row(string Id, string Text) : IReactorKeyed
-    {
-        string IReactorKeyed.Key => Id;
-    }
+    public record Row(string Id, string Text);
 
     public static class C
     {
         public static Element Build(IReadOnlyList<Row> rows)
-            => FlexColumn(ForEach(rows, (r, i) => TextBlock(r.Text).WithKey(r)));
+            => FlexColumn(ForEach(rows, (r, i) => TextBlock(r.Text).WithKey(r.Id)));
     }
 }";
 
@@ -513,7 +578,7 @@ namespace TestApp
         {
             TestCode = before,
             FixedCode = after,
-            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.Id}_WithKey_Item",
+            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.Id}_WithKey_Item_Id",
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 

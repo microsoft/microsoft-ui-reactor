@@ -85,6 +85,22 @@ Conventions for contributors:
   style's full setters.
 
 ### Changed
+- **`ForEach` keys its elements from `IReactorKeyed` items, matching the templated
+  factories (spec 042 §5, issue #1156).** Spec 042 Phase 2 already defaults the key
+  selector to `t => t.Key` for `ListView<T>` / `GridView<T>` / `LazyVStack<T>` /
+  `LazyHStack<T>`; `ForEach` was left off that list, so the *same* `T` auto-keyed through
+  `ListView` but not through the hand-built path — and `REACTOR_DSL_001` then demanded a
+  key the author had no reason to think was missing. `ForEach` now fills a null key the
+  same way, so those lists take `ChildReconciler`'s keyed path — the difference between
+  moving a row and re-mounting it. **An explicit key still wins**, so `.WithKey(item.Id)`
+  or any deliberate override is untouched. The interface test is hoisted to a one-time
+  per-`T` static, so the per-item cost is a branch on a cached bool rather than a type
+  test that would box a struct `T` on every row. `REACTOR_DSL_001` no longer fires on a
+  `ForEach` over `IReactorKeyed` items, since there is nothing left to add — it still
+  fires for `Select`, which does no keying. Nothing is auto-keyed for items *without*
+  identity: an index key is the position, so it would reproduce positional matching while
+  forcing the LIS path, and sibling `ForEach` groups flatten into one parent, so `"0"`,
+  `"1"`, … would collide across them and trip the duplicate-key bailout.
 - **`GridSize` Allow for min and max size (issue 1106).**
   Changed the base constructor to `GridSize(double value, GridUnitType type, double? min = null, double? max = null)` to accomodate passing in the min and max value for `GridSize`. This will be passed on to WinUI's `ColumnDefinition` or `RowDefinition`. The old constructor is still valid but has no way of passing in min and max values.
 - **`GridSize` String value checks.**

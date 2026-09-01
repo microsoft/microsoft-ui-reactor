@@ -1306,6 +1306,9 @@ public static partial class Factories
     /// <summary>
     /// Map a list to elements (like .map() in React JSX):
     ///   ForEach(items, item =&gt; TextBlock(item.Name))
+    /// <para>When <typeparamref name="T"/> implements
+    /// <see cref="IReactorKeyed"/>, each projected element is keyed from the
+    /// item automatically — see <see cref="AutoKey{T}"/>.</para>
     /// </summary>
     public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render)
     {
@@ -1316,15 +1319,17 @@ public static partial class Factories
         {
             var arr = new Element[list.Count];
             for (int i = 0; i < arr.Length; i++)
-                arr[i] = render(list[i]);
+                arr[i] = AutoKey(render(list[i]), list[i]);
             return new GroupElement(arr);
         }
-        return new GroupElement(items.Select(render).ToArray());
+        return new GroupElement(items.Select(item => AutoKey(render(item), item)).ToArray());
     }
 
     /// <summary>
     /// Map with index:
     ///   ForEach(items, (item, i) =&gt; TextBlock($"{i}: {item}"))
+    /// <para>Keys from <see cref="IReactorKeyed"/> items exactly as the
+    /// single-parameter overload does.</para>
     /// </summary>
     public static Element ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render)
     {
@@ -1332,10 +1337,48 @@ public static partial class Factories
         {
             var arr = new Element[list.Count];
             for (int i = 0; i < arr.Length; i++)
-                arr[i] = render(list[i], i);
+                arr[i] = AutoKey(render(list[i], i), list[i]);
             return new GroupElement(arr);
         }
-        return new GroupElement(items.Select((item, i) => render(item, i)).ToArray());
+        return new GroupElement(items.Select((item, i) => AutoKey(render(item, i), item)).ToArray());
+    }
+
+    /// <summary>
+    /// Spec 042 §5 — identity-on-data. When the item carries its own identity,
+    /// key the projected element from it so the reconciler takes the keyed path
+    /// without the author repeating <c>.WithKey(item.Key)</c> on every row.
+    /// </summary>
+    /// <remarks>
+    /// Brings <c>ForEach</c> in line with the templated factories, which have
+    /// defaulted their key selector to <c>t =&gt; t.Key</c> since Phase 2 (the
+    /// 2-arg <c>ListView&lt;T&gt;</c> / <c>GridView&lt;T&gt;</c> /
+    /// <c>TreeView&lt;T&gt;</c> overloads constrained
+    /// <c>where T : IReactorKeyed</c>). <c>ForEach</c> was simply omitted from
+    /// that list, so the same T auto-keyed through <c>ListView</c> but not here.
+    /// <para>An explicit key always wins: this only fills a null, so
+    /// <c>.WithKey(item.Id)</c> or any deliberate override is untouched.</para>
+    /// <para>Deliberately NOT a positional fallback for non-keyed items. An
+    /// index key is the position, so it would reproduce positional matching
+    /// while forcing the LIS path (<c>ChildReconciler.Reconcile</c> switches on
+    /// <c>HasAnyKeys</c>), and sibling <c>ForEach</c> groups flatten into one
+    /// parent — so <c>"0"</c>, <c>"1"</c>, … would collide across them and trip
+    /// the duplicate-key bailout. <c>REACTOR_DSL_002</c> flags exactly that
+    /// shape when an author writes it by hand.</para>
+    /// </remarks>
+    static Element AutoKey<T>(Element element, T item)
+    {
+        // The interface test is hoisted to a one-time per-T static so the
+        // per-item cost is a branch on a cached bool. A per-item `is` test
+        // would box every row when T is a struct implementing IReactorKeyed,
+        // against #170's allocation budget.
+        if (!SelfKeyingItem<T>.Supported) return element;
+        if (element.Key is not null) return element;
+        return item is IReactorKeyed keyed ? element with { Key = keyed.Key } : element;
+    }
+
+    static class SelfKeyingItem<T>
+    {
+        internal static readonly bool Supported = typeof(IReactorKeyed).IsAssignableFrom(typeof(T));
     }
 
     /// <summary>

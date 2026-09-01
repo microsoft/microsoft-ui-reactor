@@ -658,6 +658,68 @@ public class ElementTests
         Assert.Equal("0:A", ((TextBlockElement)group.Children[0]).Content);
     }
 
+    // ── ForEach identity-on-data (spec 042 §5) ──────────────────────────
+
+    private sealed record KeyedRow(string Id, string Text) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+
+    [Fact]
+    public void ForEach_Keys_Elements_From_IReactorKeyed_Items()
+    {
+        var rows = new[] { new KeyedRow("a", "Alpha"), new KeyedRow("b", "Bravo") };
+
+        var group = (GroupElement)ForEach(rows, r => TextBlock(r.Text));
+
+        // The whole point: without this the children are unkeyed and
+        // ChildReconciler.Reconcile takes the positional arm.
+        Assert.Equal(["a", "b"], group.Children.Select(c => c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Keys_From_IReactorKeyed_On_The_Indexed_Overload_Too()
+    {
+        var rows = new[] { new KeyedRow("a", "Alpha"), new KeyedRow("b", "Bravo") };
+
+        var group = (GroupElement)ForEach(rows, (r, i) => TextBlock($"{i}:{r.Text}"));
+
+        Assert.Equal(["a", "b"], group.Children.Select(c => c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Does_Not_Override_An_Explicit_Key()
+    {
+        // A deliberate override must survive — the auto-key only fills a null.
+        var rows = new[] { new KeyedRow("a", "Alpha"), new KeyedRow("b", "Bravo") };
+
+        var group = (GroupElement)ForEach(rows, r => TextBlock(r.Text).WithKey($"row-{r.Id}"));
+
+        Assert.Equal(["row-a", "row-b"], group.Children.Select(c => c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Leaves_NonKeyed_Items_Unkeyed()
+    {
+        // No identity on the data, so nothing to key from — and an index key
+        // would be a positional key wearing a disguise.
+        var group = (GroupElement)ForEach(new[] { "A", "B" }, item => TextBlock(item));
+
+        Assert.All(group.Children, c => Assert.Null(c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Keys_From_IReactorKeyed_On_The_Enumerable_Path()
+    {
+        // The non-IReadOnlyList arm is a separate Select(...) branch (#170's
+        // fast path only covers lists), so it needs its own coverage.
+        IEnumerable<KeyedRow> rows = new[] { new KeyedRow("a", "Alpha"), new KeyedRow("b", "Bravo") }.Where(_ => true);
+
+        var group = (GroupElement)ForEach(rows, r => TextBlock(r.Text));
+
+        Assert.Equal(["a", "b"], group.Children.Select(c => c.Key));
+    }
+
     [Fact]
     public void ForEach_Group_Flattened_In_Parent()
     {

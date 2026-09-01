@@ -139,7 +139,38 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // TreatWarningsAsErrors — so a false positive breaks a build.
         if (confirmReactorFactory && !IsReactorForEach(inv, ctx)) return;
 
+        // ForEach keys IReactorKeyed items itself (Dsl.AutoKey), so there is
+        // nothing for the author to add. Without this the two halves fight:
+        // DSL_001 asks for a key, the author writes `.WithKey(item)`, and
+        // REACTOR_DSL_004 then reports it as redundant.
+        if (confirmReactorFactory && ProjectsSelfKeyingItems(inv, ctx)) return;
+
         ctx.ReportDiagnostic(Diagnostic.Create(Rule, inv.GetLocation(), projectionName));
+    }
+
+    // True when the ForEach type argument implements IReactorKeyed, i.e. the
+    // factory supplies the key at runtime. Matched by name + namespace so the
+    // analyzer needs no hard reference to Reactor.Core.
+    static bool ProjectsSelfKeyingItems(InvocationExpressionSyntax inv, SyntaxNodeAnalysisContext ctx)
+    {
+        if (ctx.SemanticModel.GetSymbolInfo(inv, ctx.CancellationToken).Symbol is not IMethodSymbol
+            {
+                TypeArguments.Length: 1,
+            } method)
+            return false;
+
+        return ImplementsReactorKeyed(method.TypeArguments[0]);
+    }
+
+    internal static bool ImplementsReactorKeyed(ITypeSymbol type)
+    {
+        foreach (var iface in type.AllInterfaces)
+        {
+            if (iface.Name == "IReactorKeyed"
+                && iface.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Reactor.Core")
+                return true;
+        }
+        return false;
     }
 
     // REACTOR_DSL_002 — inspect the key expression of a `.WithKey(arg)` call.
