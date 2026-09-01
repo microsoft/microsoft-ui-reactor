@@ -1333,9 +1333,19 @@ public static partial class Factories
 
     static Element[] BuildKeyed<T>(IEnumerable<T> items, Func<T, Element> render)
     {
-        var buffer = items.TryGetNonEnumeratedCount(out var count)
-            ? new List<Element>(count)
-            : new List<Element>();
+        // Fill the final array directly when the source can report a count, the
+        // same shape as the IReadOnlyList arm above. Only a sequence of unknown
+        // length pays for the List plus its copy.
+        if (items.TryGetNonEnumeratedCount(out var count))
+        {
+            var sized = new Element[count];
+            var at = 0;
+            foreach (var item in items)
+                sized[at++] = AutoKey(render(item), item);
+            return sized;
+        }
+
+        var buffer = new List<Element>();
         foreach (var item in items)
             buffer.Add(AutoKey(render(item), item));
         return buffer.ToArray();
@@ -1362,9 +1372,19 @@ public static partial class Factories
 
     static Element[] BuildKeyedIndexed<T>(IEnumerable<T> items, Func<T, int, Element> render)
     {
-        var buffer = items.TryGetNonEnumeratedCount(out var count)
-            ? new List<Element>(count)
-            : new List<Element>();
+        if (items.TryGetNonEnumeratedCount(out var count))
+        {
+            var sized = new Element[count];
+            var at = 0;
+            foreach (var item in items)
+            {
+                sized[at] = AutoKey(render(item, at), item);
+                at++;
+            }
+            return sized;
+        }
+
+        var buffer = new List<Element>();
         var index = 0;
         foreach (var item in items)
         {
