@@ -1307,8 +1307,9 @@ public static partial class Factories
     /// Map a list to elements (like .map() in React JSX):
     ///   ForEach(items, item =&gt; TextBlock(item.Name))
     /// <para>When <typeparamref name="T"/> implements
-    /// <see cref="IReactorKeyed"/>, each projected element is keyed from the
-    /// item automatically — see <see cref="AutoKey{T}"/>.</para>
+    /// <see cref="IReactorKeyed"/>, each projected element is keyed from
+    /// <c>item.Key</c> unless the projection already set one, so the
+    /// reconciler matches rows by identity instead of by position.</para>
     /// </summary>
     public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render)
     {
