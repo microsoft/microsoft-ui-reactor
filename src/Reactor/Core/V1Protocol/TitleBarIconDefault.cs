@@ -255,7 +255,8 @@ internal static class TitleBarIconDefault
     /// </param>
     /// <param name="declaredIconApplied">
     /// The owning window's <c>DeclaredIconApplied</c> verdict, forwarded to
-    /// <see cref="ResolveForSpec"/> so the resync agrees with the window about which
+    /// <see cref="ResolveForSpec(WindowSpec?, bool?, out bool)"/> so the resync agrees with
+    /// the window about which
     /// <em>source</em> won and not merely about which file the declaration names.
     /// </param>
     /// <remarks>
@@ -316,8 +317,8 @@ internal static class TitleBarIconDefault
         // See InvalidateCaches.
         Volatile.Write(ref s_declared, null);
 
-        var projected = ResolveForSpec(spec, declaredIconApplied);
-        var written = ResolveForResync(projected);
+        var projected = ResolveForSpec(spec, declaredIconApplied, out var fromDeclaredIcon);
+        var written = ResolveForResync(projected, fromDeclaredIcon);
         control.IconSource = written;
         s_applied.AddOrUpdate(control, new AppliedIcon(
             projected, elementOwned: false, authorOwned: false, written));
@@ -325,17 +326,29 @@ internal static class TitleBarIconDefault
 
     /// <summary>
     /// Builds the <c>IconSource</c> for the out-of-band resync, bypassing the XAML image
-    /// cache for image-backed icons.
+    /// cache when — and only when — the window itself would have re-read the file.
     /// </summary>
     /// <remarks>
     /// A plain <c>BitmapImage</c> is keyed on its URI, so re-creating one for a path whose
     /// bytes changed can serve the previous decode. <c>IgnoreImageCache</c> forces the
     /// re-read. Only this path pays for it: normal renders go through
     /// <see cref="IconResolver.ResolveIconSource(IconData?)"/> and keep the cache.
+    /// <para>Gated on <paramref name="fromDeclaredIcon"/> for the same reason the cache
+    /// invalidation is gated — the two window arms differ. <c>ApplyChrome</c> re-runs
+    /// <c>spec.Icon.Apply(...)</c> every time, so a declared file replaced in place does
+    /// reach the caption and the title bar must follow. The convention/PE arm returns its
+    /// cached <c>HICON</c> from <c>TryApplyExeIconFallback</c> forever, so forcing a
+    /// re-decode there would both burn a decode on every unrelated <c>WindowSpec</c>
+    /// update and make the title bar adopt bytes the caption never sees.</para>
     /// </remarks>
-    private static Microsoft.UI.Xaml.Controls.IconSource? ResolveForResync(IconData? projected)
+    /// <param name="projected">The projected icon, or <c>null</c> for none.</param>
+    /// <param name="fromDeclaredIcon">
+    /// <c>true</c> when <paramref name="projected"/> came from <see cref="WindowSpec.Icon"/>.
+    /// </param>
+    private static Microsoft.UI.Xaml.Controls.IconSource? ResolveForResync(
+        IconData? projected, bool fromDeclaredIcon)
     {
-        if (projected is not ImageIconData image)
+        if (!fromDeclaredIcon || projected is not ImageIconData image)
             return IconResolver.ResolveIconSource(projected);
 
         var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage
@@ -382,7 +395,24 @@ internal static class TitleBarIconDefault
     /// re-deriving a proxy for it is still the right shape, and costs nothing.</para>
     /// </param>
     internal static IconData? ResolveForSpec(WindowSpec? spec, bool? declaredIconApplied = null)
+        => ResolveForSpec(spec, declaredIconApplied, out _);
+
+    /// <summary>
+    /// As <see cref="ResolveForSpec(WindowSpec?, bool?)"/>, additionally reporting which
+    /// arm produced the value so the caller can match that arm's cache policy.
+    /// </summary>
+    /// <param name="spec">The owning window's spec.</param>
+    /// <param name="declaredIconApplied">The window's declared-icon verdict.</param>
+    /// <param name="fromDeclaredIcon">
+    /// <c>true</c> when the result came from <see cref="WindowSpec.Icon"/> rather than the
+    /// convention asset. Reported rather than re-derived by the caller: deriving the same
+    /// fact a second way is how two copies drift apart.
+    /// </param>
+    internal static IconData? ResolveForSpec(
+        WindowSpec? spec, bool? declaredIconApplied, out bool fromDeclaredIcon)
     {
+        fromDeclaredIcon = false;
+
         // Mirror ApplyChrome's `spec.Embed is null` guard: an embedded window never gets
         // a window icon, so there is no window icon for its title bar to inherit.
         if (spec?.Embed is not null) return null;
@@ -394,7 +424,10 @@ internal static class TitleBarIconDefault
         if (declaredIconApplied is not false
             && spec?.Icon is { } declared
             && TryResolveDeclared(declared) is { } fromSpec)
+        {
+            fromDeclaredIcon = true;
             return fromSpec;
+        }
 
         return ResolveConvention();
     }

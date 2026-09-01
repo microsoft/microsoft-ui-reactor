@@ -731,6 +731,116 @@ internal static class TitleBarIconDefaultFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  A TitleBar replaced by a subtree containing one, then a window-icon update.
+    //
+    //  ChildReconciler's type-mismatch branch mounts the replacement subtree
+    //  BEFORE unmounting the old control. The new mount records
+    //  _titleBarIconControl; the old control's unmount then reaches
+    //  ClearTitleBarControl. An unconditional clear there wipes the reference the
+    //  replacement just recorded, and because that field is written only at mount
+    //  it is never re-established -- SyncTitleBarIcon returns at its first line
+    //  for the rest of the window's life.
+    //
+    //  The shape matters and was measured, not assumed. A *keyed* swap does not
+    //  reproduce this: its order is unmount-then-mount, so the clear lands
+    //  harmlessly before the new reference exists, and a fixture built that way
+    //  passes with the bug present. Reaching the mount-first branch needs the
+    //  child's element TYPE to change (TitleBar -> VStack) while the new subtree
+    //  still contains a TitleBar.
+    //
+    //  Invisible without the second step either way: the replacement mounts with
+    //  the correct icon regardless, so only a subsequent WindowSpec.Icon change --
+    //  which travels exclusively by the push -- separates the two states.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultSurvivesTypeReplacement(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        private sealed class SwapBarComponent : Component
+        {
+            public WinUI.TitleBar? Bar;
+            public Action<int>? SetPhase;
+
+            public override Element Render()
+            {
+                var (phase, set) = UseState(0);
+                SetPhase = set;
+
+                // Child 0 changes ELEMENT TYPE (TitleBar -> VStack) while the new subtree
+                // still contains a TitleBar. That is what selects ChildReconciler's
+                // type-mismatch branch, which mounts the replacement subtree first and
+                // unmounts the old control afterwards. A keyed swap does NOT reproduce it:
+                // measured order there is unmount-then-mount, so the stale clear cannot
+                // land on the new reference.
+                Element bar = phase == 0
+                    ? TitleBar("SwapIcon").Set(b => Bar = b)
+                    : VStack(TitleBar("SwapIcon").Set(b => Bar = b));
+
+                return VStack(bar, TextBlock("body"));
+            }
+        }
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var first = CreateExternalIcon(scratch);
+                var second = global::System.IO.Path.Join(scratch, "Second.ico");
+                global::System.IO.File.Copy(TestIcoPath, second, overwrite: true);
+
+                var comp = new SwapBarComponent();
+                var win = await OpenAndSettle(
+                    Spec("TypeReplace") with { Icon = WindowIcon.FromPath(first) }, () => comp);
+                try
+                {
+                    var original = comp.Bar;
+                    H.Check("TitleBarIcon_TypeSwap_BarMounted", original is not null);
+                    if (original is null) return;
+
+                    comp.SetPhase?.Invoke(1);
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(300);
+
+                    var replacement = comp.Bar;
+
+                    // Positive control. If the key change did not actually replace the
+                    // control there is no mount/unmount interleaving, the bug cannot
+                    // occur, and the assertion below would pass for a reason that has
+                    // nothing to do with the fix.
+                    H.Check("TitleBarIcon_TypeSwap_ControlWasReplaced",
+                        replacement is not null && !ReferenceEquals(replacement, original));
+                    if (replacement is null) return;
+
+                    var before = IconUri(replacement);
+                    Console.WriteLine($"# typeSwap: before={before}");
+                    H.Check($"TitleBarIcon_TypeSwap_ReplacementHasIcon (uri={before})", before is not null);
+
+                    // Only the window icon moves, so the push is the sole route.
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(second) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var after = IconUri(replacement);
+                    Console.WriteLine($"# typeSwap: after={after}");
+                    H.Check($"TitleBarIcon_TypeSwap_ReplacementStillTracked (uri={after})",
+                        after is not null
+                        && after.LocalPath.EndsWith("Second.ico", StringComparison.OrdinalIgnoreCase));
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  An element that owns its icon slot keeps it across a window icon change.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultExplicitSurvivesWindowIconChange(Harness h) : SelfTestFixtureBase(h)

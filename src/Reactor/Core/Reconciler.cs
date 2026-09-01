@@ -2173,9 +2173,9 @@ public sealed partial class Reconciler : IDisposable
         // ExtendsContentIntoTitleBar inference and its caption-height
         // contribution from the owning window, so a window that merely used to
         // host one is not left content-extended and tall for its lifetime.
-        if (control is WinUI.TitleBar
+        if (control is WinUI.TitleBar unmountingBar
             && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } titleBarWindow)
-            titleBarWindow.ClearTitleBarControl();
+            titleBarWindow.ClearTitleBarControl(unmountingBar);
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
@@ -2539,9 +2539,9 @@ public sealed partial class Reconciler : IDisposable
         // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
         // pooling traversal (nested in a poolable container) must also withdraw
         // its inference and caption-height contribution.
-        if (control is WinUI.TitleBar
+        if (control is WinUI.TitleBar pooledUnmountingBar
             && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } pooledTitleBarWindow)
-            pooledTitleBarWindow.ClearTitleBarControl();
+            pooledTitleBarWindow.ClearTitleBarControl(pooledUnmountingBar);
 
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))

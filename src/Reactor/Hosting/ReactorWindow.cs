@@ -1836,11 +1836,31 @@ public sealed partial class ReactorWindow : IDisposable
     /// one.
     /// </para>
     /// </summary>
-    internal void ClearTitleBarControl()
+    /// <param name="unmounting">
+    /// The control being unmounted. Used to guard <see cref="_titleBarIconControl"/>:
+    /// a keyed or type replacement mounts the new <c>TitleBar</c> <em>before</em>
+    /// unmounting the old one (<c>ChildReconciler</c> mounts, then
+    /// <c>ReplaceChildWithExitTransition</c> unmounts), so an unconditional clear here
+    /// would wipe the reference the replacement's mount had just recorded and leave the
+    /// live title bar permanently unreachable by the icon push.
+    /// <para>Only that field is guarded. The height fields keep their existing
+    /// unconditional semantics because they are re-established by the next
+    /// <c>ApplyTitleBarHeightOption</c>, which runs on every update;
+    /// <see cref="_titleBarIconControl"/> is written only at mount, so a spurious clear
+    /// of it is permanent.</para>
+    /// </param>
+    internal void ClearTitleBarControl(Microsoft.UI.Xaml.Controls.TitleBar? unmounting = null)
     {
         _titleBarControlMounted = false;
         _titleBarControl = null;
-        _titleBarIconControl = null;
+
+        if (unmounting is null
+            || _titleBarIconControl is null
+            || !_titleBarIconControl.TryGetTarget(out var tracked)
+            || ReferenceEquals(tracked, unmounting))
+        {
+            _titleBarIconControl = null;
+        }
         _titleBarControlExplicitHeight = false;
         _titleBarControlHeightOwned = false;
         _elementTitleBarHeight = null;
