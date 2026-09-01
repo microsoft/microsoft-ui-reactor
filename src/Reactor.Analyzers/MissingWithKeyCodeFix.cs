@@ -179,18 +179,14 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
         return true;
     }
 
-    static bool ImplementsIReactorKeyed(ITypeSymbol type)
-    {
-        foreach (var iface in type.AllInterfaces)
-        {
-            // Match by name + containing namespace to avoid pulling a hard
-            // reference to Reactor.Core into the analyzer assembly.
-            if (iface.Name == "IReactorKeyed"
-                && iface.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Reactor.Core")
-                return true;
-        }
-        return false;
-    }
+    // Delegates to the analyzer's copy rather than keeping a second one. This
+    // file previously had its own AllInterfaces loop, which missed the case
+    // where the type IS IReactorKeyed (AllInterfaces excludes the type itself)
+    // — so a `Select` over an `IReadOnlyList<IReactorKeyed>` never got the
+    // `.WithKey(item)` offer. Same drift, one more copy: the reason #1156
+    // existed in the first place.
+    static bool ImplementsIReactorKeyed(ITypeSymbol type) =>
+        MissingWithKeyAnalyzer.ImplementsReactorKeyed(type);
 
     static bool HasPublicProperty(ITypeSymbol type, string name)
     {

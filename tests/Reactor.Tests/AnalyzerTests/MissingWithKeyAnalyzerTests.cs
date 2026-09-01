@@ -1308,4 +1308,49 @@ namespace TestApp
             TestCode = source,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    [Fact]
+    public async Task CodeFix_Offers_WithKey_Item_When_T_Is_IReactorKeyed_Itself()
+    {
+        // Select does no keying, so a collection typed directly as
+        // IReactorKeyed still needs an explicit key -- and the fix should offer
+        // the `.WithKey(item)` form. It did not, because the code fix kept its
+        // own AllInterfaces loop, which excludes the type itself.
+        var before = Stubs + @"
+namespace TestApp
+{
+    using System.Linq;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<IReactorKeyed> rows)
+            => FlexColumn({|REACTOR_DSL_001:rows.Select(r => TextBlock(r.Key))|}.ToArray());
+    }
+}";
+
+        var after = Stubs + @"
+namespace TestApp
+{
+    using System.Linq;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<IReactorKeyed> rows)
+            => FlexColumn(rows.Select(r => TextBlock(r.Key).WithKey(r)).ToArray());
+    }
+}";
+
+        await new CSharpCodeFixTest<MissingWithKeyAnalyzer, MissingWithKeyCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.Id}_WithKey_Item",
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
 }
