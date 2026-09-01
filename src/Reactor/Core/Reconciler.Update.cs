@@ -261,11 +261,15 @@ public sealed partial class Reconciler
         // Re-apply the TitleBar's caption-derived height after modifiers so
         // removing an explicit .Height(...) from a still-tall TitleBar falls
         // back to the implied tall height rather than to auto. (issue #917)
-        if (newEl is TitleBarElement tbEl && target is WinUI.TitleBar tbCtl)
+        // Height sync is element-specific; the icon observation is not — see the matching
+        // note in Reconciler.Mount.cs.
+        if (target is WinUI.TitleBar tbCtl)
         {
-            TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+            if (newEl is TitleBarElement tbEl)
+                TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+
             // Anything that changed since the pre-modifier observation came from a
-            // one-shot modifier, which nothing re-applies.
+            // modifier; whether it recurs depends on the phase.
             global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
                 .ObserveAfterModifiers(tbCtl, isMount: false);
         }
