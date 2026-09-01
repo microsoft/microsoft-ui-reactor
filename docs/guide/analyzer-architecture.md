@@ -211,11 +211,10 @@ flags an `async`-void `UseEffect` body (spec 060 §4.1).
 ## Symbol-grounded matching — the WithKey case
 
 ```csharp
-static void AnalyzeMissingKey(SyntaxNodeAnalysisContext ctx, InvocationExpressionSyntax inv)
+static void AnalyzeMissingKey(SyntaxNodeAnalysisContext ctx, InvocationExpressionSyntax inv, int lambdaIndex)
 {
-    // Single lambda argument with an invocation body.
-    if (inv.ArgumentList.Arguments.Count != 1) return;
-    if (inv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) return;
+    if (inv.ArgumentList.Arguments.Count <= lambdaIndex) return;
+    if (inv.ArgumentList.Arguments[lambdaIndex].Expression is not LambdaExpressionSyntax lambda) return;
 
     var body = lambda.Body;
     if (body is BlockSyntax block) body = ExtractReturnExpression(block) ?? body;

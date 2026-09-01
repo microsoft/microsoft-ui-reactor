@@ -138,7 +138,7 @@ class CollectionsGroup : Component
         var items = new[] { "Alpha", "Bravo", "Charlie", "Delta" };
         return VStack(4,
             TextBlock("Items").Bold(),
-            ForEach(items, item => TextBlock($"  • {item}"))
+            ForEach(items, item => TextBlock($"  • {item}").WithKey(item))
         ).Padding(16);
     }
 }
@@ -407,7 +407,7 @@ class DataSystemGroup : Component
             ForEach(rows, r => HStack(16,
                 TextBlock(r.Item1),
                 TextBlock(r.Item2.ToString())
-            ))
+            ).WithKey(r.Item1))
         ).Padding(16);
     }
 }

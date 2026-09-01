@@ -454,7 +454,8 @@ class ParameterizedCommandExample : Component
                     // by design, so call .Execute(arg) directly from the click handler.
                     Button(delete.Label, () => delete.Execute?.Invoke(item))
                         .AutomationName($"Delete {item.Title}")
-                        .IsEnabled(delete.IsEnabled)))
+                        .IsEnabled(delete.IsEnabled))
+                    .WithKey(item.Id.ToString()))
         ).Padding(24);
     }
 }
