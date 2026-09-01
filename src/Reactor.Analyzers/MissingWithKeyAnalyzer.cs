@@ -181,11 +181,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // that would leave the analyzer demanding a key the factory supplies.
         if (IsReactorKeyedInterface(type)) return true;
 
-        foreach (var iface in type.AllInterfaces)
-        {
-            if (IsReactorKeyedInterface(iface)) return true;
-        }
-        return false;
+        return type.AllInterfaces.Any(IsReactorKeyedInterface);
     }
 
     // Matched by name + namespace so the analyzer needs no hard reference to

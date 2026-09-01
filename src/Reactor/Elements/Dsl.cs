@@ -1367,10 +1367,18 @@ public static partial class Factories
     /// </remarks>
     static Element AutoKey<T>(Element element, T item)
     {
-        // The interface test is hoisted to a one-time per-T static so the
-        // per-item cost is a branch on a cached bool. A per-item `is` test
-        // would box every row when T is a struct implementing IReactorKeyed,
-        // against #170's allocation budget.
+        // SelfKeyingItem<T> hoists the interface test, so the common case — T
+        // does not implement IReactorKeyed — costs one branch on a cached bool
+        // per item instead of a type test.
+        //
+        // It does NOT make the keyed path allocation-free: `item is
+        // IReactorKeyed` below boxes once per row when T is a struct that
+        // implements the interface. Calling an interface member on an
+        // unconstrained T cannot avoid that, and a constrained overload is not
+        // possible because constraints are not part of the signature. Records
+        // are the documented shape for keyed items (spec 042 §5), so that path
+        // is rare; ForEach_Keys_From_A_Struct_IReactorKeyed_Item pins that it
+        // still produces the right keys.
         if (!SelfKeyingItem<T>.Supported) return element;
         // `Func<T, Element>` is non-nullable, but ChildReconciler.Filter drops
         // null children rather than throwing, so a renderer that returns null
