@@ -738,6 +738,40 @@ public class ElementTests
     }
 
     [Fact]
+    public void ForEach_Handles_A_Source_Whose_Count_Disagrees_With_Its_Enumeration()
+    {
+        // TryGetNonEnumeratedCount is a snapshot. If the walk yields fewer items
+        // the array would keep trailing nulls; more, and it would throw. Both
+        // directions are pinned here because neither shows up on a well-behaved
+        // collection.
+        var shorter = new LyingCount<string>(["a", "b"], reportedCount: 5);
+        var longer = new LyingCount<string>(["a", "b", "c"], reportedCount: 1);
+
+        var shortGroup = (GroupElement)ForEach(shorter, s => TextBlock(s));
+        var longGroup = (GroupElement)ForEach(longer, (s, i) => TextBlock(s));
+
+        Assert.Equal(2, shortGroup.Children.Length);
+        Assert.All(shortGroup.Children, Assert.NotNull);
+        Assert.Equal(3, longGroup.Children.Length);
+        Assert.All(longGroup.Children, Assert.NotNull);
+    }
+
+    // Reports one count and enumerates a different number of items. ICollection
+    // is what TryGetNonEnumeratedCount reads, so Count is the lie.
+    private sealed class LyingCount<T>(IReadOnlyList<T> actual, int reportedCount) : ICollection<T>
+    {
+        public int Count => reportedCount;
+        public bool IsReadOnly => true;
+        public IEnumerator<T> GetEnumerator() => actual.GetEnumerator();
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public void Add(T item) => throw new NotSupportedException();
+        public void Clear() => throw new NotSupportedException();
+        public bool Contains(T item) => throw new NotSupportedException();
+        public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+        public bool Remove(T item) => throw new NotSupportedException();
+    }
+
+    [Fact]
     public void ForEach_Group_Flattened_In_Parent()
     {
         var el = HStack(

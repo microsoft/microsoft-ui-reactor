@@ -1333,22 +1333,22 @@ public static partial class Factories
 
     static Element[] BuildKeyed<T>(IEnumerable<T> items, Func<T, Element> render)
     {
-        // Fill the final array directly when the source can report a count, the
-        // same shape as the IReadOnlyList arm above. Only a sequence of unknown
-        // length pays for the List plus its copy.
-        if (items.TryGetNonEnumeratedCount(out var count))
-        {
-            var sized = new Element[count];
-            var at = 0;
-            foreach (var item in items)
-                sized[at++] = AutoKey(render(item), item);
-            return sized;
-        }
-
-        var buffer = new List<Element>();
+        // Pre-size from a reported count, then grow or trim if the enumeration
+        // disagrees. A count is only a snapshot — a concurrent source can yield
+        // a different number of items than it just claimed — and getting that
+        // wrong would leave trailing nulls or throw. Same contract as
+        // Enumerable.ToArray, without its closure.
+        var buffer = items.TryGetNonEnumeratedCount(out var count) && count > 0
+            ? new Element[count]
+            : new Element[4];
+        var at = 0;
         foreach (var item in items)
-            buffer.Add(AutoKey(render(item), item));
-        return buffer.ToArray();
+        {
+            if (at == buffer.Length) Array.Resize(ref buffer, buffer.Length * 2);
+            buffer[at++] = AutoKey(render(item), item);
+        }
+        if (at != buffer.Length) Array.Resize(ref buffer, at);
+        return buffer;
     }
 
     /// <summary>
@@ -1372,26 +1372,19 @@ public static partial class Factories
 
     static Element[] BuildKeyedIndexed<T>(IEnumerable<T> items, Func<T, int, Element> render)
     {
-        if (items.TryGetNonEnumeratedCount(out var count))
-        {
-            var sized = new Element[count];
-            var at = 0;
-            foreach (var item in items)
-            {
-                sized[at] = AutoKey(render(item, at), item);
-                at++;
-            }
-            return sized;
-        }
-
-        var buffer = new List<Element>();
-        var index = 0;
+        // Same pre-size / grow / trim contract as BuildKeyed.
+        var buffer = items.TryGetNonEnumeratedCount(out var count) && count > 0
+            ? new Element[count]
+            : new Element[4];
+        var at = 0;
         foreach (var item in items)
         {
-            buffer.Add(AutoKey(render(item, index), item));
-            index++;
+            if (at == buffer.Length) Array.Resize(ref buffer, buffer.Length * 2);
+            buffer[at] = AutoKey(render(item, at), item);
+            at++;
         }
-        return buffer.ToArray();
+        if (at != buffer.Length) Array.Resize(ref buffer, at);
+        return buffer;
     }
 
     /// <summary>
