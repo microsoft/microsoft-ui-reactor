@@ -1152,10 +1152,12 @@ internal static class TitleBarIconDefaultFixtures
     //
     //  Two ways the one-shot rule can be got wrong:
     //
-    //  (a) Classifying repeatability from Setters.Length alone. The capture
-    //      setter here never touches IconSource, so the mount write is still
-    //      one-shot -- but a naive "carries setters => repeats" test would
-    //      call it repeating and let the next render overwrite it.
+    //  (a) Attributing the write to the wrong author. The capture setter here
+    //      never touches IconSource, so the mount write is still one-shot --
+    //      which the staged observers establish by seeing the divergence only
+    //      after ApplyModifiers. An earlier revision inferred it from the
+    //      element instead (Setters.Length, then a mount-pass flag) and got
+    //      this case backwards; the arm remains as the regression guard.
     //
     //  (b) Preserving the one-shot too hard. An element that changes its OWN
     //      .Icon(...) is asking for the new value, so the mount-time override

@@ -176,12 +176,16 @@ internal static class TitleBarIconDefault
         /// one-shot like <c>.OnMount(...)</c>, which does not.
         /// </summary>
         /// <remarks>
-        /// Both land after the descriptor props and are indistinguishable to
-        /// <see cref="ObserveAfterSetters"/> by inspection of the control alone, but they
-        /// need opposite handling. A repeating setter can be written over safely — it
-        /// overwrites Reactor again immediately, and writing is what lets the projection
-        /// come back if the setter is later removed. A one-shot has nothing to re-apply
-        /// it, so writing over it destroys the author's value permanently.
+        /// The two need opposite handling. A repeating write can be written over safely —
+        /// it lands again immediately, and writing is what lets the projection come back
+        /// once the write is removed. A one-shot has nothing to re-apply it, so writing
+        /// over it destroys the author's value permanently.
+        /// <para>Set from the observation stage and phase rather than inferred from the
+        /// element: a divergence at the setter stage repeats (setters re-run every render),
+        /// and one at the modifier stage repeats only on an update, because
+        /// <c>ApplyModifiers</c> runs <c>OnMountAction</c> once but <c>OnUpdateAction</c>
+        /// on every in-place update. See <see cref="ObserveAfterSetters"/> and
+        /// <see cref="ObserveAfterModifiers"/>.</para>
         /// </remarks>
         internal readonly bool AuthorRepeats = authorRepeats;
 
@@ -265,8 +269,10 @@ internal static class TitleBarIconDefault
     }
 
     /// <summary>
-    /// Records whether a raw <c>.Set(...)</c> setter claimed the icon slot. Called by the
-    /// reconciler after modifiers and setters have run, on both mount and update.
+    /// First half of the ownership observation: records whether a raw <c>.Set(...)</c>
+    /// setter claimed the icon slot. Called by the reconciler after the descriptor props
+    /// and setters have run but <b>before</b> <c>ApplyModifiers</c>, on both mount and
+    /// update.
     /// </summary>
     /// <remarks>
     /// <para>Setters run <em>after</em> every descriptor prop — the documented "setters
@@ -295,10 +301,12 @@ internal static class TitleBarIconDefault
     /// outside that contract.</para>
     /// <para>Two observation points, not one, and that is what makes the classification
     /// exact rather than heuristic. Setters run inside the descriptor handler, before
-    /// <c>ApplyModifiers</c>; <c>.OnMount(...)</c> runs inside it. So a divergence seen
-    /// <em>here</em> — before modifiers — is a setter's by construction and therefore
-    /// repeats, and one that appears only in
-    /// <see cref="ObserveAfterModifiers"/> came from a modifier and does not.</para>
+    /// <c>ApplyModifiers</c>; <c>.OnMount(...)</c> and <c>.OnUpdate(...)</c> run inside it.
+    /// So a divergence seen <em>here</em> — before modifiers — is a setter's by
+    /// construction and repeats. One that appears only in
+    /// <see cref="ObserveAfterModifiers"/> came from a modifier, and whether <em>that</em>
+    /// repeats depends on the phase: a mount action runs once, an update action runs
+    /// again on every in-place update.</para>
     /// <para>An earlier revision tried to infer this from the element instead
     /// (<c>Setters.Length</c>, then a mount-pass flag) and was wrong in both directions:
     /// a capture-only <c>.Set(b =&gt; captured = b)</c> made a mount write look repeatable,
@@ -319,13 +327,15 @@ internal static class TitleBarIconDefault
     /// <summary>
     /// Second half of the ownership observation: runs after <c>ApplyModifiers</c>, and
     /// attributes anything that changed since <see cref="ObserveAfterSetters"/> to a
-    /// one-shot modifier such as <c>.OnMount(...)</c>.
+    /// modifier such as <c>.OnMount(...)</c> or <c>.OnUpdate(...)</c>.
     /// </summary>
     /// <remarks>
-    /// A one-shot has nothing that re-applies it, so <see cref="Apply"/> must not write
-    /// over it. Misclassifying here is self-correcting rather than permanent: if a setter
-    /// really does own the slot, its next render diverges at the setter stage and
-    /// <see cref="ObserveAfterSetters"/> upgrades the record back to repeating.
+    /// Whether that write recurs depends on the phase, not the stage — see
+    /// <paramref name="isMount"/>. A one-shot has nothing that re-applies it, so
+    /// <see cref="Apply"/> must not write over it. Misclassifying here is self-correcting
+    /// rather than permanent: if a setter really does own the slot, its next render
+    /// diverges at the setter stage and <see cref="ObserveAfterSetters"/> upgrades the
+    /// record back to repeating.
     /// </remarks>    /// <param name="control">The mounted WinUI <c>TitleBar</c> to observe.</param>
     /// <param name="isMount">
     /// <c>true</c> on the mount pass. <c>ApplyModifiers</c> runs <c>OnMountAction</c> on
