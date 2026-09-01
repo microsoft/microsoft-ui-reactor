@@ -221,7 +221,7 @@ class MutatingPropsDont : Component<ItemsProps>
         // Don't — this mutates the parent's collection, so the parent never
         // sees the change and doesn't re-render.
         Props.Items.Add("new item");
-        return VStack(4, ForEach(Props.Items, i => TextBlock(i)));
+        return VStack(4, ForEach(Props.Items, (item, i) => TextBlock(item).WithKey($"{i}-{item}")));
     }
 }
 // </snippet:mutating-props>

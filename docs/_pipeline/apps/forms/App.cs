@@ -315,7 +315,7 @@ class AutoSuggestDemo : Component
             When(matches.Length > 0, () =>
                 VStack(2,
                     ForEach(matches, m =>
-                        TextBlock(m).Padding(8, 4))
+                        TextBlock(m).Padding(8, 4).WithKey(m))
                 ).Background(Theme.CardBackground).Width(280))
         ).Padding(24);
     }

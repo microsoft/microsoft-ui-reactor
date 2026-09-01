@@ -51,8 +51,10 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
 
         foreach (var diagnostic in context.Diagnostics)
         {
-            var selectInv = root.FindNode(diagnostic.Location.SourceSpan) as InvocationExpressionSyntax;
-            if (selectInv is null) continue;
+            var reported = root.FindNode(
+                diagnostic.Location.SourceSpan,
+                getInnermostNodeForTie: true);
+            if (reported is not InvocationExpressionSyntax selectInv) continue;
 
             if (!TryGetProjectionLambda(selectInv, out var lambda)) continue;
 

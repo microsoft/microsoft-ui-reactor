@@ -164,7 +164,7 @@ class FetchCancellationExample : Component
 
         return VStack(8,
             TextBox(query, setQuery, header: "Search query").Width(250),
-            ForEach(items, i => TextBlock(i))
+            ForEach(items, item => TextBlock(item).WithKey(item))
         ).Padding(24);
     }
 }

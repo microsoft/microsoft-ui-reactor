@@ -55,7 +55,7 @@ class ReducerDemo : Component
                 Button("Clear", () =>
                     updateItems(_ => new List<string>()))
             ),
-            ForEach(items, item => TextBlock($"  - {item}"))
+            ForEach(items, (item, i) => TextBlock($"  - {item}").WithKey($"{i}-{item}"))
         );
     }
 }

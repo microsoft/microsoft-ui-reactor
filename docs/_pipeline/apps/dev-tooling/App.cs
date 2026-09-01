@@ -81,7 +81,7 @@ class IterationDemo : Component
                     }
                 })
             ),
-            ForEach(items, item => TextBlock($"  - {item}"))
+            ForEach(items, (item, i) => TextBlock($"  - {item}").WithKey($"{i}-{item}"))
         ).Padding(24);
     }
 }

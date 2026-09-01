@@ -97,7 +97,7 @@ class ScrollBorderDemo : Component
                     VStack(4,
                         ForEach(
                             Enumerable.Range(1, 20),
-                            i => TextBlock($"Scrollable item {i}"))
+                            i => TextBlock($"Scrollable item {i}").WithKey(i.ToString()))
                     ).Padding(8)
                 ).Height(120)
             ).CornerRadius(4).Background(Theme.CardBackground)

@@ -557,7 +557,8 @@ class LetterJump : Component<IReadOnlyList<Person>>
                     {
                         if (groupStarts.TryGetValue(letter, out var start))
                             listRef.Current?.ScrollToIndex(start);
-                    }).AutomationName($"Jump to {letter}")))
+                    }).AutomationName($"Jump to {letter}")
+                        .WithKey(letter.ToString())))
         );
     }
 }
