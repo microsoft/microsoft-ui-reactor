@@ -30,11 +30,18 @@ amendments where the original text is wrong.
 > | Interceptor generator (1,169 lines) | `src/Reactor.SourceMap.Generator/` |
 > | `REACTOR_SOURCEMAP_001` | emitted when a `[ReactorSourceTransparent]` helper is not forwardable |
 >
-> **On citations.** This document cites code by **file and symbol name**, never by
-> line number. `Element.cs` alone is >7,600 lines and moved every previously-cited
-> line by hundreds when source mapping landed; a line number in a long-lived design
-> record is stale the moment the next PR merges. Every symbol named here is
-> greppable.
+> **On citations.** This document cites **Reactor implementation code** by file
+> and symbol name, never by line number. `Element.cs` alone is >7,600 lines and
+> moved every previously-cited line by hundreds when source mapping landed; a line
+> number in a long-lived design record is stale the moment the next PR merges.
+> Every implementation symbol named here is greppable.
+>
+> Line numbers *do* appear in two places where they are the subject rather than a
+> reference, and are correct there: illustrative sample data (`MainPage.cs:34` in
+> the API examples, a fictional user file) and verbatim captured output (the
+> `dotnet watch` transcript under
+> [Measured results](#measured-results-2026-08-26), where the stale line number
+> *is* the finding).
 >
 > **Two independent gates**, which is a refinement on this spec's single
 > `#if DEBUG` idea:
