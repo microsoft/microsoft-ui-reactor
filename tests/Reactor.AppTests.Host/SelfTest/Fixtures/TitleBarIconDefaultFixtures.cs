@@ -648,6 +648,89 @@ internal static class TitleBarIconDefaultFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  The same WindowIcon instance whose file appears, then disappears.
+    //
+    //  ApplyChrome's declared arm has no memo at all -- `spec.Icon is { } icon
+    //  && icon.Apply(_appWindow)` re-resolves on every application -- so the
+    //  caption tracks a file that shows up or is deleted behind an unchanged
+    //  WindowIcon reference. The title bar's declared cache is keyed on that
+    //  reference, so without an explicit clear in the resync it would serve the
+    //  stale hit or miss forever and drift away from the caption.
+    //
+    //  Deliberately holds ONE WindowIcon instance across all three states: a
+    //  fixture that built a fresh WindowIcon per update would take the
+    //  key-mismatch path and pass no matter what the cache does, which is the
+    //  same shape of non-discriminating oracle as re-resolving the already-
+    //  ambient window in the two-window arm.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultTracksSameIconInstanceAppearing(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+
+                // Named but not yet present. WindowIcon.FromPath does no I/O, so this is
+                // a legal declaration for an asset deployed later.
+                var deferred = global::System.IO.Path.Join(scratch, "Deferred.ico");
+                var icon = WindowIcon.FromPath(deferred);
+
+                var comp = new BarComponent(static e => e);
+                var win = await OpenAndSettle(Spec("Deferred") with { Icon = icon }, () => comp);
+                try
+                {
+                    var bar = comp.Bar;
+                    H.Check("TitleBarIcon_Deferred_BarMounted", bar is not null);
+                    if (bar is null) return;
+
+                    // Zero control: the declared icon names nothing and the scratch root
+                    // has no convention asset, so there is genuinely nothing to inherit.
+                    // Without this the later non-null reading proves nothing.
+                    Console.WriteLine($"# deferred: initial={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Deferred_NothingBeforeDeploy", bar.IconSource is null);
+
+                    global::System.IO.File.Copy(TestIcoPath, deferred, overwrite: true);
+
+                    // Same WindowIcon instance; only the title moves.
+                    win.Update(win.Spec with { Title = "Deferred (deployed)" });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var appeared = IconUri(bar);
+                    Console.WriteLine($"# deferred: appeared={appeared}");
+                    H.Check($"TitleBarIcon_Deferred_PicksUpDeployedAsset (uri={appeared})",
+                        appeared is not null
+                        && appeared.LocalPath.EndsWith("Deferred.ico", StringComparison.OrdinalIgnoreCase));
+                    H.Check("TitleBarIcon_Deferred_SameIconInstanceThroughout",
+                        ReferenceEquals(win.Spec.Icon, icon));
+
+                    // ...and the other direction: deleting it must take the mark away,
+                    // still behind the same reference.
+                    global::System.IO.File.Delete(deferred);
+                    win.Update(win.Spec with { Title = "Deferred (removed)" });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    Console.WriteLine($"# deferred: removed={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check("TitleBarIcon_Deferred_DropsRemovedAsset", bar.IconSource is null);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  An element that owns its icon slot keeps it across a window icon change.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultExplicitSurvivesWindowIconChange(Harness h) : SelfTestFixtureBase(h)
@@ -973,7 +1056,7 @@ internal static class TitleBarIconDefaultFixtures
     //
     //  The oracle is decoded pixel size, not the URI: the path is unchanged by
     //  construction, so only the decode can tell the two states apart. The test
-    //  icon decodes at 32x32 and the replacement PNG at 256x256.
+    //  icon decodes at 32x32 and the replacement PNG at 1x1.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultRefreshesReplacedFile(Harness h) : SelfTestFixtureBase(h)
     {

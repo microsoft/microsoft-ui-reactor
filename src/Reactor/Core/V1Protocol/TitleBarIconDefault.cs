@@ -68,22 +68,29 @@ internal static class TitleBarIconDefault
     internal static void ResetForTests() => InvalidateCaches();
 
     /// <summary>
-    /// Drops the resolved-path caches so the next resolve re-probes the filesystem.
+    /// Drops <em>both</em> resolved-path caches so the next resolve re-probes the
+    /// filesystem. Test-only; the resync clears just the declared entry.
     /// </summary>
     /// <remarks>
-    /// <para>Test-only. Production code deliberately never invalidates, because the window
-    /// chain it mirrors does not either: <c>ReactorWindow.TryApplyExeIconFallback</c>
-    /// caches <em>both</em> outcomes for the window's lifetime — a hit via
-    /// <c>_exeFallbackHIcon</c> and a miss via <c>_exeFallbackAttempted</c> — on the stated
-    /// assumption that "neither source can appear while the window is alive". Re-probing
-    /// here would <em>create</em> the divergence it looks like it prevents: an
-    /// <c>AppIcon.ico</c> appearing mid-run would light up the title bar while the caption
-    /// kept serving its cached miss.</para>
-    /// <para>The two caches are still not scope-identical — this one is process-wide,
-    /// the window's is per-window — so a second window opened after the asset appeared
-    /// would re-probe for its caption while this memo stays cold. That residue is
-    /// accepted rather than engineered away: it needs the asset to materialize while the
-    /// app runs, which is the case both layers already document as out of scope.</para>
+    /// <para>The convention memo is deliberately never invalidated in production, because
+    /// the window chain it mirrors does not re-probe either:
+    /// <c>ReactorWindow.TryApplyExeIconFallback</c> caches <em>both</em> outcomes for the
+    /// window's lifetime — a hit via <c>_exeFallbackHIcon</c> and a miss via
+    /// <c>_exeFallbackAttempted</c> — on the stated assumption that "neither source can
+    /// appear while the window is alive". Re-probing it would <em>create</em> a
+    /// divergence: an <c>AppIcon.ico</c> appearing mid-run would light up the title bar
+    /// while the caption kept serving its cached miss.</para>
+    /// <para>The declared entry is the opposite case, which is why
+    /// <see cref="ResyncInheritedIcon"/> clears it: <c>ApplyChrome</c> re-runs
+    /// <c>spec.Icon.Apply(...)</c> on every application with no memo at all, so caching it
+    /// here would strand the title bar when a same-instance <see cref="WindowIcon"/>
+    /// starts or stops resolving. Both directions are the same rule — match the caching
+    /// of whichever window arm produced the value — and the arms simply differ.</para>
+    /// <para>One residue: the convention memo is process-wide while the window's is
+    /// per-window, so a second window opened after an asset appeared would re-probe for
+    /// its caption while this memo stays cold. Accepted rather than engineered away — it
+    /// needs the asset to materialize while the app runs, which both layers already
+    /// document as out of scope.</para>
     /// </remarks>
     private static void InvalidateCaches()
     {
@@ -295,10 +302,15 @@ internal static class TitleBarIconDefault
         if (last.ElementOwned || last.AuthorOwned) return;
         if (!ReferenceEquals(control.IconSource, last.Source)) return;
 
-        // No cache invalidation here: the window's own fallback caches both a hit and a
-        // miss for the window's lifetime, so re-probing would make the title bar notice a
-        // mid-run asset change the caption cannot. See InvalidateCaches. A *declared*
-        // icon still re-resolves on change, because that cache is keyed on the WindowIcon.
+        // Mirror ApplyChrome's caching arm by arm, because the two arms differ. Its
+        // declared arm re-resolves on every application — `spec.Icon is { } icon &&
+        // icon.Apply(_appWindow)` with no memo — so drop the declared entry here: the
+        // same WindowIcon instance whose file appears or disappears would otherwise move
+        // the caption while the title bar stayed put. Its convention/PE arm caches both
+        // outcomes for the window's lifetime, so that memo is deliberately left standing.
+        // See InvalidateCaches.
+        Volatile.Write(ref s_declared, null);
+
         var projected = ResolveForSpec(spec);
         var written = ResolveForResync(projected);
         control.IconSource = written;
@@ -412,9 +424,11 @@ internal static class TitleBarIconDefault
     /// <remarks>
     /// <para>Both forms were measured to load unpackaged. <c>ms-appx:</c> is preferred
     /// for package content because it is XAML's native form and goes through MRT, so a
-    /// packaged app can serve a scale-qualified variant — and the packaged case is the
-    /// one that could not be measured here (the self-test host is
-    /// <c>WindowsPackageType=None</c>).</para>
+    /// packaged app can serve a scale-qualified variant. The packaged case is measured
+    /// too: <c>Reactor.PackagedTests.Host</c> links every fixture source from
+    /// <c>Reactor.AppTests.Host</c>, and these fixtures declare no tier (so
+    /// <c>SelfTestTier.Any</c>), which puts the <c>FromResource("ms-appx:///...")</c> arm
+    /// of <c>TitleBarIcon_WindowSpec</c> under real package identity.</para>
     /// <para>Note this is the opposite choice from <c>WindowIcon.Apply</c>, which must
     /// hand <c>AppWindow.SetIcon</c> a filesystem path because that API silently applies
     /// a default icon when given a packaged-resource URI. The two APIs consume URIs
