@@ -348,6 +348,31 @@ public class TitleBarIconDefaultTests : IDisposable
     }
 
     [Fact]
+    public void A_Convention_Asset_The_Window_Could_Not_Load_Yields_No_Icon()
+    {
+        // Existence is not adoption. LoadConventionAssetIcon returns 0 for a file it
+        // cannot load, and LoadExecutablePeIcon then supplies the window's HICON -- a
+        // source with no path and no ImageSource, so the title bar has nothing to
+        // project. Showing the unloadable convention file anyway would put a mark on the
+        // title bar that the caption is not showing, which is the exact divergence this
+        // feature exists to prevent.
+        var convention = WriteFile("Assets", "AppIcon.ico");
+        TitleBarIconDefault.ResetForTests();
+
+        // Positive control: the same probe with the window's verdict absent or affirmative
+        // does resolve, so the null below is about the verdict and not about a missing file.
+        var undecided = Assert.IsType<ImageIconData>(
+            TitleBarIconDefault.ResolveForSpec(new WindowSpec(), null, null));
+        Assert.Equal(convention, undecided.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+
+        TitleBarIconDefault.ResetForTests();
+        Assert.NotNull(TitleBarIconDefault.ResolveForSpec(new WindowSpec(), null, true));
+
+        TitleBarIconDefault.ResetForTests();
+        Assert.Null(TitleBarIconDefault.ResolveForSpec(new WindowSpec(), null, false));
+    }
+
+    [Fact]
     public void An_Embedded_Window_Inherits_No_Icon()
     {
         // Positive control first: the same spec without Embed does resolve, so a null

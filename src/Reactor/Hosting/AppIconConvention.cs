@@ -22,6 +22,24 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// </remarks>
 internal static class AppIconConvention
 {
+    private static string? s_probeRootOverride;
+
+    /// <summary>
+    /// The directory the convention is probed under. <see cref="AppContext.BaseDirectory"/>
+    /// in production; overridable for tests.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately shared by <em>both</em> consumers — <see cref="ReactorWindow"/>'s
+    /// <c>HICON</c> load and the <c>TitleBar</c> projection. An override that moved only
+    /// one of them would make the window and the title bar probe different directories,
+    /// and any logic that compares their verdicts would then be reasoning about two
+    /// unrelated files. Keeping one root is what lets the title bar trust
+    /// <c>ReactorWindow.ConventionIconApplied</c>.
+    /// </remarks>
+    internal static string ProbeRoot => s_probeRootOverride ?? AppContext.BaseDirectory;
+
+    internal static void SetProbeRootForTests(string? directory) => s_probeRootOverride = directory;
+
     /// <summary>Directory name holding the convention asset, relative to the app root.</summary>
     internal const string AssetDirectory = "Assets";
 

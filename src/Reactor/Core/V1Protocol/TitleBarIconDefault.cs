@@ -44,7 +44,6 @@ internal static class TitleBarIconDefault
     // is per-UI-thread, so contention here is theoretical rather than expected.
     private static DeclaredEntry? s_declared;
     private static StrongBox<IconData?>? s_convention;
-    private static string? s_baseDirectoryOverride;
 
     /// <summary>
     /// Root the convention probe searches. Overridable so tests can point it at a
@@ -56,12 +55,18 @@ internal static class TitleBarIconDefault
     /// Deliberately <b>not</b> used to decide whether a path is expressible as
     /// <c>ms-appx:</c> — that question is about the real package root and a test cannot
     /// move it. See <see cref="TryGetAppRelativeSegments"/>.
+    /// <para>Backed by <see cref="AppIconConvention.ProbeRoot"/> rather than a private
+    /// field, so an override moves the window's <c>HICON</c> probe and this projection
+    /// together. Two independently-overridable roots would let the window and the title
+    /// bar resolve different files, which would in turn make
+    /// <c>ReactorWindow.ConventionIconApplied</c> a verdict about a file this type never
+    /// looked at.</para>
     /// </remarks>
-    internal static string ConventionProbeRoot => s_baseDirectoryOverride ?? AppContext.BaseDirectory;
+    internal static string ConventionProbeRoot => AppIconConvention.ProbeRoot;
 
     internal static void SetBaseDirectoryForTests(string? directory)
     {
-        s_baseDirectoryOverride = directory;
+        AppIconConvention.SetProbeRootForTests(directory);
         ResetForTests();
     }
 
@@ -255,9 +260,13 @@ internal static class TitleBarIconDefault
     /// </param>
     /// <param name="declaredIconApplied">
     /// The owning window's <c>DeclaredIconApplied</c> verdict, forwarded to
-    /// <see cref="ResolveForSpec(WindowSpec?, bool?, out bool)"/> so the resync agrees with
-    /// the window about which
+    /// <see cref="ResolveForSpec(WindowSpec?, bool?, bool?, out bool)"/> so the resync
+    /// agrees with the window about which
     /// <em>source</em> won and not merely about which file the declaration names.
+    /// </param>
+    /// <param name="conventionIconApplied">
+    /// The owning window's <c>ConventionIconApplied</c> verdict, forwarded for the same
+    /// reason: the convention asset existing is not evidence the window loaded it.
     /// </param>
     /// <remarks>
     /// No-op for a control this type never wrote to, and for a title bar whose element
@@ -302,7 +311,10 @@ internal static class TitleBarIconDefault
     /// </para>
     /// </remarks>
     internal static void ResyncInheritedIcon(
-        Microsoft.UI.Xaml.Controls.TitleBar control, WindowSpec spec, bool? declaredIconApplied)
+        Microsoft.UI.Xaml.Controls.TitleBar control,
+        WindowSpec spec,
+        bool? declaredIconApplied,
+        bool? conventionIconApplied)
     {
         if (!s_applied.TryGetValue(control, out var last)) return;
         if (last.ElementOwned || last.AuthorOwned) return;
@@ -317,7 +329,8 @@ internal static class TitleBarIconDefault
         // See InvalidateCaches.
         Volatile.Write(ref s_declared, null);
 
-        var projected = ResolveForSpec(spec, declaredIconApplied, out var fromDeclaredIcon);
+        var projected = ResolveForSpec(
+            spec, declaredIconApplied, conventionIconApplied, out var fromDeclaredIcon);
         var written = ResolveForResync(projected, fromDeclaredIcon);
         control.IconSource = written;
         s_applied.AddOrUpdate(control, new AppliedIcon(
@@ -367,7 +380,8 @@ internal static class TitleBarIconDefault
     internal static IconData? ResolveDefault()
     {
         var window = ReactorApp.ActiveHostInternal?.OwningWindow;
-        return ResolveForSpec(window?.Spec, window?.DeclaredIconApplied);
+        return ResolveForSpec(
+            window?.Spec, window?.DeclaredIconApplied, window?.ConventionIconApplied, out _);
     }
 
     /// <summary>
@@ -394,22 +408,38 @@ internal static class TitleBarIconDefault
     /// so no end-to-end selftest could stage it. Carrying the window's verdict rather than
     /// re-deriving a proxy for it is still the right shape, and costs nothing.</para>
     /// </param>
-    internal static IconData? ResolveForSpec(WindowSpec? spec, bool? declaredIconApplied = null)
-        => ResolveForSpec(spec, declaredIconApplied, out _);
+    /// <param name="conventionIconApplied">
+    /// <c>ReactorWindow.ConventionIconApplied</c> — whether the window's fallback icon
+    /// actually came from <c>Assets\AppIcon.ico</c>. See the <c>out</c> overload.
+    /// </param>
+    internal static IconData? ResolveForSpec(
+        WindowSpec? spec, bool? declaredIconApplied = null, bool? conventionIconApplied = null)
+        => ResolveForSpec(spec, declaredIconApplied, conventionIconApplied, out _);
 
     /// <summary>
-    /// As <see cref="ResolveForSpec(WindowSpec?, bool?)"/>, additionally reporting which
-    /// arm produced the value so the caller can match that arm's cache policy.
+    /// As <see cref="ResolveForSpec(WindowSpec?, bool?, bool?)"/>, additionally reporting
+    /// which arm produced the value so the caller can match that arm's cache policy.
     /// </summary>
     /// <param name="spec">The owning window's spec.</param>
     /// <param name="declaredIconApplied">The window's declared-icon verdict.</param>
+    /// <param name="conventionIconApplied">
+    /// <c>ReactorWindow.ConventionIconApplied</c> — whether the window's fallback icon
+    /// actually came from <c>Assets\AppIcon.ico</c>. <c>false</c> means the asset either
+    /// was absent or could not be loaded and the executable's PE icon won instead; the
+    /// title bar cannot project a PE resource, so it shows nothing rather than a mark the
+    /// caption is not showing. <c>null</c> (no decision yet, or no live window) keeps the
+    /// optimistic behaviour of trusting the file probe.
+    /// </param>
     /// <param name="fromDeclaredIcon">
     /// <c>true</c> when the result came from <see cref="WindowSpec.Icon"/> rather than the
     /// convention asset. Reported rather than re-derived by the caller: deriving the same
     /// fact a second way is how two copies drift apart.
     /// </param>
     internal static IconData? ResolveForSpec(
-        WindowSpec? spec, bool? declaredIconApplied, out bool fromDeclaredIcon)
+        WindowSpec? spec,
+        bool? declaredIconApplied,
+        bool? conventionIconApplied,
+        out bool fromDeclaredIcon)
     {
         fromDeclaredIcon = false;
 
@@ -428,6 +458,10 @@ internal static class TitleBarIconDefault
             fromDeclaredIcon = true;
             return fromSpec;
         }
+
+        // Same rule one level down: the asset existing is not evidence the window loaded
+        // it. When the PE icon won instead, there is nothing the title bar can project.
+        if (conventionIconApplied is false) return null;
 
         return ResolveConvention();
     }

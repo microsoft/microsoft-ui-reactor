@@ -758,8 +758,24 @@ internal static class TitleBarIconDefaultFixtures
 
         private sealed class SwapBarComponent : Component
         {
-            public WinUI.TitleBar? Bar;
+            private WinUI.TitleBar? _bar;
             public Action<int>? SetPhase;
+
+            /// <summary>
+            /// A method rather than a public field, so each read is opaque to nullable
+            /// flow analysis.
+            /// </summary>
+            /// <remarks>
+            /// Reading a field twice makes the second read inherit the first read's
+            /// narrowing: <c>if (original is null) return;</c> marks the underlying slot
+            /// non-null, so the analyzer then treats the replacement's <c>is not null</c>
+            /// assertion as always true and its null guard as dead. The analyzer cannot
+            /// see that the phase change re-renders and reassigns the field, so both
+            /// conclusions are wrong at runtime — and "fixing" either one by deleting it
+            /// would remove a guard that really can fire. A method call is not
+            /// slot-tracked, so no state leaks between the two reads.
+            /// </remarks>
+            public WinUI.TitleBar? ReadBar() => _bar;
 
             public override Element Render()
             {
@@ -773,8 +789,8 @@ internal static class TitleBarIconDefaultFixtures
                 // measured order there is unmount-then-mount, so the stale clear cannot
                 // land on the new reference.
                 Element bar = phase == 0
-                    ? TitleBar("SwapIcon").Set(b => Bar = b)
-                    : VStack(TitleBar("SwapIcon").Set(b => Bar = b));
+                    ? TitleBar("SwapIcon").Set(b => _bar = b)
+                    : VStack(TitleBar("SwapIcon").Set(b => _bar = b));
 
                 return VStack(bar, TextBlock("body"));
             }
@@ -797,7 +813,7 @@ internal static class TitleBarIconDefaultFixtures
                     Spec("TypeReplace") with { Icon = WindowIcon.FromPath(first) }, () => comp);
                 try
                 {
-                    var original = comp.Bar;
+                    var original = comp.ReadBar();
                     H.Check("TitleBarIcon_TypeSwap_BarMounted", original is not null);
                     if (original is null) return;
 
@@ -805,9 +821,9 @@ internal static class TitleBarIconDefaultFixtures
                     await win.Host.WaitForIdleAsync();
                     await Harness.Render(300);
 
-                    var replacement = comp.Bar;
+                    var replacement = comp.ReadBar();
 
-                    // Positive control. If the key change did not actually replace the
+                    // Positive control. If the type change did not actually replace the
                     // control there is no mount/unmount interleaving, the bug cannot
                     // occur, and the assertion below would pass for a reason that has
                     // nothing to do with the fix.
