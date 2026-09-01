@@ -872,6 +872,95 @@ internal static class TitleBarIconDefaultFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  TWO title bars in one window both follow a window-icon change.
+    //
+    //  Multiple TitleBars in a single window is a supported, shipped shape:
+    //  samples/ReactorGallery mounts the shell's own bar and, on its TitleBar
+    //  page, three more previews. Tracking only the most recently mounted
+    //  control left every other bar showing a stale icon after a
+    //  WindowSpec.Icon change -- and, exactly like the two-window arm, that is
+    //  invisible in every single-bar test, because with one bar there is
+    //  nothing to be wrong about.
+    //
+    //  The FIRST bar is the discriminating one: it is the one the old
+    //  last-writer-wins reference had already forgotten by the time the second
+    //  mounted. Asserting only the second would pass against the bug.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultRefreshesEveryMountedBar(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        private sealed class TwoBarComponent : Component
+        {
+            private WinUI.TitleBar? _first;
+            private WinUI.TitleBar? _second;
+
+            public WinUI.TitleBar? ReadFirst() => _first;
+            public WinUI.TitleBar? ReadSecond() => _second;
+
+            public override Element Render() => VStack(
+                TitleBar("First").Set(b => _first = b),
+                TitleBar("Second").Set(b => _second = b),
+                TextBlock("body"));
+        }
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: false);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+                var first = CreateExternalIcon(scratch);
+                var second = global::System.IO.Path.Join(scratch, "Second.ico");
+                global::System.IO.File.Copy(TestIcoPath, second, overwrite: true);
+
+                var comp = new TwoBarComponent();
+                var win = await OpenAndSettle(
+                    Spec("TwoBars") with { Icon = WindowIcon.FromPath(first) }, () => comp);
+                try
+                {
+                    var barA = comp.ReadFirst();
+                    var barB = comp.ReadSecond();
+
+                    // Positive control: two DISTINCT controls really are mounted. Without
+                    // this the fixture would silently degrade into a single-bar test.
+                    H.Check("TitleBarIcon_TwoBars_BothMounted",
+                        barA is not null && barB is not null && !ReferenceEquals(barA, barB));
+                    if (barA is null || barB is null) return;
+
+                    H.Check($"TitleBarIcon_TwoBars_FirstInitial (uri={IconUri(barA)})",
+                        IconUri(barA)?.LocalPath.EndsWith("External.ico", StringComparison.OrdinalIgnoreCase) == true);
+                    H.Check($"TitleBarIcon_TwoBars_SecondInitial (uri={IconUri(barB)})",
+                        IconUri(barB)?.LocalPath.EndsWith("External.ico", StringComparison.OrdinalIgnoreCase) == true);
+
+                    win.Update(win.Spec with { Icon = WindowIcon.FromPath(second) });
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var afterA = IconUri(barA);
+                    var afterB = IconUri(barB);
+                    Console.WriteLine($"# twoBars: first={afterA}");
+                    Console.WriteLine($"# twoBars: second={afterB}");
+
+                    // The first bar is the arm that reddens without the fix.
+                    H.Check($"TitleBarIcon_TwoBars_FirstFollows (uri={afterA})",
+                        afterA?.LocalPath.EndsWith("Second.ico", StringComparison.OrdinalIgnoreCase) == true);
+                    H.Check($"TitleBarIcon_TwoBars_SecondFollows (uri={afterB})",
+                        afterB?.LocalPath.EndsWith("Second.ico", StringComparison.OrdinalIgnoreCase) == true);
+                }
+                finally { await CloseAndSettle(win); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  An element that owns its icon slot keeps it across a window icon change.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultExplicitSurvivesWindowIconChange(Harness h) : SelfTestFixtureBase(h)

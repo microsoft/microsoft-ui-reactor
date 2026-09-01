@@ -203,7 +203,16 @@ public sealed partial class ReactorWindow : IDisposable
     // not to the declaration, so the two halves never disagree.
     private WindowTitleBarHeight? _effectiveTitleBarHeight;
     private WeakReference<FrameworkElement>? _titleBarControl;
-    private WeakReference<Microsoft.UI.Xaml.Controls.TitleBar>? _titleBarIconControl;
+
+    /// <summary>
+    /// Every mounted WinUI <c>TitleBar</c> in this window's content, for the inherited-icon
+    /// push. A list rather than a single reference: multiple title bars in one window are a
+    /// supported shape — <c>samples/ReactorGallery</c> mounts the shell's own bar plus
+    /// three previews on its TitleBar page — and holding only the most recent one would
+    /// leave every other bar showing a stale icon after a <see cref="WindowSpec.Icon"/>
+    /// change.
+    /// </summary>
+    private readonly List<WeakReference<Microsoft.UI.Xaml.Controls.TitleBar>> _titleBarIconControls = new();
     private bool _titleBarControlExplicitHeight;
     private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
@@ -767,19 +776,29 @@ public sealed partial class ReactorWindow : IDisposable
     /// </param>
     private void SyncTitleBarIcon(WindowSpec spec)
     {
-        if (_titleBarIconControl is null || !_titleBarIconControl.TryGetTarget(out var bar)) return;
+        if (_titleBarIconControls.Count == 0) return;
 
-        try
+        for (var i = _titleBarIconControls.Count - 1; i >= 0; i--)
         {
-            Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(
-                bar, spec, DeclaredIconApplied, UnloadableConventionIconPath);
-        }
-        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
-        {
-            // The WinUI TitleBar control throws teardown-reentry COMExceptions while the
-            // window is closing (issue #537). A cosmetic icon refresh must never take the
-            // window down.
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SyncTitleBarIcon", ex);
+            if (!_titleBarIconControls[i].TryGetTarget(out var bar))
+            {
+                _titleBarIconControls.RemoveAt(i);
+                continue;
+            }
+
+            try
+            {
+                Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(
+                    bar, spec, DeclaredIconApplied, UnloadableConventionIconPath);
+            }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                // The WinUI TitleBar control throws teardown-reentry COMExceptions while the
+                // window is closing (issue #537). A cosmetic icon refresh must never take the
+                // window down. Caught per control so one closing bar does not stop the rest
+                // of them being refreshed.
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SyncTitleBarIcon", ex);
+            }
         }
     }
 
@@ -1877,7 +1896,20 @@ public sealed partial class ReactorWindow : IDisposable
     {
         _titleBarControlPresent = true;
         _titleBarControlMounted = true;
-        _titleBarIconControl = new WeakReference<Microsoft.UI.Xaml.Controls.TitleBar>(control);
+
+        // Prune dead entries opportunistically. A control whose window content was
+        // replaced without an unmount reaching us would otherwise sit here forever; the
+        // list is tiny, so this is cheaper than any bookkeeping alternative.
+        for (var i = _titleBarIconControls.Count - 1; i >= 0; i--)
+        {
+            if (!_titleBarIconControls[i].TryGetTarget(out var existing))
+                _titleBarIconControls.RemoveAt(i);
+            else if (ReferenceEquals(existing, control))
+                return;
+        }
+
+        _titleBarIconControls.Add(
+            new WeakReference<Microsoft.UI.Xaml.Controls.TitleBar>(control));
     }
 
     /// <summary>
@@ -1894,32 +1926,43 @@ public sealed partial class ReactorWindow : IDisposable
     /// </para>
     /// </summary>
     /// <param name="unmounting">
-    /// The control being unmounted. A keyed or type replacement can mount the new
-    /// <c>TitleBar</c> <em>before</em> unmounting the old one (<c>ChildReconciler</c>'s
-    /// type-mismatch branch mounts the replacement subtree, then unmounts), in which case
-    /// this call is <em>stale</em>: the replacement has already re-registered and the
-    /// state now describes it, not the control going away. Clearing then would tear down
-    /// live state — the icon reference the push needs, and
+    /// The control being unmounted, or <c>null</c> from a caller that does not know.
+    /// Its entry is dropped, and the window-wide state below is withdrawn only once no
+    /// mounted title bar remains.
+    /// <para>That "only once none remain" is load-bearing, and subsumes an earlier
+    /// identity check. A keyed or type replacement can mount the new <c>TitleBar</c>
+    /// <em>before</em> unmounting the old one (<c>ChildReconciler</c>'s type-mismatch
+    /// branch mounts the replacement subtree, then unmounts), so this call is often
+    /// <em>stale</em>: the state already describes the replacement. Withdrawing it then
+    /// would strand the live bar — losing the reference the icon push needs, and clearing
     /// <see cref="_titleBarControlMounted"/>, whose loss makes the next <c>ApplyChrome</c>
     /// resolve <c>spec.ExtendsContentIntoTitleBar ?? _titleBarControlMounted</c> to
     /// <c>false</c> and drop the window out of content-extended mode with a title bar
-    /// still mounted.
-    /// <para><c>null</c> (or nothing tracked) clears unconditionally, preserving the
-    /// behaviour of every caller that predates the replacement guard.</para>
+    /// still mounted.</para>
     /// </param>
     internal void ClearTitleBarControl(Microsoft.UI.Xaml.Controls.TitleBar? unmounting = null)
     {
-        if (unmounting is not null
-            && _titleBarIconControl is not null
-            && _titleBarIconControl.TryGetTarget(out var tracked)
-            && !ReferenceEquals(tracked, unmounting))
+        if (unmounting is null)
         {
-            return;
+            _titleBarIconControls.Clear();
+        }
+        else
+        {
+            for (var i = _titleBarIconControls.Count - 1; i >= 0; i--)
+            {
+                if (!_titleBarIconControls[i].TryGetTarget(out var tracked)
+                    || ReferenceEquals(tracked, unmounting))
+                {
+                    _titleBarIconControls.RemoveAt(i);
+                }
+            }
+
+            // Another title bar is still mounted, so nothing window-wide is withdrawn.
+            if (_titleBarIconControls.Count > 0) return;
         }
 
         _titleBarControlMounted = false;
         _titleBarControl = null;
-        _titleBarIconControl = null;
         _titleBarControlExplicitHeight = false;
         _titleBarControlHeightOwned = false;
         _elementTitleBarHeight = null;
