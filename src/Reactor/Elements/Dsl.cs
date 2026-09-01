@@ -1323,7 +1323,22 @@ public static partial class Factories
                 arr[i] = AutoKey(render(list[i]), list[i]);
             return new GroupElement(arr);
         }
-        return new GroupElement(items.Select(item => AutoKey(render(item), item)).ToArray());
+        // Build directly rather than `Select(item => AutoKey(render(item), item))`:
+        // that lambda captures `render`, so it allocates a display class per call
+        // on top of the Select iterator. The pre-#1156 code passed the delegate
+        // straight through as `Select(render)` and captured nothing; a manual walk
+        // keeps that, and pre-sizes when the source can report a count.
+        return new GroupElement(BuildKeyed(items, render));
+    }
+
+    static Element[] BuildKeyed<T>(IEnumerable<T> items, Func<T, Element> render)
+    {
+        var buffer = items.TryGetNonEnumeratedCount(out var count)
+            ? new List<Element>(count)
+            : new List<Element>();
+        foreach (var item in items)
+            buffer.Add(AutoKey(render(item), item));
+        return buffer.ToArray();
     }
 
     /// <summary>
@@ -1341,7 +1356,22 @@ public static partial class Factories
                 arr[i] = AutoKey(render(list[i], i), list[i]);
             return new GroupElement(arr);
         }
-        return new GroupElement(items.Select((item, i) => AutoKey(render(item, i), item)).ToArray());
+        // Same reasoning as the single-parameter overload: no captured lambda.
+        return new GroupElement(BuildKeyedIndexed(items, render));
+    }
+
+    static Element[] BuildKeyedIndexed<T>(IEnumerable<T> items, Func<T, int, Element> render)
+    {
+        var buffer = items.TryGetNonEnumeratedCount(out var count)
+            ? new List<Element>(count)
+            : new List<Element>();
+        var index = 0;
+        foreach (var item in items)
+        {
+            buffer.Add(AutoKey(render(item, index), item));
+            index++;
+        }
+        return buffer.ToArray();
     }
 
     /// <summary>
