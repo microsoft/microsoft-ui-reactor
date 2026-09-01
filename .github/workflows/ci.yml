@@ -17,6 +17,7 @@ jobs:
     outputs:
       non-md: ${{ steps.filter.outputs.non-md }}
       docs-templates: ${{ steps.filter.outputs.docs-templates }}
+      compiled-docs: ${{ steps.filter.outputs.compiled-docs }}
       devtools-trim: ${{ steps.filter.outputs.devtools-trim }}
       audit-ledger: ${{ steps.filter.outputs.audit-ledger }}
     steps:
@@ -45,6 +46,7 @@ jobs:
             echo "No valid diff range; defaulting all change filters to true"
             echo "non-md=true" >> "$GITHUB_OUTPUT"
             echo "docs-templates=true" >> "$GITHUB_OUTPUT"
+            echo "compiled-docs=true" >> "$GITHUB_OUTPUT"
             echo "devtools-trim=true" >> "$GITHUB_OUTPUT"
             echo "audit-ledger=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -53,6 +55,7 @@ jobs:
             echo "git diff failed; defaulting all change filters to true"
             echo "non-md=true" >> "$GITHUB_OUTPUT"
             echo "docs-templates=true" >> "$GITHUB_OUTPUT"
+            echo "compiled-docs=true" >> "$GITHUB_OUTPUT"
             echo "devtools-trim=true" >> "$GITHUB_OUTPUT"
             echo "audit-ledger=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -77,6 +80,16 @@ jobs:
             echo "devtools-trim=true" >> "$GITHUB_OUTPUT"
           else
             echo "devtools-trim=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Issue #1052: the compiled-docs freshness gate lives in `docs-build`,
+          # which is armed by non-md. But the likeliest way to introduce the
+          # drift it catches is to hand-edit a generated page under docs/guide —
+          # and that edit is pure .md, so it sets non-md=false and skips the one
+          # job that would have caught it. Same shape as audit-ledger below.
+          if echo "$files" | grep -qE '^docs/guide/'; then
+            echo "compiled-docs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "compiled-docs=false" >> "$GITHUB_OUTPUT"
           fi
           # Issue #959: the spec 044 swallowed-error audit is a Markdown file
           # whose summary table is derived from its own rows and gated by
@@ -763,7 +776,11 @@ jobs:
   docs-build:
     name: Docs build
     needs: changes
-    if: needs.changes.outputs.non-md == 'true'
+    # `compiled-docs` re-arms this job for a docs/guide-only edit (issue #1052).
+    # Those files are all .md, so non-md alone is false and the job would skip —
+    # and hand-editing a generated page instead of its template is the single
+    # most likely way to introduce the drift the freshness gate below catches.
+    if: needs.changes.outputs.non-md == 'true' || needs.changes.outputs.compiled-docs == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -773,8 +790,27 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # Tee'd to a log rather than run bare, because the freshness gate at the
+      # bottom of this job needs to know this compile *fully ran*. A compile
+      # that dies early leaves docs/guide untouched, and an untouched tree is
+      # indistinguishable from a fresh one by `git status` alone — so the log is
+      # what turns "no diff" into a measurement instead of an assumption.
+      #
+      # The exit code is checked explicitly instead of leaning on the runner's
+      # trailing `exit $LASTEXITCODE`: a pipeline's exit code is a subtlety
+      # nobody should have to re-derive when reading a gate. (Measured on
+      # pwsh 7.6: $LASTEXITCODE through `| Tee-Object` reports the native
+      # command's code, 0 and non-zero alike.)
       - name: Compile docs
-        run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots --ci
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots --ci 2>&1 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/docs-compile.log"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "docs compile failed (exit $LASTEXITCODE)."
+            exit 1
+          }
 
       # Non-destructiveness gate for issue #989: a compile with
       # --no-screenshots must never touch a committed screenshot. Phase 3 is
@@ -807,6 +843,16 @@ jobs:
       # both modes against a planted subdirectory — `all` names each PNG, so
       # whoever hits this in CI sees which files appeared instead of a
       # directory they then have to go and inspect.
+      #
+      # Kept, and kept *first*, now that the freshness gate below watches all of
+      # docs/guide. That gate's path set is a superset of this one's, but the two
+      # defend opposite properties: this one says nothing may be written here,
+      # and you fix it by removing the write; that one says whatever was written
+      # must be committed, and you fix it by committing. Fold them together and
+      # a reintroduced screenshot write gets answered with "commit the
+      # regenerated output" — precisely the wrong instruction, and the one that
+      # would have let issue #989 through. Ordering is what keeps the specific
+      # diagnosis in front of the general one.
       - name: Verify --no-screenshots left committed images untouched
         shell: pwsh
         run: |
@@ -822,28 +868,93 @@ jobs:
             exit 1
           }
 
-      # Docs version freshness gate. The compile above substitutes the
-      # {{reactorVersion}} token — whose single source is <ReactorPublicVersion>
-      # in Directory.Build.props — into the guide pages that name the package
-      # version. If a PR bumps that property (or edits these templates) without
-      # recompiling, the committed output goes stale; fail here with a clear fix
-      # instead of shipping docs that disagree with the source of truth.
+      # Compiled-output freshness gate (issue #1052). The compile above
+      # regenerates every generated file under docs/guide — 72 topic pages,
+      # README.md, and ~117 pages under reference/. Until this gate existed, CI
+      # did all of that work and then checked exactly two of those files, so a
+      # source edit that changed a `snippet="source:..."` region left the
+      # published page stale and the job stayed green. The evidence was being
+      # computed and discarded.
       #
-      # Scoped to the two version-bearing pages (getting-started, packaging)
-      # rather than all of docs/guide: other committed guide pages currently
-      # carry pre-existing compile drift unrelated to versioning, which a
-      # whole-tree diff would false-fail on. Widen once that drift is
-      # reconciled separately.
-      - name: Verify docs version substitution is committed
+      # This step consumes it. It subsumes the old two-file version check: a
+      # `<ReactorPublicVersion>` bump that wasn't recompiled shows up here as a
+      # diff in getting-started.md / packaging.md like any other staleness,
+      # which is why the fix text still names that case explicitly.
+      #
+      # `git status --porcelain`, not `git diff` — the same reason the images
+      # gate above gives, and it matters more here. `git diff` sees tracked
+      # modifications only, so a *new* topic template or a newly generated
+      # reference page produces an untracked file that `git diff` reports as
+      # nothing at all. `git status` catches both, so it replaces `git diff`
+      # rather than joining it (docs/contributing/doc-pipeline.md §4).
+      #
+      # The precondition is deliberately part of this step rather than a step of
+      # its own. A clean tree only means "fresh" if the compile that was
+      # supposed to rewrite the tree actually rewrote it, so the verdict and the
+      # thing it depends on belong together — a separate step would pass or fail
+      # on its own and leave the reader to connect them. Two ways the compile
+      # can exit 0 without having regenerated what this gate covers:
+      #
+      #   * `RunReferenceGeneration` returns null and only *prints* when there is
+      #     no Reactor.xml (or no reference-map.yaml). Phase 5.7's header still
+      #     appears, the compile still says it succeeded, and ~117 reference
+      #     pages silently go unwritten.
+      #   * a `--skip-*` flag added to the invocation above turns a writing phase
+      #     off. Phases 2 (build) and 3 (capture) are expected to be skipped —
+      #     neither writes a page, and skipping capture is the whole point of
+      #     --no-screenshots — and Phase 5 isn't implemented. Any *other* skipped
+      #     phase silently narrows this gate, so it fails here instead.
+      #
+      # Both are checked against the log rather than assumed away, because each
+      # of them turns this gate into a check that cannot fail — which is the
+      # defect the gate was added to fix, reintroduced one level up.
+      #
+      # Matching avoids the box-drawing characters in the phase banners on
+      # purpose: every pattern here is ASCII, so the gate cannot be defeated by
+      # a console-encoding difference mangling `═══` on some future runner
+      # image.
+      - name: Verify compiled docs are committed
         shell: pwsh
         run: |
-          # git diff --exit-code returns non-zero when the tree differs; opt out
-          # of native-command error mapping so we surface the actionable message
-          # below instead of a bare PowerShell terminating error.
           $PSNativeCommandUseErrorActionPreference = $false
-          git diff --exit-code -- docs/guide/getting-started.md docs/guide/packaging.md
+          $logPath = "$env:RUNNER_TEMP/docs-compile.log"
+          if (-not (Test-Path -LiteralPath $logPath)) {
+            Write-Error "No compile log at $logPath — the gate could not run, so treat this as a failure rather than an all-clear."
+            exit 1
+          }
+          $log = Get-Content -LiteralPath $logPath -Raw
+
+          if ($log -notmatch [regex]::Escape('Documentation compiled successfully.')) {
+            Write-Error 'The docs compile did not report success, so docs/guide was not fully regenerated and a clean tree below would prove nothing. Treating as a failure. See the Compile docs step output.'
+            exit 1
+          }
+
+          foreach ($missing in @('Reactor.xml not found', 'reference-map.yaml not found')) {
+            if ($log -match [regex]::Escape($missing)) {
+              Write-Error "Phase 5.7 skipped reference generation ($missing), so docs/guide/reference was not regenerated and this gate cannot judge it. Treating as a failure."
+              exit 1
+            }
+          }
+
+          # Phase 2 (build), 3 (capture) and 5 (AI author, unimplemented) are the
+          # only skips that leave every generated page still written this run.
+          $unexpected = [regex]::Matches($log, '(?m)Phase (?<n>[0-9.]+):[^\r\n]*\(skipped') |
+            ForEach-Object { $_.Groups['n'].Value } |
+            Where-Object { $_ -notin @('2', '3', '5') } |
+            Sort-Object -Unique
+          if ($unexpected) {
+            Write-Error "Compile skipped phase(s) $($unexpected -join ', '), which write under docs/guide. The tree below was not fully regenerated, so this gate cannot judge it. Treating as a failure."
+            exit 1
+          }
+
+          $dirty = git status --porcelain --untracked-files=all -- docs/guide
           if ($LASTEXITCODE -ne 0) {
-            Write-Error 'docs/guide is out of date with the doc templates and/or ReactorPublicVersion. Run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots  then commit the regenerated docs/guide pages (the {{reactorVersion}} token is substituted from <ReactorPublicVersion> in Directory.Build.props).'
+            Write-Error "git status failed (exit $LASTEXITCODE) — the gate could not run, so treat this as a failure rather than an all-clear."
+            exit 1
+          }
+          if ($dirty) {
+            $dirty | ForEach-Object { Write-Host "  $_" }
+            Write-Error 'The files above are generated, and recompiling them produced different output than what is committed. docs/guide is compiled from docs/_pipeline/templates/*.md.dt plus the sources their snippets point at, so editing a page directly does not stick — regenerate instead. Run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots  then commit the result. Most often this is a src/ edit that moved a snippet="source:..." region, or a <ReactorPublicVersion> bump in Directory.Build.props that the {{reactorVersion}} pages have not picked up. See docs/contributing/doc-pipeline.md section 10.'
             exit 1
           }
 

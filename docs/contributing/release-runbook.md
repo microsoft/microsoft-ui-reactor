@@ -106,8 +106,11 @@ current is free now, since you bump the one property anyway.
 
 Two guards keep the bump honest so it can't silently go stale:
 
-- **Docs freshness gate** (CI `docs-build` job) fails the PR if `<ReactorPublicVersion>`
-  changed but `docs/guide/{getting-started,packaging}.md` weren't recompiled.
+- **Docs freshness gate** (CI `docs-build` job) recompiles the whole guide and fails the
+  PR if any generated file under `docs/guide` differs from what is committed — so a
+  `<ReactorPublicVersion>` bump that skipped a recompile is caught along with every other
+  kind of compiled-doc drift. See
+  [doc-pipeline.md §10](doc-pipeline.md#10-compiled-output-freshness-gate).
 - **Tag-vs-property guard** (`release.yml`, tag pushes only) fails the release if
   `<ReactorPublicVersion>` doesn't equal the MinVer-resolved tag version — so the tag, the
   docs, and the stamped template pack are provably one version.
