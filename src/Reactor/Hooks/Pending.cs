@@ -26,7 +26,8 @@ public static class PendingFactory
     /// element simply chooses which rendered tree to show — there is no unwinding
     /// of rendering, and no reconciler involvement.
     /// <para>
-    /// Marked <see cref="ReactorSourceTransparentAttribute"/> (spec 010) because it is a
+    /// Marked <c>[ReactorSourceTransparent]</c> (see
+    /// <see cref="ReactorSourceTransparentAttribute"/>, spec 010) because it is a
     /// pure forwarder: the element is really built by the <c>Component&lt;,&gt;</c> call
     /// on the next line, inside Reactor's own assembly, where no consumer call site
     /// exists to intercept. Without the annotation a <c>Pending(...)</c> element reports

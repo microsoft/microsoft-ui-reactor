@@ -20,7 +20,8 @@ element simply chooses which rendered tree to show — there is no unwinding
 of rendering, and no reconciler involvement.
 
 
-Marked `ReactorSourceTransparentAttribute` (spec 010) because it is a
+Marked `[ReactorSourceTransparent]` (see
+`ReactorSourceTransparentAttribute`, spec 010) because it is a
 pure forwarder: the element is really built by the `Component<,>` call
 on the next line, inside Reactor's own assembly, where no consumer call site
 exists to intercept. Without the annotation a `Pending(...)` element reports
