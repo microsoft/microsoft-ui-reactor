@@ -112,22 +112,25 @@ public sealed partial class ReactorWindow : IDisposable
     internal bool? DeclaredIconApplied { get; private set; }
 
     /// <summary>
-    /// Whether the window's fallback icon came from the <c>Assets\AppIcon.ico</c>
-    /// convention rather than the executable's PE resources. <c>null</c> until the
-    /// fallback has actually been evaluated.
+    /// The <c>Assets\AppIcon.ico</c> the window's fallback probed and <b>failed to
+    /// load</b>, or <c>null</c> when there was no such file or it loaded fine.
     /// </summary>
     /// <remarks>
     /// Read by the <c>TitleBar</c> icon default for the same reason as
-    /// <see cref="DeclaredIconApplied"/>: existence of the asset is not evidence the
-    /// window adopted it. <c>LoadConventionAssetIcon</c> returns <c>0</c> for a file it
-    /// cannot load, and <c>LoadExecutablePeIcon</c> then wins — a source the title bar
-    /// has no way to project, so the documented behaviour there is no title-bar icon
-    /// rather than a mark the caption is not showing.
-    /// <para>Stays <c>null</c> while a declared icon is being used, because the fallback
-    /// never ran. That is the correct state: nothing about the convention has been
-    /// decided.</para>
+    /// <see cref="DeclaredIconApplied"/>: the asset existing is not evidence the window
+    /// adopted it. <c>LoadConventionAssetIcon</c> goes through <c>LoadImageW</c>, which
+    /// returns <c>0</c> for a file it cannot decode, and <c>LoadExecutablePeIcon</c> then
+    /// wins — a source the title bar cannot project at all.
+    /// <para>A <b>path</b> rather than a <c>bool</c>, deliberately. The title bar must act
+    /// on this verdict only when it is a verdict about <em>the same file</em> the title bar
+    /// resolved. The two probe roots are independent (the title bar's is redirectable for
+    /// tests; this one is always <see cref="AppContext.BaseDirectory"/>, because
+    /// redirecting the window's native icon load is not something a test should do), so a
+    /// bare boolean could make the title bar blank itself over a file it never looked at.
+    /// Comparing paths is not deriving the same fact twice — it is checking that two facts
+    /// refer to the same object before combining them.</para>
     /// </remarks>
-    internal bool? ConventionIconApplied { get; private set; }
+    internal string? UnloadableConventionIconPath { get; private set; }
     // Lazy-init shell wrappers — apps that never read these never instantiate
     // them, keeping the cold-start budget clean (spec 036 §0.7 / §11.7).
     private TaskbarProgress? _taskbarProgress;
@@ -763,7 +766,7 @@ public sealed partial class ReactorWindow : IDisposable
         try
         {
             Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(
-                bar, spec, DeclaredIconApplied, ConventionIconApplied);
+                bar, spec, DeclaredIconApplied, UnloadableConventionIconPath);
         }
         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         {
@@ -1046,22 +1049,16 @@ public sealed partial class ReactorWindow : IDisposable
         // Load first, outside the try: both loaders are non-throwing (the generated
         // interop stubs return 0 on failure and LoadConventionAssetIcon guards its
         // own file probe).
-        var hIcon = LoadConventionAssetIcon();
+        var hIcon = LoadConventionAssetIcon(out var conventionCandidate);
 
-        // Which source produced the handle, for the TitleBar projection. An
-        // Assets\AppIcon.ico that exists but cannot be loaded yields 0 here and the PE
-        // icon wins instead — so file existence alone is not evidence the window adopted
-        // the convention asset.
-        var conventionWon = hIcon != 0;
+        // An asset that exists but will not load is the one case the TitleBar projection
+        // cannot see for itself: File.Exists succeeds there, so without this it would
+        // project a file the caption is not showing. Recorded as the path so the title bar
+        // can confirm the verdict is about the file it resolved.
+        UnloadableConventionIconPath = hIcon == 0 ? conventionCandidate : null;
 
         if (hIcon == 0) hIcon = LoadExecutablePeIcon();
-        if (hIcon == 0)
-        {
-            ConventionIconApplied = false;
-            return false;
-        }
-
-        ConventionIconApplied = conventionWon;
+        if (hIcon == 0) return false;
 
         // This method owns hIcon until SetIcon has taken it. Tracking that explicitly
         // rather than relying on the catch means every exit — success, a swallowed
@@ -1147,12 +1144,23 @@ public sealed partial class ReactorWindow : IDisposable
     /// rather than as an <c>HICON</c>, and the two must not disagree about which file
     /// the convention names.
     /// </remarks>
-    private static nint LoadConventionAssetIcon()
+    /// <param name="candidate">
+    /// The path probed, or <c>null</c> when no convention asset exists. Reported even on a
+    /// load failure so the caller can tell "no such file" from "file there, would not
+    /// load" — only the second is a divergence the title bar has to mirror.
+    /// </param>
+    private static nint LoadConventionAssetIcon(out string? candidate)
     {
-        if (!Hosting.AppIconConvention.TryGetAssetPath(
-                Hosting.AppIconConvention.ProbeRoot, out var path))
+        candidate = null;
+
+        // Always AppContext.BaseDirectory, never a redirectable root: this is a native
+        // LoadImageW + AppWindow.SetIcon + DestroyIcon sequence on the real window, and a
+        // test has no business steering it. (The TitleBar projection's own probe root is
+        // redirectable; the two are reconciled by comparing paths, not by sharing a root.)
+        if (!Hosting.AppIconConvention.TryGetAssetPath(AppContext.BaseDirectory, out var path))
             return 0;
 
+        candidate = path;
         return NativeIcon.LoadImageW(0, path, NativeIcon.IMAGE_ICON,
             0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
     }

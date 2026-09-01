@@ -350,26 +350,38 @@ public class TitleBarIconDefaultTests : IDisposable
     [Fact]
     public void A_Convention_Asset_The_Window_Could_Not_Load_Yields_No_Icon()
     {
-        // Existence is not adoption. LoadConventionAssetIcon returns 0 for a file it
-        // cannot load, and LoadExecutablePeIcon then supplies the window's HICON -- a
-        // source with no path and no ImageSource, so the title bar has nothing to
-        // project. Showing the unloadable convention file anyway would put a mark on the
-        // title bar that the caption is not showing, which is the exact divergence this
-        // feature exists to prevent.
+        // Existence is not adoption. LoadConventionAssetIcon goes through LoadImageW,
+        // which returns 0 for a file it cannot decode, and LoadExecutablePeIcon then
+        // supplies the window's HICON -- a source with no path and no ImageSource, so the
+        // title bar has nothing to project. Showing the unloadable file anyway would put a
+        // mark on the title bar that the caption is not showing.
         var convention = WriteFile("Assets", "AppIcon.ico");
         TitleBarIconDefault.ResetForTests();
 
-        // Positive control: the same probe with the window's verdict absent or affirmative
-        // does resolve, so the null below is about the verdict and not about a missing file.
+        // Positive control: with no verdict the same probe resolves, so the null below is
+        // about the verdict and not about a missing file.
         var undecided = Assert.IsType<ImageIconData>(
             TitleBarIconDefault.ResolveForSpec(new WindowSpec(), null, null));
         Assert.Equal(convention, undecided.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
 
         TitleBarIconDefault.ResetForTests();
-        Assert.NotNull(TitleBarIconDefault.ResolveForSpec(new WindowSpec(), null, true));
+        Assert.Null(TitleBarIconDefault.ResolveForSpec(new WindowSpec(), null, convention));
+    }
 
+    [Fact]
+    public void A_Verdict_About_A_Different_File_Does_Not_Blank_The_Title_Bar()
+    {
+        // The window always probes AppContext.BaseDirectory while this projection's root
+        // is redirectable, so the two can legitimately be looking at different files. A
+        // verdict is only actionable when it names the file this type actually resolved --
+        // otherwise the title bar would blank itself over a file it never looked at.
+        var convention = WriteFile("Assets", "AppIcon.ico");
         TitleBarIconDefault.ResetForTests();
-        Assert.Null(TitleBarIconDefault.ResolveForSpec(new WindowSpec(), null, false));
+
+        var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveForSpec(
+            new WindowSpec(), null, IOPath.Join(_root, "somewhere-else", "Assets", "AppIcon.ico")));
+
+        Assert.Equal(convention, icon.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
     }
 
     [Fact]

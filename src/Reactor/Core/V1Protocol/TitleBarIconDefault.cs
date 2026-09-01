@@ -44,6 +44,7 @@ internal static class TitleBarIconDefault
     // is per-UI-thread, so contention here is theoretical rather than expected.
     private static DeclaredEntry? s_declared;
     private static StrongBox<IconData?>? s_convention;
+    private static string? s_baseDirectoryOverride;
 
     /// <summary>
     /// Root the convention probe searches. Overridable so tests can point it at a
@@ -55,18 +56,19 @@ internal static class TitleBarIconDefault
     /// Deliberately <b>not</b> used to decide whether a path is expressible as
     /// <c>ms-appx:</c> — that question is about the real package root and a test cannot
     /// move it. See <see cref="TryGetAppRelativeSegments"/>.
-    /// <para>Backed by <see cref="AppIconConvention.ProbeRoot"/> rather than a private
-    /// field, so an override moves the window's <c>HICON</c> probe and this projection
-    /// together. Two independently-overridable roots would let the window and the title
-    /// bar resolve different files, which would in turn make
-    /// <c>ReactorWindow.ConventionIconApplied</c> a verdict about a file this type never
-    /// looked at.</para>
+    /// <para>Also deliberately <em>independent</em> of the root
+    /// <c>ReactorWindow.LoadConventionAssetIcon</c> probes. Sharing one root would let a
+    /// test redirect the window's native <c>LoadImageW</c> + <c>SetIcon</c> +
+    /// <c>DestroyIcon</c> sequence, which is not something a test should steer. The two
+    /// are reconciled by comparing resolved paths — see
+    /// <c>ReactorWindow.UnloadableConventionIconPath</c> — rather than by sharing a
+    /// root.</para>
     /// </remarks>
-    internal static string ConventionProbeRoot => AppIconConvention.ProbeRoot;
+    internal static string ConventionProbeRoot => s_baseDirectoryOverride ?? AppContext.BaseDirectory;
 
     internal static void SetBaseDirectoryForTests(string? directory)
     {
-        AppIconConvention.SetProbeRootForTests(directory);
+        s_baseDirectoryOverride = directory;
         ResetForTests();
     }
 
@@ -260,12 +262,12 @@ internal static class TitleBarIconDefault
     /// </param>
     /// <param name="declaredIconApplied">
     /// The owning window's <c>DeclaredIconApplied</c> verdict, forwarded to
-    /// <see cref="ResolveForSpec(WindowSpec?, bool?, bool?, out bool)"/> so the resync
+    /// <see cref="ResolveForSpec(WindowSpec?, bool?, string?, out bool)"/> so the resync
     /// agrees with the window about which
     /// <em>source</em> won and not merely about which file the declaration names.
     /// </param>
-    /// <param name="conventionIconApplied">
-    /// The owning window's <c>ConventionIconApplied</c> verdict, forwarded for the same
+    /// <param name="unloadableConventionPath">
+    /// The owning window's <c>UnloadableConventionIconPath</c>, forwarded for the same
     /// reason: the convention asset existing is not evidence the window loaded it.
     /// </param>
     /// <remarks>
@@ -314,7 +316,7 @@ internal static class TitleBarIconDefault
         Microsoft.UI.Xaml.Controls.TitleBar control,
         WindowSpec spec,
         bool? declaredIconApplied,
-        bool? conventionIconApplied)
+        string? unloadableConventionPath)
     {
         if (!s_applied.TryGetValue(control, out var last)) return;
         if (last.ElementOwned || last.AuthorOwned) return;
@@ -330,7 +332,7 @@ internal static class TitleBarIconDefault
         Volatile.Write(ref s_declared, null);
 
         var projected = ResolveForSpec(
-            spec, declaredIconApplied, conventionIconApplied, out var fromDeclaredIcon);
+            spec, declaredIconApplied, unloadableConventionPath, out var fromDeclaredIcon);
         var written = ResolveForResync(projected, fromDeclaredIcon);
         control.IconSource = written;
         s_applied.AddOrUpdate(control, new AppliedIcon(
@@ -381,7 +383,7 @@ internal static class TitleBarIconDefault
     {
         var window = ReactorApp.ActiveHostInternal?.OwningWindow;
         return ResolveForSpec(
-            window?.Spec, window?.DeclaredIconApplied, window?.ConventionIconApplied, out _);
+            window?.Spec, window?.DeclaredIconApplied, window?.UnloadableConventionIconPath, out _);
     }
 
     /// <summary>
@@ -408,27 +410,25 @@ internal static class TitleBarIconDefault
     /// so no end-to-end selftest could stage it. Carrying the window's verdict rather than
     /// re-deriving a proxy for it is still the right shape, and costs nothing.</para>
     /// </param>
-    /// <param name="conventionIconApplied">
-    /// <c>ReactorWindow.ConventionIconApplied</c> — whether the window's fallback icon
-    /// actually came from <c>Assets\AppIcon.ico</c>. See the <c>out</c> overload.
+    /// <param name="unloadableConventionPath">
+    /// <c>ReactorWindow.UnloadableConventionIconPath</c>. See the <c>out</c> overload.
     /// </param>
     internal static IconData? ResolveForSpec(
-        WindowSpec? spec, bool? declaredIconApplied = null, bool? conventionIconApplied = null)
-        => ResolveForSpec(spec, declaredIconApplied, conventionIconApplied, out _);
+        WindowSpec? spec, bool? declaredIconApplied = null, string? unloadableConventionPath = null)
+        => ResolveForSpec(spec, declaredIconApplied, unloadableConventionPath, out _);
 
     /// <summary>
-    /// As <see cref="ResolveForSpec(WindowSpec?, bool?, bool?)"/>, additionally reporting
+    /// As <see cref="ResolveForSpec(WindowSpec?, bool?, string?)"/>, additionally reporting
     /// which arm produced the value so the caller can match that arm's cache policy.
     /// </summary>
     /// <param name="spec">The owning window's spec.</param>
     /// <param name="declaredIconApplied">The window's declared-icon verdict.</param>
-    /// <param name="conventionIconApplied">
-    /// <c>ReactorWindow.ConventionIconApplied</c> — whether the window's fallback icon
-    /// actually came from <c>Assets\AppIcon.ico</c>. <c>false</c> means the asset either
-    /// was absent or could not be loaded and the executable's PE icon won instead; the
-    /// title bar cannot project a PE resource, so it shows nothing rather than a mark the
-    /// caption is not showing. <c>null</c> (no decision yet, or no live window) keeps the
-    /// optimistic behaviour of trusting the file probe.
+    /// <param name="unloadableConventionPath">
+    /// <c>ReactorWindow.UnloadableConventionIconPath</c> — the convention asset the window
+    /// probed and could not load, if any. When it names the same file this projection
+    /// resolved, the PE icon won on the window, so the title bar shows nothing rather than
+    /// a mark the caption is not showing. <c>null</c> (no decision yet, no live window, or
+    /// a different file) keeps the optimistic behaviour of trusting the file probe.
     /// </param>
     /// <param name="fromDeclaredIcon">
     /// <c>true</c> when the result came from <see cref="WindowSpec.Icon"/> rather than the
@@ -438,7 +438,7 @@ internal static class TitleBarIconDefault
     internal static IconData? ResolveForSpec(
         WindowSpec? spec,
         bool? declaredIconApplied,
-        bool? conventionIconApplied,
+        string? unloadableConventionPath,
         out bool fromDeclaredIcon)
     {
         fromDeclaredIcon = false;
@@ -460,10 +460,9 @@ internal static class TitleBarIconDefault
         }
 
         // Same rule one level down: the asset existing is not evidence the window loaded
-        // it. When the PE icon won instead, there is nothing the title bar can project.
-        if (conventionIconApplied is false) return null;
-
-        return ResolveConvention();
+        // it. When it existed but would not load, the PE icon won and there is nothing the
+        // title bar can project.
+        return ResolveConvention(unloadableConventionPath);
     }
 
     private static IconData? TryResolveDeclared(WindowIcon declared)
@@ -479,16 +478,43 @@ internal static class TitleBarIconDefault
         return value;
     }
 
-    private static IconData? ResolveConvention()
+    /// <summary>
+    /// Resolves the convention asset, unless the window has reported that this exact file
+    /// would not load.
+    /// </summary>
+    /// <param name="unloadableConventionPath">
+    /// The path the window probed and failed to load, or <c>null</c>. Compared by path
+    /// rather than trusted as a bare verdict: the window always probes
+    /// <see cref="AppContext.BaseDirectory"/> while this projection's root is redirectable
+    /// for tests, so the two can legitimately be looking at different files. Acting on a
+    /// verdict about a file this type never resolved is the mistake the comparison
+    /// prevents.
+    /// </param>
+    /// <remarks>
+    /// Not folded into the cache: the cached value is "what the convention resolves to",
+    /// which does not depend on the window's load verdict. Gating after the cache keeps
+    /// one meaning per cache entry.
+    /// </remarks>
+    private static IconData? ResolveConvention(string? unloadableConventionPath)
     {
         var cached = Volatile.Read(ref s_convention);
-        if (cached is not null) return cached.Value;
+        if (cached is null)
+        {
+            var resolved = AppIconConvention.TryGetAssetPath(ConventionProbeRoot, out var probed)
+                ? BuildIconData(probed)
+                : null;
+            cached = new StrongBox<IconData?>(resolved);
+            Volatile.Write(ref s_convention, cached);
+        }
 
-        var value = AppIconConvention.TryGetAssetPath(ConventionProbeRoot, out var path)
-            ? BuildIconData(path)
-            : null;
-        Volatile.Write(ref s_convention, new StrongBox<IconData?>(value));
-        return value;
+        if (unloadableConventionPath is not null
+            && AppIconConvention.TryGetAssetPath(ConventionProbeRoot, out var path)
+            && string.Equals(path, unloadableConventionPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return cached.Value;
     }
 
     /// <summary>
