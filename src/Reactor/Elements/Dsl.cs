@@ -1338,15 +1338,18 @@ public static partial class Factories
         // a different number of items than it just claimed — and getting that
         // wrong would leave trailing nulls or throw. Same contract as
         // Enumerable.ToArray, without its closure.
-        var buffer = items.TryGetNonEnumeratedCount(out var count) && count > 0
-            ? new Element[count]
+        var buffer = items.TryGetNonEnumeratedCount(out var count)
+            ? (count == 0 ? Array.Empty<Element>() : new Element[count])
             : new Element[4];
         var at = 0;
         foreach (var item in items)
         {
-            if (at == buffer.Length) Array.Resize(ref buffer, buffer.Length * 2);
+            // Math.Max, not `* 2`: a source that reported zero starts on a
+            // zero-length buffer, and doubling that never grows.
+            if (at == buffer.Length) Array.Resize(ref buffer, Math.Max(4, buffer.Length * 2));
             buffer[at++] = AutoKey(render(item), item);
         }
+        if (at == 0) return Array.Empty<Element>();
         if (at != buffer.Length) Array.Resize(ref buffer, at);
         return buffer;
     }
@@ -1373,16 +1376,17 @@ public static partial class Factories
     static Element[] BuildKeyedIndexed<T>(IEnumerable<T> items, Func<T, int, Element> render)
     {
         // Same pre-size / grow / trim contract as BuildKeyed.
-        var buffer = items.TryGetNonEnumeratedCount(out var count) && count > 0
-            ? new Element[count]
+        var buffer = items.TryGetNonEnumeratedCount(out var count)
+            ? (count == 0 ? Array.Empty<Element>() : new Element[count])
             : new Element[4];
         var at = 0;
         foreach (var item in items)
         {
-            if (at == buffer.Length) Array.Resize(ref buffer, buffer.Length * 2);
+            if (at == buffer.Length) Array.Resize(ref buffer, Math.Max(4, buffer.Length * 2));
             buffer[at] = AutoKey(render(item, at), item);
             at++;
         }
+        if (at == 0) return Array.Empty<Element>();
         if (at != buffer.Length) Array.Resize(ref buffer, at);
         return buffer;
     }

@@ -746,14 +746,20 @@ public class ElementTests
         // collection.
         var shorter = new LyingCount<string>(["a", "b"], reportedCount: 5);
         var longer = new LyingCount<string>(["a", "b", "c"], reportedCount: 1);
+        // Reports zero, so the buffer starts zero-length — doubling that would
+        // never grow, which is why the grow step uses Math.Max.
+        var zeroClaimed = new LyingCount<string>(["a", "b"], reportedCount: 0);
 
         var shortGroup = (GroupElement)ForEach(shorter, s => TextBlock(s));
         var longGroup = (GroupElement)ForEach(longer, (s, i) => TextBlock(s));
+        var zeroGroup = (GroupElement)ForEach(zeroClaimed, s => TextBlock(s));
 
         Assert.Equal(2, shortGroup.Children.Length);
         Assert.All(shortGroup.Children, Assert.NotNull);
         Assert.Equal(3, longGroup.Children.Length);
         Assert.All(longGroup.Children, Assert.NotNull);
+        Assert.Equal(2, zeroGroup.Children.Length);
+        Assert.All(zeroGroup.Children, Assert.NotNull);
     }
 
     // Reports one count and enumerates a different number of items. ICollection
