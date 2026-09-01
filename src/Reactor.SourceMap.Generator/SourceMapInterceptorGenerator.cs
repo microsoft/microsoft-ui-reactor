@@ -374,10 +374,10 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
 
         ImmutableArray<ArgumentStamp>.Builder? builder = null;
 
-        foreach (var argument in operation.Arguments)
+        foreach (var argument in operation.Arguments.Where(static a => a.Parameter is not null))
         {
-            if (argument.Parameter is null) continue;
-            var ordinal = argument.Parameter.Ordinal;
+            // Non-null by the filter above; the compiler cannot see through Where.
+            var ordinal = argument.Parameter!.Ordinal;
 
             if (argument.ArgumentKind == ArgumentKind.ParamArray)
             {
@@ -484,14 +484,8 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     // ── Mechanism 1: transparent helpers ──────────────────────────────────
 
     private static bool IsTransparent(IMethodSymbol method)
-    {
-        foreach (var attribute in method.GetAttributes())
-        {
-            if (attribute.AttributeClass?.ToDisplayString() == TransparentAttributeMetadataName)
-                return true;
-        }
-        return false;
-    }
+        => method.GetAttributes()
+            .Any(static a => a.AttributeClass?.ToDisplayString() == TransparentAttributeMetadataName);
 
     private static bool IsForwardable(IMethodSymbol method, Compilation compilation, INamedTypeSymbol elementSymbol)
         => ForwardabilityProblem(method, compilation, elementSymbol) is null;
