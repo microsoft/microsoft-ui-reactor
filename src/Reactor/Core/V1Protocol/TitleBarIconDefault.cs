@@ -33,17 +33,27 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 internal static class TitleBarIconDefault
 {
     /// <summary>Cached resolution of one declared <see cref="WindowIcon"/>.</summary>
-    private sealed class DeclaredEntry(WindowIcon key, IconData? value)
+    private sealed class DeclaredEntry(WindowIcon key, IconData? value, string? path)
     {
         internal readonly WindowIcon Key = key;
         internal readonly IconData? Value = value;
+
+        /// <summary>The file <see cref="Value"/> was built from, for fingerprinting.</summary>
+        internal readonly string? Path = path;
+    }
+
+    /// <summary>Cached resolution of the convention asset.</summary>
+    private sealed class ConventionEntry(IconData? value, string? path)
+    {
+        internal readonly IconData? Value = value;
+        internal readonly string? Path = path;
     }
 
     // Both caches are read/written as single references so a torn read is impossible;
     // the worst a race can do is recompute, never observe a half-built pair. Rendering
     // is per-UI-thread, so contention here is theoretical rather than expected.
     private static DeclaredEntry? s_declared;
-    private static StrongBox<IconData?>? s_convention;
+    private static ConventionEntry? s_convention;
     private static string? s_baseDirectoryOverride;
 
     /// <summary>
@@ -136,10 +146,18 @@ internal static class TitleBarIconDefault
         IconData? value,
         bool elementOwned,
         bool authorOwned,
-        Microsoft.UI.Xaml.Controls.IconSource? source)
+        Microsoft.UI.Xaml.Controls.IconSource? source,
+        string? fileStamp = null)
     {
         internal readonly IconData? Value = value;
         internal readonly bool ElementOwned = elementOwned;
+
+        /// <summary>
+        /// Last-write time and length of the file behind <see cref="Value"/> when it was
+        /// written, or <c>null</c>. Lets the out-of-band resync distinguish "same file,
+        /// untouched" from "same path, new bytes" without decoding either.
+        /// </summary>
+        internal readonly string? FileStamp = fileStamp;
 
         /// <summary>
         /// Set once the control was observed carrying an <c>IconSource</c> this type did
@@ -235,6 +253,14 @@ internal static class TitleBarIconDefault
     /// the alternative (treating any setter-bearing element as owning the slot) blocks
     /// inheritance for the common capture-only idiom indefinitely, because
     /// <c>ReactorWindow.Update</c> does not schedule a render.</para>
+    /// <para>The same boundary applies to a setter that <em>mutates</em> the inherited
+    /// <c>IconSource</c> in place — <c>((ImageIconSource)b.IconSource).ImageSource = …</c>
+    /// — rather than replacing it: the reference is unchanged, so ownership does not
+    /// latch and a later resync can overwrite the mutation. Detecting it would mean
+    /// deep-inspecting a control-owned object on every render, and the recovery is the
+    /// same as above: the next render re-runs the setter. Replacing the value is the
+    /// supported way to claim the slot; reaching into the instance this type created is
+    /// outside that contract.</para>
     /// </remarks>
     internal static void ObserveAfterSetters(Microsoft.UI.Xaml.Controls.TitleBar control)
     {
@@ -332,11 +358,29 @@ internal static class TitleBarIconDefault
         Volatile.Write(ref s_declared, null);
 
         var projected = ResolveForSpec(
-            spec, declaredIconApplied, unloadableConventionPath, out var fromDeclaredIcon);
+            spec, declaredIconApplied, unloadableConventionPath,
+            out var fromDeclaredIcon, out var resolvedPath);
+
+        // Nothing about the icon changed — not the projection, and not the bytes behind
+        // it. Skip the write entirely.
+        //
+        // The stamp is what makes this safe to skip. An earlier revision compared only the
+        // projection and had to be removed, because replacing a file in place leaves the
+        // projected Uri identical and the refresh was lost. Comparing the file's
+        // last-write time and length too keeps that case working while sparing the common
+        // one: ApplyChrome runs on every unequal WindowSpec, so without this a title
+        // change or an opacity tweak would re-read and re-decode the icon from disk.
+        var stamp = FileStamp(resolvedPath);
+        if (EqualityComparer<IconData?>.Default.Equals(last.Value, projected)
+            && string.Equals(last.FileStamp, stamp, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         var written = ResolveForResync(projected, fromDeclaredIcon);
         control.IconSource = written;
         s_applied.AddOrUpdate(control, new AppliedIcon(
-            projected, elementOwned: false, authorOwned: false, written));
+            projected, elementOwned: false, authorOwned: false, written, stamp));
     }
 
     /// <summary>
@@ -440,8 +484,30 @@ internal static class TitleBarIconDefault
         bool? declaredIconApplied,
         string? unloadableConventionPath,
         out bool fromDeclaredIcon)
+        => ResolveForSpec(spec, declaredIconApplied, unloadableConventionPath, out fromDeclaredIcon, out _);
+
+    /// <summary>
+    /// As above, additionally reporting the file the icon was built from so a caller can
+    /// stamp it. Separate overload so the common callers are not forced to discard it.
+    /// </summary>
+    /// <param name="spec">The owning window's spec.</param>
+    /// <param name="declaredIconApplied">The window's declared-icon verdict.</param>
+    /// <param name="unloadableConventionPath">The window's unadopted convention path.</param>
+    /// <param name="fromDeclaredIcon">Whether the result came from the declared icon.</param>
+    /// <param name="resolvedPath">
+    /// The file the result was built from, or <c>null</c>. Reported rather than derived
+    /// back out of the projected <c>Uri</c>: that <c>Uri</c> may be <c>ms-appx:</c>, and
+    /// mapping it back to a path is exactly the kind of second derivation that drifts.
+    /// </param>
+    internal static IconData? ResolveForSpec(
+        WindowSpec? spec,
+        bool? declaredIconApplied,
+        string? unloadableConventionPath,
+        out bool fromDeclaredIcon,
+        out string? resolvedPath)
     {
         fromDeclaredIcon = false;
+        resolvedPath = null;
 
         // Mirror ApplyChrome's `spec.Embed is null` guard: an embedded window never gets
         // a window icon, so there is no window icon for its title bar to inherit.
@@ -453,28 +519,34 @@ internal static class TitleBarIconDefault
         // exists, and agreeing with the window means agreeing about the source that won.
         if (declaredIconApplied is not false
             && spec?.Icon is { } declared
-            && TryResolveDeclared(declared) is { } fromSpec)
+            && TryResolveDeclared(declared, out var declaredPath) is { } fromSpec)
         {
             fromDeclaredIcon = true;
+            resolvedPath = declaredPath;
             return fromSpec;
         }
 
         // Same rule one level down: the asset existing is not evidence the window loaded
         // it. When it existed but would not load, the PE icon won and there is nothing the
         // title bar can project.
-        return ResolveConvention(unloadableConventionPath);
+        return ResolveConvention(unloadableConventionPath, out resolvedPath);
     }
 
-    private static IconData? TryResolveDeclared(WindowIcon declared)
+    private static IconData? TryResolveDeclared(WindowIcon declared, out string? resolvedPath)
     {
         var cached = Volatile.Read(ref s_declared);
-        if (cached is not null && ReferenceEquals(cached.Key, declared)) return cached.Value;
+        if (cached is not null && ReferenceEquals(cached.Key, declared))
+        {
+            resolvedPath = cached.Path;
+            return cached.Value;
+        }
 
         // WindowIcon.TryResolvePath is the same resolver AppWindow.SetIcon goes
         // through, so the title bar and the window caption cannot disagree about which
         // file a declared icon names.
-        var value = declared.TryResolvePath(out var path) ? BuildIconData(path) : null;
-        Volatile.Write(ref s_declared, new DeclaredEntry(declared, value));
+        resolvedPath = declared.TryResolvePath(out var path) ? path : null;
+        var value = resolvedPath is null ? null : BuildIconData(resolvedPath);
+        Volatile.Write(ref s_declared, new DeclaredEntry(declared, value, resolvedPath));
         return value;
     }
 
@@ -490,31 +562,69 @@ internal static class TitleBarIconDefault
     /// verdict about a file this type never resolved is the mistake the comparison
     /// prevents.
     /// </param>
+    /// <param name="resolvedPath">
+    /// The convention file the result was built from, or <c>null</c> when there is none or
+    /// the window did not adopt it.
+    /// </param>
     /// <remarks>
     /// Not folded into the cache: the cached value is "what the convention resolves to",
     /// which does not depend on the window's load verdict. Gating after the cache keeps
     /// one meaning per cache entry.
     /// </remarks>
-    private static IconData? ResolveConvention(string? unloadableConventionPath)
+    private static IconData? ResolveConvention(string? unloadableConventionPath, out string? resolvedPath)
     {
         var cached = Volatile.Read(ref s_convention);
         if (cached is null)
         {
-            var resolved = AppIconConvention.TryGetAssetPath(ConventionProbeRoot, out var probed)
-                ? BuildIconData(probed)
+            var probedPath = AppIconConvention.TryGetAssetPath(ConventionProbeRoot, out var probed)
+                ? probed
                 : null;
-            cached = new StrongBox<IconData?>(resolved);
+            cached = new ConventionEntry(
+                probedPath is null ? null : BuildIconData(probedPath), probedPath);
             Volatile.Write(ref s_convention, cached);
         }
 
         if (unloadableConventionPath is not null
-            && AppIconConvention.TryGetAssetPath(ConventionProbeRoot, out var path)
-            && string.Equals(path, unloadableConventionPath, StringComparison.OrdinalIgnoreCase))
+            && cached.Path is not null
+            && string.Equals(cached.Path, unloadableConventionPath, StringComparison.OrdinalIgnoreCase))
         {
+            resolvedPath = null;
             return null;
         }
 
+        resolvedPath = cached.Path;
         return cached.Value;
+    }
+
+    /// <summary>
+    /// A cheap stamp of the file behind a resolved icon: last-write time and length.
+    /// <c>null</c> when there is no file, or when the stat itself fails.
+    /// </summary>
+    /// <remarks>
+    /// Lets the resync tell "the same file, untouched" from "the same path, different
+    /// bytes" without decoding either. A stat failure returns <c>null</c>, which compares
+    /// unequal to a real stamp and so falls through to the rewrite — the safe direction:
+    /// an unreadable stat costs one redundant decode rather than a stale icon.
+    /// </remarks>
+    private static string? FileStamp(string? path)
+    {
+        if (path is null) return null;
+        try
+        {
+            var info = new global::System.IO.FileInfo(path);
+            if (!info.Exists) return null;
+            return $"{info.LastWriteTimeUtc.Ticks:x}:{info.Length:x}";
+        }
+        catch (Exception ex) when (ex is global::System.IO.IOException
+                                      or UnauthorizedAccessException
+                                      or ArgumentException
+                                      or NotSupportedException
+                                      or global::System.Security.SecurityException)
+        {
+            Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Core.Diagnostics.LogCategory.Hosting, "TitleBarIconDefault.FileStamp", ex);
+            return null;
+        }
     }
 
     /// <summary>
