@@ -1424,11 +1424,13 @@ public static partial class Factories
         // is rare; ForEach_Keys_From_A_Struct_IReactorKeyed_Item pins that it
         // still produces the right keys.
         if (!SelfKeyingItem<T>.Supported) return element;
-        // `Func<T, Element>` is non-nullable, but ChildReconciler.Filter drops
-        // null children rather than throwing, so a renderer that returns null
-        // used to survive as far as the diff. Keep that tolerance instead of
-        // turning it into a NullReferenceException here.
-        if (element is null || element.Key is not null) return element;
+        // `Func<T, Element>` is non-nullable, so a null here is already a
+        // contract violation — but ChildReconciler.Filter drops null children
+        // rather than throwing, and before #1156 the null simply flowed through
+        // to that filter. The `!` is that tolerance made explicit: the array
+        // element type is non-nullable, exactly like the delegate's return.
+        if (element is null) return element!;
+        if (element.Key is not null) return element;
         return item is IReactorKeyed keyed ? element with { Key = keyed.Key } : element;
     }
 
