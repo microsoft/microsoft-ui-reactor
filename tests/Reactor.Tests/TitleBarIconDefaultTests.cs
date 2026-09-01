@@ -305,6 +305,49 @@ public class TitleBarIconDefaultTests : IDisposable
     }
 
     [Fact]
+    public void A_Declared_Icon_The_Window_Rejected_Falls_Through_To_The_Convention()
+    {
+        // ApplyChrome decides between the declared icon and the fallback by the return of
+        // WindowIcon.Apply, which is TryResolvePath *plus* a catch-wrapped
+        // AppWindow.SetIcon. TryResolveDeclared only performs the first half, so a file
+        // that resolves but that SetIcon refuses would leave the title bar projecting a
+        // file the window is not showing. DeclaredIconApplied carries the window's actual
+        // verdict across so the two surfaces agree on the winning *source*.
+        var convention = WriteFile("Assets", "AppIcon.ico");
+        var declared = WriteFile("Declared.ico");
+        TitleBarIconDefault.ResetForTests();
+
+        var spec = new WindowSpec { Icon = WindowIcon.FromPath(declared) };
+
+        // Positive control: the declared file genuinely resolves, so the assertion below
+        // is about the verdict and not about a missing file (which is a different, already
+        // covered path).
+        var accepted = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveForSpec(spec, true));
+        Assert.Equal(declared, accepted.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+
+        TitleBarIconDefault.ResetForTests();
+        var rejected = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveForSpec(spec, false));
+        Assert.Equal(convention, rejected.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+    }
+
+    [Fact]
+    public void An_Undecided_Window_Still_Honours_The_Declaration()
+    {
+        // null means ApplyChrome has not run yet (or there is no live window). Staying
+        // optimistic there keeps a title bar that mounts before the first chrome pass
+        // behaving as it did before the verdict existed; SyncTitleBarIcon corrects it at
+        // the end of that same ApplyChrome if the window disagrees.
+        WriteFile("Assets", "AppIcon.ico");
+        var declared = WriteFile("Declared.ico");
+        TitleBarIconDefault.ResetForTests();
+
+        var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveForSpec(
+            new WindowSpec { Icon = WindowIcon.FromPath(declared) }, null));
+
+        Assert.Equal(declared, icon.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
+    }
+
+    [Fact]
     public void An_Embedded_Window_Inherits_No_Icon()
     {
         // Positive control first: the same spec without Embed does resolve, so a null

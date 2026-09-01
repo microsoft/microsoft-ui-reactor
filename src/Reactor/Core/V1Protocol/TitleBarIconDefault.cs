@@ -253,6 +253,11 @@ internal static class TitleBarIconDefault
     /// be active — so updating the window that is <em>not</em> currently ambient would
     /// write the other window's icon into its title bar.
     /// </param>
+    /// <param name="declaredIconApplied">
+    /// The owning window's <c>DeclaredIconApplied</c> verdict, forwarded to
+    /// <see cref="ResolveForSpec"/> so the resync agrees with the window about which
+    /// <em>source</em> won and not merely about which file the declaration names.
+    /// </param>
     /// <remarks>
     /// No-op for a control this type never wrote to, and for a title bar whose element
     /// declared its own icon or opted out with <c>.NoIcon()</c> — those own the slot.
@@ -296,7 +301,7 @@ internal static class TitleBarIconDefault
     /// </para>
     /// </remarks>
     internal static void ResyncInheritedIcon(
-        Microsoft.UI.Xaml.Controls.TitleBar control, WindowSpec spec)
+        Microsoft.UI.Xaml.Controls.TitleBar control, WindowSpec spec, bool? declaredIconApplied)
     {
         if (!s_applied.TryGetValue(control, out var last)) return;
         if (last.ElementOwned || last.AuthorOwned) return;
@@ -311,7 +316,7 @@ internal static class TitleBarIconDefault
         // See InvalidateCaches.
         Volatile.Write(ref s_declared, null);
 
-        var projected = ResolveForSpec(spec);
+        var projected = ResolveForSpec(spec, declaredIconApplied);
         var written = ResolveForResync(projected);
         control.IconSource = written;
         s_applied.AddOrUpdate(control, new AppliedIcon(
@@ -347,7 +352,10 @@ internal static class TitleBarIconDefault
     /// from the window chain.
     /// </summary>
     internal static IconData? ResolveDefault()
-        => ResolveForSpec(ReactorApp.ActiveHostInternal?.OwningWindow?.Spec);
+    {
+        var window = ReactorApp.ActiveHostInternal?.OwningWindow;
+        return ResolveForSpec(window?.Spec, window?.DeclaredIconApplied);
+    }
 
     /// <summary>
     /// The icon a window with <paramref name="spec"/> contributes to its title bar.
@@ -359,15 +367,33 @@ internal static class TitleBarIconDefault
     /// owning window. That is not an embed, so it still resolves the app-level
     /// convention asset.
     /// </param>
-    internal static IconData? ResolveForSpec(WindowSpec? spec)
+    /// <param name="declaredIconApplied">
+    /// <c>ReactorWindow.DeclaredIconApplied</c> — whether <c>ApplyChrome</c> saw the
+    /// declared icon actually reach the window. <c>false</c> forces the convention arm
+    /// even when the declaration resolves to a real file, because the window itself fell
+    /// through to its fallback; <c>null</c> (no decision yet, or no live window) keeps the
+    /// optimistic behaviour of trusting the declaration.
+    /// <para>In practice <c>false</c> almost always means the path did not resolve, which
+    /// <see cref="TryResolveDeclared"/> would have caught anyway. The resolve-succeeded
+    /// case is the defensive one: <c>AppWindow.SetIcon</c> was measured on Windows App SDK
+    /// 2.1 to accept both a text file named <c>.ico</c> and a real <c>.ico</c> held open
+    /// with <c>FileShare.None</c> — it silently applies a default rather than throwing —
+    /// so no end-to-end selftest could stage it. Carrying the window's verdict rather than
+    /// re-deriving a proxy for it is still the right shape, and costs nothing.</para>
+    /// </param>
+    internal static IconData? ResolveForSpec(WindowSpec? spec, bool? declaredIconApplied = null)
     {
         // Mirror ApplyChrome's `spec.Embed is null` guard: an embedded window never gets
         // a window icon, so there is no window icon for its title bar to inherit.
         if (spec?.Embed is not null) return null;
 
         // A declared icon that resolves to no file falls through to the convention,
-        // exactly as it does for the window itself in ApplyChrome.
-        if (spec?.Icon is { } declared && TryResolveDeclared(declared) is { } fromSpec)
+        // exactly as it does for the window itself in ApplyChrome. So does one the window
+        // resolved but SetIcon rejected — TryResolveDeclared proves only that a file
+        // exists, and agreeing with the window means agreeing about the source that won.
+        if (declaredIconApplied is not false
+            && spec?.Icon is { } declared
+            && TryResolveDeclared(declared) is { } fromSpec)
             return fromSpec;
 
         return ResolveConvention();

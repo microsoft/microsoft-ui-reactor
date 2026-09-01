@@ -90,6 +90,26 @@ public sealed partial class ReactorWindow : IDisposable
     // True once Reactor has put an icon on this window (declared or fallback). Gates
     // ClearWindowIcon so Reactor only ever takes down an icon it applied itself.
     private bool _reactorAppliedIcon;
+
+    /// <summary>
+    /// Whether the last <c>ApplyChrome</c> saw <see cref="WindowSpec.Icon"/> actually
+    /// reach the window, or fall through to the convention/PE fallback.
+    /// <c>null</c> until chrome has been applied once.
+    /// </summary>
+    /// <remarks>
+    /// Read by the <c>TitleBar</c> icon default so the two surfaces agree on which
+    /// <em>source</em> won, not merely on which file a declaration names.
+    /// <c>WindowIcon.Apply</c> is <c>TryResolvePath</c> plus a catch-wrapped
+    /// <c>AppWindow.SetIcon</c>, so a declared file that exists but is not a loadable icon
+    /// resolves fine and is then rejected — leaving the window on its fallback. Without
+    /// this the title bar would keep projecting the rejected file and render nothing.
+    /// <para>Tri-state on purpose. <c>null</c> means "no decision yet", under which the
+    /// projection stays optimistic and honours the declaration, so a title bar that
+    /// mounts before the first <c>ApplyChrome</c> behaves exactly as it did before this
+    /// flag existed. <c>SyncTitleBarIcon</c> runs at the end of the same <c>ApplyChrome</c>
+    /// that sets it, so the authoritative answer lands immediately afterwards.</para>
+    /// </remarks>
+    internal bool? DeclaredIconApplied { get; private set; }
     // Lazy-init shell wrappers — apps that never read these never instantiate
     // them, keeping the cold-start budget clean (spec 036 §0.7 / §11.7).
     private TaskbarProgress? _taskbarProgress;
@@ -634,7 +654,8 @@ public sealed partial class ReactorWindow : IDisposable
             // resource URI with no matching asset) would otherwise leave the window with
             // no icon at all, because a non-null spec.Icon used to suppress the fallback.
             bool applied;
-            if (spec.Icon is { } icon && icon.Apply(_appWindow))
+            var declaredApplied = spec.Icon is { } icon && icon.Apply(_appWindow);
+            if (declaredApplied)
             {
                 // The declared icon is what the window shows now, so a cached fallback
                 // handle no longer describes it. Drop it: otherwise removing the
@@ -648,6 +669,10 @@ public sealed partial class ReactorWindow : IDisposable
             {
                 applied = TryApplyExeIconFallback();
             }
+
+            // Record which source actually won, for the TitleBar projection. A declared
+            // icon can resolve to a real file and still be rejected by SetIcon.
+            DeclaredIconApplied = declaredApplied;
 
             if (applied)
             {
@@ -719,7 +744,7 @@ public sealed partial class ReactorWindow : IDisposable
 
         try
         {
-            Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(bar, spec);
+            Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(bar, spec, DeclaredIconApplied);
         }
         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         {
