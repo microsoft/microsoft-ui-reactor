@@ -260,7 +260,7 @@ public sealed partial class Reconciler
             // .Set(...) claim the icon slot?" is observable rather than guessable. Also
             // refreshes ownership on renders where the icon write took its fast path.
             global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
-                .ObserveAfterSetters(tbCtl);
+                .ObserveAfterSetters(tbCtl, tbEl);
         }
 
         // Re-apply the caption-derived default after modifiers have run so a

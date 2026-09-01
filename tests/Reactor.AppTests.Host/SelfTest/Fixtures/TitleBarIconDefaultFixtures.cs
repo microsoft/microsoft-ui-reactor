@@ -983,33 +983,37 @@ internal static class TitleBarIconDefaultFixtures
             public override Element Render() => TitleBar("Standard");
         }
 
-        private sealed class TallBar : Component
+        /// <summary>
+        /// Fixture-owned handle to the Tall bar's state setter.
+        /// </summary>
+        /// <remarks>
+        /// Passed in as props rather than published through a static. Two successive
+        /// code-quality findings rejected both static shapes — assigning from
+        /// <c>Render</c> and assigning from the constructor — because the rule covers
+        /// instance methods, properties <em>and</em> constructors alike. Handing the
+        /// component an object the fixture already owns removes the static entirely
+        /// instead of relocating the write.
+        /// </remarks>
+        private sealed class PhaseHandle
         {
-            // The static write lives in the constructor, not Render: assigning a static
-            // from an instance method trips a code-quality rule, and there is no reason to
-            // re-publish the pointer on every render.
-            private static TallBar? s_current;
-            private Action<int>? _setter;
+            internal Action<int>? Setter;
+            internal bool Ready => Setter is not null;
+            internal void SetPhase(int value) => Setter?.Invoke(value);
+        }
 
-            public TallBar() => s_current = this;
-
-            internal static bool Ready => s_current?._setter is not null;
-
-            internal static void SetPhase(int value) => s_current?._setter?.Invoke(value);
-
-            internal static void Reset() => s_current = null;
-
+        private sealed class TallBar : Component<PhaseHandle>
+        {
             public override Element Render()
             {
                 var (phase, set) = UseState(0);
-                _setter = set;
+                Props.Setter = set;
                 return phase == 0
                     ? TitleBar("Tall").HeightOption(WindowTitleBarHeight.Tall)
                     : TextBlock("gone");
             }
         }
 
-        private sealed class HeightBarsComponent : Component
+        private sealed class HeightBarsComponent(PhaseHandle handle) : Component
         {
             // Each bar is its own component, so removing the Tall one is a LOCALIZED
             // rerender: the survivor's Render never runs again and therefore never
@@ -1020,7 +1024,7 @@ internal static class TitleBarIconDefaultFixtures
             // fixture and it survived the mutation.
             public override Element Render() => VStack(
                 Component<SurvivorBar>(),
-                Component<TallBar>(),
+                Component<TallBar, PhaseHandle>(handle),
                 TextBlock("body"));
         }
 
@@ -1028,8 +1032,8 @@ internal static class TitleBarIconDefaultFixtures
         {
             EnsureUIDispatcher();
 
-            TallBar.Reset();
-            var win = await OpenAndSettle(Spec("TwoBarHeights"), () => new HeightBarsComponent());
+            var handle = new PhaseHandle();
+            var win = await OpenAndSettle(Spec("TwoBarHeights"), () => new HeightBarsComponent(handle));
             try
             {
                 // Positive control. If the Tall bar never took the caption there is no
@@ -1040,8 +1044,8 @@ internal static class TitleBarIconDefaultFixtures
                 H.Check($"TitleBarIcon_BarHeights_TallApplied ({tallApplied})",
                     tallApplied == Microsoft.UI.Windowing.TitleBarHeightOption.Tall);
 
-                H.Check("TitleBarIcon_BarHeights_SetterCaptured", TallBar.Ready);
-                TallBar.SetPhase(1);
+                H.Check("TitleBarIcon_BarHeights_SetterCaptured", handle.Ready);
+                handle.SetPhase(1);
                 await win.Host.WaitForIdleAsync();
                 await Harness.Render(300);
 
@@ -1055,10 +1059,89 @@ internal static class TitleBarIconDefaultFixtures
                 H.Check("TitleBarIcon_BarHeights_StillExtended",
                     win.NativeWindow.ExtendsContentIntoTitleBar);
             }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  A .OnMount(...) icon survives later renders.
+    //
+    //  .OnMount and .Set both land after the descriptor props, so they look
+    //  identical to ObserveAfterSetters -- but they need opposite handling.
+    //  A .Set setter re-runs every render, so Reactor writing over it is
+    //  harmless (the setter immediately wins again) and is what lets the
+    //  projection return if the setter is removed. .OnMount runs ONCE, so
+    //  writing over it destroys the author's value with nothing to restore it.
+    //
+    //  The element deliberately carries NO setters, which is what makes the
+    //  write one-shot. A capture-only .Set here would make it "repeating" and
+    //  the fixture would assert the opposite behaviour.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultKeepsOnMountIcon(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        private sealed class OnMountBarComponent : Component
+        {
+            public Action<int>? SetPhase;
+            public WinUI.TitleBar? Bar;
+
+            public override Element Render()
+            {
+                var (phase, set) = UseState(0);
+                SetPhase = set;
+
+                return VStack(
+                    TitleBar("OnMount").OnMount(fe =>
+                    {
+                        if (fe is not WinUI.TitleBar bar) return;
+                        Bar = bar;
+                        bar.IconSource = new WinUI.FontIconSource { Glyph = "\uE734" };
+                    }),
+                    TextBlock($"phase {phase}"));
+            }
+        }
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: true);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+
+                var comp = new OnMountBarComponent();
+                var win = await OpenAndSettle(Spec("OnMountIcon"), () => comp);
+                try
+                {
+                    var bar = comp.Bar;
+                    H.Check("TitleBarIcon_OnMount_BarMounted", bar is not null);
+                    if (bar is null) return;
+
+                    // Positive control: the mount action really did take the slot. There is
+                    // a convention asset in the scratch root, so without the OnMount write
+                    // this would be an ImageIconSource -- the assertion distinguishes the
+                    // author's value from the inherited one rather than from nothing.
+                    H.Check($"TitleBarIcon_OnMount_TookTheSlot ({bar.IconSource?.GetType().Name})",
+                        bar.IconSource is WinUI.FontIconSource);
+
+                    // A plain re-render. The mount action does NOT run again, so anything
+                    // Reactor writes here is permanent.
+                    comp.SetPhase?.Invoke(1);
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    Console.WriteLine($"# onMount: after={bar.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check($"TitleBarIcon_OnMount_SurvivesRerender ({bar.IconSource?.GetType().Name ?? "<null>"})",
+                        bar.IconSource is WinUI.FontIconSource);
+                }
+                finally { await CloseAndSettle(win); }
+            }
             finally
             {
-                TallBar.Reset();
-                await CloseAndSettle(win);
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
             }
         }
     }
