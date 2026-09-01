@@ -1837,30 +1837,32 @@ public sealed partial class ReactorWindow : IDisposable
     /// </para>
     /// </summary>
     /// <param name="unmounting">
-    /// The control being unmounted. Used to guard <see cref="_titleBarIconControl"/>:
-    /// a keyed or type replacement mounts the new <c>TitleBar</c> <em>before</em>
-    /// unmounting the old one (<c>ChildReconciler</c> mounts, then
-    /// <c>ReplaceChildWithExitTransition</c> unmounts), so an unconditional clear here
-    /// would wipe the reference the replacement's mount had just recorded and leave the
-    /// live title bar permanently unreachable by the icon push.
-    /// <para>Only that field is guarded. The height fields keep their existing
-    /// unconditional semantics because they are re-established by the next
-    /// <c>ApplyTitleBarHeightOption</c>, which runs on every update;
-    /// <see cref="_titleBarIconControl"/> is written only at mount, so a spurious clear
-    /// of it is permanent.</para>
+    /// The control being unmounted. A keyed or type replacement can mount the new
+    /// <c>TitleBar</c> <em>before</em> unmounting the old one (<c>ChildReconciler</c>'s
+    /// type-mismatch branch mounts the replacement subtree, then unmounts), in which case
+    /// this call is <em>stale</em>: the replacement has already re-registered and the
+    /// state now describes it, not the control going away. Clearing then would tear down
+    /// live state — the icon reference the push needs, and
+    /// <see cref="_titleBarControlMounted"/>, whose loss makes the next <c>ApplyChrome</c>
+    /// resolve <c>spec.ExtendsContentIntoTitleBar ?? _titleBarControlMounted</c> to
+    /// <c>false</c> and drop the window out of content-extended mode with a title bar
+    /// still mounted.
+    /// <para><c>null</c> (or nothing tracked) clears unconditionally, preserving the
+    /// behaviour of every caller that predates the replacement guard.</para>
     /// </param>
     internal void ClearTitleBarControl(Microsoft.UI.Xaml.Controls.TitleBar? unmounting = null)
     {
+        if (unmounting is not null
+            && _titleBarIconControl is not null
+            && _titleBarIconControl.TryGetTarget(out var tracked)
+            && !ReferenceEquals(tracked, unmounting))
+        {
+            return;
+        }
+
         _titleBarControlMounted = false;
         _titleBarControl = null;
-
-        if (unmounting is null
-            || _titleBarIconControl is null
-            || !_titleBarIconControl.TryGetTarget(out var tracked)
-            || ReferenceEquals(tracked, unmounting))
-        {
-            _titleBarIconControl = null;
-        }
+        _titleBarIconControl = null;
         _titleBarControlExplicitHeight = false;
         _titleBarControlHeightOwned = false;
         _elementTitleBarHeight = null;

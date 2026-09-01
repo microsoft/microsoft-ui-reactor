@@ -819,10 +819,25 @@ internal static class TitleBarIconDefaultFixtures
                     Console.WriteLine($"# typeSwap: before={before}");
                     H.Check($"TitleBarIcon_TypeSwap_ReplacementHasIcon (uri={before})", before is not null);
 
+                    // A live TitleBar means the window infers content extension. The stale
+                    // unmount must not withdraw that on the replacement's behalf.
+                    Console.WriteLine(
+                        $"# typeSwap: extendedAfterSwap={win.NativeWindow.ExtendsContentIntoTitleBar}");
+                    H.Check("TitleBarIcon_TypeSwap_ExtendedAfterSwap",
+                        win.NativeWindow.ExtendsContentIntoTitleBar);
+
                     // Only the window icon moves, so the push is the sole route.
                     win.Update(win.Spec with { Icon = WindowIcon.FromPath(second) });
                     await win.Host.WaitForIdleAsync();
                     await Harness.Render(200);
+
+                    // ApplyChrome resolves `spec.ExtendsContentIntoTitleBar ?? _titleBarControlMounted`.
+                    // If the stale unmount cleared that latch, this update silently drops
+                    // the window out of content-extended mode with a title bar still live.
+                    Console.WriteLine(
+                        $"# typeSwap: extendedAfterUpdate={win.NativeWindow.ExtendsContentIntoTitleBar}");
+                    H.Check("TitleBarIcon_TypeSwap_StillExtendedAfterUpdate",
+                        win.NativeWindow.ExtendsContentIntoTitleBar);
 
                     var after = IconUri(replacement);
                     Console.WriteLine($"# typeSwap: after={after}");
