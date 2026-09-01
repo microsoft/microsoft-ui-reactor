@@ -539,14 +539,14 @@ public static class SourceInfo
 
 > **Amended (2026-08-26): do not implement this either.** It exists only to feed
 > the §1.3 attached property, which is itself redundant. `SetElementTagIfNeeded`
-> (`SetElementTagIfNeeded`) already refreshes `ReactorState.Element` on every mount and
-> update, so `CallSite` is reachable from any tagged control with no mount-path
-> change at all.
+> already refreshes `ReactorState.Element` on every mount and update, so
+> `CallSite` is reachable from any tagged control with no mount-path change at
+> all.
 >
 > The original text's claim that `Mount` is "a single insertion point" is
 > **correct** and still worth knowing — `Reconciler.Mount` is a single public
 > choke point where all four dispatch arms converge, with a common post-dispatch
-> tail at `:145`. It simply is not needed for this feature.
+> `ApplyModifiers` tail. It simply is not needed for this feature.
 
 <details>
 <summary>Original proposal (historical — do not implement)</summary>
