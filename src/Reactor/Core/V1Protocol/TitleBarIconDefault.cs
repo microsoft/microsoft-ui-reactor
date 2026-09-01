@@ -237,9 +237,18 @@ internal static class TitleBarIconDefault
         {
             // A one-shot author write — .OnMount(...) rather than .Set(...) — has nothing
             // that will re-apply it, so writing over it destroys it permanently. Leave the
-            // slot alone until the element itself starts claiming it.
-            if (last.AuthorOwned && !last.AuthorRepeats && last.ElementOwned == owned)
+            // slot alone, but only while the element's own declaration is unchanged: an
+            // element that switches .Icon(Home) to .Icon(Save) is asking for Save, and a
+            // mount-time override must not outrank a later explicit declaration. Ambient
+            // (inherited) changes deliberately do not override it — the author's value is
+            // more specific than the window's.
+            if (last.AuthorOwned
+                && !last.AuthorRepeats
+                && last.ElementOwned == owned
+                && (!owned || EqualityComparer<IconData?>.Default.Equals(last.Value, projected)))
+            {
                 return;
+            }
 
             if (!last.AuthorOwned
                 && last.ElementOwned == owned
@@ -287,21 +296,33 @@ internal static class TitleBarIconDefault
     /// <para>What it cannot see from the control alone is whether the write will
     /// <em>happen again</em>. A <c>.Set(...)</c> setter re-runs on every render; a
     /// <c>.OnMount(...)</c> action runs once, and <c>ApplyModifiers</c> runs it before this
-    /// observation, so both look identical here. The element supplies that half: carrying
-    /// setters means the write repeats. Note this is <em>not</em> the discredited
+    /// observation, so both look identical here. <paramref name="isMount"/> resolves it
+    /// without a second observation point: the mount action can only have run on the mount
+    /// pass, so a divergence seen on any <em>later</em> render is necessarily a setter's
+    /// and therefore repeats. On the mount pass an element that carries a mount action is
+    /// treated as one-shot, which is the safe direction — the value is preserved, and if a
+    /// setter really did write it, the next render re-writes it and this observation
+    /// upgrades the record to repeating.</para>
+    /// <para>Deliberately not <c>Setters.Length &gt; 0</c> alone: that cannot tell a
+    /// capture-only <c>.Set(b =&gt; captured = b)</c> from an icon setter, so
+    /// <c>.OnMount(set icon).Set(capture)</c> would be recorded as repeating on the
+    /// strength of a setter that never touches the icon, and the mount value would be
+    /// overwritten with nothing to restore it. Nor is any of this the discredited
     /// "<c>Setters.Length</c> implies ownership" test — ownership is still ground truth
-    /// from the control; the element only says whether the observed write is repeatable.
-    /// See <c>AppliedIcon.AuthorRepeats</c> for why the two need opposite handling.</para>
+    /// from the control; this only classifies how the observed write behaves over time.</para>
     /// </remarks>
     internal static void ObserveAfterSetters(
-        Microsoft.UI.Xaml.Controls.TitleBar control, TitleBarElement element)
+        Microsoft.UI.Xaml.Controls.TitleBar control, TitleBarElement element, bool isMount)
     {
         if (!s_applied.TryGetValue(control, out var last)) return;
         if (ReferenceEquals(control.IconSource, last.Source)) return;
 
+        var mountActionCouldHaveWritten = isMount && element.Modifiers?.OnMountAction is not null;
+        var repeats = element.Setters.Length > 0 && !mountActionCouldHaveWritten;
+
         s_applied.AddOrUpdate(control, new AppliedIcon(
             last.Value, last.ElementOwned, authorOwned: true, control.IconSource,
-            last.FileStamp, authorRepeats: element.Setters.Length > 0));
+            last.FileStamp, authorRepeats: repeats));
     }
 
     /// <summary>

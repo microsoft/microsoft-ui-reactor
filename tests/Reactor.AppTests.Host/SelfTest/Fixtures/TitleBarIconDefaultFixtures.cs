@@ -1147,6 +1147,134 @@ internal static class TitleBarIconDefaultFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  .OnMount(icon) alongside a capture-only .Set(...), and a declared icon
+    //  that changes after a mount-time override.
+    //
+    //  Two ways the one-shot rule can be got wrong:
+    //
+    //  (a) Classifying repeatability from Setters.Length alone. The capture
+    //      setter here never touches IconSource, so the mount write is still
+    //      one-shot -- but a naive "carries setters => repeats" test would
+    //      call it repeating and let the next render overwrite it.
+    //
+    //  (b) Preserving the one-shot too hard. An element that changes its OWN
+    //      .Icon(...) is asking for the new value, so the mount-time override
+    //      must not outrank it. (An ambient window-icon change still must not,
+    //      which is the asymmetry the guard encodes.)
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultOneShotBoundaries(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        private sealed class CaptureComponent : Component
+        {
+            public Action<int>? SetPhase;
+            public WinUI.TitleBar? Bar;
+
+            public override Element Render()
+            {
+                var (phase, set) = UseState(0);
+                SetPhase = set;
+
+                return VStack(
+                    TitleBar("Capture")
+                        .OnMount(fe =>
+                        {
+                            if (fe is WinUI.TitleBar b)
+                                b.IconSource = new WinUI.FontIconSource { Glyph = "\uE734" };
+                        })
+                        // Touches nothing about the icon. Must not make the mount write
+                        // look repeatable.
+                        .Set(b => Bar = b),
+                    TextBlock($"phase {phase}"));
+            }
+        }
+
+        private sealed class DeclaredThenChangedComponent : Component
+        {
+            public Action<int>? SetPhase;
+            public WinUI.TitleBar? Bar;
+
+            public override Element Render()
+            {
+                var (phase, set) = UseState(0);
+                SetPhase = set;
+
+                var glyph = phase == 0 ? "\uE80F" : "\uE74E";
+                return VStack(
+                    TitleBar("Declared")
+                        .Icon(new FontIconData(glyph, "Segoe Fluent Icons"))
+                        .OnMount(fe =>
+                        {
+                            if (fe is WinUI.TitleBar b)
+                                b.IconSource = new WinUI.BitmapIconSource();
+                        })
+                        .Set(b => Bar = b),
+                    TextBlock($"phase {phase}"));
+            }
+        }
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var scratch = CreateScratchAppRoot(withConventionAsset: true);
+            try
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
+
+                // (a) capture-only setter must not defeat the one-shot protection.
+                var capture = new CaptureComponent();
+                var captureWin = await OpenAndSettle(Spec("OneShotCapture"), () => capture);
+                try
+                {
+                    H.Check("TitleBarIcon_OneShot_CaptureMounted", capture.Bar is not null);
+                    H.Check($"TitleBarIcon_OneShot_CaptureTookSlot ({capture.Bar?.IconSource?.GetType().Name})",
+                        capture.Bar?.IconSource is WinUI.FontIconSource);
+
+                    capture.SetPhase?.Invoke(1);
+                    await captureWin.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    Console.WriteLine($"# oneShot: capture={capture.Bar?.IconSource?.GetType().Name ?? "<null>"}");
+                    H.Check($"TitleBarIcon_OneShot_CaptureSetterDoesNotDefeatIt ({capture.Bar?.IconSource?.GetType().Name ?? "<null>"})",
+                        capture.Bar?.IconSource is WinUI.FontIconSource);
+                }
+                finally { await CloseAndSettle(captureWin); }
+
+                // (b) a changed declared icon outranks the mount-time override.
+                var declared = new DeclaredThenChangedComponent();
+                var declaredWin = await OpenAndSettle(Spec("OneShotDeclared"), () => declared);
+                try
+                {
+                    H.Check("TitleBarIcon_OneShot_DeclaredMounted", declared.Bar is not null);
+
+                    // Positive control: the mount override really did take the slot, so the
+                    // assertion below is about it losing to a new declaration rather than
+                    // about it never having been there.
+                    H.Check($"TitleBarIcon_OneShot_DeclaredOverrideTookSlot ({declared.Bar?.IconSource?.GetType().Name})",
+                        declared.Bar?.IconSource is WinUI.BitmapIconSource);
+
+                    declared.SetPhase?.Invoke(1);
+                    await declaredWin.Host.WaitForIdleAsync();
+                    await Harness.Render(200);
+
+                    var kind = declared.Bar?.IconSource?.GetType().Name ?? "<null>";
+                    Console.WriteLine($"# oneShot: declared={kind}");
+                    H.Check($"TitleBarIcon_OneShot_ChangedDeclarationWins ({kind})",
+                        declared.Bar?.IconSource is WinUI.FontIconSource);
+                }
+                finally { await CloseAndSettle(declaredWin); }
+            }
+            finally
+            {
+                TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                DeleteScratch(scratch);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  An element that owns its icon slot keeps it across a window icon change.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultExplicitSurvivesWindowIconChange(Harness h) : SelfTestFixtureBase(h)

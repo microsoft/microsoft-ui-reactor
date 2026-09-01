@@ -155,7 +155,7 @@ public sealed partial class Reconciler
             // Setters have run by now, so this is the first point at which "did a raw
             // .Set(...) claim the icon slot?" is observable rather than guessable.
             global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
-                .ObserveAfterSetters(tbCtl, tbEl);
+                .ObserveAfterSetters(tbCtl, tbEl, isMount: true);
         }
 
         // After modifiers + setters have had a chance to set an explicit
