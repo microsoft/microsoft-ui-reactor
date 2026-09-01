@@ -961,6 +961,97 @@ internal static class TitleBarIconDefaultFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  Removing the bar that owns the caption height, while another remains.
+    //
+    //  The issue-#917 height state is a single slot describing whichever bar
+    //  wrote last. Once a window can hold several bars, protecting the
+    //  survivors on unmount must not also preserve the DEPARTED bar's caption
+    //  height -- the window would stay sized to something that no longer
+    //  exists, still holding a reference to it.
+    //
+    //  The Tall bar is deliberately the SECOND one, so it is the last writer
+    //  and therefore the one the single slot is holding when it is removed. Do
+    //  it the other way round and the slot already holds the survivor, the
+    //  caption never had to change, and the assertion passes against the bug.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class TitleBarIconDefaultDropsDepartedBarHeight(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
+        private sealed class SurvivorBar : Component
+        {
+            public override Element Render() => TitleBar("Standard");
+        }
+
+        private sealed class TallBar : Component
+        {
+            internal static Action<int>? Setter;
+
+            public override Element Render()
+            {
+                var (phase, set) = UseState(0);
+                Setter = set;
+                return phase == 0
+                    ? TitleBar("Tall").HeightOption(WindowTitleBarHeight.Tall)
+                    : TextBlock("gone");
+            }
+        }
+
+        private sealed class HeightBarsComponent : Component
+        {
+            // Each bar is its own component, so removing the Tall one is a LOCALIZED
+            // rerender: the survivor's Render never runs again and therefore never
+            // re-establishes its own height contribution. Re-rendering both (a single
+            // component owning both bars) makes the survivor rewrite the slot on the same
+            // pass, which repairs the state incidentally and leaves the assertion passing
+            // against the bug -- measured, not assumed: that was the first version of this
+            // fixture and it survived the mutation.
+            public override Element Render() => VStack(
+                Component<SurvivorBar>(),
+                Component<TallBar>(),
+                TextBlock("body"));
+        }
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            TallBar.Setter = null;
+            var win = await OpenAndSettle(Spec("TwoBarHeights"), () => new HeightBarsComponent());
+            try
+            {
+                // Positive control. If the Tall bar never took the caption there is no
+                // "departed writer" to forget, and the assertion below would pass for a
+                // reason unrelated to the fix.
+                var tallApplied = win.AppWindow.TitleBar.PreferredHeightOption;
+                Console.WriteLine($"# barHeights: withTall={tallApplied}");
+                H.Check($"TitleBarIcon_BarHeights_TallApplied ({tallApplied})",
+                    tallApplied == Microsoft.UI.Windowing.TitleBarHeightOption.Tall);
+
+                H.Check("TitleBarIcon_BarHeights_SetterCaptured", TallBar.Setter is not null);
+                TallBar.Setter?.Invoke(1);
+                await win.Host.WaitForIdleAsync();
+                await Harness.Render(300);
+
+                var after = win.AppWindow.TitleBar.PreferredHeightOption;
+                Console.WriteLine($"# barHeights: afterRemoval={after}");
+                H.Check($"TitleBarIcon_BarHeights_DepartedWriterForgotten ({after})",
+                    after == Microsoft.UI.Windowing.TitleBarHeightOption.Standard);
+
+                // ...and the surviving bar still keeps the window content-extended, which
+                // is what the early return exists to protect.
+                H.Check("TitleBarIcon_BarHeights_StillExtended",
+                    win.NativeWindow.ExtendsContentIntoTitleBar);
+            }
+            finally
+            {
+                TallBar.Setter = null;
+                await CloseAndSettle(win);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  An element that owns its icon slot keeps it across a window icon change.
     // ════════════════════════════════════════════════════════════════════════
     internal class TitleBarIconDefaultExplicitSurvivesWindowIconChange(Harness h) : SelfTestFixtureBase(h)

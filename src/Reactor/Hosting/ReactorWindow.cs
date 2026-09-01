@@ -1957,11 +1957,47 @@ public sealed partial class ReactorWindow : IDisposable
                 }
             }
 
-            // Another title bar is still mounted, so nothing window-wide is withdrawn.
-            if (_titleBarIconControls.Count > 0) return;
+            // Another title bar is still mounted, so the window-wide state below stays.
+            if (_titleBarIconControls.Count > 0)
+            {
+                DropHeightContributionIfWrittenBy(unmounting);
+                return;
+            }
         }
 
         _titleBarControlMounted = false;
+        _titleBarControl = null;
+        _titleBarControlExplicitHeight = false;
+        _titleBarControlHeightOwned = false;
+        _elementTitleBarHeight = null;
+        ApplyTitleBarHeight(warnWhenNotExtended: false);
+    }
+
+    /// <summary>
+    /// Withdraws the caption-height contribution when the bar that supplied it is the one
+    /// going away, while other title bars remain mounted.
+    /// </summary>
+    /// <remarks>
+    /// The issue-#917 height state is a single slot — <c>_elementTitleBarHeight</c>,
+    /// <see cref="_titleBarControl"/> and its two flags describe whichever bar wrote last.
+    /// With several bars mounted, returning early to protect the others would otherwise
+    /// leave the window sized to a bar that no longer exists, still holding a reference to
+    /// it. Dropping the contribution is the honest state: nothing currently claims a
+    /// height, and a remaining bar re-establishes its own on its next
+    /// <c>SetElementTitleBarHeight</c>.
+    /// <para>Deliberately does <em>not</em> promote another bar's height here. Which of
+    /// several simultaneously-mounted bars should own the caption is an open question in
+    /// the height design (today's answer is "the last one to write"), and inventing an
+    /// answer inside an unmount path would settle it by accident.</para>
+    /// </remarks>
+    private void DropHeightContributionIfWrittenBy(Microsoft.UI.Xaml.Controls.TitleBar? unmounting)
+    {
+        if (unmounting is null || _titleBarControl is null) return;
+
+        // A dead weak target counts as "the writer is gone" too.
+        if (_titleBarControl.TryGetTarget(out var writer) && !ReferenceEquals(writer, unmounting))
+            return;
+
         _titleBarControl = null;
         _titleBarControlExplicitHeight = false;
         _titleBarControlHeightOwned = false;

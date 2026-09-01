@@ -605,6 +605,13 @@ internal static class TitleBarIconDefault
     /// bytes" without decoding either. A stat failure returns <c>null</c>, which compares
     /// unequal to a real stamp and so falls through to the rewrite — the safe direction:
     /// an unreadable stat costs one redundant decode rather than a stale icon.
+    /// <para>A staleness heuristic, not a content hash: a rewrite that preserves both the
+    /// timestamp and the length would be missed. That is deliberate. The alternative,
+    /// rebuilding unconditionally for a declared icon, re-reads and re-decodes the file on
+    /// every unrelated <c>WindowSpec</c> change — a title edit, an opacity tweak — and
+    /// hashing the contents trades the decode for a full read at the same cadence. This is
+    /// the same signal <c>make</c> and MSBuild treat as authoritative for incremental
+    /// work; defeating it takes deliberate timestamp restoration.</para>
     /// </remarks>
     private static string? FileStamp(string? path)
     {
