@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="TableViewSamples.Pages.HeadersVisibilityPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:TableViewSamples.Controls">
+
+    <controls:SamplePresenter
+        Header="Headers visibility"
+        Description="Show or hide the table's column headers and the row selection gutter with the HeadersVisibility property. Switch between All, Column, Row, and None to see each surface appear and disappear."
+        SourceCaption="HeadersVisibilityPage.xaml (excerpt)"
+        SourceSnippet="HeadersVisibility.xaml.txt"
+        StretchExample="True">
+
+        <controls:SamplePresenter.Example>
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <muxc:InfoBar
+                    Grid.Row="0"
+                    IsOpen="True"
+                    IsClosable="False"
+                    Severity="Informational"
+                    Title="Try it"
+                    Message="Pick a mode to show or hide the column headers and the row checkbox gutter — All, Column, Row, or None."
+                    MinHeight="104"/>
+                <Border
+                    Grid.Row="1"
+                    Style="{StaticResource TableHostBorderStyle}"
+                    Padding="0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Stretch">
+                    <muxc:TableView
+                        x:Name="DemoTable"
+                        ItemsSource="{x:Bind Rows, Mode=OneWay}"
+                        SelectionMode="Multiple"
+                        VerticalAlignment="Stretch"
+                        MinHeight="320">
+                        <muxc:TableViewTextColumn Header="Column 1" Width="{StaticResource ColWidthNumber}" Binding="{Binding Value1}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Column 2" Width="{StaticResource ColWidthNumber}" Binding="{Binding Value2}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Column 3" Width="{StaticResource ColWidthNumber}" Binding="{Binding Value3}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Column 4" Width="{StaticResource ColWidthNumber}" Binding="{Binding Value4}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Column 5" Width="{StaticResource ColWidthNumber}" Binding="{Binding Value5}" CanUserSort="False" CanUserFilter="False"/>
+                    </muxc:TableView>
+                </Border>
+            </Grid>
+        </controls:SamplePresenter.Example>
+
+        <controls:SamplePresenter.Options>
+            <StackPanel Spacing="12" AutomationProperties.Name="Headers visibility options">
+                <TextBlock Text="Headers visibility" Style="{StaticResource SectionHeaderTextStyle}"/>
+                <TextBlock
+                    Text="Choose which header surfaces are visible."
+                    Style="{StaticResource SectionDescriptionTextStyle}"
+                    TextWrapping="Wrap"/>
+                <RadioButton Content="All" Tag="All" GroupName="HeadersVisibility" IsChecked="True" Checked="OnHeadersVisibilityChecked"/>
+                <RadioButton Content="Column" Tag="Column" GroupName="HeadersVisibility" Checked="OnHeadersVisibilityChecked"/>
+                <RadioButton Content="Row" Tag="Row" GroupName="HeadersVisibility" Checked="OnHeadersVisibilityChecked"/>
+                <RadioButton Content="None" Tag="None" GroupName="HeadersVisibility" Checked="OnHeadersVisibilityChecked"/>
+            </StackPanel>
+        </controls:SamplePresenter.Options>
+
+    </controls:SamplePresenter>
+</Page>

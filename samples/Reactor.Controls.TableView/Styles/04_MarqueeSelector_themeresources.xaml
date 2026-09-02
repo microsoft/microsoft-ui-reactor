@@ -1,0 +1,31 @@
+<!-- Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. See LICENSE in the project root for license information. -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- §4.18 mi-4 — themable marquee fill
+         Marquee selection visuals MUST be defined inside ThemeDictionaries with
+         literal Color values per theme because the keys must be resolvable at
+         load time across all visual states. Using StaticResource aliases or
+         referencing theme-scoped brushes from root-level would silently fail
+         for programmatic MarqueeSelector instances. Follow §1.13 contract. -->
+
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <!-- Default (Dark): subtle bluish overlay matching SystemAccentColor at ~25% opacity -->
+            <SolidColorBrush x:Key="MUX_MarqueeSelectionFillBrush" Color="#3F0096FF" />
+            <SolidColorBrush x:Key="MUX_MarqueeSelectionStrokeBrush" Color="#FF0078D4" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <!-- Light: darker accent for visibility against light background -->
+            <SolidColorBrush x:Key="MUX_MarqueeSelectionFillBrush" Color="#3F005FB8" />
+            <SolidColorBrush x:Key="MUX_MarqueeSelectionStrokeBrush" Color="#FF005FB8" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <!-- §1.13 audit: HighContrast uses SystemColor tokens wrapped in literal SolidColorBrush -->
+            <SolidColorBrush x:Key="MUX_MarqueeSelectionFillBrush" Color="{ThemeResource SystemColorHighlightColor}" Opacity="0.3" />
+            <SolidColorBrush x:Key="MUX_MarqueeSelectionStrokeBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>
