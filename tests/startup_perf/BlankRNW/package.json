@@ -6,6 +6,7 @@
     "windows": "npx @react-native-community/cli run-windows",
     "windows-debug": "react-native run-windows --arch x64",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "start": "react-native start"
   },
   "dependencies": {

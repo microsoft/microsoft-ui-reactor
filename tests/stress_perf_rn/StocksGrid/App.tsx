@@ -33,7 +33,6 @@ import {
   ROWS,
   TOTAL_ITEMS,
   StockDataSource,
-  formatCell,
 } from './StockDataSource';
 import { PerfTracker } from './PerfTracker';
 
@@ -83,8 +82,8 @@ const StockCell = React.memo(function StockCell({
 // Precomputed text styles — picked by isUp instead of an inline {color: ...}
 // object that would allocate per render and defeat downstream caching.
 const cellTextStyles = StyleSheet.create({
-  up:   { color: '#008000', fontSize: 8, paddingHorizontal: 2, paddingVertical: 1 },
-  down: { color: '#FF0000', fontSize: 8, paddingHorizontal: 2, paddingVertical: 1 },
+  up:   { color: GREEN, fontSize: 8, paddingHorizontal: 2, paddingVertical: 1 },
+  down: { color: RED, fontSize: 8, paddingHorizontal: 2, paddingVertical: 1 },
 });
 
 // ── App ─────────────────────────────────────────────────────────────────────
