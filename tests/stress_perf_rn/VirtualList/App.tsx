@@ -114,6 +114,12 @@ export default function App(props: AppProps) {
       }
     });
     return stop;
+    // The frame loop must be installed exactly once for the component's
+    // lifetime — re-running it would restart the tween mid-benchmark and
+    // corrupt the measurements. `finishBenchmark` is also declared below this
+    // effect, so listing it here would throw on first render (TDZ); it is
+    // reached through the always-current closure instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const finishBenchmark = useCallback(() => {
