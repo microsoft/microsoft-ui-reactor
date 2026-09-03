@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",
+    "@as-integrations/express4": "^1.1.2",
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
     "express": "^4.22.2"
