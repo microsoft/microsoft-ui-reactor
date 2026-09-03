@@ -1,0 +1,179 @@
+name: Node projects
+
+# Nothing in CI exercised the repo's npm projects, so breakage in them only
+# surfaced when someone ran them by hand. Two examples reached main: the
+# HeadTrax sample server crashed on startup for weeks because Apollo Server 5
+# removed the `@apollo/server/express4` subpath (#1175), and all three React
+# Native harnesses failed their own `lint` script (#1176).
+#
+# This workflow installs each npm project from its committed lockfile and runs
+# the checks that project actually declares.
+
+on:
+  pull_request:
+    paths:
+      - 'samples/apps/headtrax/service/**'
+      - 'src/vscode-reactor/**'
+      - 'tools/figma-plugin/**'
+      - 'tests/stress_perf_rn/StocksGrid/**'
+      - 'tests/stress_perf_rn/VirtualList/**'
+      - 'tests/startup_perf/BlankRNW/**'
+      - '.github/workflows/node.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'samples/apps/headtrax/service/**'
+      - 'src/vscode-reactor/**'
+      - 'tools/figma-plugin/**'
+      - 'tests/stress_perf_rn/StocksGrid/**'
+      - 'tests/stress_perf_rn/VirtualList/**'
+      - 'tests/startup_perf/BlankRNW/**'
+      - '.github/workflows/node.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One in-flight run per PR; a newer commit supersedes an older run.
+concurrency:
+  group: node-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: vscode-reactor
+            dir: src/vscode-reactor
+            checks: npm run compile
+
+          - name: figma-plugin
+            dir: tools/figma-plugin
+            checks: npm run build
+
+          # The RN harnesses declare `test` / `test:windows` too, but ship no
+          # test files, so `jest` exits 1 with "No tests found". Left out
+          # deliberately rather than papered over with --passWithNoTests.
+          - name: StocksGrid
+            dir: tests/stress_perf_rn/StocksGrid
+            checks: |
+              npm run lint
+              npm run typecheck
+
+          - name: VirtualList
+            dir: tests/stress_perf_rn/VirtualList
+            checks: |
+              npm run lint
+              npm run typecheck
+
+          - name: BlankRNW
+            dir: tests/startup_perf/BlankRNW
+            checks: |
+              npm run lint
+              npm run typecheck
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+
+      # `npm ci`, not `install`: a lockfile that has drifted from package.json
+      # should itself be a failure.
+      - name: Install
+        working-directory: ${{ matrix.dir }}
+        run: npm ci --no-audit --no-fund
+
+      - name: Check
+        working-directory: ${{ matrix.dir }}
+        run: ${{ matrix.checks }}
+
+  headtrax-smoke:
+    name: headtrax service (smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Node 22, not latest: better-sqlite3 ^11.7.0 cannot build on Node 26,
+      # which removed the V8 APIs it uses (error C2039). On 22 it takes a
+      # prebuilt binary.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: samples/apps/headtrax/service/package-lock.json
+
+      - name: Install
+        working-directory: samples/apps/headtrax/service
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate sample data
+        working-directory: samples/apps/headtrax/service
+        run: npm run generate:small
+
+      # The #1175 bug was a bad import that only fires at startup, so this has
+      # to actually boot the server and read rows back out of it. A 200 alone
+      # proves nothing here: GraphQL answers 200 with an `errors` body, and an
+      # empty page is also a 200 — so assert the payload.
+      - name: Start server and exercise GraphQL
+        working-directory: samples/apps/headtrax/service
+        run: |
+          set -euo pipefail
+
+          node server.js &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:4000/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          curl -sf http://localhost:4000/health | jq -e '.ok == true' >/dev/null
+
+          # jq builds the JSON body so the GraphQL text can stay a plain
+          # single-quoted string instead of hand-escaped JSON.
+          gql() {
+            local payload
+            payload=$(jq -n --arg q "$1" '{query: $q}')
+            curl -sf -X POST http://localhost:4000/graphql \
+              -H 'Content-Type: application/json' \
+              -d "$payload"
+          }
+
+          resp=$(gql '{ stats { totalEmployees } departments employees(pageSize: 3, select: ["firstName","lastName","email"]) { items { firstName lastName email } } }')
+          echo "$resp"
+
+          # generate:small seeds exactly 500 employees, so these fail if the
+          # resolver, the SQLite read, or the column projection breaks.
+          echo "$resp" | jq -e 'has("errors") | not'                   >/dev/null
+          echo "$resp" | jq -e '.data.stats.totalEmployees == 500'     >/dev/null
+          echo "$resp" | jq -e '(.data.departments | length) > 0'      >/dev/null
+          echo "$resp" | jq -e '(.data.employees.items | length) == 3' >/dev/null
+          echo "$resp" | jq -e '.data.employees.items | all(.email | contains("@"))' >/dev/null
+
+          # Full-text search is a separate SQLite index, so the page query above
+          # says nothing about it. Pair a term taken from the data with a
+          # nonsense one: without the negative control, "rows came back" is
+          # equally consistent with searchQuery being ignored outright.
+          # `jq -r` here is raw extraction, not assertion — the counts are
+          # compared by the explicit `test` commands below.
+          surname=$(gql '{ employees(pageSize: 1, select: ["lastName"]) { items { lastName } } }' \
+            | jq -r '.data.employees.items[0].lastName')
+          test -n "$surname"
+
+          hits=$(gql "{ employees(pageSize: 5, searchQuery: \"$surname\", select: [\"lastName\"]) { totalCount } }" \
+            | jq -r '.data.employees.totalCount')
+          miss=$(gql '{ employees(pageSize: 5, searchQuery: "zzzznotarealsurname", select: ["lastName"]) { totalCount } }' \
+            | jq -r '.data.employees.totalCount')
+
+          echo "FTS: '$surname' -> $hits hit(s); nonsense term -> $miss hit(s)"
+          test "$hits" -gt 0
+          test "$miss" -eq 0
