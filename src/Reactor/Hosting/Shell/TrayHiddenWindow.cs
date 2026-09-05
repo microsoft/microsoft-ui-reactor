@@ -190,9 +190,13 @@ internal sealed class TrayHiddenWindow : IDisposable
         {
             try
             {
+                // NOTIFYICON_VERSION_4 wire protocol:
+                // Explorer forwards both the legacy mouse message (WM_LBUTTONUP / WM_RBUTTONUP)
+                // and the version-4 semantic notification (NIN_SELECT / WM_CONTEXTMENU) for each
+                // physical user interaction. Handling both duplicates Click and RightClick (issue #1180).
+                // We handle only the v4 semantic notifications + WM_LBUTTONDBLCLK.
                 switch (mouseMessage)
                 {
-                    case TrayIconComInterop.WM_LBUTTONUP:
                     case TrayIconComInterop.NIN_SELECT:
                     case TrayIconComInterop.NIN_KEYSELECT:
                         hit.OnClick?.Invoke();
@@ -200,7 +204,6 @@ internal sealed class TrayHiddenWindow : IDisposable
                     case TrayIconComInterop.WM_LBUTTONDBLCLK:
                         hit.OnDoubleClick?.Invoke();
                         break;
-                    case TrayIconComInterop.WM_RBUTTONUP:
                     case TrayIconComInterop.WM_CONTEXTMENU:
                         hit.OnRightClick?.Invoke();
                         break;
