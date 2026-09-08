@@ -20,6 +20,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB = join(__dirname, "headtrax.smoke.db");
 const PORT = parseInt(process.env.SMOKE_PORT || "4123", 10);
 const COUNT = 500;
+// Every request is bounded. These queries run against 500 rows, so anything
+// approaching this is a hang, not slowness.
+const REQUEST_TIMEOUT_MS = 30_000;
 const URL = `http://localhost:${PORT}/graphql`;
 
 function run(cmd, args, opts = {}) {
@@ -33,10 +36,14 @@ function run(cmd, args, opts = {}) {
 }
 
 async function gql(query) {
+  // Bounded for the same reason as the health probe: fetch has no default
+  // timeout, so a resolver that never completes would hang this script until
+  // the workflow's outer timeout instead of reporting a failure.
   const res = await fetch(URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} from ${URL}`);
   return res.json();
