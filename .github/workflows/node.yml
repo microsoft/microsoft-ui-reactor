@@ -77,7 +77,12 @@ jobs:
               npm run typecheck
 
     steps:
+      # persist-credentials: false — `npm ci` below runs lifecycle scripts from
+      # PR-controlled dependencies, so the job must not leave a usable git
+      # credential in .git/config for that code to find.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -99,7 +104,12 @@ jobs:
     name: headtrax service (smoke)
     runs-on: ubuntu-latest
     steps:
+      # persist-credentials: false — this job runs `npm ci`, the data generator
+      # and the server itself, all PR-controlled code, so no git credential
+      # should survive the checkout for that code to recover.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Node 22, not latest: better-sqlite3 ^11.7.0 cannot build on Node 26,
       # which removed the V8 APIs it uses (error C2039). On 22 it takes a
@@ -160,20 +170,38 @@ jobs:
           echo "$resp" | jq -e '.data.employees.items | all(.email | contains("@"))' >/dev/null
 
           # Full-text search is a separate SQLite index, so the page query above
-          # says nothing about it. Pair a term taken from the data with a
-          # nonsense one: without the negative control, "rows came back" is
-          # equally consistent with searchQuery being ignored outright.
+          # says nothing about it.
+          #
+          # The probe terms are fixed constants, never values sampled from the
+          # generated data. faker is unseeded, so the data differs every run,
+          # and ~6% of generated surnames contain a hyphen or apostrophe. The
+          # server strips `'"*()` but not `-`, then appends `*` and hands the
+          # result to FTS5 MATCH, so `Bayer-Kohler` becomes the expression
+          # `Bayer-Kohler*` and errors with `no such column: Kohler`, while
+          # `O'Connell` collapses to `OConnell*` and matches nothing. Sampling a
+          # surname would therefore fail this check on roughly 1 run in 17.
+          #
+          # `headtrax` is safe by construction: generate-data.js hardcodes the
+          # address domain `headtrax.example.com`, and `email` is an indexed FTS
+          # column, so the term is alphanumeric and present in every row.
+          #
           # `jq -r` here is raw extraction, not assertion — the counts are
           # compared by the explicit `test` commands below.
-          surname=$(gql '{ employees(pageSize: 1, select: ["lastName"]) { items { lastName } } }' \
-            | jq -r '.data.employees.items[0].lastName')
-          test -n "$surname"
-
-          hits=$(gql "{ employees(pageSize: 5, searchQuery: \"$surname\", select: [\"lastName\"]) { totalCount } }" \
+          all_hits=$(gql '{ employees(pageSize: 5, searchQuery: "headtrax", select: ["lastName"]) { totalCount } }' \
+            | jq -r '.data.employees.totalCount')
+          some_hits=$(gql '{ employees(pageSize: 5, searchQuery: "Engineering", select: ["lastName"]) { totalCount } }' \
             | jq -r '.data.employees.totalCount')
           miss=$(gql '{ employees(pageSize: 5, searchQuery: "zzzznotarealsurname", select: ["lastName"]) { totalCount } }' \
             | jq -r '.data.employees.totalCount')
 
-          echo "FTS: '$surname' -> $hits hit(s); nonsense term -> $miss hit(s)"
-          test "$hits" -gt 0
+          echo "FTS: headtrax -> $all_hits ; Engineering -> $some_hits ; nonsense -> $miss (of 500)"
+
+          # `headtrax` alone would be a weak oracle: it matches every row, which
+          # is exactly what an *ignored* searchQuery would also return. The
+          # nonsense term rules that out, and `Engineering` — a hardcoded
+          # department, so always populated — proves the index discriminates
+          # rather than answering all-or-nothing.
+          test "$all_hits" -eq 500
           test "$miss" -eq 0
+          test "$some_hits" -gt 0
+          test "$some_hits" -lt 500
