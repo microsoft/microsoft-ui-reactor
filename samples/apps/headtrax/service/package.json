@@ -9,7 +9,8 @@
     "generate:medium": "node generate-data.js --count 50000",
     "generate:large": "node generate-data.js --count 200000",
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "smoke": "node smoke.mjs"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",

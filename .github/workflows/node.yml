@@ -1,0 +1,190 @@
+name: Node projects
+
+# Nothing in CI exercised the repo's npm projects, so breakage in them only
+# surfaced when someone ran them by hand. Two examples reached main: the
+# HeadTrax sample server crashed on startup for weeks because Apollo Server 5
+# removed the `@apollo/server/express4` subpath (#1175), and all three React
+# Native harnesses failed their own `lint` script (#1176).
+#
+# This workflow holds no list of projects and no per-project commands. It
+# discovers every tracked package.json and runs whichever of the check scripts
+# below that project declares, so a new npm project is covered the moment it
+# lands and nothing here needs editing.
+
+on:
+  # paths-ignore rather than a paths allowlist. An allowlist of extensions is
+  # a closed set: a future project using .vue, .svelte, .css or .graphql would
+  # be discovered from its package.json, then silently skip this workflow on
+  # every later source-only change. Discovery is meant to be the single thing
+  # that decides coverage, so the trigger only excludes files that cannot
+  # affect an npm project.
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One in-flight run per PR; a newer commit supersedes an older run.
+concurrency:
+  group: node-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    name: Discover projects
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.scan.outputs.projects }}
+      any: ${{ steps.scan.outputs.any }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Find npm projects and their declared checks
+        id: scan
+        env:
+          # Scripts treated as checks. `test` is deliberately absent: the React
+          # Native harnesses declare it but ship no test files, so jest exits 1
+          # with "No tests found", and --passWithNoTests would only manufacture
+          # a green check that asserts nothing. Add a name here and every
+          # project declaring it is picked up automatically.
+          CHECK_SCRIPTS: 'lint typecheck build compile smoke'
+        run: |
+          set -euo pipefail
+
+          # `git ls-files` rather than a filesystem glob: it lists only tracked
+          # files, so a vendored or stray node_modules can never be mistaken
+          # for a project in this repo.
+          projects=$(git ls-files '*package.json' \
+            | grep -v '/node_modules/' \
+            | node -e '
+              const fs = require("fs");
+              const path = require("path");
+              const checks = process.env.CHECK_SCRIPTS.split(" ").filter(Boolean);
+              const manifests = fs.readFileSync(0, "utf8").split("\n").map(s => s.trim()).filter(Boolean);
+              const out = [];
+              const uncovered = [];
+              for (const manifest of manifests) {
+                const pkg = JSON.parse(fs.readFileSync(manifest, "utf8"));
+                const declared = checks.filter(c => pkg.scripts && pkg.scripts[c]);
+                if (declared.length === 0) { uncovered.push(manifest); continue; }
+                out.push({
+                  dir: path.dirname(manifest),
+                  checks: declared.join(" "),
+                });
+              }
+              // A project with none of the recognized scripts would otherwise
+              // be skipped in silence, which is the exact failure this
+              // workflow exists to prevent: it would look green while
+              // covering nothing. Make it a hard, named error instead.
+              if (uncovered.length > 0) {
+                console.error("\nnpm projects with no recognized check script:");
+                for (const m of uncovered) console.error(`  ${m}`);
+                console.error(`\nEvery tracked npm project must declare at least one of: ${checks.join(", ")}.`);
+                console.error("Add one, or add the script name to CHECK_SCRIPTS in this workflow.");
+                process.exit(1);
+              }
+              process.stdout.write(JSON.stringify(out));
+            ')
+
+          node -e '
+            const p = JSON.parse(process.argv[1]);
+            for (const x of p) console.log(`  ${x.dir}  ->  ${x.checks}`);
+            console.log(`discovered ${p.length} project(s) with checks`);
+          ' "$projects"
+
+          count=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).length))' "$projects")
+          echo "projects=$projects" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then echo "any=true" >> "$GITHUB_OUTPUT"; else echo "any=false" >> "$GITHUB_OUTPUT"; fi
+
+  check:
+    name: ${{ matrix.project.dir }}
+    needs: discover
+    # An empty matrix is an error rather than a skip, so gate the whole job.
+    if: needs.discover.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.discover.outputs.projects) }}
+    steps:
+      # persist-credentials: false — `npm ci` runs lifecycle scripts from
+      # PR-controlled dependencies, and the project's own scripts run right
+      # after, so no git credential should survive the checkout for that code
+      # to recover.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Node 22, not latest: better-sqlite3 ^11.7.0 (HeadTrax) cannot build on
+      # Node 26, which removed the V8 APIs it uses. On 22 it takes a prebuilt
+      # binary.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ matrix.project.dir }}/package-lock.json
+
+      # `npm ci`, not `install`: a lockfile that has drifted from package.json
+      # should itself be a failure.
+      - name: Install
+        working-directory: ${{ matrix.project.dir }}
+        run: npm ci --no-audit --no-fund
+
+      - name: Run declared checks
+        working-directory: ${{ matrix.project.dir }}
+        env:
+          CHECKS: ${{ matrix.project.checks }}
+        run: |
+          set -euo pipefail
+          for script in $CHECKS; do
+            echo "::group::npm run $script"
+            npm run "$script"
+            echo "::endgroup::"
+          done
+
+      # Several projects commit their build output and ship it directly —
+      # src/vscode-reactor/package.json points `main` at out/extension.js, and
+      # tools/figma-plugin/manifest.json points at dist/code.js and
+      # dist/ui.html. The checks above regenerate those files inside the
+      # runner, so without this a source-only change compiles green here while
+      # merging the previous build. Measured: both builds are deterministic
+      # (rebuilding twice is byte-identical), so a difference means the
+      # committed artifact is genuinely out of date.
+      #
+      # --ignore-cr-at-eol because the repo has no .gitattributes, so a
+      # contributor on Windows sees whole-file CRLF churn that says nothing
+      # about staleness.
+      - name: Check committed build output is current
+        working-directory: ${{ matrix.project.dir }}
+        run: |
+          set -euo pipefail
+          stale=0
+          if ! git diff --ignore-cr-at-eol --exit-code -- .; then
+            stale=1
+          fi
+          # `git diff` only sees tracked files. A build that starts emitting a
+          # new artifact, or a PR that deletes a committed one and lets the
+          # build recreate it, leaves an untracked file and would otherwise
+          # look clean.
+          untracked=$(git ls-files --others --exclude-standard -- .)
+          if [ -n "$untracked" ]; then
+            echo "Untracked files produced by the checks:"
+            echo "$untracked" | sed 's/^/  /'
+            stale=1
+          fi
+          if [ "$stale" -ne 0 ]; then
+            echo
+            echo "Committed build output is stale: running the checks above changed the working tree."
+            echo "Rebuild this project and commit the result."
+            exit 1
+          fi
