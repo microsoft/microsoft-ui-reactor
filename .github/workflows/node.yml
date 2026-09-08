@@ -12,44 +12,21 @@ name: Node projects
 # lands and nothing here needs editing.
 
 on:
+  # paths-ignore rather than a paths allowlist. An allowlist of extensions is
+  # a closed set: a future project using .vue, .svelte, .css or .graphql would
+  # be discovered from its package.json, then silently skip this workflow on
+  # every later source-only change. Discovery is meant to be the single thing
+  # that decides coverage, so the trigger only excludes files that cannot
+  # affect an npm project.
   pull_request:
-    # File-type patterns rather than project directories. An enumerated list of
-    # paths would need editing for every new project, and forgetting is silent.
-    # Over-triggering costs a few fast ubuntu jobs; under-triggering loses the
-    # coverage this workflow exists to provide. (The lists are duplicated
-    # because GitHub Actions does not support YAML anchors.)
-    paths:
-      - '**/package.json'
-      - '**/package-lock.json'
-      - '**/.npmrc'
-      - '**/tsconfig*.json'
-      - '**/.eslintrc*'
-      - '**/*.js'
-      - '**/*.jsx'
-      - '**/*.mjs'
-      - '**/*.cjs'
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '**/*.html'
-      - '**/*.sql'
-      - '.github/workflows/node.yml'
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   push:
     branches: [main]
-    paths:
-      - '**/package.json'
-      - '**/package-lock.json'
-      - '**/.npmrc'
-      - '**/tsconfig*.json'
-      - '**/.eslintrc*'
-      - '**/*.js'
-      - '**/*.jsx'
-      - '**/*.mjs'
-      - '**/*.cjs'
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '**/*.html'
-      - '**/*.sql'
-      - '.github/workflows/node.yml'
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -191,9 +168,23 @@ jobs:
         working-directory: ${{ matrix.project.dir }}
         run: |
           set -euo pipefail
+          stale=0
           if ! git diff --ignore-cr-at-eol --exit-code -- .; then
+            stale=1
+          fi
+          # `git diff` only sees tracked files. A build that starts emitting a
+          # new artifact, or a PR that deletes a committed one and lets the
+          # build recreate it, leaves an untracked file and would otherwise
+          # look clean.
+          untracked=$(git ls-files --others --exclude-standard -- .)
+          if [ -n "$untracked" ]; then
+            echo "Untracked files produced by the checks:"
+            echo "$untracked" | sed 's/^/  /'
+            stale=1
+          fi
+          if [ "$stale" -ne 0 ]; then
             echo
-            echo "Committed build output is stale: running the checks above changed tracked files."
+            echo "Committed build output is stale: running the checks above changed the working tree."
             echo "Rebuild this project and commit the result."
             exit 1
           fi

@@ -52,11 +52,18 @@ function check(label, actual, predicate, expectation) {
 async function waitForHealth(deadlineMs = 60_000) {
   const started = Date.now();
   while (Date.now() - started < deadlineMs) {
+    const remaining = deadlineMs - (Date.now() - started);
     try {
-      const res = await fetch(`http://localhost:${PORT}/health`);
+      // Bound each request: fetch has no default timeout, so a server that
+      // accepts the connection but never responds would leave this await
+      // pending forever and the loop would never recheck its clock — the
+      // deadline above would not actually bound anything.
+      const res = await fetch(`http://localhost:${PORT}/health`, {
+        signal: AbortSignal.timeout(Math.max(1, Math.min(2_000, remaining))),
+      });
       if (res.ok) return res.json();
     } catch {
-      // server not listening yet
+      // not listening yet, or this probe timed out
     }
     await new Promise((r) => setTimeout(r, 500));
   }
