@@ -97,7 +97,14 @@ public sealed class TaskbarOverlay
 
     private static nint LoadIconFor(WindowIcon? icon)
     {
-        if (icon is null || string.IsNullOrEmpty(icon.Source)) return 0;
+        if (icon is null) return 0;
+
+        // In-memory data has no path to load from — CreateIconFromResourceEx takes it
+        // directly. Zero for the size means SM_CXICON, matching the LR_DEFAULTSIZE the
+        // file-backed arm below asks for, so both kinds hand the shell the same size.
+        if (icon.IsBinary) return icon.CreateBinaryHIcon(0, 0);
+
+        if (string.IsNullOrEmpty(icon.Source)) return 0;
         if (icon.IsResource) return 0; // ms-appx:/// resources require WinRT path; shell overlay needs HICON.
 
         try
