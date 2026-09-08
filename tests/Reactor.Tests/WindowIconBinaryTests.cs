@@ -364,6 +364,35 @@ public partial class WindowIconBinaryTests
     }
 
     [Fact]
+    public void Rgba_Alpha_Survives_The_Round_Trip()
+    {
+        // A badge is the motivating case for FromRgba, and a badge is mostly transparent.
+        // The AND mask this assembles is all-zero, which means "take the colour pixel
+        // everywhere" and defers transparency entirely to the 32-bpp alpha channel — so if
+        // alpha did not survive, every binary icon would render as an opaque square.
+        var pixels = new byte[4 * 4 * 4];
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            pixels[i] = 0;
+            pixels[i + 1] = 200;
+            pixels[i + 2] = 0;
+            // Opaque along the top row, fully transparent everywhere else.
+            pixels[i + 3] = (i / 4) < 4 ? (byte)255 : (byte)0;
+        }
+
+        var hIcon = WindowIcon.FromRgba(pixels, 4, 4).CreateBinaryHIcon(4, 4);
+        Assert.NotEqual(0, hIcon);
+
+        try
+        {
+            var bgra = ReadIconPixels(hIcon, out var width, out _);
+            Assert.Equal(255, bgra[(((0 * width) + 1) * 4) + 3]);
+            Assert.Equal(0, bgra[(((3 * width) + 1) * 4) + 3]);
+        }
+        finally { DestroyIcon(hIcon); }
+    }
+
+    [Fact]
     public void Data_The_Loader_Cannot_Read_Yields_No_Handle()
     {
         // Failure has to be a zero handle rather than an exception: these run on shell
