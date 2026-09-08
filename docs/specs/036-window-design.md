@@ -186,6 +186,7 @@ ReactorWindow               owns one OS Window + one ReactorHost
 WindowSpec                  immutable record — full surface description
 WindowKey                   value type for stable identity (string + props)
 WindowIcon                  abstraction over AppWindow.SetIcon paths/IconId
+WindowIconKind              Path | Resource | Binary — see §4.1
 PresenterKind               Overlapped | FullScreen | CompactOverlay
 WindowState                 Normal | Minimized | Maximized | FullScreen | CompactOverlay
 WindowStartPosition         Default | CenterOnPrimary | CenterOnOwner |
@@ -276,6 +277,32 @@ fields, in the same spirit as the reconciler.
 > `Windows.Foundation.Rect` is the outlier (`Single`). Mixing the two
 > would force callers to cast at every property access; we pay the
 > 4-bytes-per-field cost for consistency.
+
+> **On `WindowIcon` source kinds** *(amended for issue #1185)*. `WindowIcon` has
+> three factories, and `WindowIcon.Kind` reports which produced an instance:
+>
+> ```csharp
+> public enum WindowIconKind { Path, Resource, Binary }
+>
+> WindowIcon.FromPath(string path);                             // Kind.Path
+> WindowIcon.FromResource(string uri);                          // Kind.Resource
+> WindowIcon.FromBytes(ReadOnlySpan<byte> data);                // Kind.Binary
+> WindowIcon.FromRgba(ReadOnlySpan<byte> px, int w, int h);     // Kind.Binary
+> ```
+>
+> Which surface accepts which kind follows from the primitive each one needs,
+> not from a policy choice. The shell surfaces — the tray icon (§11.4), the
+> taskbar overlay (§11.2) and thumbnail-toolbar buttons (§11.5) — need a raw
+> `HICON`, which comes from `LoadImageW` on a file or `CreateIconFromResourceEx`
+> on in-memory data; neither reads an `ms-appx:` URI, so `Kind.Resource` is
+> skipped there. Jump lists (§11.3) need a `Uri`, so only `Kind.Resource` works
+> on the packaged path. This field needs a filesystem path, because that is what
+> `AppWindow.SetIcon` takes — so `Kind.Binary` is reported as *not applied* and
+> the window falls through to the `Assets\AppIcon.ico` convention or its PE
+> icon, exactly as a missing file does. Supporting it here would mean
+> `SetIcon(IconId)` over a handle the window would then have to own and free,
+> which is `ReactorWindow`'s concern rather than the icon's; deferred rather
+> than designed away.
 
 ### 4.2 `ReactorWindow`
 
@@ -1193,7 +1220,7 @@ ReactorApp.Run(ctx =>
 {
     var tray = ctx.OpenTrayIcon(new TrayIconSpec(
         Key: "main",
-        Icon: WindowIcon.FromResource("Assets/tray.ico"),
+        Icon: WindowIcon.FromPath("Assets/tray.ico"),   // or FromBytes / FromRgba
         Tooltip: "Sync Agent — idle"));
 
     // Single-instance window keyed by "main". Opening it twice from
