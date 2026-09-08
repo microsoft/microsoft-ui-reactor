@@ -165,5 +165,11 @@ if (failures.length > 0) {
   console.error(`\nsmoke FAILED: ${failures.length} check(s) — ${failures.join(", ")}\n`);
   process.exit(1);
 }
+// The server's exit listener records a failure if the child died unexpectedly
+// — including after the last assertion or during teardown. Exiting 0
+// unconditionally here would overwrite that and report success on a crash.
+if (process.exitCode) {
+  console.error(`\nsmoke FAILED: server exited unexpectedly (code ${process.exitCode})\n`);
+  process.exit(process.exitCode);
+}
 console.log("\nsmoke passed\n");
-process.exit(0);

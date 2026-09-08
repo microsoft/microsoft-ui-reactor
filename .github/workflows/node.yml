@@ -30,6 +30,8 @@ on:
       - '**/*.cjs'
       - '**/*.ts'
       - '**/*.tsx'
+      - '**/*.html'
+      - '**/*.sql'
       - '.github/workflows/node.yml'
   push:
     branches: [main]
@@ -45,6 +47,8 @@ on:
       - '**/*.cjs'
       - '**/*.ts'
       - '**/*.tsx'
+      - '**/*.html'
+      - '**/*.sql'
       - '.github/workflows/node.yml'
   workflow_dispatch:
 
@@ -91,14 +95,26 @@ jobs:
               const checks = process.env.CHECK_SCRIPTS.split(" ").filter(Boolean);
               const manifests = fs.readFileSync(0, "utf8").split("\n").map(s => s.trim()).filter(Boolean);
               const out = [];
+              const uncovered = [];
               for (const manifest of manifests) {
                 const pkg = JSON.parse(fs.readFileSync(manifest, "utf8"));
                 const declared = checks.filter(c => pkg.scripts && pkg.scripts[c]);
-                if (declared.length === 0) continue;
+                if (declared.length === 0) { uncovered.push(manifest); continue; }
                 out.push({
                   dir: path.dirname(manifest),
                   checks: declared.join(" "),
                 });
+              }
+              // A project with none of the recognized scripts would otherwise
+              // be skipped in silence, which is the exact failure this
+              // workflow exists to prevent: it would look green while
+              // covering nothing. Make it a hard, named error instead.
+              if (uncovered.length > 0) {
+                console.error("\nnpm projects with no recognized check script:");
+                for (const m of uncovered) console.error(`  ${m}`);
+                console.error(`\nEvery tracked npm project must declare at least one of: ${checks.join(", ")}.`);
+                console.error("Add one, or add the script name to CHECK_SCRIPTS in this workflow.");
+                process.exit(1);
               }
               process.stdout.write(JSON.stringify(out));
             ')
