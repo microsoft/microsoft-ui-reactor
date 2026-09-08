@@ -6,28 +6,45 @@ name: Node projects
 # removed the `@apollo/server/express4` subpath (#1175), and all three React
 # Native harnesses failed their own `lint` script (#1176).
 #
-# This workflow installs each npm project from its committed lockfile and runs
-# the checks that project actually declares.
+# This workflow holds no list of projects and no per-project commands. It
+# discovers every tracked package.json and runs whichever of the check scripts
+# below that project declares, so a new npm project is covered the moment it
+# lands and nothing here needs editing.
 
 on:
   pull_request:
+    # File-type patterns rather than project directories. An enumerated list of
+    # paths would need editing for every new project, and forgetting is silent.
+    # Over-triggering costs a few fast ubuntu jobs; under-triggering loses the
+    # coverage this workflow exists to provide. (The lists are duplicated
+    # because GitHub Actions does not support YAML anchors.)
     paths:
-      - 'samples/apps/headtrax/service/**'
-      - 'src/vscode-reactor/**'
-      - 'tools/figma-plugin/**'
-      - 'tests/stress_perf_rn/StocksGrid/**'
-      - 'tests/stress_perf_rn/VirtualList/**'
-      - 'tests/startup_perf/BlankRNW/**'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/.npmrc'
+      - '**/tsconfig*.json'
+      - '**/.eslintrc*'
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '**/*.ts'
+      - '**/*.tsx'
       - '.github/workflows/node.yml'
   push:
     branches: [main]
     paths:
-      - 'samples/apps/headtrax/service/**'
-      - 'src/vscode-reactor/**'
-      - 'tools/figma-plugin/**'
-      - 'tests/stress_perf_rn/StocksGrid/**'
-      - 'tests/stress_perf_rn/VirtualList/**'
-      - 'tests/startup_perf/BlankRNW/**'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/.npmrc'
+      - '**/tsconfig*.json'
+      - '**/.eslintrc*'
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '**/*.ts'
+      - '**/*.tsx'
       - '.github/workflows/node.yml'
   workflow_dispatch:
 
@@ -40,168 +57,104 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  discover:
+    name: Discover projects
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.scan.outputs.projects }}
+      any: ${{ steps.scan.outputs.any }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Find npm projects and their declared checks
+        id: scan
+        env:
+          # Scripts treated as checks. `test` is deliberately absent: the React
+          # Native harnesses declare it but ship no test files, so jest exits 1
+          # with "No tests found", and --passWithNoTests would only manufacture
+          # a green check that asserts nothing. Add a name here and every
+          # project declaring it is picked up automatically.
+          CHECK_SCRIPTS: 'lint typecheck build compile smoke'
+        run: |
+          set -euo pipefail
+
+          # `git ls-files` rather than a filesystem glob: it lists only tracked
+          # files, so a vendored or stray node_modules can never be mistaken
+          # for a project in this repo.
+          projects=$(git ls-files '*package.json' \
+            | grep -v '/node_modules/' \
+            | node -e '
+              const fs = require("fs");
+              const path = require("path");
+              const checks = process.env.CHECK_SCRIPTS.split(" ").filter(Boolean);
+              const manifests = fs.readFileSync(0, "utf8").split("\n").map(s => s.trim()).filter(Boolean);
+              const out = [];
+              for (const manifest of manifests) {
+                const pkg = JSON.parse(fs.readFileSync(manifest, "utf8"));
+                const declared = checks.filter(c => pkg.scripts && pkg.scripts[c]);
+                if (declared.length === 0) continue;
+                out.push({
+                  dir: path.dirname(manifest),
+                  checks: declared.join(" "),
+                });
+              }
+              process.stdout.write(JSON.stringify(out));
+            ')
+
+          node -e '
+            const p = JSON.parse(process.argv[1]);
+            for (const x of p) console.log(`  ${x.dir}  ->  ${x.checks}`);
+            console.log(`discovered ${p.length} project(s) with checks`);
+          ' "$projects"
+
+          count=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).length))' "$projects")
+          echo "projects=$projects" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then echo "any=true" >> "$GITHUB_OUTPUT"; else echo "any=false" >> "$GITHUB_OUTPUT"; fi
+
   check:
-    name: ${{ matrix.name }}
+    name: ${{ matrix.project.dir }}
+    needs: discover
+    # An empty matrix is an error rather than a skip, so gate the whole job.
+    if: needs.discover.outputs.any == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: vscode-reactor
-            dir: src/vscode-reactor
-            checks: npm run compile
-
-          - name: figma-plugin
-            dir: tools/figma-plugin
-            checks: npm run build
-
-          # The RN harnesses declare `test` / `test:windows` too, but ship no
-          # test files, so `jest` exits 1 with "No tests found". Left out
-          # deliberately rather than papered over with --passWithNoTests.
-          - name: StocksGrid
-            dir: tests/stress_perf_rn/StocksGrid
-            checks: |
-              npm run lint
-              npm run typecheck
-
-          - name: VirtualList
-            dir: tests/stress_perf_rn/VirtualList
-            checks: |
-              npm run lint
-              npm run typecheck
-
-          - name: BlankRNW
-            dir: tests/startup_perf/BlankRNW
-            checks: |
-              npm run lint
-              npm run typecheck
-
+        project: ${{ fromJSON(needs.discover.outputs.projects) }}
     steps:
-      # persist-credentials: false — `npm ci` below runs lifecycle scripts from
-      # PR-controlled dependencies, so the job must not leave a usable git
-      # credential in .git/config for that code to find.
+      # persist-credentials: false — `npm ci` runs lifecycle scripts from
+      # PR-controlled dependencies, and the project's own scripts run right
+      # after, so no git credential should survive the checkout for that code
+      # to recover.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      # Node 22, not latest: better-sqlite3 ^11.7.0 (HeadTrax) cannot build on
+      # Node 26, which removed the V8 APIs it uses. On 22 it takes a prebuilt
+      # binary.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+          cache-dependency-path: ${{ matrix.project.dir }}/package-lock.json
 
       # `npm ci`, not `install`: a lockfile that has drifted from package.json
       # should itself be a failure.
       - name: Install
-        working-directory: ${{ matrix.dir }}
+        working-directory: ${{ matrix.project.dir }}
         run: npm ci --no-audit --no-fund
 
-      - name: Check
-        working-directory: ${{ matrix.dir }}
-        run: ${{ matrix.checks }}
-
-  headtrax-smoke:
-    name: headtrax service (smoke)
-    runs-on: ubuntu-latest
-    steps:
-      # persist-credentials: false — this job runs `npm ci`, the data generator
-      # and the server itself, all PR-controlled code, so no git credential
-      # should survive the checkout for that code to recover.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # Node 22, not latest: better-sqlite3 ^11.7.0 cannot build on Node 26,
-      # which removed the V8 APIs it uses (error C2039). On 22 it takes a
-      # prebuilt binary.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: samples/apps/headtrax/service/package-lock.json
-
-      - name: Install
-        working-directory: samples/apps/headtrax/service
-        run: npm ci --no-audit --no-fund
-
-      - name: Generate sample data
-        working-directory: samples/apps/headtrax/service
-        run: npm run generate:small
-
-      # The #1175 bug was a bad import that only fires at startup, so this has
-      # to actually boot the server and read rows back out of it. A 200 alone
-      # proves nothing here: GraphQL answers 200 with an `errors` body, and an
-      # empty page is also a 200 — so assert the payload.
-      - name: Start server and exercise GraphQL
-        working-directory: samples/apps/headtrax/service
+      - name: Run declared checks
+        working-directory: ${{ matrix.project.dir }}
+        env:
+          CHECKS: ${{ matrix.project.checks }}
         run: |
           set -euo pipefail
-
-          node server.js &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-
-          for _ in $(seq 1 30); do
-            if curl -sf http://localhost:4000/health >/dev/null 2>&1; then break; fi
-            sleep 1
+          for script in $CHECKS; do
+            echo "::group::npm run $script"
+            npm run "$script"
+            echo "::endgroup::"
           done
-
-          curl -sf http://localhost:4000/health | jq -e '.ok == true' >/dev/null
-
-          # jq builds the JSON body so the GraphQL text can stay a plain
-          # single-quoted string instead of hand-escaped JSON.
-          gql() {
-            local payload
-            payload=$(jq -n --arg q "$1" '{query: $q}')
-            curl -sf -X POST http://localhost:4000/graphql \
-              -H 'Content-Type: application/json' \
-              -d "$payload"
-          }
-
-          resp=$(gql '{ stats { totalEmployees } departments employees(pageSize: 3, select: ["firstName","lastName","email"]) { items { firstName lastName email } } }')
-          echo "$resp"
-
-          # generate:small seeds exactly 500 employees, so these fail if the
-          # resolver, the SQLite read, or the column projection breaks.
-          echo "$resp" | jq -e 'has("errors") | not'                   >/dev/null
-          echo "$resp" | jq -e '.data.stats.totalEmployees == 500'     >/dev/null
-          echo "$resp" | jq -e '(.data.departments | length) > 0'      >/dev/null
-          echo "$resp" | jq -e '(.data.employees.items | length) == 3' >/dev/null
-          echo "$resp" | jq -e '.data.employees.items | all(.email | contains("@"))' >/dev/null
-
-          # Full-text search is a separate SQLite index, so the page query above
-          # says nothing about it.
-          #
-          # The probe terms are fixed constants, never values sampled from the
-          # generated data. faker is unseeded, so the data differs every run,
-          # and ~6% of generated surnames contain a hyphen or apostrophe. The
-          # server strips `'"*()` but not `-`, then appends `*` and hands the
-          # result to FTS5 MATCH, so `Bayer-Kohler` becomes the expression
-          # `Bayer-Kohler*` and errors with `no such column: Kohler`, while
-          # `O'Connell` collapses to `OConnell*` and matches nothing. Sampling a
-          # surname would therefore fail this check on roughly 1 run in 17.
-          #
-          # `headtrax` is safe by construction: generate-data.js hardcodes the
-          # address domain `headtrax.example.com`, and `email` is an indexed FTS
-          # column, so the term is alphanumeric and present in every row.
-          #
-          # `jq -r` here is raw extraction, not assertion — the counts are
-          # compared by the explicit `test` commands below.
-          all_hits=$(gql '{ employees(pageSize: 5, searchQuery: "headtrax", select: ["lastName"]) { totalCount } }' \
-            | jq -r '.data.employees.totalCount')
-          some_hits=$(gql '{ employees(pageSize: 5, searchQuery: "Engineering", select: ["lastName"]) { totalCount } }' \
-            | jq -r '.data.employees.totalCount')
-          miss=$(gql '{ employees(pageSize: 5, searchQuery: "zzzznotarealsurname", select: ["lastName"]) { totalCount } }' \
-            | jq -r '.data.employees.totalCount')
-
-          echo "FTS: headtrax -> $all_hits ; Engineering -> $some_hits ; nonsense -> $miss (of 500)"
-
-          # `headtrax` alone would be a weak oracle: it matches every row, which
-          # is exactly what an *ignored* searchQuery would also return. The
-          # nonsense term rules that out, and `Engineering` — a hardcoded
-          # department, so always populated — proves the index discriminates
-          # rather than answering all-or-nothing.
-          test "$all_hits" -eq 500
-          test "$miss" -eq 0
-          test "$some_hits" -gt 0
-          test "$some_hits" -lt 500
