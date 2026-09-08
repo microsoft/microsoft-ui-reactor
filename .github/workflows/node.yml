@@ -174,3 +174,26 @@ jobs:
             npm run "$script"
             echo "::endgroup::"
           done
+
+      # Several projects commit their build output and ship it directly —
+      # src/vscode-reactor/package.json points `main` at out/extension.js, and
+      # tools/figma-plugin/manifest.json points at dist/code.js and
+      # dist/ui.html. The checks above regenerate those files inside the
+      # runner, so without this a source-only change compiles green here while
+      # merging the previous build. Measured: both builds are deterministic
+      # (rebuilding twice is byte-identical), so a difference means the
+      # committed artifact is genuinely out of date.
+      #
+      # --ignore-cr-at-eol because the repo has no .gitattributes, so a
+      # contributor on Windows sees whole-file CRLF churn that says nothing
+      # about staleness.
+      - name: Check committed build output is current
+        working-directory: ${{ matrix.project.dir }}
+        run: |
+          set -euo pipefail
+          if ! git diff --ignore-cr-at-eol --exit-code -- .; then
+            echo
+            echo "Committed build output is stale: running the checks above changed tracked files."
+            echo "Rebuild this project and commit the result."
+            exit 1
+          fi

@@ -64,6 +64,8 @@ async function waitForHealth(deadlineMs = 60_000) {
 }
 
 let server;
+let serverExited = false;
+let tearingDown = false;
 try {
   for (const f of [DB, `${DB}-wal`, `${DB}-shm`]) if (existsSync(f)) rmSync(f);
 
@@ -80,9 +82,14 @@ try {
     stdio: "inherit",
     env: { ...process.env, DB_PATH: DB, PORT: String(PORT) },
   });
-  server.on("exit", (code) => {
-    if (code !== null && code !== 0) {
-      console.error(`server exited early with code ${code}`);
+  server.on("exit", (code, signal) => {
+    serverExited = true;
+    // Any exit before teardown is a failure, whatever the status. Checking for
+    // a non-zero code is not enough: Node reports code === null when a child
+    // dies by signal, and a server that exits 0 on its own mid-run is equally
+    // wrong, so either would otherwise slip through to "smoke passed".
+    if (!tearingDown) {
+      console.error(`\nserver exited before teardown (code ${code}, signal ${signal})`);
       process.exitCode = 1;
     }
   });
@@ -137,10 +144,13 @@ try {
   check("FTS nonsense term", miss, (v) => v === 0, "0");
   check("FTS subset term (Engineering)", some, (v) => v > 0 && v < COUNT, `0 < n < ${COUNT}`);
 } finally {
+  // Set before kill() so the exit listener can tell an intentional shutdown
+  // from a crash.
+  tearingDown = true;
   // Wait for the server to actually release the database before removing it:
   // kill() only signals, and on Windows unlinking a file with an open handle
   // fails with EBUSY.
-  if (server && server.exitCode === null) {
+  if (server && !serverExited) {
     server.kill();
     await new Promise((resolve) => {
       const done = setTimeout(resolve, 5_000);
