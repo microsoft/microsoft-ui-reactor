@@ -15,6 +15,11 @@ namespace Microsoft.UI.Reactor;
 /// quality loss; we emit a one-shot <c>Debug.WriteLine</c> when a
 /// <see cref="WindowIcon.FromPath(string)"/> source can't be loaded as an HICON.
 ///
+/// The overlay needs a raw <c>HICON</c>, so it accepts a filesystem path or in-memory
+/// data (<see cref="WindowIcon.FromBytes"/> / <see cref="WindowIcon.FromRgba"/>) and
+/// skips <see cref="WindowIcon.FromResource"/>. A procedurally-drawn badge is a natural
+/// fit for <see cref="WindowIcon.FromRgba"/>, which needs no file on disk.
+///
 /// Accessibility: <see cref="AccessibleDescription"/> flows through the
 /// <c>pszDescription</c> parameter of <c>ITaskbarList3.SetOverlayIcon</c> —
 /// without it the overlay is invisible to assistive tech (spec §0.6).

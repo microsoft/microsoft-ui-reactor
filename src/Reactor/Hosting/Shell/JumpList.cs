@@ -33,6 +33,9 @@ namespace Microsoft.UI.Reactor;
 /// resource-style sources today; ship a sidecar <c>.ico</c> alongside the
 /// executable and reference it via <c>FromPath</c> for unpackaged scenarios
 /// only after confirming the icon shows up in your build.
+/// Binary sources (<c>WindowIcon.FromBytes</c> / <c>FromRgba</c>) are not usable on
+/// either path — the shell resolves a jump-list logo by <c>Uri</c>, so there is
+/// nothing to point it at.
 /// </para>
 /// </param>
 /// <param name="GroupCategory">Group label for <see cref="JumpListItemKind.Custom"/> items.</param>
