@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace Microsoft.UI.Reactor.Analyzers;
 
@@ -42,7 +43,6 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
 
     private const string WindowIconType = "Microsoft.UI.Reactor.WindowIcon";
     private const string IconMemberName = "Icon";
-    private const string RunIconParameterName = "icon";
 
     // Code-fix / tooling hand-off keys (data travels in Diagnostic.Properties, never message text).
     internal const string FactoryKey = "Factory";
@@ -183,10 +183,9 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         // (b) `Icon:` as a constructor argument (named, or positional on a record's primary ctor).
         if (argumentList is not null)
         {
-            var ctor = ctx.SemanticModel.GetSymbolInfo(node, ctx.CancellationToken).Symbol as IMethodSymbol;
-            var argument = FindArgument(argumentList, ctor, IconMemberName);
-            if (argument is not null)
-                Check(ctx, argument.Expression, surface, $"{type.Name}.{IconMemberName}");
+            var value = FindArgumentValue(ctx, node, IconMemberName);
+            if (value is not null)
+                Check(ctx, value, surface, $"{type.Name}.{IconMemberName}");
         }
     }
 
@@ -222,9 +221,9 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         // ReactorApp.Run(..., icon: ...) feeds WindowSpec.Icon.
         if (container == "Microsoft.UI.Reactor.ReactorApp" && method.Name == "Run")
         {
-            var argument = FindArgument(invocation.ArgumentList, method, RunIconParameterName);
-            if (argument is not null && Surfaces.TryGetValue("Microsoft.UI.Reactor.WindowSpec", out var windowSurface))
-                Check(ctx, argument.Expression, windowSurface, "the window icon");
+            var value = FindArgumentValue(ctx, invocation, IconMemberName);
+            if (value is not null && Surfaces.TryGetValue("Microsoft.UI.Reactor.WindowSpec", out var windowSurface))
+                Check(ctx, value, windowSurface, "the window icon");
             return;
         }
 
@@ -232,9 +231,9 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         if (container == "Microsoft.UI.Reactor.JumpListItem" &&
             (method.Name == "ForUri" || method.Name == "ForCommandLine"))
         {
-            var argument = FindArgument(invocation.ArgumentList, method, RunIconParameterName);
-            if (argument is not null && Surfaces.TryGetValue(container, out var jumpSurface))
-                Check(ctx, argument.Expression, jumpSurface, $"JumpListItem.{IconMemberName}");
+            var value = FindArgumentValue(ctx, invocation, IconMemberName);
+            if (value is not null && Surfaces.TryGetValue(container, out var jumpSurface))
+                Check(ctx, value, jumpSurface, $"JumpListItem.{IconMemberName}");
         }
     }
 
@@ -423,29 +422,41 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
     };
 
     /// <summary>
-    /// The argument bound to <paramref name="parameterName"/>. A <b>named</b> argument matches
-    /// regardless of the rest; the <b>positional</b> slot is only resolved when the call is
-    /// entirely positional, so a mixed call is skipped rather than mis-counted.
+    /// The expression bound to <paramref name="parameterName"/>, or <c>null</c>.
     /// </summary>
-    private static ArgumentSyntax? FindArgument(ArgumentListSyntax argumentList, IMethodSymbol? method, string parameterName)
+    /// <remarks>
+    /// Uses the compiler's own argument-to-parameter mapping rather than counting ordinals by
+    /// hand. Hand-counting has to special-case mixed calls, and the shape that matters most here
+    /// is exactly a mixed one — <c>new TrayIconSpec(WindowIcon.FromPath(…), Tooltip: …, Key: …)</c>
+    /// puts <c>Icon</c> positionally in front of named arguments. Asking Roslyn removes that class
+    /// of bug entirely, and also handles non-trailing named arguments and reduced extension calls
+    /// without further thought.
+    /// <para><see cref="ArgumentKind.Explicit"/> filters out arguments the compiler synthesised
+    /// for omitted optional parameters, whose syntax is the parameter's default value rather than
+    /// anything the author wrote.</para>
+    /// </remarks>
+    private static ExpressionSyntax? FindArgumentValue(SyntaxNodeAnalysisContext ctx, SyntaxNode node, string parameterName)
     {
-        var arguments = argumentList.Arguments;
+        var arguments = ctx.SemanticModel.GetOperation(node, ctx.CancellationToken) switch
+        {
+            IInvocationOperation invocation => invocation.Arguments,
+            IObjectCreationOperation creation => creation.Arguments,
+            _ => default,
+        };
+
+        if (arguments.IsDefaultOrEmpty)
+            return null;
 
         foreach (var argument in arguments)
         {
-            if (argument.NameColon?.Name.Identifier.ValueText == parameterName)
-                return argument;
+            if (argument.ArgumentKind != ArgumentKind.Explicit)
+                continue;
+            if (!string.Equals(argument.Parameter?.Name, parameterName, System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return argument.Syntax is ArgumentSyntax syntax ? syntax.Expression : null;
         }
 
-        if (arguments.Any(a => a.NameColon is not null))
-            return null;
-        if (method is null)
-            return null;
-
-        var parameter = method.Parameters.FirstOrDefault(p => p.Name == parameterName);
-        if (parameter is null)
-            return null;
-
-        return parameter.Ordinal < arguments.Count ? arguments[parameter.Ordinal] : null;
+        return null;
     }
 }

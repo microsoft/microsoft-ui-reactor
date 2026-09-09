@@ -141,6 +141,32 @@ namespace TestApp
     }
 
     [Fact]
+    public async Task Fires_When_The_Icon_Is_Positional_And_Later_Arguments_Are_Named()
+    {
+        // C# requires a positional argument to bind at its own ordinal, so `Icon` here is
+        // unambiguous even though the rest of the call is named. An ordinal-counting matcher
+        // that bails on "any named argument present" would miss this, and it is a natural
+        // shape to write.
+        var source = @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor;
+
+    class App
+    {
+        void M()
+        {
+            var spec = new TrayIconSpec(
+                {|REACTOR_ICON_001:WindowIcon.FromResource(""ms-appx:///Assets/tray.ico"")|},
+                Tooltip: ""My App"",
+                Key: WindowKey.Of(""main""));
+        }
+    }
+}";
+        await Analyzer(source).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Fires_On_Resource_Icon_For_A_Thumbnail_Toolbar_Button()
     {
         var source = @"
