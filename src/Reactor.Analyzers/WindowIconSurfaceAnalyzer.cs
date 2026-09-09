@@ -46,7 +46,10 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
 
     // Code-fix / tooling hand-off keys (data travels in Diagnostic.Properties, never message text).
     internal const string FactoryKey = "Factory";
-    /// <summary>Stable <c>Type.Member</c> identifier of the surface that rejected the icon.</summary>
+    /// <summary>
+    /// Fully-qualified <c>Namespace.Type.Member</c> identifier of the surface that rejected the
+    /// icon — machine-readable, and unambiguous across same-named types in other namespaces.
+    /// </summary>
     internal const string SurfaceKey = "Surface";
 
     /// <summary>The four <c>WindowIcon</c> factories, mapped to the kind each produces.</summary>
@@ -169,7 +172,11 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
             return;
 
         var type = ctx.SemanticModel.GetTypeInfo(node, ctx.CancellationToken).Type;
-        if (type is null || !Surfaces.TryGetValue(type.ToDisplayString(), out var surface))
+        if (type is null)
+            return;
+
+        var owner = type.ToDisplayString();
+        if (!Surfaces.TryGetValue(owner, out var surface))
             return;
 
         // (a) `Icon = …` in an object initializer or a `with` expression.
@@ -181,7 +188,9 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
 
             if (assignment is not null)
             {
-                Check(ctx, assignment.Right, surface, $"{type.Name}.{IconMemberName}");
+                Check(ctx, assignment.Right, surface,
+                    surfaceId: $"{owner}.{IconMemberName}",
+                    displayLabel: $"{type.Name}.{IconMemberName}");
                 return;
             }
         }
@@ -191,7 +200,11 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         {
             var value = FindArgumentValue(ctx, node, IconMemberName);
             if (value is not null)
-                Check(ctx, value, surface, $"{type.Name}.{IconMemberName}");
+            {
+                Check(ctx, value, surface,
+                    surfaceId: $"{owner}.{IconMemberName}",
+                    displayLabel: $"{type.Name}.{IconMemberName}");
+            }
         }
     }
 
@@ -208,7 +221,9 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         if (owner is null || !Surfaces.TryGetValue(owner, out var surface))
             return;
 
-        Check(ctx, assignment.Right, surface, $"{property.ContainingType!.Name}.{IconMemberName}");
+        Check(ctx, assignment.Right, surface,
+            surfaceId: $"{owner}.{IconMemberName}",
+            displayLabel: $"{property.ContainingType!.Name}.{IconMemberName}");
     }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext ctx)
@@ -229,7 +244,11 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         {
             var value = FindArgumentValue(ctx, invocation, IconMemberName);
             if (value is not null && Surfaces.TryGetValue("Microsoft.UI.Reactor.WindowSpec", out var windowSurface))
-                Check(ctx, value, windowSurface, surfaceId: "ReactorApp.Run", displayLabel: "the window icon");
+            {
+                Check(ctx, value, windowSurface,
+                    surfaceId: $"{container}.{method.Name}",
+                    displayLabel: "the window icon");
+            }
             return;
         }
 
@@ -239,7 +258,11 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         {
             var value = FindArgumentValue(ctx, invocation, IconMemberName);
             if (value is not null && Surfaces.TryGetValue(container, out var jumpSurface))
-                Check(ctx, value, jumpSurface, $"JumpListItem.{IconMemberName}");
+            {
+                Check(ctx, value, jumpSurface,
+                    surfaceId: $"{container}.{method.Name}",
+                    displayLabel: $"JumpListItem.{IconMemberName}");
+            }
         }
     }
 
@@ -252,14 +275,16 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
     /// <paramref name="surface"/> cannot use.
     /// </summary>
     /// <param name="surfaceId">
-    /// A stable <c>Type.Member</c> identifier for the surface, carried in
+    /// A fully-qualified <c>Namespace.Type.Member</c> identifier for the surface, carried in
     /// <see cref="Diagnostic.Properties"/> under <see cref="SurfaceKey"/>. Machine-readable and
-    /// safe for a future code fix or telemetry to switch on.
+    /// safe for a future code fix or telemetry to switch on; qualified so a same-named type in
+    /// another namespace can never collide with it.
     /// </param>
     /// <param name="displayLabel">
     /// How the surface reads mid-sentence in the message, when that differs from
-    /// <paramref name="surfaceId"/> — a named argument reads better as prose ("the window icon")
-    /// than as a member path. Defaults to <paramref name="surfaceId"/>.
+    /// <paramref name="surfaceId"/> — the message wants the short <c>TrayIconSpec.Icon</c> rather
+    /// than a namespace-qualified path, and a named argument reads better still as prose ("the
+    /// window icon"). Defaults to <paramref name="surfaceId"/>.
     /// </param>
     private static void Check(
         SyntaxNodeAnalysisContext ctx,
