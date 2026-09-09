@@ -38,10 +38,12 @@ Conventions for contributors:
   four doubles and any struct-typed local to be re-typed. Purely additive; the `double`
   overloads keep their existing binding and stay the ergonomic default.
 
-  One consequence for hand-written code: `.Margin(default)` and `.CornerRadius(default)`
-  are now ambiguous (`CS0121`) because the bare `default` literal converts to `double`
-  and to the struct alike. `.BorderThickness(default)` has always behaved this way for
-  the same reason. Spell the type — `default(Thickness)` — or pass a value.
+  One consequence for hand-written code: `.Margin(default)`, `.Padding(default)` and
+  `.CornerRadius(default)` are now ambiguous (`CS0121`), because the bare `default`
+  literal converts to `double` and to the struct alike. `.BorderThickness(default)`
+  has always behaved this way for the same reason. Name the type — `default(Thickness)`
+  for `.Margin` / `.Padding` / `.BorderThickness`, `default(CornerRadius)` for
+  `.CornerRadius` — or pass a value.
 
 ### Changed
 
@@ -52,12 +54,14 @@ Conventions for contributors:
   overloads above those values now pass straight through to the modifier. Both
   spellings of a constructor literal still decompose, including the target-typed
   `new(8)`, so `.Margin(8)` remains the output rather than `.Margin(new Thickness(8))`.
-  A construction carrying an object initializer is no longer decomposed at all:
-  `new Thickness(8) { Left = 5 }` is `Thickness(5,8,8,8)`, so emitting `.Margin(8)`
-  would have silently dropped the initializer and changed the value written. It now
-  rides the struct overload whole. A target-typed `new(...)` that cannot be
-  decomposed is still left unfixed, because it carries no type of its own and the
-  rewrite would be ambiguous.
+  A literal carrying an object initializer or a named argument is no longer
+  decomposed: `new Thickness(8) { Left = 5 }` is `Thickness(5,8,8,8)`, so emitting
+  `.Margin(8)` would have silently dropped the initializer, and the struct's parameter
+  names differ from the modifier's (`Thickness(uniformLength)` against
+  `Margin(uniform)`), so copying a named argument across produced `CS1739`. Both now
+  ride the struct overload whole. A target-typed `new(...)` that cannot be decomposed
+  is still left unfixed, because it carries no type of its own and the rewrite would
+  be ambiguous.
 
 ### Deprecated
 

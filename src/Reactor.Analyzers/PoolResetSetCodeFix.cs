@@ -385,12 +385,23 @@ public sealed class PoolResetSetCodeFix : CodeFixProvider
             // names no type, but the property being assigned fixes it, and only the arguments
             // survive the rewrite either way.
             //
-            // An object initializer disqualifies both: `new Thickness(8) { Left = 5 }` is
-            // Thickness(5,8,8,8), so decomposing to the constructor arguments alone would
-            // silently drop the initializer and change the value written — the exact class of
-            // silent behaviour change this diagnostic exists to prevent. The explicitly-typed
-            // form then falls through and rides the struct overload verbatim, initializer and
-            // all; the target-typed form has no such escape and is refused below.
+            // Two things disqualify a literal from being decomposed, because both carry state
+            // that copying the argument list alone would lose or corrupt:
+            //
+            //   * An object initializer. `new Thickness(8) { Left = 5 }` is Thickness(5,8,8,8),
+            //     so emitting `.Margin(8)` would silently drop it and change the value written —
+            //     the exact class of silent behaviour change this diagnostic exists to prevent.
+            //   * A named argument. The struct's parameter names are not the modifier's:
+            //     `Thickness(uniformLength)` against `Margin(uniform)`, and
+            //     `CornerRadius(uniformRadius)` against `CornerRadius(radius)`. Copying the
+            //     argument across verbatim yields `.Margin(uniformLength: 8)`, which is CS1739.
+            //     (The four-argument names do line up, but not uniformly across both structs,
+            //     so this refuses on any named argument rather than encoding that coincidence.
+            //     NoOpModifierAnalyzer refuses named arguments for the same reason.)
+            //
+            // An explicitly-typed literal then falls through and rides the struct overload
+            // whole, which preserves either shape exactly. The target-typed spelling has no
+            // such escape and is refused below.
             SeparatedSyntaxList<ArgumentSyntax>? ctorArgs = value switch
             {
                 ObjectCreationExpressionSyntax { Initializer: null } oce when IsNamedType(oce.Type, structName)
@@ -399,6 +410,9 @@ public sealed class PoolResetSetCodeFix : CodeFixProvider
                     => ioce.ArgumentList.Arguments,
                 _ => null,
             };
+
+            if (ctorArgs is { } args && args.Any(argument => argument.NameColon is not null))
+                ctorArgs = null;
 
             // Both structs have 0/1/4-arg constructors. The 0-arg form is not interesting;
             // 1 and 4 map cleanly onto the uniform and per-edge modifier overloads.

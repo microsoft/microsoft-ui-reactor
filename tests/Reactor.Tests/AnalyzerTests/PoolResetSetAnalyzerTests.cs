@@ -32,8 +32,8 @@ namespace Microsoft.UI.Xaml
         public double Top;
         public double Right;
         public double Bottom;
-        public Thickness(double u) {}
-        public Thickness(double l, double t, double r, double b) {}
+        public Thickness(double uniformLength) {}
+        public Thickness(double left, double top, double right, double bottom) {}
     }
 }
 
@@ -85,8 +85,8 @@ public static class FakeElementExtensions
     public static FakeElement Height(this FakeElement el, double v) => el;
     public static FakeElement Opacity(this FakeElement el, double v) => el;
     public static FakeElement AccessKey(this FakeElement el, string v) => el;
-    public static FakeElement Margin(this FakeElement el, double u) => el;
-    public static FakeElement Margin(this FakeElement el, double l, double t, double r, double b) => el;
+    public static FakeElement Margin(this FakeElement el, double uniform) => el;
+    public static FakeElement Margin(this FakeElement el, double left, double top, double right, double bottom) => el;
     public static FakeElement Margin(this FakeElement el, Thickness thickness) => el;
     public static FakeElement HorizontalAlignment(this FakeElement el, HorizontalAlignment a) => el;
     public static FakeElement VerticalAlignment(this FakeElement el, VerticalAlignment a) => el;
@@ -591,6 +591,64 @@ class C
     {
         var el = new FakeElement();
         {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new())|};
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = code,
+            FixedCode = code,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Keeps_A_Named_Constructor_Argument_By_Not_Decomposing()
+    {
+        // The struct's parameter names are not the modifier's — WinUI spells the uniform
+        // Thickness constructor `uniformLength` while the modifier spells it `uniform`, and
+        // CornerRadius spells it `uniformRadius` against the modifier's `radius`. Copying a
+        // named argument across verbatim would emit `.Margin(uniformLength: 8)`, which is
+        // CS1739. Riding the struct overload keeps the call exactly as written.
+        var before = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new Thickness(uniformLength: 8))|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        el.Margin(new Thickness(uniformLength: 8));
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Suppressed_For_A_Target_Typed_New_With_A_Named_Argument()
+    {
+        // Same naming mismatch as above, and the target-typed spelling cannot fall back to
+        // the struct overload because `new(...)` is ambiguous between it and the double
+        // overload. Diagnostic-only.
+        var code = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(uniformLength: 8))|};
     }
 }";
 
