@@ -60,12 +60,12 @@ Conventions for contributors:
   grounds that no modifier existed, while `.IsHitTestVisible(bool)` had been in
   `ElementExtensions.cs` all along; because an exclusion counts as a classification, nothing ever
   rechecked the claim (issue #1193).
-- `REACTOR_POOL_001` no longer fires for `.Set(tb => tb.IsTabStop = …)` on a non-`Control`
-  receiver such as `TextBlock`. WinUI 3 declares `IsTabStop` on `UIElement`, but `CleanElement`
-  clears it only under `if (fe is Control …)`, so the Warning asserted a pool reset that does not
-  happen — a build break for consumers using `TreatWarningsAsErrors`, and the same shape as
-  issue #1051. It reports `REACTOR_MOD_002` there instead and is unchanged on `Control`
-  receivers (issue #1193).
+- `ElementPool.CleanElement` now clears `IsTabStop` on every pooled element rather than only on
+  `Control` receivers. WinUI 3 declares the property on `UIElement` and `ApplyModifiers` writes it
+  ungated, so `.IsTabStop(false)` reaches poolable non-`Control`s — `TextBlock`, `RichTextBlock`,
+  `Grid`, `StackPanel`, `Border`, `Canvas`, `Viewbox`, `Image` — and each could carry a stale tab
+  stop into its next renter, making a control unexpectedly unreachable by keyboard. This is the
+  same missing-reset shape as issue #985, found by the widened consistency scan (issue #1193).
 - The pool ⇄ analyzer consistency invariants now scan the whole of `CleanElement` instead of
   stopping at its `switch (fe)` dispatch, so resets in the type-specific arms — the `TextBlock`
   font/text family, the `TextBox`, `Viewbox` and `ProgressRing` arms — are checked against

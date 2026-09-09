@@ -679,9 +679,9 @@ public class ModifierUnsetClearValueTests
         "UIElement.AccessKey",
         "UIElement.ContextFlyout",
         "UIElement.IsHitTestVisible",
+        "UIElement.IsTabStop",
         "FrameworkElement.RenderTransform",
         "FrameworkElement.FlowDirection",
-        "Control.IsTabStop",
         // Issue #985 — the receiver-gated chain that mirrors ApplyModifiers' Padding /
         // CornerRadius / BorderThickness / BorderBrush / Background / IsEnabled writes.
         // Pinned per receiver, not per property: dropping only the Border or only the Panel
@@ -711,13 +711,16 @@ public class ModifierUnsetClearValueTests
     [Fact]
     public void CleanElement_Resets_Through_ClearValue_Not_Default_Assignment()
     {
-        var commonBlock = ReadCleanElementCommonBlock(out var paramName);
-
-        // Same shape PoolResetSetConsistencyTests.ReadResetProperties scans for, so the two
-        // stay in agreement about what a "reset" looks like in this block.
-        var offenders = Regex.Matches(commonBlock, $@"\b{Regex.Escape(paramName)}\.(\w+)\s*=[^=]")
-            .Select(match => match.Groups[1].Value)
-            .Where(property => property != "ClearValue")
+        // Reads the Roslyn scan rather than a regex over raw text, which is not a cosmetic
+        // change: the text version matched inside comments, and CleanElement's comments discuss
+        // the very properties being scanned. Writing `fe.IsTabStop = …` in prose to explain why
+        // the clear is ungated was enough to make this test report IsTabStop as a
+        // default-assignment offender — a phantom failure naming a real property, which is the
+        // most expensive kind to triage.
+        var offenders = CleanElementScan.Resets
+            .Where(reset => reset.Shape == ResetShape.Assignment)
+            .Where(reset => reset.Receiver == CleanElementScan.RootReceiver)
+            .Select(reset => reset.Property)
             .Where(property => !CleanElementAssignmentExceptions.ContainsKey(property))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(property => property, StringComparer.Ordinal)
@@ -732,15 +735,56 @@ public class ModifierUnsetClearValueTests
     }
 
     /// <summary>
+    /// Prose in <c>CleanElement</c> must not be readable as a reset.
+    /// </summary>
+    /// <remarks>
+    /// Not hypothetical, and not cheap: while widening the scan for issue #1193 a comment
+    /// explaining why <c>IsTabStop</c> is cleared ungated contained the words
+    /// <c>fe.IsTabStop = …</c>, and the then-regex version of
+    /// <see cref="CleanElement_Resets_Through_ClearValue_Not_Default_Assignment"/> reported
+    /// <c>IsTabStop</c> as a default-assignment offender. The property was real and the clear was
+    /// correct, so the failure looked like a genuine product defect. Roslyn makes the whole class
+    /// impossible — trivia is trivia — and this pins that rather than trusting it.
+    /// </remarks>
+    [Fact]
+    public void Comments_In_CleanElement_Are_Not_Read_As_Resets()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+        var source = File.ReadAllText(Path.Join(root!, "src", "Reactor", "Core", "ElementPool.cs"));
+
+        // The positive control. Without a comment of this shape in the file, the assertion below
+        // is satisfied by an absence that proves nothing.
+        Assert.Contains(
+            "`fe.IsTabStop = …`",
+            source,
+            StringComparison.Ordinal);
+
+        var assignments = CleanElementScan.Resets
+            .Where(reset => reset.Shape == ResetShape.Assignment)
+            .Select(reset => reset.Property)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.False(
+            assignments.Contains("IsTabStop"),
+            "The scan read the comment `fe.IsTabStop = …` as a real assignment. CleanElement's " +
+            "comments name the properties being scanned, so a text-matching scan invents resets " +
+            "from prose — the failure then names a real property with a correct clear, which is " +
+            "the most expensive kind to triage. Parse, do not match.");
+    }
+
+    /// <summary>
     /// The positive half of <see cref="CleanElement_Resets_Through_ClearValue_Not_Default_Assignment"/>,
     /// and its dual rather than its subordinate. Three distinct faults, three different halves:
     /// <list type="bullet">
     ///   <item>an outright deleted <c>ClearValue</c> produces no offender for the scan to
     ///     catch, so the required releases are pinned by name — the original reason;</item>
-    ///   <item>anything that SHRINKS the scanned region (see the anchor note in
-    ///     <c>ReadCleanElementCommonBlock</c>) makes the scan vacuous rather than failing,
-    ///     and only this pin set notices — MEASURED: region 12922 -&gt; 7335 chars leaves the
-    ///     scan green and reddens this test;</item>
+    ///   <item>anything that SHRINKS what the scan sees makes it vacuous rather than failing,
+    ///     and only this pin set notices — MEASURED against the region-truncation the scan is
+    ///     no longer subject to: 12922 -&gt; 7335 chars left the scan green and reddened this
+    ///     test. The region boundary itself is gone (<see cref="CleanElementScan"/> reads the
+    ///     whole method), but the asymmetry it demonstrated is not: any narrowing of the scan
+    ///     is still silent on the absence side and loud here;</item>
     ///   <item>conversely, a default-assignment reset of a property NOT among these rows is
     ///     invisible here and caught only by the scan — MEASURED: injecting
     ///     <c>fe.AllowDrop = false;</c> reddens the scan, names the property, and leaves this
@@ -1353,78 +1397,5 @@ public class ModifierUnsetClearValueTests
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// The FE-common block of <c>ElementPool.CleanElement</c> — opening brace up to (but not
-    /// including) the <c>switch (fe)</c> that begins type-specific cleanup — plus the
-    /// method's parameter name. Mirrors the boundary
-    /// <see cref="PoolResetSetConsistencyTests"/> uses, deliberately: the type-specific arms
-    /// reset content slots (<c>Content</c>, <c>Child</c>, <c>Source</c>) whose correct empty
-    /// state really is a written null, so they are not subject to this rule.
-    /// </summary>
-    /// <remarks>
-    /// The boundary is located through Roslyn syntax nodes, not a text scan, and that is
-    /// load-bearing rather than stylistic. Any text form — <c>IndexOf("switch (fe)")</c> or an
-    /// anchored <c>^\s*switch</c> regex alike — can be made to match inside a comment, which
-    /// silently truncates the region and turns every absence-shaped assertion over it vacuous
-    /// while still reporting green. A line comment defeats the unanchored form and a block
-    /// comment whose inner line begins with the dispatch text defeats the anchored one; a
-    /// <see cref="SwitchStatementSyntax"/> cannot be forged by a comment of any shape.
-    /// Do not "simplify" this back to a string search.
-    /// <para>
-    /// Closing the forgery route does not make the presence-shaped detectors redundant, and
-    /// they must not be deleted on that reasoning. The two halves guard different things: the
-    /// presence pins guard this region's <em>scope</em> (a truncated region makes every
-    /// absence-shaped assertion pass more readily, so it goes vacuous without failing), and the
-    /// absence scan guards the pin list's <em>closed world</em> (a pin list only knows the names
-    /// someone thought to write down). Neither subsumes the other. The presence half lives in
-    /// <see cref="CleanElement_Releases_Every_Modifier_Backed_Dependency_Property"/> here, and in
-    /// <c>Every_TrappedProperty_Is_Reset_In_CleanElement</c>,
-    /// <c>Every_TrappedAttachedProperty_Is_Reset_In_CleanElement</c> and
-    /// <c>Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names</c> in
-    /// <see cref="PoolResetSetConsistencyTests"/> — four detectors across two files.
-    /// </para>
-    /// </remarks>
-    private static string ReadCleanElementCommonBlock(out string paramName)
-    {
-        var root = RepoRootFinder.FindRepoRoot();
-        Assert.NotNull(root);
-        var file = Path.Join(root!, "src", "Reactor", "Core", "ElementPool.cs");
-        Assert.True(File.Exists(file), $"ElementPool.cs not found at {file}");
-
-        var source = File.ReadAllText(file);
-        var method = CSharpSyntaxTree.ParseText(source).GetRoot()
-            .DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .FirstOrDefault(candidate =>
-                candidate.Identifier.ValueText == "CleanElement"
-                && candidate.Modifiers.Any(SyntaxKind.StaticKeyword)
-                && candidate.ParameterList.Parameters.Count == 1
-                && candidate.ParameterList.Parameters[0].Type?.ToString()
-                    .EndsWith("FrameworkElement", StringComparison.Ordinal) == true);
-        Assert.True(method is not null, "Could not locate static CleanElement(FrameworkElement) in ElementPool.cs");
-
-        var body = method!.Body;
-        Assert.True(body is not null, "CleanElement no longer has a block body — the FE-common region is undefined.");
-
-        // Located on the syntax tree rather than by an anchored regex over the source text.
-        // The regex form this replaces could be truncated by a block comment whose inner line
-        // began with the dispatch keyword, and truncation was silent: every absence-shaped
-        // assertion over this region ("no offender is present") passes more readily on a
-        // smaller region, so it went vacuous without failing. A SwitchStatementSyntax lookup
-        // cannot match a comment at all, which removes that residual rather than documenting
-        // it. The presence-shaped detectors named in the remarks above are still the half that
-        // catches a region defect, and none of them is made unnecessary by this change.
-        paramName = method.ParameterList.Parameters[0].Identifier.ValueText;
-        var governingName = paramName;
-
-        var dispatch = body!.DescendantNodes()
-            .OfType<SwitchStatementSyntax>()
-            .FirstOrDefault(candidate => candidate.Expression is IdentifierNameSyntax governing
-                && governing.Identifier.ValueText == governingName);
-        Assert.True(dispatch is not null, $"CleanElement layout changed — no 'switch ({governingName})' boundary found.");
-
-        return source[body.OpenBraceToken.SpanStart..dispatch!.SpanStart];
     }
 }

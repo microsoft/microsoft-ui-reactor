@@ -62,11 +62,23 @@ using Microsoft.UI.Xaml.Media;
 
 public class Control : FrameworkElement { }
 
-// TextBlock is NOT a Control in WinUI — which is the whole point of the IsTabStop rows below.
-public class TextBlock : FrameworkElement { public double FontSize; public FontFamily FontFamily; }
+// TextBlock is NOT a Control in WinUI. It also declares Stretch/StretchDirection/IsActive here
+// purely so the negative-control arms COMPILE — the point of those arms is that the analyzer
+// stays silent because no `.Stretch(...)` / `.IsActive(...)` modifier exists for
+// TextBlockElement, not because the write failed to type-check.
+public class TextBlock : FrameworkElement
+{
+    public double FontSize;
+    public FontFamily FontFamily;
+    public int Stretch;
+    public int StretchDirection;
+    public bool IsActive;
+}
+
 public class RichTextBlock : FrameworkElement { public double FontSize; }
 public class Button : Control { }
 public class Viewbox : FrameworkElement { public int Stretch; public int StretchDirection; }
+public class ProgressRing : Control { public bool IsActive; }
 }
 
 namespace Microsoft.UI.Reactor
@@ -97,6 +109,11 @@ public class ViewboxElement : Element
     public ViewboxElement Set(Action<Viewbox> configure) => this;
 }
 
+public class ProgressRingElement : Element
+{
+    public ProgressRingElement Set(Action<ProgressRing> configure) => this;
+}
+
 public static class Mods
 {
     public static T FontSize<T>(this T el, double v) where T : Element => el;
@@ -106,6 +123,7 @@ public static class Mods
     public static RichTextBlockElement FontSize(this RichTextBlockElement el, double v) => el;
     public static ViewboxElement Stretch(this ViewboxElement el, int v) => el;
     public static ViewboxElement StretchDirection(this ViewboxElement el, int v) => el;
+    public static ProgressRingElement IsActive(this ProgressRingElement el, bool v = true) => el;
 }
 }
 ";
@@ -196,34 +214,70 @@ class C
     /// excluded as a "Viewbox-only modifier" — a description of what <c>elementTypes</c> is for,
     /// not a reason — and <c>StretchDirection</c> was in no table at all.
     /// </summary>
+    /// <remarks>
+    /// Paired with a <c>TextBlockElement</c> arm that must stay silent, so the
+    /// <c>elementTypes: ViewboxElementOnly</c> gate is proved load-bearing. Without that arm the
+    /// positive one passes just as well on an ungated row, which would report on receivers with
+    /// no <c>.Stretch</c> modifier and emit a fix that does not compile.
+    /// </remarks>
     [Theory]
     [InlineData("Stretch")]
     [InlineData("StretchDirection")]
-    public async Task Reports_The_Viewbox_Properties(string property)
+    public async Task Reports_The_Viewbox_Properties_Only_Where_The_Modifier_Exists(string property)
     {
         await VerifyAsync($@"
         var el = new Microsoft.UI.Reactor.ViewboxElement();
-        {{|REACTOR_MOD_002:el.Set(vb => vb.{property} = 1)|}};");
+        {{|REACTOR_MOD_002:el.Set(vb => vb.{property} = 1)|}};
+
+        var text = new Microsoft.UI.Reactor.TextBlockElement();
+        text.Set(tb => tb.{property} = 1);");
     }
 
     /// <summary>
-    /// The false positive the #1193 derivation exposed, and its control.
+    /// The false positive the #1193 derivation exposed — repaired in the pool rather than in the
+    /// analyzer, so both receivers report `POOL_001`.
     /// </summary>
     /// <remarks>
-    /// <c>CleanElement</c> clears <c>IsTabStop</c> under <c>if (fe is Control …)</c>, but WinUI 3
-    /// declares the property on <c>UIElement</c> — so a write on a <c>TextBlock</c> compiles and
-    /// used to be told, at Warning severity, that the pool unwinds it. It does not. The Button row
-    /// is what makes this a narrowing rather than a removal: the same property on a <c>Control</c>
-    /// still reports POOL_001, so a gate that stopped being consulted entirely would fail here.
+    /// <c>CleanElement</c> used to clear <c>IsTabStop</c> only under
+    /// <c>if (fe is Control tabStopControl)</c>, but WinUI 3 declares the property on
+    /// <c>UIElement</c> and <c>ApplyModifiers</c> writes it ungated — so <c>.IsTabStop(false)</c>
+    /// reached a pooled <c>TextBlock</c> that the pool then never reset, and the diagnostic's
+    /// promise was false there. Narrowing the gate to <c>Control</c> would have made the
+    /// diagnostic honest while leaving the leak; clearing on <c>fe</c> closes the leak and keeps
+    /// the unrestricted claim true. Both arms therefore assert <c>POOL_001</c>, and the
+    /// <c>TextBlock</c> arm is the one that regresses if the clear is narrowed again.
     /// </remarks>
     [Fact]
-    public async Task Narrows_IsTabStop_To_Control_Receivers()
+    public async Task Reports_IsTabStop_On_Pooled_Control_And_Non_Control_Receivers()
     {
         await VerifyAsync(@"
         var text = new Microsoft.UI.Reactor.TextBlockElement();
-        {|REACTOR_MOD_002:text.Set(tb => tb.IsTabStop = false)|};
+        {|REACTOR_POOL_001:text.Set(tb => tb.IsTabStop = false)|};
 
         var button = new Microsoft.UI.Reactor.ButtonElement();
         {|REACTOR_POOL_001:button.Set(b => b.IsTabStop = false)|};");
+    }
+
+    /// <summary>
+    /// <c>ProgressRing.IsActive</c>, the third row that had no table entry at all, and the
+    /// negative control that makes the <c>elementTypes</c> gate load-bearing.
+    /// </summary>
+    /// <remarks>
+    /// The positive arm alone would pass just as happily if the row lost its
+    /// <c>elementTypes: ProgressRingElementOnly</c> — an ungated <c>ModifierInfo("IsActive")</c>
+    /// still reports on a <c>ProgressRing</c>, while also reporting on every receiver that has no
+    /// <c>.IsActive</c> modifier and so producing a fix that does not compile. The
+    /// <c>TextBlockElement</c> arm is what fails in that case, and the same pairing is applied to
+    /// the Viewbox rows above.
+    /// </remarks>
+    [Fact]
+    public async Task Reports_IsActive_Only_Where_The_Modifier_Exists()
+    {
+        await VerifyAsync(@"
+        var ring = new Microsoft.UI.Reactor.ProgressRingElement();
+        {|REACTOR_MOD_002:ring.Set(pr => pr.IsActive = false)|};
+
+        var text = new Microsoft.UI.Reactor.TextBlockElement();
+        text.Set(tb => tb.IsActive = false);");
     }
 }

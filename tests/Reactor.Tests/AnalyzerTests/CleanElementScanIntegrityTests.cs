@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
+using Microsoft.UI.Reactor.Cli.Pack;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
@@ -29,12 +30,14 @@ public class CleanElementScanIntegrityTests
     [InlineData("FrameworkElement", "Margin")]
     // Method scope, direct assignment. The old scan matched assignments too, but only here.
     [InlineData("FrameworkElement", "Tag")]
-    // Method scope, ungated ClearValue for a property that had no ModifierTable row at all
-    // before #1193 — the issue's second named miss.
+    // Braceless single-statement `if (fe is Control c) c.ClearValue(...)` — the shape a
+    // region-parsing scan gets wrong. IsEnabled is now the only property clearing this way.
+    [InlineData("Control", "IsEnabled")]
+    // Ungated clears for the two properties #162 added. IsTabStop moved OUT of the `is Control`
+    // arm as part of this change (a pooled TextBlock was keeping a stale tab stop), so
+    // FrameworkElement — not Control — is the receiver that must be found.
     [InlineData("FrameworkElement", "IsHitTestVisible")]
-    // Braceless single-statement `if (fe is Control c) c.ClearValue(...)`. Resolving this to
-    // Control rather than FrameworkElement is what demotes IsTabStop on a TextBlock to MOD_002.
-    [InlineData("Control", "IsTabStop")]
+    [InlineData("FrameworkElement", "IsTabStop")]
     // `else if` arm of the FE-common narrowing chain.
     [InlineData("Border", "BorderBrush")]
     // Nested `if` inside the Panel arm — two levels of pattern binding.
@@ -184,6 +187,43 @@ public class CleanElementScanIntegrityTests
     }
 
     /// <summary>
+    /// The scan must attribute a reset written inside a nested <c>if</c> to the innermost type
+    /// bound for it, not to the enclosing arm.
+    /// </summary>
+    /// <remarks>
+    /// <c>Grid</c> and <c>StackPanel</c> are bound inside the <c>else if (fe is Panel resetPanel)</c>
+    /// arm, so their clears sit two pattern-bindings deep. Attributing them to <c>Panel</c> would
+    /// widen <c>Padding</c>'s and <c>CornerRadius</c>'s derived <c>poolResetGate</c> to every panel
+    /// — including <c>Canvas</c>, which is poolable and declares neither property — and turn a
+    /// correct MOD_002 into a false POOL_001 Warning. The <c>Panel</c> row is the control: it must
+    /// stay attributed to <c>Panel</c>, since <c>Background</c> really is cleared for every panel.
+    /// </remarks>
+    [Theory]
+    [InlineData("Grid", "Padding", "Panel")]
+    [InlineData("StackPanel", "CornerRadius", "Panel")]
+    [InlineData("Panel", "Background", "Grid")]
+    public void Nested_Bindings_Attribute_To_The_Innermost_Type(
+        string receiver, string property, string mustNotBeAttributedTo)
+    {
+        var receivers = CleanElementScan.Resets
+            .Where(reset => reset.Property == property)
+            .Select(reset => reset.Receiver)
+            .ToList();
+
+        Assert.True(
+            receivers.Contains(receiver, StringComparer.Ordinal),
+            $"'{property}' is cleared on '{receiver}' in CleanElement, but the scan attributed it " +
+            $"to [{string.Join(", ", receivers)}] instead.");
+
+        Assert.False(
+            receivers.Contains(mustNotBeAttributedTo, StringComparer.Ordinal),
+            $"The scan attributed a '{property}' reset to '{mustNotBeAttributedTo}', which does not " +
+            "clear it. A widened attribution widens the derived poolResetGate, which turns a " +
+            "correct REACTOR_MOD_002 into a false REACTOR_POOL_001 Warning — a build break under " +
+            "TreatWarningsAsErrors.");
+    }
+
+    /// <summary>
     /// Non-degeneracy floor. Every other test here names specific pairs; this one notices a scan
     /// that keeps those and loses the long tail.
     /// </summary>
@@ -228,47 +268,81 @@ public class CleanElementScanIntegrityTests
             CleanElementScan.InstanceResets.Count + CleanElementScan.AttachedResets.Count);
     }
 
-    // ── Comment and literal blanking ────────────────────────────────────────
+    // ── Spurious matches ────────────────────────────────────────────────────
 
     /// <summary>
-    /// The blanking pass is the reason the scan can drop the old <c>^\s*switch</c> line anchor, and
-    /// it is not exercised by the fixture: <c>ElementPool.cs</c> happens to contain no comment that
-    /// reads as a reset today, so a stripper that did nothing at all would leave every test above
-    /// green. Drive it directly instead.
+    /// Text that merely <em>looks</em> like a reset must not become one.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The regex predecessors of this scan needed a hand-written comment/string blanker and a
+    /// line-anchored region boundary precisely because this method's own comments discuss the
+    /// properties being scanned — <c>"Padding / CornerRadius / … / IsEnabled"</c> — and a comment
+    /// read as a reset invents a receiver/property pair no consistency invariant can satisfy.
+    /// Roslyn makes that structurally impossible: trivia is trivia and literals are literals. This
+    /// test is the standing proof, because "it cannot happen" is exactly the claim that stops
+    /// being checked.
+    /// </para>
+    /// <para>
+    /// The identifiers below appear in <c>CleanElement</c>'s comments (or the surrounding
+    /// doc comments) but are never assigned or cleared as code. If any shows up in the scan, the
+    /// parser has regressed to text matching. Each is asserted to be genuinely present in the
+    /// file first, so a row cannot quietly become a test of nothing after a comment is reworded.
+    /// </para>
+    /// </remarks>
     [Theory]
-    // A comment naming a property assignment must not read as one. CleanElement's own comments
-    // discuss the exact properties being scanned, so this is the live hazard.
-    [InlineData("// tb.FontSize = 14;", false)]
-    [InlineData("/* tb.FontSize = 14; */", false)]
-    [InlineData("/// <example>fe.Margin = x;</example>", false)]
-    // …while the same text as code must survive it.
-    [InlineData("tb.FontSize = 14;", true)]
-    // A literal containing assignment-shaped text is not an assignment.
-    [InlineData("Log(\"tb.FontSize = 14\");", false)]
-    [InlineData("Log(@\"tb.FontSize = 14\");", false)]
-    // An escaped quote must not end the literal early and let its tail parse as code.
-    [InlineData("Log(\"a\\\" tb.FontSize = 14\");", false)]
-    // A doubled quote is the verbatim escape, with the same requirement.
-    [InlineData("Log(@\"a\"\" tb.FontSize = 14\");", false)]
-    // Real code containing an empty literal — CleanElement's `tb.Text = ""` — still parses.
-    [InlineData("tb.Text = \"\";", true)]
-    public void Blanking_Removes_Comments_And_Literals_But_Not_Code(string snippet, bool expectAssignment)
+    // Named in the FE-common comment block's prose about ApplyModifiers' receiver chains.
+    [InlineData("ApplyModifiers")]
+    [InlineData("PoolableTypes")]
+    // Named in the prose explaining which gated receivers the pool does NOT recycle.
+    [InlineData("RelativePanel")]
+    public void Prose_Is_Not_Mistaken_For_A_Reset(string identifier)
     {
-        var blanked = CleanElementScan.StripCommentsAndStrings(snippet);
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+        var source = File.ReadAllText(Path.Join(root!, "src", "Reactor", "Core", "ElementPool.cs"));
 
-        Assert.Equal(
-            snippet.Length,
-            blanked.Length);
+        // Positive control. A row naming text the file does not contain asserts nothing — the
+        // scan would "correctly" omit an identifier that was never there to match.
+        Assert.Contains(identifier, source, StringComparison.Ordinal);
 
-        var matched = Regex.IsMatch(
-            blanked, @"\b(\w+)\.(\w+)\s*(?<![=!<>+\-*/%&|^])=(?!=)");
+        var matches = CleanElementScan.Resets
+            .Where(reset => string.Equals(reset.Property, identifier, StringComparison.Ordinal))
+            .ToList();
 
         Assert.True(
-            matched == expectAssignment,
-            $"Blanking '{snippet}' produced '{blanked}', which the assignment pattern " +
-            $"{(matched ? "matched" : "did not match")} — expected the opposite. A comment or " +
-            "literal read as a reset invents a receiver/property pair no consistency invariant " +
-            "can satisfy; a blanked-away statement silently drops a real one.");
+            matches.Count == 0,
+            $"The scan reported a reset of '{identifier}': [{string.Join("; ", matches)}]. That name " +
+            "appears only in CleanElement's comments, so the scan is matching text rather than " +
+            "syntax. A phantom reset satisfies no ModifierTable row, so it fails the consistency " +
+            "invariants for a reason that does not exist — and it names a plausible-looking " +
+            "property while doing it.");
+    }
+
+    /// <summary>
+    /// Every scanned receiver must be a type <c>CleanElement</c> genuinely narrows to.
+    /// </summary>
+    /// <remarks>
+    /// The complement of <see cref="Every_Reset_Receiver_Resolves_To_A_Bound_Type"/>: that one
+    /// catches a reset whose receiver resolves to nothing, this catches a <em>binding</em> that
+    /// should not exist. <c>if (fe.Style is not null)</c> is the live hazard — under the regex
+    /// predecessor's `\bis\s+(\w+)\s+(\w+)` it read as type <c>not</c> bound to name <c>null</c>,
+    /// and the keyword exclusion that suppressed it was a list someone had to remember to extend.
+    /// Roslyn classifies it as a <c>UnaryPattern</c>, which is not a declaration at all.
+    /// </remarks>
+    [Fact]
+    public void No_Binding_Is_Invented_From_A_Non_Declaration_Pattern()
+    {
+        var suspicious = CleanElementScan.BoundReceivers
+            .Where(pair => pair.Value is "not" or "null" or "and" or "or" or "var" or "true" or "false")
+            .Select(pair => $"{pair.Key} -> {pair.Value}")
+            .OrderBy(text => text, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            suspicious.Count == 0,
+            $"These bindings name a pattern keyword rather than a type: [{string.Join(", ", suspicious)}]. " +
+            "The scan is treating a combinator or `var` pattern as a type declaration, so any reset " +
+            "naming that variable would be attributed to a type that does not exist.");
     }
 }

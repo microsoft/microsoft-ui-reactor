@@ -279,9 +279,16 @@ public sealed class ElementPool : IDisposable
         // resets AccessibilityView above; it must also reset these two so a control hidden
         // inside a custom label can't return to the pool non-tabbable / non-hit-testable and
         // silently poison the next unrelated renter that doesn't re-set them.
+        //
+        // Both are cleared on `fe`, not under an `is Control` narrowing. WinUI 3 declares
+        // IsTabStop on UIElement and ApplyModifiers writes it ungated (`fe.IsTabStop = …`),
+        // so `.IsTabStop(false)` reaches every element — including the poolable non-Controls
+        // TextBlock, RichTextBlock, Grid, StackPanel, Border, Canvas, Viewbox and Image.
+        // Clearing it only for Control left every one of those able to carry a stale tab stop
+        // into its next renter, which is the #985 shape; the narrower Control.IsTabStopProperty
+        // also names the same underlying DP, so this is a widening, not a retarget.
         fe.ClearValue(UIElement.IsHitTestVisibleProperty);
-        if (fe is Control tabStopControl)
-            tabStopControl.ClearValue(Control.IsTabStopProperty);
+        fe.ClearValue(UIElement.IsTabStopProperty);
 
         // Issue #985: six common modifiers are written by ApplyModifiers onto receivers
         // this method never reset, so a pooled control handed its previous renter's local

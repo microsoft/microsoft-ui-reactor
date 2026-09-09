@@ -381,16 +381,18 @@ internal static class ModifierTable
             { "Opacity",             new ModifierInfo("Opacity",             poolReset: true) },
             { "AccessKey",           new ModifierInfo("AccessKey",           poolReset: true) },
 
-            // Cleared under `if (fe is Control …)`, not on the FrameworkElement itself, so the
-            // gate is load-bearing rather than decorative. WinUI 3 declares IsTabStop on
-            // UIElement, so `.Set(tb => tb.IsTabStop = false)` on a TextBlock compiles — and
-            // without ControlOnly it was told the pool resets a value the pool leaves alone,
-            // which is the #1051 false-positive shape at Warning severity. IsEnabled cannot
-            // reach a non-Control receiver at all, so its gate is a no-op behaviourally and is
-            // declared only to keep the derivation total: every poolReset row states the
-            // receivers CleanElement really clears it on, and a row that opts out of saying so
-            // is a row the parity check cannot verify.
-            { "IsTabStop",           new ModifierInfo("IsTabStop",           poolReset: true, poolResetGate: ControlOnly) },
+            // IsTabStop deliberately has NO gate. It is declared on UIElement and ApplyModifiers
+            // writes it ungated (`fe.IsTabStop = …`), so it reaches every element — including the
+            // poolable non-Controls TextBlock, RichTextBlock, Grid, StackPanel, Border, Canvas,
+            // Viewbox and Image. Gating the diagnostic to Control would have described a real
+            // pool leak (a pooled TextBlock keeping a stale tab stop) as expected behaviour;
+            // CleanElement clears it on `fe` instead, which makes the unrestricted claim true.
+            //
+            // IsEnabled is the genuine Control-only case: WinUI declares it on Control, so the
+            // gate restricts nothing a user could hit and exists to keep the derivation total —
+            // every poolReset row names the receivers CleanElement clears it on, and a row that
+            // opts out of saying so is a row the parity check cannot verify.
+            { "IsTabStop",           new ModifierInfo("IsTabStop",           poolReset: true) },
             { "IsEnabled",           new ModifierInfo("IsEnabled",           poolReset: true, poolResetGate: ControlOnly) },
 
             // Pool-reset but only on some receivers (issue #985). CleanElement clears these

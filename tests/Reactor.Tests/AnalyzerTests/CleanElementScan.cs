@@ -4,8 +4,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.UI.Reactor.Cli.Pack;
 using Xunit;
 
@@ -16,8 +16,8 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// because the three are not interchangeable to a reader: <see cref="ClearValue"/> restores the
 /// dependency-property default and lets Style setters win again (issue #952), while
 /// <see cref="Assignment"/> pins a hardcoded literal and <see cref="CollectionClear"/> empties a
-/// live collection. All three lose a user's <c>.Set(...)</c> write on pool return, which is the
-/// only fact <c>REACTOR_POOL_001</c> reports — so all three must be scanned.
+/// live collection. All three drop whatever the previous renter left behind, which is the fact
+/// the pool consistency invariants are stated over — so all three must be scanned.
 /// </summary>
 internal enum ResetShape
 {
@@ -79,35 +79,37 @@ internal readonly record struct CleanElementReset(
 /// #985 and #950 <em>relocated</em> clears up into the FE-common block specifically so the scan
 /// could see them, which works only for properties declared on a shared base. <c>TextBlock</c>'s
 /// font and text DPs exist on <c>TextBlock</c> alone and cannot be relocated, so they stayed in
-/// the <c>case TextBlock tb:</c> arm and were never checked against <c>ModifierTable</c> — and
-/// <c>REACTOR_POOL_001</c> silently under-reported them for as long as they sat there.
+/// the <c>case TextBlock tb:</c> arm and were never checked against <c>ModifierTable</c>.
 /// </para>
 /// <para>
-/// <b>How the receiver is resolved.</b> Not by parsing regions, which would have to track brace
-/// depth, <c>else if</c> chains, braceless single-statement <c>if</c> bodies and fallthrough-free
-/// <c>case</c> arms, and would fail <em>quietly</em> by attributing a statement to the wrong
-/// enclosing type. Instead every reset names its receiver as a local, and every local in this
-/// method is introduced by exactly one binding: the method parameter, an <c>is T name</c>
-/// pattern, or a <c>case T name:</c> label. So the map from local name to type is recovered
-/// directly from the bindings and each reset is resolved through it. A receiver that resolves to
-/// nothing is reported rather than defaulted — see
-/// <see cref="CleanElementScanIntegrityTests.Every_Reset_Receiver_Resolves_To_A_Bound_Type"/> —
-/// because defaulting is what would let a renamed local silently re-attribute a whole arm to
+/// <b>Roslyn, not regex.</b> Its predecessors were regexes over raw file text, which forced them
+/// to re-implement C# lexing badly: a hand-written comment/string blanker (this method's comments
+/// discuss the very properties being scanned), a line anchor so a comment mentioning the dispatch
+/// could not masquerade as the region boundary, and brace counting to delimit the body. Parsing
+/// with <see cref="CSharpSyntaxTree"/> deletes all three problems — trivia is trivia, literals are
+/// literals, and the body is a node — and it is what this assembly already does for the same class
+/// of problem (<c>ModifierUnsetClearValueTests.ReconcilerRoot</c>, <c>ModifierTableIntegrityTests</c>).
+/// It also removes categories of silent mis-parse the regex version had to special-case by
+/// keyword: <c>if (fe.Style is not null)</c> is a <c>UnaryPattern</c>, not a declaration, so it
+/// cannot be read as a type binding, and <c>a &gt;= b</c> can never be read as an assignment.
+/// </para>
+/// <para>
+/// <b>How the receiver is resolved.</b> Every reset names its receiver as a local, and every local
+/// in this method is introduced by exactly one binding: the method parameter, an <c>is T name</c>
+/// pattern, or a <c>case T name:</c> label — both of the latter being a
+/// <see cref="DeclarationPatternSyntax"/>. So the map from local name to type is recovered from the
+/// bindings and each reset resolved through it. A receiver that resolves to nothing is reported
+/// rather than defaulted (see
+/// <c>CleanElementScanIntegrityTests.Every_Reset_Receiver_Resolves_To_A_Bound_Type</c>), because
+/// defaulting is what would let a renamed local silently re-attribute a whole arm to
 /// <c>FrameworkElement</c> and widen every derived gate.
-/// </para>
-/// <para>
-/// <b>Comments are stripped before matching.</b> An assignment or clear written inside a comment
-/// is not a reset, and this method's comments discuss the very properties being scanned
-/// (<c>"Padding / CornerRadius / … / IsEnabled"</c>). Stripping is also what lets the scan drop
-/// the old <c>^\s*switch</c> line anchor, which existed only to stop a comment mentioning the
-/// dispatch from masquerading as the region boundary.
 /// </para>
 /// <para>
 /// <b>Direction of error.</b> A scan that returns <em>fewer</em> resets cannot fail an
 /// absence-shaped assertion — a smaller set holds fewer offenders — so under-matching is the
-/// silent failure and is guarded presence-shaped in <see cref="CleanElementScanIntegrityTests"/>,
-/// which pins named pairs the scan must find, requires every <c>case</c> label to be represented,
-/// and floors the total.
+/// silent failure and is guarded presence-shaped in <c>CleanElementScanIntegrityTests</c>, which
+/// pins named pairs the scan must find, requires every <c>case</c> label to be represented, and
+/// floors the total.
 /// </para>
 /// </remarks>
 internal static class CleanElementScan
@@ -124,8 +126,8 @@ internal static class CleanElementScan
     internal static IReadOnlyList<CleanElementReset> Resets => Result.Value.Resets;
 
     /// <summary>
-    /// The resets naming an <em>instance</em> dependency property — every reset that is not
-    /// <see cref="AttachedResets"/>, over the same matches, so the two partition
+    /// The resets naming an <em>instance</em> dependency property — the exact complement of
+    /// <see cref="AttachedResets"/> over the same matches, so the two partition
     /// <see cref="Resets"/> by construction.
     /// </summary>
     internal static IReadOnlyList<CleanElementReset> InstanceResets => Result.Value.Instance;
@@ -142,7 +144,7 @@ internal static class CleanElementScan
     /// <summary>The types named by the <c>case T x:</c> labels of the type-specific dispatch.</summary>
     internal static IReadOnlyList<string> SwitchCaseReceivers => Result.Value.SwitchCases;
 
-    /// <summary>Every <c>.ClearValue(</c> call in the method, however it is written.</summary>
+    /// <summary>Every <c>ClearValue</c> invocation in the method, however it is written.</summary>
     internal static int TotalClearValueCalls => Result.Value.TotalClearValueCalls;
 
     /// <summary>The subset of those the scan parsed into a <see cref="CleanElementReset"/>.</summary>
@@ -162,8 +164,7 @@ internal static class CleanElementScan
     /// This is the source of truth <c>ModifierInfo.PoolResetGate</c> mirrors. Deriving it from
     /// <c>ControlGate ∩ PoolableTypes</c> instead — as the parity test did before issue #1193 —
     /// asserts that "<c>ApplyModifiers</c> writes it here" implies "<c>CleanElement</c> clears it
-    /// here", which holds for the #985 border-box family and is false for the fonts:
-    /// <c>FontSize</c>'s gate is <c>Control | TextBlock</c> and only <c>TextBlock</c> is cleared.
+    /// here", which holds for the #985 border-box family and is false in general.
     /// </remarks>
     internal static IReadOnlyCollection<string> ReceiversResetting(string property) =>
         InstanceResets
@@ -182,72 +183,103 @@ internal static class CleanElementScan
         int TotalClearValueCalls,
         int RecognizedClearValueCalls);
 
-    // ── Reset shapes ────────────────────────────────────────────────────────
-    //
-    // `(?:[\w.]+\.)?` before the owner absorbs whatever qualification the source uses
-    // (Microsoft.UI.Xaml.Automation.AutomationProperties, WinUI.Border, Layout.FlexPanel); the
-    // rightmost segment is how ModifierTable.AttachedProperties is keyed and how the analyzer
-    // sees the owner at a call site.
-    private const string ClearValuePattern =
-        @"\b(\w+)\.ClearValue\(\s*(?:[\w.]+\.)?(\w+)\.(\w+)Property\s*\)";
-
-    // `=` not followed by `=` and not preceded by one of `=!<>+-*/%&|^` excludes ==, !=, <=, >=,
-    // => and every compound assignment, none of which is a reset to a fixed value.
-    private const string AssignmentPattern =
-        @"\b(\w+)\.(\w+)\s*(?<![=!<>+\-*/%&|^])=(?!=)";
-
-    private const string CollectionClearPattern = @"\b(\w+)\.(\w+)\.Clear\(\s*\)";
-
     private static ScanResult Scan()
     {
-        var body = ReadCleanElementBody(out var parameterName);
-        var code = StripCommentsAndStrings(body);
+        var method = ReadCleanElementMethod();
+        var parameterName = method.ParameterList.Parameters[0].Identifier.Text;
 
         var bindings = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [parameterName] = RootReceiver,
         };
 
-        // `is <Qualified.>Type name` — the FE-common narrowing chain, including the nested
-        // Grid / StackPanel arms inside the Panel branch.
-        //
-        // The lookahead excludes the pattern-combinator keywords. `if (fe.Style is not null)` is
-        // in this method today, and without it that reads as type `not` bound to name `null` — a
-        // junk binding that a later `null.Something = …` could never use, but which would also
-        // mask a genuine collision if a real type were ever named in a combinator position.
-        // Rejecting at the binding keeps BoundReceivers a faithful list of what the method binds.
-        foreach (Match match in Regex.Matches(code, @"\bis\s+(?!not\b|and\b|or\b|null\b)(?:[\w.]+\.)?(\w+)\s+(\w+)\b"))
-            Bind(bindings, match.Groups[2].Value, match.Groups[1].Value);
-
-        // `case <Qualified.>Type name:` — the type-specific dispatch.
-        var switchCases = new List<string>();
-        foreach (Match match in Regex.Matches(code, @"\bcase\s+(?:[\w.]+\.)?(\w+)\s+(\w+)\s*:"))
+        // A DeclarationPatternSyntax is both `fe is Control c` and `case WinUI.Panel panel:`, so
+        // one walk collects the FE-common narrowing chain (including the nested Grid / StackPanel
+        // arms) and the type dispatch.
+        foreach (var pattern in method.DescendantNodes().OfType<DeclarationPatternSyntax>())
         {
-            Bind(bindings, match.Groups[2].Value, match.Groups[1].Value);
-            switchCases.Add(match.Groups[1].Value);
+            if (pattern.Designation is SingleVariableDesignationSyntax designation)
+                Bind(bindings, designation.Identifier.Text, SimpleTypeName(pattern.Type));
         }
+
+        var switchCases = method.DescendantNodes()
+            .OfType<SwitchStatementSyntax>()
+            .Where(node => node.Expression is IdentifierNameSyntax id
+                           && string.Equals(id.Identifier.Text, parameterName, StringComparison.Ordinal))
+            .SelectMany(node => node.Sections)
+            .SelectMany(section => section.Labels)
+            .OfType<CasePatternSwitchLabelSyntax>()
+            .Select(label => label.Pattern)
+            .OfType<DeclarationPatternSyntax>()
+            .Select(pattern => SimpleTypeName(pattern.Type))
+            .ToList();
 
         var resets = new List<(int Position, CleanElementReset Reset)>();
         var unresolved = new SortedSet<string>(StringComparer.Ordinal);
-        var recognizedClears = 0;
+        var totalClearValueCalls = 0;
+        var recognizedClearValueCalls = 0;
 
-        foreach (Match match in Regex.Matches(code, ClearValuePattern))
+        foreach (var node in method.DescendantNodes())
         {
-            recognizedClears++;
-            Add(match.Index, match.Groups[1].Value, match.Groups[2].Value, match.Groups[3].Value, ResetShape.ClearValue);
-        }
+            switch (node)
+            {
+                // `receiver.PROP = value` — the shape `tb.FontSize = 14` and `fe.Tag = null` use.
+                // `SimpleAssignmentExpression` only: a compound assignment (`x.P += v`) is not a
+                // reset to a fixed value, and matching the kind through the pattern rather than a
+                // separate `IsKind` call keeps the pattern variables definitely assigned.
+                case AssignmentExpressionSyntax
+                {
+                    RawKind: (int)SyntaxKind.SimpleAssignmentExpression,
+                    Left: MemberAccessExpressionSyntax
+                    {
+                        Expression: IdentifierNameSyntax assignReceiver,
+                        Name: { } assignedProperty,
+                    },
+                } assignment:
+                    Add(assignment.SpanStart, assignReceiver.Identifier.Text, owner: null,
+                        assignedProperty.Identifier.Text, ResetShape.Assignment);
+                    break;
 
-        foreach (Match match in Regex.Matches(code, AssignmentPattern))
-        {
-            // `receiver.ClearValue(...)` never matches (a call, not an assignment), but a
-            // collection clear's own receiver segment would be picked up as `panel.Children`
-            // by neither pattern — Clear() is a call too. Nothing to exclude here beyond the
-            // operator filter already in the pattern.
-            Add(match.Index, match.Groups[1].Value, owner: null, match.Groups[2].Value, ResetShape.Assignment);
-        }
+                case InvocationExpressionSyntax invocation
+                    when invocation.Expression is MemberAccessExpressionSyntax call:
 
-        foreach (Match match in Regex.Matches(code, CollectionClearPattern))
-            Add(match.Index, match.Groups[1].Value, owner: null, match.Groups[2].Value, ResetShape.CollectionClear);
+                    if (string.Equals(call.Name.Identifier.Text, "ClearValue", StringComparison.Ordinal))
+                    {
+                        totalClearValueCalls++;
+
+                        // `receiver.ClearValue(Owner.PROPProperty)`. The owner may carry any amount
+                        // of qualification (Microsoft.UI.Xaml.Automation.AutomationProperties,
+                        // WinUI.Border, Layout.FlexPanel); only its rightmost segment is kept,
+                        // which is how ModifierTable.AttachedProperties is keyed and how the
+                        // analyzer sees the owner at a call site.
+                        if (call.Expression is IdentifierNameSyntax clearReceiver
+                            && invocation.ArgumentList.Arguments.Count == 1
+                            && invocation.ArgumentList.Arguments[0].Expression is MemberAccessExpressionSyntax dp
+                            && dp.Name.Identifier.Text.EndsWith("Property", StringComparison.Ordinal))
+                        {
+                            recognizedClearValueCalls++;
+                            var dependencyProperty = dp.Name.Identifier.Text;
+                            Add(invocation.SpanStart, clearReceiver.Identifier.Text,
+                                SimpleTypeName(dp.Expression),
+                                dependencyProperty.Substring(0, dependencyProperty.Length - "Property".Length),
+                                ResetShape.ClearValue);
+                        }
+                    }
+                    // `receiver.PROP.Clear()` — Panel.Children, RichTextBlock.Blocks.
+                    else if (string.Equals(call.Name.Identifier.Text, "Clear", StringComparison.Ordinal)
+                             && invocation.ArgumentList.Arguments.Count == 0
+                             && call.Expression is MemberAccessExpressionSyntax
+                             {
+                                 Expression: IdentifierNameSyntax collectionReceiver,
+                             } collection)
+                    {
+                        Add(invocation.SpanStart, collectionReceiver.Identifier.Text, owner: null,
+                            collection.Name.Identifier.Text, ResetShape.CollectionClear);
+                    }
+
+                    break;
+            }
+        }
 
         var ordered = resets.OrderBy(entry => entry.Position).Select(entry => entry.Reset).ToList();
 
@@ -259,8 +291,8 @@ internal static class CleanElementScan
             bindings,
             switchCases,
             unresolved.ToList(),
-            Regex.Matches(code, @"\.ClearValue\s*\(").Count,
-            recognizedClears);
+            totalClearValueCalls,
+            recognizedClearValueCalls);
 
         void Add(int position, string receiverName, string? owner, string property, ResetShape shape)
         {
@@ -275,12 +307,28 @@ internal static class CleanElementScan
     }
 
     /// <summary>
+    /// The rightmost segment of a possibly-qualified type or owner name — <c>Panel</c> for
+    /// <c>WinUI.Panel</c>, <c>AutomationProperties</c> for
+    /// <c>Microsoft.UI.Xaml.Automation.AutomationProperties</c>.
+    /// </summary>
+    private static string SimpleTypeName(Microsoft.CodeAnalysis.SyntaxNode node) => node switch
+    {
+        IdentifierNameSyntax identifier => identifier.Identifier.Text,
+        QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
+        MemberAccessExpressionSyntax member => member.Name.Identifier.Text,
+        _ => node.ToString(),
+    };
+
+    /// <summary>
     /// Record a local → type binding, refusing to overwrite a different one.
     /// </summary>
     /// <remarks>
     /// Two bindings of one name to two types would make every reset naming it ambiguous, and the
     /// scan would silently attribute some of them to the wrong receiver — the exact failure this
     /// class exists to end. Fail at the binding instead, where the message can name both types.
+    /// Legal C# (two disjoint scopes reusing a name) trips this, which is deliberate: the scan is
+    /// flat, so a reused name is genuinely unresolvable here and must be renamed rather than
+    /// silently resolved to whichever binding was walked first.
     /// </remarks>
     private static void Bind(Dictionary<string, string> bindings, string name, string type)
     {
@@ -289,7 +337,7 @@ internal static class CleanElementScan
             throw new InvalidOperationException(
                 $"ElementPool.CleanElement binds the local '{name}' to both '{existing}' and " +
                 $"'{type}'. Every reset naming '{name}' would be attributed to whichever binding " +
-                "was scanned first, so the REACTOR_POOL_001 consistency invariants would silently " +
+                "was walked first, so the REACTOR_POOL_001 consistency invariants would silently " +
                 "check the wrong receiver. Rename one of the pattern variables.");
         }
 
@@ -297,99 +345,15 @@ internal static class CleanElementScan
     }
 
     /// <summary>
-    /// Replace every comment with equivalent whitespace and every string/character literal with a
-    /// blank of the same length, so match offsets stay faithful to the original text.
+    /// <c>CleanElement</c>'s declaration, parsed from <c>ElementPool.cs</c>.
     /// </summary>
     /// <remarks>
-    /// Blanking rather than deleting keeps <c>Regex.Match.Index</c> usable for source ordering.
-    /// String contents are blanked as well as comments: <c>tb.Text = ""</c> is a reset the scan
-    /// must see, but nothing inside a literal ever is, and a literal containing <c>x.Y =</c>
-    /// would otherwise be matched as one.
+    /// Selected by name plus a single <c>FrameworkElement</c> parameter rather than by the literal
+    /// <c>(FrameworkElement fe)</c> text, so a harmless rename of the parameter does not blind the
+    /// scan — the parameter's own name is read back off the node. Requiring exactly one match is
+    /// what stops an added overload from silently halving the scanned surface.
     /// </remarks>
-    internal static string StripCommentsAndStrings(string source)
-    {
-        var output = new StringBuilder(source.Length);
-        var index = 0;
-
-        while (index < source.Length)
-        {
-            var current = source[index];
-            var next = index + 1 < source.Length ? source[index + 1] : '\0';
-
-            if (current == '/' && next == '/')
-            {
-                while (index < source.Length && source[index] != '\n')
-                    output.Append(source[index++] == '\t' ? '\t' : ' ');
-                continue;
-            }
-
-            if (current == '/' && next == '*')
-            {
-                output.Append("  ");
-                index += 2;
-                while (index < source.Length && !(source[index] == '*' && index + 1 < source.Length && source[index + 1] == '/'))
-                {
-                    output.Append(source[index] == '\n' ? '\n' : ' ');
-                    index++;
-                }
-
-                if (index < source.Length) { output.Append("  "); index += 2; }
-                continue;
-            }
-
-            if (current == '@' && next == '"')
-            {
-                output.Append("  ");
-                index += 2;
-                while (index < source.Length)
-                {
-                    if (source[index] == '"')
-                    {
-                        // A doubled quote escapes itself inside a verbatim literal.
-                        if (index + 1 < source.Length && source[index + 1] == '"') { output.Append("  "); index += 2; continue; }
-                        output.Append(' '); index++; break;
-                    }
-
-                    output.Append(source[index] == '\n' ? '\n' : ' ');
-                    index++;
-                }
-
-                continue;
-            }
-
-            if (current is '"' or '\'')
-            {
-                var quote = current;
-                output.Append(' ');
-                index++;
-                while (index < source.Length && source[index] != quote)
-                {
-                    if (source[index] == '\\' && index + 1 < source.Length) { output.Append("  "); index += 2; continue; }
-                    output.Append(source[index] == '\n' ? '\n' : ' ');
-                    index++;
-                }
-
-                if (index < source.Length) { output.Append(' '); index++; }
-                continue;
-            }
-
-            output.Append(current);
-            index++;
-        }
-
-        return output.ToString();
-    }
-
-    /// <summary>
-    /// <c>CleanElement</c>'s complete body, brace-matched from the method's opening brace to its
-    /// closing one, plus the name of its parameter.
-    /// </summary>
-    /// <remarks>
-    /// Brace matching runs over comment- and string-blanked text so a brace inside either cannot
-    /// unbalance the count. Matching the signature by shape rather than by the literal
-    /// <c>(FrameworkElement fe)</c> keeps the scan robust to a harmless rename.
-    /// </remarks>
-    private static string ReadCleanElementBody(out string parameterName)
+    private static MethodDeclarationSyntax ReadCleanElementMethod()
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
@@ -397,29 +361,25 @@ internal static class CleanElementScan
         // behavior flagged by CodeQL cs/path-combine. All segments here are hardcoded literals.
         var path = Path.Join(root!, "src", "Reactor", "Core", "ElementPool.cs");
         Assert.True(File.Exists(path), $"ElementPool.cs not found at {path}");
-        var source = File.ReadAllText(path);
 
-        var signature = Regex.Match(source,
-            @"static\s+void\s+CleanElement\s*\(\s*FrameworkElement\s+(\w+)\s*\)");
-        Assert.True(signature.Success,
-            "Could not locate CleanElement(FrameworkElement) in ElementPool.cs — has it been " +
-            "removed or had its parameter type changed?");
-        parameterName = signature.Groups[1].Value;
+        var methods = CSharpSyntaxTree.ParseText(File.ReadAllText(path))
+            .GetRoot()
+            .DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .Where(method =>
+                method.Identifier.Text == "CleanElement"
+                && method.ParameterList.Parameters.Count == 1
+                && method.ParameterList.Parameters[0].Type is { } type
+                && SimpleTypeName(type) == "FrameworkElement")
+            .ToList();
 
-        var open = source.IndexOf('{', signature.Index + signature.Length);
-        Assert.True(open > signature.Index, "CleanElement opening brace not found");
+        Assert.True(
+            methods.Count == 1,
+            $"Expected exactly one CleanElement(FrameworkElement) in ElementPool.cs, found {methods.Count}. " +
+            "Every REACTOR_POOL_001 consistency invariant is stated over that method's body, so a " +
+            "rename, an added overload, or a signature change silently empties all of them.");
 
-        var blanked = StripCommentsAndStrings(source);
-        var depth = 0;
-        for (var index = open; index < blanked.Length; index++)
-        {
-            if (blanked[index] == '{') depth++;
-            else if (blanked[index] == '}' && --depth == 0)
-                return source.Substring(open, index - open + 1);
-        }
-
-        Assert.Fail("CleanElement's body is not brace-balanced — the scan cannot delimit it.");
-        return string.Empty;
+        return methods[0];
     }
 
     // ── Attached vs. instance ───────────────────────────────────────────────
