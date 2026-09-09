@@ -23,12 +23,13 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Where the modifier signature differs from the property type, the codefix
-/// translates the RHS into the modifier's expected shape (see <c>Margin</c>
-/// below). When no safe translation exists, the codefix is suppressed —
-/// the analyzer still reports the trap, the developer just has to fix by hand.
-/// For attached properties that decision is the analyzer's
-/// (<c>FixablePropertiesKey</c>), because part of it is semantic.
+/// Where the modifier signature differs from the raw property type, the codefix
+/// translates the RHS into the shape that reads best (see <c>Margin</c>
+/// below — a literal <c>new Thickness(8)</c> becomes <c>.Margin(8)</c> rather
+/// than passing the struct through). When no safe translation exists, the
+/// codefix is suppressed — the analyzer still reports the trap, the developer
+/// just has to fix by hand. For attached properties that decision is the
+/// analyzer's (<c>FixablePropertiesKey</c>), because part of it is semantic.
 /// </para>
 /// <para>
 /// Multi-statement bodies are converted all-or-nothing; see
@@ -368,29 +369,69 @@ public sealed class PoolResetSetCodeFix : CodeFixProvider
     /// </returns>
     private static ArgumentListSyntax? TryBuildModifierArguments(string propName, ExpressionSyntax value)
     {
-        // Margin/Padding/BorderThickness are Thickness-typed properties whose modifiers all
-        // take doubles, and CornerRadius is the same shape with a CornerRadius struct.
-        // Translate the literal constructor forms:
+        // Margin/Padding/BorderThickness are Thickness-typed properties, and CornerRadius is
+        // the same shape with a CornerRadius struct. All four modifiers accept both the raw
+        // struct and a decomposed set of doubles, so two rewrites are available and the
+        // decomposed one reads better:
         //   new Thickness(uniform)      → .Padding(uniform)
         //   new Thickness(l, t, r, b)   → .Padding(l, t, r, b)
-        // Other RHS shapes (variables, member access, no-arg construction) cannot be
-        // rewritten safely — skip the fix and leave the diagnostic for a human.
+        // Any other RHS — an opaque local, a field, a call, a ternary, `new Thickness()` —
+        // rides the struct-typed overload verbatim.
         if (propName is "Margin" or "Padding" or "BorderThickness" or "CornerRadius")
         {
             var structName = propName == "CornerRadius" ? "CornerRadius" : "Thickness";
-            if (value is not ObjectCreationExpressionSyntax oce) return null;
-            if (!IsNamedType(oce.Type, structName)) return null;
-            var ctorArgs = oce.ArgumentList?.Arguments;
-            if (ctorArgs is null) return null;
+
+            // Both spellings of a constructor literal qualify. The target-typed `new(8)` form
+            // names no type, but the property being assigned fixes it, and only the arguments
+            // survive the rewrite either way.
+            //
+            // Two things disqualify a literal from being decomposed, because both carry state
+            // that copying the argument list alone would lose or corrupt:
+            //
+            //   * An object initializer. `new Thickness(8) { Left = 5 }` is Thickness(5,8,8,8),
+            //     so emitting `.Margin(8)` would silently drop it and change the value written —
+            //     the exact class of silent behaviour change this diagnostic exists to prevent.
+            //   * A named argument. The struct's parameter names are not the modifier's:
+            //     `Thickness(uniformLength)` against `Margin(uniform)`, and
+            //     `CornerRadius(uniformRadius)` against `CornerRadius(radius)`. Copying the
+            //     argument across verbatim yields `.Margin(uniformLength: 8)`, which is CS1739.
+            //     (The four-argument names do line up, but not uniformly across both structs,
+            //     so this refuses on any named argument rather than encoding that coincidence.
+            //     NoOpModifierAnalyzer refuses named arguments for the same reason.)
+            //
+            // An explicitly-typed literal then falls through and rides the struct overload
+            // whole, which preserves either shape exactly. The target-typed spelling has no
+            // such escape and is refused below.
+            SeparatedSyntaxList<ArgumentSyntax>? ctorArgs = value switch
+            {
+                ObjectCreationExpressionSyntax { Initializer: null } oce when IsNamedType(oce.Type, structName)
+                    => oce.ArgumentList?.Arguments,
+                ImplicitObjectCreationExpressionSyntax { Initializer: null } ioce
+                    => ioce.ArgumentList.Arguments,
+                _ => null,
+            };
+
+            if (ctorArgs is { } args && args.Any(argument => argument.NameColon is not null))
+                ctorArgs = null;
+
             // Both structs have 0/1/4-arg constructors. The 0-arg form is not interesting;
             // 1 and 4 map cleanly onto the uniform and per-edge modifier overloads.
-            if (ctorArgs.Value.Count is 1 or 4)
+            if (ctorArgs is { Count: 1 or 4 })
                 return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(ctorArgs.Value));
-            return null;
+
+            // A target-typed `new(...)` that did not decompose must not fall through to the
+            // struct overload: it carries no type of its own, so it is convertible to
+            // `double` as readily as to the struct and `.Margin(new())` would be an
+            // ambiguous call. (`default` needs no such guard — the analyzer's
+            // IsNullOrDefault gate drops null/default right-hand sides before they are ever
+            // reported, so they never reach this method.)
+            if (value.IsKind(SyntaxKind.ImplicitObjectCreationExpression))
+                return null;
         }
 
-        // All other tracked properties: the modifier accepts the same type
-        // as the property (double / enum / string / Brush), so pass the RHS through.
+        // Everything reaching here — the four struct-typed properties in their pass-through
+        // form, plus all other tracked properties, whose modifier accepts the same type as
+        // the property (double / enum / string / Brush) — takes the RHS unchanged.
         return SyntaxFactory.ArgumentList(
             SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(value)));
     }

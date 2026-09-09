@@ -489,6 +489,50 @@ public class ElementTests
             TextBlock("x").Margin(horizontal: 8, vertical: 4).Modifiers!.Margin);
         Assert.Equal(new Thickness(1, 2, 3, 4),
             TextBlock("x").Margin(1, 2, 3, 4).Modifiers!.Margin);
+
+        // The struct overload must not perturb any of the above. A double still
+        // picks a double overload, and picks the *uniform* one specifically —
+        // if the struct overload ever started winning, or shifted resolution to
+        // the per-side overload, these values would change.
+        Assert.Equal(new Thickness(10), TextBlock("x").Margin(10.0).Modifiers!.Margin);
+        Assert.Equal(new Thickness(16), TextBlock("x").Padding(16).Modifiers!.Padding);
+        Assert.Equal(new Microsoft.UI.Xaml.CornerRadius(6),
+            TextBlock("x").CornerRadius(6).Modifiers!.CornerRadius);
+    }
+
+    [Fact]
+    public void Struct_Overloads_Store_The_Value_Verbatim()
+    {
+        // The struct overloads exist so a `.Set(fe => fe.Margin = someThickness)`
+        // lifts straight across instead of being decomposed into four doubles.
+        // An asymmetric value is used deliberately: a uniform one would agree with
+        // the uniform double overload, so it could not tell them apart.
+        var margin = new Thickness(68, 4, 40, 4);
+        Assert.Equal(margin, TextBlock("x").Margin(margin).Modifiers!.Margin);
+
+        var padding = new Thickness(1, 2, 3, 4);
+        Assert.Equal(padding, TextBlock("x").Padding(padding).Modifiers!.Padding);
+
+        var radius = new Microsoft.UI.Xaml.CornerRadius(1, 2, 3, 4);
+        Assert.Equal(radius, TextBlock("x").CornerRadius(radius).Modifiers!.CornerRadius);
+    }
+
+    [Fact]
+    public void Struct_Overloads_Preserve_The_Concrete_Element_Type()
+    {
+        // Modifiers are generic (<T> where T : Element) so the chain keeps the
+        // concrete type. The struct overloads must behave identically, otherwise
+        // a `.Margin(thickness).Bold()` chain would stop compiling.
+        var el = TextBlock("x")
+            .Margin(new Thickness(8))
+            .Padding(new Thickness(4))
+            .CornerRadius(new Microsoft.UI.Xaml.CornerRadius(2))
+            .Bold();
+
+        Assert.IsType<TextBlockElement>(el);
+        Assert.Equal(new Thickness(8), el.Modifiers!.Margin);
+        Assert.Equal(new Thickness(4), el.Modifiers.Padding);
+        Assert.Equal(new Microsoft.UI.Xaml.CornerRadius(2), el.Modifiers.CornerRadius);
     }
 
     [Fact]

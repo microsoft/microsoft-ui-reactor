@@ -63,7 +63,43 @@ Conventions for contributors:
   `FromResource`-for-a-tray-icon mistake in its worked example, which is the case for
   surfacing this in the editor.
 
+- **Struct-typed overloads for `.Margin(...)`, `.Padding(...)` and `.CornerRadius(...)`
+  (issue #1192).** All four common layout modifiers now accept their WinUI struct
+  directly, matching the `.BorderThickness(Thickness)` overload that has shipped since
+  #775: `.Margin(Thickness)`, `.Padding(Thickness)` and
+  `.CornerRadius(CornerRadius)`. This makes the `REACTOR_POOL_001` migration a
+  lift-and-shift for struct-typed writes — `.Set(fe => fe.Margin = someThickness)`
+  becomes `.Margin(someThickness)` instead of forcing the value to be decomposed into
+  four doubles and any struct-typed local to be re-typed. Purely additive; the `double`
+  overloads keep their existing binding and stay the ergonomic default.
+
+  Two consequences for hand-written code, both from the bare literal converting to
+  `double` and to the struct alike. `.Margin(default)`, `.Padding(default)` and
+  `.CornerRadius(default)` are now ambiguous (`CS0121`); `.BorderThickness(default)`
+  has always behaved this way for the same reason. The parameterless target-typed
+  `.Margin(new())`, `.Padding(new())` and `.CornerRadius(new())` are newly ambiguous
+  too — they previously bound the `double` overload as `new double()`, i.e. zero.
+  Name the type in either shape — `default(Thickness)` / `new Thickness()` for
+  `.Margin` / `.Padding` / `.BorderThickness`, `default(CornerRadius)` /
+  `new CornerRadius()` for `.CornerRadius` — or pass a value.
+
 ### Changed
+
+- **`PoolResetSetCodeFix` now fixes struct-typed `.Set(...)` writes it previously left
+  alone (issue #1192).** It could only rewrite a literal `new Thickness(uniform)` or
+  `new Thickness(l, t, r, b)`, so every other right-hand side — an opaque local, a
+  field, a call, a ternary — was reported and left for a human. With the struct
+  overloads above those values now pass straight through to the modifier. Both
+  spellings of a constructor literal still decompose, including the target-typed
+  `new(8)`, so `.Margin(8)` remains the output rather than `.Margin(new Thickness(8))`.
+  A literal carrying an object initializer or a named argument is no longer
+  decomposed: `new Thickness(8) { Left = 5 }` is `Thickness(5,8,8,8)`, so emitting
+  `.Margin(8)` would have silently dropped the initializer, and the struct's parameter
+  names differ from the modifier's (`Thickness(uniformLength)` against
+  `Margin(uniform)`), so copying a named argument across produced `CS1739`. Both now
+  ride the struct overload whole. A target-typed `new(...)` that cannot be decomposed
+  is still left unfixed, because it carries no type of its own and the rewrite would
+  be ambiguous.
 
 ### Deprecated
 

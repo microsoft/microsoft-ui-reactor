@@ -345,8 +345,8 @@ and `.Margin(16).Bold()` both compile on a `TextBlockElement`.
 ### Layout (any Element)
 
 ```csharp
-.Margin(16) / .Margin(h, v) / .Margin(l, t, r, b)
-.Padding(...)
+.Margin(16) / .Margin(h, v) / .Margin(l, t, r, b) / .Margin(thickness)
+.Padding(16) / .Padding(h, v) / .Padding(l, t, r, b) / .Padding(thickness)
 .Width(300) / .Height(200) / .Size(w, h)
 .MinWidth(...) / .MinHeight(...) / .MaxWidth(...) / .MaxHeight(...)
 .HAlign(HorizontalAlignment.Center) / .VAlign(VerticalAlignment.Top)

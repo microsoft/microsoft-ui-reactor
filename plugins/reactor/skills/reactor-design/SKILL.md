@@ -402,7 +402,7 @@ VStack(8, items).Padding(16)       // ✓ works
 TextBlock("Hello").Padding(8)      // ✓ works
 ```
 
-Both `.Margin()` and `.Padding()` accept three overloads:
+Both `.Margin()` and `.Padding()` accept four overloads:
 
 ```csharp
 // Uniform — same on all sides
@@ -413,6 +413,9 @@ element.Margin(horizontal: 24, vertical: 8)
 
 // Per-side: left, top, right, bottom
 element.Margin(left: 4, top: 8, right: 16, bottom: 24)
+
+// A Thickness you already have — useful when lifting a value out of a .Set(...)
+element.Margin(new Thickness(68, 4, 40, 4))
 ```
 
 #### Corner Radius

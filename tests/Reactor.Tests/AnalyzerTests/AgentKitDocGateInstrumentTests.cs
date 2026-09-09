@@ -1349,11 +1349,16 @@ public class AgentKitDocGateInstrumentTests
     /// </summary>
     /// <remarks>
     /// Review proposed reading "matches no reflected parameter type" as "reference type, therefore
-    /// null", to cover an aliased <c>default(BrushAlias)</c>. It is declined: <c>Thickness</c> is
-    /// not among <c>Padding</c>'s reflected single-argument types either, so
-    /// <c>.Padding(default(Thickness))</c> takes the same path, and exempting it would lose a
-    /// value-typed-default finding that is real and already pinned. The alias shape does not occur
-    /// in documentation; the value-typed one does.
+    /// null", to cover an aliased <c>default(BrushAlias)</c>. It is declined: an unresolved name
+    /// says nothing about reference-ness, so reading it as null would exempt whatever this surface
+    /// cannot see.
+    /// <para>
+    /// The example that originally carried that argument was <c>.Padding(default(Thickness))</c>,
+    /// which reached the no-match path only because <c>Padding</c> took no <c>Thickness</c>. It
+    /// takes one now, so the call resolves and is refused for the stronger reason — the matched
+    /// type is a struct. Both routes must refuse, and
+    /// <c>Walker_Still_Reports_A_Value_Typed_Default</c> pins that the finding survived the move.
+    /// </para>
     /// </remarks>
     [Fact]
     [Trait("Category", "AgentKitDocGate")]
@@ -1361,9 +1366,11 @@ public class AgentKitDocGateInstrumentTests
     {
         Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Background", "BrushAlias"));
 
-        // The case that makes this the right trade: same path, and it must keep reporting.
+        // The resolvable value-typed case: refused on the type, not on the lookup failing.
         Assert.False(ReactorSurface.Instance.DefaultIsProvablyNull("Padding", "Thickness"));
-        Assert.DoesNotContain(ReactorSurface.Instance.SingleArgumentModifierTypes("Padding"), t => t.Name == "Thickness");
+        Assert.Contains(
+            ReactorSurface.Instance.SingleArgumentModifierTypes("Padding"),
+            t => t.Name == "Thickness" && t.IsValueType);
 
         // Control: a name that does resolve is still answered from the type.
         Assert.True(ReactorSurface.Instance.DefaultIsProvablyNull("Background", "Brush"));

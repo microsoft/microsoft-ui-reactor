@@ -356,8 +356,8 @@ class AlignmentSizingDemo : Component
 |----------|--------|
 | `.Width(n)` | Fixed width in pixels |
 | `.Height(n)` | Fixed height in pixels |
-| `.Margin(n)` | Outer spacing (all sides) |
-| `.Padding(n)` | Inner spacing (all sides) |
+| `.Margin(n)` / `.Margin(thickness)` | Outer spacing — uniform `n`, or per-side via `Thickness` |
+| `.Padding(n)` / `.Padding(thickness)` | Inner spacing — uniform `n`, or per-side via `Thickness` |
 | `.HAlign(alignment)` | Horizontal alignment (Left, Center, Right, Stretch) |
 | `.VAlign(alignment)` | Vertical alignment (Top, Center, Bottom, Stretch) |
 | `.HorizontalContentAlignment(alignment)` | Horizontal child/content alignment inside a Control |

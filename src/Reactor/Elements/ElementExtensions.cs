@@ -59,6 +59,14 @@ public static partial class ElementExtensions
     public static T Margin<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { Margin = new Thickness(left, top, right, bottom) });
 
+    // The struct overload exists so a `.Set(fe => fe.Margin = someThickness)` — the exact
+    // shape REACTOR_POOL_001 flags — is a lift-and-shift rather than a rewrite: the value
+    // moves across untouched, with no need to decompose it into four doubles or re-type
+    // the local holding it. Mirrors the BorderThickness(Thickness) overload below. The
+    // double overloads stay the ergonomic default.
+    public static T Margin<T>(this T el, Thickness thickness) where T : Element =>
+        ModifyLayout(el, new LayoutModifiers { Margin = thickness });
+
     public static T Padding<T>(this T el, double uniform) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(uniform) });
 
@@ -71,6 +79,10 @@ public static partial class ElementExtensions
     // to the more-specific overloads.
     public static T Padding<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(left, top, right, bottom) });
+
+    // Same lift-and-shift story as Margin(Thickness) above.
+    public static T Padding<T>(this T el, Thickness thickness) where T : Element =>
+        ModifyLayout(el, new LayoutModifiers { Padding = thickness });
 
     // ── Logical (BiDi-aware) layout modifiers ───────────────────────
     // InlineStart = left in LTR, right in RTL. InlineEnd = right in LTR, left in RTL.
@@ -1336,6 +1348,13 @@ public static partial class ElementExtensions
 
     public static T CornerRadius<T>(this T el, double topLeft, double topRight, double bottomRight, double bottomLeft) where T : Element =>
         ModifyVisual(el, new VisualModifiers { CornerRadius = new Microsoft.UI.Xaml.CornerRadius(topLeft, topRight, bottomRight, bottomLeft) });
+
+    // Same lift-and-shift story as Margin(Thickness) / Padding(Thickness) above.
+    // The parameter type is spelled out in full for symmetry with the two calls
+    // above it, which qualify to keep the method name and the type name distinct
+    // at a glance.
+    public static T CornerRadius<T>(this T el, Microsoft.UI.Xaml.CornerRadius radius) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { CornerRadius = radius });
 
     // ── Border brush/thickness (on Control and Border) ─────────────
 
