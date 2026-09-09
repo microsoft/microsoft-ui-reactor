@@ -515,6 +515,19 @@ public partial class WindowIconBinaryTests
     }
 
     [Fact]
+    public void A_256px_Frame_Loads_Through_The_Platform()
+    {
+        // The .ico format cannot store 256 in a dimension byte, so it stores 0. Selection
+        // reads that back as 256, but until now only against filler payloads — this drives
+        // a real 256px frame through the slice and the loader, so the encoding is proven
+        // where it actually matters. The 32px decoy is what makes the check meaningful:
+        // read literally, a 0 byte would rank as the smallest frame in the file and lose.
+        var ico = BuildRealIco((256, 255, 0, 0), (32, 0, 0, 255));
+
+        AssertIconColour(WindowIcon.FromBytes(ico).CreateBinaryHIcon(256, 256), redish: true);
+    }
+
+    [Fact]
     public void Data_The_Loader_Cannot_Read_Yields_No_Handle()
     {
         // Failure has to be a zero handle rather than an exception: these run on shell

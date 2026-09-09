@@ -24,19 +24,20 @@ namespace Microsoft.UI.Reactor;
 /// <param name="Kind">Whether this is a regular task, a separator, or part of a custom group.</param>
 /// <param name="Description">Optional tooltip / accessible description.</param>
 /// <param name="Icon">
-/// Optional icon shown next to the title.
-/// <para><b>⚠ Packaged-only:</b> the WinRT jump-list path consumes
-/// <c>WindowIcon.FromResource</c> values (<c>ms-appx:///...</c> URIs) only.
-/// Filesystem paths from <c>WindowIcon.FromPath</c> are silently ignored on
-/// the packaged path because the WinRT <c>JumpListItem.Logo</c> requires a
-/// packaged <c>Uri</c>. The unpackaged Win32 jump-list path likewise prefers
-/// resource-style sources today; ship a sidecar <c>.ico</c> alongside the
-/// executable and reference it via <c>FromPath</c> for unpackaged scenarios
-/// only after confirming the icon shows up in your build.
-/// Binary sources (<c>WindowIcon.FromBytes</c> / <c>FromRgba</c>) are not usable on
-/// either path — the shell resolves a jump-list logo by <c>Uri</c>, so there is
-/// nothing to point it at.
-/// </para>
+/// Optional icon shown next to the title. The two jump-list paths want different things,
+/// and each silently skips what it cannot use:
+/// <list type="bullet">
+/// <item><description><b>Packaged</b> — <c>WindowIcon.FromResource</c> only. The WinRT
+/// <c>JumpListItem.Logo</c> takes a packaged <c>Uri</c>, so a filesystem path is
+/// skipped.</description></item>
+/// <item><description><b>Unpackaged</b> — <c>WindowIcon.FromPath</c> only. The Win32 path
+/// hands the source to <c>IShellLink.SetIconLocation</c>, which wants a filesystem path,
+/// so an <c>ms-appx:</c> URI is skipped instead. See
+/// <c>JumpListComInterop.BuildShellLinkArray</c>.</description></item>
+/// </list>
+/// <para>Binary sources (<c>WindowIcon.FromBytes</c> / <c>FromRgba</c>) work on neither:
+/// they have no URI and no path. Both arms skip them via the empty-<c>Source</c> guard.
+/// Ship a sidecar <c>.ico</c> or a packaged asset for jump-list entries.</para>
 /// </param>
 /// <param name="GroupCategory">Group label for <see cref="JumpListItemKind.Custom"/> items.</param>
 public sealed record JumpListItem(

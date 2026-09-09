@@ -317,7 +317,7 @@ internal static partial class BinaryIconImage
     /// <summary>
     /// Assemble a 32-bpp <c>RT_ICON</c> payload from a straight-alpha RGBA8 buffer.
     /// </summary>
-    /// <param name="rgba">
+    /// <param name="pixels">
     /// <c>width * height * 4</c> bytes, top-down, one pixel as R, G, B, A.
     /// </param>
     /// <param name="width">Icon width in pixels.</param>
@@ -338,7 +338,7 @@ internal static partial class BinaryIconImage
     /// its rows are DWORD-aligned at 1 bpp, which is a different stride from the colour
     /// plane's.</para>
     /// </remarks>
-    internal static byte[] BuildRgbaIconImage(ReadOnlySpan<byte> rgba, int width, int height)
+    internal static byte[] BuildRgbaIconImage(ReadOnlySpan<byte> pixels, int width, int height)
     {
         if (width <= 0 || width > MaxRgbaDimension)
             throw new ArgumentOutOfRangeException(nameof(width), width,
@@ -348,10 +348,10 @@ internal static partial class BinaryIconImage
                 $"Icon height must be between 1 and {MaxRgbaDimension}.");
 
         int expected = width * height * 4;
-        if (rgba.Length != expected)
+        if (pixels.Length != expected)
             throw new ArgumentException(
                 $"RGBA buffer must be exactly {expected} bytes for a {width}x{height} icon " +
-                $"(got {rgba.Length}).", nameof(rgba));
+                $"(got {pixels.Length}).", nameof(pixels));
 
         int maskStride = ((width + 31) / 32) * 4;
         int maskSize = maskStride * height;
@@ -372,7 +372,7 @@ internal static partial class BinaryIconImage
         int rowBytes = width * 4;
         for (int y = 0; y < height; y++)
         {
-            var source = rgba.Slice(y * rowBytes, rowBytes);
+            var source = pixels.Slice(y * rowBytes, rowBytes);
             var destination = colour.Slice((height - 1 - y) * rowBytes, rowBytes);
             for (int x = 0; x < rowBytes; x += 4)
             {

@@ -147,7 +147,7 @@ Not every surface takes every kind, because they need different primitives:
 | --- | --- | --- | --- |
 | Window caption / Alt-Tab | yes | yes | no |
 | Tray icon, taskbar overlay, thumbnail toolbar | yes | no | yes |
-| Jump-list entry | unpackaged only | yes | no |
+| Jump-list entry | unpackaged only | packaged only | no |
 
 The three shell surfaces need a raw `HICON` (`LoadImageW` on a file, or
 `CreateIconFromResourceEx` on in-memory data), neither of which reads an
