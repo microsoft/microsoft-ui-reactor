@@ -484,7 +484,7 @@ accepts every kind:
 | Tray icon | ✅ | ❌ | ✅ |
 | Taskbar overlay | ✅ | ❌ | ✅ |
 | Thumbnail-toolbar button | ✅ | ❌ | ✅ |
-| Jump-list entry | unpackaged only | ✅ | ❌ |
+| Jump-list entry | unpackaged only | packaged only | ❌ |
 
 The pattern behind the table is which primitive each surface needs. The three
 shell surfaces need a raw `HICON`, which comes either from `LoadImageW` on a file
