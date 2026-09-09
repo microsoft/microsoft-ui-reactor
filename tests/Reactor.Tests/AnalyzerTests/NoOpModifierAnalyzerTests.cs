@@ -249,8 +249,11 @@ namespace Microsoft.UI.Reactor
         public static AmbiguousElement Set(this AmbiguousElement el, Action<WinUI.Border> configure) => el;
         public static XamlHostElement Set(this XamlHostElement el, Action<Microsoft.UI.Xaml.FrameworkElement> configure) => el;
 
-        // Yoga box model: the element-specific equivalent of Padding on a FlexElement. Overload
-        // shapes mirror Padding's exactly, which is what makes the rename fix sound.
+        // Yoga box model: the element-specific equivalent of Padding on a FlexElement. The
+        // double overload shapes mirror Padding's, which is what makes the rename fix sound
+        // for those. Padding additionally takes a Thickness and FlexPadding does not, so that
+        // one call is reported but deliberately left unfixed — see
+        // CodeFix_Is_Not_Offered_For_A_Thickness_Padding.
         public static FlexElement FlexPadding(this FlexElement el, double uniform) => el;
         public static FlexElement FlexPadding(this FlexElement el, double horizontal, double vertical) => el;
         public static FlexElement FlexPadding(this FlexElement el, double left, double top, double right, double bottom) => el;
@@ -266,7 +269,7 @@ namespace Microsoft.UI.Reactor
         public static T Padding<T>(this T el, double uniform) where T : Element => el;
         public static T Padding<T>(this T el, double horizontal, double vertical) where T : Element => el;
         public static T Padding<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element => el;
-    public static T Padding<T>(this T el, Thickness thickness) where T : Element => el;
+        public static T Padding<T>(this T el, Thickness thickness) where T : Element => el;
         public static T FontSize<T>(this T el, double size) where T : Element => el;
 
         // Generic, but ungated in ModifierTable (see GateOnlyInReconciler).
