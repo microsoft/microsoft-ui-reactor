@@ -120,7 +120,7 @@ internal static partial class BinaryIconImage
             }
             return hIcon;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsInteropBindingFailure(ex))
         {
             // The generated marshalling stub is blittable and should not throw, but a
             // DllNotFoundException / EntryPointNotFoundException on a stripped host must
@@ -129,6 +129,18 @@ internal static partial class BinaryIconImage
             return 0;
         }
     }
+
+    /// <summary>
+    /// The failures a source-generated P/Invoke can raise before it ever reaches the OS: a
+    /// missing library, a missing export, or an image the loader rejects. Anything else out
+    /// of a blittable stub is a genuine bug and propagates — the three shell call sites all
+    /// wrap their own loads, so narrowing here costs no robustness.
+    /// </summary>
+    /// <remarks>Mirrors <c>WindowIcon.IsPathProbeFailure</c>, which narrows the same way.</remarks>
+    private static bool IsInteropBindingFailure(Exception ex)
+        => ex is DllNotFoundException
+              or EntryPointNotFoundException
+              or BadImageFormatException;
 
     /// <summary>
     /// The system metric a caller means by "no preference", falling back to the 96-DPI
@@ -142,7 +154,7 @@ internal static partial class BinaryIconImage
             var value = TrayIconComInterop.GetSystemMetrics(metric);
             if (value > 0) return value;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsInteropBindingFailure(ex))
         {
             Debug.WriteLine($"[Reactor] BinaryIconImage: GetSystemMetrics({metric}) failed: {ex.Message}");
         }
