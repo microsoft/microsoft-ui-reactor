@@ -23,12 +23,13 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Where the modifier signature differs from the property type, the codefix
-/// translates the RHS into the modifier's expected shape (see <c>Margin</c>
-/// below). When no safe translation exists, the codefix is suppressed —
-/// the analyzer still reports the trap, the developer just has to fix by hand.
-/// For attached properties that decision is the analyzer's
-/// (<c>FixablePropertiesKey</c>), because part of it is semantic.
+/// Where the modifier signature differs from the raw property type, the codefix
+/// translates the RHS into the shape that reads best (see <c>Margin</c>
+/// below — a literal <c>new Thickness(8)</c> becomes <c>.Margin(8)</c> rather
+/// than passing the struct through). When no safe translation exists, the
+/// codefix is suppressed — the analyzer still reports the trap, the developer
+/// just has to fix by hand. For attached properties that decision is the
+/// analyzer's (<c>FixablePropertiesKey</c>), because part of it is semantic.
 /// </para>
 /// <para>
 /// Multi-statement bodies are converted all-or-nothing; see
@@ -368,29 +369,39 @@ public sealed class PoolResetSetCodeFix : CodeFixProvider
     /// </returns>
     private static ArgumentListSyntax? TryBuildModifierArguments(string propName, ExpressionSyntax value)
     {
-        // Margin/Padding/BorderThickness are Thickness-typed properties whose modifiers all
-        // take doubles, and CornerRadius is the same shape with a CornerRadius struct.
-        // Translate the literal constructor forms:
+        // Margin/Padding/BorderThickness are Thickness-typed properties, and CornerRadius is
+        // the same shape with a CornerRadius struct. All four modifiers accept both the raw
+        // struct and a decomposed set of doubles, so two rewrites are available and the
+        // decomposed one reads better:
         //   new Thickness(uniform)      → .Padding(uniform)
         //   new Thickness(l, t, r, b)   → .Padding(l, t, r, b)
-        // Other RHS shapes (variables, member access, no-arg construction) cannot be
-        // rewritten safely — skip the fix and leave the diagnostic for a human.
+        // Any other RHS — an opaque local, a field, a call, a ternary, `new Thickness()` —
+        // rides the struct-typed overload verbatim.
         if (propName is "Margin" or "Padding" or "BorderThickness" or "CornerRadius")
         {
             var structName = propName == "CornerRadius" ? "CornerRadius" : "Thickness";
-            if (value is not ObjectCreationExpressionSyntax oce) return null;
-            if (!IsNamedType(oce.Type, structName)) return null;
-            var ctorArgs = oce.ArgumentList?.Arguments;
-            if (ctorArgs is null) return null;
-            // Both structs have 0/1/4-arg constructors. The 0-arg form is not interesting;
-            // 1 and 4 map cleanly onto the uniform and per-edge modifier overloads.
-            if (ctorArgs.Value.Count is 1 or 4)
-                return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(ctorArgs.Value));
-            return null;
+            if (value is ObjectCreationExpressionSyntax oce && IsNamedType(oce.Type, structName))
+            {
+                // Both structs have 0/1/4-arg constructors. The 0-arg form is not interesting;
+                // 1 and 4 map cleanly onto the uniform and per-edge modifier overloads.
+                var ctorArgs = oce.ArgumentList?.Arguments;
+                if (ctorArgs is { Count: 1 or 4 })
+                    return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(ctorArgs.Value));
+            }
+
+            // Target-typed `new(...)` must still be left alone. It carries no type of its
+            // own, and once the struct overload exists it is convertible to `double` and to
+            // the struct alike, so emitting `.Margin(new(8))` trades a warning for an
+            // ambiguous-call error. (`default` needs no guard here: the analyzer's
+            // IsNullOrDefault gate drops null/default right-hand sides before they are ever
+            // reported, so they never reach this method.)
+            if (value.IsKind(SyntaxKind.ImplicitObjectCreationExpression))
+                return null;
         }
 
-        // All other tracked properties: the modifier accepts the same type
-        // as the property (double / enum / string / Brush), so pass the RHS through.
+        // Everything reaching here — the four struct-typed properties in their pass-through
+        // form, plus all other tracked properties, whose modifier accepts the same type as
+        // the property (double / enum / string / Brush) — takes the RHS unchanged.
         return SyntaxFactory.ArgumentList(
             SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(value)));
     }

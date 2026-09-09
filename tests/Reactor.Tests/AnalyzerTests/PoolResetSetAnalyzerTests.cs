@@ -83,6 +83,7 @@ public static class FakeElementExtensions
     public static FakeElement AccessKey(this FakeElement el, string v) => el;
     public static FakeElement Margin(this FakeElement el, double u) => el;
     public static FakeElement Margin(this FakeElement el, double l, double t, double r, double b) => el;
+    public static FakeElement Margin(this FakeElement el, Thickness thickness) => el;
     public static FakeElement HorizontalAlignment(this FakeElement el, HorizontalAlignment a) => el;
     public static FakeElement VerticalAlignment(this FakeElement el, VerticalAlignment a) => el;
 }
@@ -444,19 +445,53 @@ class C
     }
 
     [Fact]
-    public async Task Analyzer_Fires_But_CodeFix_Suppressed_For_Opaque_Margin_RHS()
+    public async Task CodeFix_Rewrites_Opaque_Margin_RHS_Through_The_Struct_Overload()
     {
-        // RHS is a variable reference, not a Thickness constructor literal —
-        // we can't safely translate, so the analyzer fires (the trap is real)
-        // but no codefix is offered. The verifier confirms this by leaving
-        // TestCode == FixedCode: the warning persists, and no rewrite occurs.
-        var code = Stubs + @"
+        // The RHS is an opaque variable, so it cannot be decomposed into the four
+        // doubles the per-side overload wants. It does not need to be: the modifier
+        // also accepts a bare Thickness, so the value lifts across untouched. This
+        // is the case that used to be diagnostic-only and had to be fixed by hand.
+        var before = Stubs + @"
 class C
 {
     void M(Thickness margin)
     {
         var el = new FakeElement();
         {|REACTOR_POOL_001:el.Set(fe => fe.Margin = margin)|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void M(Thickness margin)
+    {
+        var el = new FakeElement();
+        el.Margin(margin);
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Suppressed_For_Implicit_Object_Creation_Margin_RHS()
+    {
+        // Target-typed `new(...)` carries no type of its own, so once Margin accepts both a
+        // double and a Thickness the call is ambiguous — measured as CS0121. The analyzer
+        // still fires (the trap is real); no fix is offered. The verifier confirms it by
+        // leaving TestCode == FixedCode: the warning persists, and no rewrite occurs.
+        var code = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(8))|};
     }
 }";
 

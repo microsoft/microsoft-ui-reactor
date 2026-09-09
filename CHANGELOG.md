@@ -28,7 +28,31 @@ Conventions for contributors:
 
 ### Added
 
+- **Struct-typed overloads for `.Margin(...)`, `.Padding(...)` and `.CornerRadius(...)`
+  (issue #1192).** All four common layout modifiers now accept their WinUI struct
+  directly, matching the `.BorderThickness(Thickness)` overload that has shipped since
+  #775: `.Margin(Thickness)`, `.Padding(Thickness)` and
+  `.CornerRadius(CornerRadius)`. This makes the `REACTOR_POOL_001` migration a
+  lift-and-shift for struct-typed writes — `.Set(fe => fe.Margin = someThickness)`
+  becomes `.Margin(someThickness)` instead of forcing the value to be decomposed into
+  four doubles and any struct-typed local to be re-typed. Purely additive; the `double`
+  overloads keep their existing binding and stay the ergonomic default.
+
+  One consequence for hand-written code: `.Margin(default)` and `.CornerRadius(default)`
+  are now ambiguous (`CS0121`) because the bare `default` literal converts to `double`
+  and to the struct alike. `.BorderThickness(default)` has always behaved this way for
+  the same reason. Spell the type — `default(Thickness)` — or pass a value.
+
 ### Changed
+
+- **`PoolResetSetCodeFix` now fixes struct-typed `.Set(...)` writes it previously left
+  alone (issue #1192).** It could only rewrite a literal `new Thickness(uniform)` or
+  `new Thickness(l, t, r, b)`, so every other right-hand side — an opaque local, a
+  field, a call, a ternary — was reported and left for a human. With the struct
+  overloads above those values now pass straight through to the modifier. The literal
+  constructor forms still decompose, so `.Margin(8)` remains the output rather than
+  `.Margin(new Thickness(8))`. Target-typed `new(...)` is deliberately still left
+  unfixed: it carries no type of its own, so the rewrite would be ambiguous.
 
 ### Deprecated
 

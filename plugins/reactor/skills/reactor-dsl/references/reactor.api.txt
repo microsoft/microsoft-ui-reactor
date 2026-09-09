@@ -586,6 +586,7 @@ T.Center<T>() → T
 T.CenterAt<T>(double x, double y) → T
 T.CenterPoint<T>(Vector3 center) → T
 T.ConnectedAnimation<T>(string key) → T
+T.CornerRadius<T>(CornerRadius radius) → T
 T.CornerRadius<T>(double radius) → T
 T.CornerRadius<T>(double topLeft, double topRight, double bottomRight, double bottomLeft) → T
 T.DescribedBy<T>(ElementRef[] targets) → T
@@ -631,6 +632,7 @@ T.LayoutAnimation<T>() → T
 T.LayoutAnimation<T>(LayoutAnimationConfig config) → T
 T.LayoutAnimation<T>(TimeSpan duration) → T
 T.LiveRegion<T>(AutomationLiveSetting mode = AutomationLiveSetting.Polite) → T
+T.Margin<T>(Thickness thickness) → T
 T.Margin<T>(double horizontal, double vertical) → T
 T.Margin<T>(double left = 0, double top = 0, double right = 0, double bottom = 0) → T
 T.Margin<T>(double uniform) → T
@@ -684,6 +686,7 @@ T.OnUnmountAdd<T>(Action<FrameworkElement> action) → T
 T.OnWarning<T>(Func<T, T> configure) → T
 T.Opacity<T>(double opacity) → T
 T.OpacityTransition<T>(TimeSpan? duration = null) → T
+T.Padding<T>(Thickness thickness) → T
 T.Padding<T>(double horizontal, double vertical) → T
 T.Padding<T>(double left = 0, double top = 0, double right = 0, double bottom = 0) → T
 T.Padding<T>(double uniform) → T

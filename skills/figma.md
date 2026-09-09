@@ -91,6 +91,7 @@ Pass the full URL to the Figma MCP tool — the server handles node scoping.
   `paddingLeft/Right = 16` and `paddingTop/Bottom = 8` is `.Margin(16, 8)`, not
   `.Margin(8, 16)`.
 - `.Margin(left: L, top: T, right: R, bottom: B)` — use named args for per-side values
+- `.Margin(thickness)` — pass a `Thickness` you already hold, rather than unpacking it
 
 ### Sizing
 
