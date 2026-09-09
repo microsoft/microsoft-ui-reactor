@@ -44,7 +44,24 @@ Conventions for contributors:
   filesystem path — and reports it as not applied, so the window falls through to the
   `Assets\AppIcon.ico` convention or its PE icon rather than showing nothing. Jump lists
   and the `TitleBar` icon default skip it for the reason they already skip a PE icon:
-  both need a `Uri`.
+  they need a `Uri` or a path, and binary data is neither.
+
+- **`REACTOR_ICON_001` — a `WindowIcon` source kind the target surface silently skips
+  (spec 061, issue #1185).** Every `WindowIcon` factory type-checks against every
+  icon-taking surface, but the surfaces need different primitives and quietly drop what
+  they cannot use — a `Debug.WriteLine` and a missing glyph, invisible in a Release build.
+  The analyzer reports `FromResource` handed to a tray icon, taskbar overlay or
+  thumbnail-toolbar button (all need a raw `HICON`, which cannot come from an `ms-appx:`
+  URI), and `FromBytes` / `FromRgba` handed to `WindowSpec.Icon`, `ReactorApp.Run(icon:)`
+  or a jump-list entry (which need a filesystem path or a `Uri`).
+
+  It fires only when the icon's kind is provably known at the use site — a direct factory
+  call, or a write-once local whose initializer is one (including through the documented
+  `UseMemo(() => WindowIcon.FromPath(...))` idiom). A conditional, field, parameter or
+  method result stays silent, as does either non-binary kind on a jump-list entry, since
+  packaged-versus-unpackaged is a runtime property. Reactor's own spec 036 carried the
+  `FromResource`-for-a-tray-icon mistake in its worked example, which is the case for
+  surfacing this in the editor.
 
 ### Changed
 
