@@ -52,8 +52,12 @@ Conventions for contributors:
   overloads above those values now pass straight through to the modifier. Both
   spellings of a constructor literal still decompose, including the target-typed
   `new(8)`, so `.Margin(8)` remains the output rather than `.Margin(new Thickness(8))`.
-  A target-typed `new()` with nothing to decompose is deliberately still left
-  unfixed: it carries no type of its own, so the rewrite would be ambiguous.
+  A construction carrying an object initializer is no longer decomposed at all:
+  `new Thickness(8) { Left = 5 }` is `Thickness(5,8,8,8)`, so emitting `.Margin(8)`
+  would have silently dropped the initializer and changed the value written. It now
+  rides the struct overload whole. A target-typed `new(...)` that cannot be
+  decomposed is still left unfixed, because it carries no type of its own and the
+  rewrite would be ambiguous.
 
 ### Deprecated
 

@@ -123,8 +123,11 @@ public sealed class NoOpModifierAnalyzer : DiagnosticAnalyzer
     /// <c>element|modifier</c> → the element-specific modifier that carries the same intent, for
     /// receivers that are not shapes. <c>FlexPanel</c> is a <c>Panel</c> but not a
     /// <c>StackPanel</c>, so <c>ApplyModifiers</c> drops <c>Padding</c> on it; the Yoga box model
-    /// exposes the equivalent as <c>FlexPadding</c>, whose three overloads mirror
-    /// <c>Padding</c>'s exactly.
+    /// exposes the equivalent as <c>FlexPadding</c>, whose three <c>double</c> overloads mirror
+    /// <c>Padding</c>'s. <c>Padding</c> additionally takes a <c>Thickness</c>, which
+    /// <c>FlexPadding</c> does not — that call is still reported, but
+    /// <see cref="TryGetReplacement"/> finds no signature-compatible overload, so it is
+    /// diagnostic-only rather than auto-fixed.
     /// </summary>
     internal static readonly IReadOnlyDictionary<string, string> ElementReplacements =
         new Dictionary<string, string>(System.StringComparer.Ordinal)

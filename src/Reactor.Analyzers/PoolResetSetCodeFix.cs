@@ -381,14 +381,21 @@ public sealed class PoolResetSetCodeFix : CodeFixProvider
         {
             var structName = propName == "CornerRadius" ? "CornerRadius" : "Thickness";
 
-            // Both spellings of a constructor literal qualify. The target-typed `new(8)`
-            // form names no type, but the property being assigned fixes it, and only the
-            // arguments survive the rewrite either way.
+            // Both spellings of a constructor literal qualify. The target-typed `new(8)` form
+            // names no type, but the property being assigned fixes it, and only the arguments
+            // survive the rewrite either way.
+            //
+            // An object initializer disqualifies both: `new Thickness(8) { Left = 5 }` is
+            // Thickness(5,8,8,8), so decomposing to the constructor arguments alone would
+            // silently drop the initializer and change the value written — the exact class of
+            // silent behaviour change this diagnostic exists to prevent. The explicitly-typed
+            // form then falls through and rides the struct overload verbatim, initializer and
+            // all; the target-typed form has no such escape and is refused below.
             SeparatedSyntaxList<ArgumentSyntax>? ctorArgs = value switch
             {
-                ObjectCreationExpressionSyntax oce when IsNamedType(oce.Type, structName)
+                ObjectCreationExpressionSyntax { Initializer: null } oce when IsNamedType(oce.Type, structName)
                     => oce.ArgumentList?.Arguments,
-                ImplicitObjectCreationExpressionSyntax ioce
+                ImplicitObjectCreationExpressionSyntax { Initializer: null } ioce
                     => ioce.ArgumentList.Arguments,
                 _ => null,
             };

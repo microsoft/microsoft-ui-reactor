@@ -266,6 +266,7 @@ namespace Microsoft.UI.Reactor
         public static T Padding<T>(this T el, double uniform) where T : Element => el;
         public static T Padding<T>(this T el, double horizontal, double vertical) where T : Element => el;
         public static T Padding<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element => el;
+    public static T Padding<T>(this T el, Thickness thickness) where T : Element => el;
         public static T FontSize<T>(this T el, double size) where T : Element => el;
 
         // Generic, but ungated in ModifierTable (see GateOnlyInReconciler).
@@ -968,6 +969,20 @@ namespace TestApp
         internal static Element Four() => Flex().FlexPadding(1, 2, 3, 4);");
 
         await MakeFixTest(body, fixedBody).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Is_Not_Offered_For_A_Thickness_Padding()
+    {
+        // `.Padding(...)` takes a Thickness; `.FlexPadding(...)` takes only doubles. The write is
+        // still dropped on a Flex receiver, so the diagnostic is right to fire — but there is no
+        // signature-compatible FlexPadding overload to rename to, and decomposing a Thickness the
+        // author may not have written literally is not something the fix can do. Diagnostic-only,
+        // asserted by leaving the fixed body identical.
+        var body = App(@"
+        internal static Element M() => Flex().{|REACTOR_MOD_003:Padding|}(new Microsoft.UI.Xaml.Thickness(8));");
+
+        await MakeFixTest(body, body).RunAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]

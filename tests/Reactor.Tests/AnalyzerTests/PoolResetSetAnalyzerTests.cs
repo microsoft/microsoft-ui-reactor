@@ -28,6 +28,10 @@ namespace Microsoft.UI.Xaml
     public enum VerticalAlignment { Top, Center, Bottom, Stretch }
     public struct Thickness
     {
+        public double Left;
+        public double Top;
+        public double Right;
+        public double Bottom;
         public Thickness(double u) {}
         public Thickness(double l, double t, double r, double b) {}
     }
@@ -483,6 +487,7 @@ class C
     {
         // `new(8)` names no type, but the property being assigned fixes it, so it
         // decomposes exactly like the explicitly-spelled `new Thickness(8)` does.
+        // The four-argument form rides the same arity gate.
         var before = Stubs + @"
 class C
 {
@@ -490,6 +495,7 @@ class C
     {
         var el = new FakeElement();
         {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(8))|};
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(1, 2, 3, 4))|};
     }
 }";
 
@@ -500,6 +506,7 @@ class C
     {
         var el = new FakeElement();
         el.Margin(8);
+        el.Margin(1, 2, 3, 4);
     }
 }";
 
@@ -507,6 +514,65 @@ class C
         {
             TestCode = before,
             FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Keeps_An_Object_Initializer_By_Not_Decomposing()
+    {
+        // `new Thickness(8) { Left = 5 }` is Thickness(5,8,8,8). Decomposing to the
+        // constructor arguments alone would emit `.Margin(8)` and silently drop the
+        // initializer, changing the value written — the exact silent behaviour change
+        // REACTOR_POOL_001 exists to prevent. The struct overload takes the whole
+        // expression instead, so the value survives intact.
+        var before = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new Thickness(8) { Left = 5 })|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        el.Margin(new Thickness(8) { Left = 5 });
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Suppressed_For_A_Target_Typed_New_With_An_Initializer()
+    {
+        // Same initializer reasoning as above, but the target-typed spelling has no
+        // escape: it cannot be decomposed without dropping the initializer, and it
+        // cannot ride the struct overload either because `new(...)` is ambiguous
+        // between the double and Thickness overloads. Diagnostic-only.
+        var code = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(8) { Left = 5 })|};
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = code,
+            FixedCode = code,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 
