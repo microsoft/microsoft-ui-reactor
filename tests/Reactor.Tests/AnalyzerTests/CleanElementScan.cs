@@ -196,10 +196,19 @@ internal static class CleanElementScan
         // A DeclarationPatternSyntax is both `fe is Control c` and `case WinUI.Panel panel:`, so
         // one walk collects the FE-common narrowing chain (including the nested Grid / StackPanel
         // arms) and the type dispatch.
-        foreach (var pattern in method.DescendantNodes().OfType<DeclarationPatternSyntax>())
+        //
+        // The Where is the filter, not a formality: a discard designation (`fe is Control _`)
+        // introduces no local, so it can never be a reset's receiver and must not reach Bind.
+        // Filtering there rather than inside the body keeps the enumerated sequence exactly the
+        // set of bindings this loop records.
+        var declaredReceivers = method.DescendantNodes()
+            .OfType<DeclarationPatternSyntax>()
+            .Where(pattern => pattern.Designation is SingleVariableDesignationSyntax);
+
+        foreach (var pattern in declaredReceivers)
         {
-            if (pattern.Designation is SingleVariableDesignationSyntax designation)
-                Bind(bindings, designation.Identifier.Text, SimpleTypeName(pattern.Type));
+            var designation = (SingleVariableDesignationSyntax)pattern.Designation;
+            Bind(bindings, designation.Identifier.Text, SimpleTypeName(pattern.Type));
         }
 
         var switchCases = method.DescendantNodes()
