@@ -303,12 +303,14 @@ internal static class ModifierTable
     private static readonly string[] ControlBorderGridStack = { "Control", "Border", "Grid", "StackPanel" };
 
     // Single-receiver poolResetGate. ControlOnly names the receiver whose arm in
-    // ElementPool.CleanElement actually clears the property, for the two rows cleared under
-    // `if (fe is Control …)` rather than on the FrameworkElement itself.
+    // ElementPool.CleanElement actually clears the property — today only IsEnabled, which
+    // CleanElement clears under `if (fe is Control …)` rather than on the FrameworkElement.
     //
     // This is never a controlGate — a control gate says where ApplyModifiers writes the modifier,
     // which is a different and usually wider question. Deriving one from the other is the
-    // conflation that made REACTOR_POOL_001 claim IsTabStop was pool-reset on a TextBlock.
+    // conflation that let REACTOR_POOL_001 claim IsTabStop was pool-reset on a TextBlock while
+    // CleanElement left it alone there; that leak is now fixed in the pool, so IsTabStop needs no
+    // gate at all and this list has one member.
     private static readonly string[] ControlOnly = { "Control" };
 
     // Element-type lists for the type-specific modifiers whose property CleanElement resets in a

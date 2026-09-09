@@ -54,12 +54,13 @@ Conventions for contributors:
 
 ### Fixed
 
-- `REACTOR_MOD_002` now covers five properties `ElementPool.CleanElement` resets that no
-  diagnostic mentioned at all: `IsHitTestVisible`, `Stretch`, `StretchDirection` and `IsActive`,
-  plus `Stretch`'s move out of the exclusion list. `IsHitTestVisible` was excluded on the stated
-  grounds that no modifier existed, while `.IsHitTestVisible(bool)` had been in
-  `ElementExtensions.cs` all along; because an exclusion counts as a classification, nothing ever
-  rechecked the claim (issue #1193).
+- `REACTOR_MOD_002` now covers four properties `ElementPool.CleanElement` resets that no
+  diagnostic mentioned at all: `IsHitTestVisible`, `Stretch`, `StretchDirection` and `IsActive`.
+  `IsHitTestVisible` was excluded on the stated grounds that no modifier existed, while
+  `.IsHitTestVisible(bool)` had been in `ElementExtensions.cs` all along, and `Stretch` was
+  excluded as a "Viewbox-only modifier" — a description of what the element-type gate is for
+  rather than a reason to skip the property. Because an exclusion counts as a classification,
+  nothing ever rechecked either claim (issue #1193).
 - `ElementPool.CleanElement` now clears `IsTabStop` on every pooled element rather than only on
   `Control` receivers. WinUI 3 declares the property on `UIElement` and `ApplyModifiers` writes it
   ungated, so `.IsTabStop(false)` reaches poolable non-`Control`s — `TextBlock`, `RichTextBlock`,
