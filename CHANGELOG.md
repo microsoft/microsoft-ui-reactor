@@ -104,6 +104,26 @@ Conventions for contributors:
 
 ### Fixed
 
+- `REACTOR_MOD_002` now covers four properties `ElementPool.CleanElement` resets that no
+  diagnostic mentioned at all: `IsHitTestVisible`, `Stretch`, `StretchDirection` and `IsActive`.
+  `IsHitTestVisible` was excluded on the stated grounds that no modifier existed, while
+  `.IsHitTestVisible(bool)` had been in `ElementExtensions.cs` all along, and `Stretch` was
+  excluded as a "Viewbox-only modifier" — a description of what the element-type gate is for
+  rather than a reason to skip the property. Because an exclusion counts as a classification,
+  nothing ever rechecked either claim (issue #1193).
+- `ElementPool.CleanElement` now clears `IsTabStop` on every pooled element rather than only on
+  `Control` receivers. WinUI 3 declares the property on `UIElement` and `ApplyModifiers` writes it
+  ungated, so `.IsTabStop(false)` reaches poolable non-`Control`s — `TextBlock`, `RichTextBlock`,
+  `Grid`, `StackPanel`, `Border`, `Canvas`, `Viewbox`, `Image` — and each could carry a stale tab
+  stop into its next renter, making a control unexpectedly unreachable by keyboard. This is the
+  same missing-reset shape as issue #985, found by the widened consistency scan (issue #1193).
+- The pool ⇄ analyzer consistency invariants now scan the whole of `CleanElement` instead of
+  stopping at its `switch (fe)` dispatch, so resets in the type-specific arms — the `TextBlock`
+  font/text family, the `TextBox`, `Viewbox` and `ProgressRing` arms — are checked against
+  `ModifierTable` for the first time. Previously a clear placed after the dispatch was invisible
+  to every invariant, and #985/#950 had to relocate clears into the FE-common block to get them
+  covered (issue #1193).
+
 ### Security
 
 ## [0.1.0-preview.14] — 2026-09-01
