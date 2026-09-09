@@ -212,8 +212,8 @@ Every element supports sizing and alignment modifiers:
 |----------|--------|
 | `.Width(n)` | Fixed width in pixels |
 | `.Height(n)` | Fixed height in pixels |
-| `.Margin(n)` | Outer spacing (all sides) |
-| `.Padding(n)` | Inner spacing (all sides) |
+| `.Margin(n)` / `.Margin(thickness)` | Outer spacing (all sides) |
+| `.Padding(n)` / `.Padding(thickness)` | Inner spacing (all sides) |
 | `.HAlign(alignment)` | Horizontal alignment (Left, Center, Right, Stretch) |
 | `.VAlign(alignment)` | Vertical alignment (Top, Center, Bottom, Stretch) |
 | `.HorizontalContentAlignment(alignment)` | Horizontal child/content alignment inside a Control |
