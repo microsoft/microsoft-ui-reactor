@@ -151,7 +151,7 @@ internal static partial class BinaryIconImage
     {
         try
         {
-            var value = TrayIconComInterop.GetSystemMetrics(metric);
+            var value = GetSystemMetrics(metric);
             if (value > 0) return value;
         }
         catch (Exception ex) when (IsInteropBindingFailure(ex))
@@ -395,4 +395,11 @@ internal static partial class BinaryIconImage
         int cxDesired,
         int cyDesired,
         uint flags);
+
+    // Source-generated rather than the legacy [DllImport] extern next door in
+    // TrayIconComInterop: the signature is blittable int -> int, so the generated stub is
+    // trim/AOT-clean with no marshalling at all, which is what the rest of this assembly's
+    // newer interop does (see ReactorWindow.NativeIcon).
+    [LibraryImport("user32.dll")]
+    private static partial int GetSystemMetrics(int nIndex);
 }

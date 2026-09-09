@@ -436,7 +436,9 @@ public partial class WindowIconBinaryTests
         // resolution happens: a .ico carrying default-size artwork and an oversized frame
         // must render the default-size one, which is only observable by colour because
         // CreateIconFromResourceEx rescales whichever frame it is handed.
-        int defaultSize = TrayIconComInterop.GetSystemMetrics(11); // SM_CXICON
+        // Deliberately an independent binding to the same export rather than the product's
+        // own, so a resolution that stopped consulting the OS could not satisfy this.
+        int defaultSize = GetSystemMetrics(SM_CXICON);
         Assert.True(defaultSize > 0, "SM_CXICON should be positive on any real desktop.");
 
         var ico = BuildRealIco(
@@ -847,4 +849,10 @@ public partial class WindowIconBinaryTests
     [LibraryImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool DeleteObject(nint ho);
+
+    /// <summary><c>SM_CXICON</c> — the full-size icon width metric.</summary>
+    private const int SM_CXICON = 11;
+
+    [LibraryImport("user32.dll")]
+    private static partial int GetSystemMetrics(int nIndex);
 }
