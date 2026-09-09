@@ -955,13 +955,23 @@ public class ModifierUnsetClearValueTests
 
         foreach (var (property, info) in ModifierTable.Properties)
         {
-            if (!info.PoolReset || info.ControlGate is null) continue;
+            if (!info.PoolReset) continue;
 
-            var derived = info.ControlGate
+            // Derived from CleanElement itself, not from ControlGate. Those are different facts —
+            // "ApplyModifiers writes it here" versus "CleanElement clears it here" — and reading
+            // the second off the first is what made this test demand that IsTabStop report
+            // POOL_001 on every FrameworkElement, when CleanElement only clears it under
+            // `if (fe is Control …)`. They coincide for the #985 border-box family and nowhere
+            // else, which is why the old derivation looked correct (issue #1193).
+            var derived = CleanElementScan.ReceiversResetting(property)
                 .Where(closure.ContainsKey)
                 .ToHashSet(StringComparer.Ordinal);
 
-            var declared = (info.PoolResetGate ?? info.ControlGate).ToHashSet(StringComparer.Ordinal);
+            // What the analyzer will actually enforce: PassesPoolResetGate short-circuits to
+            // "no restriction" on a null poolResetGate, so ControlGate is the only remaining
+            // narrowing, and a row with neither is unrestricted — i.e. every FrameworkElement.
+            var declared = (info.PoolResetGate ?? info.ControlGate ?? new[] { CleanElementScan.RootReceiver })
+                .ToHashSet(StringComparer.Ordinal);
 
             var tooWide = declared.Except(derived, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
             var tooNarrow = derived.Except(declared, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
@@ -969,30 +979,29 @@ public class ModifierUnsetClearValueTests
             Assert.True(
                 tooWide.Count == 0,
                 $"'{property}' reports REACTOR_POOL_001 on [{string.Join(", ", tooWide)}], which " +
-                "ElementPool never recycles — so the diagnostic asserts that a .Set write is " +
-                "unwound on pool return when nothing of the sort happens. POOL_001 is a Warning, " +
-                $"so this breaks consumers building with TreatWarningsAsErrors. Add the receiver " +
-                $"to ElementPool.PoolableTypes, or drop it from '{property}'s poolResetGate so it " +
-                "falls to REACTOR_MOD_002.");
+                "ElementPool.CleanElement does not clear it on (or never recycles at all) — so the " +
+                "diagnostic asserts that a .Set write is unwound on pool return when nothing of the " +
+                "sort happens. POOL_001 is a Warning, so this breaks consumers building with " +
+                $"TreatWarningsAsErrors. Narrow '{property}'s poolResetGate to the receivers " +
+                "CleanElement really clears, so the rest fall to REACTOR_MOD_002.");
 
             Assert.True(
                 tooNarrow.Count == 0,
-                $"'{property}' is pool-reset on [{string.Join(", ", tooNarrow)}] but its " +
-                "poolResetGate omits them, so a .Set write that really is lost on pool reuse " +
-                "reports as REACTOR_MOD_002 (Info, 'a modifier exists') instead of " +
-                "REACTOR_POOL_001 (Warning, 'this write is dropped'). Add them to the gate.");
+                $"'{property}' is reset by CleanElement on [{string.Join(", ", tooNarrow)}] but its " +
+                "poolResetGate omits them, so the analyzer reports REACTOR_MOD_002 (Info) there " +
+                "instead of REACTOR_POOL_001 (Warning). Add them to the gate, or drop the reset.");
 
             checkedProperties.Add(property);
         }
 
         Assert.True(
-            checkedProperties.Count >= 5,
-            $"Only {checkedProperties.Count} gated pool-reset propert(ies) were compared, so this " +
+            checkedProperties.Count >= 12,
+            $"Only {checkedProperties.Count} pool-reset propert(ies) were compared, so this " +
             "parity gate has stopped seeing the table it exists to check.");
 
         // The mirror is only load-bearing where it actually narrows something. If no property
-        // declares a poolResetGate, every assertion above is satisfied by `?? ControlGate`
-        // comparing the gate against itself — true by construction, and it would stay true if
+        // declares a poolResetGate, every assertion above is satisfied by the `??` fallbacks
+        // comparing a gate against itself — true by construction, and it would stay true if
         // the analyzer stopped consulting the gate entirely.
         Assert.Contains(
             ModifierTable.Properties.Values,
@@ -1112,17 +1121,14 @@ public class ModifierUnsetClearValueTests
     }
 
     /// <summary>
-    /// <c>Owner.Property</c> pairs released by <c>CleanElement</c>'s FE-common block, using the
-    /// same anchored boundary as the rest of this file so both callers agree on the region.
+    /// <c>Owner.Property</c> pairs released anywhere in <c>CleanElement</c>, via the shared
+    /// <see cref="CleanElementScan"/> so every caller agrees on the region — which since issue
+    /// #1193 is the whole method rather than the FE-common block.
     /// </summary>
-    private static HashSet<string> ReadCleanElementClears()
-    {
-        var commonBlock = ReadCleanElementCommonBlock(out _);
-
-        return Regex.Matches(commonBlock, @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(\w+)\.(\w+)Property\s*\)")
-            .Select(match => match.Groups[1].Value + "." + match.Groups[2].Value)
+    private static HashSet<string> ReadCleanElementClears() =>
+        CleanElementScan.Resets
+            .Select(reset => (reset.Owner ?? reset.Receiver) + "." + reset.Property)
             .ToHashSet(StringComparer.Ordinal);
-    }
 
     /// <summary>Reconciler.cs, parsed once per test run rather than once per helper call.</summary>
     private static readonly Lazy<SyntaxNode> ReconcilerRoot = new(() =>
