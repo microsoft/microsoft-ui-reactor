@@ -149,6 +149,10 @@ public partial class WindowIconBinaryTests
     [Fact]
     public void Frame_Selection_With_No_Preference_Takes_The_Largest_Frame()
     {
+        // Helper-level fallback only: TryCreateHIcon resolves a zero size to SM_CXICON
+        // before selecting, so no shell surface takes this arm. See
+        // Default_Size_Selection_Matches_The_System_Icon_Metric for the behaviour callers
+        // actually get.
         var ico = BuildIco((16, 32), (48, 32), (32, 32));
         Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 0, out var offset, out _));
         Assert.Equal(FrameOffset(ico, index: 1), offset);
@@ -393,6 +397,90 @@ public partial class WindowIconBinaryTests
     }
 
     [Fact]
+    public void Default_Size_Selection_Matches_The_System_Icon_Metric()
+    {
+        // A caller passing 0 means "whatever LR_DEFAULTSIZE would have meant", which is
+        // SM_CXICON — not "the biggest frame you have". This differential proves the
+        // resolution happens: a .ico carrying default-size artwork and an oversized frame
+        // must render the default-size one, which is only observable by colour because
+        // CreateIconFromResourceEx rescales whichever frame it is handed.
+        int defaultSize = TrayIconComInterop.GetSystemMetrics(11); // SM_CXICON
+        Assert.True(defaultSize > 0, "SM_CXICON should be positive on any real desktop.");
+
+        var ico = BuildRealIco(
+            (defaultSize, 255, 0, 0),      // the frame authored for the default size
+            (defaultSize * 4, 0, 0, 255)); // a larger frame that must not win
+
+        AssertIconColour(WindowIcon.FromBytes(ico).CreateBinaryHIcon(0, 0), redish: true);
+    }
+
+    [Fact]
+    public void TaskbarOverlay_Loads_A_Binary_Icon()
+    {
+        // The overlay's binary arm is otherwise unreachable from any test: Apply() needs a
+        // live ITaskbarList3, which no headless context has. Reaching the loader directly
+        // is how the existing overlay tests pin the null / resource arms too.
+        var icon = WindowIcon.FromRgba(SolidRgba(16, 16, 0, 0, 255, 255), 16, 16);
+        var hIcon = InvokeLoadIconFor(typeof(TaskbarOverlay), icon);
+
+        Assert.NotEqual(0, hIcon);
+        DestroyIcon(hIcon);
+    }
+
+    [Fact]
+    public void ThumbnailToolbar_Loads_A_Binary_Icon()
+    {
+        var icon = WindowIcon.FromRgba(SolidRgba(16, 16, 255, 0, 0, 255), 16, 16);
+        var hIcon = InvokeLoadIconFor(typeof(ThumbnailToolbarState), icon);
+
+        Assert.NotEqual(0, hIcon);
+        DestroyIcon(hIcon);
+    }
+
+    /// <summary>
+    /// Calls a shell surface's <c>private static nint LoadIconFor(WindowIcon)</c>. Both
+    /// overlay and toolbar keep that helper private, and <c>TaskbarOverlayTests</c> already
+    /// reaches it this way — matching that rather than widening product visibility for a
+    /// test. The <c>DynamicallyAccessedMembers</c> annotation is what keeps this honest
+    /// under the project's trim analysis.
+    /// </summary>
+    private static nint InvokeLoadIconFor(
+        [global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+            global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicMethods)]
+        Type owner,
+        WindowIcon icon)
+    {
+        var method = owner.GetMethod(
+            "LoadIconFor",
+            global::System.Reflection.BindingFlags.Static
+                | global::System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"LoadIconFor not found on {owner.FullName}");
+        return (nint)method.Invoke(null, [icon])!;
+    }
+
+    [Fact]
+    public void FromBytes_Loads_A_Png_Payload()
+    {
+        // FromBytes documents PNG support, which rests entirely on
+        // CreateIconFromResourceEx accepting a whole PNG file as icon-resource bits
+        // (Vista and later). That is a claim about Windows, not about this repo, so it
+        // has to be measured rather than asserted in a doc comment.
+        var png = BuildSolidPng(8, 8, 0, 200, 0);
+        var hIcon = WindowIcon.FromBytes(png).CreateBinaryHIcon(8, 8);
+        Assert.NotEqual(0, hIcon);
+
+        try
+        {
+            var bgra = ReadIconPixels(hIcon, out var width, out var height);
+            Assert.Equal(8, width);
+            Assert.Equal(8, height);
+            var (b, g, r) = PixelAt(bgra, width, 4, 4);
+            Assert.True(g > 150 && r < 60 && b < 60, $"expected green, got B={b} G={g} R={r}");
+        }
+        finally { DestroyIcon(hIcon); }
+    }
+
+    [Fact]
     public void Data_The_Loader_Cannot_Read_Yields_No_Handle()
     {
         // Failure has to be a zero handle rather than an exception: these run on shell
@@ -501,6 +589,83 @@ public partial class WindowIconBinaryTests
             }
         }
         return pixels;
+    }
+
+    /// <summary>
+    /// Build a minimal single-colour PNG file: signature, IHDR, one zlib-deflated IDAT,
+    /// IEND. Assembled here rather than checked in as a base64 blob so the payload is
+    /// readable and its dimensions and colour can be varied by a future test.
+    /// </summary>
+    private static byte[] BuildSolidPng(int width, int height, byte r, byte g, byte b)
+    {
+        // Raw scanlines: one filter byte (0 = None) followed by RGB triples.
+        var raw = new byte[height * (1 + (width * 3))];
+        int at = 0;
+        for (int y = 0; y < height; y++)
+        {
+            raw[at++] = 0;
+            for (int x = 0; x < width; x++)
+            {
+                raw[at++] = r;
+                raw[at++] = g;
+                raw[at++] = b;
+            }
+        }
+
+        byte[] deflated;
+        using (var buffer = new global::System.IO.MemoryStream())
+        {
+            using (var zlib = new global::System.IO.Compression.ZLibStream(
+                buffer, global::System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+            {
+                zlib.Write(raw, 0, raw.Length);
+            }
+            deflated = buffer.ToArray();
+        }
+
+        var ihdr = new byte[13];
+        BinaryPrimitives.WriteInt32BigEndian(ihdr.AsSpan(0), width);
+        BinaryPrimitives.WriteInt32BigEndian(ihdr.AsSpan(4), height);
+        ihdr[8] = 8;  // bit depth
+        ihdr[9] = 2;  // colour type 2 = truecolour RGB
+        ihdr[10] = 0; // deflate
+        ihdr[11] = 0; // adaptive filtering
+        ihdr[12] = 0; // no interlace
+
+        using var png = new global::System.IO.MemoryStream();
+        png.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        WritePngChunk(png, "IHDR", ihdr);
+        WritePngChunk(png, "IDAT", deflated);
+        WritePngChunk(png, "IEND", []);
+        return png.ToArray();
+    }
+
+    private static void WritePngChunk(global::System.IO.Stream stream, string type, byte[] data)
+    {
+        var length = new byte[4];
+        BinaryPrimitives.WriteInt32BigEndian(length, data.Length);
+        stream.Write(length);
+
+        var typed = new byte[4 + data.Length];
+        for (int i = 0; i < 4; i++) typed[i] = (byte)type[i];
+        data.CopyTo(typed.AsSpan(4));
+        stream.Write(typed);
+
+        var crc = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(crc, Crc32(typed));
+        stream.Write(crc);
+    }
+
+    private static uint Crc32(ReadOnlySpan<byte> data)
+    {
+        uint crc = 0xFFFFFFFFu;
+        foreach (var value in data)
+        {
+            crc ^= value;
+            for (int bit = 0; bit < 8; bit++)
+                crc = (crc & 1) != 0 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+        }
+        return crc ^ 0xFFFFFFFFu;
     }
 
     private static void AssertIconColour(nint hIcon, bool redish)

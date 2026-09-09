@@ -61,6 +61,12 @@ internal static partial class BinaryIconImage
 
     private const uint LR_DEFAULTCOLOR = 0x00000000;
 
+    /// <summary>Full-size icon width metric — what a zero <c>cx</c> resolves to.</summary>
+    private const int SM_CXICON = 11;
+
+    /// <summary>Full-size icon height metric — what a zero <c>cy</c> resolves to.</summary>
+    private const int SM_CYICON = 12;
+
     /// <summary>
     /// Create an <c>HICON</c> from in-memory icon data.
     /// </summary>
@@ -68,17 +74,27 @@ internal static partial class BinaryIconImage
     /// An <c>.ico</c> container, a PNG file, or a bare <c>RT_ICON</c> DIB blob.
     /// </param>
     /// <param name="cx">
-    /// Desired width in pixels, or <c>0</c> to let the platform pick (which
-    /// <c>CreateIconFromResourceEx</c> resolves to <c>SM_CXICON</c> — the same thing
-    /// <c>LR_DEFAULTSIZE</c> means to <c>LoadImageW</c>, so a call site that passes zero
-    /// today keeps the size it already had).
+    /// Desired width in pixels, or <c>0</c> to let the platform pick. Zero is resolved
+    /// here to <c>SM_CXICON</c> — the same metric <c>CreateIconFromResourceEx</c> and
+    /// <c>LoadImageW</c>'s <c>LR_DEFAULTSIZE</c> both resolve it to — so that frame
+    /// selection and the native load agree on one size rather than each deriving its own.
     /// </param>
     /// <param name="cy">Desired height in pixels, or <c>0</c>. See <paramref name="cx"/>.</param>
     /// <returns>The handle, or <c>0</c> when the data could not be loaded.</returns>
+    /// <remarks>
+    /// Resolving zero <em>before</em> selection is load-bearing for a multi-frame
+    /// <c>.ico</c>. Left unresolved, "no preference" would take the largest frame — so a
+    /// file carrying both 32px and 256px artwork would render the 256px frame downscaled,
+    /// where the file-backed <c>LoadImageW</c> arm on the same surface picks the frame
+    /// authored for the default size. The two arms of the same call site would then
+    /// disagree about which artwork a multi-size icon shows.
+    /// </remarks>
     internal static nint TryCreateHIcon(ReadOnlySpan<byte> data, int cx, int cy)
     {
         if (data.Length == 0) return 0;
 
+        if (cx <= 0) cx = DefaultIconSize(SM_CXICON);
+        if (cy <= 0) cy = DefaultIconSize(SM_CYICON);
         var payload = data;
         if (LooksLikeIcoContainer(data))
         {
@@ -112,6 +128,25 @@ internal static partial class BinaryIconImage
             Debug.WriteLine($"[Reactor] BinaryIconImage: CreateIconFromResourceEx threw: {ex.Message}");
             return 0;
         }
+    }
+
+    /// <summary>
+    /// The system metric a caller means by "no preference", falling back to the 96-DPI
+    /// value if the metric is unavailable. Never returns zero, because zero is what this
+    /// resolution exists to eliminate.
+    /// </summary>
+    private static int DefaultIconSize(int metric)
+    {
+        try
+        {
+            var value = TrayIconComInterop.GetSystemMetrics(metric);
+            if (value > 0) return value;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] BinaryIconImage: GetSystemMetrics({metric}) failed: {ex.Message}");
+        }
+        return 32;
     }
 
     /// <summary>
@@ -149,8 +184,9 @@ internal static partial class BinaryIconImage
     /// <param name="ico">The whole <c>.ico</c> file.</param>
     /// <param name="desired">
     /// Target width in pixels. <c>0</c> or negative means "no preference", in which case the
-    /// largest frame wins — <c>CreateIconFromResourceEx</c> then scales it down to the system
-    /// metric, which loses less than scaling a small frame up.
+    /// largest frame wins. Note <see cref="TryCreateHIcon"/> resolves zero to
+    /// <c>SM_CXICON</c> before calling this, so no shell surface reaches that arm — it is
+    /// a helper-level fallback, not the behaviour any caller relies on.
     /// </param>
     /// <param name="offset">Byte offset of the chosen frame within <paramref name="ico"/>.</param>
     /// <param name="length">Byte length of the chosen frame.</param>
