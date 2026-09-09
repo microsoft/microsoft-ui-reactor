@@ -619,8 +619,9 @@ class BinaryTrayHost : Component
     static byte[] LoadEmbeddedIcon()
     {
         var assembly = typeof(BinaryTrayHost).Assembly;
-        using var stream = assembly.GetManifestResourceStream("MyApp.TrayIcon.ico");
-        if (stream is null) return [];
+        using var stream = assembly.GetManifestResourceStream("MyApp.TrayIcon.ico")
+            ?? throw new InvalidOperationException(
+                "Embedded resource 'MyApp.TrayIcon.ico' not found — check the file's Build Action.");
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);
         return buffer.ToArray();
