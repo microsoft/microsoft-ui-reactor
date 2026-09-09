@@ -294,7 +294,8 @@ beside the app, then to the icon embedded in the executable by
 
 ### Where an icon can come from
 
-`WindowIcon` has three factories, and not every surface accepts all three:
+`WindowIcon` has four factories across three source kinds, and not every surface
+accepts every kind:
 
 | Factory | Source |
 | --- | --- |

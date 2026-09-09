@@ -125,7 +125,7 @@ public partial class WindowIconBinaryTests
     public void Frame_Selection_Prefers_An_Exact_Size_Match()
     {
         var ico = BuildIco((16, 32), (32, 32), (48, 32));
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, out var offset, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, 32, out var offset, out _));
         Assert.Equal(FrameOffset(ico, index: 1), offset);
     }
 
@@ -134,7 +134,7 @@ public partial class WindowIconBinaryTests
     {
         // Downscaling 48 to 32 keeps detail that upscaling 16 has already thrown away.
         var ico = BuildIco((16, 32), (48, 32), (64, 32));
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, out var offset, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, 32, out var offset, out _));
         Assert.Equal(FrameOffset(ico, index: 1), offset);
     }
 
@@ -142,7 +142,7 @@ public partial class WindowIconBinaryTests
     public void Frame_Selection_Falls_Back_To_The_Largest_Smaller_Frame()
     {
         var ico = BuildIco((8, 32), (16, 32));
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, out var offset, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, 32, out var offset, out _));
         Assert.Equal(FrameOffset(ico, index: 1), offset);
     }
 
@@ -154,7 +154,7 @@ public partial class WindowIconBinaryTests
         // Default_Size_Selection_Matches_The_System_Icon_Metric for the behaviour callers
         // actually get.
         var ico = BuildIco((16, 32), (48, 32), (32, 32));
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 0, out var offset, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 0, 0, out var offset, out _));
         Assert.Equal(FrameOffset(ico, index: 1), offset);
     }
 
@@ -167,9 +167,9 @@ public partial class WindowIconBinaryTests
         // lose). Three distinct answers from one file cannot be produced by any constant.
         var ico = BuildIco((16, 32), (32, 32), (48, 32));
 
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 16, out var small, out _));
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, out var medium, out _));
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 48, out var large, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 16, 16, out var small, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, 32, out var medium, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 48, 48, out var large, out _));
 
         Assert.Equal(3, new[] { small, medium, large }.Distinct().Count());
         Assert.True(small < medium && medium < large);
@@ -179,7 +179,7 @@ public partial class WindowIconBinaryTests
     public void Frame_Selection_Breaks_Size_Ties_On_Colour_Depth()
     {
         var ico = BuildIco((32, 8), (32, 32));
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, out var offset, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, 32, out var offset, out _));
         Assert.Equal(FrameOffset(ico, index: 1), offset);
     }
 
@@ -189,8 +189,40 @@ public partial class WindowIconBinaryTests
         // The .ico format cannot store 256 in a byte, so it stores 0. Read literally, a
         // 256px frame would rank as the smallest in the file rather than the largest.
         var ico = BuildIco((256, 32), (48, 32));
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 0, out var offset, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 0, 0, out var offset, out _));
         Assert.Equal(FrameOffset(ico, index: 0), offset);
+    }
+
+    [Fact]
+    public void Frame_Selection_Rejects_An_Offset_Pointing_Into_The_Directory()
+    {
+        // An entry whose payload offset lands inside the ICONDIR is in-bounds for the
+        // buffer but cannot be image data. Left un-rejected it out-ranks — and so
+        // displaces — the real frame beside it, and the load then fails on a file that
+        // had a perfectly good 32px frame available.
+        var ico = BuildRealIco((32, 255, 0, 0), (32, 0, 0, 255));
+
+        // Point the first (otherwise winning, since ties go to the earlier equal rank)
+        // entry back at the directory itself.
+        BinaryPrimitives.WriteUInt32LittleEndian(ico.AsSpan(6 + 12), 8);
+
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, 32, out var offset, out _));
+        Assert.Equal(FrameOffset(ico, index: 1), offset);
+
+        // And the whole path still yields a real icon rather than failing the load.
+        AssertIconColour(WindowIcon.FromBytes(ico).CreateBinaryHIcon(32, 32), redish: false);
+    }
+
+    [Fact]
+    public void Frame_Selection_Ranks_Both_Dimensions()
+    {
+        // Scored on width alone, a 32x16 frame reads as an exact match for a 32x32
+        // request and beats the genuinely square one. LoadImageW, given both cx and cy,
+        // would not make that mistake.
+        var ico = BuildIcoWithSizes((32, 16, 32), (32, 32, 32));
+
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, 32, out var offset, out _));
+        Assert.Equal(FrameOffset(ico, index: 1), offset);
     }
 
     [Fact]
@@ -199,34 +231,34 @@ public partial class WindowIconBinaryTests
         var valid = BuildIco((16, 32), (32, 32));
 
         // Truncated below the six-byte ICONDIR.
-        Assert.False(BinaryIconImage.TrySelectIcoFrame(valid.AsSpan(0, 4), 32, out _, out _));
+        Assert.False(BinaryIconImage.TrySelectIcoFrame(valid.AsSpan(0, 4), 32, 32, out _, out _));
 
         // idType 2 is a cursor, not an icon.
         var cursor = (byte[])valid.Clone();
         cursor[2] = 2;
-        Assert.False(BinaryIconImage.TrySelectIcoFrame(cursor, 32, out _, out _));
+        Assert.False(BinaryIconImage.TrySelectIcoFrame(cursor, 32, 32, out _, out _));
 
         // Zero entries.
         var empty = (byte[])valid.Clone();
         BinaryPrimitives.WriteUInt16LittleEndian(empty.AsSpan(4), 0);
-        Assert.False(BinaryIconImage.TrySelectIcoFrame(empty, 32, out _, out _));
+        Assert.False(BinaryIconImage.TrySelectIcoFrame(empty, 32, 32, out _, out _));
 
         // A count whose directory alone runs past the end of the buffer.
         var overrun = (byte[])valid.Clone();
         BinaryPrimitives.WriteUInt16LittleEndian(overrun.AsSpan(4), 4096);
-        Assert.False(BinaryIconImage.TrySelectIcoFrame(overrun, 32, out _, out _));
+        Assert.False(BinaryIconImage.TrySelectIcoFrame(overrun, 32, 32, out _, out _));
 
         // Every entry's payload extends past the end.
         var runaway = (byte[])valid.Clone();
         for (int i = 0; i < 2; i++)
             BinaryPrimitives.WriteUInt32LittleEndian(runaway.AsSpan(6 + (i * 16) + 8), uint.MaxValue);
-        Assert.False(BinaryIconImage.TrySelectIcoFrame(runaway, 32, out _, out _));
+        Assert.False(BinaryIconImage.TrySelectIcoFrame(runaway, 32, 32, out _, out _));
 
         // Every entry declares a zero-length payload.
         var hollow = (byte[])valid.Clone();
         for (int i = 0; i < 2; i++)
             BinaryPrimitives.WriteUInt32LittleEndian(hollow.AsSpan(6 + (i * 16) + 8), 0);
-        Assert.False(BinaryIconImage.TrySelectIcoFrame(hollow, 32, out _, out _));
+        Assert.False(BinaryIconImage.TrySelectIcoFrame(hollow, 32, 32, out _, out _));
     }
 
     [Fact]
@@ -236,7 +268,7 @@ public partial class WindowIconBinaryTests
         // Point the 32px entry past the end of the buffer.
         BinaryPrimitives.WriteUInt32LittleEndian(ico.AsSpan(6 + 16 + 12), uint.MaxValue - 1);
 
-        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, out var offset, out _));
+        Assert.True(BinaryIconImage.TrySelectIcoFrame(ico, 32, 32, out var offset, out _));
         Assert.Equal(FrameOffset(ico, index: 2), offset);
     }
 
@@ -513,6 +545,16 @@ public partial class WindowIconBinaryTests
         // A distinct, non-trivial payload length per frame so an off-by-one in the entry
         // walk shows up as a wrong offset rather than coincidentally matching.
         var payloads = frames.Select((f, i) => new byte[64 + (i * 16)]).ToArray();
+        return Assemble(frames.Select(f => (f.Size, f.Size, f.BitCount)).ToArray(), payloads);
+    }
+
+    /// <summary>
+    /// Same as <see cref="BuildIco"/>, but each frame declares its width and height
+    /// separately so a non-square entry can be described.
+    /// </summary>
+    private static byte[] BuildIcoWithSizes(params (int Width, int Height, int BitCount)[] frames)
+    {
+        var payloads = frames.Select((f, i) => new byte[64 + (i * 16)]).ToArray();
         return Assemble(frames, payloads);
     }
 
@@ -526,10 +568,10 @@ public partial class WindowIconBinaryTests
             .Select(f => BinaryIconImage.BuildRgbaIconImage(
                 SolidRgba(f.Size, f.Size, f.R, f.G, f.B, 255), f.Size, f.Size))
             .ToArray();
-        return Assemble(frames.Select(f => (f.Size, 32)).ToArray(), payloads);
+        return Assemble(frames.Select(f => (f.Size, f.Size, 32)).ToArray(), payloads);
     }
 
-    private static byte[] Assemble((int Size, int BitCount)[] frames, byte[][] payloads)
+    private static byte[] Assemble((int Width, int Height, int BitCount)[] frames, byte[][] payloads)
     {
         int directory = 6 + (frames.Length * 16);
         var file = new byte[directory + payloads.Sum(p => p.Length)];
@@ -543,8 +585,8 @@ public partial class WindowIconBinaryTests
         {
             var entry = file.AsSpan(6 + (i * 16), 16);
             // 256 is stored as 0 — the format's own encoding of "does not fit in a byte".
-            entry[0] = (byte)(frames[i].Size == 256 ? 0 : frames[i].Size);
-            entry[1] = entry[0];
+            entry[0] = (byte)(frames[i].Width == 256 ? 0 : frames[i].Width);
+            entry[1] = (byte)(frames[i].Height == 256 ? 0 : frames[i].Height);
             entry[2] = 0;                                                               // bColorCount
             entry[3] = 0;                                                               // bReserved
             BinaryPrimitives.WriteUInt16LittleEndian(entry.Slice(4), 1);                // wPlanes

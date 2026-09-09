@@ -279,7 +279,8 @@ fields, in the same spirit as the reconciler.
 > 4-bytes-per-field cost for consistency.
 
 > **On `WindowIcon` source kinds** *(amended for issue #1185)*. `WindowIcon` has
-> three factories, and `WindowIcon.Kind` reports which produced an instance:
+> four factories across three kinds, and `WindowIcon.Kind` reports which kind
+> produced an instance:
 >
 > ```csharp
 > public enum WindowIconKind { Path, Resource, Binary }

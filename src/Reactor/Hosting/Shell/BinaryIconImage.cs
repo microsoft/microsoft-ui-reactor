@@ -98,7 +98,7 @@ internal static partial class BinaryIconImage
         var payload = data;
         if (LooksLikeIcoContainer(data))
         {
-            if (!TrySelectIcoFrame(data, cx, out var offset, out var length))
+            if (!TrySelectIcoFrame(data, cx, cy, out var offset, out var length))
             {
                 Debug.WriteLine(
                     "[Reactor] BinaryIconImage: no usable frame in the supplied .ico data.");
@@ -178,16 +178,17 @@ internal static partial class BinaryIconImage
         && BinaryPrimitives.ReadUInt32LittleEndian(data) == BitmapInfoHeaderSize;
 
     /// <summary>
-    /// Pick the <c>ICONDIRENTRY</c> whose image best matches <paramref name="desired"/> pixels
-    /// wide and return the slice bounds of its <c>RT_ICON</c> payload.
+    /// Pick the <c>ICONDIRENTRY</c> whose image best matches the requested pixel size and
+    /// return the slice bounds of its <c>RT_ICON</c> payload.
     /// </summary>
     /// <param name="ico">The whole <c>.ico</c> file.</param>
-    /// <param name="desired">
+    /// <param name="desiredWidth">
     /// Target width in pixels. <c>0</c> or negative means "no preference", in which case the
     /// largest frame wins. Note <see cref="TryCreateHIcon"/> resolves zero to
     /// <c>SM_CXICON</c> before calling this, so no shell surface reaches that arm — it is
     /// a helper-level fallback, not the behaviour any caller relies on.
     /// </param>
+    /// <param name="desiredHeight">Target height in pixels. See <paramref name="desiredWidth"/>.</param>
     /// <param name="offset">Byte offset of the chosen frame within <paramref name="ico"/>.</param>
     /// <param name="length">Byte length of the chosen frame.</param>
     /// <returns>
@@ -196,7 +197,7 @@ internal static partial class BinaryIconImage
     /// failing the whole file, so one bad record does not discard the frames around it.
     /// </returns>
     internal static bool TrySelectIcoFrame(
-        ReadOnlySpan<byte> ico, int desired, out int offset, out int length)
+        ReadOnlySpan<byte> ico, int desiredWidth, int desiredHeight, out int offset, out int length)
     {
         offset = 0;
         length = 0;
@@ -223,12 +224,15 @@ internal static partial class BinaryIconImage
             uint imageOffset = BinaryPrimitives.ReadUInt32LittleEndian(entry.Slice(12));
 
             // Bounds are checked in 64-bit so a hostile pair of DWORDs cannot wrap into a
-            // range that looks in-bounds.
+            // range that looks in-bounds. The offset must also clear the directory itself:
+            // an entry pointing back into the ICONDIR is in-bounds but cannot be image
+            // data, and left un-rejected it could out-rank — and so displace — a real
+            // frame later in the file.
             if (bytesInRes == 0) continue;
-            if (imageOffset < IcoHeaderSize) continue;
+            if (imageOffset < directoryEnd) continue;
             if ((long)imageOffset + bytesInRes > ico.Length) continue;
 
-            var rank = FrameRank.For(width, height, bitCount, desired);
+            var rank = FrameRank.For(width, height, bitCount, desiredWidth, desiredHeight);
             if (!found || rank.CompareTo(best) > 0)
             {
                 found = true;
@@ -250,6 +254,10 @@ internal static partial class BinaryIconImage
     /// "smallest frame at least as large as the target" must beat every smaller frame for the
     /// same reason. Downscaling a larger frame keeps detail that upscaling a smaller one has
     /// already lost, which is why the ≥ tier outranks the &lt; tier.
+    /// <para>Both dimensions are ranked, not just width. An <c>.ico</c> may hold a
+    /// deliberately non-square frame, and scoring on width alone would call a 32×16 frame an
+    /// exact match for a 32×32 request — diverging from what <c>LoadImageW</c> picks when
+    /// both <c>cx</c> and <c>cy</c> are given.</para>
     /// </remarks>
     private readonly struct FrameRank(int tier, int primary, int bitCount)
         : IComparable<FrameRank>
@@ -258,22 +266,25 @@ internal static partial class BinaryIconImage
         private readonly int _primary = primary;
         private readonly int _bitCount = bitCount;
 
-        internal static FrameRank For(int width, int height, int bitCount, int desired)
+        internal static FrameRank For(
+            int width, int height, int bitCount, int desiredWidth, int desiredHeight)
         {
-            if (desired <= 0)
+            if (desiredWidth <= 0 || desiredHeight <= 0)
             {
                 // No preference: prefer the most pixels. Area, not width, so a
                 // deliberately non-square frame is not mistaken for a better one.
                 return new FrameRank(0, width * height, bitCount);
             }
 
-            if (width == desired) return new FrameRank(2, 0, bitCount);
+            if (width == desiredWidth && height == desiredHeight)
+                return new FrameRank(2, 0, bitCount);
 
-            // Within the "at least as large" tier, closer to the target is better, so negate
-            // the overshoot. Within the "smaller" tier, bigger is better as-is.
-            return width > desired
-                ? new FrameRank(1, desired - width, bitCount)
-                : new FrameRank(0, width, bitCount);
+            // Within the "at least as large on both axes" tier, closer to the target is
+            // better, so negate the total overshoot. Everything else has to be upscaled on
+            // at least one axis; there, more pixels is the best available proxy.
+            return width >= desiredWidth && height >= desiredHeight
+                ? new FrameRank(1, (desiredWidth - width) + (desiredHeight - height), bitCount)
+                : new FrameRank(0, width * height, bitCount);
         }
 
         public int CompareTo(FrameRank other)
