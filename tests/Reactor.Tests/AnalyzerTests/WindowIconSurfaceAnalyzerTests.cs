@@ -68,7 +68,22 @@ namespace Microsoft.UI.Reactor
 
     public static class ReactorApp
     {
-        public static void Run(string title, double? width = null, WindowIcon icon = null) { }
+        // Mirrors the real signatures in src/Reactor/Hosting/ReactorApp.cs: `icon` sits after
+        // width/height/fullScreen, and every documented call site passes it by name.
+        public static void Run<TRoot>(
+            string title = ""Reactor App"",
+            double? width = null,
+            double? height = null,
+            bool fullScreen = false,
+            WindowIcon icon = null) { }
+
+        public static void Run(
+            string title,
+            System.Func<object> rootRender,
+            double? width = null,
+            double? height = null,
+            bool fullScreen = false,
+            WindowIcon icon = null) { }
     }
 }
 
@@ -193,16 +208,25 @@ namespace TestApp
     [Fact]
     public async Task Fires_On_Binary_Icon_For_The_Run_Icon_Argument()
     {
+        // The named form is what every documented call site uses, so it is the one that has to
+        // work; the positional form covers FindArgument's other branch.
         var source = @"
 namespace TestApp
 {
     using Microsoft.UI.Reactor;
 
+    class Root { }
+
     class App
     {
-        void M(byte[] data)
+        void Named(byte[] data)
         {
-            ReactorApp.Run(""Demo"", 800, {|REACTOR_ICON_001:WindowIcon.FromBytes(data)|});
+            ReactorApp.Run<Root>(""Demo"", icon: {|REACTOR_ICON_001:WindowIcon.FromBytes(data)|});
+        }
+
+        void Positional(byte[] data)
+        {
+            ReactorApp.Run<Root>(""Demo"", 800, 600, false, {|REACTOR_ICON_001:WindowIcon.FromBytes(data)|});
         }
     }
 }";
@@ -303,10 +327,12 @@ namespace TestApp
             // The window caption takes a path or a packaged resource.
             var w1 = new WindowSpec { Icon = WindowIcon.FromPath(""AppIcon.ico"") };
             var w2 = new WindowSpec { Icon = WindowIcon.FromResource(""ms-appx:///Assets/AppIcon.ico"") };
-            ReactorApp.Run(""Demo"", 800, WindowIcon.FromPath(""AppIcon.ico""));
-            ReactorApp.Run(""Demo"", 800, WindowIcon.FromResource(""ms-appx:///Assets/AppIcon.ico""));
+            ReactorApp.Run<Root>(""Demo"", icon: WindowIcon.FromPath(""AppIcon.ico""));
+            ReactorApp.Run<Root>(""Demo"", icon: WindowIcon.FromResource(""ms-appx:///Assets/AppIcon.ico""));
         }
     }
+
+    class Root { }
 }";
         await Analyzer(source).RunAsync(TestContext.Current.CancellationToken);
     }
