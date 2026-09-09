@@ -664,13 +664,20 @@ internal static partial class WindowModelFixtures
                 H.Check("TrayIcon_BinarySource_Loads_HIcon", binary.CurrentHIcon != 0);
                 H.Check("TrayIcon_UnusableSource_Loads_No_HIcon", unusable.CurrentHIcon == 0);
 
-                // Swapping the source must reload rather than strand the old bitmap. The
-                // handle changing is the observable part; a setter that skipped the reload
-                // would leave the original value in place.
-                var first = binary.CurrentHIcon;
+                // Swapping the source must reload rather than strand the old bitmap.
+                // Comparing handle values would not prove that: Win32 is free to hand back
+                // the same numeric HICON once DestroyIcon has freed the old one, so an
+                // "it changed" check can fail on a correct reload. Drive the same icon
+                // through a source the loader refuses instead — non-zero to zero and back
+                // is a transition no stale handle can produce.
+                binary.Icon = WindowIcon.FromPath("definitely-not-a-real-icon.ico");
+                var afterUnusable = binary.CurrentHIcon;
+
                 binary.Icon = WindowIcon.FromRgba(pixels, 16, 16);
+                var afterReload = binary.CurrentHIcon;
+
                 H.Check("TrayIcon_BinarySource_Reloads_On_Swap",
-                    first != 0 && binary.CurrentHIcon != 0 && binary.CurrentHIcon != first);
+                    afterUnusable == 0 && afterReload != 0);
             }
             finally
             {
