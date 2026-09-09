@@ -1045,6 +1045,7 @@ TaskbarProgressState { None, Indeterminate, Normal, Paused, Error }
 WindowCloseReason { UserClosed, AppClosed, OwnerClosed }
 WindowCornerStyle { Default, Square, Rounded, RoundedSmall }
 WindowEmbedStyle { Child, Owner }
+WindowIconKind { Path, Resource, Binary }
 WindowLevel { Normal, Floating, AlwaysOnTop }
 WindowResizeMode { CanResize, NoResize, CanMinimize }
 WindowSizeToContent { Manual, Width, Height, WidthAndHeight }
@@ -6257,10 +6258,14 @@ ValueTuple<double, double> Size { get; }
 WindowSizeChangedEventArgs Raw { get; }
 
 ### class WindowIcon
+WindowIconKind Kind { get; }
+bool IsBinary { get; }
 bool IsResource { get; }
 string Source { get; }
+FromBytes(ReadOnlySpan<byte> data) → WindowIcon
 FromPath(string path) → WindowIcon
 FromResource(string uri) → WindowIcon
+FromRgba(ReadOnlySpan<byte> pixels, int width, int height) → WindowIcon
 
 ### struct WindowKey
 new(string Name)

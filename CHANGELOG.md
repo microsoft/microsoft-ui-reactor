@@ -28,6 +28,41 @@ Conventions for contributors:
 
 ### Added
 
+- **Binary icon sources on `WindowIcon` (spec 036 §4.1, issue #1185).**
+  `WindowIcon.FromBytes(ReadOnlySpan<byte>)` takes encoded `.ico` or PNG data and
+  `WindowIcon.FromRgba(ReadOnlySpan<byte>, int, int)` takes a raw straight-alpha RGBA8
+  buffer, so an icon that lives in an embedded resource, a download, or a
+  procedurally-drawn badge no longer has to be written to a temporary file before the
+  shell can show it. Consumed by the three surfaces that need a raw `HICON`: the tray
+  icon (spec 036 §11.4), the taskbar overlay (§11.2), and thumbnail-toolbar buttons
+  (§11.5). Both factories copy the caller's buffer, and a multi-frame `.ico` held in
+  memory has its closest frame selected the same way `LoadImageW` would from a file.
+  The new `WindowIcon.Kind` (`WindowIconKind.Path` / `Resource` / `Binary`) reports which
+  factory produced an icon; `IsResource` is unchanged.
+
+  `WindowSpec.Icon` does **not** accept a binary source — `AppWindow.SetIcon` needs a
+  filesystem path — and reports it as not applied, so the window falls through to the
+  `Assets\AppIcon.ico` convention or its PE icon rather than showing nothing. Jump lists
+  and the `TitleBar` icon default skip it for the reason they already skip a PE icon:
+  they need a `Uri` or a path, and binary data is neither.
+
+- **`REACTOR_ICON_001` — a `WindowIcon` source kind the target surface silently skips
+  (spec 061, issue #1185).** Every `WindowIcon` factory type-checks against every
+  icon-taking surface, but the surfaces need different primitives and quietly drop what
+  they cannot use — a `Debug.WriteLine` and a missing glyph, invisible in a Release build.
+  The analyzer reports `FromResource` handed to a tray icon, taskbar overlay or
+  thumbnail-toolbar button (all need a raw `HICON`, which cannot come from an `ms-appx:`
+  URI), and `FromBytes` / `FromRgba` handed to `WindowSpec.Icon`, `ReactorApp.Run(icon:)`
+  or a jump-list entry (which need a filesystem path or a `Uri`).
+
+  It fires only when the icon's kind is provably known at the use site — a direct factory
+  call, or a write-once local whose initializer is one (including through the documented
+  `UseMemo(() => WindowIcon.FromPath(...))` idiom). A conditional, field, parameter or
+  method result stays silent, as does either non-binary kind on a jump-list entry, since
+  packaged-versus-unpackaged is a runtime property. Reactor's own spec 036 carried the
+  `FromResource`-for-a-tray-icon mistake in its worked example, which is the case for
+  surfacing this in the editor.
+
 - **Struct-typed overloads for `.Margin(...)`, `.Padding(...)` and `.CornerRadius(...)`
   (issue #1192).** All four common layout modifiers now accept their WinUI struct
   directly, matching the `.BorderThickness(Thickness)` overload that has shipped since

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.UI.Reactor.Hosting.Shell;
 using Microsoft.UI.Windowing;
 
 namespace Microsoft.UI.Reactor;
@@ -9,42 +10,78 @@ namespace Microsoft.UI.Reactor;
 /// to a tray icon, or to a taskbar overlay. (spec 036 §4.1)
 /// </summary>
 /// <remarks>
-/// Two source kinds are supported: a filesystem path (<see cref="FromPath"/>) for
-/// <c>.ico</c> resources alongside an unpackaged app, and an
-/// <c>ms-appx:///</c>-style packaged-app resource URI (<see cref="FromResource"/>).
-/// Empty strings are rejected at construction so a malformed icon never reaches
-/// the WinUI APIs.
+/// Three source kinds are supported: a filesystem path (<see cref="FromPath"/>) for
+/// <c>.ico</c> resources alongside an unpackaged app, an <c>ms-appx:///</c>-style
+/// packaged-app resource URI (<see cref="FromResource"/>), and icon data held in memory
+/// (<see cref="FromBytes"/> / <see cref="FromRgba"/>). Empty strings and empty buffers are
+/// rejected at construction so a malformed icon never reaches the WinUI APIs.
 /// <para>Consumers differ in what they can accept, because most of them need a raw
-/// Win32 <c>HICON</c>:</para>
+/// Win32 <c>HICON</c> while a couple need a <see cref="Uri"/>:</para>
 /// <list type="bullet">
-/// <item><description><see cref="WindowSpec.Icon"/> — accepts both kinds. An
-/// <c>ms-appx:</c> source is mapped to a file beside the app before it reaches
-/// <c>AppWindow.SetIcon</c>, which needs a filesystem path: handed the URI itself
-/// inside a packaged app it silently applies a default icon.</description></item>
+/// <item><description><see cref="WindowSpec.Icon"/> — <see cref="FromPath"/> and
+/// <see cref="FromResource"/>. An <c>ms-appx:</c> source is mapped to a file beside the app
+/// before it reaches <c>AppWindow.SetIcon</c>, which needs a filesystem path: handed the URI
+/// itself inside a packaged app it silently applies a default icon. A binary source is
+/// <b>not</b> accepted here — see <see cref="FromBytes"/>.</description></item>
 /// <item><description>Tray icons, taskbar overlays, and thumbnail-toolbar buttons —
-/// <see cref="FromPath"/> only. They load through <c>LoadImageW</c>, which cannot read a
-/// packaged resource URI.</description></item>
+/// <see cref="FromPath"/> and the binary factories. They need an <c>HICON</c>, which comes
+/// either from <c>LoadImageW</c> on a file or from <c>CreateIconFromResourceEx</c> on
+/// in-memory data; neither can read a packaged resource URI, so
+/// <see cref="FromResource"/> is skipped with a diagnostic.</description></item>
 /// <item><description>Jump lists — <see cref="FromResource"/> on the packaged path
 /// (the WinRT API takes the URI directly) and <see cref="FromPath"/> on the unpackaged
-/// one. Each silently skips the other kind.</description></item>
+/// one. Every other kind is silently skipped.</description></item>
 /// </list>
+/// <para>Instances are immutable and safe to share: a binary source copies the caller's
+/// buffer, so a later write to that array cannot change what the shell renders.</para>
 /// </remarks>
 public sealed class WindowIcon
 {
     private readonly string _source;
-    private readonly bool _isResource;
+    private readonly WindowIconKind _kind;
 
-    private WindowIcon(string source, bool isResource)
+    /// <summary>
+    /// The icon payload for <see cref="WindowIconKind.Binary"/>, and <c>null</c> otherwise.
+    /// Either encoded data as supplied to <see cref="FromBytes"/>, or the <c>RT_ICON</c> DIB
+    /// that <see cref="FromRgba"/> assembled from a pixel buffer — the loader consumes both
+    /// through the same call, so they need no further distinction here.
+    /// </summary>
+    private readonly byte[]? _binary;
+
+    /// <summary>Human-readable form of <see cref="_binary"/> for diagnostics.</summary>
+    private readonly string? _binaryDescription;
+
+    private WindowIcon(string source, WindowIconKind kind)
     {
         _source = source;
-        _isResource = isResource;
+        _kind = kind;
     }
 
-    /// <summary>The path or resource URI this icon was constructed from.</summary>
+    private WindowIcon(byte[] binary, string description)
+    {
+        _source = string.Empty;
+        _kind = WindowIconKind.Binary;
+        _binary = binary;
+        _binaryDescription = description;
+    }
+
+    /// <summary>
+    /// The path or resource URI this icon was constructed from, or
+    /// <see cref="string.Empty"/> for a <see cref="WindowIconKind.Binary"/> icon, which has
+    /// no addressable source. Test <see cref="Kind"/> rather than inferring it from here.
+    /// </summary>
     public string Source => _source;
 
+    /// <summary>Which factory produced this icon.</summary>
+    public WindowIconKind Kind => _kind;
+
     /// <summary>True when constructed via <see cref="FromResource"/>.</summary>
-    public bool IsResource => _isResource;
+    public bool IsResource => _kind == WindowIconKind.Resource;
+
+    /// <summary>
+    /// True when constructed via <see cref="FromBytes"/> or <see cref="FromRgba"/>.
+    /// </summary>
+    public bool IsBinary => _kind == WindowIconKind.Binary;
 
     /// <summary>
     /// Create an icon from a filesystem path (typically a <c>.ico</c>) for an
@@ -64,7 +101,7 @@ public sealed class WindowIcon
         WarnIfUnrecognisedExtension(path);
         WarnIfMissing(path);
 
-        return new WindowIcon(path, isResource: false);
+        return new WindowIcon(path, WindowIconKind.Path);
     }
 
     private static readonly string[] s_recognisedIconExtensions =
@@ -121,8 +158,107 @@ public sealed class WindowIcon
     {
         if (string.IsNullOrEmpty(uri))
             throw new ArgumentException("WindowIcon resource URI must be non-empty.", nameof(uri));
-        return new WindowIcon(uri, isResource: true);
+        return new WindowIcon(uri, WindowIconKind.Resource);
     }
+
+    /// <summary>
+    /// Create an icon from encoded icon data held in memory — an <c>.ico</c> container, a
+    /// PNG, or a bare <c>RT_ICON</c> DIB blob — so an app whose icon lives in an embedded
+    /// resource, a database, or a download does not have to write a temporary file first.
+    /// (issue #1185)
+    /// </summary>
+    /// <param name="data">
+    /// The encoded bytes. Copied, so the caller may reuse or overwrite its buffer.
+    /// </param>
+    /// <remarks>
+    /// <para>Consumed by the tray icon, the taskbar overlay, and thumbnail-toolbar buttons,
+    /// which need a raw <c>HICON</c> and get one via <c>CreateIconFromResourceEx</c>. A
+    /// multi-frame <c>.ico</c> is honoured: the frame nearest the size the surface asks for
+    /// is selected, exactly as <c>LoadImageW</c> would have done from a file.</para>
+    /// <para><b>Not accepted by <see cref="WindowSpec.Icon"/>.</b> Putting a binary icon on a
+    /// window means owning the <c>HICON</c> for the window's lifetime, which
+    /// <c>AppWindow.SetIcon(IconId)</c> does not do for you. A binary icon declared there is
+    /// reported as not applied, so the window falls back to <c>Assets\AppIcon.ico</c> or its
+    /// PE icon rather than showing nothing. Jump lists and the <c>TitleBar</c> icon default
+    /// skip it for the same reason they skip a PE icon: both need a <see cref="Uri"/>.</para>
+    /// <para>An unrecognised signature is logged via
+    /// <c>System.Diagnostics.Debug.WriteLine</c> rather than throwing, mirroring
+    /// <see cref="FromPath"/>'s treatment of an unrecognised extension — the loader is the
+    /// authority on what it accepts, and refusing data it would have loaded is worse than
+    /// letting it report the failure.</para>
+    /// <para>The bytes are held for this instance's lifetime. That is the point of the API,
+    /// but it is worth knowing when a long-lived spec holds a large multi-resolution
+    /// <c>.ico</c>.</para>
+    /// </remarks>
+    public static WindowIcon FromBytes(ReadOnlySpan<byte> data)
+    {
+        if (data.Length == 0)
+            throw new ArgumentException("WindowIcon binary data must be non-empty.", nameof(data));
+
+        WarnIfUnrecognisedSignature(data);
+        return new WindowIcon(data.ToArray(), $"binary ({data.Length} bytes)");
+    }
+
+    /// <summary>
+    /// Create an icon from a raw straight-alpha RGBA8 pixel buffer — the shape Rust's tray
+    /// crates expose as <c>Icon::from_rgba</c>. (issue #1185)
+    /// </summary>
+    /// <param name="pixels">
+    /// Exactly <c>width * height * 4</c> bytes, top-down, one pixel as R, G, B, A. Copied
+    /// (as an assembled icon image), so the caller may reuse or overwrite its buffer.
+    /// </param>
+    /// <param name="width">Icon width in pixels, between 1 and 4096.</param>
+    /// <param name="height">Icon height in pixels, between 1 and 4096.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="width"/> or <paramref name="height"/> is outside 1–4096.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="pixels"/> is not exactly <c>width * height * 4</c> bytes.
+    /// </exception>
+    /// <remarks>
+    /// The buffer is converted once, at construction, into the 32-bpp icon-resource layout
+    /// the platform loader wants (bottom-up BGRA plus an AND mask). See <see cref="FromBytes"/>
+    /// for which surfaces consume a binary icon.
+    /// </remarks>
+    public static WindowIcon FromRgba(ReadOnlySpan<byte> pixels, int width, int height)
+    {
+        var image = BinaryIconImage.BuildRgbaIconImage(pixels, width, height);
+        return new WindowIcon(image, $"rgba {width}x{height}");
+    }
+
+    /// <summary>
+    /// Warns when <paramref name="data"/> carries none of the signatures
+    /// <c>CreateIconFromResourceEx</c> is documented to accept. Advisory only.
+    /// </summary>
+    private static void WarnIfUnrecognisedSignature(ReadOnlySpan<byte> data)
+    {
+        if (BinaryIconImage.LooksLikeIcoContainer(data)) return;
+        if (BinaryIconImage.LooksLikePng(data)) return;
+        if (BinaryIconImage.LooksLikeDibIconImage(data)) return;
+
+        Debug.WriteLine(
+            $"[Reactor] WindowIcon.FromBytes: {data.Length} bytes matching no known icon " +
+            "signature. Expected an .ico container, a PNG, or a BITMAPINFOHEADER icon image.");
+    }
+
+    /// <summary>
+    /// Create the Win32 <c>HICON</c> for a <see cref="WindowIconKind.Binary"/> icon. Returns
+    /// <c>0</c> for every other kind, and for data the platform loader refuses.
+    /// </summary>
+    /// <param name="cx">
+    /// Desired width in pixels, or <c>0</c> to let the platform pick — which resolves to
+    /// <c>SM_CXICON</c>, the same size <c>LR_DEFAULTSIZE</c> gives the file-backed path.
+    /// </param>
+    /// <param name="cy">Desired height in pixels, or <c>0</c>.</param>
+    /// <remarks>The caller owns the returned handle and must <c>DestroyIcon</c> it.</remarks>
+    internal nint CreateBinaryHIcon(int cx, int cy)
+        => _binary is null ? 0 : BinaryIconImage.TryCreateHIcon(_binary, cx, cy);
+
+    /// <summary>
+    /// A short description of this icon for diagnostics, usable for every kind —
+    /// unlike <see cref="Source"/>, which is empty for a binary icon.
+    /// </summary>
+    internal string Describe() => _binaryDescription ?? _source;
 
     /// <summary>
     /// Apply the icon to the given <see cref="AppWindow"/>. Best-effort: any
@@ -132,9 +268,10 @@ public sealed class WindowIcon
     /// </summary>
     /// <returns>
     /// <c>true</c> when the icon was handed to the platform. <c>false</c> when it was
-    /// not: a filesystem path that demonstrably does not exist, a <c>null</c>
-    /// <paramref name="appWindow"/>, or a <c>SetIcon</c> call that threw. The caller
-    /// then falls back rather than leaving the window with no icon at all.
+    /// not: a filesystem path that demonstrably does not exist, a binary source (which this
+    /// surface does not accept), a <c>null</c> <paramref name="appWindow"/>, or a
+    /// <c>SetIcon</c> call that threw. The caller then falls back rather than leaving the
+    /// window with no icon at all.
     /// </returns>
     /// <remarks>
     /// <para>A filesystem source is resolved to an absolute path first, preferring the
@@ -156,6 +293,11 @@ public sealed class WindowIcon
     /// does not throw — would report success and suppress the fallback, locking in a
     /// blank icon for a window that had a perfectly good convention or PE icon
     /// available.</para>
+    /// <para>A <see cref="WindowIconKind.Binary"/> source reports failure for the same
+    /// reason, one step earlier: it has no path at all. Applying one would mean
+    /// <c>SetIcon(IconId)</c> over a handle this window would then have to own and free,
+    /// which is the window's business rather than the icon's — so the declaration degrades
+    /// to the convention/PE fallback instead of silently doing nothing.</para>
     /// </remarks>
     internal bool Apply(AppWindow appWindow)
     {
@@ -169,7 +311,7 @@ public sealed class WindowIcon
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor] WindowIcon.Apply failed for '{_source}': {ex.Message}");
+            Debug.WriteLine($"[Reactor] WindowIcon.Apply failed for '{Describe()}': {ex.Message}");
             return false;
         }
     }
@@ -182,9 +324,10 @@ public sealed class WindowIcon
     /// file a declared icon names.
     /// </summary>
     /// <returns>
-    /// <c>false</c> when the source names no existing file. See the remarks on
-    /// <see cref="Apply"/> for why a <c>ms-appx:</c> URI that maps to nothing is a
-    /// failure rather than something to pass through.
+    /// <c>false</c> when the source names no existing file — including every
+    /// <see cref="WindowIconKind.Binary"/> icon, which by construction names none. See the
+    /// remarks on <see cref="Apply"/> for why a <c>ms-appx:</c> URI that maps to nothing is
+    /// a failure rather than something to pass through.
     /// <para><b>One permissive edge:</b> <c>true</c> does <em>not</em> guarantee the path
     /// exists. When the existence probe itself throws — a locked-down filesystem, a path
     /// shape the platform rejects — <see cref="TryResolveExistingPath"/> reports success
@@ -196,7 +339,17 @@ public sealed class WindowIcon
     /// </returns>
     internal bool TryResolvePath(out string resolved)
     {
-        if (_isResource)
+        if (_kind == WindowIconKind.Binary)
+        {
+            resolved = string.Empty;
+            Debug.WriteLine(
+                $"[Reactor] WindowIcon.TryResolvePath: {Describe()} has no filesystem path. " +
+                "Binary icons are for the tray, taskbar overlay, and thumbnail toolbar; " +
+                "surfaces that need a path or URI fall back instead.");
+            return false;
+        }
+
+        if (_kind == WindowIconKind.Resource)
         {
             if (!TryResolveResourceUri(_source, out resolved))
             {

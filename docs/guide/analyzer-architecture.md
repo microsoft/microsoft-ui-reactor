@@ -177,6 +177,7 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 | `REACTOR_THREAD_002` | Warning | Blocking a Task (.Result/.Wait) in Render/effect | `BlockingTaskAnalyzer.cs` |
 | `REACTOR_OPT_001` | Info | Selection sentinel literal force-asserts instead of Optional<T>.Unset | `OptionalSentinelAnalyzer.cs` |
 | `REACTOR_CMD_001` | Info | Raw-init Command + own click callback both set (callback wins; command never runs) | `RawCommandCallbackAnalyzer.cs` |
+| `REACTOR_ICON_001` | Warning | `WindowIcon` source kind the target surface silently skips (`FromResource` on tray/overlay/thumbnail; `FromBytes`/`FromRgba` on the window caption or a jump list) | `WindowIconSurfaceAnalyzer.cs` |
 | `REACTOR_THREAD_001` | Warning | UI-thread-only mutator called on a background thread | `UIThreadAffinityAnalyzer.cs` |
 | `REACTOR_HOOKS_002` | Info | Hook after an early-return guard | `HookRulesAnalyzer.cs` |
 | `REACTOR_HOOKS_003` | Warning | async-void UseEffect body | `HookRulesAnalyzer.cs` |

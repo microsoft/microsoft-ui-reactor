@@ -466,6 +466,36 @@ When no icon is declared, Reactor falls back in order to `Assets\AppIcon.ico`
 beside the app, then to the icon embedded in the executable by
 `<ApplicationIcon>`.
 
+### Where an icon can come from
+
+`WindowIcon` has four factories across three source kinds, and not every surface
+accepts every kind:
+
+| Factory | Source |
+| --- | --- |
+| `WindowIcon.FromPath(path)` | A file beside the app — the usual unpackaged spelling. |
+| `WindowIcon.FromResource(uri)` | An `ms-appx:///Assets/App.ico` package resource. |
+| `WindowIcon.FromBytes(data)` | Encoded `.ico` or PNG data already in memory. |
+| `WindowIcon.FromRgba(pixels, w, h)` | A raw straight-alpha RGBA8 buffer, top-down. |
+
+| Surface | `FromPath` | `FromResource` | `FromBytes` / `FromRgba` |
+| --- | --- | --- | --- |
+| Window caption / Alt-Tab | ✅ | ✅ | ❌ |
+| Tray icon | ✅ | ❌ | ✅ |
+| Taskbar overlay | ✅ | ❌ | ✅ |
+| Thumbnail-toolbar button | ✅ | ❌ | ✅ |
+| Jump-list entry | unpackaged only | packaged only | ❌ |
+
+The pattern behind the table is which primitive each surface needs. The three
+shell surfaces need a raw `HICON`, which comes either from `LoadImageW` on a file
+or from `CreateIconFromResourceEx` on in-memory data — neither can read a packaged
+resource URI. Jump lists need a `Uri`. The window caption needs a filesystem path,
+because `AppWindow.SetIcon` takes one.
+
+A source a surface cannot use is skipped with a diagnostic rather than throwing.
+On the window that means falling through to `Assets\AppIcon.ico` or the PE icon,
+so a binary `icon:` leaves the window no barer than declaring none.
+
 ### Which surface shows which icon
 
 This trips people up, so it is worth being precise. Three different assets feed
@@ -500,10 +530,10 @@ first two for you.
 
 Caveats:
 
-- Prefer a real `.ico`. It is the format `AppWindow.SetIcon` documents, and the only
-  one the tray-icon, taskbar-overlay, and thumbnail-toolbar surfaces can load —
-  they need a raw `HICON` via `LoadImageW`. Reactor passes the source to the
-  platform unchanged rather than pre-validating the extension.
+- Prefer a real `.ico`. It is the format `AppWindow.SetIcon` documents, and — for a
+  file source — the only one the tray-icon, taskbar-overlay, and thumbnail-toolbar
+  surfaces can load, since they need a raw `HICON` via `LoadImageW`. Reactor passes
+  the source to the platform unchanged rather than pre-validating the extension.
 - A packaged app does **not** get its window icon from `Package.appxmanifest`.
   The manifest drives the taskbar button and Task Manager through package identity,
   which bypasses the window handle entirely — so without an explicit icon the
@@ -518,6 +548,113 @@ Caveats:
   app before it reaches the platform, because `AppWindow.SetIcon` wants a
   filesystem path: given the URI itself, a packaged app silently gets a default
   icon instead of the asset.
+- A binary icon holds its bytes for the lifetime of the `WindowIcon`. That is the
+  point of the API, but keep it in mind for a long-lived spec carrying a large
+  multi-resolution `.ico`.
+
+## Tray icons
+
+`ReactorApp.OpenTrayIcon` registers a notification-area icon for the process;
+`UseTrayIcon` scopes one to a component and closes it on unmount. Both take a
+`TrayIconSpec`, and mutating `Icon`, `Tooltip` or `IsVisible` re-applies through
+`Shell_NotifyIcon`.
+
+```csharp
+class TrayHost : Component
+{
+    public override Element Render()
+    {
+        var icon = UseMemo(() => WindowIcon.FromPath("Assets/TrayIcon.ico"));
+        var tray = UseTrayIcon(new TrayIconSpec(
+            Icon: icon,
+            Tooltip: "My App",
+            Key: WindowKey.Of("main-tray")));
+
+        UseEffect(() =>
+        {
+            if (tray is null) return () => { };
+            void onClick(object? s, EventArgs e)
+                => ReactorApp.PrimaryWindow?.Activate();
+            tray.Click += onClick;
+            return () => tray.Click -= onClick;
+        }, tray ?? (object)"no-tray");
+
+        return TextBlock("Tray icon registered while this component is mounted.");
+    }
+}
+```
+
+The icon does not have to be a file. `WindowIcon.FromBytes` takes encoded `.ico`
+or PNG data, and `WindowIcon.FromRgba` takes a raw pixel buffer — so an embedded
+resource, a downloaded asset, or a badge you draw at runtime reaches the shell
+without a temporary file on disk:
+
+```csharp
+// A tray icon can also come from bytes already in memory — no temporary file.
+class BinaryTrayHost : Component
+{
+    public override Element Render()
+    {
+        // Encoded .ico or PNG data: an embedded resource, a download, a database blob.
+        var embedded = UseMemo(() => WindowIcon.FromBytes(LoadEmbeddedIcon()));
+
+        // Or a raw RGBA8 buffer you drew yourself, for a badge that changes at runtime.
+        var drawn = UseMemo(() => WindowIcon.FromRgba(UnreadBadge(16, 16), 16, 16));
+
+        var tray = UseTrayIcon(new TrayIconSpec(
+            Icon: embedded,
+            Tooltip: "My App",
+            Key: WindowKey.Of("binary-tray")));
+
+        UseEffect(() =>
+        {
+            // Swapping the source reloads the shell bitmap.
+            if (tray is not null) tray.Icon = drawn;
+            return () => { };
+        }, drawn);
+
+        return TextBlock("Tray icon built from in-memory data.");
+    }
+
+    static byte[] LoadEmbeddedIcon()
+    {
+        var assembly = typeof(BinaryTrayHost).Assembly;
+        using var stream = assembly.GetManifestResourceStream("MyApp.TrayIcon.ico")
+            ?? throw new InvalidOperationException(
+                "Embedded resource 'MyApp.TrayIcon.ico' not found — check the file's Build Action.");
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
+    // width * height * 4 bytes, top-down, one pixel as R, G, B, A.
+    static byte[] UnreadBadge(int width, int height)
+    {
+        var pixels = new byte[width * height * 4];
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            pixels[i] = 0xE8;     // R
+            pixels[i + 1] = 0x11; // G
+            pixels[i + 2] = 0x23; // B
+            pixels[i + 3] = 0xFF; // A
+        }
+        return pixels;
+    }
+}
+```
+
+Caveats:
+
+- Ship a multi-size `.ico` (16, 20, 24, 32, 40 px) where you can. The tray asks for
+  the DPI-aware small-icon size, and both the file loader and the in-memory loader
+  pick the closest frame rather than rescaling a single one.
+- `ms-appx:///` resources are not usable here — see the table above. A packaged app
+  should ship a sidecar `.ico` or embed the bytes.
+- Tooltips are truncated to the shell's 127-character `szTip` buffer, and surface to
+  Narrator as the icon's accessible name.
+- **Tray clicks are not authenticated.** The callback arrives as a Win32 message any
+  process at the same integrity level can synthesise. Use click handlers for
+  reversible UI actions; gate anything destructive behind an in-app confirmation.
 
 ## Taskbar integration
 
@@ -548,7 +685,8 @@ Caveats:
 
 - Shell COM calls are best-effort; Reactor keeps last-set managed state where relevant.
 - Thumbnail toolbars support at most seven buttons.
-- Overlay icons need HICON-compatible sources; resource URIs are not overlay HICONs.
+- Overlay and thumbnail icons need HICON-compatible sources: a `FromPath` file or
+  `FromBytes` / `FromRgba` data. Resource URIs are not overlay HICONs.
 
 ### Jump list
 

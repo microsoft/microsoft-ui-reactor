@@ -159,7 +159,13 @@ internal sealed class ThumbnailToolbarState
 
     private static nint LoadIconFor(WindowIcon icon)
     {
-        if (icon is null || string.IsNullOrEmpty(icon.Source) || icon.IsResource) return 0;
+        if (icon is null) return 0;
+
+        // See TaskbarOverlay.LoadIconFor: zero matches the LR_DEFAULTSIZE below, so a
+        // binary button icon lands at the same size as a file-backed one.
+        if (icon.IsBinary) return icon.CreateBinaryHIcon(0, 0);
+
+        if (string.IsNullOrEmpty(icon.Source) || icon.IsResource) return 0;
         try
         {
             const uint IMAGE_ICON = 1;
