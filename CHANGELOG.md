@@ -73,12 +73,15 @@ Conventions for contributors:
   four doubles and any struct-typed local to be re-typed. Purely additive; the `double`
   overloads keep their existing binding and stay the ergonomic default.
 
-  One consequence for hand-written code: `.Margin(default)`, `.Padding(default)` and
-  `.CornerRadius(default)` are now ambiguous (`CS0121`), because the bare `default`
-  literal converts to `double` and to the struct alike. `.BorderThickness(default)`
-  has always behaved this way for the same reason. Name the type — `default(Thickness)`
-  for `.Margin` / `.Padding` / `.BorderThickness`, `default(CornerRadius)` for
-  `.CornerRadius` — or pass a value.
+  Two consequences for hand-written code, both from the bare literal converting to
+  `double` and to the struct alike. `.Margin(default)`, `.Padding(default)` and
+  `.CornerRadius(default)` are now ambiguous (`CS0121`); `.BorderThickness(default)`
+  has always behaved this way for the same reason. The parameterless target-typed
+  `.Margin(new())`, `.Padding(new())` and `.CornerRadius(new())` are newly ambiguous
+  too — they previously bound the `double` overload as `new double()`, i.e. zero.
+  Name the type in either shape — `default(Thickness)` / `new Thickness()` for
+  `.Margin` / `.Padding` / `.BorderThickness`, `default(CornerRadius)` /
+  `new CornerRadius()` for `.CornerRadius` — or pass a value.
 
 ### Changed
 
