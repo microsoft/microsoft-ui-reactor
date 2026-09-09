@@ -49,9 +49,10 @@ Conventions for contributors:
   alone (issue #1192).** It could only rewrite a literal `new Thickness(uniform)` or
   `new Thickness(l, t, r, b)`, so every other right-hand side — an opaque local, a
   field, a call, a ternary — was reported and left for a human. With the struct
-  overloads above those values now pass straight through to the modifier. The literal
-  constructor forms still decompose, so `.Margin(8)` remains the output rather than
-  `.Margin(new Thickness(8))`. Target-typed `new(...)` is deliberately still left
+  overloads above those values now pass straight through to the modifier. Both
+  spellings of a constructor literal still decompose, including the target-typed
+  `new(8)`, so `.Margin(8)` remains the output rather than `.Margin(new Thickness(8))`.
+  A target-typed `new()` with nothing to decompose is deliberately still left
   unfixed: it carries no type of its own, so the rewrite would be ambiguous.
 
 ### Deprecated

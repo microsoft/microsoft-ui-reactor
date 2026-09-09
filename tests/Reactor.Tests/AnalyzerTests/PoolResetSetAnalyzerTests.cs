@@ -479,19 +479,52 @@ class C
     }
 
     [Fact]
-    public async Task CodeFix_Suppressed_For_Implicit_Object_Creation_Margin_RHS()
+    public async Task CodeFix_Decomposes_A_Target_Typed_New_Margin_RHS()
     {
-        // Target-typed `new(...)` carries no type of its own, so once Margin accepts both a
-        // double and a Thickness the call is ambiguous — measured as CS0121. The analyzer
-        // still fires (the trap is real); no fix is offered. The verifier confirms it by
-        // leaving TestCode == FixedCode: the warning persists, and no rewrite occurs.
-        var code = Stubs + @"
+        // `new(8)` names no type, but the property being assigned fixes it, so it
+        // decomposes exactly like the explicitly-spelled `new Thickness(8)` does.
+        var before = Stubs + @"
 class C
 {
     void M()
     {
         var el = new FakeElement();
         {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(8))|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        el.Margin(8);
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Suppressed_For_A_Target_Typed_New_With_No_Arguments()
+    {
+        // The 0-arg form has nothing to decompose, and it cannot fall through to the
+        // struct overload either: `new()` carries no type of its own, so it converts to
+        // `double` as readily as to Thickness and `.Margin(new())` would be ambiguous.
+        // The analyzer still fires; no fix is offered. The verifier confirms that by
+        // leaving TestCode == FixedCode.
+        var code = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new())|};
     }
 }";
 

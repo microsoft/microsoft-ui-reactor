@@ -380,19 +380,28 @@ public sealed class PoolResetSetCodeFix : CodeFixProvider
         if (propName is "Margin" or "Padding" or "BorderThickness" or "CornerRadius")
         {
             var structName = propName == "CornerRadius" ? "CornerRadius" : "Thickness";
-            if (value is ObjectCreationExpressionSyntax oce && IsNamedType(oce.Type, structName))
-            {
-                // Both structs have 0/1/4-arg constructors. The 0-arg form is not interesting;
-                // 1 and 4 map cleanly onto the uniform and per-edge modifier overloads.
-                var ctorArgs = oce.ArgumentList?.Arguments;
-                if (ctorArgs is { Count: 1 or 4 })
-                    return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(ctorArgs.Value));
-            }
 
-            // Target-typed `new(...)` must still be left alone. It carries no type of its
-            // own, and once the struct overload exists it is convertible to `double` and to
-            // the struct alike, so emitting `.Margin(new(8))` trades a warning for an
-            // ambiguous-call error. (`default` needs no guard here: the analyzer's
+            // Both spellings of a constructor literal qualify. The target-typed `new(8)`
+            // form names no type, but the property being assigned fixes it, and only the
+            // arguments survive the rewrite either way.
+            SeparatedSyntaxList<ArgumentSyntax>? ctorArgs = value switch
+            {
+                ObjectCreationExpressionSyntax oce when IsNamedType(oce.Type, structName)
+                    => oce.ArgumentList?.Arguments,
+                ImplicitObjectCreationExpressionSyntax ioce
+                    => ioce.ArgumentList.Arguments,
+                _ => null,
+            };
+
+            // Both structs have 0/1/4-arg constructors. The 0-arg form is not interesting;
+            // 1 and 4 map cleanly onto the uniform and per-edge modifier overloads.
+            if (ctorArgs is { Count: 1 or 4 })
+                return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(ctorArgs.Value));
+
+            // A target-typed `new(...)` that did not decompose must not fall through to the
+            // struct overload: it carries no type of its own, so it is convertible to
+            // `double` as readily as to the struct and `.Margin(new())` would be an
+            // ambiguous call. (`default` needs no such guard — the analyzer's
             // IsNullOrDefault gate drops null/default right-hand sides before they are ever
             // reported, so they never reach this method.)
             if (value.IsKind(SyntaxKind.ImplicitObjectCreationExpression))
