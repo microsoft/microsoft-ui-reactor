@@ -396,6 +396,9 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
     /// <see cref="AssignmentExpressionSyntax"/>, so matching on that node type covers all of them.
     /// The left-hand side is walked rather than compared directly, because a deconstruction
     /// (<c>(icon, _) = …</c>) writes the local through a tuple.
+    /// <para>Only <c>ref</c> and <c>out</c> count among the by-reference forms. An <c>in</c>
+    /// argument is a read-only reference the callee cannot assign through, so treating it as a
+    /// write would suppress a diagnostic whose kind is still provable.</para>
     /// </remarks>
     private static bool IsReassigned(SyntaxNodeAnalysisContext ctx, SyntaxNode scope, ILocalSymbol local)
     {
@@ -407,7 +410,7 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
                     when WritesLocal(ctx, assignment.Left, local):
                     return true;
 
-                case ArgumentSyntax { RefKindKeyword.RawKind: not (int)SyntaxKind.None } argument
+                case ArgumentSyntax { RefKindKeyword.RawKind: (int)SyntaxKind.RefKeyword or (int)SyntaxKind.OutKeyword } argument
                     when WritesLocal(ctx, argument.Expression, local):
                     return true;
             }

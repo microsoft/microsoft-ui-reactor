@@ -366,6 +366,65 @@ namespace TestApp
     }
 
     [Fact]
+    public async Task Fires_When_The_Local_Is_Only_Passed_By_In()
+    {
+        // `in` is a read-only reference: the callee cannot assign through it, so the local still
+        // provably holds what its initializer produced. Counting it as a write would silently
+        // drop a valid diagnostic.
+        var source = @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor;
+
+    class App
+    {
+        static void Inspect(in WindowIcon icon) { }
+
+        void M()
+        {
+            var icon = WindowIcon.FromResource(""ms-appx:///Assets/tray.ico"");
+            Inspect(in icon);
+            var spec = new TrayIconSpec(Icon: {|REACTOR_ICON_001:icon|}, Tooltip: ""My App"");
+        }
+    }
+}";
+        await Analyzer(source).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Silent_When_The_Local_Is_Passed_By_Ref_Or_Out()
+    {
+        // The mirror of the `in` case: both of these genuinely can rewrite the local, so the
+        // initializer no longer determines what reaches the surface.
+        var source = @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor;
+
+    class App
+    {
+        static void Swap(ref WindowIcon icon) { }
+        static void Make(out WindowIcon icon) { icon = null; }
+
+        void ByRef()
+        {
+            var icon = WindowIcon.FromResource(""ms-appx:///Assets/tray.ico"");
+            Swap(ref icon);
+            var spec = new TrayIconSpec(Icon: icon, Tooltip: ""t"");
+        }
+
+        void ByOut()
+        {
+            var icon = WindowIcon.FromResource(""ms-appx:///Assets/tray.ico"");
+            Make(out icon);
+            var spec = new TrayIconSpec(Icon: icon, Tooltip: ""t"");
+        }
+    }
+}";
+        await Analyzer(source).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Silent_When_The_Local_Is_Reassigned_By_Deconstruction()
     {
         // The declaration says Resource, but a deconstruction overwrote it before use. Missing
