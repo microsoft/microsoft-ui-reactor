@@ -46,6 +46,7 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
 
     // Code-fix / tooling hand-off keys (data travels in Diagnostic.Properties, never message text).
     internal const string FactoryKey = "Factory";
+    /// <summary>Stable <c>Type.Member</c> identifier of the surface that rejected the icon.</summary>
     internal const string SurfaceKey = "Surface";
 
     /// <summary>The four <c>WindowIcon</c> factories, mapped to the kind each produces.</summary>
@@ -228,7 +229,7 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         {
             var value = FindArgumentValue(ctx, invocation, IconMemberName);
             if (value is not null && Surfaces.TryGetValue("Microsoft.UI.Reactor.WindowSpec", out var windowSurface))
-                Check(ctx, value, windowSurface, "the window icon");
+                Check(ctx, value, windowSurface, surfaceId: "ReactorApp.Run", displayLabel: "the window icon");
             return;
         }
 
@@ -246,7 +247,26 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
     //  Matching
     // ══════════════════════════════════════════════════════════════
 
-    private static void Check(SyntaxNodeAnalysisContext ctx, ExpressionSyntax value, Surface surface, string surfaceLabel)
+    /// <summary>
+    /// Reports the diagnostic when <paramref name="value"/> resolves to the kind
+    /// <paramref name="surface"/> cannot use.
+    /// </summary>
+    /// <param name="surfaceId">
+    /// A stable <c>Type.Member</c> identifier for the surface, carried in
+    /// <see cref="Diagnostic.Properties"/> under <see cref="SurfaceKey"/>. Machine-readable and
+    /// safe for a future code fix or telemetry to switch on.
+    /// </param>
+    /// <param name="displayLabel">
+    /// How the surface reads mid-sentence in the message, when that differs from
+    /// <paramref name="surfaceId"/> — a named argument reads better as prose ("the window icon")
+    /// than as a member path. Defaults to <paramref name="surfaceId"/>.
+    /// </param>
+    private static void Check(
+        SyntaxNodeAnalysisContext ctx,
+        ExpressionSyntax value,
+        Surface surface,
+        string surfaceId,
+        string? displayLabel = null)
     {
         if (!TryResolveKind(ctx, value, out var kind, out var factoryName))
             return;
@@ -255,11 +275,11 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
 
         var properties = ImmutableDictionary<string, string?>.Empty
             .Add(FactoryKey, factoryName)
-            .Add(SurfaceKey, surfaceLabel);
+            .Add(SurfaceKey, surfaceId);
 
         ctx.ReportDiagnostic(Diagnostic.Create(
             Rule, value.GetLocation(), properties,
-            $"WindowIcon.{factoryName}", surfaceLabel, surface.Because, surface.Remedy));
+            $"WindowIcon.{factoryName}", displayLabel ?? surfaceId, surface.Because, surface.Remedy));
     }
 
     /// <summary>
