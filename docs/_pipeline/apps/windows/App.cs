@@ -218,6 +218,60 @@ class TrayHost : Component
 }
 // </snippet:tray-icon>
 
+// <snippet:tray-icon-binary>
+// A tray icon can also come from bytes already in memory — no temporary file.
+class BinaryTrayHost : Component
+{
+    public override Element Render()
+    {
+        // Encoded .ico or PNG data: an embedded resource, a download, a database blob.
+        var embedded = UseMemo(() => WindowIcon.FromBytes(LoadEmbeddedIcon()));
+
+        // Or a raw RGBA8 buffer you drew yourself, for a badge that changes at runtime.
+        var drawn = UseMemo(() => WindowIcon.FromRgba(UnreadBadge(16, 16), 16, 16));
+
+        var tray = UseTrayIcon(new TrayIconSpec(
+            Icon: embedded,
+            Tooltip: "My App",
+            Key: WindowKey.Of("binary-tray")));
+
+        UseEffect(() =>
+        {
+            // Swapping the source reloads the shell bitmap.
+            if (tray is not null) tray.Icon = drawn;
+            return () => { };
+        }, drawn);
+
+        return TextBlock("Tray icon built from in-memory data.");
+    }
+
+    static byte[] LoadEmbeddedIcon()
+    {
+        var assembly = typeof(BinaryTrayHost).Assembly;
+        using var stream = assembly.GetManifestResourceStream("MyApp.TrayIcon.ico")
+            ?? throw new InvalidOperationException(
+                "Embedded resource 'MyApp.TrayIcon.ico' not found — check the file's Build Action.");
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
+    // width * height * 4 bytes, top-down, one pixel as R, G, B, A.
+    static byte[] UnreadBadge(int width, int height)
+    {
+        var pixels = new byte[width * height * 4];
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            pixels[i] = 0xE8;     // R
+            pixels[i + 1] = 0x11; // G
+            pixels[i + 2] = 0x23; // B
+            pixels[i + 3] = 0xFF; // A
+        }
+        return pixels;
+    }
+}
+// </snippet:tray-icon-binary>
+
 // ────────────────────────────────────────────────────────────────────
 //  Compiled counterparts for the guide's per-section examples.
 // ────────────────────────────────────────────────────────────────────

@@ -12,9 +12,11 @@ namespace Microsoft.UI.Reactor;
 /// Must be unique within a single set.
 /// </param>
 /// <param name="Icon">
-/// Filesystem-backed icon. <see cref="WindowIcon.FromResource"/> sources are
-/// not supported on the thumbnail surface (HICON only) and are silently
-/// skipped — the button still renders without an icon.
+/// Filesystem-backed icon (<see cref="WindowIcon.FromPath"/>) or in-memory icon data
+/// (<see cref="WindowIcon.FromBytes"/> / <see cref="WindowIcon.FromRgba"/>).
+/// <see cref="WindowIcon.FromResource"/> sources are not supported on the thumbnail
+/// surface (HICON only) and are silently skipped — the button still renders without
+/// an icon.
 /// </param>
 /// <param name="Tooltip">Hover tooltip; truncated to 259 characters.</param>
 /// <param name="OnClick">Click delegate. Invoked on the UI thread when the button is pressed.</param>

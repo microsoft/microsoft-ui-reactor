@@ -28,6 +28,24 @@ Conventions for contributors:
 
 ### Added
 
+- **Binary icon sources on `WindowIcon` (spec 036 §4.1, issue #1185).**
+  `WindowIcon.FromBytes(ReadOnlySpan<byte>)` takes encoded `.ico` or PNG data and
+  `WindowIcon.FromRgba(ReadOnlySpan<byte>, int, int)` takes a raw straight-alpha RGBA8
+  buffer, so an icon that lives in an embedded resource, a download, or a
+  procedurally-drawn badge no longer has to be written to a temporary file before the
+  shell can show it. Consumed by the three surfaces that need a raw `HICON`: the tray
+  icon (spec 036 §11.4), the taskbar overlay (§11.2), and thumbnail-toolbar buttons
+  (§11.5). Both factories copy the caller's buffer, and a multi-frame `.ico` held in
+  memory has its closest frame selected the same way `LoadImageW` would from a file.
+  The new `WindowIcon.Kind` (`WindowIconKind.Path` / `Resource` / `Binary`) reports which
+  factory produced an icon; `IsResource` is unchanged.
+
+  `WindowSpec.Icon` does **not** accept a binary source — `AppWindow.SetIcon` needs a
+  filesystem path — and reports it as not applied, so the window falls through to the
+  `Assets\AppIcon.ico` convention or its PE icon rather than showing nothing. Jump lists
+  and the `TitleBar` icon default skip it for the reason they already skip a PE icon:
+  both need a `Uri`.
+
 ### Changed
 
 ### Deprecated

@@ -8,11 +8,14 @@ namespace Microsoft.UI.Reactor;
 /// </summary>
 /// <param name="Icon">
 /// The icon to display in the notification area. Must be a filesystem path
-/// (<see cref="WindowIcon.FromPath"/>) pointing at an <c>.ico</c>. Packaged resources
-/// (<see cref="WindowIcon.FromResource"/>) are <b>not</b> usable here: the notification
-/// area needs a raw <c>HICON</c>, which is loaded via <c>LoadImageW</c>, and that cannot
-/// read an <c>ms-appx:///</c> URI. A resource icon is skipped with a diagnostic — ship a
-/// sidecar <c>.ico</c> alongside the app instead. See <c>ReactorTrayIcon.LoadHIcon</c>.
+/// (<see cref="WindowIcon.FromPath"/>) pointing at an <c>.ico</c>, or icon data held in
+/// memory (<see cref="WindowIcon.FromBytes"/> / <see cref="WindowIcon.FromRgba"/>).
+/// Packaged resources (<see cref="WindowIcon.FromResource"/>) are <b>not</b> usable here:
+/// the notification area needs a raw <c>HICON</c>, which is loaded via <c>LoadImageW</c>
+/// or <c>CreateIconFromResourceEx</c>, and neither can read an <c>ms-appx:///</c> URI. A
+/// resource icon is skipped with a diagnostic — ship a sidecar <c>.ico</c> alongside the
+/// app, or hand the bytes to <see cref="WindowIcon.FromBytes"/> instead. See
+/// <c>ReactorTrayIcon.LoadHIcon</c>.
 /// </param>
 /// <param name="Tooltip">
 /// User-visible tooltip that surfaces as the icon's accessible name to

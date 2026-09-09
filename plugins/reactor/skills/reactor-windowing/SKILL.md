@@ -139,6 +139,34 @@ Not inherited: an icon that exists only as an executable PE resource
 XAML `IconSource` needs an image source; and an embedded window
 (`WindowSpec.Embed`), which never receives a window icon at all.
 
+### Icon sources
+
+```csharp
+WindowIcon.FromPath("Assets/AppIcon.ico");          // file beside the app
+WindowIcon.FromResource("ms-appx:///Assets/A.ico"); // packaged resource
+WindowIcon.FromBytes(icoOrPngBytes);                // encoded data in memory
+WindowIcon.FromRgba(pixels, 16, 16);                // raw RGBA8, top-down
+```
+
+Not every surface takes every kind, because they need different primitives:
+
+| Surface | `FromPath` | `FromResource` | `FromBytes` / `FromRgba` |
+| --- | --- | --- | --- |
+| Window caption / Alt-Tab | yes | yes | no |
+| Tray icon, taskbar overlay, thumbnail toolbar | yes | no | yes |
+| Jump-list entry | unpackaged only | packaged only | no |
+
+The three shell surfaces need a raw `HICON` (`LoadImageW` on a file, or
+`CreateIconFromResourceEx` on in-memory data), neither of which reads an
+`ms-appx:` URI. Jump lists need a `Uri`. `AppWindow.SetIcon` needs a filesystem
+path. An unusable source is skipped with a diagnostic, never thrown — on the
+window that means falling through to `Assets\AppIcon.ico` or the PE icon, so a
+binary `icon:` leaves the window no barer than declaring none.
+
+Reach for the binary factories when the icon is an embedded resource, a
+download, or drawn at runtime: they avoid writing a temporary file. The bytes
+are copied at construction and held for the `WindowIcon`'s lifetime.
+
 ### Tall title bar
 
 ```csharp

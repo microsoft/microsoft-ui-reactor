@@ -210,6 +210,12 @@ public sealed record WindowSpec
     /// package identity and the manifest's <c>Square44x44Logo</c>, never looking at the
     /// window handle. A packaged app that wants a consistent icon everywhere must ship a
     /// matching manifest logo in addition to setting this.</para>
+    /// <para>A binary source (<see cref="WindowIcon.FromBytes"/> /
+    /// <see cref="WindowIcon.FromRgba"/>) is <b>not</b> accepted here — this surface needs
+    /// a filesystem path, because that is what <c>AppWindow.SetIcon</c> takes. Declaring
+    /// one falls through to the same convention/PE fallback as declaring no icon at all,
+    /// so the window is never left barer than it would otherwise have been. Binary sources
+    /// are for the tray icon, the taskbar overlay, and thumbnail-toolbar buttons.</para>
     /// </remarks>
     public WindowIcon? Icon { get; init; }
 
