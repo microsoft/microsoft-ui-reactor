@@ -54,16 +54,40 @@ namespace Microsoft.UI.Reactor
         public string AccessibleDescription { get; set; }
     }
 
-    // Path/Uri surfaces — reject Binary.
-    public sealed class WindowSpec
+    // Path/Uri surfaces — reject Binary. WindowSpec is a `record` in the real framework
+    // (src/Reactor/Hosting/WindowSpec.cs), which is what makes `spec with { Icon = ... }` legal.
+    public sealed record WindowSpec
     {
         public string Title { get; init; }
         public WindowIcon Icon { get; init; }
     }
 
-    public sealed record JumpListItem(string Title, string Arguments, WindowIcon Icon = null)
+    public enum JumpListItemKind { Task, Custom, Separator }
+
+    // Mirrors the real record in src/Reactor/Hosting/Shell/JumpList.cs: Icon is the FIFTH
+    // parameter, behind Kind and Description. A stub that moved it would let a positional test
+    // pass against a signature no caller can write.
+    public sealed record JumpListItem(
+        string Title,
+        string Arguments,
+        JumpListItemKind Kind = JumpListItemKind.Task,
+        string Description = null,
+        WindowIcon Icon = null,
+        string GroupCategory = null)
     {
-        public static JumpListItem ForUri(string title, string uri, string description = null, WindowIcon icon = null) => null;
+        public static JumpListItem ForUri(
+            string title,
+            string uri,
+            string description = null,
+            WindowIcon icon = null,
+            string groupCategory = null) => null;
+
+        public static JumpListItem ForCommandLine(
+            string title,
+            System.Collections.Generic.IEnumerable<string> arguments,
+            string description = null,
+            WindowIcon icon = null,
+            string groupCategory = null) => null;
     }
 
     public static class ReactorApp
@@ -262,6 +286,8 @@ namespace TestApp
     [Fact]
     public async Task Fires_On_Binary_Icon_For_A_Jump_List_Entry()
     {
+        // All three shapes a jump-list icon can arrive through: the record's fifth positional
+        // slot, and both convenience factories.
         var source = @"
 namespace TestApp
 {
@@ -269,9 +295,116 @@ namespace TestApp
 
     class App
     {
-        void M(byte[] data)
+        void Record(byte[] data)
         {
-            var item = JumpListItem.ForUri(""Open"", ""app://open"", null, {|REACTOR_ICON_001:WindowIcon.FromBytes(data)|});
+            var item = new JumpListItem(
+                ""Open"",
+                ""app://open"",
+                JumpListItemKind.Task,
+                null,
+                {|REACTOR_ICON_001:WindowIcon.FromBytes(data)|});
+        }
+
+        void ForUri(byte[] data)
+        {
+            var item = JumpListItem.ForUri(""Open"", ""app://open"", icon: {|REACTOR_ICON_001:WindowIcon.FromBytes(data)|});
+        }
+
+        void ForCommandLine(byte[] data)
+        {
+            var item = JumpListItem.ForCommandLine(
+                ""Open"",
+                new[] { ""--open"" },
+                icon: {|REACTOR_ICON_001:WindowIcon.FromRgba(data, 16, 16)|});
+        }
+    }
+}";
+        await Analyzer(source).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_Through_A_With_Expression_And_An_Implicit_New()
+    {
+        // Both syntax kinds are registered alongside explicit `new Type(...)`, so both need to be
+        // held to it — a `with` in particular is how a spec is normally amended.
+        var source = @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor;
+
+    class App
+    {
+        void M(WindowSpec existing, byte[] data)
+        {
+            WindowSpec implicitNew = new() { Icon = {|REACTOR_ICON_001:WindowIcon.FromBytes(data)|} };
+            var amended = existing with { Icon = {|REACTOR_ICON_001:WindowIcon.FromRgba(data, 16, 16)|} };
+        }
+    }
+}";
+        await Analyzer(source).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_On_A_Coalescing_Assignment_To_The_Overlay()
+    {
+        // `TaskbarOverlay.Icon` is `WindowIcon?`, so `??=` is legal C# and reaches the same
+        // setter — and therefore the same silent skip — as a plain assignment.
+        var source = @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor;
+
+    class App
+    {
+        void M(TaskbarOverlay overlay)
+        {
+            overlay.Icon ??= {|REACTOR_ICON_001:WindowIcon.FromResource(""ms-appx:///Assets/badge.ico"")|};
+        }
+    }
+}";
+        await Analyzer(source).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Silent_When_The_Local_Is_Reassigned_By_Deconstruction()
+    {
+        // The declaration says Resource, but a deconstruction overwrote it before use. Missing
+        // this shape would report the stale kind — a false positive, which is the failure mode
+        // this rule is built to avoid.
+        var source = @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor;
+
+    class App
+    {
+        void M()
+        {
+            var icon = WindowIcon.FromResource(""ms-appx:///Assets/tray.ico"");
+            int unused;
+            (icon, unused) = (WindowIcon.FromPath(""tray.ico""), 0);
+            var spec = new TrayIconSpec(Icon: icon, Tooltip: ""t"");
+        }
+    }
+}";
+        await Analyzer(source).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Silent_When_The_Local_Is_Reassigned_By_Coalescing()
+    {
+        var source = @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor;
+
+    class App
+    {
+        void M(WindowIcon maybe)
+        {
+            var icon = maybe;
+            icon ??= WindowIcon.FromResource(""ms-appx:///Assets/tray.ico"");
+            var spec = new TrayIconSpec(Icon: icon, Tooltip: ""t"");
         }
     }
 }";
@@ -377,9 +510,10 @@ namespace TestApp
     {
         void M()
         {
-            var a = new JumpListItem(""Open"", ""app://open"", WindowIcon.FromPath(""open.ico""));
-            var b = new JumpListItem(""Open"", ""app://open"", WindowIcon.FromResource(""ms-appx:///Assets/open.ico""));
-            var c = JumpListItem.ForUri(""Open"", ""app://open"", null, WindowIcon.FromPath(""open.ico""));
+            var a = new JumpListItem(""Open"", ""app://open"", Icon: WindowIcon.FromPath(""open.ico""));
+            var b = new JumpListItem(""Open"", ""app://open"", Icon: WindowIcon.FromResource(""ms-appx:///Assets/open.ico""));
+            var c = JumpListItem.ForUri(""Open"", ""app://open"", icon: WindowIcon.FromPath(""open.ico""));
+            var d = JumpListItem.ForCommandLine(""Open"", new[] { ""--open"" }, icon: WindowIcon.FromResource(""ms-appx:///Assets/open.ico""));
         }
     }
 }";

@@ -141,8 +141,13 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
             SyntaxKind.ImplicitObjectCreationExpression,
             SyntaxKind.WithExpression);
 
-        // `window.Overlay.Icon = …` — the overlay has no constructor an app can call.
-        context.RegisterSyntaxNodeAction(AnalyzeAssignment, SyntaxKind.SimpleAssignmentExpression);
+        // `window.Overlay.Icon = …` — the overlay has no constructor an app can call. The
+        // coalescing form is registered too: `Icon` is `WindowIcon?`, so `??=` is legal C# and
+        // reaches the same setter.
+        context.RegisterSyntaxNodeAction(
+            AnalyzeAssignment,
+            SyntaxKind.SimpleAssignmentExpression,
+            SyntaxKind.CoalesceAssignmentExpression);
 
         // `ReactorApp.Run<App>("t", icon: …)` and `JumpListItem.ForUri(…, icon: …)`.
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
@@ -293,23 +298,31 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         if (declarator?.Initializer is null)
             return false;
 
+        var initializer = declarator.Initializer.Value;
+
+        // Resolve the initializer's kind BEFORE the reassignment scan. The scan walks every node
+        // in the containing member, so paying for it on any local that merely happens to be passed
+        // to an icon surface would put a whole-member walk on the IDE's typing path. Ordered this
+        // way it runs only for a local already known to hold a WindowIcon factory result.
+        //
+        // `UseMemo(() => WindowIcon.FromX(...))` is the idiom the windowing guide documents; the
+        // memo is transparent, returning exactly what the lambda returns.
+        if (!TryMatchFactoryCall(ctx, initializer, out var candidateKind, out var candidateFactory)
+            && !(TryUnwrapUseMemo(ctx, initializer) is { } memoized
+                 && TryMatchFactoryCall(ctx, memoized, out candidateKind, out candidateFactory)))
+        {
+            return false;
+        }
+
         // A local that is assigned again anywhere could hold a different kind by the time it is
         // used. Bail rather than reason about order.
         var body = declarator.FirstAncestorOrSelf<MemberDeclarationSyntax>();
         if (body is null || IsReassigned(ctx, body, local))
             return false;
 
-        var initializer = declarator.Initializer.Value;
-
-        if (TryMatchFactoryCall(ctx, initializer, out kind, out factoryName))
-            return true;
-
-        // `UseMemo(() => WindowIcon.FromX(...))` — the documented idiom. The memo is transparent:
-        // it returns exactly what the lambda returns.
-        if (TryUnwrapUseMemo(ctx, initializer) is { } memoized)
-            return TryMatchFactoryCall(ctx, memoized, out kind, out factoryName);
-
-        return false;
+        kind = candidateKind;
+        factoryName = candidateFactory;
+        return true;
     }
 
     /// <summary>True when <paramref name="value"/> is a direct call to a <c>WindowIcon</c> factory.</summary>
@@ -378,6 +391,12 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
     /// True when <paramref name="local"/> is the target of any assignment, or is passed by
     /// <c>ref</c>/<c>out</c>, anywhere inside <paramref name="scope"/>.
     /// </summary>
+    /// <remarks>
+    /// Every assignment form — <c>=</c>, <c>??=</c>, <c>+=</c> — is an
+    /// <see cref="AssignmentExpressionSyntax"/>, so matching on that node type covers all of them.
+    /// The left-hand side is walked rather than compared directly, because a deconstruction
+    /// (<c>(icon, _) = …</c>) writes the local through a tuple.
+    /// </remarks>
     private static bool IsReassigned(SyntaxNodeAnalysisContext ctx, SyntaxNode scope, ILocalSymbol local)
     {
         foreach (var node in scope.DescendantNodes())
@@ -385,16 +404,47 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
             switch (node)
             {
                 case AssignmentExpressionSyntax assignment
-                    when SymbolEquals(ctx, assignment.Left, local):
+                    when WritesLocal(ctx, assignment.Left, local):
                     return true;
 
                 case ArgumentSyntax { RefKindKeyword.RawKind: not (int)SyntaxKind.None } argument
-                    when SymbolEquals(ctx, argument.Expression, local):
+                    when WritesLocal(ctx, argument.Expression, local):
                     return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// True when assigning to <paramref name="target"/> writes <paramref name="local"/> — directly,
+    /// or as one element of a deconstruction tuple.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="DeclarationExpressionSyntax"/> (<c>var (a, b) = …</c>, <c>out var x</c>)
+    /// introduces new locals and therefore never targets an existing one, so it stops the walk.
+    /// </remarks>
+    private static bool WritesLocal(SyntaxNodeAnalysisContext ctx, ExpressionSyntax target, ILocalSymbol local)
+    {
+        switch (target)
+        {
+            case IdentifierNameSyntax:
+                return SymbolEquals(ctx, target, local);
+
+            case ParenthesizedExpressionSyntax parenthesized:
+                return WritesLocal(ctx, parenthesized.Expression, local);
+
+            case TupleExpressionSyntax tuple:
+                foreach (var element in tuple.Arguments)
+                {
+                    if (WritesLocal(ctx, element.Expression, local))
+                        return true;
+                }
+                return false;
+
+            default:
+                return false;
+        }
     }
 
     private static bool SymbolEquals(SyntaxNodeAnalysisContext ctx, ExpressionSyntax expression, ILocalSymbol local) =>
@@ -434,6 +484,11 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
     /// <para><see cref="ArgumentKind.Explicit"/> filters out arguments the compiler synthesised
     /// for omitted optional parameters, whose syntax is the parameter's default value rather than
     /// anything the author wrote.</para>
+    /// <para>The name comparison is case-insensitive because the same logical parameter is spelled
+    /// <c>Icon</c> on the record surfaces and <c>icon</c> on the factory methods. Every call site
+    /// is one of the handful of members named in <see cref="Surfaces"/> or
+    /// <see cref="AnalyzeInvocation"/>, none of which declares two parameters differing only by
+    /// case, so this cannot mis-bind.</para>
     /// </remarks>
     private static ExpressionSyntax? FindArgumentValue(SyntaxNodeAnalysisContext ctx, SyntaxNode node, string parameterName)
     {
@@ -447,16 +502,11 @@ public sealed class WindowIconSurfaceAnalyzer : DiagnosticAnalyzer
         if (arguments.IsDefaultOrEmpty)
             return null;
 
-        foreach (var argument in arguments)
-        {
-            if (argument.ArgumentKind != ArgumentKind.Explicit)
-                continue;
-            if (!string.Equals(argument.Parameter?.Name, parameterName, System.StringComparison.OrdinalIgnoreCase))
-                continue;
+        var match = arguments
+            .Where(a => a.ArgumentKind == ArgumentKind.Explicit)
+            .FirstOrDefault(a => string.Equals(
+                a.Parameter?.Name, parameterName, System.StringComparison.OrdinalIgnoreCase));
 
-            return argument.Syntax is ArgumentSyntax syntax ? syntax.Expression : null;
-        }
-
-        return null;
+        return match?.Syntax is ArgumentSyntax syntax ? syntax.Expression : null;
     }
 }
