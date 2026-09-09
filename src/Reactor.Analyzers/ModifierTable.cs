@@ -302,6 +302,23 @@ internal static class ModifierTable
     private static readonly string[] ControlBorderGridStackText = { "Control", "Border", "Grid", "StackPanel", "TextBlock" };
     private static readonly string[] ControlBorderGridStack = { "Control", "Border", "Grid", "StackPanel" };
 
+    // Single-receiver poolResetGate. ControlOnly names the receiver whose arm in
+    // ElementPool.CleanElement actually clears the property — today only IsEnabled, which
+    // CleanElement clears under `if (fe is Control …)` rather than on the FrameworkElement.
+    //
+    // This is never a controlGate — a control gate says where ApplyModifiers writes the modifier,
+    // which is a different and usually wider question. Deriving one from the other is the
+    // conflation that let REACTOR_POOL_001 claim IsTabStop was pool-reset on a TextBlock while
+    // CleanElement left it alone there; that leak is now fixed in the pool, so IsTabStop needs no
+    // gate at all and this list has one member.
+    private static readonly string[] ControlOnly = { "Control" };
+
+    // Element-type lists for the type-specific modifiers whose property CleanElement resets in a
+    // `case` arm of its type dispatch. Named here rather than inline because each is shared by
+    // two rows or reads better beside its sibling.
+    private static readonly string[] ViewboxElementOnly = { "ViewboxElement" };
+    private static readonly string[] ProgressRingElementOnly = { "ProgressRingElement" };
+
     /// <summary>
     /// The exact WinUI control type names <c>ElementPool</c> recycles — a mirror of
     /// <c>ElementPool.PoolableTypes</c>.
@@ -365,7 +382,20 @@ internal static class ModifierTable
             { "VerticalAlignment",   new ModifierInfo("VerticalAlignment",   poolReset: true) },
             { "Opacity",             new ModifierInfo("Opacity",             poolReset: true) },
             { "AccessKey",           new ModifierInfo("AccessKey",           poolReset: true) },
+
+            // IsTabStop deliberately has NO gate. It is declared on UIElement and ApplyModifiers
+            // writes it ungated (`fe.IsTabStop = …`), so it reaches every element — including the
+            // poolable non-Controls TextBlock, RichTextBlock, Grid, StackPanel, Border, Canvas,
+            // Viewbox and Image. Gating the diagnostic to Control would have described a real
+            // pool leak (a pooled TextBlock keeping a stale tab stop) as expected behaviour;
+            // CleanElement clears it on `fe` instead, which makes the unrestricted claim true.
+            //
+            // IsEnabled is the genuine Control-only case: WinUI declares it on Control, so the
+            // gate restricts nothing a user could hit and exists to keep the derivation total —
+            // every poolReset row names the receivers CleanElement clears it on, and a row that
+            // opts out of saying so is a row the parity check cannot verify.
             { "IsTabStop",           new ModifierInfo("IsTabStop",           poolReset: true) },
+            { "IsEnabled",           new ModifierInfo("IsEnabled",           poolReset: true, poolResetGate: ControlOnly) },
 
             // Pool-reset but only on some receivers (issue #985). CleanElement clears these
             // through a Control | Border | Panel/Grid/StackPanel | TextBlock chain that mirrors
@@ -391,18 +421,19 @@ internal static class ModifierTable
             // unwound, costing the element's structural skip rather than the value.
             //
             // Nothing here is hand-maintained. ModifierUnsetClearValueTests reads
-            // ElementPool.PoolableTypes for (1) and derives the gated-receiver intersection for
-            // (2), and fails if either drifts. Closes issue #1051.
+            // ElementPool.PoolableTypes for (1) and derives (2) from the CleanElementScan of
+            // CleanElement itself, and fails if either drifts. Closes issue #1051; the derivation
+            // for (2) moved off ControlGate in #1193, because "ApplyModifiers writes it here" and
+            // "CleanElement clears it here" are different facts that only coincide for this
+            // border-box family.
             //
             // WinUI declares most of these on Panel subclasses too, and the allow-lists
             // genuinely differ: Panel itself declares only Background; Grid, StackPanel, and
             // RelativePanel each declare their own border-box properties, and TextBlock takes
-            // Padding but not CornerRadius. IsEnabled needs no gate — WinUI declares it on
-            // Control, so if the .Set lambda compiles the receiver already qualifies. The three
-            // rows without a poolResetGate need none: CleanElement clears Background for every
-            // Panel and both Border* for the whole Control and Border arms, so once (1) holds
-            // there is no gated receiver left for (2) to exclude.
-            { "IsEnabled",       new ModifierInfo("IsEnabled",       poolReset: true) },
+            // Padding but not CornerRadius. The three rows without a poolResetGate need none:
+            // CleanElement clears Background for every Panel and both Border* for the whole
+            // Control and Border arms, so once (1) holds there is no gated receiver left for (2)
+            // to exclude — their ControlGate already names exactly the cleared receivers.
             { "Padding",         new ModifierInfo("Padding",         poolReset: true, controlGate: ControlBorderGridStackRelativeText, poolResetGate: ControlBorderGridStackText) },
             { "CornerRadius",    new ModifierInfo("CornerRadius",    poolReset: true, controlGate: ControlBorderGridStackRelative,     poolResetGate: ControlBorderGridStack) },
             { "BorderThickness", new ModifierInfo("BorderThickness", poolReset: true, controlGate: ControlBorder) },
@@ -415,6 +446,31 @@ internal static class ModifierTable
             // already qualifies, so no predicate is needed.
             { "HorizontalContentAlignment", new ModifierInfo("HorizontalContentAlignment") },
             { "VerticalContentAlignment",   new ModifierInfo("VerticalContentAlignment") },
+
+            // Reset by CleanElement (issue #162, alongside IsTabStop) and written ungated by
+            // ApplyModifiers, yet deliberately NOT poolReset — see the note on DeliberatelyExcluded
+            // below for the row this replaces. Two separate facts got conflated here historically:
+            //
+            //   1. "no .IsHitTestVisible modifier exists" — simply false. The generic
+            //      .IsHitTestVisible(bool) has been in ElementExtensions.cs all along, with a
+            //      signature that matches the property exactly, so MOD_002's suggestion is sound
+            //      and the rewrite compiles. That is what this row restores (issue #1193).
+            //
+            //   2. "the pool loses the .Set write" — the claim POOL_001 would additionally make.
+            //      It is not established. CleanElement runs on pool RETURN, and the next mount
+            //      re-applies setters: DescriptorHandler.Mount rents the control and ends in
+            //      ApplySetters, and Element.SettersEqual keeps any element carrying setters on
+            //      the Update path, which also ends in ApplySetters. The place a .Set write really
+            //      is discarded is a modifier set -> unset transition, because ApplyModifiers runs
+            //      AFTER ApplySetters — pinned by the Issue950 selftest
+            //      ModifierResetOutranksASetterWrite, whose own comment names MOD_002 as the
+            //      diagnostic that steers callers off it.
+            //
+            // So this lands at MOD_002, matching the evidence, rather than inheriting IsTabStop's
+            // poolReset out of symmetry. Whether the 18 existing poolReset rows should keep that
+            // stronger claim is a live question raised on #1193 and deliberately not answered here:
+            // flipping this one bool is the whole change if they do.
+            { "IsHitTestVisible", new ModifierInfo("IsHitTestVisible") },
 
             // Fonts have BOTH a generic modifier and type-specific overloads, and the two
             // cover different receivers — so the gates are OR'd (see ModifierInfo.ElementTypes).
@@ -466,6 +522,17 @@ internal static class ModifierTable
                     "TextBoxElement", "PasswordBoxElement", "NumberBoxElement", "ComboBoxElement",
                     "AutoSuggestBoxElement", "CalendarDatePickerElement", "RichEditBoxElement",
                 }) },
+
+            // Viewbox and ProgressRing. None of the three had a row before issue #1193, and the
+            // reason each was missing is worth keeping: Stretch sat in DeliberatelyExcluded as a
+            // "Viewbox-only modifier", which describes what elementTypes is FOR rather than a
+            // reason to skip the property; StretchDirection and IsActive were in neither table
+            // because the staleness tests' WinUI probe does not reach Viewbox or ProgressRing, so
+            // nothing ever forced the choice. Each has an exact-signature type-specific modifier,
+            // so MOD_002's suggestion is sound and its rewrite compiles.
+            { "Stretch", new ModifierInfo("Stretch", elementTypes: ViewboxElementOnly) },
+            { "StretchDirection", new ModifierInfo("StretchDirection", elementTypes: ViewboxElementOnly) },
+            { "IsActive", new ModifierInfo("IsActive", elementTypes: ProgressRingElementOnly) },
             { "SelectionMode", new ModifierInfo("SelectionMode",
                 elementTypes: new[] { "ListViewElement", "GridViewElement" }) },
 
@@ -569,17 +636,17 @@ internal static class ModifierTable
             ["Header"] = "Header modifiers take a string; a .Set may assign an arbitrary object.",
             ["Orientation"] = "Modifiers exist only for Slider/DatePicker; StackElement (the common .Set receiver) has none.",
             ["Spacing"] = "StackElement-only modifier; the property is also on native panels Reactor does not map.",
-            ["Stretch"] = "Viewbox-only modifier.",
             ["FlowDirection"] = "Modifier exists only for RichTextRun, not for elements generally.",
             ["DisplayMode"] = "CalendarView-only modifier; the common .Set receiver is a SplitView.",
             ["IsTextScaleFactorEnabled"] = "Modifier exists for RichText* types but not TextBlockElement, the usual .Set receiver.",
 
-            // No modifier exists at all. IsHitTestVisible is reset by ElementPool alongside
-            // IsTabStop but is framework-internal (chart label/tick hiding, #162) with no
-            // user-facing modifier — PoolResetSetConsistencyTests excludes it for the same
-            // reason. Recorded here because a sweep report claimed a modifier existed; the
-            // integrity test above is what caught that it does not.
-            ["IsHitTestVisible"] = "No modifier exists; framework-internal, reset for chart-label hiding (#162).",
+            // CleanElement clears Image.Source, and a `Source` modifier does exist — but only on
+            // ParallaxViewElement, a different control that shares the property name. There is no
+            // .Source for ImageElement (the image is a constructor argument), so the rewrite would
+            // not compile on the receiver that is actually reset. Surfaced by the whole-method
+            // CleanElement scan added in #1193; recorded rather than mapped because a name match
+            // across unrelated receivers is precisely what this table exists to reject.
+            ["Source"] = "The only .Source modifier is ParallaxViewElement's; CleanElement resets Image.Source, which has no modifier.",
 
             // Transition helpers, not property assignments. `.ScaleTransition()` enables an
             // implicit composition animation; assigning the matching WinUI property through

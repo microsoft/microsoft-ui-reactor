@@ -279,9 +279,16 @@ public sealed class ElementPool : IDisposable
         // resets AccessibilityView above; it must also reset these two so a control hidden
         // inside a custom label can't return to the pool non-tabbable / non-hit-testable and
         // silently poison the next unrelated renter that doesn't re-set them.
+        //
+        // Both are cleared on `fe`, not under an `is Control` narrowing. WinUI 3 declares
+        // IsTabStop on UIElement and ApplyModifiers writes it ungated (`fe.IsTabStop = …`),
+        // so `.IsTabStop(false)` reaches every element — including the poolable non-Controls
+        // TextBlock, RichTextBlock, Grid, StackPanel, Border, Canvas, Viewbox and Image.
+        // Clearing it only for Control left every one of those able to carry a stale tab stop
+        // into its next renter, which is the #985 shape; the narrower Control.IsTabStopProperty
+        // also names the same underlying DP, so this is a widening, not a retarget.
         fe.ClearValue(UIElement.IsHitTestVisibleProperty);
-        if (fe is Control tabStopControl)
-            tabStopControl.ClearValue(Control.IsTabStopProperty);
+        fe.ClearValue(UIElement.IsTabStopProperty);
 
         // Issue #985: six common modifiers are written by ApplyModifiers onto receivers
         // this method never reset, so a pooled control handed its previous renter's local
@@ -289,11 +296,15 @@ public sealed class ElementPool : IDisposable
         // to the next one — and a local value outranks every Style setter (same precedence
         // trap as #952, but caused by a *missing* reset rather than a wrong-shaped one).
         //
-        // These live here, in the FE-common region, and not in the type-specific arms
-        // below: the pool/analyzer consistency invariants (PoolResetSetConsistencyTests)
-        // stop scanning at the type dispatch, so a clear placed after it is invisible to
-        // them and ModifierTable would keep claiming the property is not pool-reset.
-        // Placement is the fix, not an implementation detail.
+        // These live here, in the FE-common region, rather than in the type-specific arms
+        // below because that is where they belong: the chain mirrors ApplyModifiers' own
+        // receiver dispatch, so one clear covers every receiver the modifier can be written
+        // to. It is no longer a workaround. Until issue #1193 the consistency invariants
+        // stopped scanning at the type dispatch, so a clear placed after it was invisible to
+        // them and ModifierTable could keep claiming the property was not pool-reset — which
+        // is why #985 and #950 moved clears up here in the first place. CleanElementScan now
+        // reads the whole method and attributes each reset to its receiver, so placement is
+        // free again and a type-specific property can be cleared in its own arm.
         //
         // The chain mirrors ApplyModifiers' receiver types for the receivers that are actually
         // pooled (Reconciler.cs): Padding → Control | Border | Grid | StackPanel | TextBlock,
@@ -362,9 +373,10 @@ public sealed class ElementPool : IDisposable
         else if (fe is TextBlock resetText)
         {
             // TextBlock's padding reset predates #985 (it arrived with #950) but lived in
-            // the case arm below, where no scanner could see it — so ModifierTable's claim
+            // the case arm below, where no scanner could reach it — so ModifierTable's claim
             // that Padding is pool-reset on TextBlock was the one receiver in the gate that
-            // nothing verified. Deleting the line used to break no test. Now it does.
+            // nothing verified. Deleting the line used to break no test. Now it does, and
+            // since #1193 it would be verified in the case arm too.
             resetText.ClearValue(TextBlock.PaddingProperty);
         }
 
@@ -441,6 +453,14 @@ public sealed class ElementPool : IDisposable
                 // here is a real question, but it is a rendering change independent of
                 // issue #952 (FontSize's ApplyModifiers unset arm already clears), so it
                 // is left for its own change.
+                //
+                // These nine were invisible to the pool/analyzer consistency invariants until
+                // issue #1193 widened CleanElementScan past this dispatch — they are declared on
+                // TextBlock alone, so unlike Padding below they could not be relocated into the
+                // FE-common chain to be seen. Each now has a ModifierTable row, and the scan
+                // attributes them to TextBlock rather than to FrameworkElement, which is what
+                // keeps the same write on a RichTextBlock from inheriting a claim about an arm
+                // that only clears Blocks.
                 tb.FontSize = 14; // WinUI default
                 tb.ClearValue(TextBlock.FontWeightProperty);
                 tb.ClearValue(TextBlock.FontStyleProperty);
