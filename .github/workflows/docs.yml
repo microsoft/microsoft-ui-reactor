@@ -1,43 +1,199 @@
 name: Publish docs
 
+# The published site is versioned with mike (https://github.com/jimporter/mike).
+# Every version is rendered once and kept in the `gh-pages` branch; the Pages
+# artifact is that whole branch, so versions stay byte-identical after they are
+# published. Material's version selector reads the `versions.json` that mike
+# maintains at the site root.
 on:
   push:
     branches: [main]
     paths:
       - 'docs/guide/**'
+      - 'docs/_overrides/**'
+      - 'docs/_site-root/**'
       - 'mkdocs.yml'
       - 'docs/requirements.txt'
       - '.github/workflows/docs.yml'
+    # Path filters are not evaluated for tag pushes, so a release tag always
+    # publishes regardless of which files the release commit touched. That is
+    # the behaviour we want here: the tag itself is the trigger.
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      backfill_tags:
+        description: >-
+          Space-separated release tags to publish retroactively, e.g.
+          "v0.1.0-preview.12 v0.1.0-preview.13". Leave empty to just republish
+          the selected branch as the `main` version.
+        required: false
+        default: ''
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+permissions: {}
 
+# Serialises Pages deployments *and* the gh-pages pushes below, so two runs can
+# never race for the same branch.
 concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  MIKE_BRANCH: gh-pages
+  LATEST_ALIAS: latest
+  MAIN_VERSION: main
+
 jobs:
-  build:
+  publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # mike commits the rendered site to gh-pages
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # mike rewrites the gh-pages branch, and the steps below decide which
+          # release is `latest` by sorting the tag list — both need real history.
+          fetch-depth: 0
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: docs/requirements.txt
+
       - run: pip install -r docs/requirements.txt
-      - run: mkdocs build --strict
+
+      - name: Configure the identity mike commits under
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch the existing version history
+        # Absent on the very first run; mike creates the branch in that case.
+        run: |
+          git fetch origin "$MIKE_BRANCH:$MIKE_BRANCH" \
+            || echo "No $MIKE_BRANCH branch yet — mike will create it."
+
+      # mike exposes no --strict passthrough, so strictness stays an explicit
+      # gate. The build is deterministic, so passing here means the render mike
+      # performs next is equally clean. Mirrors the PR-side gate in ci.yml.
+      - name: Check the docs build strictly
+        run: python -m mkdocs build --strict --site-dir "$RUNNER_TEMP/strict-check"
+
+      - name: Publish the main version
+        if: github.ref_type == 'branch' && !inputs.backfill_tags
+        run: |
+          mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy \
+            --title 'main (development)' "$MAIN_VERSION"
+
+          # Until a release version exists there is nothing for the site root to
+          # redirect to, which would leave it a 404. Point the root at main for
+          # that window only; publishing any release moves it back to `latest`.
+          if ! mike list --branch "$MIKE_BRANCH" "$LATEST_ALIAS" >/dev/null 2>&1; then
+            mike set-default --branch "$MIKE_BRANCH" --push "$MAIN_VERSION"
+          fi
+
+      - name: Publish the release version
+        # `!inputs.backfill_tags` matters because a workflow_dispatch can be
+        # started from a tag ref: without it, a manual backfill launched from a
+        # tag would run this step and the backfill step in the same run.
+        if: github.ref_type == 'tag' && !inputs.backfill_tags
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          newest="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+
+          if [ "$GITHUB_REF_NAME" = "$newest" ]; then
+            mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy \
+              --update-aliases "$version" "$LATEST_ALIAS"
+            mike set-default --branch "$MIKE_BRANCH" --push "$LATEST_ALIAS"
+          else
+            # Tagging an older line (a backport, or a re-cut of a superseded
+            # tag) must publish that version without dragging `latest` backwards.
+            echo "$GITHUB_REF_NAME is older than $newest — publishing without moving $LATEST_ALIAS."
+            mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy "$version"
+          fi
+
+      - name: Backfill release versions
+        if: inputs.backfill_tags
+        env:
+          BACKFILL_TAGS: ${{ inputs.backfill_tags }}
+        run: |
+          # Tags cut before versioning existed carry no version selector in their
+          # own mkdocs.yml, so the config and theme override from this ref are
+          # layered over each tag checkout. That only works while the tag's page
+          # set still satisfies this nav — the strict build below is what turns a
+          # tag that has drifted too far into a loud failure rather than a
+          # silently broken version.
+          overlay="$(mktemp -d)"
+          cp mkdocs.yml "$overlay/mkdocs.yml"
+          cp -r docs/_overrides "$overlay/_overrides"
+
+          newest="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+
+          for tag in $BACKFILL_TAGS; do
+            echo "::group::Publishing $tag"
+            git checkout --force --detach "$tag"
+            cp "$overlay/mkdocs.yml" mkdocs.yml
+            rm -rf docs/_overrides
+            cp -r "$overlay/_overrides" docs/_overrides
+
+            python -m mkdocs build --strict --site-dir "$RUNNER_TEMP/strict-check"
+
+            if [ "$tag" = "$newest" ]; then
+              mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy \
+                --update-aliases "${tag#v}" "$LATEST_ALIAS"
+            else
+              mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy "${tag#v}"
+            fi
+            echo "::endgroup::"
+          done
+
+          git checkout --force "$GITHUB_SHA"
+
+          # The loop above only assigns `latest` to the newest tag, so a backfill
+          # that omits it leaves the alias undefined — and `mike set-default`
+          # errors on an identifier that does not exist. Fall back through the
+          # versions that could plausibly anchor the site root instead of failing
+          # after the versions have already been pushed.
+          if mike list --branch "$MIKE_BRANCH" "$LATEST_ALIAS" >/dev/null 2>&1; then
+            mike set-default --branch "$MIKE_BRANCH" --push "$LATEST_ALIAS"
+          elif mike list --branch "$MIKE_BRANCH" "$MAIN_VERSION" >/dev/null 2>&1; then
+            echo "No $LATEST_ALIAS alias yet — pointing the site root at $MAIN_VERSION."
+            mike set-default --branch "$MIKE_BRANCH" --push "$MAIN_VERSION"
+          else
+            echo "Neither $LATEST_ALIAS nor $MAIN_VERSION is published; leaving the site root default unchanged."
+          fi
+
+      - name: Assemble the Pages artifact from every published version
+        # `git archive` rather than a checkout: it materialises the branch
+        # without leaving git metadata in the directory that gets uploaded.
+        run: |
+          rm -rf site && mkdir site
+          git archive "$MIKE_BRANCH" | tar -x -C site
+
+          # Forwards legacy unversioned URLs to the same page under `latest`.
+          # Kept out of the mike branch deliberately: it is a property of how the
+          # site is served, not of any one published version, so it is refreshed
+          # from this ref on every deploy.
+          if [ -f docs/_site-root/404.html ]; then
+            cp docs/_site-root/404.html site/404.html
+          else
+            echo "::warning::docs/_site-root/404.html is missing — legacy unversioned links will 404."
+          fi
+
+          echo "Publishing these versions:"
+          cat site/versions.json
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
   deploy:
-    needs: build
+    needs: publish
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
