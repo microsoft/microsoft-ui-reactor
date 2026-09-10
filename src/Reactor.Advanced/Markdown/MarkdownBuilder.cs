@@ -29,7 +29,10 @@ public record MarkdownOptions
     public Func<Element[], Element>? UnorderedList { get; init; }
     /// <summary>Override ordered list rendering. (startNumber, items)</summary>
     public Func<int, Element[], Element>? OrderedList { get; init; }
-    /// <summary>Override list item rendering. (defaultElement)</summary>
+    /// <summary>
+    /// Override list item rendering. Receives the default Auto/Star Grid containing
+    /// the marker and content. Content wraps when the document has a finite available width.
+    /// </summary>
     public Func<Element, Element>? ListItem { get; init; }
     /// <summary>Override code block rendering. (code, language)</summary>
     public Func<string, string?, Element>? CodeBlock { get; init; }
@@ -531,10 +534,11 @@ internal sealed class MarkdownBuilder
         else
             content = TextBlock(""); // empty fallback
 
-        Element element = HStack(4,
+        // A horizontal StackPanel measures content with infinite width, preventing wrapping.
+        Element element = Grid([GridSize.Auto, GridSize.Star()], [],
             TextBlock(marker).VAlign(VerticalAlignment.Top),
-            content
-        );
+            content.Grid(column: 1)
+        ) with { ColumnSpacing = 4 };
 
         if (_options.ListItem is not null)
             element = _options.ListItem(element);

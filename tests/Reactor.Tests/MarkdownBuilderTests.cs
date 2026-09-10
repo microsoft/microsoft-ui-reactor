@@ -657,17 +657,23 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void UnorderedList_ItemsAreHStacksWithBulletMarker()
+    public void UnorderedList_ItemsUseAutoStarGridWithBulletMarker()
     {
         var result = Md("- Item one");
         var stack = AsVStack(result);
         var listStack = Child<StackElement>(stack, 0);
-        var item = Assert.IsType<StackElement>(listStack.Children[0]);
-        Assert.Equal(Orientation.Horizontal, item.Orientation);
-        Assert.Equal(4.0, item.Spacing);
+        var item = Assert.IsType<GridElement>(listStack.Children[0]);
+        Assert.Equal([GridSize.Auto, GridSize.Star()], item.Definition.Columns);
+        Assert.Empty(item.Definition.Rows);
+        Assert.Equal(4.0, item.ColumnSpacing);
+        Assert.Equal(2, item.Children.Length);
 
         var marker = Assert.IsType<TextBlockElement>(item.Children[0]);
-        Assert.Contains("\u2022", marker.Content);
+        Assert.Equal("\u2022 ", marker.Content);
+        Assert.Equal(VerticalAlignment.Top, marker.Modifiers!.VerticalAlignment);
+        Assert.Equal(1, item.Children[1].GetAttached<GridAttached>()!.Column);
+        Assert.Equal("Item one", Inline<RichTextRun>(
+            Assert.IsType<RichTextBlockElement>(item.Children[1]), 0).Text);
     }
 
     [Fact]
@@ -678,11 +684,11 @@ public class MarkdownBuilderTests
         var listStack = Child<StackElement>(stack, 0);
         Assert.Equal(3, listStack.Children.Length);
 
-        var item1 = Assert.IsType<StackElement>(listStack.Children[0]);
+        var item1 = Assert.IsType<GridElement>(listStack.Children[0]);
         var marker1 = Assert.IsType<TextBlockElement>(item1.Children[0]);
         Assert.Contains("1.", marker1.Content);
 
-        var item3 = Assert.IsType<StackElement>(listStack.Children[2]);
+        var item3 = Assert.IsType<GridElement>(listStack.Children[2]);
         var marker3 = Assert.IsType<TextBlockElement>(item3.Children[0]);
         Assert.Contains("3.", marker3.Content);
     }
@@ -694,11 +700,11 @@ public class MarkdownBuilderTests
         var stack = AsVStack(result);
         var listStack = Child<StackElement>(stack, 0);
 
-        var item1 = Assert.IsType<StackElement>(listStack.Children[0]);
+        var item1 = Assert.IsType<GridElement>(listStack.Children[0]);
         var marker1 = Assert.IsType<TextBlockElement>(item1.Children[0]);
         Assert.Contains("5.", marker1.Content);
 
-        var item2 = Assert.IsType<StackElement>(listStack.Children[1]);
+        var item2 = Assert.IsType<GridElement>(listStack.Children[1]);
         var marker2 = Assert.IsType<TextBlockElement>(item2.Children[0]);
         Assert.Contains("6.", marker2.Content);
     }
@@ -709,7 +715,7 @@ public class MarkdownBuilderTests
         var result = Md("- [x] Done");
         var stack = AsVStack(result);
         var listStack = Child<StackElement>(stack, 0);
-        var item = Assert.IsType<StackElement>(listStack.Children[0]);
+        var item = Assert.IsType<GridElement>(listStack.Children[0]);
         var marker = Assert.IsType<TextBlockElement>(item.Children[0]);
         Assert.Contains("\u2611", marker.Content);
     }
@@ -720,7 +726,7 @@ public class MarkdownBuilderTests
         var result = Md("- [ ] Todo");
         var stack = AsVStack(result);
         var listStack = Child<StackElement>(stack, 0);
-        var item = Assert.IsType<StackElement>(listStack.Children[0]);
+        var item = Assert.IsType<GridElement>(listStack.Children[0]);
         var marker = Assert.IsType<TextBlockElement>(item.Children[0]);
         Assert.Contains("\u2610", marker.Content);
     }
@@ -803,6 +809,30 @@ public class MarkdownBuilderTests
 
         Md("- A\n- B\n- C", options);
         Assert.Equal(3, callCount);
+    }
+
+    [Fact]
+    public void ListItem_CustomCallback_ReceivesDefaultGridAndRetainsReplacement()
+    {
+        var defaults = new List<GridElement>();
+        var result = Md("- A\n- B", new MarkdownOptions
+        {
+            ListItem = item =>
+            {
+                defaults.Add(Assert.IsType<GridElement>(item));
+                return Border(item).Padding(7);
+            },
+        });
+
+        var list = Child<StackElement>(AsVStack(result), 0);
+        Assert.Equal(2, defaults.Count);
+        Assert.Equal(2, list.Children.Length);
+        for (int i = 0; i < defaults.Count; i++)
+        {
+            var wrapper = Assert.IsType<BorderElement>(list.Children[i]);
+            Assert.Same(defaults[i], wrapper.Child);
+            Assert.Equal(new Thickness(7), wrapper.Modifiers!.Padding);
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -1199,15 +1229,15 @@ public class MarkdownBuilderTests
         var stack = AsVStack(result);
         var listStack = Child<StackElement>(stack, 0);
 
-        // First item: HStack with marker + content
-        var item1 = Assert.IsType<StackElement>(listStack.Children[0]);
+        // First item: Grid with marker + content
+        var item1 = Assert.IsType<GridElement>(listStack.Children[0]);
         var content1 = item1.Children[1]; // content is second child after marker
         var rtb1 = Assert.IsType<RichTextBlockElement>(content1);
         var run1 = Inline<RichTextRun>(rtb1, 0);
         Assert.True(run1.IsBold);
 
         // Second item
-        var item2 = Assert.IsType<StackElement>(listStack.Children[1]);
+        var item2 = Assert.IsType<GridElement>(listStack.Children[1]);
         var content2 = item2.Children[1];
         var rtb2 = Assert.IsType<RichTextBlockElement>(content2);
         var run2 = Inline<RichTextRun>(rtb2, 0);

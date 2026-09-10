@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Diagnostics;
+using Microsoft.UI.Reactor.Markdown;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -87,6 +88,33 @@ public sealed class LayoutFootgunDetectorTests : IDisposable
     }
 
     // ── Should NOT warn ────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("- First\n\n  Second")]
+    [InlineData("- Parent\n\n  - Child\n\n- Last")]
+    [InlineData("- Intro\n\n  ```text\n  code\n  ```")]
+    public void MarkdownMultiBlockItems_DoNotConsumeLayoutWarning(string markdown)
+    {
+        var rows = new List<GridElement>();
+        Microsoft.UI.Reactor.Advanced.Factories.Markdown(markdown, new MarkdownOptions
+        {
+            CodeBlock = (code, _) => TextBlock(code),
+            ListItem = item =>
+            {
+                rows.Add(Assert.IsType<GridElement>(item));
+                return item;
+            },
+        });
+        Assert.NotEmpty(rows);
+        foreach (var row in rows)
+            LayoutFootgunDetector.InspectGrid(row);
+        Assert.Empty(_warnings);
+
+        var offender = Grid([GridSize.Auto, GridSize.Star()], [GridSize.Auto],
+            VStack(Border(VStack())).Grid(column: 1));
+        LayoutFootgunDetector.InspectGrid(offender);
+        Assert.Contains("row 0 (Auto)", Assert.Single(_warnings));
+    }
 
     [Fact]
     public void HStack_InStarColumn_DoesNotWarn()

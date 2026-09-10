@@ -275,10 +275,11 @@ internal static class MarkdownFixtures
             }
             H.Check("Md_UL_HasAlpha", hasAlpha);
 
-            // Each item is an HStack (StackPanel horizontal)
-            var hstacks = H.FindAllControls<StackPanel>(sp =>
-                sp.Orientation == Orientation.Horizontal);
-            H.Check("Md_UL_HasHStacks", hstacks.Count >= 3);
+            var rows = H.FindAllControls<WinGrid>(grid =>
+                grid.ColumnDefinitions.Count == 2
+                && grid.ColumnDefinitions[0].Width.IsAuto
+                && grid.ColumnDefinitions[1].Width.IsStar);
+            H.Check("Md_UL_HasAutoStarRows", rows.Count == 3);
         }
     }
 
@@ -682,7 +683,8 @@ internal static class MarkdownFixtures
             H.Check("Md_Complex_HasManyBlocks", rtbs.Count >= 5);
 
             // Table grid
-            var grid = H.FindControl<WinGrid>(g => g.ColumnDefinitions.Count >= 2);
+            var grid = H.FindControl<WinGrid>(g => g.ColumnDefinitions.Count >= 2
+                && g.RowDefinitions.Count >= 2);
             H.Check("Md_Complex_HasTable", grid is not null);
 
             // Bullets
