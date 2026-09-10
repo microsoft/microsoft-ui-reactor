@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="TableViewSamples.Pages.DynamicColumnsPage"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:TableViewSamples.Controls">
+
+    <controls:SamplePresenter
+        Header="Dynamic columns"
+        Description="Show or hide a column at runtime by setting TableViewColumn.Visibility. The column stays in place and keeps its width, so bringing it back is instant — no columns are added, removed, or rebuilt."
+        SourceCaption="DynamicColumnsPage.xaml.cs (excerpt)"
+        SourceSnippet="DynamicColumns.cs.txt"
+        StretchExample="True">
+
+        <controls:SamplePresenter.Example>
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <muxc:InfoBar Grid.Row="0" IsOpen="True" IsClosable="False" Severity="Informational" Title="Try it" Message="Toggle the checkboxes to show or hide each column. Each column keeps its width and position when you bring it back." MinHeight="104"/>
+                <Border Grid.Row="1" Style="{StaticResource TableHostBorderStyle}" Padding="0" VerticalAlignment="Stretch">
+                    <muxc:TableView x:Name="VisibilityTable" AutomationProperties.AutomationId="VisibilityTable" ItemsSource="{x:Bind People, Mode=OneTime}" VerticalAlignment="Stretch" MinHeight="320">
+                        <muxc:TableView.Columns>
+                            <muxc:TableViewTextColumn x:Name="VisFirstNameColumn"  Header="First name"  Width="160" Binding="{Binding FirstName}"/>
+                            <muxc:TableViewTextColumn x:Name="VisLastNameColumn"   Header="Last name"   Width="160" Binding="{Binding LastName}"/>
+                            <muxc:TableViewTextColumn x:Name="VisDepartmentColumn" Header="Department"  Width="140" Binding="{Binding Department}"/>
+                            <muxc:TableViewTextColumn x:Name="VisRoleColumn"       Header="Role"        Width="200" Binding="{Binding Role}"/>
+                            <muxc:TableViewTextColumn x:Name="VisSalaryColumn"     Header="Salary"      Width="100" Binding="{Binding Salary}"/>
+                        </muxc:TableView.Columns>
+                    </muxc:TableView>
+                </Border>
+            </Grid>
+        </controls:SamplePresenter.Example>
+
+        <controls:SamplePresenter.Options>
+            <StackPanel Spacing="12">
+                <TextBlock Text="Column visibility" Style="{StaticResource SectionHeaderTextStyle}"/>
+                <TextBlock Text="Toggle each column by setting TableViewColumn.Visibility. Width and position are preserved." Style="{StaticResource SectionDescriptionTextStyle}" TextWrapping="Wrap"/>
+                <CheckBox Content="First name"  IsChecked="{x:Bind VisibleFirstName,  Mode=TwoWay}" AutomationProperties.AutomationId="VisFirstNameCheckBox" HorizontalAlignment="Stretch"/>
+                <CheckBox Content="Last name"   IsChecked="{x:Bind VisibleLastName,   Mode=TwoWay}" AutomationProperties.AutomationId="VisLastNameCheckBox" HorizontalAlignment="Stretch"/>
+                <CheckBox Content="Department"  IsChecked="{x:Bind VisibleDepartment, Mode=TwoWay}" AutomationProperties.AutomationId="VisDepartmentCheckBox" HorizontalAlignment="Stretch"/>
+                <CheckBox Content="Role"        IsChecked="{x:Bind VisibleRole,       Mode=TwoWay}" AutomationProperties.AutomationId="VisRoleCheckBox" HorizontalAlignment="Stretch"/>
+                <CheckBox Content="Salary"      IsChecked="{x:Bind VisibleSalary,     Mode=TwoWay}" AutomationProperties.AutomationId="VisSalaryCheckBox" HorizontalAlignment="Stretch"/>
+            </StackPanel>
+        </controls:SamplePresenter.Options>
+
+    </controls:SamplePresenter>
+</Page>

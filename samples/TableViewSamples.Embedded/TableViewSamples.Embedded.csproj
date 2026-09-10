@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TableViewSamples</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TableView.Projection\TableView.Projection.csproj" />
+    <!-- The single shared TableView enablement (provider registration + style/theme closure merge).
+         The gallery defers to it so the advanced theme dictionaries are merged into Application.Resources
+         EXACTLY ONCE process-wide — coexisting with the consumable TableView control without a second
+         (access-violating) copy of the same closure. -->
+    <ProjectReference Include="..\Reactor.Controls.TableView\Reactor.Controls.TableView.csproj" />
+  </ItemGroup>
+</Project>
+

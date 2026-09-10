@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="TableViewSamples.Pages.InlineEditPage"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:TableViewSamples.Controls">
+
+    <controls:SamplePresenter
+        Header="Inline editing"
+        Description="Edit cell values in place: F2 or double-click opens the editor, Enter commits, Esc discards. Per-column IsReadOnly opts individual columns out, and the EditEnding event lets you veto a commit (here used to reject empty values)."
+        SourceCaption="InlineEditPage.xaml (excerpt)"
+        SourceSnippet="InlineEdit.xaml.txt"
+        StretchExample="True">
+
+        <controls:SamplePresenter.Example>
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <muxc:InfoBar
+                    Grid.Row="0"
+                    IsOpen="True"
+                    IsClosable="False"
+                    Severity="Informational"
+                    Title="Try it"
+                    Message="Click a cell and press F2 to edit; Enter commits, Esc cancels. Toggle the switches to reject empty values or make the table or a column read-only."
+                    MinHeight="104"/>
+                <Border Grid.Row="1" Style="{StaticResource TableHostBorderStyle}" VerticalAlignment="Stretch" Padding="0">
+                    <muxc:TableView
+                        x:Name="PeopleTable"
+                        ItemsSource="{x:Bind People, Mode=OneWay}"
+                        SelectionMode="Single"
+                        EditStarted="OnTableEditStarted"
+                        EditEnding="OnTableEditEnding"
+                        EditEnded="OnTableEditEnded"
+                        VerticalAlignment="Stretch"
+                        MinHeight="320">
+                        <muxc:TableViewTextColumn x:Name="FirstNameColumn"  Header="First name (editable)" Width="{StaticResource ColWidthShortName}" Binding="{Binding FirstName}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn x:Name="LastNameColumn"   Header="Last name (editable)"  Width="{StaticResource ColWidthShortName}" Binding="{Binding LastName}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn x:Name="EmailColumn"      Header="Email (editable)"      Width="{StaticResource ColWidthEmail}" Binding="{Binding Email}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn x:Name="DepartmentColumn" Header="Department (read-only)" Width="{StaticResource ColWidthDepartment}" IsReadOnly="True" Binding="{Binding Department}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn x:Name="RoleColumn"       Header="Role (read-only)"      Width="{StaticResource ColWidthLongName}" IsReadOnly="True" Binding="{Binding Role}" CanUserSort="False" CanUserFilter="False"/>
+                    </muxc:TableView>
+                </Border>
+            </Grid>
+        </controls:SamplePresenter.Example>
+
+        <controls:SamplePresenter.Options>
+            <StackPanel Spacing="12">
+                <TextBlock Text="Edit controls" Style="{StaticResource SectionHeaderTextStyle}"/>
+                <TextBlock
+                    Text="Click a cell in an editable column to focus it, then press F2 (or click Begin edit). Type, then press Enter to commit or Esc to cancel."
+                    Style="{StaticResource SectionDescriptionTextStyle}"
+                    TextWrapping="Wrap"/>
+                <StackPanel Spacing="8">
+                    <Button x:Name="BeginEditButton" AutomationProperties.AutomationId="BeginEditButton" Content="Begin edit" Click="OnBeginEditClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="CommitEditButton" AutomationProperties.AutomationId="CommitEditButton" Content="Commit" Click="OnCommitEditClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="CancelEditButton" AutomationProperties.AutomationId="CancelEditButton" Content="Cancel" Click="OnCancelEditClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                </StackPanel>
+                <ToggleSwitch
+                    x:Name="ReadOnlyToggle"
+                    AutomationProperties.AutomationId="ReadOnlyToggle"
+                    Header="Table IsReadOnly"
+                    OnContent="True (no editing)"
+                    OffContent="False (editable)"
+                    Toggled="OnReadOnlyToggled"/>
+                <ToggleSwitch
+                    x:Name="ValidateToggle"
+                    AutomationProperties.AutomationId="ValidateToggle"
+                    Header="Reject empty values"
+                    OnContent="On"
+                    OffContent="Off"/>
+
+                <TextBlock Text="Column read-only" Style="{StaticResource SectionHeaderTextStyle}" Margin="0,8,0,0"/>
+                <ToggleSwitch
+                    x:Name="EmailReadOnlyToggle"
+                    AutomationProperties.AutomationId="EmailReadOnlyToggle"
+                    Header="Email column IsReadOnly"
+                    OnContent="True"
+                    OffContent="False"
+                    Toggled="OnEmailReadOnlyToggled"/>
+                <ToggleSwitch
+                    x:Name="LastNameReadOnlyToggle"
+                    AutomationProperties.AutomationId="LastNameReadOnlyToggle"
+                    Header="Last name column IsReadOnly"
+                    OnContent="True"
+                    OffContent="False"
+                    Toggled="OnLastNameReadOnlyToggled"/>
+
+                <TextBlock Text="Cell edit status" Style="{StaticResource SectionHeaderTextStyle}" Margin="0,8,0,0"/>
+                <Grid ColumnSpacing="12" RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="IsEditing" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="IsEditingText" Text="False" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="IsEditingText"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="EditingItem" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="EditingItemText" Text="(none)" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="EditingItemText" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="EditingColumn" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="EditingColumnText" Text="(none)" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="EditingColumnText" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="EditStarted count" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="EditStartedCountText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="EditStartedCountText"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="EditEnded count" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="1" x:Name="EditEndedCountText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="EditEndedCountText"/>
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Last result" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="5" Grid.Column="1" x:Name="LastResultText" Text="(none yet)" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="LastResultText" TextWrapping="Wrap"/>
+                </Grid>
+
+                <TextBlock Text="Row edit status" Style="{StaticResource SectionHeaderTextStyle}" Margin="0,8,0,0"/>
+                <Grid ColumnSpacing="12" RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Last RowEditEnding" Style="{StaticResource StatusReadoutLabelStyle}" VerticalAlignment="Top"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LastRowEditEndingText" Text="(none yet)" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="LastRowEditEndingText" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Last RowEditEnded" Style="{StaticResource StatusReadoutLabelStyle}" VerticalAlignment="Top"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="LastRowEditEndedText" Text="(none yet)" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="LastRowEditEndedText" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="RowEditEnding count" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RowEditEndingCountText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="RowEditEndingCountText"/>
+                </Grid>
+            </StackPanel>
+        </controls:SamplePresenter.Options>
+
+    </controls:SamplePresenter>
+</Page>

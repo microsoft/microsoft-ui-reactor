@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="TableViewSamples.Pages.ClipboardPage"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:TableViewSamples.Controls">
+
+    <controls:SamplePresenter
+        Header="Clipboard / Excel-style operations"
+        Description="Ctrl+C / Ctrl+X / Ctrl+V over cell ranges using Excel-compatible TSV (so paste into Excel just works), plus Ctrl+D fill-down. Per-action properties (CanUserCopy, CanUserPaste, CanUserCut) let you opt individual shortcuts in or out."
+        SourceCaption="ClipboardPage.xaml (excerpt)"
+        SourceSnippet="Clipboard.xaml.txt"
+        StretchExample="True">
+
+        <controls:SamplePresenter.Example>
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <muxc:InfoBar Grid.Row="0" IsOpen="True" IsClosable="False" Severity="Informational" Title="Try it" Message="Click a row and press Ctrl+C to copy it as TSV (paste into Excel). Ctrl+V pastes, Ctrl+D fills down. Toggle the switches to disable each shortcut." MinHeight="104"/>
+                <Border Grid.Row="1" Style="{StaticResource TableHostBorderStyle}" VerticalAlignment="Stretch">
+                    <muxc:TableView x:Name="PeopleTable" ItemsSource="{x:Bind People, Mode=OneWay}" SelectionMode="Extended" CanUserCopy="True" CanUserPaste="True" CanUserCut="True" Copying="OnCopying" Cutting="OnCutting" Pasting="OnPasting" VerticalAlignment="Stretch" MinHeight="320">
+                        <muxc:TableViewTextColumn Header="First name" Width="{StaticResource ColWidthShortName}" Binding="{Binding FirstName}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Last name"  Width="{StaticResource ColWidthShortName}" Binding="{Binding LastName}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Department" Width="{StaticResource ColWidthDepartment}" Binding="{Binding Department}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Role"       Width="{StaticResource ColWidthLongName}" Binding="{Binding Role}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Salary"     Width="{StaticResource ColWidthNumber}" Binding="{Binding Salary}" CanUserSort="False" CanUserFilter="False"/>
+                    </muxc:TableView>
+                </Border>
+            </Grid>
+        </controls:SamplePresenter.Example>
+
+        <controls:SamplePresenter.Options>
+            <StackPanel Spacing="12">
+                <TextBlock Text="Clipboard controls" Style="{StaticResource SectionHeaderTextStyle}"/>
+                <StackPanel Spacing="8">
+                    <ToggleSwitch x:Name="CanUserCopySwitch" Header="CanUserCopy" IsOn="True" Toggled="OnCanUserCopyToggled" AutomationProperties.AutomationId="CanUserCopySwitch"/>
+                    <ToggleSwitch x:Name="CanUserPasteSwitch" Header="CanUserPaste" IsOn="True" Toggled="OnCanUserPasteToggled" AutomationProperties.AutomationId="CanUserPasteSwitch"/>
+                    <ToggleSwitch x:Name="CanUserCutSwitch" Header="CanUserCut" IsOn="True" Toggled="OnCanUserCutToggled" AutomationProperties.AutomationId="CanUserCutSwitch"/>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <Button x:Name="CopyButton" Content="Copy (Ctrl+C)" Click="OnCopyClick" AutomationProperties.AutomationId="CopyButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="CutButton" Content="Cut (Ctrl+X)" Click="OnCutClick" AutomationProperties.AutomationId="CutButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="PasteButton" Content="Paste (Ctrl+V)" Click="OnPasteClick" AutomationProperties.AutomationId="PasteButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="FillDownButton" Content="Fill down (Ctrl+D)" Click="OnFillDownClick" AutomationProperties.AutomationId="FillDownButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="Status" Style="{StaticResource SectionHeaderTextStyle}" Margin="0,8,0,0"/>
+                <Grid ColumnSpacing="12" RowSpacing="4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Last action" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LastActionText" Text="(none)" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="LastActionText"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Copying fires" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="CopyingCountText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="CopyingCountText"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Cutting fires" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="CuttingCountText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="CuttingCountText"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Pasting fires" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="PastingCountText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="PastingCountText"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Last clipboard text" Style="{StaticResource StatusReadoutLabelStyle}" VerticalAlignment="Top"/>
+                    <ScrollViewer Grid.Row="4" Grid.Column="1" MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="LastClipboardText" Text="(empty)" TextWrapping="NoWrap" FontFamily="Consolas" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="LastClipboardText"/>
+                    </ScrollViewer>
+                </Grid>
+            </StackPanel>
+        </controls:SamplePresenter.Options>
+    </controls:SamplePresenter>
+</Page>
