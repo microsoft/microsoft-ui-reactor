@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Microsoft",
+  "classifications": [ "Windows", "WinUI" ],
+  "identity": "Microsoft.UI.Reactor.FileBased",
+  "groupIdentity": "Microsoft.UI.Reactor.FileBased",
+  "name": "Microsoft WinUI Reactor File-Based App",
+  "description": "A Windows WinUI Application using Reactor with file-based structure",
+  "shortName": "reactorapp-filebased",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "Company.ReactorApp1",
+  "preferNameDirectory": true,
+  "symbols": {
+    "TargetFrameworkOverride": {
+      "type": "parameter",
+      "description": "Overrides the target framework",
+      "replaces": "TargetFrameworkOverride",
+      "datatype": "string",
+      "defaultValue": "",
+      "displayName": "Target framework override"
+    },
+    "Framework": {
+      "type": "parameter",
+      "description": "The target framework for the project.",
+      "datatype": "choice",
+      "choices": [
+        {
+          "choice": "net10.0",
+          "description": "Target net10.0",
+          "displayName": ".NET 10.0"
+        }
+      ],
+      "replaces": "net10.0",
+      "defaultValue": "net10.0",
+      "displayName": "Framework"
+    },
+    "skipRestore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "description": "If specified, skips the automatic restore of the project on create.",
+      "defaultValue": "false",
+      "displayName": "Skip restore"
+    },
+    "UseProgramMain": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Whether to generate an explicit Program class and Main method instead of top-level statements.",
+      "displayName": "Do not use _top-level statements"
+    },
+    "NativeAot" : {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "displayName": "Enable _native AOT publish",
+      "description": "Whether to enable the project for publishing as native AOT."
+    },
+    "HostIdentifier": {
+      "type": "bind",
+      "binding": "HostIdentifier"
+    },
+    "csharpFeature_TopLevelProgram": {
+      "type": "computed",
+      "value": "UseProgramMain != \"true\""
+    },
+    "MSUIReactorVersion": {
+        "type": "parameter",
+        "dataType": "string",
+        "replaces": "MS_UI_REACTOR_VERSION",
+        "defaultValue": "MS_UI_REACTOR_VERSION_VALUE"
+      },
+  },
+  "primaryOutputs": [
+    {
+      "path": "App.cs"
+    },
+  ],
+  "defaultName": "WinUIApp1",
+  "postActions": [
+    {
+      "id": "restore",
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages required by this project.",
+      "args": {
+        "executable": "dotnet.exe",
+        "args": "restore App.cs",
+        "redirectStandardOutput": false,
+        "redirectStandardError": false
+      },
+      "manualInstructions": [
+        {
+          "text": "Run 'dotnet restore'"
+        }
+      ],
+      "actionId": "3A7C4B45-1F5D-4A30-959A-51B88E82B5D2",
+      "continueOnError": true
+    }
+  ]
+}
