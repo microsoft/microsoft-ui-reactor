@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Microsoft.UI.Reactor.SelfTests;
@@ -69,13 +70,25 @@ public class ShutdownPolicyProcessLifetimeTests
         // opened and then closed. Without this, deleting OpenProbeWindow or the
         // close timer would silently route several arms through the zero-surface
         // startup path, where they would still report STILL-ALIVE and pass.
+        //
+        // The zero-surface arms need the mirror image. They assert windows=0,
+        // which is also what a window that opened and closed leaves behind, so
+        // bypassing the zero-surface branch would leave them green too. Requiring
+        // the markers to be ABSENT is what pins them to the startup path.
+        var detail = Detail(policy, args, result);
         if (!flags.Contains(NoWindowFlag))
         {
-            var detail = Detail(policy, args, result);
             StringAssert.Contains(result.Stdout, "OPENED",
                 $"The probe never opened a window, so this is not a last-window-close run.\n{detail}");
             StringAssert.Contains(result.Stdout, ClosingMarker,
                 $"The probe never reached the close step, so this is not a last-window-close run.\n{detail}");
+        }
+        else
+        {
+            StringAssert.DoesNotMatch(result.Stdout, new Regex("OPENED"),
+                $"A window was opened, so this run exercised last-window-close rather than zero-surface startup.\n{detail}");
+            StringAssert.DoesNotMatch(result.Stdout, new Regex(ClosingMarker),
+                $"A window was closed, so this run exercised last-window-close rather than zero-surface startup.\n{detail}");
         }
 
         return result;
