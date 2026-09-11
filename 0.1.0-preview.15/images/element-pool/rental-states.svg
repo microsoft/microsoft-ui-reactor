@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 480" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 13px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-error { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.5; }
+    .terminal { fill: #1f2328; stroke: #1f2328; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-error { fill: #3c0d0d; stroke: #f85149; }
+      .terminal { fill: #e6edf3; stroke: #e6edf3; }
+      .edge { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Start dot -->
+  <circle class="terminal" cx="60" cy="60" r="8"/>
+  <text class="sub" x="60" y="38" text-anchor="middle">[*]</text>
+
+  <!-- Pooled -->
+  <rect class="box-accent" x="170" y="30" width="160" height="60" rx="30"/>
+  <text class="label" x="250" y="55" text-anchor="middle">Pooled</text>
+  <text class="sub" x="250" y="74" text-anchor="middle">on per-type stack</text>
+
+  <!-- Rented -->
+  <rect class="box-accent" x="450" y="30" width="160" height="60" rx="30"/>
+  <text class="label" x="530" y="55" text-anchor="middle">Rented</text>
+  <text class="sub" x="530" y="74" text-anchor="middle">attached to visual tree</text>
+
+  <!-- Returning -->
+  <rect class="box-accent" x="450" y="200" width="160" height="60" rx="30"/>
+  <text class="label" x="530" y="225" text-anchor="middle">Returning</text>
+  <text class="sub" x="530" y="244" text-anchor="middle">awaiting clean</text>
+
+  <!-- terminal: cap reached -->
+  <circle class="terminal" cx="660" cy="360" r="8"/>
+  <text class="sub" x="660" y="385" text-anchor="middle">[*] GC eligible</text>
+
+  <!-- terminal: tainted -->
+  <circle class="terminal" cx="380" cy="360" r="8"/>
+  <text class="sub" x="380" y="385" text-anchor="middle">[*] never re-pooled</text>
+
+  <!-- terminal: dispose -->
+  <circle class="terminal" cx="170" cy="170" r="8"/>
+  <text class="sub" x="170" y="195" text-anchor="middle">[*] Pool.Dispose</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M68 60 L170 60" marker-end="url(#arr)"/>
+  <text class="edge-label" x="120" y="52" text-anchor="middle">new</text>
+
+  <path class="edge" d="M330 60 L450 60" marker-end="url(#arr)"/>
+  <text class="edge-label" x="390" y="50" text-anchor="middle">Reconciler.Mount</text>
+  <text class="edge-label" x="390" y="78" text-anchor="middle">pool.TryRent</text>
+
+  <path class="edge" d="M530 90 L530 200" marker-end="url(#arr)"/>
+  <text class="edge-label" x="540" y="150" text-anchor="start">Reconciler.Unmount</text>
+  <text class="edge-label" x="540" y="166" text-anchor="start">pool.Return</text>
+
+  <path class="edge" d="M450 230 Q 350 240 280 90" marker-end="url(#arr)"/>
+  <text class="edge-label" x="280" y="170">ForceDetach +</text>
+  <text class="edge-label" x="280" y="186">CleanElement,</text>
+  <text class="edge-label" x="280" y="202">stack &lt; cap</text>
+
+  <path class="edge" d="M610 230 Q 660 280 660 352" marker-end="url(#arr)"/>
+  <text class="edge-label" x="670" y="305">cap (32 / type)</text>
+
+  <path class="edge" d="M450 240 Q 410 320 384 352" marker-end="url(#arr)"/>
+  <text class="edge-label" x="350" y="305" text-anchor="end">compositor-tainted</text>
+
+  <path class="edge" d="M210 90 L178 162" marker-end="url(#arr)"/>
+  <text class="edge-label" x="160" y="135" text-anchor="end">Dispose</text>
+</svg>
