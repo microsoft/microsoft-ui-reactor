@@ -534,7 +534,8 @@ internal sealed class MarkdownBuilder
         else
             content = TextBlock(""); // empty fallback
 
-        // A horizontal StackPanel measures content with infinite width, preventing wrapping.
+        // The Star column hands the content the finite width left over beside the marker, which is
+        // what lets long text wrap onto additional lines.
         Element element = Grid([GridSize.Auto, GridSize.Star()], [],
             TextBlock(marker).VAlign(VerticalAlignment.Top),
             content.Grid(column: 1)

@@ -107,7 +107,13 @@ public sealed class LayoutFootgunDetectorTests : IDisposable
         });
         Assert.NotEmpty(rows);
         foreach (var row in rows)
+        {
+            // The detector only warns on an explicit Auto track, so the absence of a warning below
+            // is only meaningful while the rows stay implicit — an implicit row is Star, and Star
+            // stretches instead of collapsing.
+            Assert.Empty(row.Definition.Rows);
             LayoutFootgunDetector.InspectGrid(row);
+        }
         Assert.Empty(_warnings);
 
         var offender = Grid([GridSize.Auto, GridSize.Star()], [GridSize.Auto],

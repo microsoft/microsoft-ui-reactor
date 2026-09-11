@@ -149,14 +149,14 @@ internal static class MarkdownListLayoutFixtures
                                 ? block.TransformToVisual(viewport).TransformBounds(
                                     Runs(block).Last().ContentEnd.GetCharacterRect(LogicalDirection.Backward))
                                 : new Rect();
-                            return (element.DesiredSize, bounds, end);
+                            return (Desired: element.DesiredSize, Bounds: bounds, End: end);
                         }).ToArray();
                         Console.WriteLine($"# row mode: unified={unified}, explicit={explicitRow}, " +
                             $"width={width}, desired={viewport.DesiredSize}, height={viewport.ActualHeight}");
                         if (explicitRow)
                             baseline.Add(snapshot);
                         else
-                            H.Check($"ImplicitRowEquivalent_{unified}_{step}", snapshot.SequenceEqual(baseline[step]));
+                            H.Check($"ImplicitRowEquivalent_{unified}_{step}", LayoutMatches(snapshot, baseline[step]));
                         step++;
                     }
                 }
@@ -248,6 +248,29 @@ internal static class MarkdownListLayoutFixtures
                 h.Check("Wide_RestoresHeight", Math.Abs(viewport.ActualHeight - wideHeight) < 1);
         }
     }
+
+    // Two independent mounts can land a fraction of a DIP apart through sub-pixel rounding, so
+    // equivalence is measured within a tolerance rather than by exact floating-point equality.
+    private const double LayoutTolerance = 0.5;
+
+    private static bool LayoutMatches(
+        (Size Desired, Rect Bounds, Rect End)[] actual,
+        (Size Desired, Rect Bounds, Rect End)[] expected) =>
+        actual.Length == expected.Length
+        && actual.Zip(expected).All(pair =>
+            Close(pair.First.Desired, pair.Second.Desired)
+            && Close(pair.First.Bounds, pair.Second.Bounds)
+            && Close(pair.First.End, pair.Second.End));
+
+    private static bool Close(Size a, Size b) =>
+        Close(a.Width, b.Width) && Close(a.Height, b.Height);
+
+    private static bool Close(Rect a, Rect b) =>
+        Close(a.X, b.X) && Close(a.Y, b.Y) && Close(a.Width, b.Width) && Close(a.Height, b.Height);
+
+    // Equals first so the NaN and infinity components of a degenerate Rect match themselves.
+    private static bool Close(double a, double b) =>
+        a.Equals(b) || Math.Abs(a - b) <= LayoutTolerance;
 
     private static IEnumerable<Run> Runs(RichTextBlock block) =>
         block.Blocks.OfType<Paragraph>().SelectMany(p => Runs(p.Inlines));
