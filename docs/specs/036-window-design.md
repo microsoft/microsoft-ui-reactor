@@ -551,10 +551,11 @@ Because the mode no longer depends on the policy, `ShutdownPolicy` stays
 a plain store: settable from any thread, read when a surface closes, with
 no window in which the policy and the platform can disagree.
 
-Reactor only takes ownership when it owns the `Application`: an app
-embedding `ReactorHostControl` never calls `Application.Start`, so its
-mode already defaults to `OnExplicitShutdown` and Reactor must not change
-that app's lifetime.
+Reactor only takes ownership when it owns the `Application` — when
+`Application.Current` is a `ReactorApplication`. A WinUI app that embeds
+`ReactorHostControl` runs its own `Application` and manages its own
+windows, so Reactor does not decide when that process ends and leaves its
+`DispatcherShutdownMode` at whatever the app chose or inherited.
 
 ### 6.3 Per-window teardown
 

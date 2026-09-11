@@ -135,23 +135,21 @@ public class WindowShutdownPolicyTests
     }
 
     [Fact]
-    public void EvaluateShutdownPolicy_Leaves_The_App_Alive_When_A_NonPrimary_Window_Closes()
+    public void EvaluateShutdownPolicy_Accepts_Both_Polarities_Of_ClosedWasPrimary()
     {
-        // Issue #647 / #1204: an auxiliary window (a docking tear-off) opts out
-        // of the shutdown policy and is never elected primary, so closing it —
-        // even as the last window on screen — must not end the process. That
-        // guarantee is only real because Reactor owns the event loop; while the
-        // platform still had OnLastWindowClose it would unwind anyway.
-        //
-        // Exit() is unobservable headlessly, so this asserts the reachable half:
-        // the default policy's non-primary path completes without taking the
-        // exit branch. The process-level half is the probe's --exclude-window arm.
+        // Bookkeeping only. The interesting behaviour — that a non-primary close
+        // under the default policy leaves the process running, which is issue
+        // #647's guarantee and only holds because Reactor owns the event loop —
+        // is NOT assertable here: SafeExit reduces to Application.Current?.Exit()
+        // with no Application, so both branches are indistinguishable. That case
+        // is covered by the probe's --excluded-window arm, which can observe the
+        // process. This keeps only the claim this tier can actually make.
         var prior = ReactorApp.ShutdownPolicy;
         try
         {
             ReactorApp.ShutdownPolicy = ShutdownPolicy.OnPrimaryWindowClosed;
             ReactorApp.EvaluateShutdownPolicy(closedWasPrimary: false);
-            Assert.Empty(ReactorApp.Windows);
+            ReactorApp.EvaluateShutdownPolicy(closedWasPrimary: true);
         }
         finally
         {

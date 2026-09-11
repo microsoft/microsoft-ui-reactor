@@ -105,6 +105,21 @@ public class ShutdownPolicyProcessLifetimeTests
     }
 
     [TestMethod]
+    public void OnLastSurfaceClosed_Exits_When_The_Last_Window_Closes_With_No_Tray_Icon()
+    {
+        // Control for the arm above: same policy, no surviving surface, opposite
+        // outcome. Without it, a regression that made OnLastSurfaceClosed never
+        // exit would leave every other process test green — "stays alive" is the
+        // assertion everywhere else.
+        var result = RunProbe("OnLastSurfaceClosed");
+        var detail = Detail("OnLastSurfaceClosed", ProbeFlag, result);
+
+        StringAssert.Contains(result.Stdout, LoopExitedMarker,
+            $"With no window and no tray icon left, this policy must end the process.\n{detail}");
+        Assert.AreEqual(LoopExitedExitCode, result.ExitCode, detail);
+    }
+
+    [TestMethod]
     public void OnPrimaryWindowClosed_Still_Exits_When_Its_Window_Closes()
     {
         var result = RunProbe("OnPrimaryWindowClosed");

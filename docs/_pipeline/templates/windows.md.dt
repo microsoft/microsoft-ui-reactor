@@ -564,17 +564,20 @@ exit. Auxiliary windows that opt out of the shutdown policy (such as docking
 tear-off floating windows) are never elected primary, so closing one of them
 never exits the app even when it is the last *visible* window.
 
-Reactor drives WinUI's `Application.DispatcherShutdownMode` from the policy, so
-picking one is all you need. At startup Reactor switches the platform to
-`OnExplicitShutdown` — otherwise WinUI ends the process when the last window
-closes, without consulting the policy, a tray icon, or `ExcludeFromShutdownPolicy`.
-From then on the table above is exhaustive: every exit is Reactor's decision.
+Reactor takes ownership of WinUI's `Application.DispatcherShutdownMode` at
+startup, switching the platform to `OnExplicitShutdown`. Otherwise WinUI ends the
+process when the last window closes, without consulting the policy, a tray icon,
+or `ExcludeFromShutdownPolicy`. Ownership is unconditional — it does not vary with
+the policy — so the table above is exhaustive: every exit is Reactor's decision,
+made by evaluating the policy when a surface closes.
 
 Set the policy before `ReactorApp.Run` or at any point afterwards, from any
 thread; it is read when a surface closes, so there is no ordering to get right.
+Changing it does not move `DispatcherShutdownMode`.
 
-Reactor only takes that ownership when it owns the `Application`, so a host app
-that embeds `ReactorHostControl` in its own `Application` keeps its own lifetime.
+Reactor only takes that ownership when it owns the `Application`. A WinUI app that
+embeds `ReactorHostControl` runs its own `Application` and manages its own
+windows, so Reactor leaves its shutdown mode — and its lifetime — alone.
 
 ## Tips
 

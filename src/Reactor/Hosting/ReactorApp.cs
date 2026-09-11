@@ -213,13 +213,14 @@ public static partial class ReactorApp
     /// <see cref="SafeExit"/> whenever the elected primary closes, and
     /// <c>ReactorWindow</c> subscribes to the native <c>Window.Closed</c>, so a
     /// user-initiated close is observed exactly like an app-initiated one.</para>
-    /// <para>Only written when Reactor owns the <see cref="Application"/>. An app
-    /// that embeds <c>ReactorHostControl</c> in its own <see cref="Application"/>
-    /// never calls <c>Application.Start</c>, so the platform has already
-    /// defaulted its mode to <see cref="DispatcherShutdownMode.OnExplicitShutdown"/>;
-    /// writing the other value there would make that app exit when its last
-    /// window closes. Best-effort: a teardown-racing write is logged rather than
-    /// thrown, matching <see cref="SafeExit"/>.</para>
+    /// <para>Only written when Reactor owns the <see cref="Application"/> — that
+    /// is, when <see cref="Application.Current"/> is a
+    /// <see cref="ReactorApplication"/>. A WinUI app that embeds
+    /// <c>ReactorHostControl</c> runs its own <see cref="Application"/> and
+    /// manages its own windows; Reactor does not decide when that process ends,
+    /// so it must leave that app's <see cref="Application.DispatcherShutdownMode"/>
+    /// at whatever the app chose or inherited. Best-effort: a teardown-racing
+    /// write is logged rather than thrown, matching <see cref="SafeExit"/>.</para>
     /// </remarks>
     internal static void TakeOwnershipOfDispatcherLifetime()
     {

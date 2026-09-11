@@ -6,30 +6,28 @@ namespace Microsoft.UI.Reactor.AppTests.Host;
 
 /// <summary>
 /// Issue #1204 — the negative half of the ownership gate in
-/// <c>ReactorApp.SyncDispatcherShutdownMode</c>: when Reactor does <b>not</b>
-/// own the <see cref="Application"/>, setting
-/// <see cref="ReactorApp.ShutdownPolicy"/> must leave that app's
-/// <see cref="Application.DispatcherShutdownMode"/> alone.
+/// <c>ReactorApp.TakeOwnershipOfDispatcherLifetime</c>: when Reactor does
+/// <b>not</b> own the <see cref="Application"/>, nothing Reactor does may change
+/// that app's <see cref="Application.DispatcherShutdownMode"/>.
 /// </summary>
 /// <remarks>
-/// <para>The gate exists because an app embedding <c>ReactorHostControl</c> in
-/// its own <see cref="Application"/> never calls <c>Application.Start</c>, so
-/// the platform has already defaulted its mode to
-/// <see cref="DispatcherShutdownMode.OnExplicitShutdown"/>. Writing
-/// <see cref="DispatcherShutdownMode.OnLastWindowClose"/> there would make the
-/// host process exit when its last window closes — a lifetime change Reactor has
-/// no business making. <c>ReactorHost</c> also seeds
-/// <see cref="ReactorApp.UIDispatcher"/> in exactly that scenario, so the
-/// dispatcher check upstream of the gate does not stand in for it.</para>
+/// <para>The gate exists because a WinUI app that embeds
+/// <c>ReactorHostControl</c> runs its own <see cref="Application"/> and manages
+/// its own windows. Reactor does not decide when that process ends, so it must
+/// leave the property at whatever the app chose or inherited — writing
+/// <see cref="DispatcherShutdownMode.OnExplicitShutdown"/> there would stop that
+/// app exiting when its last window closes. <c>ReactorHost</c> also seeds
+/// <see cref="ReactorApp.UIDispatcher"/> in exactly that scenario, so a
+/// dispatcher check would not stand in for the gate.</para>
 /// <para>This needs its own process and its own mode because the gate's
 /// condition is <c>Application.Current is ReactorApplication</c>: inside the
 /// selftest host that is always true, so no in-process fixture can reach the
 /// branch. Here a plain <see cref="Application"/> subclass owns the process
 /// instead.</para>
-/// <para>The seeded mode is deliberately the one Reactor would write for the
-/// policy under test's <i>opposite</i>, so a gate that failed open would flip it
-/// and be caught. <c>GATE-VIOLATED</c> is therefore a reachable outcome, not a
-/// branch that can only ever print success.</para>
+/// <para>The seeded value is deliberately the opposite of what Reactor writes
+/// when it <i>does</i> own the app, so a gate that failed open would visibly flip
+/// it. <c>GATE-VIOLATED</c> is therefore a reachable outcome, not a branch that
+/// can only ever print success.</para>
 /// </remarks>
 internal static partial class ShutdownPolicyGateProbe
 {
@@ -76,9 +74,9 @@ internal static partial class ShutdownPolicyGateProbe
                     // ReactorHost's constructor does for ReactorHostControl.
                     ReactorApp.UIDispatcher = dispatcher;
 
-                    // OnLastWindowClose is what Reactor writes for the DEFAULT
-                    // policy, so seeding it here means a gate that failed open
-                    // would visibly flip it to OnExplicitShutdown below.
+                    // Seed the opposite of what Reactor writes when it owns the
+                    // app (OnExplicitShutdown), so a gate that failed open would
+                    // visibly flip this to OnExplicitShutdown below.
                     Application.Current.DispatcherShutdownMode = DispatcherShutdownMode.OnLastWindowClose;
                     var seeded = Application.Current.DispatcherShutdownMode;
                     Console.WriteLine($"SEEDED {seeded}");
