@@ -13,6 +13,15 @@
     <!-- Full WinUI host (selftest runner); bundle the WAS runtime so the
          exe launches without depending on the machine-wide install. -->
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- BLOCKED / PLACEHOLDER — see the pull request description and the version
+         comment in Directory.Build.props. Self-contained projects normally take
+         the Microsoft.WindowsAppSDK metapackage (see the injection rule in
+         Directory.Build.targets), but the experimental aggregate caps WinUI below
+         3.0.0 and wants a newer Foundation, so it cannot resolve alongside the
+         WinUI slice carrying the code-based DataTemplate constructor. Opt out of
+         the injection and take the self-consistent split packages instead.
+         Revert this block once the API ships in a public Windows App SDK. -->
+    <ReactorSkipWinAppSDKInjection>true</ReactorSkipWinAppSDKInjection>
     <!-- CsWinRT1030: generic WinRT-implementing collection use (e.g. List<Border>
          in SplitterMatrixFixtures) requires the CsWinRT-generated marshaling
          code to use unsafe blocks. This flag enables that for the generated
@@ -55,6 +64,14 @@
 
   <ItemGroup>
     <PackageReference Include="MessageFormat" />
+  </ItemGroup>
+
+  <!-- BLOCKED / PLACEHOLDER — the explicit split-package references that replace
+       the metapackage injection skipped above. Revert together with
+       ReactorSkipWinAppSDKInjection once the API ships publicly. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" />
   </ItemGroup>
 
   <ItemGroup>
