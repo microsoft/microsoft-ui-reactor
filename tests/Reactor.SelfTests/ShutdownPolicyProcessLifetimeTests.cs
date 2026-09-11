@@ -82,7 +82,9 @@ public class ShutdownPolicyProcessLifetimeTests
         var detail = Detail("Explicit", ProbeFlag, result);
 
         StringAssert.Contains(result.Stdout, AliveMarker,
-            $"The process exited when its last window closed — DispatcherShutdownMode was never raised to OnExplicitShutdown.\n{detail}");
+            $"The process exited when its last window closed — Reactor never took ownership of the event loop.\n{detail}");
+        StringAssert.Contains(result.Stdout, "windows=0",
+            $"The window was still open, so the process staying alive proves nothing about last-window-close.\n{detail}");
         Assert.AreEqual(AliveExitCode, result.ExitCode,
             $"ReactorApp.Exit() should have been the only thing that ended the process.\n{detail}");
     }
@@ -99,8 +101,8 @@ public class ShutdownPolicyProcessLifetimeTests
 
         StringAssert.Contains(result.Stdout, AliveMarker,
             $"A live tray icon should have kept the process running after the last window closed.\n{detail}");
-        StringAssert.Contains(result.Stdout, "trayIcons=1",
-            $"The probe reported no tray icon, so this run did not exercise the surviving-surface case.\n{detail}");
+        StringAssert.Contains(result.Stdout, "windows=0 trayIcons=1",
+            $"This run did not reach 'last window closed, tray icon surviving', so a live process proves nothing.\n{detail}");
         Assert.AreEqual(AliveExitCode, result.ExitCode, detail);
     }
 
@@ -209,6 +211,8 @@ public class ShutdownPolicyProcessLifetimeTests
             $"The probe's window was elected primary, so this run never reached the auxiliary-window case.\n{detail}");
         StringAssert.Contains(result.Stdout, AliveMarker,
             $"Closing an auxiliary window ended the process, contradicting the documented issue-#647 behaviour.\n{detail}");
+        StringAssert.Contains(result.Stdout, "windows=0",
+            $"The auxiliary window never closed, so a live process proves nothing about closing one.\n{detail}");
         Assert.AreEqual(AliveExitCode, result.ExitCode, detail);
     }
 

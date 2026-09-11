@@ -133,27 +133,4 @@ public class WindowShutdownPolicyTests
             ReactorApp.ShutdownPolicy = prior;
         }
     }
-
-    [Fact]
-    public void EvaluateShutdownPolicy_Accepts_Both_Polarities_Of_ClosedWasPrimary()
-    {
-        // Bookkeeping only. The interesting behaviour — that a non-primary close
-        // under the default policy leaves the process running, which is issue
-        // #647's guarantee and only holds because Reactor owns the event loop —
-        // is NOT assertable here: SafeExit reduces to Application.Current?.Exit()
-        // with no Application, so both branches are indistinguishable. That case
-        // is covered by the probe's --excluded-window arm, which can observe the
-        // process. This keeps only the claim this tier can actually make.
-        var prior = ReactorApp.ShutdownPolicy;
-        try
-        {
-            ReactorApp.ShutdownPolicy = ShutdownPolicy.OnPrimaryWindowClosed;
-            ReactorApp.EvaluateShutdownPolicy(closedWasPrimary: false);
-            ReactorApp.EvaluateShutdownPolicy(closedWasPrimary: true);
-        }
-        finally
-        {
-            ReactorApp.ShutdownPolicy = prior;
-        }
-    }
 }

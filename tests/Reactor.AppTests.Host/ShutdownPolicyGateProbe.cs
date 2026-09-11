@@ -75,8 +75,7 @@ internal static partial class ShutdownPolicyGateProbe
                     ReactorApp.UIDispatcher = dispatcher;
 
                     // Seed the opposite of what Reactor writes when it owns the
-                    // app (OnExplicitShutdown), so a gate that failed open would
-                    // visibly flip this to OnExplicitShutdown below.
+                    // app, so a gate that failed open would visibly flip this.
                     Application.Current.DispatcherShutdownMode = DispatcherShutdownMode.OnLastWindowClose;
                     var seeded = Application.Current.DispatcherShutdownMode;
                     Console.WriteLine($"SEEDED {seeded}");
@@ -89,6 +88,15 @@ internal static partial class ShutdownPolicyGateProbe
                     }
 
                     ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+
+                    // Drive the ownership path DIRECTLY. Setting the policy is
+                    // deliberately a plain store — it writes nothing to the
+                    // platform — so going through the setter would make
+                    // GATE-VIOLATED unreachable and this probe would report
+                    // success even with the gate deleted. The gate lives in
+                    // TakeOwnershipOfDispatcherLifetime, so that is what has to
+                    // be called here. OnLaunched invokes exactly this method.
+                    ReactorApp.TakeOwnershipOfDispatcherLifetime();
 
                     var after = Application.Current.DispatcherShutdownMode;
                     Console.WriteLine($"AFTER {after} policy={ReactorApp.ShutdownPolicy}");
