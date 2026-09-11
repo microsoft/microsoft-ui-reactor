@@ -42,6 +42,8 @@ public class ShutdownPolicyProcessLifetimeTests
     private const string ExcludedWindowFlag = "--excluded-window";
     private const string CloseTrayFlag = "--close-tray";
     private const string LegacyRunFlag = "--legacy-run";
+    private const string ThrowInStartupFlag = "--throw-in-startup";
+    private const string StartupThrewMarker = "STARTUP-THREW";
     private const string ClosingMarker = "CLOSING";
     private const string GateProbeFlag = "--shutdown-policy-gate-probe";
     private const int AliveExitCode = 42;
@@ -75,8 +77,16 @@ public class ShutdownPolicyProcessLifetimeTests
         // which is also what a window that opened and closed leaves behind, so
         // bypassing the zero-surface branch would leave them green too. Requiring
         // the markers to be ABSENT is what pins them to the startup path.
+        //
+        // The throwing arms are exempt from both: they never reach either branch,
+        // and they carry their own marker (STARTUP-THREW) plus termination as the
+        // oracle.
         var detail = Detail(policy, args, result);
-        if (!flags.Contains(NoWindowFlag))
+        if (flags.Contains(ThrowInStartupFlag))
+        {
+            // nothing to assert here — the caller checks STARTUP-THREW.
+        }
+        else if (!flags.Contains(NoWindowFlag))
         {
             StringAssert.Contains(result.Stdout, "OPENED",
                 $"The probe never opened a window, so this is not a last-window-close run.\n{detail}");
@@ -316,6 +326,48 @@ public class ShutdownPolicyProcessLifetimeTests
         StringAssert.Contains(result.Stdout, LoopExitedMarker,
             $"The legacy entry point must still exit when its primary window closes.\n{detail}");
         Assert.AreEqual(LoopExitedExitCode, result.ExitCode, detail);
+    }
+
+    // ── handled startup failures ───────────────────────────────────────────
+    //
+    // Once Reactor owns the loop, a startup that throws has no surfaces and no
+    // platform fallback, so the zero-surface decision runs from a finally.
+    //
+    // These arms assert only that such a launch TERMINATES, and deliberately not
+    // that the finally is what terminated it. Measured: an exception propagating
+    // out of OnLaunched fast-fails the XAML runtime (exit 0xC000027B) even when
+    // ReactorApplication.OnUnhandledException returns true, so the hang the
+    // finally guards against is not reachable this way today and no assertion
+    // here can be attributed to it. They stay as a regression net — a future
+    // WinUI that lets a handled startup exception continue would turn this into
+    // a timeout — and the honest claim is "does not hang", nothing more.
+
+    [TestMethod]
+    public void A_Handled_Startup_Failure_Does_Not_Leave_The_Process_Running()
+    {
+        // RunHost asserts non-timeout, which is the substance of this test.
+        var result = RunProbe("OnPrimaryWindowClosed", ThrowInStartupFlag);
+        var detail = Detail("OnPrimaryWindowClosed", $"{ProbeFlag} {ThrowInStartupFlag}", result);
+
+        StringAssert.Contains(result.Stdout, StartupThrewMarker,
+            $"The startup callback did not throw, so this run did not exercise the failure path.\n{detail}");
+        Assert.AreNotEqual(AliveExitCode, result.ExitCode,
+            $"A failed startup reported itself alive.\n{detail}");
+    }
+
+    [TestMethod]
+    public void A_Handled_Configure_Failure_Does_Not_Leave_The_Process_Running()
+    {
+        // The legacy bridge's equivalent. configure runs after ReactorWindow has
+        // created its native window, so this also drives the OpenWindowCore
+        // cleanup that closes and disposes it.
+        var result = RunProbe("OnPrimaryWindowClosed", LegacyRunFlag, ThrowInStartupFlag);
+        var detail = Detail("OnPrimaryWindowClosed", $"{ProbeFlag} {LegacyRunFlag} {ThrowInStartupFlag}", result);
+
+        StringAssert.Contains(result.Stdout, StartupThrewMarker,
+            $"The configure callback did not throw, so this run did not exercise the failure path.\n{detail}");
+        Assert.AreNotEqual(AliveExitCode, result.ExitCode,
+            $"A failed configure reported itself alive.\n{detail}");
     }
 
     // ── ownership gate (negative case) ─────────────────────────────────────

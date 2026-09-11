@@ -94,6 +94,23 @@ internal static class ShutdownPolicyProbe
     /// </summary>
     internal const string LegacyRunFlag = "--legacy-run";
 
+    /// <summary>
+    /// Throw from the launch path — <c>startup</c>, or the legacy <c>configure</c>
+    /// callback with <see cref="LegacyRunFlag"/> — and mark the exception handled
+    /// via <see cref="ReactorApplication.OnUnhandledException"/>.
+    /// </summary>
+    /// <remarks>
+    /// Intended to drive the <c>finally</c> that runs the zero-surface decision.
+    /// Measured caveat: an exception propagating out of <c>OnLaunched</c>
+    /// fast-fails the XAML runtime (exit <c>0xC000027B</c>) even when the handler
+    /// returns <c>true</c>, so the process terminates either way and the arms
+    /// built on this flag can only assert "does not hang". Kept because that is
+    /// still the regression worth catching, and because the legacy variant
+    /// exercises the <c>OpenWindowCore</c> cleanup for a window whose pre-mount
+    /// callback threw.
+    /// </remarks>
+    internal const string ThrowInStartupFlag = "--throw-in-startup";
+
     internal const int AliveExitCode = 42;
     internal const int LoopExitedExitCode = 1;
     internal const int UsageExitCode = 64;
@@ -103,6 +120,7 @@ internal static class ShutdownPolicyProbe
     internal const string LoopExitedMarker = "LOOP-EXITED";
     internal const string ClosingMarker = "CLOSING";
     internal const string ReopenedMarker = "REOPENED";
+    internal const string StartupThrewMarker = "STARTUP-THREW";
     internal const string TrayClosedMarker = "TRAY-CLOSED";
 
     /// <summary>Settle time before the window is closed.</summary>
@@ -124,7 +142,7 @@ internal static class ShutdownPolicyProbe
         {
             Console.Error.WriteLine(
                 $"usage: {Flag} <{string.Join('|', Enum.GetNames<ShutdownPolicy>())}> " +
-                $"[{TrayFlag}] [{NoWindowFlag}] [{ReopenFlag}] [{ExcludedWindowFlag}] [{CloseTrayFlag}] [{LegacyRunFlag}]");
+                $"[{TrayFlag}] [{NoWindowFlag}] [{ReopenFlag}] [{ExcludedWindowFlag}] [{CloseTrayFlag}] [{LegacyRunFlag}] [{ThrowInStartupFlag}]");
             return UsageExitCode;
         }
 
@@ -134,10 +152,41 @@ internal static class ShutdownPolicyProbe
         var excluded = args.Contains(ExcludedWindowFlag);
         var closeTray = args.Contains(CloseTrayFlag);
         var legacyRun = args.Contains(LegacyRunFlag);
+        var throwInStartup = args.Contains(ThrowInStartupFlag);
 
         ReactorApp.ShutdownPolicy = policy;
         Console.WriteLine(
-            $"POLICY {policy} tray={withTray} noWindow={noWindow} reopen={reopen} excluded={excluded} legacy={legacyRun}");
+            $"POLICY {policy} tray={withTray} noWindow={noWindow} reopen={reopen} excluded={excluded} legacy={legacyRun} throws={throwInStartup}");
+
+        if (throwInStartup)
+        {
+            // Handled, so the exception does not end the process on its own —
+            // which is the whole point: what ends it must be the zero-surface
+            // decision running from the finally.
+            ReactorApplication.OnUnhandledException = _ =>
+            {
+                Console.WriteLine(StartupThrewMarker);
+                Console.Out.Flush();
+                return true;
+            };
+
+            if (legacyRun)
+            {
+                ReactorApp.Run<ProbeContent>(
+                    "Shutdown Policy Probe (throwing configure)",
+                    width: 320,
+                    height: 200,
+                    configure: _ => throw new InvalidOperationException("probe: configure failed"));
+            }
+            else
+            {
+                ReactorApp.Run(_ => throw new InvalidOperationException("probe: startup failed"));
+            }
+
+            Console.WriteLine(LoopExitedMarker);
+            Console.Out.Flush();
+            return LoopExitedExitCode;
+        }
 
         if (legacyRun)
         {

@@ -733,8 +733,18 @@ public static partial class ReactorApp
         }
         catch (Exception)
         {
-            // Idempotent when the failure happened before RegisterWindow.
+            // Unregister BEFORE closing: UnregisterWindow no-ops when the window
+            // was never registered (a configure throw), and doing it first means
+            // the close cascade's own unregister is the no-op instead — so a
+            // failed open cannot run EvaluateShutdownPolicy and decide to exit.
+            // The zero-surface decision on the launch paths owns that call.
             UnregisterWindow(window);
+            // Dispose alone is not enough: it unsubscribes handlers and tears
+            // down the host, but never closes the native Window the
+            // ReactorWindow ctor already created. Without this, a failed open
+            // leaves a live untracked window on screen — most visibly under
+            // ShutdownPolicy.Explicit, where the process keeps running.
+            try { window.Close(); } catch { /* best effort */ }
             try { window.Dispose(); } catch { /* best effort */ }
             throw;
         }
