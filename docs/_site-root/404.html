@@ -43,7 +43,18 @@
           window.location.replace(
             base + "latest/" + rest + window.location.search + window.location.hash
           );
+          return;
         }
+
+        // Not redirecting, so the body below is what the reader sees. Point its
+        // link at the same base the redirect would have used, rather than a
+        // hardcoded project path that would be wrong on a custom domain.
+        document.addEventListener("DOMContentLoaded", function () {
+          var link = document.getElementById("latest-link");
+          if (link) {
+            link.setAttribute("href", base + "latest/");
+          }
+        });
       })();
     </script>
   </head>
@@ -52,7 +63,7 @@
     <p>
       This page may have moved. The documentation is now published per release —
       try the
-      <a href="/microsoft-ui-reactor/latest/">latest release documentation</a>.
+      <a id="latest-link" href="/microsoft-ui-reactor/latest/">latest release documentation</a>.
     </p>
   </body>
 </html>

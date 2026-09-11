@@ -118,6 +118,16 @@ jobs:
         env:
           BACKFILL_TAGS: ${{ inputs.backfill_tags }}
         run: |
+          # A typo'd or missing-`v` tag must fail before anything is published:
+          # the loop below pushes as it goes, so discovering a bad tag halfway
+          # would leave the site half-updated.
+          for tag in $BACKFILL_TAGS; do
+            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "::error::backfill_tags: '$tag' is not a tag in this repository. Use full release tags, including the leading v — for example v0.1.0-preview.14."
+              exit 1
+            fi
+          done
+
           # Tags cut before versioning existed carry no version selector in their
           # own mkdocs.yml, so the config and theme override from this ref are
           # layered over each tag checkout. That only works while the tag's page
@@ -129,6 +139,12 @@ jobs:
           cp -r docs/_overrides "$overlay/_overrides"
 
           newest="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+
+          # Highest of the requested tags, ordered by git's version sort rather
+          # than the order the operator happened to type them in.
+          printf '%s\n' $BACKFILL_TAGS > "$RUNNER_TEMP/backfill-tags.txt"
+          highest_backfilled="$(git tag --list 'v*' --sort=-v:refname \
+            | grep -Fxf "$RUNNER_TEMP/backfill-tags.txt" | head -n 1)"
 
           for tag in $BACKFILL_TAGS; do
             echo "::group::Publishing $tag"
@@ -150,18 +166,21 @@ jobs:
 
           git checkout --force "$GITHUB_SHA"
 
-          # The loop above only assigns `latest` to the newest tag, so a backfill
-          # that omits it leaves the alias undefined — and `mike set-default`
-          # errors on an identifier that does not exist. Fall back through the
-          # versions that could plausibly anchor the site root instead of failing
-          # after the versions have already been pushed.
+          # `mike deploy` writes version directories but never the site root's
+          # index.html — only `set-default` does — so the root would 404 unless
+          # something is selected here. `latest` is the goal; main is the
+          # stand-in before any release is published; and failing those, the
+          # newest version this run published is better than no root at all.
+          # (It is transient either way: the next main push or release tag
+          # re-points the root.)
           if mike list --branch "$MIKE_BRANCH" "$LATEST_ALIAS" >/dev/null 2>&1; then
             mike set-default --branch "$MIKE_BRANCH" --push "$LATEST_ALIAS"
           elif mike list --branch "$MIKE_BRANCH" "$MAIN_VERSION" >/dev/null 2>&1; then
             echo "No $LATEST_ALIAS alias yet — pointing the site root at $MAIN_VERSION."
             mike set-default --branch "$MIKE_BRANCH" --push "$MAIN_VERSION"
           else
-            echo "Neither $LATEST_ALIAS nor $MAIN_VERSION is published; leaving the site root default unchanged."
+            echo "Neither $LATEST_ALIAS nor $MAIN_VERSION is published — pointing the site root at ${highest_backfilled#v}."
+            mike set-default --branch "$MIKE_BRANCH" --push "${highest_backfilled#v}"
           fi
 
       - name: Assemble the Pages artifact from every published version
@@ -174,11 +193,17 @@ jobs:
           # Forwards legacy unversioned URLs to the same page under `latest`.
           # Kept out of the mike branch deliberately: it is a property of how the
           # site is served, not of any one published version, so it is refreshed
-          # from this ref on every deploy.
-          if [ -f docs/_site-root/404.html ]; then
-            cp docs/_site-root/404.html site/404.html
-          else
-            echo "::warning::docs/_site-root/404.html is missing — legacy unversioned links will 404."
+          # from this ref on every deploy. It is tracked in the repo, so a
+          # missing file means something is wrong rather than absent by choice.
+          cp docs/_site-root/404.html site/404.html
+
+          # `mike deploy` writes version directories but never the root
+          # index.html; only `set-default` does. Publishing without one leaves
+          # the site root a 404, which is worth catching here rather than in a
+          # bug report.
+          if [ ! -f site/index.html ]; then
+            echo "::error::The assembled site has no root index.html, so the site root would 404. A publish step must run mike set-default."
+            exit 1
           fi
 
           echo "Publishing these versions:"

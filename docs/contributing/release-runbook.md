@@ -214,20 +214,27 @@ backwards.
 
 Before versioning, pages lived at unversioned paths such as
 `https://microsoft.github.io/microsoft-ui-reactor/getting-started/`. Those paths no longer
-exist — every page now sits under a version directory — so `docs/_site-root/404.html` is
-copied to the published site root and forwards them to the same page under `latest`,
-preserving any query string and anchor. GitHub Pages serves that file for any unmatched path
-under the project site.
+exist — every page now sits under a version directory — so the publish workflow copies
+`docs/_site-root/404.html` to the published site root, where GitHub Pages serves it for
+unmatched paths. It forwards those legacy paths to the same page under `latest`, preserving
+any query string and anchor.
 
 It deliberately does **not** forward a path that already starts with a published version or
 alias (`latest`, `main`, or anything beginning with a digit): those are genuine 404s inside a
 published version, and forwarding them would produce nonsense paths or a redirect loop. If
 version identifiers ever stop matching that shape, update the guard in that file.
 
+MkDocs never sees this file, so `mkdocs build --strict` cannot catch a mistake in it. Its
+behaviour is covered by `docs/_site-root/404.redirect.test.js` instead — run it with
+`node docs/_site-root/404.redirect.test.js`, or let CI run it via `SiteRootRedirectTests` in
+`tests/Reactor.DocPipeline.Tests`.
+
 ### Publishing a version retroactively
 
 Run the `Publish docs` workflow manually and set **backfill_tags** to a space-separated tag
-list, e.g. `v0.1.0-preview.12 v0.1.0-preview.13`. Each tag is checked out and built in turn.
+list, e.g. `v0.1.0-preview.12 v0.1.0-preview.13`. Every tag is verified to exist before
+anything is published — a typo or a missing leading `v` fails the run up front rather than
+halfway through — and each tag is then checked out and built in turn.
 
 Tags cut before versioning existed carry no version selector in their own `mkdocs.yml`, so
 the backfill layers the `mkdocs.yml` and `docs/_overrides/` from the ref you dispatch from
