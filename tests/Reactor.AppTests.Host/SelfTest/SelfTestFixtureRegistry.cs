@@ -66,6 +66,16 @@ internal static class SelfTestFixtureRegistry
         "Markdown_Links",
         "Markdown_BlockQuotes",
         "Markdown_UnorderedList",
+        "Markdown_ListLayout_Plain",
+        "Markdown_ListLayout_Bold",
+        "Markdown_ListLayout_Ordered",
+        "Markdown_ListLayout_Loose",
+        "Markdown_ListLayout_Nested",
+        "Markdown_ListLayout_Code",
+        "Markdown_ListLayout_Tasks",
+        "Markdown_ListLayout_Unified",
+        "Markdown_ListLayout_Short",
+        "Markdown_ListLayout_RowMeasureEquivalence",
         "Markdown_OrderedList",
         "Markdown_TaskList",
         "Markdown_TableWithAlignment",
@@ -1973,6 +1983,16 @@ internal static class SelfTestFixtureRegistry
         "Markdown_Links" => new MarkdownFixtures.Links(harness),
         "Markdown_BlockQuotes" => new MarkdownFixtures.BlockQuotes(harness),
         "Markdown_UnorderedList" => new MarkdownFixtures.UnorderedList(harness),
+        "Markdown_ListLayout_Plain" => new MarkdownListLayoutFixtures.Plain(harness),
+        "Markdown_ListLayout_Bold" => new MarkdownListLayoutFixtures.Bold(harness),
+        "Markdown_ListLayout_Ordered" => new MarkdownListLayoutFixtures.Ordered(harness),
+        "Markdown_ListLayout_Loose" => new MarkdownListLayoutFixtures.Loose(harness),
+        "Markdown_ListLayout_Nested" => new MarkdownListLayoutFixtures.Nested(harness),
+        "Markdown_ListLayout_Code" => new MarkdownListLayoutFixtures.Code(harness),
+        "Markdown_ListLayout_Tasks" => new MarkdownListLayoutFixtures.Tasks(harness),
+        "Markdown_ListLayout_Unified" => new MarkdownListLayoutFixtures.Unified(harness),
+        "Markdown_ListLayout_Short" => new MarkdownListLayoutFixtures.Short(harness),
+        "Markdown_ListLayout_RowMeasureEquivalence" => new MarkdownListLayoutFixtures.RowMeasureEquivalence(harness),
         "Markdown_OrderedList" => new MarkdownFixtures.OrderedList(harness),
         "Markdown_TaskList" => new MarkdownFixtures.TaskList(harness),
         "Markdown_TableWithAlignment" => new MarkdownFixtures.TableWithAlignment(harness),
@@ -3619,8 +3639,6 @@ internal static class SelfTestFixtureRegistry
         _ => null,
     };
 }
-
-
 
 
 

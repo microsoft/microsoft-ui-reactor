@@ -85,6 +85,12 @@ Conventions for contributors:
 
 ### Changed
 
+- **Markdown list-item defaults now use `GridElement` rather than `StackElement`
+  ([openclaw/openclaw-windows-node#1362](https://github.com/openclaw/openclaw-windows-node/issues/1362)).**
+  `MarkdownOptions.ListItem` still receives an `Element` after default construction
+  and may wrap or replace it. Callbacks that cast the default to `StackElement`
+  must adapt to the Auto/Star Grid.
+
 - **The documentation site is published per release, with a version selector (no
   product code changed).** <https://microsoft.github.io/microsoft-ui-reactor/> was
   rebuilt from the tip of `main` on every docs push, so it only ever showed unreleased
@@ -123,6 +129,13 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- **Long Markdown list content wraps within finite available width
+  ([openclaw/openclaw-windows-node#1362](https://github.com/openclaw/openclaw-windows-node/issues/1362)).**
+  Default list rows now measure content in a Star column beside an Auto-sized marker
+  instead of a horizontal StackPanel's infinite-width measure. Plain, formatted,
+  ordered, nested, task-list and multi-block content keep their markers, spacing
+  and selection, including in unified rich-text mode.
 
 - `REACTOR_MOD_002` now covers four properties `ElementPool.CleanElement` resets that no
   diagnostic mentioned at all: `IsHitTestVisible`, `Stretch`, `StretchDirection` and `IsActive`.
