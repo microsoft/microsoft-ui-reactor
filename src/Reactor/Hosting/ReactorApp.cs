@@ -988,7 +988,9 @@ public static partial class ReactorApp
         if (policy == ShutdownPolicy.Explicit) return;
         if (policy == ShutdownPolicy.OnLastSurfaceClosed && TrayIconCount != 0) return;
 
-        try { RequestEventLoopExit(); } catch { /* best effort */ }
+        // RequestEventLoopExit handles and logs its own failures, so there is
+        // nothing left to guard here.
+        RequestEventLoopExit();
     }
 
     /// <summary>
@@ -1013,7 +1015,7 @@ public static partial class ReactorApp
             Application.Current?.Exit();
             return;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or COMException)
         {
             AppLogger?.LogError(ex, "ReactorApp: Application.Exit() failed; falling back to EnqueueEventLoopExit.");
             global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.GetType().Name}: {ex.Message}");
@@ -1023,7 +1025,7 @@ public static partial class ReactorApp
         {
             UIDispatcher?.EnqueueEventLoopExit();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or COMException)
         {
             AppLogger?.LogError(ex, "ReactorApp: EnqueueEventLoopExit() also failed; the event loop may not terminate.");
             global::System.Diagnostics.Debug.WriteLine($"[Reactor] EnqueueEventLoopExit threw: {ex.GetType().Name}: {ex.Message}");
