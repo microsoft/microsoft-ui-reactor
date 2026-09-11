@@ -142,5 +142,5 @@ internal static partial class ShutdownPolicyGateProbe
     /// class deriving from a WinRT type: <c>CsWinRT1028</c> is an error under
     /// this repo's Release warnings-as-errors settings.
     /// </remarks>
-    private sealed partial class EmbedderApplication : Application;
+    private sealed partial class EmbedderApplication : Application { }
 }

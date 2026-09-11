@@ -40,6 +40,7 @@ public class ShutdownPolicyProcessLifetimeTests
     private const string ReopenFlag = "--reopen";
     private const string ExcludedWindowFlag = "--excluded-window";
     private const string CloseTrayFlag = "--close-tray";
+    private const string LegacyRunFlag = "--legacy-run";
     private const string ClosingMarker = "CLOSING";
     private const string GateProbeFlag = "--shutdown-policy-gate-probe";
     private const int AliveExitCode = 42;
@@ -240,6 +241,8 @@ public class ShutdownPolicyProcessLifetimeTests
         var result = RunProbe("Explicit", TrayFlag, ReopenFlag);
         var detail = Detail("Explicit", $"{ProbeFlag} {TrayFlag} {ReopenFlag}", result);
 
+        StringAssert.Contains(result.Stdout, "STILL-ALIVE windows=0 trayIcons=1",
+            $"The process had not actually outlived its last window when the reopen ran.\n{detail}");
         StringAssert.Contains(result.Stdout, ReopenedMarker,
             $"The probe never reached the reopen step.\n{detail}");
         StringAssert.Contains(result.Stdout, "before=0 after=1",
@@ -268,6 +271,38 @@ public class ShutdownPolicyProcessLifetimeTests
         StringAssert.Contains(result.Stdout, "windows=0",
             $"The auxiliary window never closed, so a live process proves nothing about closing one.\n{detail}");
         Assert.AreEqual(AliveExitCode, result.ExitCode, detail);
+    }
+
+    [TestMethod]
+    public void Explicit_Keeps_Process_Alive_Through_The_Legacy_Run_Entry_Point()
+    {
+        // ReactorApp.Run<TRoot> reaches OnLaunched by a different branch than
+        // Run(startup) and takes dispatcher ownership at its own call site.
+        // Every other arm goes through the callback overload, so without this
+        // one that call site could be deleted with the suite still green.
+        var result = RunProbe("Explicit", LegacyRunFlag);
+        var detail = Detail("Explicit", $"{ProbeFlag} {LegacyRunFlag}", result);
+
+        StringAssert.Contains(result.Stdout, "legacy=True",
+            $"This run did not take the legacy entry point.\n{detail}");
+        StringAssert.Contains(result.Stdout, AliveMarker,
+            $"The legacy Run<TRoot> entry point exited on last-window-close.\n{detail}");
+        StringAssert.Contains(result.Stdout, "windows=0",
+            $"The window was still open, so a live process proves nothing.\n{detail}");
+        Assert.AreEqual(AliveExitCode, result.ExitCode, detail);
+    }
+
+    [TestMethod]
+    public void OnPrimaryWindowClosed_Exits_Through_The_Legacy_Run_Entry_Point()
+    {
+        // Control for the arm above: same entry point, default policy, opposite
+        // outcome.
+        var result = RunProbe("OnPrimaryWindowClosed", LegacyRunFlag);
+        var detail = Detail("OnPrimaryWindowClosed", $"{ProbeFlag} {LegacyRunFlag}", result);
+
+        StringAssert.Contains(result.Stdout, LoopExitedMarker,
+            $"The legacy entry point must still exit when its primary window closes.\n{detail}");
+        Assert.AreEqual(LoopExitedExitCode, result.ExitCode, detail);
     }
 
     // ── ownership gate (negative case) ─────────────────────────────────────

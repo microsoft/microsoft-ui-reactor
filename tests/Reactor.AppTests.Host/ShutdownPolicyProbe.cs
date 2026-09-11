@@ -85,6 +85,15 @@ internal static class ShutdownPolicyProbe
     /// </summary>
     internal const string CloseTrayFlag = "--close-tray";
 
+    /// <summary>
+    /// Launch through the legacy <c>ReactorApp.Run&lt;TRoot&gt;</c> bridge rather
+    /// than the <c>Run(startup)</c> callback. The two entry points reach
+    /// <c>OnLaunched</c> by different branches and take dispatcher ownership at
+    /// different call sites, so an arm that only ever exercises one of them
+    /// leaves the other unobserved.
+    /// </summary>
+    internal const string LegacyRunFlag = "--legacy-run";
+
     internal const int AliveExitCode = 42;
     internal const int LoopExitedExitCode = 1;
     internal const int UsageExitCode = 64;
@@ -115,7 +124,7 @@ internal static class ShutdownPolicyProbe
         {
             Console.Error.WriteLine(
                 $"usage: {Flag} <{string.Join('|', Enum.GetNames<ShutdownPolicy>())}> " +
-                $"[{TrayFlag}] [{NoWindowFlag}] [{ReopenFlag}] [{ExcludedWindowFlag}] [{CloseTrayFlag}]");
+                $"[{TrayFlag}] [{NoWindowFlag}] [{ReopenFlag}] [{ExcludedWindowFlag}] [{CloseTrayFlag}] [{LegacyRunFlag}]");
             return UsageExitCode;
         }
 
@@ -124,10 +133,44 @@ internal static class ShutdownPolicyProbe
         var reopen = args.Contains(ReopenFlag);
         var excluded = args.Contains(ExcludedWindowFlag);
         var closeTray = args.Contains(CloseTrayFlag);
+        var legacyRun = args.Contains(LegacyRunFlag);
 
         ReactorApp.ShutdownPolicy = policy;
         Console.WriteLine(
-            $"POLICY {policy} tray={withTray} noWindow={noWindow} reopen={reopen} excluded={excluded}");
+            $"POLICY {policy} tray={withTray} noWindow={noWindow} reopen={reopen} excluded={excluded} legacy={legacyRun}");
+
+        if (legacyRun)
+        {
+            // Run<TRoot> has no startup callback, so the pre-mount `configure`
+            // hook is where the close gets scheduled. It runs on the UI thread
+            // before RegisterWindow, hence the timer: by the time it ticks,
+            // ReactorApp.PrimaryWindow is set.
+            ReactorApp.Run<ProbeContent>(
+                "Shutdown Policy Probe (legacy)",
+                width: 320,
+                height: 200,
+                configure: _ =>
+                {
+                    var dq = ReactorApp.UIDispatcher!;
+                    var timer = dq.CreateTimer();
+                    timer.Interval = TimeSpan.FromMilliseconds(SettleMs);
+                    timer.IsRepeating = false;
+                    timer.Tick += (_, _) =>
+                    {
+                        Console.WriteLine(
+                            $"OPENED primaryElected={ReactorApp.PrimaryWindow is not null} windows={ReactorApp.Windows.Count}");
+                        Console.WriteLine(ClosingMarker);
+                        Console.Out.Flush();
+                        ReactorApp.PrimaryWindow?.Close();
+                        StartAliveTimer(dq, reopen, closeTray);
+                    };
+                    timer.Start();
+                });
+
+            Console.WriteLine(LoopExitedMarker);
+            Console.Out.Flush();
+            return LoopExitedExitCode;
+        }
 
         ReactorApp.Run(_ =>
         {

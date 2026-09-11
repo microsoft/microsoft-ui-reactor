@@ -904,10 +904,10 @@ startup, switching the platform to `OnExplicitShutdown`. Otherwise WinUI ends th
 process when the last window closes, without consulting the policy, a tray icon,
 or `ExcludeFromShutdownPolicy`. Ownership is unconditional — it does not vary with
 the policy — so the table above is exhaustive for surface closes: when a window or
-tray icon closes, the policy alone decides. The process can also end in two other
-ways, neither of which involves the platform: a startup callback that opens no
-surface at all exits immediately under `OnPrimaryWindowClosed`, and
-`ReactorApp.Exit()` always works.
+tray icon closes, the policy alone decides. The process can also end two other
+ways, both of which ask WinUI to exit outright rather than letting it decide: a
+startup callback that opens no surface at all exits immediately under
+`OnPrimaryWindowClosed`, and `ReactorApp.Exit()` always works.
 
 Set the policy before `ReactorApp.Run` or at any point afterwards, from any
 thread; it is read when a surface closes, so there is no ordering to get right.
