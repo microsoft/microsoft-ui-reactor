@@ -720,14 +720,20 @@ public static partial class ReactorApp
     {
         ReactorWindow window = new ReactorWindow(spec);
         window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
-        configure?.Invoke(window.Host);
-        RegisterWindow(window);
         try
         {
+            // configure runs inside the cleanup region, not before it: the
+            // ReactorWindow ctor has already created the native Window and
+            // AppWindow, so a throwing pre-mount callback would otherwise leak
+            // one that is neither registered nor disposed — invisible to
+            // ReactorApp.Windows and therefore to PrepareOpenWindowsForExit.
+            configure?.Invoke(window.Host);
+            RegisterWindow(window);
             window.MountAndActivate(rootFactory, renderFunc);
         }
         catch (Exception)
         {
+            // Idempotent when the failure happened before RegisterWindow.
             UnregisterWindow(window);
             try { window.Dispose(); } catch { /* best effort */ }
             throw;
