@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 580" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-mount { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .box-update { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-unmount { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.5; }
+    .diamond { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-mount { fill: #033a16; stroke: #3fb950; }
+      .box-update { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-unmount { fill: #3c0d0d; stroke: #f85149; }
+      .diamond { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Entry -->
+  <rect class="box-accent" x="410" y="20" width="220" height="60" rx="6"/>
+  <text class="label" x="520" y="44" text-anchor="middle">Reconciler.Reconcile</text>
+  <text class="sub" x="520" y="62" text-anchor="middle">(oldEl, newEl, existingControl)</text>
+
+  <!-- NullNew? -->
+  <polygon class="diamond" points="410,140 520,110 630,140 520,170"/>
+  <text class="label" x="520" y="138" text-anchor="middle">newEl == null</text>
+  <text class="label" x="520" y="154" text-anchor="middle">or Empty?</text>
+
+  <!-- NullOld? -->
+  <polygon class="diamond" points="430,240 520,210 610,240 520,270"/>
+  <text class="label" x="520" y="237" text-anchor="middle">oldEl == null</text>
+  <text class="label" x="520" y="253" text-anchor="middle">or no control?</text>
+
+  <!-- Unmount column (left) -->
+  <rect class="box-unmount" x="40" y="220" width="180" height="56" rx="6"/>
+  <text class="label" x="130" y="244" text-anchor="middle">Unmount path</text>
+  <text class="sub" x="130" y="262" text-anchor="middle">walk subtree</text>
+
+  <rect class="box" x="40" y="310" width="180" height="50" rx="6"/>
+  <text class="label" x="130" y="332" text-anchor="middle">FlushEffectCleanups</text>
+  <text class="sub" x="130" y="348" text-anchor="middle">in reverse slot order</text>
+
+  <rect class="box" x="40" y="390" width="180" height="50" rx="6"/>
+  <text class="label" x="130" y="412" text-anchor="middle">ElementPool.Return</text>
+  <text class="sub" x="130" y="428" text-anchor="middle">or drop (cap / tainted)</text>
+
+  <!-- Mount column (middle) -->
+  <rect class="box-mount" x="320" y="320" width="180" height="50" rx="6"/>
+  <text class="label" x="410" y="342" text-anchor="middle">Mount path</text>
+  <text class="sub" x="410" y="358" text-anchor="middle">need a control</text>
+
+  <rect class="box" x="320" y="395" width="180" height="50" rx="6"/>
+  <text class="label" x="410" y="416" text-anchor="middle">ElementPool.TryRent</text>
+  <text class="sub" x="410" y="432" text-anchor="middle">poolable types</text>
+
+  <rect class="box" x="240" y="465" width="160" height="44" rx="6"/>
+  <text class="label" x="320" y="491" text-anchor="middle">hit → reuse</text>
+
+  <rect class="box" x="420" y="465" width="160" height="44" rx="6"/>
+  <text class="label" x="500" y="491" text-anchor="middle">miss → new TControl(…)</text>
+
+  <rect class="box-accent" x="320" y="530" width="180" height="40" rx="6"/>
+  <text class="label" x="410" y="555" text-anchor="middle">MountXxx switch</text>
+
+  <!-- Update column (right) -->
+  <rect class="box-update" x="700" y="320" width="200" height="50" rx="6"/>
+  <text class="label" x="800" y="342" text-anchor="middle">Update path</text>
+
+  <polygon class="diamond" points="700,420 800,390 900,420 800,450"/>
+  <text class="label" x="800" y="416" text-anchor="middle">CanUpdate?</text>
+  <text class="sub" x="800" y="432" text-anchor="middle">type match</text>
+
+  <rect class="box" x="700" y="475" width="200" height="44" rx="6"/>
+  <text class="label" x="800" y="497" text-anchor="middle">UpdateXxx switch</text>
+  <text class="sub" x="800" y="512" text-anchor="middle">property writes only</text>
+
+  <rect class="box" x="700" y="540" width="200" height="40" rx="6"/>
+  <text class="label" x="800" y="565" text-anchor="middle">ChildReconciler · LIS</text>
+
+  <rect class="box-unmount" x="900" y="395" width="120" height="50" rx="6"/>
+  <text class="label" x="960" y="416" text-anchor="middle">Replace</text>
+  <text class="sub" x="960" y="432" text-anchor="middle">unmount→mount</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M520 80 L520 110" marker-end="url(#arr)"/>
+
+  <path class="edge" d="M410 140 L 220 230" marker-end="url(#arr)"/>
+  <text class="edge-label" x="290" y="175">yes</text>
+
+  <path class="edge" d="M520 170 L520 210" marker-end="url(#arr)"/>
+  <text class="edge-label" x="530" y="195">no</text>
+
+  <path class="edge" d="M430 240 L 410 320" marker-end="url(#arr)"/>
+  <text class="edge-label" x="370" y="280">yes</text>
+
+  <path class="edge" d="M610 240 L 800 320" marker-end="url(#arr)"/>
+  <text class="edge-label" x="730" y="280">no (update)</text>
+
+  <!-- Unmount chain -->
+  <path class="edge" d="M130 276 L130 310" marker-end="url(#arr)"/>
+  <path class="edge" d="M130 360 L130 390" marker-end="url(#arr)"/>
+
+  <!-- Mount chain -->
+  <path class="edge" d="M410 370 L410 395" marker-end="url(#arr)"/>
+  <path class="edge" d="M380 445 L335 465" marker-end="url(#arr)"/>
+  <path class="edge" d="M440 445 L490 465" marker-end="url(#arr)"/>
+  <path class="edge" d="M320 509 L380 530" marker-end="url(#arr)"/>
+  <path class="edge" d="M500 509 L440 530" marker-end="url(#arr)"/>
+
+  <!-- Update chain -->
+  <path class="edge" d="M800 370 L800 390" marker-end="url(#arr)"/>
+  <path class="edge" d="M800 450 L800 475" marker-end="url(#arr)"/>
+  <text class="edge-label" x="810" y="468">true</text>
+  <path class="edge" d="M800 519 L800 540" marker-end="url(#arr)"/>
+  <path class="edge" d="M900 420 L900 420 L960 420 L960 395" marker-end="url(#arr)"/>
+  <text class="edge-label" x="910" y="412">false</text>
+</svg>

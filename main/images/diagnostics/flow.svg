@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .group { fill: none; stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .group-label { font-size: 12px; font-weight: 600; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-source { fill: #ddf4ff; stroke: #54aeff; }
+    .box-helper { fill: #fff8c5; stroke: #d4a72c; }
+    .box-event { fill: #dff2e8; stroke: #2da44e; }
+    .box-sink { fill: #f6f0ff; stroke: #8250df; }
+    .arrow { fill: none; stroke: #57606a; stroke-width: 1.5; marker-end: url(#arrow); }
+    .arrow-debug { stroke: #d29922; stroke-dasharray: 4 3; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="600" y="28" text-anchor="middle" font-size="14" font-weight="600" fill="#24292f">Reactor diagnostics flow — from a catch site to four consumers</text>
+
+  <!-- Source: framework catch site -->
+  <rect class="box box-source" x="40" y="80" width="220" height="80" rx="6"/>
+  <text class="label" x="150" y="108" text-anchor="middle">Framework catch site</text>
+  <text class="sub"   x="150" y="128" text-anchor="middle">catch (COMException ex) when (…)</text>
+  <text class="sub"   x="150" y="144" text-anchor="middle">e.g. JumpListComInterop.Begin</text>
+
+  <!-- DiagnosticLog helper -->
+  <rect class="box box-helper" x="340" y="80" width="220" height="80" rx="6"/>
+  <text class="label" x="450" y="108" text-anchor="middle">DiagnosticLog</text>
+  <text class="sub"   x="450" y="128" text-anchor="middle">SwallowedError(category, op, ex)</text>
+  <text class="sub"   x="450" y="144" text-anchor="middle">HResultFailed(category, op, hr)</text>
+
+  <!-- ReactorEventSource -->
+  <rect class="box box-event" x="640" y="80" width="240" height="80" rx="6"/>
+  <text class="label" x="760" y="108" text-anchor="middle">ReactorEventSource</text>
+  <text class="sub"   x="760" y="128" text-anchor="middle">Microsoft-UI-Reactor provider</text>
+  <text class="sub"   x="760" y="144" text-anchor="middle">IsEnabled gate · keyword-scoped</text>
+
+  <!-- Arrows: catch → DiagnosticLog → ReactorEventSource -->
+  <path class="arrow" d="M260,120 L340,120"/>
+  <text class="edge-label" x="300" y="112" text-anchor="middle">delegate</text>
+
+  <path class="arrow" d="M560,120 L640,120"/>
+  <text class="edge-label" x="600" y="112" text-anchor="middle">Release path</text>
+
+  <!-- DEBUG mirror branching off DiagnosticLog -->
+  <path class="arrow arrow-debug" d="M450,160 C 450,220 360,220 360,280"/>
+  <text class="edge-label" x="395" y="232">DEBUG only</text>
+
+  <rect class="box" x="240" y="280" width="240" height="70" rx="6"/>
+  <text class="label" x="360" y="308" text-anchor="middle">Debug.WriteLine mirror</text>
+  <text class="sub"   x="360" y="328" text-anchor="middle">Output window only</text>
+  <text class="sub"   x="360" y="343" text-anchor="middle">[Conditional("DEBUG")]</text>
+
+  <!-- Four consumers from ReactorEventSource -->
+  <rect class="group" x="540" y="200" width="640" height="220" rx="8"/>
+  <text class="group-label" x="560" y="220">Four consumers — pick by where the consumer lives</text>
+
+  <!-- 1. env var / dotnet-trace -->
+  <rect class="box box-sink" x="560" y="240" width="270" height="60" rx="6"/>
+  <text class="label" x="695" y="265" text-anchor="middle">DOTNET_EnableEventPipe / dotnet-trace</text>
+  <text class="sub"   x="695" y="285" text-anchor="middle">.nettrace file · zero app code</text>
+
+  <!-- 2. Visual Studio Profiler -->
+  <rect class="box box-sink" x="880" y="240" width="270" height="60" rx="6"/>
+  <text class="label" x="1015" y="265" text-anchor="middle">VS Performance Profiler</text>
+  <text class="sub"   x="1015" y="285" text-anchor="middle">Events Viewer · live + post-hoc</text>
+
+  <!-- 3. ReactorTrace.Subscribe -->
+  <rect class="box box-sink" x="560" y="330" width="270" height="60" rx="6"/>
+  <text class="label" x="695" y="355" text-anchor="middle">ReactorTrace.Subscribe</text>
+  <text class="sub"   x="695" y="375" text-anchor="middle">In-process · app-controlled sink</text>
+
+  <!-- 4. reactor.logs MCP -->
+  <rect class="box box-sink" x="880" y="330" width="270" height="60" rx="6"/>
+  <text class="label" x="1015" y="355" text-anchor="middle">reactor.logs source=event</text>
+  <text class="sub"   x="1015" y="375" text-anchor="middle">MCP devtools tool · agent-readable</text>
+
+  <!-- Arrows from EventSource into each consumer -->
+  <path class="arrow" d="M760,160 L760,210 L695,210 L695,240"/>
+  <path class="arrow" d="M760,160 L760,210 L1015,210 L1015,240"/>
+  <path class="arrow" d="M760,160 L760,300 L695,300 L695,330"/>
+  <path class="arrow" d="M760,160 L760,300 L1015,300 L1015,330"/>
+</svg>
