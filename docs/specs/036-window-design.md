@@ -526,26 +526,35 @@ The startup callback is allowed to open zero surfaces. `ReactorApp.Run`
 does not require at least one `OpenWindow` or `OpenTrayIcon` call —
 only that the selected `ShutdownPolicy` permits the resulting state.
 
-**Platform projection (issue #1204).** WinUI quits the thread's
+**Platform ownership (issue #1204).** WinUI quits the thread's
 `DispatcherQueue` event loop when the last XAML window closes unless
 `Application.DispatcherShutdownMode` is `OnExplicitShutdown`, and
-`Application.Start` resets that property to `OnLastWindowClose`. Reactor
-therefore derives the mode from the policy — `OnExplicitShutdown` for
-`Explicit` and `OnLastSurfaceClosed`, the platform default for
-`OnPrimaryWindowClosed` — so §6.2 is the sole authority on process
-lifetime for the two non-default policies. The write happens in
-`OnLaunched` (for a policy chosen before `Run`) and from the
-`ShutdownPolicy` setter (for a later change). The property is per-thread,
-so a setter call from a background thread posts the write to the UI
-dispatcher instead of performing it inline; it does not block on that hop,
-because a UI thread waiting on the caller would deadlock. The consequence
-is ordering, not loss: a close the UI thread processes before the posted
-write is judged by the previous policy, which is why the documented
-guidance is to set the policy before `Run` or on the UI thread. Reactor
-only writes it when it owns the `Application`: an app embedding
-`ReactorHostControl` never calls `Application.Start`, so its mode already
-defaults to `OnExplicitShutdown` and Reactor must not change that app's
-lifetime.
+`Application.Start` resets that property to `OnLastWindowClose`. Leaving
+it there makes the platform a second, uncoordinated decision-maker: it
+cannot see `Explicit`, a surviving tray icon, or a window that opted out
+via `ExcludeFromShutdownPolicy`, so it ends processes this section says
+should keep running.
+
+`OnLaunched` therefore switches the mode to `OnExplicitShutdown` once,
+before any window exists, for **every** policy — not only the two that
+obviously need it. That unconditional ownership is what makes §6.2
+exhaustive, and in particular what makes §6.4's auxiliary-window
+guarantee real: closing a docking tear-off that was never elected primary
+leaves `closedWasPrimary` false, and now nothing else unwinds the loop
+behind Reactor's back. Every exit flows through one of three places —
+`EvaluateShutdownPolicy` on a surface close, the zero-surface check in
+`OnLaunched`, or an explicit `ReactorApp.Exit`. `ReactorWindow`
+subscribes to the native `Window.Closed`, so a user-initiated close is
+observed exactly like an app-initiated one.
+
+Because the mode no longer depends on the policy, `ShutdownPolicy` stays
+a plain store: settable from any thread, read when a surface closes, with
+no window in which the policy and the platform can disagree.
+
+Reactor only takes ownership when it owns the `Application`: an app
+embedding `ReactorHostControl` never calls `Application.Start`, so its
+mode already defaults to `OnExplicitShutdown` and Reactor must not change
+that app's lifetime.
 
 ### 6.3 Per-window teardown
 

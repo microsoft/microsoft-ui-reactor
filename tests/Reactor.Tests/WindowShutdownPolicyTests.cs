@@ -99,58 +99,59 @@ public class WindowShutdownPolicyTests
     //
     // WinUI quits the thread's DispatcherQueue event loop on last-window-close
     // unless Application.DispatcherShutdownMode is OnExplicitShutdown, so a
-    // policy that never gets projected onto that property is decorative. These
-    // assert the projection itself; the selftest fixture asserts it lands on a
-    // live Application, and the Reactor.SelfTests lifetime probe asserts the
-    // process actually survives.
-
-    [Theory]
-    [InlineData(ShutdownPolicy.OnPrimaryWindowClosed, DispatcherShutdownMode.OnLastWindowClose)]
-    [InlineData(ShutdownPolicy.OnLastSurfaceClosed, DispatcherShutdownMode.OnExplicitShutdown)]
-    [InlineData(ShutdownPolicy.Explicit, DispatcherShutdownMode.OnExplicitShutdown)]
-    public void DispatcherShutdownModeFor_Maps_Each_Policy(ShutdownPolicy policy, DispatcherShutdownMode expected)
-    {
-        Assert.Equal(expected, ReactorApp.DispatcherShutdownModeFor(policy));
-    }
+    // policy that never gets honoured is decorative. Reactor takes ownership of
+    // the loop at launch and lets EvaluateShutdownPolicy decide every exit.
+    //
+    // The observable behaviour of that lives in a live Application and a live
+    // process, so it is asserted by ShutdownPolicyDispatcherModeFixtures (the
+    // mode the host actually runs under) and by ShutdownPolicyProcessLifetimeTests
+    // (whether the process survives). What is left to check headlessly is that
+    // the setter stayed a plain store — the split-brain hazard it briefly had
+    // was that a policy could be published before the platform agreed with it.
 
     [Fact]
-    public void DispatcherShutdownModeFor_Distinguishes_NonDefault_Policies_From_The_Default()
+    public void Setting_Policy_Is_A_Plain_Store_With_No_Platform_Side_Effect()
     {
-        // Differential oracle: a mapping that collapsed to one constant would
-        // satisfy "returns a valid enum value" but would re-break the bug.
-        var platformDefault = ReactorApp.DispatcherShutdownModeFor(ShutdownPolicy.OnPrimaryWindowClosed);
-
-        Assert.NotEqual(platformDefault, ReactorApp.DispatcherShutdownModeFor(ShutdownPolicy.Explicit));
-        Assert.NotEqual(platformDefault, ReactorApp.DispatcherShutdownModeFor(ShutdownPolicy.OnLastSurfaceClosed));
-    }
-
-    [Fact]
-    public void DispatcherShutdownModeFor_Keeps_The_Platform_Default_For_Exactly_The_Default_Policy()
-    {
-        // Totality + shape: every policy is classified, and OnLastWindowClose —
-        // the mode that lets WinUI own process lifetime — is reserved for the
-        // one policy whose semantics already agree with it. A new enum member
-        // reaching the `_` arm gets caught here rather than in the field.
-        var keepPlatformOwnership = Enum.GetValues<ShutdownPolicy>()
-            .Where(p => ReactorApp.DispatcherShutdownModeFor(p) == DispatcherShutdownMode.OnLastWindowClose)
-            .ToArray();
-
-        Assert.Equal(new[] { ShutdownPolicy.OnPrimaryWindowClosed }, keepPlatformOwnership);
-    }
-
-    [Fact]
-    public void Setting_Policy_Without_A_UIDispatcher_Does_Not_Touch_WinUI()
-    {
-        // Headless: there is no Application and no UI dispatcher, so the setter
-        // must store the value and stop. Touching Application.Current here would
-        // throw a COMException and redden this test.
+        // Headless: there is no Application and no UI dispatcher. A setter that
+        // reached for either would throw a COMException and redden this test.
+        // It also documents the invariant that makes the policy safe to set from
+        // any thread: the value is never staged behind a dispatcher hop, so it
+        // cannot be observed out of step with the platform.
         Assert.Null(ReactorApp.UIDispatcher);
 
         var prior = ReactorApp.ShutdownPolicy;
         try
         {
-            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
-            Assert.Equal(ShutdownPolicy.Explicit, ReactorApp.ShutdownPolicy);
+            foreach (var p in Enum.GetValues<ShutdownPolicy>())
+            {
+                ReactorApp.ShutdownPolicy = p;
+                Assert.Equal(p, ReactorApp.ShutdownPolicy);
+            }
+        }
+        finally
+        {
+            ReactorApp.ShutdownPolicy = prior;
+        }
+    }
+
+    [Fact]
+    public void EvaluateShutdownPolicy_Leaves_The_App_Alive_When_A_NonPrimary_Window_Closes()
+    {
+        // Issue #647 / #1204: an auxiliary window (a docking tear-off) opts out
+        // of the shutdown policy and is never elected primary, so closing it —
+        // even as the last window on screen — must not end the process. That
+        // guarantee is only real because Reactor owns the event loop; while the
+        // platform still had OnLastWindowClose it would unwind anyway.
+        //
+        // Exit() is unobservable headlessly, so this asserts the reachable half:
+        // the default policy's non-primary path completes without taking the
+        // exit branch. The process-level half is the probe's --exclude-window arm.
+        var prior = ReactorApp.ShutdownPolicy;
+        try
+        {
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.OnPrimaryWindowClosed;
+            ReactorApp.EvaluateShutdownPolicy(closedWasPrimary: false);
+            Assert.Empty(ReactorApp.Windows);
         }
         finally
         {

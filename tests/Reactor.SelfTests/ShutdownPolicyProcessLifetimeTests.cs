@@ -38,6 +38,7 @@ public class ShutdownPolicyProcessLifetimeTests
     private const string TrayFlag = "--with-tray";
     private const string NoWindowFlag = "--no-window";
     private const string ReopenFlag = "--reopen";
+    private const string ExcludedWindowFlag = "--excluded-window";
     private const string GateProbeFlag = "--shutdown-policy-gate-probe";
     private const int AliveExitCode = 42;
     private const int LoopExitedExitCode = 1;
@@ -174,6 +175,26 @@ public class ShutdownPolicyProcessLifetimeTests
             $"Reopening did not produce a registered window.\n{detail}");
         Assert.AreEqual(AliveExitCode, result.ExitCode,
             $"Exit code 45 means the reopened window never registered.\n{detail}");
+    }
+
+    [TestMethod]
+    public void OnPrimaryWindowClosed_Stays_Alive_When_The_Last_Window_Opted_Out_Of_The_Policy()
+    {
+        // Issue #647's guarantee, which the windows guide already states:
+        // an auxiliary window (a docking tear-off) is never elected primary, so
+        // closing it never exits the app "even when it is the last visible
+        // window". The platform used to break that promise — OnLastWindowClose
+        // unwound the loop no matter what EvaluateShutdownPolicy decided — and
+        // it only holds now because Reactor owns the loop for every policy,
+        // including the default.
+        var result = RunProbe("OnPrimaryWindowClosed", ExcludedWindowFlag);
+        var detail = Detail("OnPrimaryWindowClosed", $"{ProbeFlag} {ExcludedWindowFlag}", result);
+
+        StringAssert.Contains(result.Stdout, "primaryElected=False",
+            $"The probe's window was elected primary, so this run never reached the auxiliary-window case.\n{detail}");
+        StringAssert.Contains(result.Stdout, AliveMarker,
+            $"Closing an auxiliary window ended the process, contradicting the documented issue-#647 behaviour.\n{detail}");
+        Assert.AreEqual(AliveExitCode, result.ExitCode, detail);
     }
 
     // ── ownership gate (negative case) ─────────────────────────────────────

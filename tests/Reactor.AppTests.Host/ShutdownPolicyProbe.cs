@@ -67,6 +67,16 @@ internal static class ShutdownPolicyProbe
     /// </summary>
     internal const string ReopenFlag = "--reopen";
 
+    /// <summary>
+    /// Opens the window with <c>ExcludeFromShutdownPolicy</c>, the way a docking
+    /// tear-off does (issue #647), so no <c>PrimaryWindow</c> is ever elected.
+    /// Closing it under the DEFAULT policy must leave the process running — the
+    /// guarantee the windows guide already made and the platform used to break,
+    /// because <c>OnLastWindowClose</c> unwound the loop regardless of what
+    /// <c>EvaluateShutdownPolicy</c> decided.
+    /// </summary>
+    internal const string ExcludedWindowFlag = "--excluded-window";
+
     internal const int AliveExitCode = 42;
     internal const int LoopExitedExitCode = 1;
     internal const int UsageExitCode = 64;
@@ -103,9 +113,11 @@ internal static class ShutdownPolicyProbe
         var withTray = args.Contains(TrayFlag);
         var noWindow = args.Contains(NoWindowFlag);
         var reopen = args.Contains(ReopenFlag);
+        var excluded = args.Contains(ExcludedWindowFlag);
 
         ReactorApp.ShutdownPolicy = policy;
-        Console.WriteLine($"POLICY {policy} tray={withTray} noWindow={noWindow} reopen={reopen}");
+        Console.WriteLine(
+            $"POLICY {policy} tray={withTray} noWindow={noWindow} reopen={reopen} excluded={excluded}");
 
         ReactorApp.Run(_ =>
         {
@@ -140,7 +152,10 @@ internal static class ShutdownPolicyProbe
                 return;
             }
 
-            var window = OpenProbeWindow("Shutdown Policy Probe");
+            var window = OpenProbeWindow("Shutdown Policy Probe", excluded);
+            Console.WriteLine(
+                $"OPENED primaryElected={ReactorApp.PrimaryWindow is not null} windows={ReactorApp.Windows.Count}");
+            Console.Out.Flush();
 
             var closeTimer = dispatcher.CreateTimer();
             closeTimer.Interval = TimeSpan.FromMilliseconds(SettleMs);
@@ -181,10 +196,13 @@ internal static class ShutdownPolicyProbe
         return LoopExitedExitCode;
     }
 
-    private static ReactorWindow OpenProbeWindow(string title) =>
-        ReactorApp.OpenWindow(
+    private static ReactorWindow OpenProbeWindow(string title, bool excludeFromShutdownPolicy = false) =>
+        ReactorApp.OpenWindowCore(
             new WindowSpec { Title = title, Width = 320, Height = 200 },
-            () => new ProbeContent());
+            rootFactory: () => new ProbeContent(),
+            renderFunc: null,
+            configure: null,
+            excludeFromShutdownPolicy: excludeFromShutdownPolicy);
 
     private static void StartAliveTimer(DispatcherQueue dispatcher, bool reopen)
     {
