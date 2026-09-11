@@ -179,7 +179,7 @@ After pushing the tag:
 
 1. Confirm the GitHub `Package` workflow runs for the tag and creates a GitHub Release.
 2. Confirm the OneBranch official pipeline starts for the tag.
-3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)).
+3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)). Check **both** of its jobs: a green `publish` beside a red `deploy` means the environment refused the tag ref, and the site stays stale even though `gh-pages` is already correct — see [Which refs may deploy](#which-refs-may-deploy).
 4. Approve the `Production_PublishNuGet` stage when ready to publish to NuGet.org.
 5. Verify the packages appear on NuGet.org.
 6. Install the released template package or a locally packed template and create a smoke app that restores against NuGet.org.
@@ -209,6 +209,45 @@ that does *not* hold `latest` renders the outdated-version banner defined in
 A tag only takes the `latest` alias if it is the highest tag by version sort. Re-cutting or
 backporting an older tag therefore publishes that version without dragging `latest`
 backwards.
+
+### Which refs may deploy
+
+The workflow's `deploy` job targets the `github-pages` environment, and that environment
+carries a deployment-branch policy naming the refs allowed to deploy from it. Because a
+release tag publishes the docs, the policy must admit **both** `main` (a branch) and `v*`
+(a tag). A policy listing only `main` — which was correct while `main` was the sole
+publisher — rejects every release tag.
+
+That policy lives in repository settings, not in this repo, so nothing in `docs.yml` hints
+at it. Read it with:
+
+```powershell
+gh api repos/microsoft/microsoft-ui-reactor/environments/github-pages/deployment-branch-policies `
+  --jq '.branch_policies[] | "\(.type): \(.name)"'
+```
+
+It should print `branch: main` and `tag: v*`. Adding a missing entry needs repository
+**admin** — `maintain` gets `HTTP 403: Must have admin rights to Repository`:
+
+```powershell
+gh api -X POST repos/microsoft/microsoft-ui-reactor/environments/github-pages/deployment-branch-policies `
+  -f name='v*' -f type='tag'
+```
+
+The failure is worth recognising on sight, because the run half-succeeds: `publish` goes
+green and `deploy` goes red with
+
+```text
+Tag "v0.1.0-preview.15" is not allowed to deploy to github-pages due to environment protection rules.
+```
+
+Nothing is lost when that happens. `publish` is the job that writes to `gh-pages`, so the
+new version *is* rendered there — and the `latest` alias has already moved to it if the tag
+qualifies under the version-sort rule above. Only the serving step was refused, which is
+why the live site keeps showing the previous release while the branch is already correct.
+Once the policy admits the ref, dispatch `Publish docs` on `main` to serve the stranded
+release: the artifact is the whole `gh-pages` branch, so a deploy from any allowed ref
+publishes every version already committed to it.
 
 ### Legacy unversioned links
 
