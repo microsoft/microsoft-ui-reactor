@@ -318,7 +318,7 @@ public class ShutdownPolicyProcessLifetimeTests
 
         StringAssert.Contains(result.Stdout, GateHeldMarker,
             $"Reactor rewrote DispatcherShutdownMode on an Application it does not own. An app embedding " +
-            $"ReactorHostControl would start exiting when its last window closes.\n{detail}");
+            $"ReactorHostControl would stop exiting when its last window closes, and hang instead.\n{detail}");
         Assert.AreEqual(GateHeldExitCode, result.ExitCode,
             $"Exit 44 = gate violated, 46 = inconclusive (the probe could not establish its preconditions).\n{detail}");
     }
