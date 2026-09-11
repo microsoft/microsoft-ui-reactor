@@ -204,7 +204,14 @@ public static partial class ReactorApp
     /// makes the platform a second, uncoordinated decision-maker: it cannot see
     /// <see cref="ShutdownPolicy.Explicit"/>, a surviving tray icon, or a window
     /// that opted out via <c>ExcludeFromShutdownPolicy</c>, so it would end
-    /// processes §6.2 says should keep running.</para>
+    /// processes that §6.2 says should keep running.</para>
+    /// <para>Called from <c>OnLaunched</c> on the launch shapes Reactor drives —
+    /// the <c>Run(startup)</c> callback and the legacy <c>Run&lt;TRoot&gt;</c>
+    /// bridge — before any window exists. It is deliberately NOT called when
+    /// <see cref="ReactorApplication"/> was constructed directly without
+    /// <c>ReactorApp.Run</c> (the selftest harness shape): that host owns its own
+    /// windows, never reaches the zero-surface check, and would be left pumping
+    /// forever once its windows closed.</para>
     /// <para>Taking ownership unconditionally — rather than only for the
     /// policies that obviously need it — is what makes §6.2 exhaustive. Every
     /// exit then flows through one place: <see cref="EvaluateShutdownPolicy"/>
@@ -1221,13 +1228,6 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // process-wide UI thread reference. (spec 036 §4.3 / §6.1)
         ReactorApp.UIDispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
-        // Application.Start just reset this thread's DispatcherShutdownMode to
-        // OnLastWindowClose, which would let WinUI end the process on
-        // last-window-close without consulting the policy. Take ownership before
-        // any window exists so EvaluateShutdownPolicy is the only thing that
-        // decides. (spec 036 §6.2)
-        ReactorApp.TakeOwnershipOfDispatcherLifetime();
-
         var opts = ReactorApp.Options;
         var activation = ParseLaunchActivation(args);
         var ctx = new ReactorAppContext(activation);
@@ -1236,6 +1236,9 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // ── Path 1: explicit Run(Action<ReactorAppContext>) startup callback.
         if (opts.Startup is not null)
         {
+            // Before the callback, so windows it opens are already governed.
+            ReactorApp.TakeOwnershipOfDispatcherLifetime();
+
             opts.Startup(ctx);
 
             // Spec 036 §6.2: with the default OnPrimaryWindowClosed policy, a
@@ -1270,7 +1273,16 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // creation. Skip the bridge so we don't try to open a window with
         // nothing to mount (which would otherwise cascade into shutdown
         // during OnLaunched). (spec 036 §4.3)
+        //
+        // Dispatcher ownership is skipped for the same reason it is skipped for
+        // a non-ReactorApplication host: this launch shape has no Reactor
+        // surfaces and never reaches the zero-surface check above, so Reactor is
+        // not the thing deciding when the process ends. Forcing
+        // OnExplicitShutdown here would leave such a host pumping forever once
+        // its own windows closed.
         if (opts.RootFactory is null && opts.RootRenderFunc is null) return;
+
+        ReactorApp.TakeOwnershipOfDispatcherLifetime();
 
         var spec = ReactorApp.BuildInitialWindowSpec(opts);
 

@@ -40,6 +40,7 @@ public class ShutdownPolicyProcessLifetimeTests
     private const string ReopenFlag = "--reopen";
     private const string ExcludedWindowFlag = "--excluded-window";
     private const string CloseTrayFlag = "--close-tray";
+    private const string ClosingMarker = "CLOSING";
     private const string GateProbeFlag = "--shutdown-policy-gate-probe";
     private const int AliveExitCode = 42;
     private const int LoopExitedExitCode = 1;
@@ -60,7 +61,23 @@ public class ShutdownPolicyProcessLifetimeTests
     {
         var exe = HostProcess.FindHostExe();
         var args = $"{ProbeFlag} {policy}" + string.Concat(flags.Select(f => " " + f));
-        return RunHost(exe, args);
+        var result = RunHost(exe, args);
+
+        // Unless the arm is deliberately zero-surface, every one of these is a
+        // last-window-close probe, and that only means something if a window was
+        // opened and then closed. Without this, deleting OpenProbeWindow or the
+        // close timer would silently route several arms through the zero-surface
+        // startup path, where they would still report STILL-ALIVE and pass.
+        if (!flags.Contains(NoWindowFlag))
+        {
+            var detail = Detail(policy, args, result);
+            StringAssert.Contains(result.Stdout, "OPENED",
+                $"The probe never opened a window, so this is not a last-window-close run.\n{detail}");
+            StringAssert.Contains(result.Stdout, ClosingMarker,
+                $"The probe never reached the close step, so this is not a last-window-close run.\n{detail}");
+        }
+
+        return result;
     }
 
     private static (int ExitCode, string Stdout, string Stderr) RunHost(string exe, string args)

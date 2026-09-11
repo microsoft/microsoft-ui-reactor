@@ -532,12 +532,19 @@ only that the selected `ShutdownPolicy` permits the resulting state.
 `Application.Start` resets that property to `OnLastWindowClose`. Leaving
 it there makes the platform a second, uncoordinated decision-maker: it
 cannot see `Explicit`, a surviving tray icon, or a window that opted out
-via `ExcludeFromShutdownPolicy`, so it ends processes this section says
-should keep running.
+via `ExcludeFromShutdownPolicy`, so it ends processes that this section
+says should keep running.
 
 `OnLaunched` therefore switches the mode to `OnExplicitShutdown` once,
 before any window exists, for **every** policy — not only the two that
-obviously need it. That unconditional ownership is what makes §6.2
+obviously need it. It does so on the launch shapes Reactor drives (the
+`Run(startup)` callback and the legacy `Run<TRoot>` bridge) and
+deliberately not when `ReactorApplication` is constructed directly
+without `ReactorApp.Run`: that host owns its own windows, never reaches
+the zero-surface check, and would be left pumping forever once its
+windows closed.
+
+That unconditional-per-policy ownership is what makes §6.2
 exhaustive, and in particular what makes §6.4's auxiliary-window
 guarantee real: closing a docking tear-off that was never elected primary
 leaves `closedWasPrimary` false, and now nothing else unwinds the loop
