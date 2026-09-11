@@ -23,6 +23,20 @@ if (args.Contains("--list-fixtures"))
     return;
 }
 
+if (args.Contains(ShutdownPolicyProbe.Flag))
+{
+    // Issue #1204 — one-window process-lifetime probe. Reports via exit code
+    // whether the event loop outlived its last window; see ShutdownPolicyProbe.
+    Environment.Exit(ShutdownPolicyProbe.Run(args));
+}
+
+if (args.Contains(ShutdownPolicyGateProbe.Flag))
+{
+    // Issue #1204 — the ownership gate's negative case, which needs a process
+    // whose Application is NOT a ReactorApplication.
+    Environment.Exit(ShutdownPolicyGateProbe.Run());
+}
+
 if (args.Contains("--self-test"))
 {
     var filterIdx = Array.IndexOf(args, "--filter");

@@ -36,6 +36,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- `ShutdownPolicy.Explicit` and `ShutdownPolicy.OnLastSurfaceClosed` now actually keep the process
+  running: Reactor projects the policy onto `Application.DispatcherShutdownMode`, so WinUI no longer
+  quits the event loop on last-window-close before `EvaluateShutdownPolicy` can veto it. Closing the
+  last window of a tray-backed app used to exit with code 0 as if the policy were
+  `OnPrimaryWindowClosed`. The default policy is unchanged, and apps that embed `ReactorHostControl`
+  in their own `Application` are left alone. (spec 036 §6.2, issue #1204)
+
 ### Security
 
 ## [0.1.0-preview.15] — 2026-09-11

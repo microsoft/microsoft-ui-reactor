@@ -526,6 +526,27 @@ The startup callback is allowed to open zero surfaces. `ReactorApp.Run`
 does not require at least one `OpenWindow` or `OpenTrayIcon` call —
 only that the selected `ShutdownPolicy` permits the resulting state.
 
+**Platform projection (issue #1204).** WinUI quits the thread's
+`DispatcherQueue` event loop when the last XAML window closes unless
+`Application.DispatcherShutdownMode` is `OnExplicitShutdown`, and
+`Application.Start` resets that property to `OnLastWindowClose`. Reactor
+therefore derives the mode from the policy — `OnExplicitShutdown` for
+`Explicit` and `OnLastSurfaceClosed`, the platform default for
+`OnPrimaryWindowClosed` — so §6.2 is the sole authority on process
+lifetime for the two non-default policies. The write happens in
+`OnLaunched` (for a policy chosen before `Run`) and from the
+`ShutdownPolicy` setter (for a later change). The property is per-thread,
+so a setter call from a background thread posts the write to the UI
+dispatcher instead of performing it inline; it does not block on that hop,
+because a UI thread waiting on the caller would deadlock. The consequence
+is ordering, not loss: a close the UI thread processes before the posted
+write is judged by the previous policy, which is why the documented
+guidance is to set the policy before `Run` or on the UI thread. Reactor
+only writes it when it owns the `Application`: an app embedding
+`ReactorHostControl` never calls `Application.Start`, so its mode already
+defaults to `OnExplicitShutdown` and Reactor must not change that app's
+lifetime.
+
 ### 6.3 Per-window teardown
 
 - `Window.Closed` → `ReactorWindow.Closed` event

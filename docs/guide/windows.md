@@ -899,6 +899,25 @@ exit. Auxiliary windows that opt out of the shutdown policy (such as docking
 tear-off floating windows) are never elected primary, so closing one of them
 never exits the app even when it is the last *visible* window.
 
+Reactor drives WinUI's `Application.DispatcherShutdownMode` from the policy, so
+picking one is all you need — the two non-default policies switch the platform to
+`OnExplicitShutdown` so the event loop outlives the last window, and Reactor
+decides when the process ends. Reactor only touches that property when it owns the
+`Application`, so a host app that embeds `ReactorHostControl` keeps its own lifetime.
+
+Where you set the policy decides when the platform catches up, because
+`DispatcherShutdownMode` is per-thread and cannot be written from another thread:
+
+| Set from | Takes effect |
+| --- | --- |
+| Before `ReactorApp.Run` | Stored, then applied at startup before any window opens |
+| The UI thread (startup callback, event handler, tray command) | Before the setter returns |
+| A background thread | On a following UI-thread turn |
+
+Prefer the first two. A background-thread change is posted rather than awaited —
+blocking would deadlock a UI thread that is waiting on the caller — so a window
+close the UI thread happens to process first is still judged by the previous policy.
+
 ## Tips
 
 **Memoize specs.** A stable `WindowSpec` avoids unnecessary chrome updates.

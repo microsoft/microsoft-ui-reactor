@@ -1259,6 +1259,9 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_IgnorePointerInputRoundTrip",
         "WindowModel_OpacityIgnorePointerInvariants",
         "WindowModel_DefaultSizeDefersToOs",
+        // Issue #1204 — ShutdownPolicy projected onto Application.DispatcherShutdownMode.
+        "ShutdownPolicy_ProjectsToDispatcherMode",
+        "ShutdownPolicy_OffThreadSetMarshals",
         // Spec 054 Phase 1 — window position/z-order/display read-back.
         "Position_ReadBack",
         "PositionChanged_FiresOnMove",
@@ -3159,6 +3162,9 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_IgnorePointerInputRoundTrip" => new WindowModelFixtures.WindowIgnorePointerInputRoundTrip(harness),
         "WindowModel_OpacityIgnorePointerInvariants" => new WindowModelFixtures.WindowOpacityIgnorePointerInvariants(harness),
         "WindowModel_DefaultSizeDefersToOs" => new WindowModelFixtures.WindowDefaultSizeDefersToOs(harness),
+        // Issue #1204 — ShutdownPolicy projected onto Application.DispatcherShutdownMode.
+        "ShutdownPolicy_ProjectsToDispatcherMode" => new ShutdownPolicyDispatcherModeFixtures.ShutdownPolicyProjectsToDispatcherMode(harness),
+        "ShutdownPolicy_OffThreadSetMarshals" => new ShutdownPolicyDispatcherModeFixtures.ShutdownPolicyOffThreadSetMarshals(harness),
         // Spec 054 Phase 1 — window position/z-order/display read-back.
         "Position_ReadBack" => new Phase1WindowingFixtures.PositionReadBack(harness),
         "PositionChanged_FiresOnMove" => new Phase1WindowingFixtures.PositionChangedFiresOnMove(harness),

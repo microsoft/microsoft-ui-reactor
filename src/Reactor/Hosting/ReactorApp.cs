@@ -175,10 +175,94 @@ public static partial class ReactorApp
     }
 
     /// <summary>Process-shutdown policy. Defaults to <see cref="ShutdownPolicy.OnPrimaryWindowClosed"/>.</summary>
+    /// <remarks>
+    /// <para>Settable from any thread and at any point in the process lifetime.
+    /// Reading it back always reflects the last write; <b>when the platform
+    /// catches up depends on where you set it</b>, because WinUI's
+    /// <see cref="Application.DispatcherShutdownMode"/> — the property that
+    /// decides whether the event loop survives its last window — is per-thread
+    /// and cannot be written from another thread:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Before <c>Run</c></b>: stored only; there is no
+    /// <see cref="Application"/> yet. <c>OnLaunched</c> applies it once WinUI has
+    /// bootstrapped, before any window opens.</description></item>
+    /// <item><description><b>On the UI thread</b> (startup callback, event
+    /// handler, tray command): applied before the setter returns.</description></item>
+    /// <item><description><b>Off the UI thread</b>: posted to
+    /// <see cref="UIDispatcher"/> and applied on a following dispatcher turn.
+    /// A window close that the UI thread happens to process first is still
+    /// judged by the previous policy, so set the policy on the UI thread when a
+    /// concurrent close is possible. The setter deliberately does not block on
+    /// the hop — a UI thread waiting on the caller would deadlock.</description></item>
+    /// </list>
+    /// <para><see cref="ShutdownPolicy.Explicit"/> and
+    /// <see cref="ShutdownPolicy.OnLastSurfaceClosed"/> map to
+    /// <see cref="DispatcherShutdownMode.OnExplicitShutdown"/>, handing process
+    /// lifetime to Reactor; <see cref="ShutdownPolicy.OnPrimaryWindowClosed"/>
+    /// keeps the platform default,
+    /// <see cref="DispatcherShutdownMode.OnLastWindowClose"/>. Reactor writes
+    /// that property only when it owns the <see cref="Application"/>, so an app
+    /// hosting <c>ReactorHostControl</c> in its own keeps its own lifetime.</para>
+    /// </remarks>
     public static ShutdownPolicy ShutdownPolicy
     {
         get => (ShutdownPolicy)Volatile.Read(ref _shutdownPolicy);
-        set => Volatile.Write(ref _shutdownPolicy, (int)value);
+        set
+        {
+            Volatile.Write(ref _shutdownPolicy, (int)value);
+
+            var dispatcher = UIDispatcher;
+            if (dispatcher is null) return;
+            if (dispatcher.HasThreadAccess) SyncDispatcherShutdownMode();
+            else dispatcher.TryEnqueue(SyncDispatcherShutdownMode);
+        }
+    }
+
+    /// <summary>
+    /// The platform dispatcher-shutdown mode that lets <paramref name="policy"/>
+    /// be honoured. (spec 036 §6.2)
+    /// </summary>
+    /// <remarks>
+    /// WinUI quits the thread's <c>DispatcherQueue</c> event loop when the last
+    /// XAML window closes unless the mode is
+    /// <see cref="DispatcherShutdownMode.OnExplicitShutdown"/>. Both non-default
+    /// policies describe states where "no windows open" is still a running app —
+    /// a tray-only app under <see cref="ShutdownPolicy.Explicit"/>, or a window
+    /// closing while a tray icon survives under
+    /// <see cref="ShutdownPolicy.OnLastSurfaceClosed"/> — so the platform must
+    /// hand process lifetime to <see cref="EvaluateShutdownPolicy"/>. The default
+    /// policy keeps the platform default, which already agrees with it: closing
+    /// the primary window exits either way.
+    /// </remarks>
+    internal static DispatcherShutdownMode DispatcherShutdownModeFor(ShutdownPolicy policy) =>
+        policy switch
+        {
+            ShutdownPolicy.OnLastSurfaceClosed => DispatcherShutdownMode.OnExplicitShutdown,
+            ShutdownPolicy.Explicit => DispatcherShutdownMode.OnExplicitShutdown,
+            _ => DispatcherShutdownMode.OnLastWindowClose,
+        };
+
+    /// <summary>
+    /// Projects <see cref="ShutdownPolicy"/> onto
+    /// <see cref="Application.DispatcherShutdownMode"/>. UI-thread only — the
+    /// property is per-thread, so writing it from elsewhere would configure the
+    /// wrong thread.
+    /// </summary>
+    /// <remarks>
+    /// Only writes when Reactor owns the <see cref="Application"/>. An app that
+    /// embeds <c>ReactorHostControl</c> in its own <see cref="Application"/>
+    /// never calls <c>Application.Start</c>, so its mode already defaults to
+    /// <see cref="DispatcherShutdownMode.OnExplicitShutdown"/> — writing
+    /// <see cref="DispatcherShutdownMode.OnLastWindowClose"/> there would make
+    /// the host process exit when its last window closes, a lifetime change
+    /// Reactor has no business making. Best-effort: a teardown-racing write is
+    /// logged rather than thrown, matching <see cref="SafeExit"/>.
+    /// </remarks>
+    internal static void SyncDispatcherShutdownMode()
+    {
+        if (Application.Current is not ReactorApplication app) return;
+        try { app.DispatcherShutdownMode = DispatcherShutdownModeFor(ShutdownPolicy); }
+        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] SyncDispatcherShutdownMode failed: {ex.GetType().Name}: {ex.Message}"); }
     }
 
     /// <summary>Fires on the UI thread when a <see cref="ReactorWindow"/> opens.</summary>
@@ -779,6 +863,10 @@ public static partial class ReactorApp
     // OnPrimaryWindowClosed: exit when the just-closed window was the primary.
     // OnLastSurfaceClosed: exit when both windows and tray icons are gone.
     // Explicit: never exit from a surface-close event — the app drives Exit().
+    //
+    // This is the sole authority on process lifetime for the two non-default
+    // policies: DispatcherShutdownModeFor puts the platform into
+    // OnExplicitShutdown for them, so nothing else will quit the event loop.
     internal static void EvaluateShutdownPolicy(bool closedWasPrimary)
     {
         var policy = ShutdownPolicy;
@@ -1140,6 +1228,14 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // a startup callback that itself opens windows — sees the right
         // process-wide UI thread reference. (spec 036 §4.3 / §6.1)
         ReactorApp.UIDispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
+        // Application.Start just reset this thread's DispatcherShutdownMode to
+        // OnLastWindowClose, which would quit the event loop on last-window-close
+        // before EvaluateShutdownPolicy could veto it. Re-apply whatever policy
+        // the app picked before Run. Policies set later — inside the startup
+        // callback or from a tray command — are projected by the property setter.
+        // (spec 036 §6.2)
+        ReactorApp.SyncDispatcherShutdownMode();
 
         var opts = ReactorApp.Options;
         var activation = ParseLaunchActivation(args);
