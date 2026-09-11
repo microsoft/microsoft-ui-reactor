@@ -277,7 +277,8 @@ class MarkdownDemo : Component
 `Markdown` is the largest Reactor-original control on this page. It
 parses GitHub-flavored Markdown with the embedded `md4c` parser and
 emits a Reactor element tree: headings become `TextBlock` with the
-heading variant, list items become `HStack`s, links become inline
+heading variant, list items become two-column `Grid`s (`Auto` marker / `*`
+content), links become inline
 hyperlinks, code spans become monospace `TextBlock`. No WebView, no HTML
 round-trip — the output composes with every other modifier on this page
 (`.Padding`, `.Width`, `.TextWrapping`).
