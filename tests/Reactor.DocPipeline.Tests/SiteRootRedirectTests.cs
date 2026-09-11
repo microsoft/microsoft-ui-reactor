@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
@@ -24,7 +25,7 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 public sealed class SiteRootRedirectTests
 {
     [Fact]
-    public void Site_root_404_redirect_cases_pass()
+    public async Task Site_root_404_redirect_cases_pass()
     {
         var repoRoot = FindRepoRoot();
         var testScript = Path.Join(repoRoot, "docs", "_site-root", "404.redirect.test.js");
@@ -44,15 +45,17 @@ public sealed class SiteRootRedirectTests
             CreateNoWindow = true,
         })!;
 
-        // Start both reads before waiting: a child that fills one pipe buffer
-        // blocks on the write while the parent blocks in WaitForExit.
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Start both reads before awaiting exit: a child that fills one pipe
+        // buffer blocks on the write while the parent waits for it to exit.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
 
         var output = string.Join(
             Environment.NewLine,
-            new[] { stdout.Result, stderr.Result }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            new[] { await stdoutTask, await stderrTask }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
         // Fails rather than skips when node is absent. Every GitHub-hosted
         // runner ships node, and the repo already has npm projects, so a
