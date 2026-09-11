@@ -555,8 +555,16 @@ subscribes to the native `Window.Closed`, so a user-initiated close is
 observed exactly like an app-initiated one.
 
 Because the mode no longer depends on the policy, `ShutdownPolicy` stays
-a plain store: settable from any thread, read when a surface closes, with
-no window in which the policy and the platform can disagree.
+a plain store: settable from any thread, with no window in which the
+policy and the platform can disagree. Two moments consult it. A surface
+close reaches `EvaluateShutdownPolicy`, which reads it then, so any
+earlier change counts. Startup is the exception — the zero-surface
+decision runs the instant the launch path finishes, so it sees whatever
+the policy holds at that instant and a write posted from another thread
+during startup can land too late. Both launch paths run that decision
+from a `finally`: once ownership is taken, a startup that throws and is
+marked handled by the app's `OnUnhandledException` would otherwise leave
+the loop pumping with nothing on screen.
 
 Reactor only takes ownership when it owns the `Application` — when
 `Application.Current` is a `ReactorApplication`. A WinUI app that embeds

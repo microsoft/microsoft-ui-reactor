@@ -179,9 +179,17 @@ public static partial class ReactorApp
     /// <para>Settable from any thread and at any point in the process lifetime,
     /// and read back immediately. Reactor takes ownership of the event loop at
     /// startup (see <see cref="TakeOwnershipOfDispatcherLifetime"/>), so this
-    /// value is consulted by <see cref="EvaluateShutdownPolicy"/> when a surface
-    /// closes rather than mirrored into platform state — there is no window in
-    /// which the policy and the platform can disagree.</para>
+    /// value is consulted when a decision is due rather than mirrored into
+    /// platform state — there is no window in which the policy and the platform
+    /// can disagree.</para>
+    /// <para>Two moments consult it. A surface close reaches
+    /// <see cref="EvaluateShutdownPolicy"/>, which reads the value then, so a
+    /// change made any time beforehand counts. Startup is the exception:
+    /// <see cref="ExitIfStartupOpenedNoSurface"/> runs the instant the launch
+    /// path finishes, so a zero-surface startup is judged against whatever the
+    /// policy holds at that instant. Set it before <c>Run</c>, or on the UI
+    /// thread before the startup callback returns — a write posted from another
+    /// thread during startup can land too late to be seen.</para>
     /// </remarks>
     public static ShutdownPolicy ShutdownPolicy
     {
@@ -239,6 +247,15 @@ public static partial class ReactorApp
     /// object, an invalid operation, or a COM fault all mean the XAML runtime is
     /// already broken. Failing at the point it is detectable beats limping into a
     /// lifetime the app did not ask for.</para>
+    /// <para>An app can still override that by returning <c>true</c> from
+    /// <see cref="ReactorApplication.OnUnhandledException"/>, which marks the
+    /// rethrow handled. Reactor does not escalate to
+    /// <see cref="Environment.FailFast(string)"/> to prevent it: an app that
+    /// force-handles every exception has asked to keep running, and the
+    /// resulting state is the pre-fix one — the platform still ends the process
+    /// on last-window-close, so the policy is ignored rather than the process
+    /// hanging. The <see cref="AppLogger"/> error above is what makes that
+    /// visible.</para>
     /// </remarks>
     internal static void TakeOwnershipOfDispatcherLifetime()
     {
@@ -927,6 +944,38 @@ public static partial class ReactorApp
         EvaluateShutdownPolicy(closedWasPrimary: false);
     }
 
+    /// <summary>
+    /// Applies the zero-surface startup decision (spec 036 §6.2): a launch that
+    /// produced no window and no tray icon must not leave the process running
+    /// under a policy that does not permit it. UI-thread only.
+    /// </summary>
+    /// <remarks>
+    /// <para>With the default <see cref="ShutdownPolicy.OnPrimaryWindowClosed"/>
+    /// this is the "I forgot to OpenWindow" guard. Apps that intend a
+    /// zero-surface startup pick <see cref="ShutdownPolicy.Explicit"/> or
+    /// <see cref="ShutdownPolicy.OnLastSurfaceClosed"/>; the latter still exits
+    /// here when no tray icon was opened either, because then nothing is left.</para>
+    /// <para>This is evaluated the moment the launch path finishes, so it reads
+    /// whatever <see cref="ShutdownPolicy"/> holds at that instant — a policy
+    /// written asynchronously from another thread during startup may not have
+    /// landed yet. Set the policy before <c>Run</c>, or on the UI thread before
+    /// the startup callback returns.</para>
+    /// <para>Called from a <c>finally</c> on both launch paths: once dispatcher
+    /// ownership has been taken, a startup that throws and is then marked handled
+    /// by the app's <c>OnUnhandledException</c> would otherwise leave the event
+    /// loop pumping with nothing on screen.</para>
+    /// </remarks>
+    internal static void ExitIfStartupOpenedNoSurface()
+    {
+        if (Windows.Count != 0) return;
+
+        var policy = ShutdownPolicy;
+        if (policy == ShutdownPolicy.Explicit) return;
+        if (policy == ShutdownPolicy.OnLastSurfaceClosed && TrayIconCount != 0) return;
+
+        try { Application.Current?.Exit(); } catch { /* best effort */ }
+    }
+
     private static void SafeExit()
     {
         PrepareOpenWindowsForExit();
@@ -1239,24 +1288,18 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
             // Before the callback, so windows it opens are already governed.
             ReactorApp.TakeOwnershipOfDispatcherLifetime();
 
-            opts.Startup(ctx);
-
-            // Spec 036 §6.2: with the default OnPrimaryWindowClosed policy, a
-            // startup that opens zero windows must exit immediately — that's
-            // the only sane default for "I forgot to OpenWindow." Apps that
-            // want zero-window startup pick Explicit or OnLastSurfaceClosed
-            // before returning from the callback. OnLastSurfaceClosed exits
-            // here only if NO tray icon was opened either; otherwise the tray
-            // keeps the process alive.
-            var noWindows = ReactorApp.Windows.Count == 0;
-            var policy = ReactorApp.ShutdownPolicy;
-            if (noWindows && policy == ShutdownPolicy.OnPrimaryWindowClosed)
+            try
             {
-                try { Application.Current?.Exit(); } catch { /* best effort */ }
+                opts.Startup(ctx);
             }
-            else if (noWindows && policy == ShutdownPolicy.OnLastSurfaceClosed && ReactorApp.TrayIconCount == 0)
+            finally
             {
-                try { Application.Current?.Exit(); } catch { /* best effort */ }
+                // In a finally because ownership has already been taken: if the
+                // callback throws and the app's OnUnhandledException marks it
+                // handled, nothing else would end a process that never opened a
+                // surface. Before ownership, the platform's OnLastWindowClose
+                // rescued that case.
+                ReactorApp.ExitIfStartupOpenedNoSurface();
             }
             return;
         }
@@ -1286,7 +1329,17 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
         var spec = ReactorApp.BuildInitialWindowSpec(opts);
 
-        ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
+        try
+        {
+            ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
+        }
+        finally
+        {
+            // Same reasoning as the startup path: OpenWindowCore unregisters and
+            // disposes the window before rethrowing, so a handled failure here
+            // leaves zero surfaces under an owned dispatcher.
+            ReactorApp.ExitIfStartupOpenedNoSurface();
+        }
     }
 
 

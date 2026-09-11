@@ -909,9 +909,12 @@ ways, both of which ask WinUI to exit outright rather than letting it decide: a
 startup callback that opens no surface at all exits immediately under
 `OnPrimaryWindowClosed`, and `ReactorApp.Exit()` always works.
 
-Set the policy before `ReactorApp.Run` or at any point afterwards, from any
-thread; it is read when a surface closes, so there is no ordering to get right.
-Changing it does not move `DispatcherShutdownMode`.
+Set the policy before `ReactorApp.Run`, or on the UI thread before your startup
+callback returns. A surface close reads it at the moment it happens, so a change
+made any time beforehand counts — but a zero-surface startup is judged the instant
+the callback returns, so a write posted from another thread during startup can
+land too late to be seen. Changing the policy never moves
+`DispatcherShutdownMode`.
 
 Reactor only takes that ownership when it owns the `Application`. A WinUI app that
 embeds `ReactorHostControl` runs its own `Application` and manages its own

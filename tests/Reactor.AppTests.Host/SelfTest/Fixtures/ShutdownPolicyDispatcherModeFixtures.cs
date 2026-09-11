@@ -56,21 +56,30 @@ internal static class ShutdownPolicyDispatcherModeFixtures
             var priorMode = Application.Current.DispatcherShutdownMode;
             try
             {
-                // Every policy, including the default. The default is the
-                // load-bearing case: deriving the mode from it is exactly what
-                // let the platform end an app whose last window was auxiliary.
+                // 1. Ownership. Seeded to the opposite value first, so a no-op
+                //    implementation is visible rather than masked by a mode that
+                //    was already correct.
+                Application.Current.DispatcherShutdownMode = DispatcherShutdownMode.OnLastWindowClose;
+                H.Check("ShutdownPolicy_Seed_Took",
+                    Application.Current.DispatcherShutdownMode == DispatcherShutdownMode.OnLastWindowClose);
+
+                ReactorApp.TakeOwnershipOfDispatcherLifetime();
+                await Harness.Render();
+
+                H.Check("ShutdownPolicy_Takes_Ownership",
+                    Application.Current.DispatcherShutdownMode == DispatcherShutdownMode.OnExplicitShutdown);
+
+                // 2. Policy independence, checked WITHOUT re-seeding: a setter
+                //    that wrote to the platform would show up as a mode that
+                //    moved off OnExplicitShutdown. Re-seeding between arms would
+                //    overwrite exactly that evidence, which is what made an
+                //    earlier version of this fixture unable to see it.
                 foreach (var policy in Enum.GetValues<ShutdownPolicy>())
                 {
                     ReactorApp.ShutdownPolicy = policy;
-
-                    Application.Current.DispatcherShutdownMode = DispatcherShutdownMode.OnLastWindowClose;
-                    H.Check($"ShutdownPolicy_{policy}_Seed_Took",
-                        Application.Current.DispatcherShutdownMode == DispatcherShutdownMode.OnLastWindowClose);
-
-                    ReactorApp.TakeOwnershipOfDispatcherLifetime();
                     await Harness.Render();
 
-                    H.Check($"ShutdownPolicy_{policy}_Takes_Ownership",
+                    H.Check($"ShutdownPolicy_{policy}_Does_Not_Move_The_Mode",
                         Application.Current.DispatcherShutdownMode == DispatcherShutdownMode.OnExplicitShutdown);
                 }
             }
