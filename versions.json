@@ -3,5 +3,10 @@
     "version": "main",
     "title": "main (development)",
     "aliases": []
+  },
+  {
+    "version": "0.1.0-preview.12",
+    "title": "0.1.0-preview.12",
+    "aliases": []
   }
 ]

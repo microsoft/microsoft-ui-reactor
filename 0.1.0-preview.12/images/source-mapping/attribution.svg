@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 380" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .group { fill: none; stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .group-label { font-size: 12px; font-weight: 600; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-planned { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .group { stroke: #6e7681; }
+      .group-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-planned { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Today group -->
+  <rect class="group" x="20" y="30" width="1080" height="140" rx="8"/>
+  <text class="group-label" x="40" y="52">Shipping today — component-name via ETW</text>
+
+  <rect class="box-accent" x="40" y="80" width="280" height="56" rx="6"/>
+  <text class="label" x="180" y="103" text-anchor="middle">User source</text>
+  <text class="sub" x="180" y="121" text-anchor="middle">class MyView : Component { … }</text>
+
+  <rect class="box" x="370" y="80" width="320" height="56" rx="6"/>
+  <text class="label" x="530" y="103" text-anchor="middle">Component.GetType().Name</text>
+  <text class="sub" x="530" y="121" text-anchor="middle">"MyView"</text>
+
+  <rect class="box" x="740" y="80" width="340" height="56" rx="6"/>
+  <text class="label" x="910" y="103" text-anchor="middle">ETW: ComponentRenderStart</text>
+  <text class="sub" x="910" y="121" text-anchor="middle">("MyView", …)</text>
+
+  <path class="edge" d="M320 108 L370 108" marker-end="url(#arr)"/>
+  <path class="edge" d="M690 108 L740 108" marker-end="url(#arr)"/>
+
+  <!-- Planned group -->
+  <rect class="group" x="20" y="200" width="1080" height="160" rx="8"/>
+  <text class="group-label" x="40" y="222">Designed — spec 010 (per-element file:line attribution)</text>
+
+  <rect class="box-accent" x="40" y="250" width="180" height="56" rx="6"/>
+  <text class="label" x="130" y="273" text-anchor="middle">User source</text>
+  <text class="sub" x="130" y="291" text-anchor="middle">Text("hello")</text>
+
+  <rect class="box-planned" x="250" y="250" width="200" height="56" rx="6"/>
+  <text class="label" x="350" y="273" text-anchor="middle">[CallerFilePath]</text>
+  <text class="sub" x="350" y="291" text-anchor="middle">[CallerLineNumber]</text>
+
+  <rect class="box-planned" x="480" y="250" width="200" height="56" rx="6"/>
+  <text class="label" x="580" y="273" text-anchor="middle">Element.Source</text>
+  <text class="sub" x="580" y="291" text-anchor="middle">(MyView.cs, 42)</text>
+
+  <rect class="box-planned" x="710" y="250" width="200" height="56" rx="6"/>
+  <text class="label" x="810" y="273" text-anchor="middle">WinUI attached DP</text>
+  <text class="sub" x="810" y="291" text-anchor="middle">SourceInfo.Location</text>
+
+  <rect class="box-planned" x="930" y="250" width="170" height="56" rx="6"/>
+  <text class="label" x="1015" y="273" text-anchor="middle">Inspector</text>
+  <text class="sub" x="1015" y="291" text-anchor="middle">jump-to-source</text>
+
+  <path class="edge" d="M220 278 L250 278" marker-end="url(#arr)"/>
+  <path class="edge" d="M450 278 L480 278" marker-end="url(#arr)"/>
+  <path class="edge" d="M680 278 L710 278" marker-end="url(#arr)"/>
+  <path class="edge" d="M910 278 L930 278" marker-end="url(#arr)"/>
+</svg>
