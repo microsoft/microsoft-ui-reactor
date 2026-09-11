@@ -800,8 +800,7 @@ public static partial class ReactorApp
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Exit));
         PrepareOpenWindowsForExit();
-        try { Application.Current?.Exit(); }
-        catch { /* best effort */ }
+        RequestEventLoopExit();
         if (exitCode != 0)
             Environment.Exit(exitCode);
     }
@@ -973,14 +972,52 @@ public static partial class ReactorApp
         if (policy == ShutdownPolicy.Explicit) return;
         if (policy == ShutdownPolicy.OnLastSurfaceClosed && TrayIconCount != 0) return;
 
-        try { Application.Current?.Exit(); } catch { /* best effort */ }
+        try { RequestEventLoopExit(); } catch { /* best effort */ }
+    }
+
+    /// <summary>
+    /// Ends this thread's event loop. UI-thread only.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Application.Exit"/> is the primary path.
+    /// <c>DispatcherQueue.EnqueueEventLoopExit</c> is the documented alternative
+    /// for a thread running under
+    /// <see cref="DispatcherShutdownMode.OnExplicitShutdown"/>, and it is the
+    /// reason this fallback exists at all: taking ownership of the loop removed
+    /// WinUI's automatic last-window shutdown, so a suppressed
+    /// <see cref="Application.Exit"/> failure would otherwise leave the process
+    /// pumping forever with no remaining way out. Both attempts are logged
+    /// through <see cref="AppLogger"/>; if both fail there is nothing further
+    /// Reactor can do from managed code, and the error is at least visible.
+    /// </remarks>
+    private static void RequestEventLoopExit()
+    {
+        try
+        {
+            Application.Current?.Exit();
+            return;
+        }
+        catch (Exception ex)
+        {
+            AppLogger?.LogError(ex, "ReactorApp: Application.Exit() failed; falling back to EnqueueEventLoopExit.");
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        try
+        {
+            UIDispatcher?.EnqueueEventLoopExit();
+        }
+        catch (Exception ex)
+        {
+            AppLogger?.LogError(ex, "ReactorApp: EnqueueEventLoopExit() also failed; the event loop may not terminate.");
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] EnqueueEventLoopExit threw: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private static void SafeExit()
     {
         PrepareOpenWindowsForExit();
-        try { Application.Current?.Exit(); }
-        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.Message}"); }
+        RequestEventLoopExit();
     }
 
     // Issue #537 — Application.Exit() tears down every open window's native
