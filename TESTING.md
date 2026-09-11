@@ -264,7 +264,7 @@ Two Host modes serve it:
 
 | Mode | Question | Exit codes |
 |---|---|---|
-| `--shutdown-policy-probe <policy> [--with-tray] [--no-window] [--reopen] [--excluded-window] [--close-tray]` | Does the event loop outlive its last window (or a zero-surface startup)? | `42` still alive, `1` loop unwound, `45` reopen failed |
+| `--shutdown-policy-probe <policy> [--with-tray] [--no-window] [--reopen] [--excluded-window] [--close-tray] [--legacy-run]` | Does the event loop outlive its last window (or a zero-surface startup)? | `42` still alive, `1` loop unwound, `45` reopen failed |
 | `--shutdown-policy-gate-probe` | Does Reactor leave a *non*-Reactor `Application`'s lifetime alone? | `43` gate held, `44` gate violated, `46` inconclusive |
 
 Every arm has a counterpart asserting the opposite outcome, so a "still alive" or "gate
