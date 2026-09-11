@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 380" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-side { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-side { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Row 1 -->
+  <rect class="box-accent" x="20" y="40" width="150" height="70" rx="6"/>
+  <text class="label" x="95" y="64" text-anchor="middle">State / hook setter</text>
+  <text class="sub" x="95" y="82" text-anchor="middle">UseState · UseReducer ·</text>
+  <text class="sub" x="95" y="96" text-anchor="middle">UseObservable</text>
+
+  <rect class="box" x="220" y="40" width="160" height="70" rx="6"/>
+  <text class="label" x="300" y="64" text-anchor="middle">Component.Render()</text>
+  <text class="sub" x="300" y="82" text-anchor="middle">BeginRender</text>
+  <text class="sub" x="300" y="96" text-anchor="middle">_hookIndex = 0</text>
+
+  <rect class="box" x="430" y="40" width="150" height="70" rx="6"/>
+  <text class="label" x="505" y="64" text-anchor="middle">Element tree</text>
+  <text class="sub" x="505" y="82" text-anchor="middle">immutable records</text>
+  <text class="sub" x="505" y="96" text-anchor="middle">no WinUI yet</text>
+
+  <rect class="box-accent" x="630" y="40" width="170" height="70" rx="6"/>
+  <text class="label" x="715" y="60" text-anchor="middle">Reconciler.Reconcile</text>
+  <text class="sub" x="715" y="78" text-anchor="middle">Mount · Update ·</text>
+  <text class="sub" x="715" y="92" text-anchor="middle">Unmount</text>
+
+  <rect class="box" x="850" y="40" width="160" height="70" rx="6"/>
+  <text class="label" x="930" y="64" text-anchor="middle">WinUI control tree</text>
+  <text class="sub" x="930" y="82" text-anchor="middle">Panel.Children</text>
+  <text class="sub" x="930" y="96" text-anchor="middle">ItemsRepeater · TabView</text>
+
+  <!-- Reconciler side helpers -->
+  <rect class="box-side" x="540" y="160" width="170" height="56" rx="6"/>
+  <text class="label" x="625" y="183" text-anchor="middle">ChildReconciler</text>
+  <text class="sub" x="625" y="201" text-anchor="middle">keyed (LIS) · positional</text>
+
+  <rect class="box-side" x="740" y="160" width="170" height="56" rx="6"/>
+  <text class="label" x="825" y="183" text-anchor="middle">ElementPool</text>
+  <text class="sub" x="825" y="201" text-anchor="middle">TryRent · Return</text>
+
+  <!-- Row 2 -->
+  <rect class="box-accent" x="220" y="260" width="170" height="70" rx="6"/>
+  <text class="label" x="305" y="284" text-anchor="middle">FlushEffects</text>
+  <text class="sub" x="305" y="302" text-anchor="middle">cleanup → effect body</text>
+  <text class="sub" x="305" y="316" text-anchor="middle">in slot order</text>
+
+  <rect class="box" x="430" y="260" width="170" height="70" rx="6"/>
+  <text class="label" x="515" y="284" text-anchor="middle">Composition layer</text>
+  <text class="sub" x="515" y="302" text-anchor="middle">implicit / explicit</text>
+  <text class="sub" x="515" y="316" text-anchor="middle">animations</text>
+
+  <rect class="box-accent" x="640" y="260" width="160" height="70" rx="6"/>
+  <text class="label" x="720" y="284" text-anchor="middle">Frame to screen</text>
+  <text class="sub" x="720" y="302" text-anchor="middle">composed by DWM</text>
+  <text class="sub" x="720" y="316" text-anchor="middle">on compositor thread</text>
+
+  <!-- Top-row edges -->
+  <path class="edge" d="M170 75 L220 75" marker-end="url(#arr)"/>
+  <text class="edge-label" x="195" y="66" text-anchor="middle">setter</text>
+
+  <path class="edge" d="M380 75 L430 75" marker-end="url(#arr)"/>
+  <text class="edge-label" x="405" y="66" text-anchor="middle">describe UI</text>
+
+  <path class="edge" d="M580 75 L630 75" marker-end="url(#arr)"/>
+  <text class="edge-label" x="605" y="66" text-anchor="middle">old vs new</text>
+
+  <path class="edge" d="M800 75 L850 75" marker-end="url(#arr)"/>
+  <text class="edge-label" x="825" y="66" text-anchor="middle">commit</text>
+
+  <!-- Reconciler ↓ children / pool -->
+  <path class="edge" d="M680 110 L625 160" marker-end="url(#arr)"/>
+  <text class="edge-label" x="630" y="135" text-anchor="middle">children</text>
+  <path class="edge" d="M750 110 L820 160" marker-end="url(#arr)"/>
+  <text class="edge-label" x="800" y="135" text-anchor="middle">rent / return</text>
+
+  <!-- WinUI ↓ FlushEffects -->
+  <path class="edge" d="M930 110 Q 930 200 305 260" marker-end="url(#arr)"/>
+  <text class="edge-label" x="610" y="245" text-anchor="middle">tree patched → flush in slot order</text>
+
+  <!-- FlushEffects → Composition → Frame -->
+  <path class="edge" d="M390 295 L430 295" marker-end="url(#arr)"/>
+  <path class="edge" d="M600 295 L640 295" marker-end="url(#arr)"/>
+</svg>

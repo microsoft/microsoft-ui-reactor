@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 360" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-bail { fill: #f6f8fa; stroke: #8c959f; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .diamond { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-bail { fill: #1c2129; stroke: #6e7681; }
+      .diamond { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Setter -->
+  <rect class="box-accent" x="20" y="120" width="120" height="56" rx="6"/>
+  <text class="label" x="80" y="143" text-anchor="middle">Setter call</text>
+  <text class="sub" x="80" y="161" text-anchor="middle">setX(newValue)</text>
+
+  <!-- Marshal diamond -->
+  <polygon class="diamond" points="200,148 270,118 340,148 270,178"/>
+  <text class="label" x="270" y="144" text-anchor="middle">On UI</text>
+  <text class="label" x="270" y="158" text-anchor="middle">thread?</text>
+
+  <!-- Hop -->
+  <rect class="box" x="200" y="220" width="140" height="60" rx="6"/>
+  <text class="label" x="270" y="244" text-anchor="middle">TryEnqueue</text>
+  <text class="sub" x="270" y="262" text-anchor="middle">marshal to UI</text>
+
+  <!-- Equality diamond -->
+  <polygon class="diamond" points="400,148 480,118 560,148 480,178"/>
+  <text class="label" x="480" y="144" text-anchor="middle">Equal to</text>
+  <text class="label" x="480" y="158" text-anchor="middle">prev value?</text>
+
+  <!-- Bail -->
+  <rect class="box-bail" x="410" y="40" width="140" height="50" rx="6"/>
+  <text class="label" x="480" y="63" text-anchor="middle">Bail</text>
+  <text class="sub" x="480" y="79" text-anchor="middle">no re-render</text>
+
+  <!-- Slot write -->
+  <rect class="box" x="620" y="120" width="140" height="56" rx="6"/>
+  <text class="label" x="690" y="143" text-anchor="middle">Write slot</text>
+  <text class="sub" x="690" y="161" text-anchor="middle">ValueHookState.Value</text>
+
+  <!-- Trigger -->
+  <rect class="box" x="620" y="230" width="140" height="56" rx="6"/>
+  <text class="label" x="690" y="253" text-anchor="middle">_requestRerender</text>
+  <text class="sub" x="690" y="271" text-anchor="middle">enqueue</text>
+
+  <!-- Coalesce -->
+  <rect class="box" x="820" y="230" width="140" height="56" rx="6"/>
+  <text class="label" x="890" y="253" text-anchor="middle">Dispatcher</text>
+  <text class="sub" x="890" y="271" text-anchor="middle">coalesce · batch</text>
+
+  <!-- Render -->
+  <rect class="box-accent" x="820" y="120" width="140" height="56" rx="6"/>
+  <text class="label" x="890" y="143" text-anchor="middle">Component.Render</text>
+  <text class="sub" x="890" y="161" text-anchor="middle">build new tree</text>
+
+  <!-- Reconcile -->
+  <rect class="box-accent" x="1010" y="120" width="150" height="56" rx="6"/>
+  <text class="label" x="1085" y="143" text-anchor="middle">Reconciler</text>
+  <text class="sub" x="1085" y="161" text-anchor="middle">diff · commit</text>
+
+  <!-- Frame -->
+  <rect class="box-accent" x="1010" y="230" width="150" height="56" rx="6"/>
+  <text class="label" x="1085" y="253" text-anchor="middle">Frame to screen</text>
+  <text class="sub" x="1085" y="271" text-anchor="middle">after FlushEffects</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M140 148 L200 148" marker-end="url(#arr)"/>
+  <path class="edge" d="M270 178 L270 220" marker-end="url(#arr)"/>
+  <text class="edge-label" x="280" y="205">no</text>
+  <path class="edge" d="M340 250 Q 380 250 400 178" marker-end="url(#arr)"/>
+  <path class="edge" d="M340 148 L400 148" marker-end="url(#arr)"/>
+  <text class="edge-label" x="370" y="140" text-anchor="middle">yes</text>
+
+  <path class="edge" d="M480 118 L480 90" marker-end="url(#arr)"/>
+  <text class="edge-label" x="490" y="106">equal</text>
+  <path class="edge" d="M560 148 L620 148" marker-end="url(#arr)"/>
+  <text class="edge-label" x="590" y="140" text-anchor="middle">different</text>
+
+  <path class="edge" d="M690 176 L690 230" marker-end="url(#arr)"/>
+  <path class="edge" d="M760 258 L820 258" marker-end="url(#arr)"/>
+  <path class="edge" d="M890 230 L890 176" marker-end="url(#arr)"/>
+  <path class="edge" d="M960 148 L1010 148" marker-end="url(#arr)"/>
+  <path class="edge" d="M1085 176 L1085 230" marker-end="url(#arr)"/>
+</svg>

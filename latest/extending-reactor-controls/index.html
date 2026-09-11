@@ -1,0 +1,4597 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Declarative UI framework for native Windows desktop apps in pure C#.">
+      
+      
+      
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.14/extending-reactor-controls/">
+      
+      
+        <link rel="prev" href="../control-reconciler-protocol/">
+      
+      
+        <link rel="next" href="../element-pool/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Extending Reactor Controls - Microsoft.UI.Reactor</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#extending-reactor-with-native-controls" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You are not viewing the latest release of Microsoft.UI.Reactor.
+  <a href="../..">
+    <strong>Go to the latest release.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Microsoft.UI.Reactor" class="md-header__button md-logo" aria-label="Microsoft.UI.Reactor" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Microsoft.UI.Reactor
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Extending Reactor Controls
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/microsoft/microsoft-ui-reactor" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    microsoft/microsoft-ui-reactor
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../components/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Learn the Framework
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../layout/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  UI Surface
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../controls/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Controls
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../navigation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  App Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../recipes/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Patterns & Recipes
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../dev-tooling/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tooling & Process
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../winforms-interop/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Interop
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../architecture-overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Under the Hood
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/hooks/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Microsoft.UI.Reactor" class="md-nav__button md-logo" aria-label="Microsoft.UI.Reactor" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Microsoft.UI.Reactor
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/microsoft/microsoft-ui-reactor" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    microsoft/microsoft-ui-reactor
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../thinking-in-reactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thinking in Reactor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../xaml-developers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactor for XAML Developers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactor-vs-xaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactor vs XAML
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn the Framework
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn the Framework
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Effects and Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../commanding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commanding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Surface
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    UI Surface
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../flex-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flex Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../styling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Styling and Theming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input-and-gestures/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input and Gestures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controls
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Controls
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controls Catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../forms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms and Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../collections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collections
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../text-and-media/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Text and Media
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../status-and-info/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Status and Info
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dialogs-and-flyouts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dialogs and Flyouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../charting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Charting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    App Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    App Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Navigation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docking Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../async-resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Async Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../localization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Localization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../accessibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accessibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../recipes/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Patterns & Recipes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Patterns & Recipes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/command-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/drag-reorder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drag Reorder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/login/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Login
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/master-detail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Master Detail
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/modal-dialog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modal Dialog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/multi-step-form/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-step Form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/paginated-list/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Paginated List
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/search-with-suggestions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search with Suggestions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/settings-page/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings Page
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheat-sheet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cheat Sheet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rules-of-reactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rules of Reactor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../theming-tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Theming Tokens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tooling & Process
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tooling & Process
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev-tooling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tooling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../packaging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packaging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Interop
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../winforms-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WinForms Interop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wpf-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WPF Interop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Under the Hood
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Under the Hood
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture-overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactivity-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactivity Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reconciliation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reconciliation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control-reconciler-protocol/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Control Reconciler Protocol
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending Reactor Controls
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending Reactor Controls
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-four-step-playbook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The four-step playbook
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-define-the-element-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1 — Define the Element record
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-choose-a-shape-descriptor-vs-hand-coded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2 — Choose a shape (descriptor vs hand-coded)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-wire-props" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3 — Wire props
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3 — Wire props">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#values-the-native-control-mutates-on-its-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Values the native control mutates on its own
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Values the native control mutates on its own">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mount-is-not-an-edge-and-a-few-controls-need-parenting-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mount is not an edge — and a few controls need parenting first
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reference-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-wire-events-the-non-dp-case" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4 — Wire events (the non-DP case)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-declare-a-child-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5 — Declare a child strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6 — Wrap the constructor in a factory holder, then use it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#explicit-registration-the-narrow-escape-hatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explicit registration — the narrow escape hatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patterns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-mistakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Mistakes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../element-pool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Element Pool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../effects-scheduling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Effects Scheduling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../threading-and-dispatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threading and Dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../source-mapping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Source Mapping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modifier-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modifier System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../analyzer-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analyzer Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../devtools-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DevTools Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../focus-and-input-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Focus and Input Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../perf-instrumentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Perf Instrumentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/hooks/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-four-step-playbook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The four-step playbook
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-define-the-element-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1 — Define the Element record
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-choose-a-shape-descriptor-vs-hand-coded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2 — Choose a shape (descriptor vs hand-coded)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-wire-props" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3 — Wire props
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3 — Wire props">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#values-the-native-control-mutates-on-its-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Values the native control mutates on its own
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Values the native control mutates on its own">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mount-is-not-an-edge-and-a-few-controls-need-parenting-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mount is not an edge — and a few controls need parenting first
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reference-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-wire-events-the-non-dp-case" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4 — Wire events (the non-DP case)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-declare-a-child-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5 — Declare a child strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6 — Wrap the constructor in a factory holder, then use it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#explicit-registration-the-narrow-escape-hatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explicit registration — the narrow escape hatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patterns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-mistakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Mistakes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/microsoft/microsoft-ui-reactor/edit/main/docs/guide/extending-reactor-controls.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<p>Microsoft.UI.Reactor (Reactor) ships handlers for the built-in WinUI
+control gallery, but the protocol that drives them is the same surface
+authors use to add their own native controls. The contract you wire
+up — an immutable element record, a descriptor or hand-coded handler,
+and a factory holder whose static constructor registers the handler
+with the global <a href="../control-reconciler-protocol/#registration"><code>ControlRegistry</code></a> — gives a custom control
+the same lifecycle, the same diff-and-write efficiency, the same pool
+reuse, and the same echo-safe two-way binding as <code>Button</code>,
+<a href="../forms/"><code>TextBox</code></a>, and <code>TabView</code>. The factory holder pattern is
+<a href="#step-3--wrap-the-constructor-in-a-factory-holder">trim-clean by construction</a>:
+if the app never calls the factory, the handler and the underlying
+WinUI control type are unreachable and NativeAOT publishing drops both.
+This page is the cookbook for that flow. By the end you will have
+added a <code>StarMeter</code> element to a Reactor app, wired it to WinUI's
+<code>RatingControl</code>, and matched the built-in performance bar without
+writing a line of imperative interpreter code. Read the reference
+companion <a href="../control-reconciler-protocol/">The Control Reconciler Protocol</a>
+for the model the steps here plug into.</p>
+<h1 id="extending-reactor-with-native-controls">Extending Reactor with Native Controls<a class="headerlink" href="#extending-reactor-with-native-controls" title="Permanent link">&para;</a></h1>
+<p>The audience is anyone wrapping a native Windows control — a third-
+party WinUI control, a custom <code>Control</code> subclass, or an existing WinUI
+control that the built-in catalog has not yet covered. The walk-through
+ports <code>Microsoft.UI.Xaml.Controls.RatingControl</code> end-to-end so the
+shape of every step is concrete; the patterns transfer to anything
+that descends from <code>FrameworkElement</code>. Cross-reference the built-in
+descriptors in <code>src/Reactor/Core/V1Protocol/Descriptor/Descriptors/</code>
+as you adapt the example — they are the production examples of every
+shape this page mentions.</p>
+<h2 id="the-four-step-playbook">The four-step playbook<a class="headerlink" href="#the-four-step-playbook" title="Permanent link">&para;</a></h2>
+<p>The whole flow is four steps, plus an optional fifth for control
+families that need a derived-type registration. The same four steps
+cover every leaf control in the built-in catalog; do them in the
+listed order — the factory holder in Step 3 <em>must</em> exist before
+Step 4 can use the element, because that holder's class-init is what
+registers the handler.</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What you write</th>
+<th>Where it lives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>An <code>Element</code> record subclass with one field per prop and one field per event callback, primary constructor <code>internal</code> so callers must reach it through the factory</td>
+<td>App code, next to the component that uses it</td>
+</tr>
+<tr>
+<td>2</td>
+<td>A <code>ControlDescriptor&lt;TElement, TControl&gt;</code> (or <code>IElementHandler&lt;TElement, TControl&gt;</code>) wiring each field to a WinUI property or event</td>
+<td>A <code>static class</code> in the same file or a sibling</td>
+</tr>
+<tr>
+<td>3</td>
+<td>A <code>public static class</code> factory holder whose <strong>static constructor</strong> calls <code>ControlRegistry.Register&lt;TElement, TControl&gt;(static () =&gt; new MyHandler())</code> and whose <code>Of(...)</code> method is the sole construction path for the element</td>
+<td>Co-located with the element record</td>
+</tr>
+<tr>
+<td>4</td>
+<td>A component that calls <code>MyControl.Of(...)</code> like any other factory in the <a href="../controls/">DSL</a></td>
+<td>Anywhere — usage shape is up to you</td>
+</tr>
+</tbody>
+</table>
+<p>A fifth step — <code>ControlRegistry.RegisterForDerivedTypes</code> against a
+non-generic intermediate base — lets one registration catch every
+closed-T variant of a generic element family. It is what the typed
+templated-list ports use; you only need it if you are adding a
+similar family.</p>
+<blockquote>
+<p><strong>Caveat:</strong> <strong>Why a factory holder, not a manual <code>Register</code> call at startup?</strong> The
+<code>static</code> keyword on the lambda in Step 3 is mandatory, and the
+holder's class-init being the registration trigger is what makes the
+control trim-clean under NativeAOT publishing (see
+<a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a>).
+If no component ever calls <code>StarMeter.Of(...)</code>, the holder is
+unreachable; the trimmer follows that unreachability through the
+cctor to the handler class and the WinUI control type, and removes
+all three from the published binary. A manual
+<code>reconciler.RegisterHandler&lt;...&gt;</code> call at app bootstrap roots every
+custom control unconditionally and defeats that story — it is
+documented in <a href="../control-reconciler-protocol/#registration">The Control Reconciler Protocol</a>
+as the explicit-override escape hatch for tests and host substitution,
+not the standard authoring path.</p>
+</blockquote>
+<h2 id="step-1-define-the-element-record">Step 1 — Define the Element record<a class="headerlink" href="#step-1-define-the-element-record" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">// An Element subclass with one controlled prop (Value), three one-way</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1">// props (MaxRating, Caption, IsClearEnabled), and one callback (OnValueChanged).</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1">// Controlled props use Optional&lt;T&gt;: Unset means the WinUI control owns the value.</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1">// Records give the reconciler value-equality for free — two StarMeterElement</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">// instances with identical fields compare equal and Update becomes a no-op.</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1">//</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1">// The primary constructor is `internal` (spec 048 §6 construction discipline):</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1">// external callers cannot `new StarMeterElement(...)` directly, so the only</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1">// reachable construction path is `StarMeter.Of(...)` below — whose class-init</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1">// installs the global handler registration. Init properties stay `public` so</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1">// `Of(...)` and its callers can configure the optional fields, and `with`</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1">// expressions still work across the assembly boundary.</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="k">public</span><span class="w"> </span><span class="k">sealed</span><span class="w"> </span><span class="k">record</span><span class="w"> </span><span class="n">StarMeterElement</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Element</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="p">{</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="n">Optional</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Value</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">get</span><span class="p">;</span><span class="w"> </span><span class="k">init</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Optional</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">.</span><span class="n">Unset</span><span class="p">;</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">MaxRating</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">get</span><span class="p">;</span><span class="w"> </span><span class="k">init</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="kt">string?</span><span class="w"> </span><span class="n">Caption</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">get</span><span class="p">;</span><span class="w"> </span><span class="k">init</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">IsClearEnabled</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">get</span><span class="p">;</span><span class="w"> </span><span class="k">init</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="n">Action</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;?</span><span class="w"> </span><span class="n">OnValueChanged</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">get</span><span class="p">;</span><span class="w"> </span><span class="k">init</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="k">internal</span><span class="w"> </span><span class="nf">StarMeterElement</span><span class="p">(</span><span class="n">Optional</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="k">value</span><span class="p">,</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="n">Action</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;?</span><span class="w"> </span><span class="n">onValueChanged</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">)</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="w">        </span><span class="n">Value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">value</span><span class="p">;</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="w">        </span><span class="n">OnValueChanged</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">onValueChanged</span><span class="p">;</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="p">}</span>
+</code></pre></div>
+<p>The record encodes everything the element exposes — controlled props,
+one-way props, the optional caption, and the user's
+<code>OnValueChanged</code> callback. The choice of <code>record</code> matters: the
+reconciler diffs elements with value equality, so two
+<code>StarMeterElement</code> instances with identical fields compare equal and
+the descriptor's Update path becomes a no-op. Reach for <code>record class</code>
+when the element will be created millions of times per second (so the
+sealed-record allocation is the dominant cost); reach for <code>record
+struct</code> only after profiling shows the heap pressure matters — most
+custom controls are well-served by the default sealed-record shape.</p>
+<p>The primary constructor is <code>internal</code> on purpose: it closes off
+<code>new StarMeterElement(...)</code> from outside the assembly that owns the
+element, leaving <code>StarMeter.Of(...)</code> (Step 6) as the sole external
+construction path. That is the <em>construction discipline</em> spec 048 §6
+requires for the <a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">factory-holder trim story</a>
+to hold — if external callers could bypass <code>Of</code>, the holder's class-
+init would not be guaranteed to run and the global registration could
+be missing when the element reached the reconciler. Init properties
+stay <code>public</code> so <code>Of(...)</code> (and <code>with</code> expressions for downstream
+authors) can configure the optional fields across the assembly
+boundary.</p>
+<p>The fields below are the only thing your component author touches.
+Every named property maps to one descriptor entry in Step 2.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Kind</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Value</code></td>
+<td>controlled <code>Optional&lt;double&gt;</code></td>
+<td><code>HasValue</code> means Reactor force-asserts the value; <code>Unset</code> means the WinUI control owns it.</td>
+</tr>
+<tr>
+<td><code>MaxRating</code></td>
+<td>one-way <code>int</code></td>
+<td>Driven by the element, never edited on the WinUI side.</td>
+</tr>
+<tr>
+<td><code>Caption</code></td>
+<td>optional one-way <code>string?</code></td>
+<td>Demo uses an explicit skip predicate; DP-backed fallbacks should prefer <code>Optional&lt;T&gt;</code> + <code>dp:</code>.</td>
+</tr>
+<tr>
+<td><code>IsClearEnabled</code></td>
+<td>one-way <code>bool</code></td>
+<td>Same as MaxRating — declarative knob.</td>
+</tr>
+<tr>
+<td><code>OnValueChanged</code></td>
+<td>callback <code>Action&lt;double&gt;?</code></td>
+<td>Subscribes only when non-null; the descriptor gates the trampoline on it.</td>
+</tr>
+</tbody>
+</table>
+<p>Inherit from <code>Element</code> (not <code>FrameworkElement</code>, not <code>Control</code>) — this
+is the Reactor record, not the WinUI control. The built-in fluent
+modifier chain (<code>.Width(...)</code>, <code>.Margin(...)</code>, <code>.Foreground(...)</code>)
+applies to the built-in element types it was authored against; a
+custom element does not get those modifiers for free. Authors who
+want chainable modifiers on their own element add an
+<code>Action&lt;TControl&gt;[] Setters</code> field and an extension-method namespace
+that appends to it, then point the descriptor's <code>GetSetters</code> selector
+at the field. The
+<a href="../modifier-system/">Modifier System</a> page walks through the chain
+shape; keeping the demo focused, the cookbook below omits it.</p>
+<h2 id="step-2-choose-a-shape-descriptor-vs-hand-coded">Step 2 — Choose a shape (descriptor vs hand-coded)<a class="headerlink" href="#step-2-choose-a-shape-descriptor-vs-hand-coded" title="Permanent link">&para;</a></h2>
+<p>Reactor's handler protocol has two surfaces — declarative
+(<a href="../control-reconciler-protocol/#descriptors--declarative-handlers"><code>ControlDescriptor</code></a>)
+and imperative
+(<a href="../control-reconciler-protocol/#the-handler-contract"><code>IElementHandler</code></a>) — that
+land on the same dispatch table. New controls should default to a
+descriptor; reach for a hand-coded handler only when the descriptor
+escape hatches (<code>.Imperative</code>, <code>.HandCoded…</code>) still cannot express
+the diff.</p>
+<table>
+<thead>
+<tr>
+<th>Use a descriptor when</th>
+<th>Reach for a hand-coded handler when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Props map 1:1 to WinUI properties, or jointly through a tuple <code>get</code></td>
+<td>Mount has irreducible imperative logic (template-part lookups via <code>OnApplyTemplate</code>, multi-control composition)</td>
+</tr>
+<tr>
+<td>Events follow <code>subscribe(handler) ↔ readBack(control)</code></td>
+<td>Events route through non-CLR shapes (raw routed events, native callbacks)</td>
+</tr>
+<tr>
+<td>The control fits one of the standard <code>ChildrenStrategy</code> shapes</td>
+<td>The control has a children-realization model the strategy set does not cover (custom virtualization, mixed item types per slot)</td>
+</tr>
+<tr>
+<td>You want the next reader to skim the spec, not the code</td>
+<td>You are wrapping a control whose contract the framework cannot yet express declaratively, and adding a new entry shape would not pay back</td>
+</tr>
+</tbody>
+</table>
+<p>Every built-in port in <code>src/Reactor/Core/V1Protocol/Descriptor/Descriptors/</code>
+is a descriptor. The few hand-coded <code>IElementHandler</code> implementations
+in <code>src/Reactor/Core/V1Protocol/Handlers/</code> are the ones whose diff
+shape genuinely does not fit a declarative entry list — read them as
+the bar for "complicated enough to write by hand."</p>
+<h2 id="step-3-wire-props">Step 3 — Wire props<a class="headerlink" href="#step-3-wire-props" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">StarMeterDescriptor</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="p">{</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">ControlDescriptor</span><span class="o">&lt;</span><span class="n">StarMeterElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">RatingControl</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Descriptor</span><span class="w"> </span><span class="o">=</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="n">ControlDescriptor</span><span class="o">&lt;</span><span class="n">StarMeterElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">RatingControl</span><span class="o">&gt;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">            </span><span class="c1">// Leaf control — no children. (See ChildrenStrategy survey for</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">            </span><span class="c1">// the other shapes: SingleContent, Panel, NamedSlots, ItemsHost…)</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">            </span><span class="n">Children</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">None</span><span class="o">&lt;</span><span class="n">StarMeterElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">RatingControl</span><span class="o">&gt;</span><span class="p">(),</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">        </span><span class="c1">// OneWay props: written on Mount, diff-and-written on Update.</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">        </span><span class="p">.</span><span class="n">OneWay</span><span class="p">(</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">            </span><span class="k">get</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">MaxRating</span><span class="p">,</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">            </span><span class="k">set</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">MaxRating</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">        </span><span class="p">.</span><span class="n">OneWay</span><span class="p">(</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">            </span><span class="k">get</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">IsClearEnabled</span><span class="p">,</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">            </span><span class="k">set</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">IsClearEnabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">)</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">        </span><span class="c1">// OneWayConditional skips the write when the predicate is false —</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">        </span><span class="c1">// leaves Caption at the control&#39;s default for elements that didn&#39;t</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">        </span><span class="c1">// supply one, rather than forcing it to null and losing a style.</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">        </span><span class="p">.</span><span class="n">OneWayConditional</span><span class="p">(</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">            </span><span class="k">get</span><span class="p">:</span><span class="w">         </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">Caption</span><span class="p">,</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">            </span><span class="k">set</span><span class="p">:</span><span class="w">         </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Caption</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="o">!</span><span class="p">,</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">            </span><span class="n">shouldWrite</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">Caption</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">)</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="w">        </span><span class="c1">// Controlled is the two-way binding shape. Its get lambda returns</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">        </span><span class="c1">// Optional&lt;double&gt;: Unset skips framework writes so the control owns</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">        </span><span class="c1">// the value; HasValue force-asserts on Mount and Update with echo</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">        </span><span class="c1">// suppression, then forwards user input through OnValueChanged.</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">        </span><span class="c1">// Subscription is gated on the callback being non-null.</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="w">        </span><span class="p">.</span><span class="n">Controlled</span><span class="o">&lt;</span><span class="kt">double</span><span class="p">,</span><span class="w"> </span><span class="kt">object</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="w">            </span><span class="k">get</span><span class="p">:</span><span class="w">         </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">Value</span><span class="p">,</span>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="w">            </span><span class="k">set</span><span class="p">:</span><span class="w">         </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">,</span>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a><span class="w">            </span><span class="n">subscribe</span><span class="p">:</span><span class="w">   </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">fe</span><span class="p">,</span><span class="w"> </span><span class="n">h</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">((</span><span class="n">WinUI</span><span class="p">.</span><span class="n">RatingControl</span><span class="p">)</span><span class="n">fe</span><span class="p">).</span><span class="n">ValueChanged</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">h</span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="o">!</span><span class="p">),</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="w">            </span><span class="n">unsubscribe</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">fe</span><span class="p">,</span><span class="w"> </span><span class="n">h</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* trampoline anchored for control lifetime */</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a><span class="w">            </span><span class="n">callback</span><span class="p">:</span><span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">OnValueChanged</span><span class="p">,</span>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a><span class="w">            </span><span class="n">readBack</span><span class="p">:</span><span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Value</span><span class="p">);</span>
+<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>
+<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a><span class="w">    </span><span class="c1">// The thin `new()`-able handler subclass that the `static` lambda in</span>
+<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a><span class="w">    </span><span class="c1">// StarMeter&#39;s cctor instantiates. Subclassing DescriptorHandler keeps</span>
+<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a><span class="w">    </span><span class="c1">// the descriptor accessible *only* through this handler — the trimmer</span>
+<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a><span class="w">    </span><span class="c1">// can drop both if the StarMeter factory is never called.</span>
+<a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a><span class="w">    </span><span class="k">internal</span><span class="w"> </span><span class="k">sealed</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">Handler</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">DescriptorHandler</span><span class="o">&lt;</span><span class="n">StarMeterElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">RatingControl</span><span class="o">&gt;</span>
+<a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a><span class="w">        </span><span class="k">public</span><span class="w"> </span><span class="nf">Handler</span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">base</span><span class="p">(</span><span class="n">StarMeterDescriptor</span><span class="p">.</span><span class="n">Descriptor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-1-44" name="__codelineno-1-44" href="#__codelineno-1-44"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-45" name="__codelineno-1-45" href="#__codelineno-1-45"></a><span class="p">}</span>
+</code></pre></div>
+<p>Each fluent builder call adds one
+<a href="../control-reconciler-protocol/#propentry-shapes--the-prop-binding-vocabulary"><code>PropEntry</code></a>
+to the descriptor. The interpreter iterates them in declaration order
+during Mount and Update. The descriptor above uses three of the
+common shapes:</p>
+<p><code>.OneWay(get, set)</code> — <code>MaxRating</code> and <code>IsClearEnabled</code>. The
+interpreter writes the value at Mount; on Update it compares the old
+element's value against the new and writes only when the values
+differ. Use this for <strong>always-write props with no callback</strong>: the
+element is authoritative and there is no user edit channel to echo.
+The default comparer is <code>EqualityComparer&lt;TValue&gt;.Default</code>; pass an
+explicit comparer to the optional <code>comparer</code> parameter for
+floating-point tolerance or custom-type equality.</p>
+<p><code>.OneWay(get, set, dp:)</code> — the DP-backed fallback channel. When the
+<code>get</code> lambda returns <code>Optional&lt;T&gt;</code>, <code>HasValue</code> writes through <code>set</code>
+and <code>Unset</code> calls <code>ClearValue(dp)</code>, releasing the local value so
+WinUI's style / template / inherited / default precedence chain can
+win. Use this when the authoring question is <strong>one-way with WinUI
+fallback</strong> (for example, a themeable brush). If there is no DP or the
+predicate is not a simple set-vs-unset choice, keep
+<code>.OneWayConditional(get, set, shouldWrite)</code> as the explicit skip-write
+shape.</p>
+<p><code>.InitialOnly(get, set)</code> — the mount-only channel. It writes once at
+Mount and never on Update, the same role React's <code>defaultValue</code> plays
+for uncontrolled inputs. Use it for props that seed a control and then
+must hand authority to WinUI forever.</p>
+<p><code>.Controlled&lt;TValue, TArgs&gt;(...)</code> — <code>Value</code>. Controlled props always
+use an <code>Optional&lt;TValue&gt;</code> element field and an Optional-returning
+<code>get:</code> lambda. <code>Unset</code> returns early on Mount and Update, meaning the
+WinUI control owns the value; <code>HasValue</code> force-asserts the element's
+value (bare on Mount, echo-suppressed on Update) and user interaction
+round-trips through the callback. This is Reactor's C# equivalent of
+React's controlled-input split: React can tell <code>&lt;input&gt;</code> from
+<code>&lt;input value={x}&gt;</code> because JSX preserves prop omission, while C#
+records cannot distinguish an omitted property from a property set to
+its default. <code>Optional&lt;T&gt;</code> supplies that missing bit.</p>
+<p>Decision tree for descriptor authors:</p>
+<table>
+<thead>
+<tr>
+<th>Intent</th>
+<th>Element prop type</th>
+<th>Builder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Controlled with user authority</td>
+<td><code>Optional&lt;T&gt;</code></td>
+<td><code>.Controlled(...)</code> / <code>.HandCodedControlled(...)</code></td>
+</tr>
+<tr>
+<td>One-way with WinUI fallback</td>
+<td><code>Optional&lt;T&gt;</code></td>
+<td><code>.OneWay(get, set, dp: SomeControl.SomeProperty)</code></td>
+</tr>
+<tr>
+<td>Mount-only seed</td>
+<td><code>T</code></td>
+<td><code>.InitialOnly(get, set)</code></td>
+</tr>
+<tr>
+<td>Always write, no callback</td>
+<td><code>T</code></td>
+<td><code>.OneWay(get, set)</code></td>
+</tr>
+<tr>
+<td>Reference to another realized element</td>
+<td><code>ElementRef&lt;TTarget&gt;?</code></td>
+<td><code>.Reference&lt;TTarget&gt;(get, set)</code></td>
+</tr>
+<tr>
+<td>Ordered references to several elements</td>
+<td><code>IReadOnlyList&lt;ElementRef&lt;TTarget&gt;&gt;?</code></td>
+<td><code>.ReferenceList&lt;TTarget&gt;(get, apply)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="values-the-native-control-mutates-on-its-own">Values the native control mutates on its own<a class="headerlink" href="#values-the-native-control-mutates-on-its-own" title="Permanent link">&para;</a></h3>
+<p>Some control properties are written by the control itself in response to
+the user, not just by Reactor: <code>InfoBar.IsOpen</code> flips to <code>false</code> when the
+user clicks the bar's close button, <code>TeachingTip.IsOpen</code> flips on a light
+dismiss, <code>SplitView.IsPaneOpen</code> and <code>NavigationView.IsPaneOpen</code> flip on a
+light dismiss or an adaptive display-mode change. Reactor's diff compares
+the <strong>old element to the new element</strong>, never the live control, so after
+one of those native writes the declared value and the control's value
+disagree — and nothing re-reconciles them.</p>
+<p>That is deliberate. Such a value is <strong>edge-triggered</strong>: the element
+declares a <em>transition</em>, not a mirror. Reactor writes the control only
+when the declared value <em>changes</em>, so a re-render that declares the same
+value again is a no-op and the user's dismissal stands.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">showBanner</span><span class="p">,</span><span class="w"> </span><span class="n">setShowBanner</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="k">true</span><span class="p">);</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="n">InfoBar</span><span class="p">(</span><span class="s">&quot;Saved&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Your changes were saved.&quot;</span><span class="p">).</span><span class="n">IsClosable</span><span class="p">()</span><span class="w"> </span><span class="k">with</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">        </span><span class="n">IsOpen</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">showBanner</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">        </span><span class="c1">// Without this the dismissal never reaches app state, so a later</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">        </span><span class="c1">// `setShowBanner(true)` is a no-op — it is already true.</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">        </span><span class="n">OnClosed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setShowBanner</span><span class="p">(</span><span class="k">false</span><span class="p">),</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="p">},</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Show again&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setShowBanner</span><span class="p">(</span><span class="k">true</span><span class="p">)));</span>
+</code></pre></div>
+<p>Wiring the change callback is what makes the value recoverable: the
+dismissal drives the declared value down to <code>false</code>, and the later
+<code>false → true</code> transition is a real edge that re-opens the control.</p>
+<p><code>OnClosed</code> also has a fluent form — <code>.Closed(() =&gt; setShowBanner(false))</code> —
+which composes with the rest of the chain when you are not already using a
+<code>with</code> expression for <code>IsOpen</code>. The equivalent hooks on the other three are
+<code>SplitView</code> / <code>NavigationView</code>'s <code>OnPaneOpenChanged</code> and <code>TeachingTip</code>'s
+<code>OnClosed</code>.</p>
+<p>The alternative — re-asserting the declared value against the live
+control on every render — is deliberately <strong>not</strong> what these four do. It
+would make a control the user cannot dismiss: <code>InfoBarElement.IsOpen</code>,
+<code>SplitViewElement.IsPaneOpen</code> and <code>NavigationViewElement.IsPaneOpen</code> all
+default to <code>true</code>, so any of them written without a change callback would
+snap back open on the next unrelated re-render.</p>
+<p>Re-asserting is safe only when the element cannot silently claim
+authority it was never given. Two built-ins do re-assert, and both clear
+that bar: <code>Expander.IsExpanded</code> is an <code>Optional&lt;bool&gt;</code> whose <em>unset</em>
+value means "the control owns this", so the element only wins when the
+author explicitly declared it; <code>Popup.IsOpen</code> defaults to <code>false</code>, which
+is also the value a light-dismissed popup rests at, so the re-assert is a
+no-op in the direction that would otherwise fight the user.</p>
+<p>So, when wrapping a control of your own with a self-mutating property:</p>
+<ul>
+<li><strong>Default to edge-triggered</strong> — <code>.OneWay(get, set)</code> plus the control's
+  change event surfaced as a callback on the element record, so callers
+  have a sync channel. This is always safe.</li>
+<li><strong>Only re-assert against the live control</strong> if authority is opt-in
+  (an <code>Optional&lt;T&gt;</code> prop, unset by default) or the element's default
+  equals the value the control rests at after the user acts. A plain
+  <code>bool</code> defaulting to the "showing" state fails both tests.</li>
+</ul>
+<h4 id="mount-is-not-an-edge-and-a-few-controls-need-parenting-first">Mount is not an edge — and a few controls need parenting first<a class="headerlink" href="#mount-is-not-an-edge-and-a-few-controls-need-parenting-first" title="Permanent link">&para;</a></h4>
+<p>Edge semantics describe the <em>steady state</em>. At mount there is no previous
+element, so the declared value is always written. What can still go wrong
+is <em>when</em>: Reactor configures a control fully before its parent takes it,
+and a handful of WinUI controls quietly discard a state change made while
+they are unparented.</p>
+<p><code>TeachingTip</code> is the built-in that does. An unparented tip holds a pending
+open only while nothing else is written to it, and a mount always writes
+something afterwards — later prop entries, setters, content slots, common
+modifiers. Ordering the entry last does not help, because most of those
+writes happen outside the descriptor. So its <code>IsOpen</code> entry defers a
+mount-time <code>true</code> to the control's <code>Loaded</code> event, the first moment the
+tip is parented into a live tree and an open is guaranteed to stick (issue
+949). Post-mount edges are unaffected: by then the control is loaded and
+the write goes straight through.</p>
+<p>If a control you are wrapping only presents once it is in a live tree, use
+the same shape — an <code>.Imperative</code> entry that defers to <code>Loaded</code>, paired
+with <code>.WithUnmount(...)</code> so the pending write is dropped if the control
+leaves the tree first, and a falling edge that arrives meanwhile disarms
+it — rather than trusting mount ordering.</p>
+<p><code>.WithUnmount(...)</code> is the descriptor's teardown seam in general: the
+engine already dispatched unmount to hand-coded handlers, and this
+surfaces the same hook to descriptor authors. Reach for it only for state
+the pool reset contract cannot see — a pending deferred write, a one-shot
+lifecycle subscription, a disposable. It is explicitly <em>not</em> for event
+trampolines, which anchor to the control's lifetime by design.</p>
+<h3 id="reference-properties">Reference properties<a class="headerlink" href="#reference-properties" title="Permanent link">&para;</a></h3>
+<p>Use reference entries when a native control property points at another
+realized <code>FrameworkElement</code>: <code>TeachingTip.Target</code>, relationship
+properties such as automation <code>LabeledBy</code>, or custom owner/source slots
+on a control. The element record stores an <code>ElementRef&lt;TTarget&gt;</code> (or an
+ordered list of them). The descriptor declares the edge:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">descriptor</span><span class="p">.</span><span class="n">Reference</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="k">get</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">Target</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="k">set</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">target</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Target</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">target</span><span class="p">);</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">descriptor</span><span class="p">.</span><span class="n">ReferenceList</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="k">get</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">Related</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="n">apply</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">targets</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">        </span><span class="n">c</span><span class="p">.</span><span class="n">Related</span><span class="p">.</span><span class="n">Clear</span><span class="p">();</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">        </span><span class="k">foreach</span><span class="w"> </span><span class="p">(</span><span class="kt">var</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">targets</span><span class="p">)</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">            </span><span class="n">c</span><span class="p">.</span><span class="n">Related</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="n">target</span><span class="p">);</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">    </span><span class="p">});</span>
+</code></pre></div>
+<p><code>.Reference</code> writes the current target on mount, subscribes to the
+cell, and rewrites the property when the target mounts later or
+unmounts. <code>.ReferenceList</code> rebuilds the target list in author
+declaration order and omits unresolved cells. Hand-coded handlers use
+<code>binding.Reference</code> / <code>binding.ReferenceList</code> for the same edge when no
+descriptor entry can express the control. <strong>D1 rule:</strong> do not read
+<code>ref.Current</code> inside a handler and assign it to a reference property;
+that is only a snapshot and breaks late binding and clear-on-unmount.
+<code>REACTOR_REF_001</code> steers that anti-pattern back to a reactive edge.</p>
+<blockquote>
+<p><strong>Caveat:</strong> For reference-type optionals, the implicit conversion is deliberate
+but easy to misread: <code>with { Background = null }</code> for an
+<code>Optional&lt;Brush&gt;</code> property becomes <code>Optional&lt;Brush&gt;.Of(null)</code> — an explicit
+force-assert of <code>null</code> — <strong>not</strong> <code>Optional&lt;Brush&gt;.Unset</code>. Write
+<code>Optional&lt;Brush&gt;.Unset</code> when the control should own the value.</p>
+</blockquote>
+<p>The <code>subscribe</code> lambda's shape is <code>(FrameworkElement,
+EventHandler&lt;TArgs&gt;) → void</code>; the engine boxes the control identity
+through <code>FrameworkElement</code> to keep the entry generic across closed-T
+tuples. <code>TArgs</code> is whatever the WinUI event carries — for
+<code>RatingControl.ValueChanged</code> the args type is <code>object</code> because WinUI
+authors the event with <code>TypedEventHandler&lt;RatingControl, object&gt;</code>.
+Subscription is <strong>gated on <code>callback</code> returning non-null</strong> — if the
+element doesn't carry <code>OnValueChanged</code>, no trampoline is wired and the
+dispatch cost for that prop stays at zero.</p>
+<blockquote>
+<p><strong>Caveat:</strong> The <code>unsubscribe</code> lambda is intentionally a no-op body — descriptor
+trampolines anchor to the control's lifetime, not the element's. The
+control returns to the pool, the pool reset contract clears the
+trampoline slot on the typed event-payload box, and the next Mount
+finds an empty slot and re-subscribes. Writing a real unsubscribe
+into the lambda double-frees the subscription when the control pools
+and is the most common source of "the event stops firing after a
+re-render" bugs. If your control genuinely needs explicit teardown on
+unmount — a pending deferred write, a one-shot lifecycle subscription,
+a disposable — declare <code>.WithUnmount(...)</code> on the descriptor. Reach for
+a hand-coded <code>IElementHandler.Unmount</code> only when you also need to
+control the unmount disposition or to see the element.</p>
+</blockquote>
+<h2 id="step-4-wire-events-the-non-dp-case">Step 4 — Wire events (the non-DP case)<a class="headerlink" href="#step-4-wire-events-the-non-dp-case" title="Permanent link">&para;</a></h2>
+<p><code>StarMeterElement.Value</code> is bound to a property and an event together,
+so it uses the <code>.Controlled</code> shape above. Events that <strong>do not</strong>
+round-trip a DP — <code>Button.Click</code>, <code>Image.ImageOpened</code>,
+<code>TextBox.SelectionChanged</code> — use a sibling builder:</p>
+<table>
+<thead>
+<tr>
+<th>Builder</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.HandCodedEvent&lt;TPayload, TDelegate&gt;(subscribe, callbackPresent, trampoline, slotIsNull, setSlot)</code></td>
+<td>Fire-and-forget event with no associated DP. The <code>trampoline</code> is a <code>static</code> delegate that closes over no per-instance state; per-control state goes on the <code>TPayload</code> slot.</td>
+</tr>
+<tr>
+<td><code>binding.OnCustomEvent&lt;TArgs&gt;(subscribe, unsubscribe, handler)</code> inside a hand-coded handler</td>
+<td>When you have already chosen the hand-coded shape and want the simpler closure-based trampoline. Allocates a closure per Mount instead of reusing a static delegate.</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>ButtonDescriptor</code> source (in
+<code>src/Reactor/Core/V1Protocol/Descriptor/Descriptors/ButtonDescriptor.cs</code>)
+is the canonical example of <code>.HandCodedEvent</code> — including the
+short-circuit for <code>IsDisabledFocusable</code> and the
+<code>Reconciler.GetElementTag</code> tag refresh.</p>
+<h2 id="step-5-declare-a-child-strategy">Step 5 — Declare a child strategy<a class="headerlink" href="#step-5-declare-a-child-strategy" title="Permanent link">&para;</a></h2>
+<p><code>StarMeterElement</code> is a leaf, so the descriptor declares
+<code>Children = new None&lt;…&gt;()</code>. The dispatch surface is the same as the
+<a href="../control-reconciler-protocol/#children-strategies">ChildrenStrategy survey</a>; the
+right strategy is whichever matches your WinUI control's structural
+contract:</p>
+<table>
+<thead>
+<tr>
+<th>Your WinUI control's child shape</th>
+<th>Strategy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No children</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td>One <code>Content</code> / <code>Child</code> slot</td>
+<td><code>SingleContent(GetChild, SetChild) { GetCurrentChild = … }</code></td>
+</tr>
+<tr>
+<td><code>Children</code> collection on a <code>Panel</code></td>
+<td><code>Panel(GetChildren, GetCollection)</code></td>
+</tr>
+<tr>
+<td>Named slots (<code>Header</code>, <code>Content</code>, <code>Footer</code>)</td>
+<td><code>NamedSlots([NamedSlot("Header", …), …])</code></td>
+</tr>
+<tr>
+<td>Flat items collection (<code>Items</code>) of values or pre-built elements</td>
+<td><code>ItemsHost(GetItems, GetCollection)</code></td>
+</tr>
+<tr>
+<td>Typed templated list with keyed reconcile</td>
+<td><code>TemplatedItems&lt;TItem, TElement, TControl&gt;(GetItems, KeySelector, BuildItemView)</code></td>
+</tr>
+<tr>
+<td>Hierarchical tree</td>
+<td><code>TreeChildren(GetNodes)</code></td>
+</tr>
+<tr>
+<td>Tabs / pivots with per-item containers</td>
+<td><code>TabItemsHost(GetItems, GetCollection, GetContent, CreateContainer)</code></td>
+</tr>
+</tbody>
+</table>
+<p>The standard strategies cover everything in the built-in catalog. The
+<code>Imperative&lt;TElement, TControl&gt;</code> escape hatch exists for the case
+where none of them fit — for example, a control whose children live
+on three different non-collection properties that must reconcile
+together. Reach for it last; you give up the engine's keyed reconcile
+and lose descendant component state across re-renders that touch the
+imperative slot.</p>
+<h2 id="step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it<a class="headerlink" href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1">// Spec 048 §6 Pattern A — the factory holder *is* the registration trigger.</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1">// The static cctor runs the first time any member of `StarMeter` is touched</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1">// (CLR-guaranteed precise-init), which means the global ControlRegistry</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1">// entry is in place before the first Of() call returns its element.</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1">//</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="c1">// The `static` keyword on the lambda is MANDATORY (not stylistic): it</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1">// guarantees the delegate is cached in a static field (one allocation,</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1">// ever) and captures nothing. A non-static lambda compiles but allocates</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="c1">// a closure per Register call AND defeats the trimmer&#39;s ability to follow</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1">// the holder→handler→control chain. The static lambda is what makes</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="c1">// Pattern A trim-clean.</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">StarMeter</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="p">{</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="nf">StarMeter</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">        </span><span class="n">ControlRegistry</span><span class="p">.</span><span class="n">Register</span><span class="o">&lt;</span><span class="n">StarMeterElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">RatingControl</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">            </span><span class="k">static</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">StarMeterDescriptor</span><span class="p">.</span><span class="n">Handler</span><span class="p">());</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">    </span><span class="c1">// Sole construction path for StarMeterElement (spec §6 construction</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">    </span><span class="c1">// discipline). Calling Of() guarantees the handler is registered before</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">    </span><span class="c1">// the returned element is mounted — the cctor above runs before any</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">    </span><span class="c1">// member of this type, including Of, can be invoked.</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">StarMeterElement</span><span class="w"> </span><span class="nf">Of</span><span class="p">(</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">        </span><span class="kt">double</span><span class="w"> </span><span class="k">value</span><span class="p">,</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="n">Action</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;?</span><span class="w"> </span><span class="n">onValueChanged</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span>
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">maxRating</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">        </span><span class="kt">string?</span><span class="w"> </span><span class="n">caption</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span>
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="w">        </span><span class="kt">bool</span><span class="w"> </span><span class="n">isClearEnabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">        </span><span class="n">Of</span><span class="p">(</span><span class="n">Optional</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">.</span><span class="n">Of</span><span class="p">(</span><span class="k">value</span><span class="p">),</span><span class="w"> </span><span class="n">onValueChanged</span><span class="p">,</span><span class="w"> </span><span class="n">maxRating</span><span class="p">,</span><span class="w"> </span><span class="n">caption</span><span class="p">,</span><span class="w"> </span><span class="n">isClearEnabled</span><span class="p">);</span>
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">StarMeterElement</span><span class="w"> </span><span class="nf">Of</span><span class="p">(</span>
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="w">        </span><span class="n">Optional</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="k">value</span><span class="p">,</span>
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="n">Action</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;?</span><span class="w"> </span><span class="n">onValueChanged</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span>
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">maxRating</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a><span class="w">        </span><span class="kt">string?</span><span class="w"> </span><span class="n">caption</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span>
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a><span class="w">        </span><span class="kt">bool</span><span class="w"> </span><span class="n">isClearEnabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a><span class="w">        </span><span class="k">new</span><span class="p">(</span><span class="k">value</span><span class="p">,</span><span class="w"> </span><span class="n">onValueChanged</span><span class="p">)</span>
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a><span class="w">            </span><span class="n">MaxRating</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maxRating</span><span class="p">,</span>
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a><span class="w">            </span><span class="n">Caption</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">caption</span><span class="p">,</span>
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a><span class="w">            </span><span class="n">IsClearEnabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">isClearEnabled</span><span class="p">,</span>
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a><span class="w">        </span><span class="p">};</span>
+<a id="__codelineno-4-42" name="__codelineno-4-42" href="#__codelineno-4-42"></a><span class="p">}</span>
+</code></pre></div>
+<p>The <code>StarMeter</code> holder is the bridge between your descriptor and the
+runtime. The CLR's precise-initialization rules guarantee its static
+constructor runs exactly once, immediately before the first member
+access — which means the global
+<a href="../control-reconciler-protocol/#registration"><code>ControlRegistry.Register</code></a>
+call lands before <code>StarMeter.Of(...)</code> can return. No app bootstrap
+code is involved; the registration is co-located with the only
+construction path for the element. Multiple components calling
+<code>StarMeter.Of(...)</code> from different threads are safe — the CLR
+serializes class init.</p>
+<p>The <code>static</code> keyword on the lambda passed to <code>ControlRegistry.Register</code>
+is <strong>mandatory, not stylistic</strong>:</p>
+<ul>
+<li>A <code>static</code> lambda is cached in a compiler-generated static field —
+  one delegate allocation, ever, no matter how many times the cctor
+  runs (which is one).</li>
+<li>A <code>static</code> lambda captures nothing (a capture is a compile error),
+  so the trimmer can prove the handler factory does not hold a
+  reference to anything outside <code>MyHandler</code> itself. That is what lets
+  the trimmer drop the entire holder → handler → control chain when
+  <code>StarMeter</code> is unreachable.</li>
+<li>A non-<code>static</code> lambda compiles, allocates a closure object per
+  <code>Register</code> call, <em>and</em> roots whatever it captures (typically
+  <code>this</code>) — which on a static cctor is nothing useful, but the
+  trimmer treats the closure as a generic reference that may hold
+  arbitrary types. See
+  <a href="#common-mistakes">Common Mistakes — Passing a non-static lambda to ControlRegistry.Register</a>.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ExtendingApp</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="p">{</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">rating</span><span class="p">,</span><span class="w"> </span><span class="n">setRating</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="mf">3.5</span><span class="p">);</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;StarMeter — custom element wrapping WinUI RatingControl&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">                </span><span class="p">.</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">14</span><span class="p">).</span><span class="n">SemiBold</span><span class="p">(),</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">            </span><span class="c1">// StarMeter.Of(...) is the sole construction path: it returns a</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">            </span><span class="c1">// StarMeterElement AND ensures (via its cctor) that the global</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">            </span><span class="c1">// ControlRegistry has the handler. No reconciler.RegisterHandler</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">            </span><span class="c1">// call lives anywhere in this app.</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">            </span><span class="n">StarMeter</span><span class="p">.</span><span class="n">Of</span><span class="p">(</span><span class="n">rating</span><span class="p">,</span><span class="w"> </span><span class="n">setRating</span><span class="p">,</span><span class="w"> </span><span class="n">caption</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Rate this page&quot;</span><span class="p">),</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">$&quot;current rating: {rating:0.0}&quot;</span><span class="p">),</span>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="w">            </span><span class="n">HStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="w">                </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Reset&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setRating</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">                </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;5 stars&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setRating</span><span class="p">(</span><span class="mi">5</span><span class="p">)))</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Custom StarMeter element rendered alongside built-in Reactor controls" src="../images/extending-reactor-controls/star-meter.png" /></p>
+<p>That is the entire path from <code>setRating(5)</code> to a frame. The component
+calls <code>StarMeter.Of(rating, setRating, ...)</code>; the holder's class-init
+has already run, so the global <code>ControlRegistry</code> carries the entry
+for <code>StarMeterElement</code>; the reconciler walks the new element tree,
+the registered descriptor handler is invoked for <code>StarMeterElement</code>,
+the interpreter diffs against the previous element (only <code>Value</code>
+changed), writes through <code>WriteSuppressed</code>, the trampoline drains the
+suppress counter on the next echo, and the loop ends with the control
+at 5 stars. The rest of the app's controls dispatch through the
+built-in handlers in lockstep.</p>
+<p><strong>Prove your control trims.</strong> The repo ships a tiny NativeAOT proof
+harness at <a href="https://github.com/microsoft/microsoft-ui-reactor/tree/main/tests/aot_trim_proof"><code>tests/aot_trim_proof/</code></a>
+that publishes a Reactor app whose <code>Render()</code> references only
+<code>TextBlock</code> and <code>Button</code>, then asserts that the handler class names
+and element record names of every other built-in control are <em>absent</em>
+from the published binary. Copy the same pattern for your control:
+publish your app with <code>dotnet publish -p:PublishAot=true</code>, then grep
+the resulting binary for your custom handler class name. If
+<code>StarMeter.Of(...)</code> is reachable, the name appears; if no component
+references it, the name is gone. That round-trip is the only
+authoritative test that Pattern A is wired correctly.</p>
+<h2 id="explicit-registration-the-narrow-escape-hatch">Explicit registration — the narrow escape hatch<a class="headerlink" href="#explicit-registration-the-narrow-escape-hatch" title="Permanent link">&para;</a></h2>
+<p>Everything above self-registers: the holder's static constructor runs
+on the only path that can produce the element, so there is nothing to
+"wire up" at startup and no <code>UseMyLibrary()</code> step. A Reactor app builds
+its element tree <em>before</em> it reconciles, so construction always
+precedes dispatch.</p>
+<p><strong>Two cases genuinely need an explicit call</strong>, because no element
+construction triggers them:</p>
+<ol>
+<li><strong>A handler for an element you never construct</strong> — typically an
+   <em>override</em> for a built-in. Constructing a <code>ButtonElement</code> runs the
+   <em>owner's</em> registration, never yours, and registration is
+   <strong>first-wins</strong>: whoever gets there first keeps the entry and later
+   calls are silently dropped. Register at startup, before the first
+   render builds a tree containing that element — the built-in claims
+   the entry on the factory call that <em>constructs</em> it, so waiting until
+   just before the first mount is already too late.</li>
+<li><strong>Eager global initialization</strong> — for example merging a XAML
+   <code>ResourceDictionary</code> into <code>Application.Current.Resources</code>. That is
+   ordinary WinUI startup work rather than control registration, and
+   it is usually too late if deferred to a render pass.</li>
+</ol>
+<p>Two paths already exist for this. Pick by scope, not by taste:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Global — <code>ControlRegistry.Register*</code></th>
+<th>Per-host — <code>reconciler.RegisterType</code> / <code>RegisterHandler</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scope</td>
+<td>Whole process</td>
+<td>One host's reconciler</td>
+</tr>
+<tr>
+<td>Capture</td>
+<td>Must be <code>static</code> — captures nothing</td>
+<td>May capture host-local state</td>
+</tr>
+<tr>
+<td>Two implementations of one element</td>
+<td>No (first-wins)</td>
+<td>Yes — different hosts may differ</td>
+</tr>
+<tr>
+<td>Compatibility</td>
+<td>Part of the frozen protocol seam, so a <em>shipped</em> control library rolls forward</td>
+<td>Outside the frozen seam — apps recompile anyway</td>
+</tr>
+<tr>
+<td>Reach for it when</td>
+<td>A library-level override, or a reusable control library</td>
+<td>A bespoke, app-local control</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Global.</strong> Registers process-wide, and is the path a redistributable
+library should prefer:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">ControlRegistry</span><span class="p">.</span><span class="n">Register</span><span class="o">&lt;</span><span class="n">ButtonElement</span><span class="p">,</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Xaml</span><span class="p">.</span><span class="n">Controls</span><span class="p">.</span><span class="n">Button</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">MyButtonHandler</span><span class="p">());</span>
+</code></pre></div>
+<p><code>Register</code> takes a handler <strong>factory</strong>, not an instance. The registration
+itself is process-wide, but the factory runs lazily <em>per reconciler</em> —
+each host that mounts the element builds its own handler instance and
+caches it — so a handler must not assume it is a process-wide singleton.
+The <code>static</code> on the lambda is the same mandate as Step 6 — a capturing
+lambda allocates a closure and blunts the trimmer, and
+<code>REACTOR_DESC_001</code> flags it. The sibling entry points are
+<code>RegisterDecorator&lt;TElement&gt;</code> for decorator elements, and
+<code>RegisterForDerivedTypes&lt;TBase, TControl&gt;</code> /
+<code>RegisterDecoratorForDerivedTypes&lt;TBase&gt;</code> to cover a whole element
+family through its base type.</p>
+<p><strong>Per-host.</strong> Registers on one host's reconciler, from the <code>configure</code>
+callback that runs before the first render:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="o">&lt;</span><span class="n">EditorApp</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Monaco Editor&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">configure</span><span class="p">:</span><span class="w"> </span><span class="n">host</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="n">host</span><span class="p">.</span><span class="n">Reconciler</span><span class="p">.</span><span class="n">RegisterType</span><span class="o">&lt;</span><span class="n">MonacoEditorElement</span><span class="p">,</span><span class="w"> </span><span class="n">MonacoEditor</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">        </span><span class="n">mount</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">el</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">MonacoEditor</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">el</span><span class="p">.</span><span class="n">Text</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">        </span><span class="n">update</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">oldEl</span><span class="p">,</span><span class="w"> </span><span class="n">newEl</span><span class="p">,</span><span class="w"> </span><span class="n">editor</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">newEl</span><span class="p">.</span><span class="n">Text</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">oldEl</span><span class="p">.</span><span class="n">Text</span><span class="p">)</span><span class="w"> </span><span class="n">editor</span><span class="p">.</span><span class="n">Text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">newEl</span><span class="p">.</span><span class="n">Text</span><span class="p">;</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="k">null</span><span class="p">;</span><span class="w">   </span><span class="c1">// null = the same control was patched in place</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">        </span><span class="p">},</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">        </span><span class="n">unmount</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">editor</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">editor</span><span class="p">.</span><span class="n">Dispose</span><span class="p">());</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="p">});</span>
+</code></pre></div>
+<p><code>RegisterType</code> takes <strong>inline</strong> mount/update/unmount delegates, so a
+one-off control needs no <code>IElementHandler</code> class at all; <code>unmount</code> is
+optional. Returning <code>null</code> from <code>update</code> means "I patched the existing
+control" — return a different <code>UIElement</code> only when you genuinely
+replaced it. If you <em>do</em> have a handler class, <code>RegisterHandler</code> takes
+an <strong>instance</strong> of it instead. This is the shape Reactor's own docking
+natives and the Monaco sample use.</p>
+<p>A library that wants eager setup ships an ordinary
+<code>public static void UseAcme(Reconciler reconciler)</code> over one of these —
+Reactor deliberately adds no <code>IReactorLibrary</code> interface or
+marker-driven discovery scan. Assembly scanning is AOT-hostile, and a
+<code>[ModuleInitializer]</code> names every handler on first type-load, so the
+trimmer can never prove any of it dead — both would forfeit the
+pay-for-what-you-use trimming that Step 6 exists to preserve.</p>
+<h2 id="patterns">Patterns<a class="headerlink" href="#patterns" title="Permanent link">&para;</a></h2>
+<p>A few recurring shapes turn up across most custom-control ports:</p>
+<p><strong>Match a built-in's perf bar without thinking about it.</strong> Use a
+descriptor; let <code>RentControl</code> pool the WinUI control; let <code>Controlled</code>
+suppress its own echoes. The interpreter's per-entry diff is a single
+equality check against the previous element's value — unchanged
+props pay one comparison and zero writes. Pool reuse, echo
+suppression, and static trampolines are defaults of the protocol, not
+opt-ins.</p>
+<p><strong>Bundle related fields into one prop entry.</strong> A control that
+exposes <code>(Color, IsOn) → Background</code> is one entry, not two — the
+<code>get</code> returns a tuple and the <code>set</code> reads both fields. The diff fires
+exactly when either input changes. This is how the LED indicator in
+<a href="../control-reconciler-protocol/#descriptors--declarative-handlers">the Control Reconciler Protocol reference</a>
+collapses two element fields into one WinUI write.</p>
+<p><strong>Layer in a Reactor-friendly default for an awkward control.</strong> Many
+WinUI controls require an initial property write to "behave"
+(<code>TextBox.PlaceholderText</code>, <code>RatingControl.MaxRating</code>). Use
+<code>.InitialOnly(get, set)</code> to seed those once at Mount without paying the
+diff-and-write cost on Update. The interpreter ignores InitialOnly
+entries on the Update path.</p>
+<p><strong>Wrap a third-party control whose API is unstable.</strong> Put the
+descriptor in a sealed <code>static class</code>, mark every reference to the
+third-party type <code>internal</code>, and re-export an <code>Element</code>-typed
+factory. Your component authors depend on the element, not the
+control. When the third-party control breaks compatibility, you
+update one file; every component keeps compiling.</p>
+<p><strong>Pre-flight the perf bar with the bench harness.</strong> The Reactor repo
+includes a <code>perf_bench</code> project (<code>tests/perf_bench/</code>) that exercises
+descriptors against the M1 / M2 / M5 / M7 / M10 micro-benches the
+spec uses to validate the descriptor model. Drop your descriptor into
+the harness and run the relevant bench before locking your port in.</p>
+<h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
+<p><strong>Subscribing in <code>Update</code> instead of <code>Mount</code>.</strong> A descriptor's
+<code>Controlled</code> entry already gates subscription on the
+mount-then-subscribe ordering — the interpreter calls
+<code>EnsureSubscribed</code> once after the Mount loop and again on each Update
+to catch null→non-null callback transitions. If you are hand-coding a
+handler and forget to centralize subscription in <code>Mount</code>, every
+re-render double-subscribes the event.</p>
+<p><strong>Forgetting <code>WriteSuppressed</code> in a hand-coded <code>Update</code>.</strong> A
+controlled prop write from <code>Update</code> echoes through the trampoline
+back into the user's state setter. The descriptor's <code>Controlled</code>
+entry wraps the write for you; a hand-coded handler must mirror it
+with <code>binding.WriteSuppressed(() =&gt; ctrl.Value = newValue)</code>.
+Forgetting it is the single most common cause of "the value snaps
+back when I edit it" bugs.</p>
+<p><code>WriteSuppressed</code> (<code>ReactorBinding.WriteSuppressed</code>, and the
+per-binding <code>ctx.BindFor(ctrl, el).WriteSuppressed(...)</code>) is <strong>the
+supported, RCW-safe public extension point</strong> for custom value-bearing
+controls — you never touch the framework's internal echo suppressor
+(issue #206). The controlled-control contract is: pair exactly one
+<code>WriteSuppressed</code> with exactly one programmatic write, and gate it on
+a live readback check (<code>if (ctrl.Value != newEl.Value)</code>) — comparing
+the control's <em>current</em> value against the rendered value, exactly as
+the engine's <code>ControlledPropEntry.Update</code> does. Gating on the live
+readback (rather than <code>oldEl.Value != newEl.Value</code>) means the write
+also fires when the control has drifted from the rendered value even
+though the element is unchanged — snapping drift back — while still
+ensuring the suppression token is consumed by the engine-provoked echo
+and never strands to swallow the user's next real edit. A worked,
+external-assembly proof of exactly this lives in
+<a href="https://github.com/microsoft/microsoft-ui-reactor/tree/main/tests/external_proof"><code>tests/external_proof/</code></a>
+(<code>GaugeHandler</code> — a Slider-shaped <code>double Value</code> control authored
+against the public surface only).</p>
+<p><strong>Stashing per-control state on the descriptor / handler.</strong> The
+descriptor and the handler instance are registered once per host.
+Per-control state needs to live on the <strong>control</strong> — either on the
+attached state DP (use <code>Reconciler.SetElementTag</code> / <code>GetElementTag</code>)
+or on the typed event payload box (use
+<code>Reconciler.GetOrCreateControlEventPayload&lt;TPayload&gt;</code>). The pool
+reset contract clears both on <code>ReturnControl</code>; descriptor-level state
+survives pool rent and corrupts the next mount.</p>
+<p><strong>Passing a non-<code>static</code> lambda to <code>ControlRegistry.Register</code>.</strong> The
+<code>static</code> keyword on the factory lambda is mandatory (see
+<a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6</a>).
+Writing
+<code>ControlRegistry.Register&lt;MyElement, MyControl&gt;(() =&gt; new MyHandler())</code>
+without the <code>static</code> modifier compiles, but allocates a closure object
+per <code>Register</code> call <em>and</em> defeats the trimmer's ability to drop the
+handler/control chain when the factory holder is unreachable. The
+compiler will accept either shape; the <code>REACTOR_DESC_001</code> analyzer
+(<code>StaticRegisterLambdaAnalyzer</code>) is your guard. Always write
+<code>static () =&gt; new MyHandler()</code>.</p>
+<p><strong>Bypassing the factory with <code>new MyElement(...)</code>.</strong> The whole reason
+the element's primary constructor is <code>internal</code> is to make
+<code>new StarMeterElement(...)</code> from outside the assembly a compile
+error. If you also expose the element record from a library, do not
+re-export a <code>public</code> constructor or a parameter-forwarding <code>public
+StarMeterElement Create(...)</code> helper that calls the internal ctor —
+both bypass the holder's class-init and the first time your library's
+element reaches an unregistered reconciler the mount will throw.
+<code>StarMeter.Of(...)</code> (which triggers the cctor <em>and</em> returns the
+element) is the only externally-reachable construction path that's
+safe.</p>
+<p><strong>Registering on a non-global reconciler when you meant the global
+one.</strong> <code>Reconciler.RegisterHandler&lt;...&gt;</code> is the per-host escape hatch
+documented in <a href="../control-reconciler-protocol/#registration">The Control Reconciler Protocol</a>;
+it is meant for tests substituting a fake handler, not for shipping
+custom controls. If your app has multiple <code>ReactorHost</code> instances and
+your control is registered through Pattern A on the global
+<code>ControlRegistry</code>, every host sees it automatically — the four-step
+dispatch precedence ends with the global registry, so no per-host
+call is needed.</p>
+<p><strong>Capturing the element in a static trampoline.</strong> The static
+trampoline pattern works because it reads the live element on every
+fire. Capturing the element in the static closure is a contradiction
+in terms — there is no closure on a static — but the equivalent
+mistake on a hand-coded trampoline that closes over the element
+instance does exactly that, and the trampoline observes the element
+that existed at Mount forever.</p>
+<h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
+<p><strong>Start from the closest built-in descriptor.</strong> Copy the most
+similar descriptor in <code>src/Reactor/Core/V1Protocol/Descriptor/Descriptors/</code>,
+strip what does not apply, and adapt. The built-ins encode the
+production patterns for every shape you are likely to need —
+including the coercion edge cases (<code>Slider.Min</code>, <code>NumberBox.Max</code>) and
+the multi-event control patterns (<code>TextBox</code>'s <code>Text</code> +
+<code>SelectionChanged</code>).</p>
+<p><strong>Keep the element record minimal.</strong> Every field is a public
+contract — once consumers depend on it, you cannot drop or rename it
+without churn. Add fields as components need them, not preemptively.</p>
+<p><strong>Test the round trip with the existing fixture harness.</strong> Add a
+fixture in <code>tests/Reactor.AppTests.Host/SelfTest/Fixtures/</code> that
+drives your control via an automation peer
+(<code>IInvokeProvider</code>/<code>IValueProvider</code>) and asserts the callback fires
+the right number of times for the right values. The pattern is
+established and the fixture runner gives you a stable stable cross-
+process test rig for free.</p>
+<p><strong>Document the perf shape inline.</strong> If your control has non-obvious
+performance characteristics — pool opt-out, custom comparer for
+floating-point tolerance, deliberately imperative entry — capture
+the reason in a comment on the descriptor field, not on the calling
+component. The descriptor is where future maintainers will look.</p>
+<p><strong>Read the Control Reconciler Protocol reference once end-to-end.</strong> The
+six body sections above are the recipe; <a href="../control-reconciler-protocol/">the protocol page</a> is the
+specification it implements. The two pages together are the complete
+contract — bookmark both.</p>
+<p><strong>Keep devtools-adjacent hooks in the optional package.</strong> Control helpers
+that only serve the <code>--devtools</code> MCP/preview surface belong in
+<code>Microsoft.UI.Reactor.Devtools</code>, not core <code>Microsoft.UI.Reactor</code>. That
+keeps retail apps from resolving or shipping devtools implementation IL
+unless they add the optional package and enable <code>Reactor.DevtoolsSupport</code>.</p>
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../control-reconciler-protocol/">The Control Reconciler Protocol</a> — the model the steps on this page plug into.</li>
+<li><a href="../reconciliation/">Reconciliation</a> — what happens before the registered handler is invoked, and how Mount vs Update vs Unmount get chosen.</li>
+<li><a href="../element-pool/">Element Pool</a> — what <code>RentControl</code> actually does, and how the per-type pool keeps <code>Mount</code> allocation-free.</li>
+<li><a href="../modifier-system/">Modifier System</a> — how the <code>Setters</code> chain a descriptor applies after its own prop loop works.</li>
+<li><a href="../hooks-internals/">Hooks Internals</a> — how state changes turn into Render calls, which is the upstream half of every loop the protocol on this page is the downstream half of.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
