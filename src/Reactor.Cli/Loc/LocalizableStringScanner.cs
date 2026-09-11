@@ -220,7 +220,7 @@ internal static class LocalizableStringScanner
         private void ProcessStringLiteral(LiteralExpressionSyntax literal, string className, string context)
         {
             var value = literal.Token.ValueText;
-            if (string.IsNullOrWhiteSpace(value)) return;
+            if (string.IsNullOrWhiteSpace(value) || IsPrivateUseOnly(value)) return;
 
             _results.Add(new LocalizableString
             {
@@ -231,6 +231,28 @@ internal static class LocalizableStringScanner
                 SpanStart = literal.SpanStart,
                 SpanLength = literal.Span.Length,
             });
+        }
+
+        private static bool IsPrivateUseOnly(string value)
+        {
+            if (value.Length == 0) return false;
+
+            for (var i = 0; i < value.Length; i++)
+            {
+                var codePoint = (int)value[i];
+                if (char.IsHighSurrogate(value[i]) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+                {
+                    codePoint = char.ConvertToUtf32(value[i], value[++i]);
+                }
+
+                var isPrivateUse = (codePoint >= 0xE000 && codePoint <= 0xF8FF)
+                    || (codePoint >= 0xF0000 && codePoint <= 0xFFFFD)
+                    || (codePoint >= 0x100000 && codePoint <= 0x10FFFD);
+                if (!isPrivateUse)
+                    return false;
+            }
+
+            return true;
         }
 
         private void ProcessInterpolatedString(InterpolatedStringExpressionSyntax interpolated, string className, string context)

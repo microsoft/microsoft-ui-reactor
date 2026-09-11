@@ -293,6 +293,27 @@ public class LocalizableStringScannerTests
     }
 
     [Fact]
+    public void PrivateUseOnlyString_Skipped()
+    {
+        var source = """
+            class App : Component {
+                public override Element Render() {
+                    return VStack(
+                        TextBlock("\uE74D"),
+                        TextBlock("\uE73A"),
+                        TextBlock("\U000F0000"),
+                        TextBlock("\uE74D Delete"));
+                }
+            }
+            """;
+
+        var results = Scan(source);
+
+        Assert.Single(results);
+        Assert.Equal("\uE74D Delete", results[0].Value);
+    }
+
+    [Fact]
     public void MultipleElementsInMethod_AllDetected()
     {
         var source = """
