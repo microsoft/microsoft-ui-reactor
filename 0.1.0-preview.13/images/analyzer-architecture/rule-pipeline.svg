@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 400" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-skip { fill: #f6f8fa; stroke: #8c959f; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .box-report { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.5; }
+    .diamond { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-skip { fill: #1c2129; stroke: #6e7681; }
+      .box-report { fill: #3c0d0d; stroke: #f85149; }
+      .diamond { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Syntax -->
+  <rect class="box-accent" x="20" y="140" width="160" height="64" rx="6"/>
+  <text class="label" x="100" y="166" text-anchor="middle">SyntaxNode</text>
+  <text class="sub" x="100" y="184" text-anchor="middle">Invocation</text>
+  <text class="sub" x="100" y="198" text-anchor="middle">ExpressionSyntax</text>
+
+  <!-- Filter diamond -->
+  <polygon class="diamond" points="220,172 320,138 420,172 320,206"/>
+  <text class="label" x="320" y="168" text-anchor="middle">Method-name</text>
+  <text class="sub" x="320" y="182" text-anchor="middle">fast path</text>
+  <text class="sub" x="320" y="196" text-anchor="middle">(IdentifierName)</text>
+
+  <!-- Hook check -->
+  <rect class="box" x="450" y="140" width="160" height="64" rx="6"/>
+  <text class="label" x="530" y="166" text-anchor="middle">LooksLikeHook?</text>
+  <text class="sub" x="530" y="184" text-anchor="middle">Use* prefix or</text>
+  <text class="sub" x="530" y="198" text-anchor="middle">DSL factory</text>
+
+  <!-- Symbol -->
+  <rect class="box" x="640" y="140" width="180" height="64" rx="6"/>
+  <text class="label" x="730" y="166" text-anchor="middle">SemanticModel</text>
+  <text class="sub" x="730" y="184" text-anchor="middle">GetSymbolInfo</text>
+  <text class="sub" x="730" y="198" text-anchor="middle">(only on match)</text>
+
+  <!-- Body -->
+  <rect class="box-accent" x="850" y="140" width="200" height="64" rx="6"/>
+  <text class="label" x="950" y="166" text-anchor="middle">Rule body</text>
+  <text class="sub" x="950" y="184" text-anchor="middle">HookRules · A11y · ThemeRef</text>
+  <text class="sub" x="950" y="198" text-anchor="middle">WithKey · MemoCells</text>
+
+  <!-- Report -->
+  <rect class="box-report" x="850" y="260" width="200" height="56" rx="6"/>
+  <text class="label" x="950" y="284" text-anchor="middle">ReportDiagnostic</text>
+  <text class="sub" x="950" y="302" text-anchor="middle">REACTOR_* id + properties</text>
+
+  <!-- Fix -->
+  <rect class="box" x="1070" y="260" width="100" height="56" rx="6"/>
+  <text class="label" x="1120" y="282" text-anchor="middle">CodeFix</text>
+  <text class="sub" x="1120" y="300" text-anchor="middle">IDE quick-fix</text>
+
+  <!-- Skip -->
+  <rect class="box-skip" x="450" y="280" width="160" height="50" rx="6"/>
+  <text class="label" x="530" y="302" text-anchor="middle">Skip</text>
+  <text class="sub" x="530" y="318" text-anchor="middle">return early</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M180 172 L220 172" marker-end="url(#arr)"/>
+  <path class="edge" d="M420 172 L450 172" marker-end="url(#arr)"/>
+  <text class="edge-label" x="435" y="160">matches</text>
+
+  <path class="edge" d="M320 206 L530 280" marker-end="url(#arr)"/>
+  <text class="edge-label" x="370" y="245">unrelated</text>
+
+  <path class="edge" d="M610 172 L640 172" marker-end="url(#arr)"/>
+  <text class="edge-label" x="625" y="160">name OK</text>
+
+  <path class="edge" d="M530 204 L530 280" marker-end="url(#arr)"/>
+  <text class="edge-label" x="540" y="245">not a hook</text>
+
+  <path class="edge" d="M820 172 L850 172" marker-end="url(#arr)"/>
+  <text class="edge-label" x="835" y="160">resolved</text>
+
+  <path class="edge" d="M730 204 L 610 280" marker-end="url(#arr)"/>
+  <text class="edge-label" x="640" y="240">third-party</text>
+
+  <path class="edge" d="M950 204 L950 260" marker-end="url(#arr)"/>
+  <text class="edge-label" x="960" y="235">violation</text>
+
+  <path class="edge" d="M850 173 Q 720 280 610 305" marker-end="url(#arr)"/>
+  <text class="edge-label" x="700" y="235">clean</text>
+
+  <path class="edge-dashed" d="M1050 288 L1070 288" marker-end="url(#arr)"/>
+</svg>

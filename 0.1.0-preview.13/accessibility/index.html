@@ -1,0 +1,4515 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Declarative UI framework for native Windows desktop apps in pure C#.">
+      
+      
+      
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.13/accessibility/">
+      
+      
+        <link rel="prev" href="../localization/">
+      
+      
+        <link rel="next" href="../recipes/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Accessibility - Microsoft.UI.Reactor</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#accessibility" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You are not viewing the latest release of Microsoft.UI.Reactor.
+  <a href="../..">
+    <strong>Go to the latest release.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Microsoft.UI.Reactor" class="md-header__button md-logo" aria-label="Microsoft.UI.Reactor" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Microsoft.UI.Reactor
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Accessibility
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/microsoft/microsoft-ui-reactor" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    microsoft/microsoft-ui-reactor
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../components/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Learn the Framework
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../layout/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  UI Surface
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../controls/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Controls
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../navigation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  App Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../recipes/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Patterns & Recipes
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../dev-tooling/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tooling & Process
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../winforms-interop/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Interop
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture-overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Under the Hood
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/hooks/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Microsoft.UI.Reactor" class="md-nav__button md-logo" aria-label="Microsoft.UI.Reactor" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Microsoft.UI.Reactor
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/microsoft/microsoft-ui-reactor" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    microsoft/microsoft-ui-reactor
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../thinking-in-reactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thinking in Reactor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../xaml-developers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactor for XAML Developers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactor-vs-xaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactor vs XAML
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn the Framework
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn the Framework
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Effects and Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../commanding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commanding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Surface
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    UI Surface
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../flex-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flex Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../styling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Styling and Theming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input-and-gestures/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input and Gestures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controls
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Controls
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controls Catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../forms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms and Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../collections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collections
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../text-and-media/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Text and Media
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../status-and-info/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Status and Info
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dialogs-and-flyouts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dialogs and Flyouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../charting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Charting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    App Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    App Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Navigation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docking Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../async-resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Async Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../localization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Localization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accessibility
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accessibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-1-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 1 Modifiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-2-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 2 Modifiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relationship-reference-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationship reference properties
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#accessible-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accessible Form
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#navigation-landmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Navigation Landmarks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#heading-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Heading Hierarchy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#focus-trapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Focus Trapping
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#screen-reader-announcements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Screen Reader Announcements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#semantic-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Semantic Panel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#accessibility-scanner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accessibility Scanner
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#roslyn-analyzers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roslyn Analyzers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patterns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#modal-dialog-with-focus-trap-and-announcement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modal dialog with focus trap and announcement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#toast-status-updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Toast / status updates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#naming-list-and-grid-rows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Naming list and grid rows
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-control-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom-control semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-mistakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Mistakes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Mistakes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#disabled-submit-with-no-isdisabledfocusable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disabled Submit with no .IsDisabledFocusable()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#accessibilityhidden-on-a-focusable-element" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AccessibilityHidden on a focusable element
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#heading-levels-skipped-or-out-of-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Heading levels skipped or out of order
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../recipes/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Patterns & Recipes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Patterns & Recipes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/command-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/drag-reorder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drag Reorder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/login/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Login
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/master-detail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Master Detail
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/modal-dialog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modal Dialog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/multi-step-form/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-step Form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/paginated-list/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Paginated List
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/search-with-suggestions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search with Suggestions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/settings-page/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings Page
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheat-sheet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cheat Sheet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rules-of-reactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rules of Reactor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../theming-tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Theming Tokens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tooling & Process
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tooling & Process
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev-tooling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tooling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../packaging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packaging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Interop
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../winforms-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WinForms Interop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wpf-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WPF Interop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Under the Hood
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Under the Hood
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture-overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactivity-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactivity Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reconciliation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reconciliation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control-reconciler-protocol/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Control Reconciler Protocol
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extending-reactor-controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending Reactor Controls
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../element-pool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Element Pool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../effects-scheduling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Effects Scheduling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../threading-and-dispatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threading and Dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../source-mapping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Source Mapping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modifier-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modifier System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../analyzer-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analyzer Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../devtools-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DevTools Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../focus-and-input-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Focus and Input Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../perf-instrumentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Perf Instrumentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/hooks/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-1-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 1 Modifiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-2-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 2 Modifiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relationship-reference-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationship reference properties
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#accessible-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accessible Form
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#navigation-landmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Navigation Landmarks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#heading-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Heading Hierarchy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#focus-trapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Focus Trapping
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#screen-reader-announcements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Screen Reader Announcements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#semantic-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Semantic Panel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#accessibility-scanner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accessibility Scanner
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#roslyn-analyzers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roslyn Analyzers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patterns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#modal-dialog-with-focus-trap-and-announcement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modal dialog with focus trap and announcement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#toast-status-updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Toast / status updates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#naming-list-and-grid-rows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Naming list and grid rows
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-control-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom-control semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-mistakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Mistakes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Mistakes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#disabled-submit-with-no-isdisabledfocusable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disabled Submit with no .IsDisabledFocusable()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#accessibilityhidden-on-a-focusable-element" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AccessibilityHidden on a focusable element
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#heading-levels-skipped-or-out-of-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Heading levels skipped or out of order
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/microsoft/microsoft-ui-reactor/edit/main/docs/guide/accessibility.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<p>Microsoft.UI.Reactor (Reactor)'s accessibility surface is two layers: modifiers that map to
+WinUI automation properties (<code>.AutomationName</code>, <code>.HeadingLevel</code>,
+<code>.Landmark</code>, <code>.LiveRegion</code>, <code>.TabIndex</code>, <code>.AccessKey</code>) and hooks that
+add runtime behavior (<code>UseFocusTrap</code> for modal focus trapping,
+<code>UseAnnounce</code> for live-region announcements, <code>SemanticPanel</code> for
+custom automation peers that the modifier set can't express). The
+analyzer set is the third layer — <code>REACTOR_A11Y_001..004</code> catch the
+most common omissions (icon-only buttons missing an automation
+name, images missing alt text, form fields missing a label, and
+clickable containers that aren't keyboard-reachable) at
+compile time. The <code>AccessibilityScanner</code> is the runtime cousin: it
+walks the post-reconciliation element tree and emits 8 categories of
+WCAG-mapped diagnostics with concrete fix suggestions. Aim for clean
+analyzer output as you type, clean scanner output before merge, and
+Narrator tab-through as the final manual check. Read <a href="#tier-1-modifiers">Tier 1
+Modifiers</a> first — those five modifiers cover most
+production cases; everything else on this page is for the
+non-trivial 20%.</p>
+<h1 id="accessibility">Accessibility<a class="headerlink" href="#accessibility" title="Permanent link">&para;</a></h1>
+<p>Reactor provides accessibility modifiers on every <a href="../components/">component</a>. They map directly to
+WinUI's automation properties, so screen readers, keyboard navigation, and
+test tools work out of the box. Modifiers are split into two tiers based on
+how often you need them.</p>
+<h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Where it lives</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tier 1 modifiers</td>
+<td><code>.AutomationName</code>, <code>.HeadingLevel</code>, <code>.TabIndex</code>, <code>.AccessKey</code>, <code>.IsTabStop</code></td>
+<td>Inline on every render — labels, headings, keyboard order.</td>
+</tr>
+<tr>
+<td>Tier 2 modifiers</td>
+<td><code>.HelpText</code>, <code>.FullDescription</code>, <code>.AccessibilityHidden</code>, <code>.AccessibilityView</code>, <code>.Landmark</code>, <code>.Required</code>, <code>.LiveRegion</code></td>
+<td>Lazy-allocated; descriptions, landmarks, hidden subtrees, regions.</td>
+</tr>
+<tr>
+<td>Relationship refs</td>
+<td><code>.LabeledBy(ref)</code>, <code>.DescribedBy(refs...)</code>, <code>.FlowsTo(refs...)</code>, <code>.FlowsFrom(refs...)</code></td>
+<td>Reactive AutomationProperties relationships between realized elements.</td>
+</tr>
+<tr>
+<td><code>UseFocusTrap(isActive)</code></td>
+<td>hook</td>
+<td>Returns a <code>FocusTrapHandle</code>; apply with <code>.FocusTrap(handle)</code> on a container.</td>
+</tr>
+<tr>
+<td><code>UseAnnounce()</code></td>
+<td>hook</td>
+<td>Returns an <code>AnnounceHandle</code> with <code>.Region</code> (zero-size element) and <code>.Announce(message, assertive?)</code>.</td>
+</tr>
+<tr>
+<td><code>SemanticPanel</code></td>
+<td>wrapper</td>
+<td>Custom automation peer (role / value / range) for composites.</td>
+</tr>
+<tr>
+<td><code>AccessibilityScanner.Scan(root)</code></td>
+<td>static</td>
+<td>Post-render runtime diagnostic — 8 WCAG checks with fix suggestions.</td>
+</tr>
+<tr>
+<td><code>REACTOR_A11Y_001</code></td>
+<td>analyzer</td>
+<td>Icon-only <code>Button(icon, action)</code> without <code>.AutomationName()</code>.</td>
+</tr>
+<tr>
+<td><code>REACTOR_A11Y_002</code></td>
+<td>analyzer</td>
+<td><code>Image()</code> without <code>.AutomationName()</code> or <code>.AccessibilityHidden()</code>.</td>
+</tr>
+<tr>
+<td><code>REACTOR_A11Y_003</code></td>
+<td>analyzer</td>
+<td>Form field without <code>header:</code> or label modifier.</td>
+</tr>
+<tr>
+<td><code>REACTOR_A11Y_004</code></td>
+<td>analyzer</td>
+<td>Clickable container (<code>Border</code>/<code>Grid</code>/<code>Canvas</code>/<code>Rectangle</code>/<code>Ellipse</code>/<code>VStack</code>/<code>HStack</code>) with <code>.OnTapped</code> but no enabling <code>.IsTabStop(true)</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="tier-1-modifiers">Tier 1 Modifiers<a class="headerlink" href="#tier-1-modifiers" title="Permanent link">&para;</a></h2>
+<p>Tier 1 modifiers are the ones you use constantly: labels, headings, tab order,
+and keyboard shortcuts. They are applied inline on every render — no lazy
+allocation.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Tier1Demo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="p">{</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Account Settings&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">                </span><span class="p">.</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">24</span><span class="p">).</span><span class="n">Bold</span><span class="p">()</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">                </span><span class="p">.</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">AutomationHeadingLevel</span><span class="p">.</span><span class="n">Level1</span><span class="p">),</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Profile&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">                </span><span class="p">.</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">18</span><span class="p">).</span><span class="n">SemiBold</span><span class="p">()</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">                </span><span class="p">.</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">AutomationHeadingLevel</span><span class="p">.</span><span class="n">Level2</span><span class="p">),</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="n">placeholderText</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Display name&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">                </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">&quot;Display name&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">                </span><span class="p">.</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">                </span><span class="p">.</span><span class="n">AccessKey</span><span class="p">(</span><span class="s">&quot;N&quot;</span><span class="p">),</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">            </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Save&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">})</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">                </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">&quot;Save profile changes&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">                </span><span class="p">.</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">                </span><span class="p">.</span><span class="n">AccessKey</span><span class="p">(</span><span class="s">&quot;S&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Tier 1 accessibility modifiers" src="../images/accessibility/tier1-modifiers.png" /></p>
+<p>Here is what each modifier does:</p>
+<ul>
+<li><strong><code>.HeadingLevel()</code></strong> marks an element as a heading (Level1 through Level9).
+  Screen reader users navigate by heading, just like <code>h1</code>--<code>h6</code> in HTML.</li>
+<li><strong><code>.AutomationName()</code></strong> sets the accessible label. Use it when the visible
+  text does not fully describe the control's purpose.</li>
+<li><strong><code>.TabIndex()</code></strong> sets the tab order. Lower values receive focus first.</li>
+<li><strong><code>.AccessKey()</code></strong> assigns an Alt+key shortcut. WinUI shows the key hint
+  when the user presses Alt.</li>
+<li><strong><code>.IsTabStop()</code></strong> controls whether the element participates in Tab
+  navigation at all.</li>
+</ul>
+<h2 id="tier-2-modifiers">Tier 2 Modifiers<a class="headerlink" href="#tier-2-modifiers" title="Permanent link">&para;</a></h2>
+<p>Tier 2 modifiers cover supplemental information, landmarks, and visibility
+control. They are lazy-allocated — Reactor only creates the backing storage when
+you use them, keeping the common case lightweight.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Tier2Demo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="p">{</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="n">placeholderText</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Search...&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">                </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">&quot;Search products&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">                </span><span class="p">.</span><span class="n">HelpText</span><span class="p">(</span><span class="s">&quot;Type a product name or SKU to filter results&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">                </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">300</span><span class="p">),</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">            </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Revenue by Region&quot;</span><span class="p">).</span><span class="n">Bold</span><span class="p">(),</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Bar chart placeholder&quot;</span><span class="p">).</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">            </span><span class="p">).</span><span class="n">FullDescription</span><span class="p">(</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">                </span><span class="s">&quot;Bar chart showing Q1 revenue: East $4.2M, &quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">                </span><span class="s">&quot;West $3.8M, Central $2.1M&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">             </span><span class="p">.</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="s">&quot;#f5f5f5&quot;</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Decorative divider&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">                </span><span class="p">.</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">                </span><span class="p">.</span><span class="n">AccessibilityHidden</span><span class="p">()</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Tier 2 accessibility modifiers" src="../images/accessibility/tier2-modifiers.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Modifier</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.HelpText()</code></td>
+<td>Extra hint read after the name</td>
+</tr>
+<tr>
+<td><code>.FullDescription()</code></td>
+<td>Extended description for complex visuals</td>
+</tr>
+<tr>
+<td><code>.AccessibilityHidden()</code></td>
+<td>Hide decorative elements from the tree</td>
+</tr>
+<tr>
+<td><code>.AccessibilityView()</code></td>
+<td>Content, Control, or Raw visibility</td>
+</tr>
+<tr>
+<td><code>.Landmark()</code></td>
+<td>Main, Navigation, Search, Form, Custom</td>
+</tr>
+<tr>
+<td><code>.Required()</code></td>
+<td>Announces "required" for form fields</td>
+</tr>
+<tr>
+<td><code>.LiveRegion()</code></td>
+<td>Announces dynamic content changes</td>
+</tr>
+</tbody>
+</table>
+<p>The tiered design means you pay zero cost for Tier 2 on elements that only
+need a label and heading level.</p>
+<h2 id="relationship-reference-properties">Relationship reference properties<a class="headerlink" href="#relationship-reference-properties" title="Permanent link">&para;</a></h2>
+<p>Some accessibility properties point at another realized element rather
+than a string. Use <code>ElementRef&lt;FrameworkElement&gt;</code> for those
+relationships:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kt">var</span><span class="w"> </span><span class="n">label</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseElementRef</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">();</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kt">var</span><span class="w"> </span><span class="n">help</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseElementRef</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">();</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Email&quot;</span><span class="p">).</span><span class="n">Ref</span><span class="p">(</span><span class="n">label</span><span class="p">),</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="n">Caption</span><span class="p">(</span><span class="s">&quot;Use your work address.&quot;</span><span class="p">).</span><span class="n">Ref</span><span class="p">(</span><span class="n">help</span><span class="p">),</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="n">TextBox</span><span class="p">(</span><span class="n">email</span><span class="p">,</span><span class="w"> </span><span class="n">setEmail</span><span class="p">)</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">        </span><span class="p">.</span><span class="n">LabeledBy</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">        </span><span class="p">.</span><span class="n">DescribedBy</span><span class="p">(</span><span class="n">help</span><span class="p">));</span>
+</code></pre></div>
+<p><code>.LabeledBy(ref)</code> writes <code>AutomationProperties.LabeledBy</code>.
+<code>.DescribedBy(refs...)</code>, <code>.FlowsTo(refs...)</code>, and
+<code>.FlowsFrom(refs...)</code> rebuild the corresponding
+<code>IList&lt;DependencyObject&gt;</code> in declaration order, omitting unresolved
+targets. Because these are reactive reference edges, the relationship
+survives mount order differences, source unmounts, and referrer
+recreation: when either side is recreated the edge re-subscribes and
+re-applies after the commit. This is the preferred form when screen
+reader relationships span containers; use the string <code>.LabeledBy(id)</code>
+only for static AutomationId relationships.</p>
+<h2 id="accessible-form">Accessible Form<a class="headerlink" href="#accessible-form" title="Permanent link">&para;</a></h2>
+<p>A real <a href="../forms/">form</a> combines Tier 1 and Tier 2 modifiers. Labels, required markers,
+help text, landmarks, and tab order work together:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">AccessibleFormDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="p">{</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">setName</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">email</span><span class="p">,</span><span class="w"> </span><span class="n">setEmail</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">agree</span><span class="p">,</span><span class="w"> </span><span class="n">setAgree</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="k">false</span><span class="p">);</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">valid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">!</span><span class="kt">string</span><span class="p">.</span><span class="n">IsNullOrWhiteSpace</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">            </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">email</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="sc">&#39;@&#39;</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">agree</span><span class="p">;</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Create Account&quot;</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">24</span><span class="p">).</span><span class="n">Bold</span><span class="p">()</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">                </span><span class="p">.</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">AutomationHeadingLevel</span><span class="p">.</span><span class="n">Level1</span><span class="p">),</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">setName</span><span class="p">,</span><span class="w"> </span><span class="n">header</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Full Name&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="w">                </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">&quot;Full name&quot;</span><span class="p">).</span><span class="n">Required</span><span class="p">().</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="n">email</span><span class="p">,</span><span class="w"> </span><span class="n">setEmail</span><span class="p">,</span><span class="w"> </span><span class="n">header</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Email&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="w">                </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">&quot;Email address&quot;</span><span class="p">).</span><span class="n">Required</span><span class="p">().</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="w">                </span><span class="p">.</span><span class="n">HelpText</span><span class="p">(</span><span class="s">&quot;We&#39;ll send a verification link&quot;</span><span class="p">),</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="w">            </span><span class="n">CheckBox</span><span class="p">(</span><span class="n">agree</span><span class="p">,</span><span class="w"> </span><span class="n">setAgree</span><span class="p">,</span><span class="w"> </span><span class="n">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;I accept the terms&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="w">                </span><span class="p">.</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="w">            </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Register&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">})</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a><span class="w">                </span><span class="p">.</span><span class="n">IsEnabled</span><span class="p">(</span><span class="n">valid</span><span class="p">).</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">4</span><span class="p">).</span><span class="n">AccessKey</span><span class="p">(</span><span class="s">&quot;R&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a><span class="w">        </span><span class="p">).</span><span class="n">Landmark</span><span class="p">(</span><span class="n">AutomationLandmarkType</span><span class="p">.</span><span class="n">Form</span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Accessible registration form" src="../images/accessibility/accessible-form.png" /></p>
+<p>The form container uses <code>.Landmark(AutomationLandmarkType.Form)</code> so screen
+reader users can jump directly to it. Each field has <code>.AutomationName()</code> for
+its label, <code>.Required()</code> for required fields, and <code>.TabIndex()</code> for
+predictable keyboard order. The email field adds <code>.HelpText()</code> to explain
+what happens after submission.</p>
+<h2 id="navigation-landmarks">Navigation Landmarks<a class="headerlink" href="#navigation-landmarks" title="Permanent link">&para;</a></h2>
+<p>Landmarks let screen reader users jump between major page regions. Use them
+on your navigation bar, main content area, and search box:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">LandmarksDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">            </span><span class="n">HStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">                </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Home&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">                </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Products&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">                </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;About&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">})</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">            </span><span class="p">).</span><span class="n">Landmark</span><span class="p">(</span><span class="n">AutomationLandmarkType</span><span class="p">.</span><span class="n">Navigation</span><span class="p">)</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">             </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">&quot;Main navigation&quot;</span><span class="p">),</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">            </span><span class="n">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Dashboard&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">                    </span><span class="p">.</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">20</span><span class="p">).</span><span class="n">Bold</span><span class="p">()</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">                    </span><span class="p">.</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">AutomationHeadingLevel</span><span class="p">.</span><span class="n">Level1</span><span class="p">),</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Welcome back. Here is your overview.&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">            </span><span class="p">).</span><span class="n">Landmark</span><span class="p">(</span><span class="n">AutomationLandmarkType</span><span class="p">.</span><span class="n">Main</span><span class="p">)</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">             </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">&quot;Main content&quot;</span><span class="p">),</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="n">placeholderText</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Search...&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">                </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">&quot;Site search&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">                </span><span class="p">.</span><span class="n">Landmark</span><span class="p">(</span><span class="n">AutomationLandmarkType</span><span class="p">.</span><span class="n">Search</span><span class="p">)</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Navigation landmarks" src="../images/accessibility/landmarks.png" /></p>
+<p>WinUI supports five landmark types: <code>Navigation</code>, <code>Main</code>, <code>Search</code>, <code>Form</code>,
+and <code>Custom</code>. Pair each landmark with <code>.AutomationName()</code> so screen readers
+announce "Main navigation" rather than just "navigation."</p>
+<h2 id="heading-hierarchy">Heading Hierarchy<a class="headerlink" href="#heading-hierarchy" title="Permanent link">&para;</a></h2>
+<p>A clear heading structure lets screen reader users skim your page. This pairs
+well with your <a href="../layout/">layout</a> hierarchy. Use <code>Level1</code> for the page
+title, <code>Level2</code> for sections, and <code>Level3</code> for subsections:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">HeadingHierarchyDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="p">{</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Application Settings&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">                </span><span class="p">.</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">24</span><span class="p">).</span><span class="n">Bold</span><span class="p">()</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">                </span><span class="p">.</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">AutomationHeadingLevel</span><span class="p">.</span><span class="n">Level1</span><span class="p">),</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Appearance&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">                </span><span class="p">.</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">18</span><span class="p">).</span><span class="n">SemiBold</span><span class="p">()</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">                </span><span class="p">.</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">AutomationHeadingLevel</span><span class="p">.</span><span class="n">Level2</span><span class="p">),</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Choose your preferred theme and font size.&quot;</span><span class="p">),</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Notifications&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">                </span><span class="p">.</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">18</span><span class="p">).</span><span class="n">SemiBold</span><span class="p">()</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">                </span><span class="p">.</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">AutomationHeadingLevel</span><span class="p">.</span><span class="n">Level2</span><span class="p">),</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Email Alerts&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="w">                </span><span class="p">.</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">15</span><span class="p">).</span><span class="n">SemiBold</span><span class="p">()</span>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="w">                </span><span class="p">.</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">AutomationHeadingLevel</span><span class="p">.</span><span class="n">Level3</span><span class="p">),</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Configure which emails you receive.&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Heading hierarchy" src="../images/accessibility/heading-hierarchy.png" /></p>
+<p>Keep your heading levels sequential — do not skip from Level1 to Level3.
+Screen readers use the hierarchy to build a page outline, and gaps confuse
+users.</p>
+<h2 id="focus-trapping">Focus Trapping<a class="headerlink" href="#focus-trapping" title="Permanent link">&para;</a></h2>
+<p><code>UseFocusTrap</code> locks keyboard focus inside a container — essential for modal
+dialogs and flyouts. When active, Tab and Shift+Tab cycle within the
+trapped subtree and cannot escape:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">FocusTrapDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="p">{</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">showModal</span><span class="p">,</span><span class="w"> </span><span class="n">setShowModal</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="k">false</span><span class="p">);</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">trap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="n">UseFocusTrap</span><span class="p">(</span><span class="n">showModal</span><span class="p">);</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Focus Trapping&quot;</span><span class="p">),</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">            </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Open Modal&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setShowModal</span><span class="p">(</span><span class="k">true</span><span class="p">)),</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">            </span><span class="n">When</span><span class="p">(</span><span class="n">showModal</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">                </span><span class="n">Border</span><span class="p">(</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">                    </span><span class="n">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">                        </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Modal Dialog&quot;</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">18</span><span class="p">).</span><span class="n">Bold</span><span class="p">(),</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">                        </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Tab/Shift+Tab stays inside this panel.&quot;</span><span class="p">),</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">                        </span><span class="n">TextBox</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="n">placeholderText</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Name&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">                            </span><span class="p">.</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">                        </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Close&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setShowModal</span><span class="p">(</span><span class="k">false</span><span class="p">))</span>
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="w">                            </span><span class="p">.</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="w">                    </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">)</span>
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="w">                </span><span class="p">).</span><span class="n">WithBorder</span><span class="p">(</span><span class="s">&quot;#888&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="w">                 </span><span class="p">.</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="w">                 </span><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="s">&quot;#ffffff&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">                 </span><span class="p">.</span><span class="n">FocusTrap</span><span class="p">(</span><span class="n">trap</span><span class="p">)</span>
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">            </span><span class="p">)</span>
+<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Focus trap in a modal dialog" src="../images/accessibility/focus-trap.png" /></p>
+<p>Create a <code>FocusTrapHandle</code> with <code>UseFocusTrap(isActive)</code>. Apply it to a
+container with <code>.FocusTrap(handle)</code>. When <code>isActive</code> is true, focus wraps
+within the subtree; when false, normal tab behavior resumes.</p>
+<p>Use focus trapping for any overlay that should prevent interaction with
+background content: modal dialogs, confirmation sheets, and dropdown menus.
+For a complete dialog pattern that combines <code>UseFocusTrap</code> with
+<a href="../dialogs-and-flyouts/"><code>ContentDialog</code></a>, see the
+<a href="../recipes/modal-dialog/">modal-dialog recipe</a>.</p>
+<blockquote>
+<p><strong>Caveat:</strong> <code>UseFocusTrap</code> guards its <code>LosingFocus</code> handler against three "no
+sensible container" states — <code>IsLoaded == false</code>, <code>Visibility !=
+Visible</code>, and <code>!IsHitTestVisible</code>. Outside those guards, the trap
+keeps eating focus changes for as long as the handle says
+<code>IsActive</code>. The classic failure: an <code>When(isOpen, () =&gt; ...)</code>
+modal whose <code>setOpen(false)</code> runs first (unmounting the trapped
+container) and <em>then</em> flips <code>isActive</code> to false on the next render —
+between the two, <code>Tab</code> from outside the now-removed container still
+matches the stale handle and <code>args.Cancel = true</code> wedges focus on a
+neighboring page element. Always flip <code>isActive</code> to false in the same
+state batch that unmounts the container, or apply the trap to an
+element that stays in the tree across the open/closed transition
+(an always-mounted overlay with <code>.IsVisible(open)</code> rather than
+<code>When(open, ...)</code>).</p>
+</blockquote>
+<h2 id="screen-reader-announcements">Screen Reader Announcements<a class="headerlink" href="#screen-reader-announcements" title="Permanent link">&para;</a></h2>
+<p><code>UseAnnounce</code> sends programmatic announcements to screen readers via live
+regions (WCAG 4.1.3). Use it to notify users of dynamic state changes that
+are not visible in the focus path:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">AnnouncementsDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="n">setCount</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">announce</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="n">UseAnnounce</span><span class="p">();</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Screen Reader Announcements&quot;</span><span class="p">),</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">            </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Save&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">                </span><span class="n">setCount</span><span class="p">(</span><span class="n">count</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="w">                </span><span class="n">announce</span><span class="p">.</span><span class="n">Announce</span><span class="p">(</span><span class="s">$&quot;Document saved ({count + 1} times)&quot;</span><span class="p">);</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="w">            </span><span class="p">}),</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="w">            </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Error (Assertive)&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="w">                </span><span class="n">announce</span><span class="p">.</span><span class="n">Announce</span><span class="p">(</span><span class="s">&quot;Connection lost!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">assertive</span><span class="p">:</span><span class="w"> </span><span class="k">true</span><span class="p">)),</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">$&quot;Saves: {count}&quot;</span><span class="p">).</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.6</span><span class="p">),</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="w">            </span><span class="n">announce</span><span class="p">.</span><span class="n">Region</span><span class="w">  </span><span class="c1">// invisible live region — must be in tree</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Screen reader announcement" src="../images/accessibility/announcements.png" /></p>
+<p>Create an <code>AnnounceHandle</code> with <code>UseAnnounce()</code>. Include <code>announce.Region</code>
+somewhere in your element tree — it renders an invisible live region. Then
+call <code>announce.Announce(message)</code> for polite announcements (queued after
+current speech) or <code>announce.Announce(message, assertive: true)</code> to
+interrupt.</p>
+<p>Calling <code>Announce</code> before <code>Region</code> has been mounted is a silent no-op —
+the handle holds an internal <code>TextBlock?</code> that the modifier pipeline
+fills in <code>OnMount</code>. If a <a href="../effects/"><code>UseEffect</code></a> with <code>[]</code> deps fires
+an <code>Announce</code> immediately on mount, the live region may not have wired
+up yet; defer the first announcement by a dispatcher tick or trigger
+it from <code>onNavigatedTo</code>.</p>
+<p>Common use cases: form submission confirmations, async operation completions,
+error messages, and timer-based status updates.</p>
+<h2 id="semantic-panel">Semantic Panel<a class="headerlink" href="#semantic-panel" title="Permanent link">&para;</a></h2>
+<p><code>SemanticPanel</code> wraps a child element to provide custom automation metadata
+that Reactor components cannot expose directly (since they are C# records, not
+WinUI controls with overridable automation peers):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">SemanticPanelDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">{</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">rating</span><span class="p">,</span><span class="w"> </span><span class="n">setRating</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="c1">// .Semantics() wraps the element in a SemanticPanel so</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">        </span><span class="c1">// screen readers announce it as a slider, not raw buttons</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Star Rating (Semantic Panel)&quot;</span><span class="p">),</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">            </span><span class="n">HStack</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="n">Enumerable</span><span class="p">.</span><span class="n">Range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">).</span><span class="n">Select</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">                </span><span class="n">Button</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">rating</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s">&quot;\u2605&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\u2606&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">                    </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setRating</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="w">                    </span><span class="p">.</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">$&quot;{i} star{(i == 1 ? &quot;&quot; : &quot;</span><span class="n">s</span><span class="s">&quot;)}&quot;</span><span class="p">)</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="w">            </span><span class="p">).</span><span class="n">ToArray</span><span class="p">())</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="w">            </span><span class="p">.</span><span class="n">Semantics</span><span class="p">(</span>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="w">                </span><span class="n">role</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;slider&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="w">                </span><span class="k">value</span><span class="p">:</span><span class="w"> </span><span class="s">$&quot;{rating} of 5 stars&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a><span class="w">                </span><span class="n">rangeMin</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">rangeMax</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="n">rangeValue</span><span class="p">:</span><span class="w"> </span><span class="n">rating</span><span class="p">),</span>
+<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">$&quot;Current: {rating}/5&quot;</span><span class="p">).</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.6</span><span class="p">)</span>
+<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Semantic panel for star rating" src="../images/accessibility/semantic-panel.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SemanticRole</code></td>
+<td>Automation role (e.g., "slider")</td>
+</tr>
+<tr>
+<td><code>SemanticValue</code></td>
+<td>Current value reported to assistive tech</td>
+</tr>
+<tr>
+<td><code>RangeMinimum</code> / <code>RangeMaximum</code></td>
+<td>Numeric range for range-value patterns</td>
+</tr>
+<tr>
+<td><code>RangeValue</code></td>
+<td>Current numeric position in the range</td>
+</tr>
+<tr>
+<td><code>IsReadOnly</code></td>
+<td>Whether the value can be changed</td>
+</tr>
+</tbody>
+</table>
+<p>Use <code>SemanticPanel</code> for custom controls like star ratings, progress
+indicators, or any composite widget that needs a specific automation role
+beyond what WinUI infers from its visual tree.</p>
+<h2 id="accessibility-scanner">Accessibility Scanner<a class="headerlink" href="#accessibility-scanner" title="Permanent link">&para;</a></h2>
+<p><code>AccessibilityScanner</code> is a post-reconciliation diagnostic tool that walks
+the element tree and flags common accessibility issues. Run it during
+development or in CI to catch violations early:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1">// Run AccessibilityScanner during development or CI:</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="c1">//</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1">// var diagnostics = AccessibilityScanner.Scan(rootElement);</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1">// foreach (var d in diagnostics)</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="c1">// {</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="c1">//     Console.WriteLine($&quot;[{d.Severity}] {d.Message}&quot;);</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1">//     Console.WriteLine($&quot;  WCAG: {d.WcagCriterion}&quot;);</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="c1">//     Console.WriteLine($&quot;  Fix: {d.Fix?.Modifier}({d.Fix?.SuggestedValue})&quot;);</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="c1">// }</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="c1">//</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="c1">// Export structured JSON for CI integration:</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="c1">// AccessibilityScanner.ExportJson(diagnostics, &quot;a11y-report.json&quot;);</span>
+</code></pre></div>
+<p>The scanner checks for 8 common issues:</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>WCAG Criterion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Icon buttons without AutomationName</td>
+<td>4.1.2 Name, Role, Value</td>
+</tr>
+<tr>
+<td>Images without alt text</td>
+<td>1.1.1 Non-text Content</td>
+</tr>
+<tr>
+<td>Form fields without labels</td>
+<td>1.3.1 Info and Relationships</td>
+</tr>
+<tr>
+<td>Heading-styled text missing HeadingLevel</td>
+<td>1.3.1 Info and Relationships</td>
+</tr>
+<tr>
+<td>Concrete brushes on interactive controls</td>
+<td>1.4.11 Non-text Contrast</td>
+</tr>
+<tr>
+<td>Missing Main landmark</td>
+<td>1.3.1 Info and Relationships</td>
+</tr>
+<tr>
+<td>TabIndex gaps</td>
+<td>2.4.3 Focus Order</td>
+</tr>
+<tr>
+<td>Unresolved LabeledBy references</td>
+<td>1.3.1 Info and Relationships</td>
+</tr>
+</tbody>
+</table>
+<p>Each <code>A11yDiagnostic</code> includes a <code>Fix</code> suggestion with the exact modifier
+and value to add. Export to JSON with <code>AccessibilityScanner.ExportJson()</code>.</p>
+<h2 id="roslyn-analyzers">Roslyn Analyzers<a class="headerlink" href="#roslyn-analyzers" title="Permanent link">&para;</a></h2>
+<p>Reactor ships four compile-time accessibility analyzers that flag violations
+as you type in your IDE:</p>
+<table>
+<thead>
+<tr>
+<th>Diagnostic ID</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>REACTOR_A11Y_001</code></td>
+<td>Icon-only <code>Button(icon, action)</code> calls without <code>.AutomationName()</code></td>
+</tr>
+<tr>
+<td><code>REACTOR_A11Y_002</code></td>
+<td><code>Image()</code> without <code>.AutomationName()</code> or <code>.AccessibilityHidden()</code></td>
+</tr>
+<tr>
+<td><code>REACTOR_A11Y_003</code></td>
+<td><code>TextBox</code>/<code>NumberBox</code>/<code>PasswordBox</code> without <code>header:</code> arg or label modifier</td>
+</tr>
+<tr>
+<td><code>REACTOR_A11Y_004</code></td>
+<td>Clickable <code>Border</code>/<code>Grid</code>/<code>Canvas</code>/<code>Rectangle</code>/<code>Ellipse</code>/<code>VStack</code>/<code>HStack</code> (<code>.OnTapped</code>) without an enabling <code>.IsTabStop(true)</code></td>
+</tr>
+</tbody>
+</table>
+<p>These analyzers run automatically when you reference the <code>Reactor.Analyzers</code>
+package. They complement the runtime <code>AccessibilityScanner</code> by catching the
+most common violations at compile time. The analyzer architecture itself is
+documented in <a href="../analyzer-architecture/">Analyzer Architecture</a> under the
+Under-the-hood track.</p>
+<h2 id="patterns">Patterns<a class="headerlink" href="#patterns" title="Permanent link">&para;</a></h2>
+<h3 id="modal-dialog-with-focus-trap-and-announcement">Modal dialog with focus trap and announcement<a class="headerlink" href="#modal-dialog-with-focus-trap-and-announcement" title="Permanent link">&para;</a></h3>
+<p>The standard accessible modal combines three primitives: a controlled
+<code>isOpen</code> boolean, a <code>UseFocusTrap</code> keyed on it, and a
+<code>UseAnnounce</code> that announces "Dialog opened" on first render and
+"Dialog closed" on dismiss. The trap container should stay mounted
+across the open/closed transition (use <code>.IsVisible(open)</code> not
+<code>When(open, ...)</code>) so focus is released cleanly when <code>isActive</code>
+flips false — see the caveat above. The
+<a href="../recipes/modal-dialog/">modal-dialog recipe</a> wires all three end
+to end against <a href="../dialogs-and-flyouts/"><code>ContentDialog</code></a>.</p>
+<h3 id="toast-status-updates">Toast / status updates<a class="headerlink" href="#toast-status-updates" title="Permanent link">&para;</a></h3>
+<p>Application-wide live announcements (save succeeded, connection
+restored, error toast) belong on a single <code>AnnounceHandle</code> hoisted to
+the app root and shared through <a href="../context/">context</a>. Each surface
+that wants to announce reads it with <code>UseContext</code> and calls
+<code>announce.Announce(message)</code>. The single live region keeps WCAG 4.1.3
+satisfied without sprinkling regions through the tree, and message
+ordering is sequential because the underlying
+<code>RaiseNotificationEvent</code> queues at the automation peer.</p>
+<h3 id="naming-list-and-grid-rows">Naming list and grid rows<a class="headerlink" href="#naming-list-and-grid-rows" title="Permanent link">&para;</a></h3>
+<p>A <code>ListView</code> / <code>GridView</code> row is its own automation node, separate from
+the item view you render into it. When the item view is a single piece
+of text, WinUI composes the row's name from that text and there is
+nothing to do. When it is a composite — an <code>HStack</code> of an icon, a title
+and a subtitle, or a card <code>Border</code> — WinUI has no single string to use
+and the row is left unnamed, so Narrator falls through to reading the
+descendants one by one.</p>
+<p>To give the row a single spoken name, put <code>.AutomationName(...)</code> on the
+<strong>root of the item view</strong>; Reactor forwards it to the generated
+<code>ListViewItem</code> / <code>GridViewItem</code> container and keeps it in sync as rows
+are added, renamed, reordered and recycled:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">ListView</span><span class="p">(</span><span class="n">contacts</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Id</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">contact</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="n">HStack</span><span class="p">(</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">        </span><span class="n">Image</span><span class="p">(</span><span class="n">contact</span><span class="p">.</span><span class="n">AvatarUrl</span><span class="p">).</span><span class="n">AccessibilityHidden</span><span class="p">(),</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">        </span><span class="n">VStack</span><span class="p">(</span><span class="n">TextBlock</span><span class="p">(</span><span class="n">contact</span><span class="p">.</span><span class="n">Name</span><span class="p">).</span><span class="n">Bold</span><span class="p">(),</span><span class="w"> </span><span class="n">TextBlock</span><span class="p">(</span><span class="n">contact</span><span class="p">.</span><span class="n">Role</span><span class="p">))</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="p">).</span><span class="n">AutomationName</span><span class="p">(</span><span class="s">$&quot;{contact.Name}, {contact.Role}&quot;</span><span class="p">))</span>
+</code></pre></div>
+<p>Leave it off when the composite already reads well descendant by
+descendant — an unnamed row is the correct, standard result, not a bug.
+Reactor never derives the row name from its own internal bookkeeping.</p>
+<h3 id="custom-control-semantics">Custom-control semantics<a class="headerlink" href="#custom-control-semantics" title="Permanent link">&para;</a></h3>
+<p>Composite controls (a star rating built from <code>Button</code> children, a
+custom toggle group, a draggable slider) need a single automation node
+that says "this is a slider, the value is 3 of 5". Wrap the composite
+in <code>SemanticPanel { SemanticRole = "slider", RangeMinimum = 1,
+RangeMaximum = 5, RangeValue = rating }</code>. Mark the child buttons
+<code>.AccessibilityHidden()</code> so screen readers see one node, not five — the
+hidden modifier removes the descendants from the automation tree but
+keeps them keyboard- and pointer-interactive.</p>
+<h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
+<h3 id="disabled-submit-with-no-isdisabledfocusable">Disabled Submit with no <code>.IsDisabledFocusable()</code><a class="headerlink" href="#disabled-submit-with-no-isdisabledfocusable" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1">// Don&#39;t:</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Submit&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">onSubmit</span><span class="p">).</span><span class="n">IsEnabled</span><span class="p">(</span><span class="n">form</span><span class="p">.</span><span class="n">IsValid</span><span class="p">)</span>
+</code></pre></div>
+<p>A disabled button is removed from the Tab order. The user fixes the
+last field, presses Tab to reach Submit, focus skips past the still-
+disabled button, and they're stranded with no keyboard route. Use
+<code>.IsDisabledFocusable(!form.IsValid)</code> on the button — it keeps the
+button keyboard-focusable while presenting as disabled. The
+<a href="../forms/#keeping-submit-reachable">Forms page</a> covers the full
+shape (it composes with <code>.Immediate()</code> on commit-on-blur inputs).</p>
+<h3 id="accessibilityhidden-on-a-focusable-element"><code>AccessibilityHidden</code> on a focusable element<a class="headerlink" href="#accessibilityhidden-on-a-focusable-element" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1">// Don&#39;t:</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Save&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">onSave</span><span class="p">)</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="p">.</span><span class="n">AccessibilityHidden</span><span class="p">()</span><span class="w">  </span><span class="c1">// hides the button from screen readers</span>
+</code></pre></div>
+<p><code>.AccessibilityHidden()</code> only affects the automation tree — keyboard
+focus and pointer hit-testing still work. The result is a button the
+user can Tab to and click but a screen reader user cannot discover.
+If the control should not be exposed to assistive tech, it should
+not exist for keyboard users either; use <code>.IsEnabled(false)</code> or pull it
+from the tree with <code>When(...)</code>. Use <code>.AccessibilityHidden()</code> only on
+decorative elements that don't accept focus (icons, ornamental
+borders, redundant labels).</p>
+<h3 id="heading-levels-skipped-or-out-of-order">Heading levels skipped or out of order<a class="headerlink" href="#heading-levels-skipped-or-out-of-order" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// Don&#39;t:</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Page Title&quot;</span><span class="p">).</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">Level1</span><span class="p">),</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Subtle Detail&quot;</span><span class="p">).</span><span class="n">HeadingLevel</span><span class="p">(</span><span class="n">Level4</span><span class="p">)</span>
+</code></pre></div>
+<p>Screen readers build a page outline by walking heading levels in
+order; gaps confuse navigation (NVDA's "next heading at level 2"
+silently fails). Promote the second heading to <code>Level2</code> or demote
+the first to match the structure. Treat heading levels like HTML —
+<code>h1</code> once per page, <code>h2</code> for sections, <code>h3</code> for subsections.</p>
+<h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
+<p><strong>Label every interactive control.</strong> If the visible text is sufficient, WinUI
+infers the name automatically. Use <code>.AutomationName()</code> when it is not — icon
+buttons, image buttons, and controls with placeholder-only text all need it.</p>
+<p><strong>Use <code>.Required()</code> instead of asterisks.</strong> Screen readers announce "required"
+automatically. Visual asterisks are invisible to assistive technology unless
+you also set the automation property.</p>
+<p><strong>Test with Narrator.</strong> Press Win+Ctrl+Enter to launch Narrator and tab
+through your app. Every control should announce its name, role, and state.</p>
+<p><strong>Keep landmarks minimal.</strong> One <code>Main</code>, one <code>Navigation</code>, and optionally one
+<code>Search</code> per page. Too many landmarks defeat the purpose — users cannot
+quickly jump when every section is a landmark.</p>
+<p><strong>Set <code>.AccessKey()</code> on frequent actions.</strong> Alt+S for Save, Alt+N for New.
+WinUI renders the key tips automatically when the user presses Alt.</p>
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><a href="../context/">Context</a></strong> — previous topic: share state across the tree without prop drilling</li>
+<li><strong><a href="../localization/">Localization</a></strong> — next topic: translate strings, format numbers/dates, and support RTL layouts</li>
+<li><strong><a href="../forms/">Forms and Input</a></strong> — build accessible forms with labels, validation, and tab order</li>
+<li><strong><a href="../navigation/">Navigation</a></strong> — add landmarks and keyboard-navigable page structure</li>
+<li><strong><a href="../styling/">Styling and Theming</a></strong> — ensure high-contrast themes work with your accessible controls</li>
+<li><strong><a href="../dialogs-and-flyouts/">Dialogs and Flyouts</a></strong> — focus traps and ARIA semantics for modal surfaces</li>
+<li><strong><a href="../analyzer-architecture/">Analyzer Architecture</a></strong> — how <code>REACTOR_A11Y_001..004</code> are authored</li>
+<li><strong><a href="../winforms-interop/">WinForms Interop</a></strong> — accessibility bridging between WinForms and Reactor</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 360" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 13px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-error { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #cf222e; stroke-width: 1.25; fill: none; stroke-dasharray: 4 3; }
+    .marker-fill { fill: #57606a; }
+    .marker-err { fill: #cf222e; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-error { fill: #3c0d0d; stroke: #f85149; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #f85149; }
+      .marker-fill { fill: #8b949e; }
+      .marker-err { fill: #f85149; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+    <marker id="arr-err" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-err" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- BeginRender -->
+  <rect class="box-accent" x="20" y="60" width="120" height="56" rx="6"/>
+  <text class="label" x="80" y="84" text-anchor="middle">BeginRender</text>
+  <text class="sub" x="80" y="102" text-anchor="middle">_hookIndex = 0</text>
+
+  <!-- Slot 0 -->
+  <rect class="box" x="170" y="50" width="130" height="76" rx="6"/>
+  <text class="label" x="235" y="71" text-anchor="middle">Slot 0</text>
+  <text class="sub" x="235" y="89" text-anchor="middle">ValueHookState&lt;int&gt;</text>
+  <text class="sub" x="235" y="105" text-anchor="middle">UseState(count)</text>
+
+  <!-- Slot 1 -->
+  <rect class="box" x="320" y="50" width="130" height="76" rx="6"/>
+  <text class="label" x="385" y="71" text-anchor="middle">Slot 1</text>
+  <text class="sub" x="385" y="89" text-anchor="middle">EffectHookState</text>
+  <text class="sub" x="385" y="105" text-anchor="middle">UseEffect(deps)</text>
+
+  <!-- Slot 2 -->
+  <rect class="box" x="470" y="50" width="130" height="76" rx="6"/>
+  <text class="label" x="535" y="71" text-anchor="middle">Slot 2</text>
+  <text class="sub" x="535" y="89" text-anchor="middle">MemoHookState&lt;T&gt;</text>
+  <text class="sub" x="535" y="105" text-anchor="middle">UseMemo(deps)</text>
+
+  <!-- Slot 3 -->
+  <rect class="box" x="620" y="50" width="130" height="76" rx="6"/>
+  <text class="label" x="685" y="71" text-anchor="middle">Slot 3</text>
+  <text class="sub" x="685" y="89" text-anchor="middle">RefHookState&lt;Ref&gt;</text>
+  <text class="sub" x="685" y="105" text-anchor="middle">UseElementRef()</text>
+
+  <!-- Render -->
+  <rect class="box-accent" x="770" y="60" width="92" height="56" rx="6"/>
+  <text class="label" x="816" y="84" text-anchor="middle">Render</text>
+  <text class="sub" x="816" y="102" text-anchor="middle">returns Element</text>
+
+  <!-- Flush -->
+  <rect class="box-accent" x="770" y="250" width="92" height="60" rx="6"/>
+  <text class="label" x="816" y="272" text-anchor="middle">FlushEffects</text>
+  <text class="sub" x="816" y="289" text-anchor="middle">cleanup →</text>
+  <text class="sub" x="816" y="302" text-anchor="middle">body</text>
+
+  <!-- Render → Flush -->
+  <path class="edge" d="M816 116 L816 250" marker-end="url(#arr)"/>
+
+  <!-- Mismatch -->
+  <rect class="box-error" x="260" y="250" width="280" height="60" rx="6"/>
+  <text class="label" x="400" y="272" text-anchor="middle">HookOrderException</text>
+  <text class="sub" x="400" y="290" text-anchor="middle">slot type ≠ expected at _hookIndex</text>
+  <text class="sub" x="400" y="304" text-anchor="middle">(call order changed between renders)</text>
+
+  <!-- Flow edges -->
+  <path class="edge" d="M140 88 L170 88" marker-end="url(#arr)"/>
+  <path class="edge" d="M300 88 L320 88" marker-end="url(#arr)"/>
+  <text class="edge-label" x="310" y="80" text-anchor="middle">advance</text>
+  <path class="edge" d="M450 88 L470 88" marker-end="url(#arr)"/>
+  <text class="edge-label" x="460" y="80" text-anchor="middle">advance</text>
+  <path class="edge" d="M600 88 L620 88" marker-end="url(#arr)"/>
+  <text class="edge-label" x="610" y="80" text-anchor="middle">advance</text>
+  <path class="edge" d="M750 88 L770 88" marker-end="url(#arr)"/>
+
+  <!-- Mismatch edges -->
+  <path class="edge-dashed" d="M235 126 Q 270 200 320 250" marker-end="url(#arr-err)"/>
+  <path class="edge-dashed" d="M385 126 L385 250" marker-end="url(#arr-err)"/>
+  <path class="edge-dashed" d="M535 126 L500 250" marker-end="url(#arr-err)"/>
+  <text class="edge-label" x="220" y="190" fill="#cf222e">type mismatch</text>
+</svg>

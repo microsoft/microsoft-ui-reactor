@@ -1,0 +1,4113 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Declarative UI framework for native Windows desktop apps in pure C#.">
+      
+      
+      
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.13/text-and-media/">
+      
+      
+        <link rel="prev" href="../collections/">
+      
+      
+        <link rel="next" href="../status-and-info/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Text and Media - Microsoft.UI.Reactor</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#text-and-media" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You are not viewing the latest release of Microsoft.UI.Reactor.
+  <a href="../..">
+    <strong>Go to the latest release.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Microsoft.UI.Reactor" class="md-header__button md-logo" aria-label="Microsoft.UI.Reactor" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Microsoft.UI.Reactor
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Text and Media
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/microsoft/microsoft-ui-reactor" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    microsoft/microsoft-ui-reactor
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../components/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Learn the Framework
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../layout/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  UI Surface
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../controls/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Controls
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../navigation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  App Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../recipes/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Patterns & Recipes
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../dev-tooling/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tooling & Process
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../winforms-interop/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Interop
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture-overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Under the Hood
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/hooks/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Microsoft.UI.Reactor" class="md-nav__button md-logo" aria-label="Microsoft.UI.Reactor" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Microsoft.UI.Reactor
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/microsoft/microsoft-ui-reactor" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    microsoft/microsoft-ui-reactor
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../thinking-in-reactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thinking in Reactor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../xaml-developers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactor for XAML Developers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactor-vs-xaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactor vs XAML
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn the Framework
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn the Framework
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Effects and Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../commanding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commanding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Surface
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    UI Surface
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../flex-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flex Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../styling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Styling and Theming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input-and-gestures/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input and Gestures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controls
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Controls
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controls Catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../forms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms and Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../collections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collections
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Text and Media
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Text and Media
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#text-variants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Text variants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#textblock-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TextBlock modifiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#richtextblock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RichTextBlock
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../status-and-info/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Status and Info
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dialogs-and-flyouts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dialogs and Flyouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../charting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Charting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    App Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    App Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Navigation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docking Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../async-resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Async Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../localization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Localization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../accessibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accessibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../recipes/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Patterns & Recipes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Patterns & Recipes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/command-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/drag-reorder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drag Reorder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/login/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Login
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/master-detail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Master Detail
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/modal-dialog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modal Dialog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/multi-step-form/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-step Form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/paginated-list/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Paginated List
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/search-with-suggestions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search with Suggestions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/settings-page/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings Page
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheat-sheet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cheat Sheet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rules-of-reactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rules of Reactor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../theming-tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Theming Tokens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tooling & Process
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tooling & Process
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev-tooling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tooling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../packaging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packaging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Interop
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../winforms-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WinForms Interop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wpf-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WPF Interop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Under the Hood
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Under the Hood
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture-overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactivity-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactivity Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reconciliation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reconciliation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control-reconciler-protocol/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Control Reconciler Protocol
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extending-reactor-controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending Reactor Controls
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../element-pool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Element Pool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../effects-scheduling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Effects Scheduling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../threading-and-dispatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threading and Dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../source-mapping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Source Mapping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modifier-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modifier System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../analyzer-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analyzer Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../devtools-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DevTools Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../focus-and-input-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Focus and Input Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../perf-instrumentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Perf Instrumentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/hooks/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#text-variants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Text variants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#textblock-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TextBlock modifiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#richtextblock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RichTextBlock
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/microsoft/microsoft-ui-reactor/edit/main/docs/guide/text-and-media.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<blockquote>
+<p><strong>WinUI reference:</strong> For the full property surface and design guidance, see <a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/text-controls">Text Controls</a>.</p>
+</blockquote>
+<p>Text and media controls are the read-only-display half of the Microsoft.UI.Reactor (Reactor)
+catalog: surfaces that show content the user is reading, watching, or
+inspecting rather than editing. Most of them are thin wrappers over the
+WinUI text and media surface, so the modifier names and accessibility
+behavior match what a WinUI developer already knows. The two outliers are
+<a href="#markdown-reactor-original"><code>Markdown(string)</code></a> — a Reactor-original
+renderer that parses GFM-style Markdown into the same element tree the
+rest of your UI uses, no WebView round trip — and the semantic text
+variants <a href="#text-variants"><code>Heading</code></a> / <a href="#text-variants"><code>SubHeading</code></a> /
+<a href="#text-variants"><code>Caption</code></a>, which preset typography so that accessibility
+tooling can infer document outline without manually setting
+<code>AutomationProperties</code>. The trade-off the catalog makes here is bias
+toward composition: rich layouts come from many small text elements in a
+<a href="../layout/"><code>VStack</code></a>, not from one giant <code>RichTextBlock</code> carrying
+manually-tuned <code>Inline</code> records. Skim the modifier tables before the
+prose, then jump to the control you need.</p>
+<h1 id="text-and-media">Text and Media<a class="headerlink" href="#text-and-media" title="Permanent link">&para;</a></h1>
+<p>This page covers every read-only-display and inline-rich-text control in
+Reactor. For input controls (<code>TextBox</code>, <code>PasswordBox</code>, <code>RichEditBox</code>),
+see <a href="../forms/">Forms</a>. For data-bound collections, see
+<a href="../collections/">Collections</a>.</p>
+<h2 id="text-variants">Text variants<a class="headerlink" href="#text-variants" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">Heading</span><span class="p">(</span><span class="kt">string</span><span class="p">)</span><span class="w">         </span><span class="c1">// section title, ~28pt</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">SubHeading</span><span class="p">(</span><span class="kt">string</span><span class="p">)</span><span class="w">      </span><span class="c1">// sub-section header, ~20pt</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">TextBlock</span><span class="p">(</span><span class="kt">string</span><span class="p">)</span><span class="w">       </span><span class="c1">// body prose</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">Caption</span><span class="p">(</span><span class="kt">string</span><span class="p">)</span><span class="w">         </span><span class="c1">// ~12pt, dimmed</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TextVariantsDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="p">{</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">        </span><span class="n">Heading</span><span class="p">(</span><span class="s">&quot;Heading — page or section title&quot;</span><span class="p">),</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;SubHeading — region header&quot;</span><span class="p">),</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">        </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Body text. The default size and weight for prose.&quot;</span><span class="p">),</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">        </span><span class="n">Caption</span><span class="p">(</span><span class="s">&quot;Caption — secondary metadata, dates, labels.&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Heading / SubHeading / TextBlock / Caption stacked" src="../images/text-and-media/text-variants.png" /></p>
+<p><code>Heading</code>, <code>SubHeading</code>, and <code>Caption</code> return <a href="../components/"><code>TextBlockElement</code></a>
+with preset <code>FontSize</code>, weight, and <code>Foreground</code> from the active theme.
+They are the right tool for document outline — screen readers and the
+<a href="../accessibility/">accessibility scanner</a> treat them as hierarchical
+landmarks, where a bare <code>TextBlock</code> styled with <code>.FontSize(24).Bold()</code> is
+just visually large. Reach for the variants first; reach for the
+modifiers on <code>TextBlock</code> only when the position in the outline doesn't
+match the visual weight you want.</p>
+<table>
+<thead>
+<tr>
+<th>Factory</th>
+<th>Default size</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Heading</code></td>
+<td>~28pt, bold</td>
+<td>One per page — the document title.</td>
+</tr>
+<tr>
+<td><code>SubHeading</code></td>
+<td>~20pt, semibold</td>
+<td>Section header inside a long page.</td>
+</tr>
+<tr>
+<td><code>TextBlock</code></td>
+<td>Body</td>
+<td>Paragraphs, labels, inline help.</td>
+</tr>
+<tr>
+<td><code>Caption</code></td>
+<td>~12pt, dimmed</td>
+<td>Timestamps, metadata, helper text under a field.</td>
+</tr>
+</tbody>
+</table>
+<p>WinUI design page: <a href="https://learn.microsoft.com/en-us/windows/apps/design/style/typography">Typography in Windows 11</a>.</p>
+<h2 id="textblock-modifiers">TextBlock modifiers<a class="headerlink" href="#textblock-modifiers" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TextBlockModifiersDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="p">{</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">        </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Bold + sized&quot;</span><span class="p">).</span><span class="n">Bold</span><span class="p">().</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">18</span><span class="p">),</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">        </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Selectable so the user can copy.&quot;</span><span class="p">).</span><span class="n">IsTextSelectionEnabled</span><span class="p">(),</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">        </span><span class="n">TextBlock</span><span class="p">(</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">            </span><span class="s">&quot;A long paragraph that demonstrates wrapping behavior. &quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">            </span><span class="s">&quot;Without TextWrapping, content stays on one line and is &quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">            </span><span class="s">&quot;clipped or scrolls. With TextWrapping.Wrap, the block &quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">            </span><span class="s">&quot;flows across multiple lines inside its width.&quot;</span><span class="p">)</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">            </span><span class="p">.</span><span class="n">TextWrapping</span><span class="p">()</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">            </span><span class="p">.</span><span class="n">MaxLines</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">            </span><span class="p">.</span><span class="n">TextTrimming</span><span class="p">(</span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Xaml</span><span class="p">.</span><span class="n">TextTrimming</span><span class="p">.</span><span class="n">WordEllipsis</span><span class="p">)</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">            </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">320</span><span class="p">)</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">    </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="TextBlock with bold/size, selectable, wrapped + trimmed variants" src="../images/text-and-media/textblock-modifiers.png" /></p>
+<p>The fluents you reach for most often:</p>
+<table>
+<thead>
+<tr>
+<th>Fluent</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.Bold()</code> / <code>.SemiBold()</code></td>
+<td>Sets <code>FontWeight</code>. Use <code>Heading</code> instead if it's a section title.</td>
+</tr>
+<tr>
+<td><code>.FontSize(double)</code></td>
+<td>Override the variant default.</td>
+</tr>
+<tr>
+<td><code>.FontFamily(string)</code></td>
+<td>Family name or <code>Microsoft.UI.Xaml.Media.FontFamily</code>.</td>
+</tr>
+<tr>
+<td><code>.TextWrapping()</code></td>
+<td>Default is no-wrap; call this to flow across lines.</td>
+</tr>
+<tr>
+<td><code>.MaxLines(int)</code></td>
+<td>Caps the visible line count — pairs with <code>TextTrimming</code>.</td>
+</tr>
+<tr>
+<td><code>.TextTrimming(mode)</code></td>
+<td><code>CharacterEllipsis</code> / <code>WordEllipsis</code> / <code>Clip</code> / <code>None</code>.</td>
+</tr>
+<tr>
+<td><code>.TextAlignment(alignment)</code></td>
+<td><code>Left</code> / <code>Right</code> / <code>Center</code> / <code>Justify</code>.</td>
+</tr>
+<tr>
+<td><code>.LineHeight(double)</code></td>
+<td>Override the line-box height (useful for dense lists).</td>
+</tr>
+<tr>
+<td><code>.IsTextSelectionEnabled()</code></td>
+<td>Lets the user select and copy the text.</td>
+</tr>
+<tr>
+<td><code>.CharacterSpacing(int)</code></td>
+<td>Hundredths of an em — <code>30</code> ≈ 0.3em tracking.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Caveat:</strong> <code>TextBlock</code> has a fast-path renderer that activates only when you set the
+<code>Text</code> via the factory string overload (<code>TextBlock("…")</code>). The moment you
+switch to inlines via <code>RichTextBlock</code>, change <code>CharacterSpacing</code> to a
+non-zero value, or set <code>TextTrimming</code> to <code>Clip</code>, layout falls back to the
+slow path and CPU cost per measure roughly doubles. For thousand-row
+lists this matters; for static prose it does not. The WinUI debug
+property <code>IsTextPerformanceVisualizationEnabled</code> highlights fast-path
+text in green — turn it on when profiling a scroll-heavy screen and
+demote any controls that aren't green to plain <code>TextBlock</code> with
+modifiers.</p>
+</blockquote>
+<h2 id="richtextblock">RichTextBlock<a class="headerlink" href="#richtextblock" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">RichTextBlock</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">text</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">RichTextBlock</span><span class="p">(</span><span class="n">RichTextParagraph</span><span class="p">[]</span><span class="w"> </span><span class="n">paragraphs</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">RichTextDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">        </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Inline-formatted prose&quot;</span><span class="p">),</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">        </span><span class="n">RichTextBlock</span><span class="p">([</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">            </span><span class="n">Paragraph</span><span class="p">(</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">                </span><span class="n">Run</span><span class="p">(</span><span class="s">&quot;Tap the &quot;</span><span class="p">),</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">                </span><span class="n">Hyperlink</span><span class="p">(</span><span class="s">&quot;docs&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">                    </span><span class="k">new</span><span class="w"> </span><span class="nf">Uri</span><span class="p">(</span><span class="s">&quot;https://learn.microsoft.com/windows/apps/&quot;</span><span class="p">)),</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">                </span><span class="n">Run</span><span class="p">(</span><span class="s">&quot; to keep reading.&quot;</span><span class="p">)),</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">            </span><span class="n">Paragraph</span><span class="p">(</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">                </span><span class="n">Run</span><span class="p">(</span><span class="s">&quot;Reactor builds the paragraph tree from value-typed &quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">                    </span><span class="s">&quot;records. No XAML inlines, no DataTemplate.&quot;</span><span class="p">))</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">        </span><span class="p">]).</span><span class="n">LineHeight</span><span class="p">(</span><span class="mi">22</span><span class="p">).</span><span class="n">Width</span><span class="p">(</span><span class="mi">420</span><span class="p">)</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">    </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="RichTextBlock with an inline hyperlink across two paragraphs" src="../images/text-and-media/rich-text.png" /></p>
+<p><code>RichTextBlock</code> is for paragraphs that mix runs and inline elements —
+hyperlinks, mid-sentence bolds, color swaps. Use it sparingly: a list of
+fields lives better in <a href="../forms/"><code>Forms</code></a>, and a multi-screen article
+lives better in <a href="#markdown-reactor-original"><code>Markdown(string)</code></a>.
+<code>RichTextBlock</code> is the right tool when the structure is dynamic (a chat
+message with @-mentions, a search result with bolded query terms)
+because you build the <code>Paragraph[]</code> from data per render.</p>
+<table>
+<thead>
+<tr>
+<th>Helper</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Paragraph(params RichTextInline[])</code></td>
+<td>A paragraph; one per visual break.</td>
+</tr>
+<tr>
+<td><code>Run(string text)</code></td>
+<td>A plain text fragment.</td>
+</tr>
+<tr>
+<td><code>Hyperlink(string text, Uri target)</code></td>
+<td>Inline link with a navigate target.</td>
+</tr>
+<tr>
+<td><code>Hyperlink(string text, Action onClick)</code></td>
+<td>Clickable inline fragment — fires the delegate and suppresses platform navigation. Use to make a single rich-text run interactive (open an editor, dispatch a command) without escaping to a hosted native subtree.</td>
+</tr>
+<tr>
+<td><code>InlineUI(Element child)</code></td>
+<td>Embeds a live control (chart, slider, button) mid-paragraph via <code>InlineUIContainer</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Modifiers — <code>.MaxLines</code>, <code>.LineHeight</code>, <code>.TextAlignment</code>,
+<code>.TextTrimming</code>, <code>.CharacterSpacing</code> — match <code>TextBlock</code>. Inline runs do
+not get the fast-path renderer, so prefer plain <code>TextBlock</code> for static
+text.</p>
+<blockquote>
+<p><strong>Caveat:</strong> Embedding live controls with <code>InlineUI(...)</code> and then mutating a <code>Run</code> in
+the same paragraph used to scroll the surrounding <code>ScrollViewer</code>/<code>ScrollView</code>
+to the top: WinUI's text engine re-measures the paragraph from scratch and
+the embedded elements contribute zero height for one layout pass, so the
+scroll host silently clamps its offset down and never restores it (issue</p>
+<h1 id="487-reactor-now-handles-this-for-you-scrollviewerrichtextblock">487). Reactor now handles this for you — <code>ScrollViewer(RichTextBlock(...))</code><a class="headerlink" href="#487-reactor-now-handles-this-for-you-scrollviewerrichtextblock" title="Permanent link">&para;</a></h1>
+<p>preserves the user's scroll offset across inline-UI mutations automatically,
+with no extra API or per-app workaround. Just wrap the <code>RichTextBlock</code> in a
+scroll host as usual.</p>
+</blockquote>
+<p>WinUI design page: <a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-text-block">Rich text block</a>.</p>
+<h2 id="richeditbox">RichEditBox<a class="headerlink" href="#richeditbox" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">RichEditBox</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">Action</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;?</span><span class="w"> </span><span class="n">onTextChanged</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">RichEditDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="p">{</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">text</span><span class="p">,</span><span class="w"> </span><span class="n">setText</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">            </span><span class="s">&quot;Edit me. RichEditBox supports paste-with-formatting, &quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">            </span><span class="s">&quot;spell-check, and Enter for new paragraphs.&quot;</span><span class="p">);</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;RichEditBox&quot;</span><span class="p">),</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">            </span><span class="n">RichEditBox</span><span class="p">(</span><span class="n">text</span><span class="p">,</span><span class="w"> </span><span class="n">setText</span><span class="p">)</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">                </span><span class="p">.</span><span class="n">AcceptsReturn</span><span class="p">()</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">                </span><span class="p">.</span><span class="n">IsSpellCheckEnabled</span><span class="p">()</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">                </span><span class="p">.</span><span class="n">TextWrapping</span><span class="p">()</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">                </span><span class="p">.</span><span class="n">Height</span><span class="p">(</span><span class="mi">160</span><span class="p">).</span><span class="n">Width</span><span class="p">(</span><span class="mi">420</span><span class="p">)</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="RichEditBox sized for paragraph editing" src="../images/text-and-media/rich-edit.png" /></p>
+<p><code>RichEditBox</code> is the editable counterpart of <code>RichTextBlock</code> — multi-line
+text with paste-from-formatted-source, spell-check, IME composition, and
+selection. The change handler fires with the plain text content; for
+formatted output you read <code>RichEditBox.Document</code> through <code>.Set(...)</code> and
+serialize the text range yourself. Single-line text input belongs in
+<a href="../forms/"><code>TextBox</code></a>, not here.</p>
+<table>
+<thead>
+<tr>
+<th>Fluent</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.AcceptsReturn(bool)</code></td>
+<td>Enter starts a new paragraph instead of submitting.</td>
+</tr>
+<tr>
+<td><code>.TextWrapping()</code></td>
+<td>Wrap (default) or NoWrap.</td>
+</tr>
+<tr>
+<td><code>.MaxLength(int)</code></td>
+<td>Cap input length.</td>
+</tr>
+<tr>
+<td><code>.IsSpellCheckEnabled(bool)</code></td>
+<td>Toggle squiggle underline.</td>
+</tr>
+<tr>
+<td><code>.SelectionHighlightColor(brush)</code></td>
+<td>Override selection background.</td>
+</tr>
+<tr>
+<td><code>.TextChanged(Action&lt;string&gt;)</code></td>
+<td>Subscribe outside the constructor argument.</td>
+</tr>
+</tbody>
+</table>
+<p>WinUI design page: <a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-edit-box">Rich edit box</a>.</p>
+<h2 id="markdown-reactor-original">Markdown (Reactor-original)<a class="headerlink" href="#markdown-reactor-original" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">Markdown</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">source</span><span class="p">)</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">Markdown</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">source</span><span class="p">,</span><span class="w"> </span><span class="n">MarkdownOptions</span><span class="w"> </span><span class="n">options</span><span class="p">)</span>
+</code></pre></div>
+<blockquote>
+<p><strong>Package note.</strong> <code>Markdown(...)</code> ships in the optional
+<code>Microsoft.UI.Reactor.Advanced</code> package (spec 062 §7). Add a
+<code>&lt;PackageReference Include="Microsoft.UI.Reactor.Advanced" /&gt;</code> and import
+its factories alongside the core ones:
+<code>using static Microsoft.UI.Reactor.Advanced.Factories;</code>.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">MarkdownDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">{</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">        </span><span class="k">const</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="n">source</span><span class="w"> </span><span class="o">=</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">            </span><span class="s">&quot;# Release notes\n\n&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">            </span><span class="s">&quot;Reactor **0.42** ships:\n\n&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">            </span><span class="s">&quot;- Compositor animations via `UseAnimation`.\n&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">            </span><span class="s">&quot;- A new [Markdown](https://example.com) renderer.\n&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">            </span><span class="s">&quot;- Bug fixes for `LazyVStack` keyed reorder.\n\n&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">            </span><span class="s">&quot;&gt; Migration guide lives in the spec.\n&quot;</span><span class="p">;</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Markdown&quot;</span><span class="p">),</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="w">            </span><span class="n">Markdown</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">).</span><span class="n">Width</span><span class="p">(</span><span class="mi">440</span><span class="p">);</span>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Markdown rendering — heading, list, link, blockquote" src="../images/text-and-media/markdown.png" /></p>
+<p><code>Markdown</code> is the largest Reactor-original control on this page. It
+parses GitHub-flavored Markdown with the embedded <code>md4c</code> parser and
+emits a Reactor element tree: headings become <code>TextBlock</code> with the
+heading variant, list items become <code>HStack</code>s, links become inline
+hyperlinks, code spans become monospace <code>TextBlock</code>. No WebView, no HTML
+round-trip — the output composes with every other modifier on this page
+(<code>.Padding</code>, <code>.Width</code>, <code>.TextWrapping</code>).</p>
+<p>The trade-off vs. <a href="#webview2">WebView2</a> is fidelity: <code>Markdown</code> does not
+support arbitrary HTML, embedded <code>&lt;script&gt;</code>, or CSS. It supports paragraphs,
+headings (h1–h6), lists (bullet, ordered, nested), inline code, fenced code
+blocks with optional language, links, images, bold, italic, strikethrough,
+blockquotes, hard line breaks, and tables. Anything beyond that — embedded
+videos, custom layouts, syntax-highlighted code with theming — falls back to
+WebView2 with an HTML-rendered fallback or a separate viewer.</p>
+<p>Reach for it for release notes, in-app help, conversational AI output,
+user-authored long-form prose (commit descriptions, knowledge-base
+articles), or any surface where the source is plain text and a thin
+formatting layer is what the reader needs.</p>
+<table>
+<thead>
+<tr>
+<th>Use Markdown when</th>
+<th>Use RichTextBlock when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source is authored as a string (LLM output, README, user comment)</td>
+<td>Inline structure is computed from typed data</td>
+</tr>
+<tr>
+<td>You need lists, code blocks, blockquotes</td>
+<td>Plain paragraphs with mid-line formatting suffice</td>
+</tr>
+<tr>
+<td>The full GFM subset is acceptable</td>
+<td>You need arbitrary <code>Inline</code> element types</td>
+</tr>
+<tr>
+<td>Round-trip from <code>.md</code> files</td>
+<td>Round-trip from a <code>RichTextParagraph[]</code> schema</td>
+</tr>
+</tbody>
+</table>
+<p>No WinUI parallel: WinUI ships a <code>MarkdownTextBlock</code> in the Community
+Toolkit, but the API surface and behavior differ. The Reactor factory is
+the canonical reference for this control.</p>
+<h2 id="image">Image<a class="headerlink" href="#image" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">Image</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">source</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ImageDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="p">{</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">        </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Image&quot;</span><span class="p">),</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">        </span><span class="c1">// Resource Uri — ms-appx:// for packaged assets, file:// for disk,</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">        </span><span class="c1">// https:// for remote.</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">        </span><span class="n">Image</span><span class="p">(</span><span class="s">&quot;ms-appx:///Assets/StoreLogo.png&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">            </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">96</span><span class="p">).</span><span class="n">Height</span><span class="p">(</span><span class="mi">96</span><span class="p">),</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">        </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Stretch.UniformToFill for cover art; &quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">                  </span><span class="s">&quot;ImageFailed to detect missing assets.&quot;</span><span class="p">).</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.6</span><span class="p">)</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">    </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Image control rendering a packaged 96x96 asset" src="../images/text-and-media/image.png" /></p>
+<p><code>Image</code> accepts the standard WinUI URI schemes — <code>ms-appx:///</code> for
+assets packaged with the app, <code>ms-appdata:///</code> for app-data files,
+<code>file:///</code> for arbitrary disk paths, and <code>http(s)://</code> for remote
+sources. The factory delegates source decoding to the WinUI
+<code>BitmapImage</code> — same caching, same DPI awareness.</p>
+<table>
+<thead>
+<tr>
+<th>Fluent</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.Width(double)</code> / <code>.Height(double)</code></td>
+<td>Layout size. Without one of these the image takes its natural pixel size.</td>
+</tr>
+<tr>
+<td><code>.NineGrid(Thickness)</code></td>
+<td>Stretch the middle, preserve the borders (chrome-style backgrounds).</td>
+</tr>
+<tr>
+<td><code>.Set(img =&gt; img.Stretch = ...)</code></td>
+<td>Stretch mode: <code>None</code> / <code>Uniform</code> (default) / <code>UniformToFill</code> / <code>Fill</code>.</td>
+</tr>
+<tr>
+<td><code>.ImageOpened(Action)</code></td>
+<td>Decode succeeded.</td>
+</tr>
+<tr>
+<td><code>.ImageFailed(Action&lt;string&gt;)</code></td>
+<td>Decode failed — fire to swap in a fallback.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Don't:</strong> decode large remote images on the UI thread by setting
+<code>Source</code> to a full-size <code>http://</code> URL inside a tight list-item
+render. The WinUI decoder spawns work off the UI thread, but the
+network fetch still blocks the visual tree from drawing the row
+until the bytes arrive. For lazy-loaded media inside a virtualized
+list, route through a <a href="../async-resources/"><code>UseResource</code></a> that
+fetches a downscaled blob and only render <code>Image</code> once <code>Pending</code> is
+resolved.</p>
+</blockquote>
+<p>WinUI design page: <a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/images-imagebrushes">Images and image brushes</a>.</p>
+<h2 id="mediaplayerelement">MediaPlayerElement<a class="headerlink" href="#mediaplayerelement" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">MediaPlayerElement</span><span class="p">(</span><span class="kt">string?</span><span class="w"> </span><span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">MediaPlayerDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="p">{</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">        </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;MediaPlayerElement&quot;</span><span class="p">),</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">        </span><span class="n">MediaPlayerElement</span><span class="p">(</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">            </span><span class="s">&quot;https://learn.microsoft.com/en-us/windows/apps/design/&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">            </span><span class="s">&quot;controls/images/ic_fluent_play_24_regular.svg&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">            </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">420</span><span class="p">).</span><span class="n">Height</span><span class="p">(</span><span class="mi">240</span><span class="p">)</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">            </span><span class="p">.</span><span class="n">Set</span><span class="p">(</span><span class="n">m</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">                </span><span class="n">m</span><span class="p">.</span><span class="n">AreTransportControlsEnabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="w">                </span><span class="n">m</span><span class="p">.</span><span class="n">AutoPlay</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">false</span><span class="p">;</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">            </span><span class="p">}),</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">        </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Use AreTransportControlsEnabled for play/pause UI.&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="w">            </span><span class="p">.</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.6</span><span class="p">)</span>
+<a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a><span class="w">    </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="MediaPlayerElement with transport controls" src="../images/text-and-media/media-player.png" /></p>
+<p><code>MediaPlayerElement</code> wraps the WinUI <code>MediaPlayerElement</code>, which itself
+hosts a <code>MediaPlayer</code> that drives audio and video playback. The factory
+accepts a string URL for the common case; for stream sources, set the
+player through <code>.Set(m =&gt; m.MediaPlayer.Source = ...)</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Knob</th>
+<th>Set via</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AreTransportControlsEnabled</code></td>
+<td><code>.Set(m =&gt; m.AreTransportControlsEnabled = true)</code></td>
+</tr>
+<tr>
+<td><code>AutoPlay</code></td>
+<td><code>.Set(m =&gt; m.AutoPlay = false)</code></td>
+</tr>
+<tr>
+<td><code>IsFullWindow</code></td>
+<td><code>.Set(m =&gt; m.IsFullWindow = true)</code></td>
+</tr>
+<tr>
+<td><code>MediaOpened</code> / <code>MediaEnded</code> / <code>MediaFailed</code></td>
+<td>Dedicated fluent overloads</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Don't:</strong> mount and unmount <code>MediaPlayerElement</code> on every render to
+drive playback. The WinUI control owns an underlying <code>MediaPlayer</code>
+that re-initializes hardware decoders on each remount; thrash kills
+playback smoothness. Render the element once with a stable position
+in the tree and drive <code>Source</code> / play state through a hook
+(<a href="../hooks/"><code>UseRef</code></a> holding the player), not through unmounts.</p>
+</blockquote>
+<p>WinUI design page: <a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/media-playback">Media player</a>.</p>
+<h2 id="webview2">WebView2<a class="headerlink" href="#webview2" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">WebView2</span><span class="p">(</span><span class="n">Uri</span><span class="o">?</span><span class="w"> </span><span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">WebViewDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="p">{</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">loaded</span><span class="p">,</span><span class="w"> </span><span class="n">setLoaded</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="k">false</span><span class="p">);</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;WebView2&quot;</span><span class="p">),</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">            </span><span class="n">WebView2</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">Uri</span><span class="p">(</span><span class="s">&quot;about:blank&quot;</span><span class="p">))</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">                </span><span class="p">.</span><span class="n">NavigationCompleted</span><span class="p">(</span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setLoaded</span><span class="p">(</span><span class="k">true</span><span class="p">))</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">                </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">420</span><span class="p">).</span><span class="n">Height</span><span class="p">(</span><span class="mi">240</span><span class="p">),</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="n">loaded</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s">&quot;Loaded.&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Loading…&quot;</span><span class="p">).</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.6</span><span class="p">)</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="WebView2 hosting about:blank" src="../images/text-and-media/webview.png" /></p>
+<p><code>WebView2</code> embeds a Chromium-based browser. Use it for content that
+genuinely needs HTML/CSS/JavaScript — a markdown page does not, an
+embedded Office viewer does. The control raises lifecycle events for
+navigation and exposes a <code>WebMessageReceived</code> channel for postMessage
+interop.</p>
+<table>
+<thead>
+<tr>
+<th>Event fluent</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.NavigationStarting(Action&lt;Uri&gt;)</code></td>
+<td>A navigation begins — cancel via <code>.Set</code>.</td>
+</tr>
+<tr>
+<td><code>.NavigationCompleted(Action&lt;Uri&gt;)</code></td>
+<td>Page finished loading.</td>
+</tr>
+<tr>
+<td><code>.WebMessageReceived(Action&lt;string&gt;)</code></td>
+<td>Page called <code>window.chrome.webview.postMessage(...)</code>.</td>
+</tr>
+<tr>
+<td><code>.CoreWebView2Initialized(Action)</code></td>
+<td>The underlying CoreWebView2 is ready — configure it via <code>.Set(w =&gt; w.CoreWebView2....)</code>.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Don't:</strong> lay out <code>WebView2</code> inside an indeterminate-sized parent
+like an <code>HStack</code> without explicit dimensions. WebView2 measures to
+its content, which for a real web page is the viewport — without
+bounds it grows to fill the available size and triggers a layout
+oscillation when the page reflows. Always pin <code>.Width</code> and <code>.Height</code>
+(or place the control in a fixed-size <code>Grid</code> cell).</p>
+</blockquote>
+<p>WinUI design page: <a href="https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution">WebView2</a>.</p>
+<h2 id="mapcontrol">MapControl<a class="headerlink" href="#mapcontrol" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">MapControl</span><span class="p">(</span><span class="kt">string?</span><span class="w"> </span><span class="n">mapServiceToken</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">zoomLevel</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">MapControlDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="p">{</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">        </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;MapControl&quot;</span><span class="p">),</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">        </span><span class="c1">// Token blank — replace with a real Bing Maps key for tile fetch.</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">        </span><span class="c1">// Without a token the control renders the grid background only.</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">        </span><span class="n">MapControl</span><span class="p">(</span><span class="n">mapServiceToken</span><span class="p">:</span><span class="w"> </span><span class="k">null</span><span class="p">,</span><span class="w"> </span><span class="n">zoomLevel</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">            </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">420</span><span class="p">).</span><span class="n">Height</span><span class="p">(</span><span class="mi">240</span><span class="p">)</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="w">    </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="MapControl at zoom level 4" src="../images/text-and-media/map-control.png" /></p>
+<p><code>MapControl</code> wraps <code>Microsoft.UI.Xaml.Controls.Maps.MapControl</code>. The
+service token comes from the Bing Maps developer portal — without it,
+the grid background renders but no tiles fetch. For full customization
+(pushpins, overlays, scenes), reach through <code>.Set(m =&gt; ...)</code> to the
+underlying control; the Reactor surface today exposes the factory
+arguments and direct passthrough.</p>
+<blockquote>
+<p><strong>Don't:</strong> ship <code>MapControl</code> to an offline-tolerant app without a
+fallback. Tile fetch failures don't throw — the control just shows
+the grid. Subscribe to the underlying <code>MapControl.MapServiceErrorOccurred</code>
+through <code>.Set</code> and swap in an <code>Image</code> of a static map (or a "map
+unavailable" panel) when offline.</p>
+</blockquote>
+<p>WinUI design page: <a href="https://learn.microsoft.com/en-us/windows/apps/develop/maps/">Map control</a> (Windows App SDK).</p>
+<h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Factory</th>
+<th>Reactor-original?</th>
+<th>WinUI doc</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TextBlock</code></td>
+<td><code>TextBlock(string)</code></td>
+<td>No</td>
+<td><a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/text-block">Text block</a></td>
+</tr>
+<tr>
+<td><code>Heading</code> / <code>SubHeading</code> / <code>Caption</code></td>
+<td><code>Heading(string)</code> etc.</td>
+<td>Variant presets</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>RichTextBlock</code></td>
+<td><code>RichTextBlock(string)</code> or <code>RichTextBlock(RichTextParagraph[])</code></td>
+<td>No</td>
+<td><a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-text-block">Rich text block</a></td>
+</tr>
+<tr>
+<td><code>RichEditBox</code></td>
+<td><code>RichEditBox(text, onChanged)</code></td>
+<td>No</td>
+<td><a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-edit-box">Rich edit box</a></td>
+</tr>
+<tr>
+<td><code>Markdown</code></td>
+<td><code>Markdown(string)</code></td>
+<td><strong>Yes</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>Image</code></td>
+<td><code>Image(string)</code></td>
+<td>No</td>
+<td><a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/images-imagebrushes">Images and image brushes</a></td>
+</tr>
+<tr>
+<td><code>MediaPlayerElement</code></td>
+<td><code>MediaPlayerElement(string?)</code></td>
+<td>No</td>
+<td><a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/media-playback">Media player</a></td>
+</tr>
+<tr>
+<td><code>WebView2</code></td>
+<td><code>WebView2(Uri?)</code></td>
+<td>No</td>
+<td><a href="https://learn.microsoft.com/en-us/microsoft-edge/webview2/">WebView2</a></td>
+</tr>
+<tr>
+<td><code>MapControl</code></td>
+<td><code>MapControl(token, zoom)</code></td>
+<td>No</td>
+<td><a href="https://learn.microsoft.com/en-us/windows/apps/develop/maps/">Map control</a></td>
+</tr>
+<tr>
+<td><code>InkCanvas</code></td>
+<td><em>Not yet wrapped</em></td>
+<td>—</td>
+<td><a href="https://learn.microsoft.com/en-us/windows/apps/design/controls/inking-controls">Ink controls</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="patterns">Patterns<a class="headerlink" href="#patterns" title="Permanent link">&para;</a></h2>
+<h3 id="long-form-prose-with-markdown">Long-form prose with Markdown<a class="headerlink" href="#long-form-prose-with-markdown" title="Permanent link">&para;</a></h3>
+<p>The release-notes / changelog pattern: parse a string of GFM into the
+element tree, then style the container — not the inner elements. Pad,
+constrain width to ~640 logical pixels for readability, and let the
+Markdown renderer hand back the hierarchy. Wrap the call in a
+<a href="../hooks/"><code>UseMemo</code></a> keyed on the source string when the renderer is
+inside a frequently-rendered parent; the parser is cheap but allocates,
+and memoization keeps GC pressure flat:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kt">var</span><span class="w"> </span><span class="n">rendered</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseMemo</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Markdown</span><span class="p">(</span><span class="n">source</span><span class="p">),</span><span class="w"> </span><span class="n">source</span><span class="p">);</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="k">return</span><span class="w"> </span><span class="nf">Border</span><span class="p">(</span><span class="n">rendered</span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">20</span><span class="p">).</span><span class="n">Width</span><span class="p">(</span><span class="mi">640</span><span class="p">);</span>
+</code></pre></div>
+<p>This is the same shape as the <a href="../recipes/master-detail/"><code>recipes/master-detail</code></a>
+content pane and the <a href="https://github.com/microsoft/reactor1/tree/main/samples/apps/chat">chat sample</a>
+message bubble.</p>
+<h3 id="inline-data-display-with-richtextblock">Inline data display with RichTextBlock<a class="headerlink" href="#inline-data-display-with-richtextblock" title="Permanent link">&para;</a></h3>
+<p>When a list-row needs <code>Name (status) — 3 hours ago</code> with the status
+bold and the timestamp dim, build a <code>RichTextBlock</code> per row out of the
+typed data. Keep the paragraph construction inline in the row
+<a href="../components/"><code>Component</code></a> so it re-runs only when the row's data
+changes; <code>RichTextBlock</code> is not the bottleneck for moderate row counts
+but the inline-element allocation can show up in profiles when a
+<a href="../collections/"><code>LazyVStack</code></a> scrolls thousands of rows at 60fps.</p>
+<h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
+<h3 id="using-textblock-for-everything">Using <code>TextBlock</code> for everything<a class="headerlink" href="#using-textblock-for-everything" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1">// Don&#39;t:</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Settings&quot;</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">28</span><span class="p">).</span><span class="n">Bold</span><span class="p">(),</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Display&quot;</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">20</span><span class="p">).</span><span class="n">Bold</span><span class="p">(),</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Adjust resolution and orientation.&quot;</span><span class="p">)</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TextVariantsDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="p">{</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">        </span><span class="n">Heading</span><span class="p">(</span><span class="s">&quot;Heading — page or section title&quot;</span><span class="p">),</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">        </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;SubHeading — region header&quot;</span><span class="p">),</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="w">        </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Body text. The default size and weight for prose.&quot;</span><span class="p">),</span>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="w">        </span><span class="n">Caption</span><span class="p">(</span><span class="s">&quot;Caption — secondary metadata, dates, labels.&quot;</span><span class="p">)</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="w">    </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a><span class="p">}</span>
+</code></pre></div>
+<p>The "don't" form ships visual hierarchy but no semantic hierarchy —
+the accessibility scanner reports no headings and screen-reader users
+get no document outline. The correct form uses the <code>Heading</code> /
+<code>SubHeading</code> / <code>TextBlock</code> factories so <a href="../accessibility/"><code>accessibility.md</code></a>
+landmark detection works.</p>
+<h3 id="rendering-markdown-inside-a-tight-scroll-loop-without-memoizing">Rendering Markdown inside a tight scroll loop without memoizing<a class="headerlink" href="#rendering-markdown-inside-a-tight-scroll-loop-without-memoizing" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1">// Don&#39;t:</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="n">LazyVStack</span><span class="o">&lt;</span><span class="n">Message</span><span class="o">&gt;</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">Id</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="n">Markdown</span><span class="p">(</span><span class="n">m</span><span class="p">.</span><span class="n">Body</span><span class="p">))</span><span class="w">  </span><span class="c1">// re-parses on every scroll-induced re-render</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1">// Do:</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">LazyVStack</span><span class="o">&lt;</span><span class="n">Message</span><span class="o">&gt;</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">Id</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">    </span><span class="n">Memo</span><span class="p">(</span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Markdown</span><span class="p">(</span><span class="n">m</span><span class="p">.</span><span class="n">Body</span><span class="p">),</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">Body</span><span class="p">))</span>
+</code></pre></div>
+<p>Markdown parsing is fast but not free — at 60fps × hundreds of visible
+rows × every state change, parser allocation shows up in GC. The
+<a href="../components/"><code>Memo</code></a> wrapper keys on the source string so unchanged
+rows skip the parser entirely.</p>
+<h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
+<p><strong>Pick the smallest control that does the job.</strong> <code>TextBlock</code> &gt;
+<code>RichTextBlock</code> &gt; <code>Markdown</code> &gt; <code>WebView2</code> in increasing layout cost.
+Promote only when the lower tier can't represent the structure.</p>
+<p><strong>Use <code>Selectable()</code> on any text the user might want to copy.</strong> Error
+messages, IDs, paths, log lines, command output — all of them are more
+useful when the user can drag-select and Ctrl+C. The cost is one
+modifier per <code>TextBlock</code>.</p>
+<p><strong>Pin dimensions on media controls.</strong> <code>Image</code>, <code>MediaPlayerElement</code>,
+<code>WebView2</code>, and <code>MapControl</code> all default to "fill available space" or
+"natural content size", which interacts badly with <code>VStack</code>/<code>HStack</code>
+auto-layout. Set <code>.Width</code> and <code>.Height</code> (or place them in a fixed
+<a href="../layout/"><code>Grid</code></a> cell).</p>
+<p><strong><code>Markdown</code> is the right choice for LLM output.</strong> Treat AI-generated
+text as a markdown stream — parse it, render it, theme the container.
+The renderer composes with the rest of the catalog and stays accessible.</p>
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><a href="../forms/">Forms and Input</a></strong> — Previous: editable input controls and the validation system.</li>
+<li><strong><a href="../status-and-info/">Status and Info</a></strong> — Next: ProgressBar, InfoBar, badges, and non-interactive feedback.</li>
+<li><strong><a href="../styling/">Styling</a></strong> — Theme tokens and font fluents applied across every text element.</li>
+<li><strong><a href="../accessibility/">Accessibility</a></strong> — How <code>Heading</code> / <code>SubHeading</code> map to document landmarks.</li>
+<li><strong><a href="https://github.com/microsoft/reactor1/tree/main/samples/apps/chat">Markdown samples</a></strong> — End-to-end LLM-output rendering in the chat sample.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

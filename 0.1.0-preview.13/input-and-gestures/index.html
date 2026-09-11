@@ -1,0 +1,4687 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Declarative UI framework for native Windows desktop apps in pure C#.">
+      
+      
+      
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.13/input-and-gestures/">
+      
+      
+        <link rel="prev" href="../animation/">
+      
+      
+        <link rel="next" href="../controls/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Input and Gestures - Microsoft.UI.Reactor</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#input-and-gestures" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You are not viewing the latest release of Microsoft.UI.Reactor.
+  <a href="../..">
+    <strong>Go to the latest release.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Microsoft.UI.Reactor" class="md-header__button md-logo" aria-label="Microsoft.UI.Reactor" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Microsoft.UI.Reactor
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Input and Gestures
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/microsoft/microsoft-ui-reactor" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    microsoft/microsoft-ui-reactor
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../components/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Learn the Framework
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../layout/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  UI Surface
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../controls/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Controls
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../navigation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  App Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../recipes/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Patterns & Recipes
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../dev-tooling/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tooling & Process
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../winforms-interop/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Interop
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture-overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Under the Hood
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/hooks/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Microsoft.UI.Reactor" class="md-nav__button md-logo" aria-label="Microsoft.UI.Reactor" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Microsoft.UI.Reactor
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/microsoft/microsoft-ui-reactor" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    microsoft/microsoft-ui-reactor
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../thinking-in-reactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Thinking in Reactor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../xaml-developers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactor for XAML Developers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactor-vs-xaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactor vs XAML
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn the Framework
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn the Framework
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Effects and Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../commanding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commanding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Surface
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    UI Surface
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../flex-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flex Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../styling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Styling and Theming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input and Gestures
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input and Gestures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pointer-tap-and-keyboard-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pointer, tap, and keyboard modifiers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pointer, tap, and keyboard modifiers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keyboard-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#focus-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Focus events
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-gestures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous gestures
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Continuous gestures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pan
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keep-pans-at-60-hz-write-translation-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keep pans at 60 Hz: write Translation directly
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#can-i-combine-onpan-with-ontapped-ondoubletapped-on-the-same-element" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I combine .OnPan with .OnTapped / .OnDoubleTapped on the same element?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinch-and-rotate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinch and rotate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#long-press" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Long press
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#focus-and-access-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Focus and access keys
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Focus and access keys">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#declarative-focus-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Declarative focus modifiers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#imperative-focus-with-refs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Imperative focus with refs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Imperative focus with refs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#typed-refs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typed refs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#behind-the-scenes-trampoline-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behind the scenes: trampoline dispatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration-from-set-passthrough" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration from .Set(...) passthrough
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#drag-and-drop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drag and drop
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Drag and drop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#typed-in-process-payloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typed in-process payloads
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#standard-formats-cross-process-interop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Standard formats + cross-process interop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lazy-providers-pay-only-when-the-target-asks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lazy providers — pay only when the target asks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#drop-indicator-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drop indicator overrides
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-move-on-confirmation-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The move-on-confirmation pattern
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patterns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#drag-reorder-a-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drag-reorder a list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinch-to-zoom-on-an-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinch-to-zoom on an image
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trap-focus-inside-a-modal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trap focus inside a modal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-mistakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Mistakes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Mistakes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#relying-on-tunneling-for-pointer-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relying on tunneling for pointer capture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-onkeydown-for-accelerator-chords" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using .OnKeyDown for accelerator chords
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forgetting-focusabletrue-on-a-clickable-border" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Forgetting Focusable(true) on a clickable Border
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controls
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Controls
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controls Catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../forms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms and Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../collections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collections
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../text-and-media/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Text and Media
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../status-and-info/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Status and Info
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dialogs-and-flyouts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dialogs and Flyouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../charting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Charting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    App Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    App Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Navigation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docking Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../async-resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Async Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../localization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Localization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../accessibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accessibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../recipes/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Patterns & Recipes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Patterns & Recipes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/command-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/drag-reorder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drag Reorder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/login/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Login
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/master-detail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Master Detail
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/modal-dialog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modal Dialog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/multi-step-form/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-step Form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/paginated-list/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Paginated List
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/search-with-suggestions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search with Suggestions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/settings-page/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings Page
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheat-sheet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cheat Sheet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rules-of-reactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rules of Reactor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../theming-tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Theming Tokens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tooling & Process
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tooling & Process
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev-tooling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tooling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../packaging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packaging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Interop
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../winforms-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WinForms Interop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wpf-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WPF Interop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Under the Hood
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Under the Hood
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture-overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactivity-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactivity Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reconciliation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reconciliation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control-reconciler-protocol/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Control Reconciler Protocol
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extending-reactor-controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending Reactor Controls
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../element-pool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Element Pool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../effects-scheduling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Effects Scheduling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../threading-and-dispatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threading and Dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../source-mapping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Source Mapping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modifier-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modifier System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../analyzer-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analyzer Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../devtools-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DevTools Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../focus-and-input-internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Focus and Input Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../perf-instrumentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Perf Instrumentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/hooks/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pointer-tap-and-keyboard-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pointer, tap, and keyboard modifiers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pointer, tap, and keyboard modifiers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keyboard-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#focus-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Focus events
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-gestures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous gestures
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Continuous gestures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pan
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keep-pans-at-60-hz-write-translation-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keep pans at 60 Hz: write Translation directly
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#can-i-combine-onpan-with-ontapped-ondoubletapped-on-the-same-element" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I combine .OnPan with .OnTapped / .OnDoubleTapped on the same element?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinch-and-rotate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinch and rotate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#long-press" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Long press
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#focus-and-access-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Focus and access keys
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Focus and access keys">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#declarative-focus-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Declarative focus modifiers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#imperative-focus-with-refs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Imperative focus with refs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Imperative focus with refs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#typed-refs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typed refs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#behind-the-scenes-trampoline-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behind the scenes: trampoline dispatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration-from-set-passthrough" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration from .Set(...) passthrough
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#drag-and-drop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drag and drop
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Drag and drop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#typed-in-process-payloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typed in-process payloads
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#standard-formats-cross-process-interop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Standard formats + cross-process interop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lazy-providers-pay-only-when-the-target-asks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lazy providers — pay only when the target asks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#drop-indicator-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drop indicator overrides
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-move-on-confirmation-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The move-on-confirmation pattern
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patterns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#drag-reorder-a-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drag-reorder a list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinch-to-zoom-on-an-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinch-to-zoom on an image
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trap-focus-inside-a-modal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trap focus inside a modal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-mistakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Mistakes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Mistakes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#relying-on-tunneling-for-pointer-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relying on tunneling for pointer capture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-onkeydown-for-accelerator-chords" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using .OnKeyDown for accelerator chords
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forgetting-focusabletrue-on-a-clickable-border" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Forgetting Focusable(true) on a clickable Border
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/microsoft/microsoft-ui-reactor/edit/main/docs/guide/input-and-gestures.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<blockquote>
+<p><strong>WinUI reference:</strong> For the full property surface and design guidance, see <a href="https://learn.microsoft.com/en-us/windows/apps/design/input/">Input</a>.</p>
+</blockquote>
+<p>Input flows from raw pointer and keyboard events through Microsoft.UI.Reactor (Reactor)'s
+modifier tower into your component's render logic, with gesture
+recognizers and focus state stacked on top. The bottom layer is the
+raw <code>.OnPointerPressed</code> / <code>.OnKeyDown</code> / <code>.OnGotFocus</code> etc. surface,
+which mirrors WinUI's routed events one-to-one and uses bubbling by
+default — events start at the deepest element and propagate up the
+tree. Above that sit the high-level recognizers: <code>.OnTapped</code>,
+<code>.OnDoubleTapped</code>, <code>.OnPan</code>, <code>.OnPinch</code>, <code>.OnRotate</code>, <code>.OnLongPress</code>
+— each auto-enables the underlying WinUI flag (e.g.
+<code>IsDoubleTapEnabled</code>) and installs a single stable trampoline so
+re-rendering with a new handler closure costs no re-subscription.
+Focus is the third tower: declarative <code>.TabIndex</code> / <code>.AccessKey</code> /
+<code>.IsTabStop</code> modifiers, the <a href="../hooks/"><code>UseElementFocus</code></a> /
+<a href="../hooks/"><code>UseElementRef</code></a> hooks for imperative focus, and
+<a href="../accessibility/"><code>UseFocusTrap</code></a> for modal containment. Everything
+is re-render-safe by design; the <a href="../focus-and-input-internals/">focus-and-input-internals</a>
+page covers the dispatcher and trampoline mechanics for readers who
+want the implementation details.</p>
+<h1 id="input-and-gestures">Input and gestures<a class="headerlink" href="#input-and-gestures" title="Permanent link">&para;</a></h1>
+<p>Reactor's input surface is declarative: attach handlers via <code>.On*</code> modifiers and
+the reconciler wires WinUI events, auto-enables the matching flags (for example
+<code>IsDoubleTapEnabled</code>), and survives re-renders without re-subscribing the
+underlying WinUI event.</p>
+<p>This page covers the modifiers you'll reach for on most screens, the higher-level
+gesture recognizers for continuous input, and the imperative escape hatches —
+ref-based focus and access keys — that round out the commanding story.</p>
+<h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Modifier / hook</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.OnPointerPressed</code> / <code>.OnPointerReleased</code> / <code>.OnPointerEntered</code> / <code>.OnPointerExited</code> / <code>.OnPointerMoved</code></td>
+<td>Raw pointer events. Bubble by default.</td>
+</tr>
+<tr>
+<td><code>.OnTapped</code> / <code>.OnDoubleTapped</code> / <code>.OnRightTapped</code> / <code>.OnHolding</code></td>
+<td>High-level tap recognizers. Auto-enable the matching <code>IsXEnabled</code> flag.</td>
+</tr>
+<tr>
+<td><code>.OnPan</code> / <code>.OnPinch</code> / <code>.OnRotate</code> / <code>.OnLongPress</code></td>
+<td>Continuous-gesture recognizers. Take <code>onBegan</code> / <code>onChanged</code> / <code>onEnded</code>.</td>
+</tr>
+<tr>
+<td><code>.OnKeyDown</code> / <code>.OnKeyUp</code> / <code>.OnPreviewKeyDown</code> / <code>.OnPreviewKeyUp</code> / <code>.OnCharacterReceived</code></td>
+<td>Keyboard events. Preview-pair tunnels; the unprefixed pair bubbles.</td>
+</tr>
+<tr>
+<td><code>.OnGotFocus</code> / <code>.OnLostFocus</code></td>
+<td>Focus events; bubble by default.</td>
+</tr>
+<tr>
+<td><code>.OnDragStart&lt;TEl,T&gt;</code> / <code>.OnDrop&lt;TEl,T&gt;</code> / <code>.OnDragOver</code></td>
+<td>Drag-and-drop sources and targets with typed in-process payloads.</td>
+</tr>
+<tr>
+<td><code>.TabIndex(n)</code> / <code>.IsTabStop()</code> / <code>.AccessKey("S")</code> / <code>.TabNavigation(...)</code></td>
+<td>Declarative focus order and keyboard navigation.</td>
+</tr>
+<tr>
+<td><a href="../hooks/"><code>UseElementFocus</code></a></td>
+<td>Untyped element ref + dispatcher-scheduled <code>RequestFocus()</code> action.</td>
+</tr>
+<tr>
+<td><a href="../hooks/"><code>UseElementRef&lt;T&gt;</code></a></td>
+<td>Typed element ref for calling methods on the underlying control.</td>
+</tr>
+<tr>
+<td><a href="../accessibility/"><code>UseFocusTrap</code></a></td>
+<td>Keyboard focus trapping for modals and flyouts.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pointer-tap-and-keyboard-modifiers">Pointer, tap, and keyboard modifiers<a class="headerlink" href="#pointer-tap-and-keyboard-modifiers" title="Permanent link">&para;</a></h2>
+<p>Every <a href="../components/">component</a> exposes the full WinUI input event surface as
+<code>.On*</code> modifiers. Attach a handler; Reactor auto-enables the matching flag and
+installs a trampoline so re-renders don't re-subscribe the underlying event.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">PointerModifiersExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="p">{</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">hover</span><span class="p">,</span><span class="w"> </span><span class="n">setHover</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="k">false</span><span class="p">);</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">tapCount</span><span class="p">,</span><span class="w"> </span><span class="n">setTapCount</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span><span class="n">TextBlock</span><span class="p">(</span><span class="n">hover</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s">&quot;hovered&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s">&quot;hover me&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">                </span><span class="p">.</span><span class="n">HAlign</span><span class="p">(</span><span class="n">HorizontalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">).</span><span class="n">VAlign</span><span class="p">(</span><span class="n">VerticalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">))</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">                </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">240</span><span class="p">).</span><span class="n">Height</span><span class="p">(</span><span class="mi">120</span><span class="p">)</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">                </span><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="n">hover</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s">&quot;#BFE3FF&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s">&quot;#E5F1FB&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">                </span><span class="p">.</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">                </span><span class="p">.</span><span class="n">OnPointerEntered</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setHover</span><span class="p">(</span><span class="k">true</span><span class="p">))</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">                </span><span class="p">.</span><span class="n">OnPointerExited</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setHover</span><span class="p">(</span><span class="k">false</span><span class="p">))</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">                </span><span class="p">.</span><span class="n">OnTapped</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setTapCount</span><span class="p">(</span><span class="n">tapCount</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">                </span><span class="p">.</span><span class="n">OnDoubleTap</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setTapCount</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">$&quot;Tapped {tapCount} time(s) — double-tap to reset&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Pointer modifiers on a Border with hover, tap, and double-tap reset" src="../images/input-and-gestures/pointer-modifiers.png" /></p>
+<p>Auto-enablement keeps handlers honest: attaching <code>.OnDoubleTapped(...)</code> sets
+<code>IsDoubleTapEnabled = true</code> on the mounted control so the WinUI event actually
+fires. Remove the handler on a later render and the flag goes back to its
+default. Shape subclasses (for example <code>Rectangle</code> and <code>Ellipse</code>) also get a
+transparent <code>Fill</code> auto-assigned when a pointer handler is attached and no fill
+was set — otherwise hit-testing would miss the unfilled shape entirely.</p>
+<h3 id="keyboard-events">Keyboard events<a class="headerlink" href="#keyboard-events" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">TextBox</span><span class="p">(</span><span class="k">value</span><span class="p">,</span><span class="w"> </span><span class="n">setValue</span><span class="p">)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="p">.</span><span class="n">OnKeyDown</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">e</span><span class="p">.</span><span class="n">Key</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">VirtualKey</span><span class="p">.</span><span class="n">Enter</span><span class="p">)</span><span class="w"> </span><span class="n">Submit</span><span class="p">();</span><span class="w"> </span><span class="p">})</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="p">.</span><span class="n">OnPreviewKeyDown</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Trace</span><span class="p">(</span><span class="s">&quot;preview&quot;</span><span class="p">))</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="p">.</span><span class="n">OnCharacterReceived</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Validate</span><span class="p">(</span><span class="n">e</span><span class="p">.</span><span class="n">Character</span><span class="p">));</span>
+</code></pre></div>
+<p><code>OnPreviewKeyDown</code> / <code>OnPreviewKeyUp</code> map to the WinUI tunneling events and fire
+before the bubbling <code>OnKeyDown</code> / <code>OnKeyUp</code> pair, which is the right spot for
+shortcut interception that needs to suppress further routing.</p>
+<h3 id="focus-events">Focus events<a class="headerlink" href="#focus-events" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">TextBox</span><span class="p">(</span><span class="k">value</span><span class="p">,</span><span class="w"> </span><span class="n">setValue</span><span class="p">)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="p">.</span><span class="n">OnGotFocus</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ShowValidationHint</span><span class="p">())</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="p">.</span><span class="n">OnLostFocus</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">HideValidationHint</span><span class="p">());</span>
+</code></pre></div>
+<p>Focus events flow through the same trampoline pattern as pointer events, so the
+handler closure is updated in-place on each render and the WinUI subscription is
+installed exactly once per element.</p>
+<h2 id="continuous-gestures">Continuous gestures<a class="headerlink" href="#continuous-gestures" title="Permanent link">&para;</a></h2>
+<p>Pan, pinch, and rotate are continuous gestures: a single user interaction
+produces a stream of callbacks with deltas relative to the gesture start. Each
+gesture takes an <code>onChanged</code> action plus optional <code>onBegan</code> / <code>onEnded</code>
+callbacks that fire exactly once per interaction.</p>
+<h3 id="pan">Pan<a class="headerlink" href="#pan" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">Rectangle</span><span class="p">()</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="p">.</span><span class="n">OnPan</span><span class="p">(</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">        </span><span class="n">onChanged</span><span class="p">:</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Translate</span><span class="p">(</span><span class="n">g</span><span class="p">.</span><span class="n">Translation</span><span class="p">),</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">        </span><span class="n">onEnded</span><span class="p">:</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">SnapToGrid</span><span class="p">(</span><span class="n">g</span><span class="p">.</span><span class="n">Translation</span><span class="p">),</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="n">minimumDistance</span><span class="p">:</span><span class="w"> </span><span class="mf">8.0</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">        </span><span class="n">axis</span><span class="p">:</span><span class="w"> </span><span class="n">PanAxis</span><span class="p">.</span><span class="n">Both</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="n">withInertia</span><span class="p">:</span><span class="w"> </span><span class="k">true</span><span class="p">);</span>
+</code></pre></div>
+<p><code>minimumDistance</code> gates callbacks: until the cumulative translation exceeds the
+threshold, nothing dispatches. On first crossing the reconciler emits <code>onBegan</code>
+(with <code>Phase = Began</code>) followed by the current delta as <code>Phase = Changed</code>. If
+the manipulation completes before the threshold is crossed, neither <code>onBegan</code>
+nor <code>onEnded</code> fire.</p>
+<p><code>PanGesture.Translation</code> is cumulative since <code>Began</code>; <code>PanGesture.Delta</code> is
+per-callback.</p>
+<h3 id="keep-pans-at-60-hz-write-translation-directly">Keep pans at 60 Hz: write Translation directly<a class="headerlink" href="#keep-pans-at-60-hz-write-translation-directly" title="Permanent link">&para;</a></h3>
+<p>Reactor's render loop re-enqueues at <code>DispatcherQueuePriority.Low</code> on every
+tick so layout and paint aren't starved by back-to-back setState calls. That's
+correct for general UI, but it means a per-event <code>setState</code> during pan drops
+frames — by the time the Low-priority render drains, several manipulation
+events have already piled up. <code>setOffset(offset + g.Delta)</code> would also read a
+stale <code>offset</code> closure, compounding the problem.</p>
+<p>For smooth 60 Hz panning, grab a ref to the mounted element and write
+<code>Translation</code> directly inside <code>onChanged</code>. No reconciler round-trip; the
+compositor property update is cheap enough to run on every tick. Only call
+setState at gesture end — once per drag, not 60× per second.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">PanGestureExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">        </span><span class="c1">// For 60 Hz smooth panning, write directly to the mounted element&#39;s</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">        </span><span class="c1">// Translation inside onChanged. Going through setState would queue</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">        </span><span class="c1">// Low-priority re-renders that get starved by the manipulation event</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">        </span><span class="c1">// stream itself, producing a laggy drag. The committedRef holds the</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">        </span><span class="c1">// position at the last gesture end so successive drags accumulate.</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">        </span><span class="c1">// Reset lives on a sibling Button because WinUI suppresses the tap</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">        </span><span class="c1">// recognizer when ManipulationMode ≠ System — .OnDoubleTap on the same</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">        </span><span class="c1">// element as .OnPan wouldn&#39;t fire.</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">cardRef</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseRef</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">?&gt;</span><span class="p">(</span><span class="k">null</span><span class="p">);</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">committedRef</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseRef</span><span class="p">(</span><span class="n">Vector2</span><span class="p">.</span><span class="n">Zero</span><span class="p">);</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">offset</span><span class="p">,</span><span class="w"> </span><span class="n">setOffset</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="n">Vector2</span><span class="p">.</span><span class="n">Zero</span><span class="p">);</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">        </span><span class="k">void</span><span class="w"> </span><span class="nf">Reset</span><span class="p">()</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">            </span><span class="n">committedRef</span><span class="p">.</span><span class="n">Current</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Vector2</span><span class="p">.</span><span class="n">Zero</span><span class="p">;</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">            </span><span class="n">setOffset</span><span class="p">(</span><span class="n">Vector2</span><span class="p">.</span><span class="n">Zero</span><span class="p">);</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">cardRef</span><span class="p">.</span><span class="n">Current</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">fe</span><span class="p">)</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">                </span><span class="n">fe</span><span class="p">.</span><span class="n">Translation</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">.</span><span class="n">Zero</span><span class="p">;</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span>
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="w">                </span><span class="n">Border</span><span class="p">(</span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;drag me&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">                    </span><span class="p">.</span><span class="n">HAlign</span><span class="p">(</span><span class="n">HorizontalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">).</span><span class="n">VAlign</span><span class="p">(</span><span class="n">VerticalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">))</span>
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="w">                    </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">120</span><span class="p">).</span><span class="n">Height</span><span class="p">(</span><span class="mi">120</span><span class="p">)</span>
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="w">                    </span><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="s">&quot;#3A7BD5&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="s">&quot;#ffffff&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a><span class="w">                    </span><span class="p">.</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="w">                    </span><span class="p">.</span><span class="n">Translation</span><span class="p">(</span><span class="n">offset</span><span class="p">.</span><span class="n">X</span><span class="p">,</span><span class="w"> </span><span class="n">offset</span><span class="p">.</span><span class="n">Y</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a><span class="w">                    </span><span class="p">.</span><span class="n">OnMount</span><span class="p">(</span><span class="n">fe</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">cardRef</span><span class="p">.</span><span class="n">Current</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fe</span><span class="p">)</span>
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a><span class="w">                    </span><span class="p">.</span><span class="n">OnPan</span><span class="p">(</span>
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a><span class="w">                        </span><span class="n">onChanged</span><span class="p">:</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a><span class="w">                        </span><span class="p">{</span>
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a><span class="w">                            </span><span class="kt">var</span><span class="w"> </span><span class="n">next</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">committedRef</span><span class="p">.</span><span class="n">Current</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a><span class="w">                                </span><span class="k">new</span><span class="w"> </span><span class="nf">Vector2</span><span class="p">((</span><span class="kt">float</span><span class="p">)</span><span class="n">g</span><span class="p">.</span><span class="n">Translation</span><span class="p">.</span><span class="n">X</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kt">float</span><span class="p">)</span><span class="n">g</span><span class="p">.</span><span class="n">Translation</span><span class="p">.</span><span class="n">Y</span><span class="p">);</span>
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a><span class="w">                            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">cardRef</span><span class="p">.</span><span class="n">Current</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">fe</span><span class="p">)</span>
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a><span class="w">                                </span><span class="n">fe</span><span class="p">.</span><span class="n">Translation</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">(</span><span class="n">next</span><span class="p">.</span><span class="n">X</span><span class="p">,</span><span class="w"> </span><span class="n">next</span><span class="p">.</span><span class="n">Y</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<a id="__codelineno-4-42" name="__codelineno-4-42" href="#__codelineno-4-42"></a><span class="w">                        </span><span class="p">},</span>
+<a id="__codelineno-4-43" name="__codelineno-4-43" href="#__codelineno-4-43"></a><span class="w">                        </span><span class="n">onEnded</span><span class="p">:</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-4-44" name="__codelineno-4-44" href="#__codelineno-4-44"></a><span class="w">                        </span><span class="p">{</span>
+<a id="__codelineno-4-45" name="__codelineno-4-45" href="#__codelineno-4-45"></a><span class="w">                            </span><span class="n">committedRef</span><span class="p">.</span><span class="n">Current</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector2</span><span class="p">((</span><span class="kt">float</span><span class="p">)</span><span class="n">g</span><span class="p">.</span><span class="n">Translation</span><span class="p">.</span><span class="n">X</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kt">float</span><span class="p">)</span><span class="n">g</span><span class="p">.</span><span class="n">Translation</span><span class="p">.</span><span class="n">Y</span><span class="p">);</span>
+<a id="__codelineno-4-46" name="__codelineno-4-46" href="#__codelineno-4-46"></a><span class="w">                            </span><span class="n">setOffset</span><span class="p">(</span><span class="n">committedRef</span><span class="p">.</span><span class="n">Current</span><span class="p">);</span>
+<a id="__codelineno-4-47" name="__codelineno-4-47" href="#__codelineno-4-47"></a><span class="w">                        </span><span class="p">},</span>
+<a id="__codelineno-4-48" name="__codelineno-4-48" href="#__codelineno-4-48"></a><span class="w">                        </span><span class="n">withInertia</span><span class="p">:</span><span class="w"> </span><span class="k">true</span><span class="p">)</span>
+<a id="__codelineno-4-49" name="__codelineno-4-49" href="#__codelineno-4-49"></a><span class="w">            </span><span class="p">).</span><span class="n">Height</span><span class="p">(</span><span class="mi">260</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="s">&quot;#f3f3f3&quot;</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">),</span>
+<a id="__codelineno-4-50" name="__codelineno-4-50" href="#__codelineno-4-50"></a>
+<a id="__codelineno-4-51" name="__codelineno-4-51" href="#__codelineno-4-51"></a><span class="w">            </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Reset position&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">Reset</span><span class="p">)</span>
+<a id="__codelineno-4-52" name="__codelineno-4-52" href="#__codelineno-4-52"></a><span class="w">        </span><span class="p">);</span>
+<a id="__codelineno-4-53" name="__codelineno-4-53" href="#__codelineno-4-53"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-4-54" name="__codelineno-4-54" href="#__codelineno-4-54"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Card with .OnPan that writes Translation directly for 60 Hz drag" src="../images/input-and-gestures/pan-gesture.png" /></p>
+<p>If the panned position doesn't drive anything else on the screen (no adjacent
+counter, no snap-to-grid indicator), you can even skip the setState at
+gesture end and treat the ref as the single source of truth.</p>
+<h3 id="can-i-combine-onpan-with-ontapped-ondoubletapped-on-the-same-element">Can I combine <code>.OnPan</code> with <code>.OnTapped</code> / <code>.OnDoubleTapped</code> on the same element?<a class="headerlink" href="#can-i-combine-onpan-with-ontapped-ondoubletapped-on-the-same-element" title="Permanent link">&para;</a></h3>
+<p>Not reliably. WinUI suppresses the tap, double-tap, right-tap, and hold
+recognizers whenever <code>ManipulationMode</code> is set to anything other than <code>System</code>
+— adding <code>.OnPan</code> (or <code>.OnPinch</code> / <code>.OnRotate</code>) flips the mode to the
+specific gesture bits, so taps stop firing on the same element. If you need
+"drag, but also click to reset," put the click target on a separate sibling
+(a Reset button, an overlay, a parent Border) rather than the drag surface
+itself.</p>
+<p><code>axis: PanAxis.Horizontal</code> restricts to X-axis translation; <code>withInertia: true</code>
+adds the inertia flag so WinUI continues to emit callbacks after the pointer
+lifts.</p>
+<h3 id="pinch-and-rotate">Pinch and rotate<a class="headerlink" href="#pinch-and-rotate" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">Image</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="p">.</span><span class="n">OnPinch</span><span class="p">(</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">        </span><span class="n">onChanged</span><span class="p">:</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Scale</span><span class="p">(</span><span class="n">g</span><span class="p">.</span><span class="n">Scale</span><span class="p">),</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">        </span><span class="n">withInertia</span><span class="p">:</span><span class="w"> </span><span class="k">true</span><span class="p">)</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="p">.</span><span class="n">OnRotate</span><span class="p">(</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">        </span><span class="n">onChanged</span><span class="p">:</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Rotate</span><span class="p">(</span><span class="n">g</span><span class="p">.</span><span class="n">Angle</span><span class="p">));</span>
+</code></pre></div>
+<p>Both gestures share the same <code>Phase</code> lifecycle as pan. <code>ScaleDelta</code> and
+<code>AngleDelta</code> report the per-callback delta; <code>Scale</code> and <code>Angle</code> are cumulative
+since <code>Began</code>. Combining gestures on one element is expected — the reconciler
+unions the required <code>ManipulationModes</code> flags.</p>
+<h3 id="long-press">Long press<a class="headerlink" href="#long-press" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">LongPressExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="p">{</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">log</span><span class="p">,</span><span class="w"> </span><span class="n">setLog</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="s">&quot;hold the card for 500 ms&quot;</span><span class="p">);</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Hold me&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">                </span><span class="p">.</span><span class="n">HAlign</span><span class="p">(</span><span class="n">HorizontalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">).</span><span class="n">VAlign</span><span class="p">(</span><span class="n">VerticalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">))</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">                </span><span class="p">.</span><span class="n">Height</span><span class="p">(</span><span class="mi">80</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="s">&quot;#FFF4CE&quot;</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">6</span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">                </span><span class="p">.</span><span class="n">OnLongPress</span><span class="p">(</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">                    </span><span class="n">g</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">setLog</span><span class="p">(</span><span class="s">$&quot;long-press after {g.Duration.TotalMilliseconds:F0}ms&quot;</span><span class="p">),</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">                    </span><span class="n">enableMouseEmulation</span><span class="p">:</span><span class="w"> </span><span class="k">true</span><span class="p">),</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="n">log</span><span class="p">)</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Long-press gesture showing duration of last trigger" src="../images/input-and-gestures/long-press.png" /></p>
+<p>Long-press is touch-and-pen first: the reconciler routes <code>Holding</code> events into
+the callback and sets <code>IsHoldingEnabled = true</code>. Mouse long-press is off by
+default because WinUI's <code>Holding</code> event doesn't fire for mouse pointers; opt in
+with <code>enableMouseEmulation: true</code> and the reconciler arms a <code>DispatcherTimer</code>
+that cancels on release, capture loss, or pointer motion past <code>cancelDistance</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">listItem</span><span class="p">.</span><span class="n">OnLongPress</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ShowContextMenu</span><span class="p">(),</span><span class="w"> </span><span class="n">enableMouseEmulation</span><span class="p">:</span><span class="w"> </span><span class="k">true</span><span class="p">);</span>
+</code></pre></div>
+<h2 id="focus-and-access-keys">Focus and access keys<a class="headerlink" href="#focus-and-access-keys" title="Permanent link">&para;</a></h2>
+<h3 id="declarative-focus-modifiers">Declarative focus modifiers<a class="headerlink" href="#declarative-focus-modifiers" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Submit&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">onClick</span><span class="p">)</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="p">.</span><span class="n">TabIndex</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="p">.</span><span class="n">AccessKey</span><span class="p">(</span><span class="s">&quot;S&quot;</span><span class="p">)</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="p">.</span><span class="n">IsTabStop</span><span class="p">();</span><span class="w">   </span><span class="c1">// default-true overload</span>
+</code></pre></div>
+<p><code>AccessKey</code> bound on a <code>.Command(...)</code> can be overridden per-site: a later
+<code>.AccessKey(...)</code> wins via the normal modifier-after-command ordering.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kt">var</span><span class="w"> </span><span class="n">save</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Command</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Label</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Save&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">Execute</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">OnSave</span><span class="p">,</span><span class="w"> </span><span class="n">AccessKey</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;S&quot;</span><span class="w"> </span><span class="p">};</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">Button</span><span class="p">(</span><span class="n">save</span><span class="p">).</span><span class="n">AccessKey</span><span class="p">(</span><span class="s">&quot;F&quot;</span><span class="p">);</span><span class="w">   </span><span class="c1">// &quot;F&quot; wins on this site</span>
+</code></pre></div>
+<p>Advanced focus knobs are first-class too:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">container</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="p">.</span><span class="n">TabNavigation</span><span class="p">(</span><span class="n">KeyboardNavigationMode</span><span class="p">.</span><span class="n">Once</span><span class="p">)</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="p">.</span><span class="n">XYFocusKeyboardNavigation</span><span class="p">(</span><span class="n">XYFocusKeyboardNavigationMode</span><span class="p">.</span><span class="n">Enabled</span><span class="p">);</span>
+</code></pre></div>
+<h3 id="imperative-focus-with-refs">Imperative focus with refs<a class="headerlink" href="#imperative-focus-with-refs" title="Permanent link">&para;</a></h3>
+<p>Sometimes you need to focus a control from an effect or event handler — for
+example, auto-focusing the first input on mount. Use <code>UseElementFocus</code> to get a
+stable <code>ElementRef</code> plus a <code>RequestFocus</code> action that schedules the focus on the
+UI dispatcher so it runs after the current reconcile pass.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">UseElementFocusExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="p">{</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">setName</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">inputRef</span><span class="p">,</span><span class="w"> </span><span class="n">requestFocus</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="n">UseElementFocus</span><span class="p">();</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">        </span><span class="n">UseEffect</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">requestFocus</span><span class="p">(),</span><span class="w"> </span><span class="n">Array</span><span class="p">.</span><span class="n">Empty</span><span class="o">&lt;</span><span class="kt">object</span><span class="o">&gt;</span><span class="p">());</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;The field below auto-focuses on mount via UseElementFocus().&quot;</span><span class="p">),</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">setName</span><span class="p">,</span><span class="w"> </span><span class="n">placeholderText</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;name&quot;</span><span class="p">).</span><span class="n">Width</span><span class="p">(</span><span class="mi">280</span><span class="p">).</span><span class="n">Ref</span><span class="p">(</span><span class="n">inputRef</span><span class="p">)</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Form auto-focusing its first input on mount via UseElementFocus" src="../images/input-and-gestures/use-element-focus.png" /></p>
+<p><code>ElementRef.Current</code> is null until the referenced element mounts; the ref
+survives re-renders so the same instance reliably points at the currently
+mounted control. Call <code>Microsoft.UI.Reactor.Input.FocusManager.Focus(ref)</code> for
+a synchronous focus attempt or <code>FocusManager.FocusAsync(ref)</code> for WinUI's
+async API with a success result.</p>
+<h4 id="typed-refs">Typed refs<a class="headerlink" href="#typed-refs" title="Permanent link">&para;</a></h4>
+<p>When you actually need to call methods on the underlying control (e.g.
+<code>SelectAll()</code> on a <code>TextBox</code>, <code>Focus(FocusState.Programmatic)</code> on a <code>Button</code>),
+use <code>UseElementRef&lt;T&gt;()</code> instead. It gives you an <code>ElementRef&lt;T&gt;</code> whose
+<code>.Current</code> is already typed as <code>T</code> — no <code>as TextBox</code> cast at the call site:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">public</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">SearchBox</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="p">{</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">inputRef</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Context</span><span class="p">.</span><span class="n">UseElementRef</span><span class="o">&lt;</span><span class="n">TextBox</span><span class="o">&gt;</span><span class="p">();</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">        </span><span class="n">Context</span><span class="p">.</span><span class="n">UseEffect</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">inputRef</span><span class="p">.</span><span class="n">Current</span><span class="o">?.</span><span class="n">SelectAll</span><span class="p">(),</span><span class="w"> </span><span class="n">Array</span><span class="p">.</span><span class="n">Empty</span><span class="o">&lt;</span><span class="kt">object</span><span class="o">&gt;</span><span class="p">());</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">TextBox</span><span class="p">(</span><span class="n">query</span><span class="p">,</span><span class="w"> </span><span class="n">setQuery</span><span class="p">).</span><span class="n">Ref</span><span class="p">(</span><span class="n">inputRef</span><span class="p">);</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="p">}</span>
+</code></pre></div>
+<p>The constraint <code>T : FrameworkElement</code> keeps the ref type-checked. In <code>DEBUG</code>
+builds Reactor asserts the actual mounted element is a <code>T</code>; in release the
+mismatch is silent and <code>.Current</code> returns <code>null</code>.</p>
+<h2 id="behind-the-scenes-trampoline-dispatch">Behind the scenes: trampoline dispatch<a class="headerlink" href="#behind-the-scenes-trampoline-dispatch" title="Permanent link">&para;</a></h2>
+<p>Re-rendering an element with a fresh handler closure is the common case in a
+data-driven UI. Naively subscribing / unsubscribing on every render costs a COM
+round-trip per event per element — enough to dominate a 1,000-item list's frame
+budget. Reactor installs one stable <em>trampoline</em> delegate per event per element
+and updates a mutable field that the trampoline reads. Re-renders swap the
+field; the WinUI subscription is untouched.</p>
+<p>You don't opt in or configure this — every <code>.On*</code> modifier routes through the
+trampoline path automatically. Inspect the
+<a href="../dev-tooling/">devtools</a> ETW <code>EventDispatch</code> keyword (<code>0x40</code>) to see exactly
+when each trampoline attaches and dispatches.</p>
+<h2 id="migration-from-set-passthrough">Migration from <code>.Set(...)</code> passthrough<a class="headerlink" href="#migration-from-set-passthrough" title="Permanent link">&para;</a></h2>
+<p>Pre-Tier-1 code often reaches through <code>.Set(...)</code> to subscribe to an event that
+the element type didn't model declaratively:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// Before — escapes the declarative surface and bypasses trampoline dispatch.</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">Rectangle</span><span class="p">().</span><span class="n">Set</span><span class="p">(</span><span class="n">r</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="p">{</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="n">r</span><span class="p">.</span><span class="n">PointerEntered</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="p">(</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Hover</span><span class="p">();</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="n">r</span><span class="p">.</span><span class="n">PointerExited</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="p">(</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Unhover</span><span class="p">();</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="p">});</span>
+</code></pre></div>
+<p>After Tier 1 lands, every pointer, tap, keyboard, and focus event has a
+first-class modifier. Replace the <code>.Set(...)</code> block with one modifier call per
+event — shorter, re-render-safe, and covered by the reconciler's auto-enable
+logic:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">// After</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">Rectangle</span><span class="p">()</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="p">.</span><span class="n">OnPointerEntered</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Hover</span><span class="p">())</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="p">.</span><span class="n">OnPointerExited</span><span class="p">((</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Unhover</span><span class="p">());</span>
+</code></pre></div>
+<h2 id="drag-and-drop">Drag and drop<a class="headerlink" href="#drag-and-drop" title="Permanent link">&para;</a></h2>
+<p>Reactor's DnD surface is a declarative wrapper over the full Windows drag-and-drop
+protocol (<code>CanDrag</code> sources, <code>AllowDrop</code> targets, <code>DragStarting</code> / <code>Drop</code> /
+<code>DropCompleted</code>, <code>DataPackage</code> with text / URI / HTML / RTF / files / bitmap /
+custom formats, <code>DragUIOverride</code> drop-indicator tweaks). Sources and targets
+auto-wire the underlying flags — you set a modifier, the reconciler flips the
+bit and subscribes once via the same trampoline path every other event uses.</p>
+<h3 id="typed-in-process-payloads">Typed in-process payloads<a class="headerlink" href="#typed-in-process-payloads" title="Permanent link">&para;</a></h3>
+<p>For reorder-within-one-app scenarios (kanban columns, sortable lists), attach a
+typed payload on the source and a matching typed drop handler on the target.
+The payload is ferried through an in-memory transfer registry keyed by a GUID
+written into <code>DataPackage.Properties</code>, so arbitrary CLR objects can round-trip
+without a serializer.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">sealed</span><span class="w"> </span><span class="k">record</span><span class="w"> </span><span class="nf">KanbanCard</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">Id</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="n">Title</span><span class="p">);</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">KanbanDndExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">{</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">todo</span><span class="p">,</span><span class="w"> </span><span class="n">setTodo</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="o">&lt;</span><span class="n">IReadOnlyList</span><span class="o">&lt;</span><span class="n">KanbanCard</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">KanbanCard</span><span class="p">[]</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">            </span><span class="k">new</span><span class="p">(</span><span class="s">&quot;k1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Write docs&quot;</span><span class="p">),</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">            </span><span class="k">new</span><span class="p">(</span><span class="s">&quot;k2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Ship feature&quot;</span><span class="p">),</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">        </span><span class="p">});</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">done</span><span class="p">,</span><span class="w"> </span><span class="n">setDone</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="o">&lt;</span><span class="n">IReadOnlyList</span><span class="o">&lt;</span><span class="n">KanbanCard</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="n">Array</span><span class="p">.</span><span class="n">Empty</span><span class="o">&lt;</span><span class="n">KanbanCard</span><span class="o">&gt;</span><span class="p">());</span>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>
+<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="w">        </span><span class="n">Element</span><span class="w"> </span><span class="nf">Column</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">label</span><span class="p">,</span>
+<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a><span class="w">            </span><span class="n">IReadOnlyList</span><span class="o">&lt;</span><span class="n">KanbanCard</span><span class="o">&gt;</span><span class="w"> </span><span class="n">cards</span><span class="p">,</span>
+<a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="w">            </span><span class="n">Action</span><span class="o">&lt;</span><span class="n">IReadOnlyList</span><span class="o">&lt;</span><span class="n">KanbanCard</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">setThis</span><span class="p">)</span>
+<a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a><span class="w">            </span><span class="kt">var</span><span class="w"> </span><span class="n">children</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="n">Element</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">TextBlock</span><span class="p">(</span><span class="n">label</span><span class="p">).</span><span class="n">SemiBold</span><span class="p">()</span><span class="w"> </span><span class="p">};</span>
+<a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="w">            </span><span class="k">foreach</span><span class="w"> </span><span class="p">(</span><span class="kt">var</span><span class="w"> </span><span class="n">card</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">cards</span><span class="p">)</span>
+<a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-15-21" name="__codelineno-15-21" href="#__codelineno-15-21"></a><span class="w">                </span><span class="kt">var</span><span class="w"> </span><span class="n">captured</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">card</span><span class="p">;</span>
+<a id="__codelineno-15-22" name="__codelineno-15-22" href="#__codelineno-15-22"></a><span class="w">                </span><span class="n">children</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span>
+<a id="__codelineno-15-23" name="__codelineno-15-23" href="#__codelineno-15-23"></a><span class="w">                    </span><span class="n">Border</span><span class="p">(</span><span class="n">TextBlock</span><span class="p">(</span><span class="n">captured</span><span class="p">.</span><span class="n">Title</span><span class="p">).</span><span class="n">Foreground</span><span class="p">(</span><span class="s">&quot;#ffffff&quot;</span><span class="p">))</span>
+<a id="__codelineno-15-24" name="__codelineno-15-24" href="#__codelineno-15-24"></a><span class="w">                        </span><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="s">&quot;#4B7BEC&quot;</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">6</span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<a id="__codelineno-15-25" name="__codelineno-15-25" href="#__codelineno-15-25"></a><span class="w">                        </span><span class="p">.</span><span class="n">OnDragStart</span><span class="o">&lt;</span><span class="n">BorderElement</span><span class="p">,</span><span class="w"> </span><span class="n">KanbanCard</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-15-26" name="__codelineno-15-26" href="#__codelineno-15-26"></a><span class="w">                            </span><span class="n">getPayload</span><span class="p">:</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">captured</span><span class="p">,</span>
+<a id="__codelineno-15-27" name="__codelineno-15-27" href="#__codelineno-15-27"></a><span class="w">                            </span><span class="n">allowedOperations</span><span class="p">:</span><span class="w"> </span><span class="n">DragOperations</span><span class="p">.</span><span class="n">Move</span><span class="p">,</span>
+<a id="__codelineno-15-28" name="__codelineno-15-28" href="#__codelineno-15-28"></a><span class="w">                            </span><span class="n">onEnd</span><span class="p">:</span><span class="w"> </span><span class="n">ctx</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-15-29" name="__codelineno-15-29" href="#__codelineno-15-29"></a><span class="w">                            </span><span class="p">{</span>
+<a id="__codelineno-15-30" name="__codelineno-15-30" href="#__codelineno-15-30"></a><span class="w">                                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">ctx</span><span class="p">.</span><span class="n">WasCancelled</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">ctx</span><span class="p">.</span><span class="n">CompletedOperation</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">DragOperations</span><span class="p">.</span><span class="n">Move</span><span class="p">)</span>
+<a id="__codelineno-15-31" name="__codelineno-15-31" href="#__codelineno-15-31"></a><span class="w">                                    </span><span class="n">setThis</span><span class="p">(</span><span class="n">cards</span><span class="p">.</span><span class="n">Where</span><span class="p">(</span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Id</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">captured</span><span class="p">.</span><span class="n">Id</span><span class="p">).</span><span class="n">ToList</span><span class="p">());</span>
+<a id="__codelineno-15-32" name="__codelineno-15-32" href="#__codelineno-15-32"></a><span class="w">                            </span><span class="p">}));</span>
+<a id="__codelineno-15-33" name="__codelineno-15-33" href="#__codelineno-15-33"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-15-34" name="__codelineno-15-34" href="#__codelineno-15-34"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="w"> </span><span class="n">children</span><span class="p">.</span><span class="n">ToArray</span><span class="p">())</span>
+<a id="__codelineno-15-35" name="__codelineno-15-35" href="#__codelineno-15-35"></a><span class="w">                </span><span class="p">.</span><span class="n">OnDrop</span><span class="o">&lt;</span><span class="n">StackElement</span><span class="p">,</span><span class="w"> </span><span class="n">KanbanCard</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-15-36" name="__codelineno-15-36" href="#__codelineno-15-36"></a><span class="w">                    </span><span class="n">onDrop</span><span class="p">:</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-15-37" name="__codelineno-15-37" href="#__codelineno-15-37"></a><span class="w">                    </span><span class="p">{</span>
+<a id="__codelineno-15-38" name="__codelineno-15-38" href="#__codelineno-15-38"></a><span class="w">                        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">cards</span><span class="p">.</span><span class="n">Any</span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">x</span><span class="p">.</span><span class="n">Id</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Id</span><span class="p">))</span>
+<a id="__codelineno-15-39" name="__codelineno-15-39" href="#__codelineno-15-39"></a><span class="w">                            </span><span class="n">setThis</span><span class="p">(</span><span class="n">cards</span><span class="p">.</span><span class="n">Append</span><span class="p">(</span><span class="n">c</span><span class="p">).</span><span class="n">ToList</span><span class="p">());</span>
+<a id="__codelineno-15-40" name="__codelineno-15-40" href="#__codelineno-15-40"></a><span class="w">                    </span><span class="p">},</span>
+<a id="__codelineno-15-41" name="__codelineno-15-41" href="#__codelineno-15-41"></a><span class="w">                    </span><span class="n">acceptedOps</span><span class="p">:</span><span class="w"> </span><span class="n">DragOperations</span><span class="p">.</span><span class="n">Move</span><span class="p">);</span>
+<a id="__codelineno-15-42" name="__codelineno-15-42" href="#__codelineno-15-42"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-15-43" name="__codelineno-15-43" href="#__codelineno-15-43"></a>
+<a id="__codelineno-15-44" name="__codelineno-15-44" href="#__codelineno-15-44"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">HStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-15-45" name="__codelineno-15-45" href="#__codelineno-15-45"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span><span class="n">Column</span><span class="p">(</span><span class="s">&quot;Todo&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">todo</span><span class="p">,</span><span class="w"> </span><span class="n">setTodo</span><span class="p">))</span>
+<a id="__codelineno-15-46" name="__codelineno-15-46" href="#__codelineno-15-46"></a><span class="w">                </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">240</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="s">&quot;#F7F7F7&quot;</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">6</span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+<a id="__codelineno-15-47" name="__codelineno-15-47" href="#__codelineno-15-47"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span><span class="n">Column</span><span class="p">(</span><span class="s">&quot;Done&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">done</span><span class="p">,</span><span class="w"> </span><span class="n">setDone</span><span class="p">))</span>
+<a id="__codelineno-15-48" name="__codelineno-15-48" href="#__codelineno-15-48"></a><span class="w">                </span><span class="p">.</span><span class="n">Width</span><span class="p">(</span><span class="mi">240</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="s">&quot;#F1FFF4&quot;</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">6</span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<a id="__codelineno-15-49" name="__codelineno-15-49" href="#__codelineno-15-49"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-15-50" name="__codelineno-15-50" href="#__codelineno-15-50"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-15-51" name="__codelineno-15-51" href="#__codelineno-15-51"></a><span class="p">}</span>
+</code></pre></div>
+<p><img alt="Typed kanban drag-and-drop columns with move-on-confirmation" src="../images/input-and-gestures/kanban-dnd.png" /></p>
+<h3 id="standard-formats-cross-process-interop">Standard formats + cross-process interop<a class="headerlink" href="#standard-formats-cross-process-interop" title="Permanent link">&para;</a></h3>
+<p>Eager setters (<code>.WithText</code>, <code>.WithUri</code>, <code>.WithHtml</code>, <code>.WithRtf</code>, <code>.WithFiles</code>,
+<code>.WithBitmap</code>, <code>.WithCustomFormat</code>) write directly to the <code>DataPackage</code>, so
+Notepad / Word / File Explorer pick the drop up natively. On the target side,
+<code>TryGetText(out string)</code> and <code>GetTextAsync(CancellationToken)</code> work the same
+whether the drag originated from the same process or a different one.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">Border</span><span class="p">(</span><span class="n">Text</span><span class="p">(</span><span class="s">&quot;Drag me to Notepad&quot;</span><span class="p">))</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">    </span><span class="p">.</span><span class="n">OnDragStart</span><span class="o">&lt;</span><span class="n">BorderElement</span><span class="o">&gt;</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">DragData</span><span class="p">().</span><span class="n">WithText</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">));</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="n">Rectangle</span><span class="p">()</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">    </span><span class="p">.</span><span class="n">OnDrop</span><span class="o">&lt;</span><span class="n">RectangleElement</span><span class="o">&gt;</span><span class="p">(</span><span class="n">args</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">args</span><span class="p">.</span><span class="n">Data</span><span class="p">.</span><span class="n">TryGetText</span><span class="p">(</span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">text</span><span class="p">))</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">            </span><span class="n">Log</span><span class="p">(</span><span class="n">text</span><span class="p">);</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="w">        </span><span class="n">args</span><span class="p">.</span><span class="n">AcceptedOperation</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DragOperations</span><span class="p">.</span><span class="n">Copy</span><span class="p">;</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="w">    </span><span class="p">});</span>
+</code></pre></div>
+<h3 id="lazy-providers-pay-only-when-the-target-asks">Lazy providers — pay only when the target asks<a class="headerlink" href="#lazy-providers-pay-only-when-the-target-asks" title="Permanent link">&para;</a></h3>
+<p>If producing the payload is expensive (rendering HTML from a view model,
+reading a large file, round-tripping through a server), register a provider
+instead of an eager value. Reactor adapts your <code>Func&lt;T&gt;</code> or
+<code>Func&lt;CancellationToken, Task&lt;T&gt;&gt;</code> onto WinUI's <code>DataProviderHandler</code>: the
+deferral is acquired, your code runs on the thread pool, and the result is
+published when the target requests that format. A target that only reads text
+never pays the HTML cost.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="n">Border</span><span class="p">(</span><span class="n">Text</span><span class="p">(</span><span class="s">&quot;Rich content&quot;</span><span class="p">))</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">    </span><span class="p">.</span><span class="n">OnDragStart</span><span class="o">&lt;</span><span class="n">BorderElement</span><span class="o">&gt;</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">DragData</span><span class="p">()</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">        </span><span class="p">.</span><span class="n">WithText</span><span class="p">(</span><span class="s">&quot;plain fallback&quot;</span><span class="p">)</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">        </span><span class="p">.</span><span class="n">WithHtml</span><span class="p">(</span><span class="n">ct</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">RenderExpensiveHtmlAsync</span><span class="p">(</span><span class="n">ct</span><span class="p">)));</span>
+</code></pre></div>
+<h3 id="drop-indicator-overrides">Drop indicator overrides<a class="headerlink" href="#drop-indicator-overrides" title="Permanent link">&para;</a></h3>
+<p>Drop-over callbacks can tweak the caption, glyph, and content-preview
+visibility via <code>DragTargetArgs.UIOverride</code> — Reactor writes the changes back
+onto WinUI's <code>DragUIOverride</code> after your callback returns.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="n">VStack</span><span class="p">(</span><span class="n">children</span><span class="p">)</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">    </span><span class="p">.</span><span class="n">OnDragOver</span><span class="p">(</span><span class="n">args</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">        </span><span class="n">args</span><span class="p">.</span><span class="n">UIOverride</span><span class="p">.</span><span class="n">Caption</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Move to Inbox&quot;</span><span class="p">;</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">        </span><span class="n">args</span><span class="p">.</span><span class="n">UIOverride</span><span class="p">.</span><span class="n">IsGlyphVisible</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">false</span><span class="p">;</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="w">        </span><span class="n">args</span><span class="p">.</span><span class="n">AcceptedOperation</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DragOperations</span><span class="p">.</span><span class="n">Move</span><span class="p">;</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="w">    </span><span class="p">})</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">    </span><span class="p">.</span><span class="n">OnDrop</span><span class="o">&lt;</span><span class="n">VStackElement</span><span class="p">,</span><span class="w"> </span><span class="n">Card</span><span class="o">&gt;</span><span class="p">(</span><span class="n">card</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">inbox</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="n">card</span><span class="p">));</span>
+</code></pre></div>
+<h3 id="the-move-on-confirmation-pattern">The move-on-confirmation pattern<a class="headerlink" href="#the-move-on-confirmation-pattern" title="Permanent link">&para;</a></h3>
+<p>When a source declares <code>DragOperations.Move</code>, the source is responsible for
+removing the moved item — but only after the drop is confirmed. Never remove
+optimistically in <code>getPayload</code>: the user might cancel (ESC), the drop might
+land outside any target, or a Ctrl-drag might downgrade Move to Copy. Wait for
+<code>onEnd</code> and branch on <code>CompletedOperation</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="n">Border</span><span class="p">(</span><span class="n">Text</span><span class="p">(</span><span class="n">card</span><span class="p">.</span><span class="n">Title</span><span class="p">))</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">    </span><span class="p">.</span><span class="n">OnDragStart</span><span class="o">&lt;</span><span class="n">BorderElement</span><span class="p">,</span><span class="w"> </span><span class="n">Card</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">        </span><span class="n">getPayload</span><span class="p">:</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">card</span><span class="p">,</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">        </span><span class="n">allowedOperations</span><span class="p">:</span><span class="w"> </span><span class="n">DragOperations</span><span class="p">.</span><span class="n">Move</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">DragOperations</span><span class="p">.</span><span class="n">Copy</span><span class="p">,</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">        </span><span class="n">onEnd</span><span class="p">:</span><span class="w"> </span><span class="n">ctx</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ctx</span><span class="p">.</span><span class="n">WasCancelled</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ctx</span><span class="p">.</span><span class="n">CompletedOperation</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">DragOperations</span><span class="p">.</span><span class="n">Move</span><span class="p">)</span>
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a><span class="w">                </span><span class="n">column</span><span class="p">.</span><span class="n">Remove</span><span class="p">(</span><span class="n">card</span><span class="p">);</span><span class="w">  </span><span class="c1">// confirmed move — safe to remove</span>
+<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a><span class="w">            </span><span class="c1">// else: Copy succeeded, source keeps the item</span>
+<a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a><span class="w">        </span><span class="p">});</span>
+</code></pre></div>
+<p><code>DragEndContext.WasCancelled</code> is true when the drop fell outside every valid
+target (ESC, dropped on empty space, system abort).
+<code>DragEndContext.CompletedOperation</code> carries the final negotiated operation
+— whatever the target set via <code>DragTargetArgs.AcceptedOperation</code> — or
+<code>DragOperations.None</code> when cancelled.</p>
+<blockquote>
+<p><strong>Caveat:</strong> <code>.OnPointerPressed</code> on a parent fires <strong>after</strong> its children when using the
+default bubbling phase — Reactor mirrors WinUI's routed-event model, where
+events start at the deepest hit-tested element and propagate up.
+If a parent needs to capture the press <em>before</em> children see it, you have two
+options: (1) set the matching <code>.On&lt;Event&gt;Handled(true)</code> on the parent (the
+handled-too overload) so the parent runs even if a child marked the event
+handled, and bubble order still applies (parent runs last); (2) attach to
+the preview/tunnel pair (<code>.OnPreviewKeyDown</code> for keys; for pointer events
+there is no preview pair — you must drop down to the manual
+<code>AddHandler(PointerPressedEvent, handler, handledEventsToo: true)</code> via
+<code>.Set(c =&gt; ...)</code>). The trap: relying on tunneling for pointer capture
+silently does the wrong thing in 80% of cases because the tunnel pair
+doesn't exist for pointer events. The
+<a href="../focus-and-input-internals/">focus-and-input-internals</a> page walks the
+routed-event phases end-to-end.</p>
+</blockquote>
+<h2 id="patterns">Patterns<a class="headerlink" href="#patterns" title="Permanent link">&para;</a></h2>
+<h3 id="drag-reorder-a-list">Drag-reorder a list<a class="headerlink" href="#drag-reorder-a-list" title="Permanent link">&para;</a></h3>
+<p>Combine <code>.OnDragStart&lt;TEl, T&gt;</code> on each item with <code>.OnDrop&lt;TEl, T&gt;</code> on the
+list container. The kanban example above is the canonical shape — typed
+payload, GUID transfer registry, move-on-confirmation. For a
+recipe-style walkthrough with full state management and animation,
+see <a href="../recipes/drag-reorder/">recipes/drag-reorder</a>.</p>
+<h3 id="pinch-to-zoom-on-an-image">Pinch-to-zoom on an image<a class="headerlink" href="#pinch-to-zoom-on-an-image" title="Permanent link">&para;</a></h3>
+<p>Combine <code>.OnPinch</code> with a <code>Translation</code> scale modifier driven from
+state. Scale is cumulative since <code>Began</code> — apply it directly to the
+element's <code>Scale</code> compositor property in <code>onChanged</code> for 60 Hz
+behavior (same pattern as pan above), then commit to <code>UseState</code> in
+<code>onEnded</code>. The reconciler unions <code>ManipulationModes</code> so adding
+<code>.OnRotate</code> on the same element is free.</p>
+<h3 id="trap-focus-inside-a-modal">Trap focus inside a modal<a class="headerlink" href="#trap-focus-inside-a-modal" title="Permanent link">&para;</a></h3>
+<p>Wrap the modal's content tree in a container with
+<code>.FocusTrap(handle)</code> where the handle comes from
+<a href="../accessibility/"><code>UseFocusTrap(isActive)</code></a>. Tab and Shift+Tab cycle
+within the trap; the modal's close handler flips <code>isActive</code> to false,
+which lifts the trap and returns focus to the previously-focused
+element. The <a href="../accessibility/">accessibility</a> page covers the
+full ARIA dialog shape (announcement, restore-focus-on-close,
+<code>aria-labelledby</code> via <code>AutomationName</code>).</p>
+<h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
+<h3 id="relying-on-tunneling-for-pointer-capture">Relying on tunneling for pointer capture<a class="headerlink" href="#relying-on-tunneling-for-pointer-capture" title="Permanent link">&para;</a></h3>
+<p>Reactor exposes pointer events through the bubbling phase only —
+there is no <code>.OnPreviewPointerPressed</code> / <code>.OnPreviewPointerReleased</code>
+modifier because WinUI's routed-event surface for pointer events
+doesn't expose a tunneling pair the same way it does for keyboard.
+If a parent needs to see the press before children consume it, use
+<code>.OnPointerPressed</code> with the handled-too overload (or
+<code>.Set(c =&gt; c.AddHandler(...))</code> for the manual case). The
+<a href="#ai:caveat">caveat above</a> goes into the routing detail.</p>
+<h3 id="using-onkeydown-for-accelerator-chords">Using <code>.OnKeyDown</code> for accelerator chords<a class="headerlink" href="#using-onkeydown-for-accelerator-chords" title="Permanent link">&para;</a></h3>
+<p><code>.OnKeyDown</code> fires per element on focus — a <code>Ctrl+S</code> handler attached
+to a <code>TextBox</code> only fires while that field has focus. For app-wide
+accelerators (Save, Find, Run), use Reactor's
+<a href="../commanding/">commanding</a> system: <code>new Command { ..., Accelerator =
+Accelerator(VirtualKey.S, VirtualKeyModifiers.Control) }</code> registers
+the chord with the WinUI accelerator infrastructure, which routes
+through the window's <code>AccessKeyManager</code> regardless of focus. The
+analyzer <code>REACTOR_INPUT_001</code> flags Ctrl/Alt key combinations attached
+via <code>.OnKeyDown</code> and suggests the <code>Command</code> rewrite.</p>
+<h3 id="forgetting-focusabletrue-on-a-clickable-border">Forgetting <code>Focusable(true)</code> on a clickable Border<a class="headerlink" href="#forgetting-focusabletrue-on-a-clickable-border" title="Permanent link">&para;</a></h3>
+<p>A <code>Border</code> with <code>.OnTapped(...)</code> is hit-testable for pointer events
+but is not in the keyboard tab order by default — pressing Tab skips
+right past it, which fails <a href="../accessibility/">accessibility</a> (every
+interactive control must be keyboard-reachable). Add <code>.IsTabStop(true)</code>
+to put the Border in the tab order — a plain <code>.TabIndex(n)</code> is not
+enough, because the reconciler applies <code>TabIndex</code> only to focusable
+<code>Control</code>s, not to a <code>Border</code> — and pair it with <code>.OnKeyDown</code> for
+Enter/Space activation. The Roslyn analyzer
+<a href="../accessibility/"><code>REACTOR_A11Y_004</code></a> flags this at build time, and the
+<a href="../accessibility/"><code>AccessibilityScanner</code></a> catches it at runtime as
+<code>A11Y_KEYBOARD_001</code>.</p>
+<h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
+<p><strong>Use the high-level recognizer when one exists.</strong> <code>.OnTapped</code> is
+the right primitive for click — it filters out drags, handles
+touch and mouse uniformly, and respects the system's tap-distance
+threshold. Reach for <code>.OnPointerPressed</code> only when you need the
+raw event (preview, capture, multi-touch coordination).</p>
+<p><strong>Write <code>Translation</code> directly during pan.</strong> A per-event <code>setState</code>
+during pan drops frames — Reactor's render loop priorities lose to
+the manipulation event stream. Grab a ref to the mounted element
+and write <code>Translation</code> inside <code>onChanged</code>; commit to state once on
+<code>onEnded</code>. The pan snippet above is the canonical shape.</p>
+<p><strong>Long-press needs <code>enableMouseEmulation: true</code> for mouse users.</strong>
+WinUI's <code>Holding</code> event doesn't fire for mouse pointers by design.
+If your context-menu trigger needs mouse support (most do), opt in
+explicitly. Touch and pen work without it.</p>
+<p><strong>Bridge to <code>Command</code> for anything keyboard-shortcut-shaped.</strong>
+Per-element <code>.OnKeyDown</code> handlers are right for "Enter submits this
+form"; app-wide chords belong on a <code>Command</code> with
+<code>AccessKey</code> + <code>AccessKeyModifiers</code>. See
+<a href="../commanding/">commanding</a> for the full surface.</p>
+<p><strong>Run the a11y scanner.</strong> A keyboard-focusable interactive control
+without <code>AutomationName</code> or a focus-visible affordance is a bug.
+<a href="../accessibility/"><code>AccessibilityScanner</code></a> flags both at runtime.</p>
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><a href="../focus-and-input-internals/">Focus and Input Internals</a></strong> — under-the-hood: trampoline dispatch, routed-event phases, dispatcher coalescing for focus</li>
+<li><strong><a href="../accessibility/">Accessibility</a></strong> — <code>UseFocusTrap</code>, <code>UseAnnounce</code>, <code>AccessibilityScanner</code>, ARIA patterns</li>
+<li><strong><a href="../commanding/">Commanding</a></strong> — app-wide accelerators, command bars, the <code>Command</code> and <code>Command&lt;T&gt;</code> types</li>
+<li><strong><a href="../animation/">Animation</a></strong> — pairing gestures with <code>.InteractionStates()</code> for hover / press / focus visuals</li>
+<li><strong><a href="../recipes/drag-reorder/">recipes/drag-reorder</a></strong> — full drag-to-reorder list recipe</li>
+<li><strong><a href="../components/">Components</a></strong> — previous topic: components, props, and composition</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
