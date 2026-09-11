@@ -218,15 +218,33 @@ public static partial class ReactorApp
     /// <see cref="ReactorApplication"/>. A WinUI app that embeds
     /// <c>ReactorHostControl</c> runs its own <see cref="Application"/> and
     /// manages its own windows; Reactor does not decide when that process ends,
-    /// so it must leave that app's <see cref="Application.DispatcherShutdownMode"/>
-    /// at whatever the app chose or inherited. Best-effort: a teardown-racing
-    /// write is logged rather than thrown, matching <see cref="SafeExit"/>.</para>
+    /// so it leaves that app's <see cref="Application.DispatcherShutdownMode"/>
+    /// at whatever the app chose or inherited.</para>
+    /// <para>Failures are surfaced rather than swallowed. Only the exception
+    /// types a teardown-racing WinRT property write can realistically produce are
+    /// caught, matching <see cref="PrepareOpenWindowsForExit"/>, and those are
+    /// reported through <see cref="AppLogger"/> so they are visible in a release
+    /// build — a silent failure here would report the requested
+    /// <see cref="ShutdownPolicy"/> while leaving the platform free to end the
+    /// process, which is issue #1204 all over again. Anything else propagates:
+    /// this runs synchronously in <c>OnLaunched</c> before the startup callback,
+    /// so an unexpected fault is a startup bug and should not be hidden.</para>
     /// </remarks>
     internal static void TakeOwnershipOfDispatcherLifetime()
     {
         if (Application.Current is not ReactorApplication app) return;
-        try { app.DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown; }
-        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] TakeOwnershipOfDispatcherLifetime failed: {ex.GetType().Name}: {ex.Message}"); }
+        try
+        {
+            app.DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or COMException)
+        {
+            const string message =
+                "Reactor could not take ownership of the dispatcher shutdown mode. WinUI may end the " +
+                "process when the last window closes, ignoring ReactorApp.ShutdownPolicy. (issue #1204)";
+            AppLogger?.LogError(ex, message);
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] {message} {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>Fires on the UI thread when a <see cref="ReactorWindow"/> opens.</summary>
