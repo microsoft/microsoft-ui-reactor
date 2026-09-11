@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Localization extraction now converts recognized count-based singular/plural ternaries
+  into ICU plural messages (spec 005 §10.4, #1131).
+- Localization extraction normalizes boolean select arguments to the string keys expected
+  by ICU MessageFormat when rewriting source (spec 005 §10.4, #1131).
+
 ### Deprecated
 
 ### Removed

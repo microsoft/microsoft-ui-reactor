@@ -239,16 +239,14 @@ After extraction, manually address:
 
 ## Phase 3: Enhance ICU messages
 
-The extractor produces simple `{variable}` placeholders. For production
-quality, edit the `.resw` values to add ICU features:
+The extractor produces named placeholders and recognizes common count-based
+ternaries, such as `$"{count} item{(count == 1 ? "" : "s")}"`, as ICU plural
+messages. Edit the `.resw` values when you need richer ICU features:
 
 ### Plurals
 
 ```xml
-<!-- Before (extracted) -->
-<data name="ItemCount"><value>{count} items</value></data>
-
-<!-- After (hand-edited) -->
+<!-- Extracted from a count-based ternary -->
 <data name="ItemCount">
   <value>{count, plural, one {# item} other {# items}}</value>
 </data>

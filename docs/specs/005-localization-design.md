@@ -783,6 +783,7 @@ interpolation hole (`{expression}`) is mapped to a named ICU placeholder:
 | `$"Total: {price:C}"` | `Total: {price, number, currency}` | `new { price }` |
 | `$"Due: {date:d}"` | `Due: {date, date, short}` | `new { date }` |
 | `$"Score: {pct:P0}"` | `Score: {pct, number, percent}` | `new { pct }` |
+| `$"{count} item{(count == 1 ? "" : "s")}"` | `{count, plural, one {# item} other {# items}}` | `new { count }` |
 
 **Rules for expression → placeholder name:**
 - Simple variable: `{count}` → `{count}` (keep as-is)
@@ -862,9 +863,11 @@ class InboxPage : Component
 </data>
 ```
 
-Note: the CLI adds a comment hint (`consider adding plural support`) when it detects a
-variable named `count`, `total`, `num*`, or similar quantity-suggesting names adjacent to
-a noun. This nudges the developer or localizer to add ICU plural forms.
+The extractor recognizes `== 1` / `!= 1` ternaries with string-literal arms and emits an
+ICU plural message when it can capture the whole phrase. For simple quantity placeholders
+that do not use a recognized ternary, the CLI retains the `consider adding plural support`
+hint. More complex plural rules, such as a dedicated zero form, can still be added by a
+developer or localizer.
 
 **Step 3 — Developer or localizer upgrades ICU in en-US .resw:**
 
