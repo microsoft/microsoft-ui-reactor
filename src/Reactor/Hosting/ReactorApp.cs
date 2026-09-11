@@ -886,14 +886,16 @@ public static partial class ReactorApp
         try { TrayIconClosed?.Invoke(null, icon); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] TrayIconClosed threw: {ex.Message}"); }
 
-        // OnLastSurfaceClosed: closing the final tray icon when no windows
-        // remain should exit just like closing the final window.
-        if (ShutdownPolicy == ShutdownPolicy.OnLastSurfaceClosed
-            && Windows.Count == 0
-            && TrayIconCount == 0)
-        {
-            SafeExit();
-        }
+        // Closing the final tray icon when no windows remain should exit just
+        // like closing the final window, so it goes through the same evaluator
+        // rather than re-deriving the condition here. A tray icon is never the
+        // elected primary, hence closedWasPrimary: false — which makes the
+        // OnPrimaryWindowClosed and Explicit arms no-ops and leaves the
+        // OnLastSurfaceClosed arm, whose "no windows and no tray icons left"
+        // test is exactly what this used to spell out inline. Keeping one
+        // decision point is what lets §6.2 claim every surface-close exit is
+        // EvaluateShutdownPolicy's.
+        EvaluateShutdownPolicy(closedWasPrimary: false);
     }
 
     private static void SafeExit()

@@ -39,6 +39,7 @@ public class ShutdownPolicyProcessLifetimeTests
     private const string NoWindowFlag = "--no-window";
     private const string ReopenFlag = "--reopen";
     private const string ExcludedWindowFlag = "--excluded-window";
+    private const string CloseTrayFlag = "--close-tray";
     private const string GateProbeFlag = "--shutdown-policy-gate-probe";
     private const int AliveExitCode = 42;
     private const int LoopExitedExitCode = 1;
@@ -119,6 +120,42 @@ public class ShutdownPolicyProcessLifetimeTests
         StringAssert.Contains(result.Stdout, LoopExitedMarker,
             $"With no window and no tray icon left, this policy must end the process.\n{detail}");
         Assert.AreEqual(LoopExitedExitCode, result.ExitCode, detail);
+    }
+
+    [TestMethod]
+    public void OnLastSurfaceClosed_Exits_When_The_Last_Tray_Icon_Closes_Too()
+    {
+        // Covers the other half of "last surface": the window goes first, the
+        // tray icon keeps the process alive, and closing the tray icon is what
+        // finally ends it. UnregisterTrayIcon routes that through
+        // EvaluateShutdownPolicy rather than deciding for itself, so this is the
+        // arm that would catch that path diverging from the evaluator.
+        var result = RunProbe("OnLastSurfaceClosed", TrayFlag, CloseTrayFlag);
+        var detail = Detail("OnLastSurfaceClosed", $"{ProbeFlag} {TrayFlag} {CloseTrayFlag}", result);
+
+        StringAssert.Contains(result.Stdout, "windows=0 trayIcons=1",
+            $"The run never reached 'window closed, tray icon surviving'.\n{detail}");
+        StringAssert.Contains(result.Stdout, "TRAY-CLOSED trayIcons=0",
+            $"The tray icon never closed, so this run says nothing about the last-surface exit.\n{detail}");
+        StringAssert.Contains(result.Stdout, LoopExitedMarker,
+            $"Closing the last surface under OnLastSurfaceClosed must end the process.\n{detail}");
+        Assert.AreEqual(LoopExitedExitCode, result.ExitCode, detail);
+    }
+
+    [TestMethod]
+    public void Explicit_Survives_Even_When_Every_Surface_Is_Gone()
+    {
+        // Control for the arm above: identical sequence, opposite policy,
+        // opposite outcome. Explicit means zero surfaces is a valid running
+        // state, so only ReactorApp.Exit ends it.
+        var result = RunProbe("Explicit", TrayFlag, CloseTrayFlag);
+        var detail = Detail("Explicit", $"{ProbeFlag} {TrayFlag} {CloseTrayFlag}", result);
+
+        StringAssert.Contains(result.Stdout, "TRAY-CLOSED trayIcons=0",
+            $"The tray icon never closed, so this run never reached the zero-surface state.\n{detail}");
+        StringAssert.Contains(result.Stdout, AliveMarker,
+            $"Explicit must keep the process running with no surfaces at all.\n{detail}");
+        Assert.AreEqual(AliveExitCode, result.ExitCode, detail);
     }
 
     [TestMethod]

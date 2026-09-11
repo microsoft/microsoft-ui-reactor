@@ -77,6 +77,14 @@ internal static class ShutdownPolicyProbe
     /// </summary>
     internal const string ExcludedWindowFlag = "--excluded-window";
 
+    /// <summary>
+    /// After the window has closed and the process has been confirmed alive,
+    /// close the tray icon too and look again. Covers the last-tray-icon exit
+    /// path, which <c>UnregisterTrayIcon</c> routes through
+    /// <c>EvaluateShutdownPolicy</c> rather than deciding for itself.
+    /// </summary>
+    internal const string CloseTrayFlag = "--close-tray";
+
     internal const int AliveExitCode = 42;
     internal const int LoopExitedExitCode = 1;
     internal const int UsageExitCode = 64;
@@ -86,6 +94,7 @@ internal static class ShutdownPolicyProbe
     internal const string LoopExitedMarker = "LOOP-EXITED";
     internal const string ClosingMarker = "CLOSING";
     internal const string ReopenedMarker = "REOPENED";
+    internal const string TrayClosedMarker = "TRAY-CLOSED";
 
     /// <summary>Settle time before the window is closed.</summary>
     private const int SettleMs = 400;
@@ -106,7 +115,7 @@ internal static class ShutdownPolicyProbe
         {
             Console.Error.WriteLine(
                 $"usage: {Flag} <{string.Join('|', Enum.GetNames<ShutdownPolicy>())}> " +
-                $"[{TrayFlag}] [{NoWindowFlag}] [{ReopenFlag}]");
+                $"[{TrayFlag}] [{NoWindowFlag}] [{ReopenFlag}] [{ExcludedWindowFlag}] [{CloseTrayFlag}]");
             return UsageExitCode;
         }
 
@@ -114,6 +123,7 @@ internal static class ShutdownPolicyProbe
         var noWindow = args.Contains(NoWindowFlag);
         var reopen = args.Contains(ReopenFlag);
         var excluded = args.Contains(ExcludedWindowFlag);
+        var closeTray = args.Contains(CloseTrayFlag);
 
         ReactorApp.ShutdownPolicy = policy;
         Console.WriteLine(
@@ -148,7 +158,7 @@ internal static class ShutdownPolicyProbe
                 // Nothing to close — the zero-surface startup decision has
                 // already been made by the time OnLaunched returns, so go
                 // straight to asking whether the loop is still running.
-                StartAliveTimer(dispatcher, reopen);
+                StartAliveTimer(dispatcher, reopen, closeTray);
                 return;
             }
 
@@ -183,7 +193,7 @@ internal static class ShutdownPolicyProbe
                 // identically. Revisit only with evidence that they can diverge.
                 window.Close();
 
-                StartAliveTimer(dispatcher, reopen);
+                StartAliveTimer(dispatcher, reopen, closeTray);
             };
             closeTimer.Start();
         });
@@ -204,7 +214,7 @@ internal static class ShutdownPolicyProbe
             configure: null,
             excludeFromShutdownPolicy: excludeFromShutdownPolicy);
 
-    private static void StartAliveTimer(DispatcherQueue dispatcher, bool reopen)
+    private static void StartAliveTimer(DispatcherQueue dispatcher, bool reopen, bool closeTray = false)
     {
         var aliveTimer = dispatcher.CreateTimer();
         aliveTimer.Interval = TimeSpan.FromMilliseconds(AliveCheckMs);
@@ -214,6 +224,21 @@ internal static class ShutdownPolicyProbe
             Console.WriteLine(
                 $"{AliveMarker} windows={ReactorApp.Windows.Count} trayIcons={ReactorApp.TrayIcons.Count}");
             Console.Out.Flush();
+
+            if (closeTray)
+            {
+                // Close the remaining surface and look again instead of exiting,
+                // so the caller can tell "the last tray icon ended the process"
+                // from "it did not".
+                foreach (var tray in ReactorApp.TrayIcons.ToArray())
+                {
+                    try { tray.Close(); } catch { /* best effort */ }
+                }
+                Console.WriteLine($"{TrayClosedMarker} trayIcons={ReactorApp.TrayIcons.Count}");
+                Console.Out.Flush();
+                StartAliveTimer(dispatcher, reopen);
+                return;
+            }
 
             if (reopen)
             {
