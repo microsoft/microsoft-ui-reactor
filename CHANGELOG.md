@@ -91,6 +91,23 @@ Conventions for contributors:
   and may wrap or replace it. Callbacks that cast the default to `StackElement`
   must adapt to the Auto/Star Grid.
 
+- **The documentation site is published per release, with a version selector (no
+  product code changed).** <https://microsoft.github.io/microsoft-ui-reactor/> was
+  rebuilt from the tip of `main` on every docs push, so it only ever showed unreleased
+  documentation and there was no way to read the docs matching the release you were
+  running. The site is now versioned with [mike](https://github.com/jimporter/mike):
+  each version renders once into a `gh-pages` branch and stays byte-identical
+  afterwards, a release tag publishes its version and takes the `latest` alias, and
+  `main` is published separately as `main (development)`. The site root redirects to
+  `latest`, and every version that is not `latest` carries a banner saying so.
+
+  Versioning moves every page under a version directory, which would turn already
+  published links into 404s, so the published site root also carries a `404.html` that
+  forwards legacy unversioned paths to the same page under `latest`, preserving the
+  query string and anchor — existing links such as `.../getting-started/#manual-setup`
+  keep working. See
+  [the release runbook](docs/contributing/release-runbook.md#versioned-documentation-site).
+
 - **`PoolResetSetCodeFix` now fixes struct-typed `.Set(...)` writes it previously left
   alone (issue #1192).** It could only rewrite a literal `new Thickness(uniform)` or
   `new Thickness(l, t, r, b)`, so every other right-hand side — an opaque local, a

@@ -8,7 +8,7 @@ Releases are **tag-driven**, but pushing a tag only *starts* the pipelines — i
 
 1. **Pre-flight** — pick the next `v0.1.0-preview.N` and confirm the tag, GitHub release, and the four NuGet packages don't already exist (`git tag --list`, `gh release view`, NuGet.org).
 2. **Prep PR (bump one property + recompile docs)** — bump `<ReactorPublicVersion>` in the root `Directory.Build.props` to the version you're about to tag, run `mur docs compile --skip-screenshots --skip-diagrams`, and commit the regenerated `docs/guide` pages. That single property is the source of truth: the guide's `{{reactorVersion}}` token and the template's `MicrosoftUIReactorVersion` fallback both derive from it, and `README.md` is version-agnostic (no sweep needed). CI's docs freshness gate fails the PR if you bump the property without recompiling. Land a PR, merge to `main`.
-3. **Tag `main`** — `git checkout main && git pull`, then `git tag -a v<version> -m "Release <version>"` and `git push origin v<version>`. This starts the GitHub `Package` workflow and the OneBranch official pipeline.
+3. **Tag `main`** — `git checkout main && git pull`, then `git tag -a v<version> -m "Release <version>"` and `git push origin v<version>`. This starts the GitHub `Package` workflow and the OneBranch official pipeline, and publishes the versioned docs site (see [Versioned documentation site](#versioned-documentation-site)).
 4. **Publish (gated)** — the tag push does **not** publish to NuGet.org. Approve the OneBranch `Production_PublishNuGet` stage, then verify the packages appear on NuGet.org.
 5. **Two-person rule** — the publish approver **must be a different person than whoever pushed the tag** (a self-approval is rejected by the compliance gate). Line up a second approver *before* you tag.
 6. **Smoke-test** — scaffold from the published template and restore against NuGet.org.
@@ -179,11 +179,68 @@ After pushing the tag:
 
 1. Confirm the GitHub `Package` workflow runs for the tag and creates a GitHub Release.
 2. Confirm the OneBranch official pipeline starts for the tag.
-3. Approve the `Production_PublishNuGet` stage when ready to publish to NuGet.org.
-4. Verify the packages appear on NuGet.org.
-5. Install the released template package or a locally packed template and create a smoke app that restores against NuGet.org.
+3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)).
+4. Approve the `Production_PublishNuGet` stage when ready to publish to NuGet.org.
+5. Verify the packages appear on NuGet.org.
+6. Install the released template package or a locally packed template and create a smoke app that restores against NuGet.org.
 
 > **Two-person rule (submitter ≠ approver).** Publishing passes through two distinct gates, not one: the ADO Environment approval *and* the OneBranch ApprovalService / ServiceTree compliance check. The OneBranch approver **must be a different person than whoever pushed the release tag** — a self-approval by the tag pusher will be rejected by the compliance gate (and has bitten past release cycles). Line up a second approver before tagging so the publish is not blocked.
+
+## Versioned documentation site
+
+<https://microsoft.github.io/microsoft-ui-reactor/> is versioned with
+[mike](https://github.com/jimporter/mike). Every published version is rendered once and
+kept as its own directory in the `gh-pages` branch, and the Pages artifact is that whole
+branch — so a version's pages stay byte-identical after it ships. Material's version
+selector in the site header reads the `versions.json` mike maintains at the site root.
+
+Nothing about this is manual on the happy path. `.github/workflows/docs.yml` handles it:
+
+| Trigger | Result |
+| --- | --- |
+| Push to `main` touching the docs | Republishes the `main (development)` version |
+| Push of a `v*` tag | Publishes `<version>`, moves the `latest` alias to it, and repoints the site root |
+
+The site root redirects to whichever version holds the `latest` alias, so readers landing
+on the bare URL always get the newest release rather than unreleased `main`. Every version
+that does *not* hold `latest` renders the outdated-version banner defined in
+`docs/_overrides/main.html`.
+
+A tag only takes the `latest` alias if it is the highest tag by version sort. Re-cutting or
+backporting an older tag therefore publishes that version without dragging `latest`
+backwards.
+
+### Legacy unversioned links
+
+Before versioning, pages lived at unversioned paths such as
+`https://microsoft.github.io/microsoft-ui-reactor/getting-started/`. Those paths no longer
+exist — every page now sits under a version directory — so the publish workflow copies
+`docs/_site-root/404.html` to the published site root, where GitHub Pages serves it for
+unmatched paths. It forwards those legacy paths to the same page under `latest`, preserving
+any query string and anchor.
+
+It deliberately does **not** forward a path that already starts with a published version or
+alias (`latest`, `main`, or anything beginning with a digit): those are genuine 404s inside a
+published version, and forwarding them would produce nonsense paths or a redirect loop. If
+version identifiers ever stop matching that shape, update the guard in that file.
+
+MkDocs never sees this file, so `mkdocs build --strict` cannot catch a mistake in it. Its
+behaviour is covered by `docs/_site-root/404.redirect.test.js` instead — run it with
+`node docs/_site-root/404.redirect.test.js`, or let CI run it via `SiteRootRedirectTests` in
+`tests/Reactor.DocPipeline.Tests`.
+
+### Publishing a version retroactively
+
+Run the `Publish docs` workflow manually and set **backfill_tags** to a space-separated tag
+list, e.g. `v0.1.0-preview.12 v0.1.0-preview.13`. Every tag is verified to exist before
+anything is published — a typo or a missing leading `v` fails the run up front rather than
+halfway through — and each tag is then checked out and built in turn.
+
+Tags cut before versioning existed carry no version selector in their own `mkdocs.yml`, so
+the backfill layers the `mkdocs.yml` and `docs/_overrides/` from the ref you dispatch from
+over each tag checkout. That only holds while the tag's page set still satisfies the current
+`nav`; the workflow's `mkdocs build --strict` step fails loudly if a tag has drifted too far,
+rather than publishing a broken version.
 
 ## If a release tag is wrong
 
