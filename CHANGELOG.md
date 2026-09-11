@@ -28,6 +28,20 @@ Conventions for contributors:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.0-preview.15] — 2026-09-11
+
+### Added
+
 - **Binary icon sources on `WindowIcon` (spec 036 §4.1, issue #1185).**
   `WindowIcon.FromBytes(ReadOnlySpan<byte>)` takes encoded `.ico` or PNG data and
   `WindowIcon.FromRgba(ReadOnlySpan<byte>, int, int)` takes a raw straight-alpha RGBA8
