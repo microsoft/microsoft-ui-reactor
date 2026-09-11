@@ -112,8 +112,14 @@ internal static partial class ShutdownPolicyGateProbe
                         _exitCode = GateViolatedExitCode;
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or global::System.Runtime.InteropServices.COMException)
                 {
+                    // Narrow rather than generic: a WinRT/XAML fault here means
+                    // the probe could not establish its preconditions, which is
+                    // INCONCLUSIVE (46) — deliberately distinct from both
+                    // GATE-HELD and GATE-VIOLATED so a broken probe cannot be
+                    // mistaken for a passing one. Anything else is a bug in the
+                    // probe and should surface as a crash.
                     Console.WriteLine($"INCONCLUSIVE {ex.GetType().Name}: {ex.Message}");
                     _exitCode = InconclusiveExitCode;
                 }

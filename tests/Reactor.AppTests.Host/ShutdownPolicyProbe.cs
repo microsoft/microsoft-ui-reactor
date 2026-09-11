@@ -232,7 +232,16 @@ internal static class ShutdownPolicyProbe
                 // from "it did not".
                 foreach (var tray in ReactorApp.TrayIcons.ToArray())
                 {
-                    try { tray.Close(); } catch { /* best effort */ }
+                    // Narrow rather than generic: a shell/COM fault while
+                    // removing the notify-icon is survivable and the trayIcons
+                    // count below reports what actually happened, but anything
+                    // else is a probe bug and should crash rather than be
+                    // mistaken for a clean close.
+                    try { tray.Close(); }
+                    catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or global::System.Runtime.InteropServices.COMException)
+                    {
+                        Console.WriteLine($"TRAY-CLOSE-FAILED {ex.GetType().Name}: {ex.Message}");
+                    }
                 }
                 Console.WriteLine($"{TrayClosedMarker} trayIcons={ReactorApp.TrayIcons.Count}");
                 Console.Out.Flush();

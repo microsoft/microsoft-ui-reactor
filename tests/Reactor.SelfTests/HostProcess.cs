@@ -70,7 +70,7 @@ internal static class HostProcess
         }
 
         var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.slnx")))
+        while (dir != null && !File.Exists(Path.Join(dir, "Reactor.slnx")))
             dir = Path.GetDirectoryName(dir);
 
         if (dir == null)
@@ -92,7 +92,13 @@ internal static class HostProcess
         var configuration = MetadataOr("ReactorSelfTestsConfiguration", "Debug");
         var tfm = MetadataOr("ReactorSelfTestsTargetFramework", "net10.0-windows10.0.22621.0");
 
-        var exe = Path.Combine(dir, "tests", "Reactor.AppTests.Host", "bin", platform,
+        // Path.Join rather than Path.Combine: Combine silently discards
+        // everything before a segment that happens to be rooted, and two of
+        // these segments come from assembly metadata rather than from literals,
+        // so a bad stamp could otherwise turn this into an absolute lookup
+        // somewhere else on disk. Join always concatenates. Same reasoning as
+        // PackagedHostDeployment.
+        var exe = Path.Join(dir, "tests", "Reactor.AppTests.Host", "bin", platform,
             configuration, tfm, "Reactor.AppTests.Host.exe");
 
         if (!File.Exists(exe))
