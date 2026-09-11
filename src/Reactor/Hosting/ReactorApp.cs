@@ -220,15 +220,18 @@ public static partial class ReactorApp
     /// manages its own windows; Reactor does not decide when that process ends,
     /// so it leaves that app's <see cref="Application.DispatcherShutdownMode"/>
     /// at whatever the app chose or inherited.</para>
-    /// <para>Failures are surfaced rather than swallowed. Only the exception
-    /// types a teardown-racing WinRT property write can realistically produce are
-    /// caught, matching <see cref="PrepareOpenWindowsForExit"/>, and those are
-    /// reported through <see cref="AppLogger"/> so they are visible in a release
-    /// build — a silent failure here would report the requested
-    /// <see cref="ShutdownPolicy"/> while leaving the platform free to end the
-    /// process, which is issue #1204 all over again. Anything else propagates:
-    /// this runs synchronously in <c>OnLaunched</c> before the startup callback,
-    /// so an unexpected fault is a startup bug and should not be hidden.</para>
+    /// <para>A failed write is fatal, not best-effort. This is the one write
+    /// standing between the app and issue #1204: continuing without it leaves
+    /// <see cref="ShutdownPolicy"/> reporting the requested value while the
+    /// platform is still free to end the process on last-window-close — the
+    /// original bug, now silent. The catch exists only to attach a diagnostic
+    /// explaining that consequence before rethrowing, because the bare WinRT
+    /// exception would not say it. And the caught types are not benign here:
+    /// this runs synchronously in <c>OnLaunched</c>, on the UI thread, against an
+    /// <see cref="Application"/> constructed moments earlier, so a disposed
+    /// object, an invalid operation, or a COM fault all mean the XAML runtime is
+    /// already broken. Failing at the point it is detectable beats limping into a
+    /// lifetime the app did not ask for.</para>
     /// </remarks>
     internal static void TakeOwnershipOfDispatcherLifetime()
     {
@@ -240,10 +243,11 @@ public static partial class ReactorApp
         catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or COMException)
         {
             const string message =
-                "Reactor could not take ownership of the dispatcher shutdown mode. WinUI may end the " +
-                "process when the last window closes, ignoring ReactorApp.ShutdownPolicy. (issue #1204)";
+                "Reactor could not take ownership of the dispatcher shutdown mode, so WinUI would end the " +
+                "process when the last window closes regardless of ReactorApp.ShutdownPolicy. (issue #1204)";
             AppLogger?.LogError(ex, message);
             global::System.Diagnostics.Debug.WriteLine($"[Reactor] {message} {ex.GetType().Name}: {ex.Message}");
+            throw;
         }
     }
 
