@@ -733,19 +733,21 @@ public static partial class ReactorApp
         }
         catch (Exception)
         {
-            // Unregister BEFORE closing: UnregisterWindow no-ops when the window
-            // was never registered (a configure throw), and doing it first means
-            // the close cascade's own unregister is the no-op instead — so a
-            // failed open cannot run EvaluateShutdownPolicy and decide to exit.
-            // The zero-surface decision on the launch paths owns that call.
-            UnregisterWindow(window);
+            // evaluateShutdownPolicy: false — a failed open is not a surface
+            // close. MountAndActivate can throw after RegisterWindow, and if the
+            // failed window was the elected primary, evaluating here would call
+            // SafeExit while the caller is still unwinding: the app would die
+            // over an OpenWindow failure it may well handle, even with other
+            // windows still open. The launch paths' zero-surface decision owns
+            // the lifetime call instead.
+            UnregisterWindow(window, evaluateShutdownPolicy: false);
             // Dispose alone is not enough: it unsubscribes handlers and tears
             // down the host, but never closes the native Window the
             // ReactorWindow ctor already created. Without this, a failed open
             // leaves a live untracked window on screen — most visibly under
             // ShutdownPolicy.Explicit, where the process keeps running.
-            try { window.Close(); } catch { /* best effort */ }
-            try { window.Dispose(); } catch { /* best effort */ }
+            try { window.Close(); } catch (Exception) { /* best effort */ }
+            try { window.Dispose(); } catch (Exception) { /* best effort */ }
             throw;
         }
         return window;
@@ -854,7 +856,19 @@ public static partial class ReactorApp
     // Copy-on-write remove. Idempotent — removing an already-removed window
     // (Phase 1 path runs Dispose → close cascade twice in some failure modes)
     // is a no-op.
-    internal static void UnregisterWindow(ReactorWindow window)
+    internal static void UnregisterWindow(ReactorWindow window) =>
+        UnregisterWindow(window, evaluateShutdownPolicy: true);
+
+    /// <param name="window">The window to remove from the process-wide registry.</param>
+    /// <param name="evaluateShutdownPolicy">
+    /// <c>false</c> for a window that never successfully opened. A failed open is
+    /// not a surface close, so it must not decide process lifetime: the window
+    /// could have been the elected primary, and running the evaluator here would
+    /// call <see cref="SafeExit"/> while the caller is still unwinding — killing
+    /// the app over an <c>OpenWindow</c> failure the caller may well handle, and
+    /// even when other windows remain.
+    /// </param>
+    internal static void UnregisterWindow(ReactorWindow window, bool evaluateShutdownPolicy)
     {
         var current = Volatile.Read(ref _windows);
         int idx = Array.IndexOf(current, window);
@@ -882,7 +896,8 @@ public static partial class ReactorApp
         try { WindowClosed?.Invoke(null, window); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowClosed threw: {ex.Message}"); }
 
-        EvaluateShutdownPolicy(closedWasPrimary: wasPrimary);
+        if (evaluateShutdownPolicy)
+            EvaluateShutdownPolicy(closedWasPrimary: wasPrimary);
     }
 
     // OnPrimaryWindowClosed: exit when the just-closed window was the primary.
@@ -1010,12 +1025,19 @@ public static partial class ReactorApp
     /// </remarks>
     private static void RequestEventLoopExit()
     {
+        // Deliberately broad, on both attempts. Application.Exit() tears open
+        // windows down synchronously, and ReactorWindow.OnNativeClosed invokes
+        // user Closed callbacks without catching them, so an arbitrary app
+        // exception can surface here. Narrowing to the usual WinRT teardown set
+        // would let one escape before the fallback runs and leave an
+        // OnExplicitShutdown loop pumping with no remaining way out — which is
+        // the exact failure this method exists to prevent. Do not narrow these.
         try
         {
             Application.Current?.Exit();
             return;
         }
-        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or COMException)
+        catch (Exception ex)
         {
             AppLogger?.LogError(ex, "ReactorApp: Application.Exit() failed; falling back to EnqueueEventLoopExit.");
             global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.GetType().Name}: {ex.Message}");
@@ -1025,7 +1047,7 @@ public static partial class ReactorApp
         {
             UIDispatcher?.EnqueueEventLoopExit();
         }
-        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or COMException)
+        catch (Exception ex)
         {
             AppLogger?.LogError(ex, "ReactorApp: EnqueueEventLoopExit() also failed; the event loop may not terminate.");
             global::System.Diagnostics.Debug.WriteLine($"[Reactor] EnqueueEventLoopExit threw: {ex.GetType().Name}: {ex.Message}");
