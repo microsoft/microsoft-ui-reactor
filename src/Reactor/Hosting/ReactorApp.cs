@@ -746,8 +746,8 @@ public static partial class ReactorApp
             // ReactorWindow ctor already created. Without this, a failed open
             // leaves a live untracked window on screen — most visibly under
             // ShutdownPolicy.Explicit, where the process keeps running.
-            try { window.Close(); } catch (Exception) { /* best effort */ }
-            try { window.Dispose(); } catch (Exception) { /* best effort */ }
+            try { window.Close(); } catch (Exception ex) when (ex is not OutOfMemoryException) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] failed-open Close threw: {ex.Message}"); }
+            try { window.Dispose(); } catch (Exception ex) when (ex is not OutOfMemoryException) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] failed-open Dispose threw: {ex.Message}"); }
             throw;
         }
         return window;
@@ -1025,19 +1025,21 @@ public static partial class ReactorApp
     /// </remarks>
     private static void RequestEventLoopExit()
     {
-        // Deliberately broad, on both attempts. Application.Exit() tears open
-        // windows down synchronously, and ReactorWindow.OnNativeClosed invokes
-        // user Closed callbacks without catching them, so an arbitrary app
-        // exception can surface here. Narrowing to the usual WinRT teardown set
-        // would let one escape before the fallback runs and leave an
-        // OnExplicitShutdown loop pumping with no remaining way out — which is
-        // the exact failure this method exists to prevent. Do not narrow these.
+        // Deliberately broad, on both attempts — filtered only to let a genuinely
+        // catastrophic OutOfMemoryException through rather than mask it.
+        // Application.Exit() tears open windows down synchronously, and
+        // ReactorWindow.OnNativeClosed invokes user Closed callbacks without
+        // catching them, so an arbitrary app exception can surface here.
+        // Narrowing to the usual WinRT teardown set would let one escape before
+        // the fallback runs and leave an OnExplicitShutdown loop pumping with no
+        // remaining way out — the exact failure this method exists to prevent.
+        // Do not narrow these further.
         try
         {
             Application.Current?.Exit();
             return;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLogger?.LogError(ex, "ReactorApp: Application.Exit() failed; falling back to EnqueueEventLoopExit.");
             global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.GetType().Name}: {ex.Message}");
@@ -1047,7 +1049,7 @@ public static partial class ReactorApp
         {
             UIDispatcher?.EnqueueEventLoopExit();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLogger?.LogError(ex, "ReactorApp: EnqueueEventLoopExit() also failed; the event loop may not terminate.");
             global::System.Diagnostics.Debug.WriteLine($"[Reactor] EnqueueEventLoopExit threw: {ex.GetType().Name}: {ex.Message}");
