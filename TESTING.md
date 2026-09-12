@@ -250,6 +250,33 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 ```
 
+### Not every test here wraps a TAP fixture
+
+`SelfTestBatch` is the TAP wrapper, but the project also holds tests that drive the Host in
+*different* modes because the thing under test is the process itself.
+`ShutdownPolicyProcessLifetimeTests` is the current example: `--self-test` cannot answer
+"did the process survive its last window closing?", because that Host terminates itself
+when the run ends — and it cannot reach a code path guarded by
+`Application.Current is ReactorApplication` at all, because inside the selftest Host that
+is always true.
+
+Two Host modes serve it:
+
+| Mode | Question | Exit codes |
+|---|---|---|
+| `--shutdown-policy-probe <policy> [--with-tray] [--no-window] [--reopen] [--excluded-window] [--close-tray] [--legacy-run]` | Does the event loop outlive its last window (or a zero-surface startup)? | `42` still alive, `1` loop unwound, `45` reopen failed |
+| `--shutdown-policy-gate-probe` | Does Reactor leave a *non*-Reactor `Application`'s lifetime alone? | `43` gate held, `44` gate violated, `46` inconclusive |
+
+Every arm has a counterpart asserting the opposite outcome, so a "still alive" or "gate
+held" result is a measurement rather than a probe that can only report one thing.
+
+Reach for this shape only when in-process observation is structurally impossible — process
+lifetime, startup ordering, a branch that depends on who owns the `Application`. Anything
+you can see from inside a live window belongs in a fixture. Share `HostProcess` for
+locating and running the Host so every mode agrees on where the binary lives; it reads the
+configuration and TFM stamped into the test assembly by `Reactor.SelfTests.csproj`, so
+`dotnet test -c Release` finds the Release Host rather than a stale Debug one.
+
 ### Fixture registration is two-place — and what that does to name searches
 
 Selftest: add the fixture to `AllFixtures` **and** to the `Create()` switch in

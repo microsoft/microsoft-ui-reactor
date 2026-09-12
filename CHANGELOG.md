@@ -36,6 +36,16 @@ Conventions for contributors:
 
 ### Fixed
 
+- `ShutdownPolicy.Explicit` and `ShutdownPolicy.OnLastSurfaceClosed` now actually keep the process
+  running. Reactor takes ownership of the WinUI dispatcher loop at startup
+  (`Application.DispatcherShutdownMode = OnExplicitShutdown`), so the platform no longer ends the
+  process on last-window-close without consulting `EvaluateShutdownPolicy`. Closing the last window
+  of a tray-backed app used to exit with code 0 as if the policy were `OnPrimaryWindowClosed`.
+  Ownership is unconditional, which also makes the documented issue-#647 guarantee real: under the
+  default policy, closing an auxiliary window that opted out via `ExcludeFromShutdownPolicy` no
+  longer ends the app even when it was the last window on screen. Apps that embed
+  `ReactorHostControl` in their own `Application` are left alone. (spec 036 §6.2, issue #1204)
+
 ### Security
 
 ## [0.1.0-preview.15] — 2026-09-11

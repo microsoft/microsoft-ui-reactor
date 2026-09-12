@@ -1259,6 +1259,8 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_IgnorePointerInputRoundTrip",
         "WindowModel_OpacityIgnorePointerInvariants",
         "WindowModel_DefaultSizeDefersToOs",
+        // Issue #1204 — Reactor owns the dispatcher loop; the policy alone decides exits.
+        "ShutdownPolicy_OwnsDispatcherLifetime",
         // Spec 054 Phase 1 — window position/z-order/display read-back.
         "Position_ReadBack",
         "PositionChanged_FiresOnMove",
@@ -3159,6 +3161,8 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_IgnorePointerInputRoundTrip" => new WindowModelFixtures.WindowIgnorePointerInputRoundTrip(harness),
         "WindowModel_OpacityIgnorePointerInvariants" => new WindowModelFixtures.WindowOpacityIgnorePointerInvariants(harness),
         "WindowModel_DefaultSizeDefersToOs" => new WindowModelFixtures.WindowDefaultSizeDefersToOs(harness),
+        // Issue #1204 — Reactor owns the dispatcher loop; the policy alone decides exits.
+        "ShutdownPolicy_OwnsDispatcherLifetime" => new ShutdownPolicyDispatcherModeFixtures.ShutdownPolicyOwnsDispatcherLifetime(harness),
         // Spec 054 Phase 1 — window position/z-order/display read-back.
         "Position_ReadBack" => new Phase1WindowingFixtures.PositionReadBack(harness),
         "PositionChanged_FiresOnMove" => new Phase1WindowingFixtures.PositionChangedFiresOnMove(harness),
