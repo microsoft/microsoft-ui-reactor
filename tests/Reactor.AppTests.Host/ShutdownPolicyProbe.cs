@@ -111,6 +111,23 @@ internal static class ShutdownPolicyProbe
     /// </remarks>
     internal const string ThrowInStartupFlag = "--throw-in-startup";
 
+    /// <summary>
+    /// Open a window whose root factory throws, so the failure lands in
+    /// <c>MountAndActivate</c> <b>after</b> <c>RegisterWindow</c> — the only way
+    /// to reach the failed-open cleanup with a window that was registered and
+    /// elected primary. The callback then opens a real window and the probe
+    /// reports whether the process survived.
+    /// </summary>
+    /// <remarks>
+    /// This is the arm that pins <c>evaluateShutdownPolicy: false</c>. Under
+    /// <c>OnPrimaryWindowClosed</c>, unregistering that window with the evaluator
+    /// enabled sees <c>closedWasPrimary: true</c> and calls <c>SafeExit</c> while
+    /// the caller is still unwinding, so the process dies over a handled
+    /// <c>OpenWindow</c> failure. The <see cref="ThrowInStartupFlag"/> arms
+    /// cannot cover it: they fail in <c>configure</c>, before registration.
+    /// </remarks>
+    internal const string ThrowInMountFlag = "--throw-in-mount";
+
     internal const int AliveExitCode = 42;
     internal const int LoopExitedExitCode = 1;
     internal const int UsageExitCode = 64;
@@ -121,6 +138,8 @@ internal static class ShutdownPolicyProbe
     internal const string ClosingMarker = "CLOSING";
     internal const string ReopenedMarker = "REOPENED";
     internal const string StartupThrewMarker = "STARTUP-THREW";
+    internal const string MountThrewMarker = "MOUNT-THREW";
+    internal const string SurvivorMarker = "SURVIVOR";
     internal const string TrayClosedMarker = "TRAY-CLOSED";
 
     /// <summary>Settle time before the window is closed.</summary>
@@ -142,7 +161,7 @@ internal static class ShutdownPolicyProbe
         {
             Console.Error.WriteLine(
                 $"usage: {Flag} <{string.Join('|', Enum.GetNames<ShutdownPolicy>())}> " +
-                $"[{TrayFlag}] [{NoWindowFlag}] [{ReopenFlag}] [{ExcludedWindowFlag}] [{CloseTrayFlag}] [{LegacyRunFlag}] [{ThrowInStartupFlag}]");
+                $"[{TrayFlag}] [{NoWindowFlag}] [{ReopenFlag}] [{ExcludedWindowFlag}] [{CloseTrayFlag}] [{LegacyRunFlag}] [{ThrowInStartupFlag}] [{ThrowInMountFlag}]");
             return UsageExitCode;
         }
 
@@ -153,10 +172,45 @@ internal static class ShutdownPolicyProbe
         var closeTray = args.Contains(CloseTrayFlag);
         var legacyRun = args.Contains(LegacyRunFlag);
         var throwInStartup = args.Contains(ThrowInStartupFlag);
+        var throwInMount = args.Contains(ThrowInMountFlag);
 
         ReactorApp.ShutdownPolicy = policy;
         Console.WriteLine(
             $"POLICY {policy} tray={withTray} noWindow={noWindow} reopen={reopen} excluded={excluded} legacy={legacyRun} throws={throwInStartup}");
+
+        if (throwInMount)
+        {
+            ReactorApp.Run(_ =>
+            {
+                var dq = ReactorApp.UIDispatcher!;
+                try
+                {
+                    // Throws inside MountAndActivate, i.e. after RegisterWindow
+                    // has already elected this window primary.
+                    ReactorApp.OpenWindow(
+                        new WindowSpec { Title = "Shutdown Policy Probe (doomed)", Width = 320, Height = 200 },
+                        () => throw new InvalidOperationException("probe: root factory failed"));
+                }
+                catch (InvalidOperationException)
+                {
+                    Console.WriteLine(
+                        $"{MountThrewMarker} windows={ReactorApp.Windows.Count} primary={ReactorApp.PrimaryWindow is not null}");
+                    Console.Out.Flush();
+                }
+
+                // Reaching this at all means the failed open did not take the
+                // process down with it.
+                OpenProbeWindow("Shutdown Policy Probe (survivor)");
+                Console.WriteLine($"{SurvivorMarker} windows={ReactorApp.Windows.Count}");
+                Console.Out.Flush();
+
+                StartAliveTimer(dq, reopen: false, closeTray: false);
+            });
+
+            Console.WriteLine(LoopExitedMarker);
+            Console.Out.Flush();
+            return LoopExitedExitCode;
+        }
 
         if (throwInStartup)
         {

@@ -43,7 +43,10 @@ public class ShutdownPolicyProcessLifetimeTests
     private const string CloseTrayFlag = "--close-tray";
     private const string LegacyRunFlag = "--legacy-run";
     private const string ThrowInStartupFlag = "--throw-in-startup";
+    private const string ThrowInMountFlag = "--throw-in-mount";
     private const string StartupThrewMarker = "STARTUP-THREW";
+    private const string MountThrewMarker = "MOUNT-THREW";
+    private const string SurvivorMarker = "SURVIVOR";
     private const string ClosingMarker = "CLOSING";
     private const string GateProbeFlag = "--shutdown-policy-gate-probe";
     private const int AliveExitCode = 42;
@@ -82,7 +85,7 @@ public class ShutdownPolicyProcessLifetimeTests
         // and they carry their own marker (STARTUP-THREW) plus termination as the
         // oracle.
         var detail = Detail(policy, args, result);
-        if (flags.Contains(ThrowInStartupFlag))
+        if (flags.Contains(ThrowInStartupFlag) || flags.Contains(ThrowInMountFlag))
         {
             // nothing to assert here — the caller checks STARTUP-THREW.
         }
@@ -368,6 +371,28 @@ public class ShutdownPolicyProcessLifetimeTests
             $"The configure callback did not throw, so this run did not exercise the failure path.\n{detail}");
         Assert.AreNotEqual(AliveExitCode, result.ExitCode,
             $"A failed configure reported itself alive.\n{detail}");
+    }
+
+    [TestMethod]
+    public void A_Failed_Open_After_Registration_Does_Not_Shut_The_App_Down()
+    {
+        // The doomed window's root factory throws inside MountAndActivate, so it
+        // had already been registered and elected primary. Under the default
+        // policy, unregistering it with the shutdown evaluator enabled sees
+        // "primary closed" and calls SafeExit mid-unwind — killing the app over
+        // an OpenWindow failure the caller handled. This is the only arm that
+        // reaches that path; the --throw-in-startup ones fail in configure,
+        // before registration.
+        var result = RunProbe("OnPrimaryWindowClosed", ThrowInMountFlag);
+        var detail = Detail("OnPrimaryWindowClosed", $"{ProbeFlag} {ThrowInMountFlag}", result);
+
+        StringAssert.Contains(result.Stdout, $"{MountThrewMarker} windows=0",
+            $"The failed window was left in the registry, or never failed at all.\n{detail}");
+        StringAssert.Contains(result.Stdout, $"{SurvivorMarker} windows=1",
+            $"The process did not survive the failed open, so a later window could not be opened.\n{detail}");
+        StringAssert.Contains(result.Stdout, AliveMarker,
+            $"A handled OpenWindow failure took the whole app down.\n{detail}");
+        Assert.AreEqual(AliveExitCode, result.ExitCode, detail);
     }
 
     // ── ownership gate (negative case) ─────────────────────────────────────
