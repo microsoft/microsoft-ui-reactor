@@ -36,6 +36,18 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Tray icon `Click` and `RightClick` no longer fire twice per interaction
+  (spec 036 §11.4, issue #1180).** Under `NOTIFYICON_VERSION_4` the shell
+  forwards both the legacy mouse message and the version-4 semantic
+  notification for a single physical interaction — a left click arrives as
+  `WM_LBUTTONUP` *and* `NIN_SELECT`, a right click as `WM_RBUTTONUP` *and*
+  `WM_CONTEXTMENU`. `TrayHiddenWindow` routed both arms of each pair, so
+  `ReactorTrayIcon.Click` and `ReactorTrayIcon.RightClick` raised twice per
+  click. Only the version-4 notifications are routed now. `DoubleClick` is
+  unaffected: `WM_LBUTTONDBLCLK` has no version-4 counterpart, so a physical
+  double click still raises `Click` once (from the first click's `NIN_SELECT`)
+  followed by `DoubleClick` once.
+
 ### Security
 
 ## [0.1.0-preview.15] — 2026-09-11
