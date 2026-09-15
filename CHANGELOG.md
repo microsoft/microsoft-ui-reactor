@@ -30,11 +30,28 @@ Conventions for contributors:
 
 ### Changed
 
+- Localization extraction now converts recognized count-based singular/plural ternaries
+  into ICU plural messages (spec 005 §10.4, #1131).
+- Localization extraction normalizes boolean select arguments to the string keys expected
+  by ICU MessageFormat when rewriting source (spec 005 §10.4, #1131).
+
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+
+- **Tray icon `Click` and `RightClick` no longer fire twice per interaction
+  (spec 036 §11.4, issue #1180).** Under `NOTIFYICON_VERSION_4` the shell
+  forwards both the legacy mouse message and the version-4 semantic
+  notification for a single physical interaction — a left click arrives as
+  `WM_LBUTTONUP` *and* `NIN_SELECT`, a right click as `WM_RBUTTONUP` *and*
+  `WM_CONTEXTMENU`. `TrayHiddenWindow` routed both arms of each pair, so
+  `ReactorTrayIcon.Click` and `ReactorTrayIcon.RightClick` raised twice per
+  click. Only the version-4 notifications are routed now. `DoubleClick` is
+  unaffected: `WM_LBUTTONDBLCLK` has no version-4 counterpart, so a physical
+  double click still raises `Click` once (from the first click's `NIN_SELECT`)
+  followed by `DoubleClick` once.
 
 - `ShutdownPolicy.Explicit` and `ShutdownPolicy.OnLastSurfaceClosed` now actually keep the process
   running. Reactor takes ownership of the WinUI dispatcher loop at startup

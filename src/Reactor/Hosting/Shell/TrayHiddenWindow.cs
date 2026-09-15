@@ -190,21 +190,11 @@ internal sealed class TrayHiddenWindow : IDisposable
         {
             try
             {
-                switch (mouseMessage)
-                {
-                    case TrayIconComInterop.WM_LBUTTONUP:
-                    case TrayIconComInterop.NIN_SELECT:
-                    case TrayIconComInterop.NIN_KEYSELECT:
-                        hit.OnClick?.Invoke();
-                        break;
-                    case TrayIconComInterop.WM_LBUTTONDBLCLK:
-                        hit.OnDoubleClick?.Invoke();
-                        break;
-                    case TrayIconComInterop.WM_RBUTTONUP:
-                    case TrayIconComInterop.WM_CONTEXTMENU:
-                        hit.OnRightClick?.Invoke();
-                        break;
-                }
+                // Routing lives in TrayNotificationRouter so the
+                // notification -> interaction mapping is unit-testable without
+                // an HWND or a dispatcher. See its remarks for why the legacy
+                // mouse messages are deliberately not routed (issue #1180).
+                TrayNotificationRouter.Dispatch(hit, TrayNotificationRouter.Classify(mouseMessage));
             }
             catch (Exception ex)
             {
