@@ -292,25 +292,51 @@ public class LocalizableStringScannerTests
         Assert.Empty(results);
     }
 
-    [Fact]
-    public void PrivateUseOnlyString_Skipped()
+    [Theory]
+    [InlineData(@"\uE000", false)]
+    [InlineData(@"\uF8FF", false)]
+    [InlineData(@"\uF900", true)]
+    [InlineData(@"\U000FFFFD", false)]
+    [InlineData(@"\U000FFFFE", true)]
+    [InlineData(@"\U0010FFFD", false)]
+    [InlineData(@"\U0010FFFE", true)]
+    [InlineData(@"\uD800", true)]
+    public void PrivateUseStringBoundaries_AreHandled(string literal, bool shouldExtract)
     {
-        var source = """
+        var source = $$"""
             class App : Component {
                 public override Element Render() {
-                    return VStack(
-                        TextBlock("\uE74D"),
-                        TextBlock("\uE73A"),
-                        TextBlock("\U000F0000"),
-                        TextBlock("\uE74D Delete"));
+                    return TextBlock("{{literal}}");
                 }
             }
             """;
 
         var results = Scan(source);
 
-        Assert.Single(results);
-        Assert.Equal("\uE74D Delete", results[0].Value);
+        Assert.Equal(shouldExtract ? 1 : 0, results.Count);
+    }
+
+    [Fact]
+    public void PrivateUseOnlyStrings_SkippedAcrossExpressionForms()
+    {
+        var source = """
+            class App : Component {
+                public override Element Render() {
+                    return VStack(
+                        TextBlock("\uE74D"),
+                        TextBlock(isVisible ? "\uE70D" : "\uE70E"),
+                        TextBlock($"\uE73A"),
+                        TextBlock("\uE74D Delete"),
+                        TextBlock(isVisible ? "\uE70D" : "Visible"));
+                }
+            }
+            """;
+
+        var results = Scan(source);
+
+        Assert.Equal(2, results.Count);
+        Assert.Contains(results, result => result.Value == "\uE74D Delete");
+        Assert.Contains(results, result => result.Value == "Visible" && result.TernaryBranch == 1);
     }
 
     [Fact]
