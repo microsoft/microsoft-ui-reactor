@@ -21,5 +21,10 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^10.5.0"
+  },
+  "overrides": {
+    "express": {
+      "qs": "^6.16.0"
+    }
   }
 }

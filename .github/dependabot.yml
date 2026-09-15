@@ -91,3 +91,26 @@ updates:
     labels:
       - "dependencies"
       - "vscode-extension"
+
+  # The remaining npm projects — the HeadTrax sample service, the React Native
+  # perf harnesses, and the Figma plugin. They were unmonitored until now, so
+  # transitive advisories piled up in Component Governance (qs, body-parser and
+  # js-yaml were all several patches behind) with nothing raising a PR. Grouped
+  # into one entry via `directories` because they share a single reviewer and
+  # none of them ships to users; `/src/vscode-reactor` stays separate above so
+  # its PRs keep the vscode-specific prefix and label.
+  - package-ecosystem: "npm"
+    directories:
+      - "/samples/apps/headtrax/service"
+      - "/tests/startup_perf/BlankRNW"
+      - "/tests/stress_perf_rn/StocksGrid"
+      - "/tests/stress_perf_rn/VirtualList"
+      - "/tools/figma-plugin"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps(npm)"
+    labels:
+      - "dependencies"
+      - "npm"
+    open-pull-requests-limit: 10
