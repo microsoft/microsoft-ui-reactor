@@ -5,11 +5,10 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Microsoft.UI.Reactor.Core;
 
-// Workaround for https://github.com/microsoft/microsoft-ui-xaml/issues/11865.
-// Visibility-valid parked containers can still be retained as bring targets.
-// Reject those offscreen anchors after ItemsView's handler, before ScrollPresenter
-// uses their bounds. Otherwise anchoring can repeatedly shift the layout.
-internal static class ItemsViewAnchorWorkaround
+// ItemsView can nominate a recycled bring target even with its content collapsed.
+// Reject it after ItemsView's handler, before ScrollPresenter uses the offscreen
+// bounds and feeds them back into layout. Only realized rows are eligible.
+internal static class ItemsViewAnchoring
 {
     private static readonly ConditionalWeakTable<ScrollView, object> RegisteredScrollViews = new();
 

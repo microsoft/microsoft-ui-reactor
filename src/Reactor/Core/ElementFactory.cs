@@ -60,24 +60,20 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // repeater. Bounded by <see cref="TrimPool"/>, so the scan is short.
     private readonly List<PoolEntry> _recyclePool = new();
 
-    // A parked container plus the values its parking properties carried before
-    // RecycleElement hid it. We store the *value source* - whatever
-    // ReadLocalValue returned - rather than the evaluated value. A row whose
+    // A parked target plus the value its Visibility DP carried before
+    // RecycleElement collapsed it. We store the *value source* — whatever
+    // ReadLocalValue returned — rather than the evaluated enum. A row whose
     // Visibility comes from a Style (or is simply at its default) has NO local
     // value, and writing the evaluated enum back on reuse would pin a local
     // value that permanently outranks the style. UnsetValue therefore means
-    // "restore by clearing"; a boxed property value means "restore by writing".
+    // "restore by clearing"; a boxed Visibility means "restore by writing".
     // A BindingExpression cannot be re-established from that captured value,
     // so a container is never pooled if parking would overwrite such a binding.
     //
-    // Ordinary controls still park by collapsing Visibility. ItemContainer uses
-    // the anchor workaround in ParkOrphan instead: leave Visibility (including
-    // any binding) untouched and preserve the local Opacity and IsEnabled value
-    // sources by the same rules. OpacityTransition is not a dependency property;
-    // retain the transition object separately so temporarily suppressing a fade
-    // does not discard an animation the author expects after reuse.
-    private readonly record struct ParkedVisibility(
-        object? Visibility, object? Opacity = null, object? IsEnabled = null, ScalarTransition? OpacityTransition = null);
+    // Ordinary controls park by collapsing their own Visibility; ItemContainer
+    // collapses its content root instead. Visibility stores that target's value
+    // source and Target remembers the element we collapsed.
+    private readonly record struct ParkedVisibility(UIElement? Target, object? Visibility);
     private readonly record struct PoolEntry(UIElement Control, ParkedVisibility ParkedVisibility);
 
     // Retaining a container that cannot serve the current row is what bounds the
@@ -609,12 +605,12 @@ public sealed partial class ElementFactory<T> : IElementFactory
             // it parented to the ItemsRepeater, so the ViewManager.cpp:866
             // Append-skip kicks in and the visual tree stays stable.
             //
-            // Undo the parking state from RecycleElement BEFORE reconciling.
+            // Undo the parking collapse from RecycleElement BEFORE reconciling.
             // Restore the exact pre-park value source rather than forcing
             // Visible: an in-place diff whose Visibility modifier is unchanged
             // writes nothing, so forcing Visible would silently un-collapse a
             // row the author asked to hide.
-            RestoreParkedVisibility(reused, parkedVisibility);
+            RestoreParkedVisibility(parkedVisibility);
             var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
             if (replacement is not null && !ReferenceEquals(replacement, reused))
             {
@@ -765,31 +761,31 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // relying on another layout pass or on the pool being drained immediately.
     // For ordinary controls, collapsing Visibility provides that guarantee.
     //
-    // Workaround for https://github.com/microsoft/microsoft-ui-xaml/issues/11865:
-    // ItemsView can retain a recycled ItemContainer as its bring-into-view anchor.
-    // Collapsing it makes deferred native layout throw E_INVALIDARG. Keep its
-    // visibility unchanged, but suppress painting and input while it is parked.
-    // Visibility alone is not enough: ItemsRepeater subsequently arranges cleared
-    // children offscreen. ItemsViewAnchorWorkaround rejects those recycled anchor
-    // requests before ScrollPresenter uses their bounds, preventing a layout
-    // feedback loop while leaving normal live anchors available.
-    // Remove this special case when WinUI safely invalidates recycled bring targets.
+    // Keep ItemContainer itself visibility-valid: ItemsView can retain it as a
+    // bring-into-view anchor after recycling. Collapse its template content to
+    // suppress rendering, hit testing and descendant focus without disabled-state
+    // transitions through the row. Reject recycled anchors before their offscreen
+    // bounds feed back into scrolling layout.
     private static void ParkOrphan(UIElement control)
     {
         if (control is ItemContainer container)
         {
-            ItemsViewAnchorWorkaround.Ensure(container);
-            // An implicit fade would leave a ghost row painting after recycling.
-            if (container.OpacityTransition is not null)
-                container.OpacityTransition = null;
-            container.Opacity = 0;
-            container.IsEnabled = false;
+            ItemsViewAnchoring.Ensure(container);
+            if (GetParkingContent(container) is { } content)
+                content.Visibility = Visibility.Collapsed;
         }
         else
         {
             control.Visibility = Visibility.Collapsed;
         }
     }
+
+    // Include template-owned controls (for example selection chrome), not only
+    // Child. Before template application, Child is the only content to park.
+    private static UIElement? GetParkingContent(ItemContainer container) =>
+        Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(container) > 0
+            ? Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(container, 0) as UIElement
+            : container.Child;
 
     // The ONLY shape TryAdoptRealizedReplacement can rescue without losing
     // state. Adoption transplants the fresh component subtree plus its
@@ -881,77 +877,42 @@ public sealed partial class ElementFactory<T> : IElementFactory
             DetachReactorStateRecursive(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
     }
 
-    // Hide a container on its way into the pool, handing back the value sources
-    // to restore on reuse: Visibility for ordinary controls, or Opacity and
-    // IsEnabled for the ItemContainer workaround. Returns false when the
-    // container cannot be parked reversibly: a property we must change is bound,
-    // and ReadLocalValue yields a BindingExpression that cannot be reinstalled
-    // from the captured value. Such a container must be retired rather than
-    // pooled. Leaving the bound property alone to preserve the binding would
-    // leave a no-longer-realized repeater child able to paint or receive input,
-    // which is the ghost row this parking machinery exists to prevent.
-    // ItemContainer's Visibility binding is safe because parking never changes it.
+    // Collapse a container's parking target on its way into the pool, handing back
+    // the target and Visibility value source to restore on reuse. Returns false
+    // when the target cannot be parked reversibly: its Visibility is bound, and
+    // ReadLocalValue yields a BindingExpression that no public API can
+    // reinstall. Such a container must be retired rather than pooled — pooling
+    // it un-collapsed would leave a visible, no-longer-realized repeater child
+    // painting at its last bounds, which is the ghost row this parking machinery
+    // exists to prevent.
     private static bool TryParkForPool(UIElement control, out ParkedVisibility restore)
     {
-        if (control is ItemContainer)
+        var target = control is ItemContainer container ? GetParkingContent(container) : control;
+        var visibility = target?.ReadLocalValue(UIElement.VisibilityProperty);
+        if (target is not null && visibility is not Visibility
+            && !ReferenceEquals(visibility, DependencyProperty.UnsetValue))
         {
-            var opacity = control.ReadLocalValue(UIElement.OpacityProperty);
-            var enabled = control.ReadLocalValue(Control.IsEnabledProperty);
-            var transition = control.OpacityTransition;
-            if ((opacity is not double && !ReferenceEquals(opacity, DependencyProperty.UnsetValue))
-                || (enabled is not bool && !ReferenceEquals(enabled, DependencyProperty.UnsetValue)))
-            {
-                restore = default;
-                return false;
-            }
-
-            restore = new ParkedVisibility(null, opacity, enabled, transition);
-        }
-        else
-        {
-            var visibility = control.ReadLocalValue(UIElement.VisibilityProperty);
-            if (visibility is not Visibility && !ReferenceEquals(visibility, DependencyProperty.UnsetValue))
-            {
-                restore = default;
-                return false;
-            }
-
-            restore = new ParkedVisibility(visibility);
+            restore = default;
+            return false;
         }
 
+        restore = new ParkedVisibility(target, visibility);
         ParkOrphan(control);
         return true;
     }
 
-    // Undo TryParkForPool before reconciliation. Clearing (rather than writing
-    // Visible) when there was no local value keeps a Style- or default-provided
-    // Visibility from being permanently overridden by a local value we invented.
-    // The same rule applies to Opacity and IsEnabled: restore the author's value
-    // source, not an assumed fully opaque/enabled state. Reconciliation cannot
-    // repair this for us when the corresponding modifier has not changed.
-    // Restore OpacityTransition last so undoing parking does not animate a reused
-    // container from transparent back to its authored opacity.
-    private static void RestoreParkedVisibility(UIElement control, ParkedVisibility parked)
+    // Undo TryParkForPool. Clearing (rather than writing Visible) when there was
+    // no local value is what keeps a Style- or default-provided Visibility from
+    // being permanently overridden by a local value we invented.
+    private static void RestoreParkedVisibility(ParkedVisibility parked)
     {
-        if (control is ItemContainer)
+        if (parked.Target is { } target)
         {
-            RestoreLocalValue(control, UIElement.OpacityProperty, parked.Opacity);
-            RestoreLocalValue(control, Control.IsEnabledProperty, parked.IsEnabled);
-            if (parked.OpacityTransition is not null)
-                control.OpacityTransition = parked.OpacityTransition;
+            if (ReferenceEquals(parked.Visibility, DependencyProperty.UnsetValue))
+                target.ClearValue(UIElement.VisibilityProperty);
+            else if (parked.Visibility is Visibility v)
+                target.Visibility = v;
         }
-        else
-        {
-            RestoreLocalValue(control, UIElement.VisibilityProperty, parked.Visibility);
-        }
-    }
-
-    private static void RestoreLocalValue(DependencyObject control, DependencyProperty property, object? value)
-    {
-        if (ReferenceEquals(value, DependencyProperty.UnsetValue))
-            control.ClearValue(property);
-        else
-            control.SetValue(property, value);
     }
 
     // Detach a UIElement from whatever container it's parented to.
@@ -961,7 +922,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // not project IPanel — `repeater is Panel` and even an ABI `.As<Panel>()`
     // both fail — so there is no Children collection to remove from and no public
     // API that un-parents a realized child. Callers must pair this with
-    // ParkOrphan (hide in place) for the repeater case. It is still the right
+    // ParkOrphan (collapse in place) for the repeater case. It is still the right
     // call for nested Panel/Border/ContentControl subtrees, so it's safe to call
     // on arbitrary recycled content.
     private static void DetachFromParent(UIElement control)
@@ -1002,13 +963,12 @@ public sealed partial class ElementFactory<T> : IElementFactory
         // parented, so without parking it can paint at its last arranged bounds:
         // a ghost row over the live list whenever the pool isn't drained in the same pass
         // (issue #919). Ordinary controls retain the collapse behavior that
-        // mirrors WinUI's own RecyclePool; ItemContainer uses ParkOrphan's
-        // visibility-valid workaround to preserve the same no-ghost invariant.
+        // mirrors WinUI's own RecyclePool; ItemContainer collapses its content
+        // instead, preserving the same no-ghost invariant and a valid outer anchor.
         if (!TryParkForPool(args.Element, out var restore))
         {
-            // Cannot be parked reversibly (a bound property parking must change).
-            // Retire it rather than pool a still-visible ghost or hand a reused
-            // container back to the author with its binding clobbered.
+            // Cannot be parked reversibly (bound target Visibility). Retire it
+            // rather than pool a still-visible ghost or clobber the binding.
             RetireContainer(args.Element);
             return;
         }

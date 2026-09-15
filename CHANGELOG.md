@@ -36,14 +36,10 @@ Conventions for contributors:
 
 ### Fixed
 
-- **Workaround for WinUI recycled bring-into-view anchors (issue #1213).**
-  Parked `ItemContainer` rows remain visibility-valid but cannot paint or receive
-  input. A scoped anchor handler rejects recycled targets before their offscreen
-  bounds affect scrolling, addressing both the invalid-anchor exception and the
-  subsequent layout-cycle failure. Parking restores original property values and
-  opacity transitions on reuse. This is a workaround for
-  [microsoft/microsoft-ui-xaml#11865](https://github.com/microsoft/microsoft-ui-xaml/issues/11865),
-  not a replacement for the upstream fix.
+- **Content-collapse parking for recycled ItemsView rows (issue #1213).**
+  Parking collapses template content instead of the outer container and restores
+  its original visibility value source on reuse. Recycled rows are excluded from
+  scroll anchoring, preventing invalid-anchor and layout-cycle failures.
 
 ### Security
 

@@ -352,10 +352,10 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_BoundVisibilityRow_IsRetiredNotPooled",
         "EFR_Factory_PoolEviction_UnmountsEvictedRows",
         "EFR_Factory_PoolParking_PreservesVisibilityValueSource",
-        "ItemsView_AnchorWorkaround_PoolRestoresValueSources",
-        "ItemsView_AnchorWorkaround_BoundRowsAndEviction",
-        "ItemsView_AnchorWorkaround_PendingBringThenKeyedReset",
-        "ItemsView_AnchorWorkaround_VariableHeightReset",
+        "ItemsView_Parking_PoolRestoresValueSources",
+        "ItemsView_Parking_BoundRowsAndEviction",
+        "ItemsView_Parking_PendingBringThenKeyedReset",
+        "ItemsView_Parking_VariableHeightReset",
         "EFR_Factory_RefreshRealizedItems_SyncsLastElementByControl",
         "EFR_LazyStack_Unmount_CleansUpAllRecycledRowComponents",
         "EFR_Factory_KeyChangeRecycle_ResetsRowComponentState",
@@ -2242,10 +2242,10 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_BoundVisibilityRow_IsRetiredNotPooled" => new ElementFactoryRecyclingFixtures.Factory_BoundVisibilityRow_IsRetiredNotPooled(harness),
         "EFR_Factory_PoolEviction_UnmountsEvictedRows" => new ElementFactoryRecyclingFixtures.Factory_PoolEviction_UnmountsEvictedRows(harness),
         "EFR_Factory_PoolParking_PreservesVisibilityValueSource" => new ElementFactoryRecyclingFixtures.Factory_PoolParking_PreservesVisibilityValueSource(harness),
-        "ItemsView_AnchorWorkaround_PoolRestoresValueSources" => new ItemsViewAnchorWorkaroundFixtures.PoolRestoresValueSources(harness),
-        "ItemsView_AnchorWorkaround_BoundRowsAndEviction" => new ItemsViewAnchorWorkaroundFixtures.BoundRowsAndEviction(harness),
-        "ItemsView_AnchorWorkaround_PendingBringThenKeyedReset" => new ItemsViewAnchorWorkaroundFixtures.PendingBringThenKeyedReset(harness),
-        "ItemsView_AnchorWorkaround_VariableHeightReset" => new ItemsViewAnchorWorkaroundFixtures.PendingBringThenKeyedReset(harness, variableHeight: true),
+        "ItemsView_Parking_PoolRestoresValueSources" => new ItemsViewParkingFixtures.PoolRestoresValueSources(harness),
+        "ItemsView_Parking_BoundRowsAndEviction" => new ItemsViewParkingFixtures.BoundRowsAndEviction(harness),
+        "ItemsView_Parking_PendingBringThenKeyedReset" => new ItemsViewParkingFixtures.PendingBringThenKeyedReset(harness),
+        "ItemsView_Parking_VariableHeightReset" => new ItemsViewParkingFixtures.PendingBringThenKeyedReset(harness, variableHeight: true),
         "EFR_Factory_RefreshRealizedItems_SyncsLastElementByControl" => new ElementFactoryRecyclingFixtures.Factory_RefreshRealizedItems_SyncsLastElementByControl(harness),
         "EFR_LazyStack_Unmount_CleansUpAllRecycledRowComponents" => new ElementFactoryRecyclingFixtures.LazyStack_Unmount_CleansUpAllRecycledRowComponents(harness),
         "EFR_Factory_KeyChangeRecycle_ResetsRowComponentState" => new ElementFactoryRecyclingFixtures.Factory_KeyChangeRecycle_ResetsRowComponentState(harness),
@@ -3647,3 +3647,7 @@ internal static class SelfTestFixtureRegistry
         _ => null,
     };
 }
+
+
+
+

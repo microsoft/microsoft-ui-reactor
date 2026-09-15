@@ -7,9 +7,13 @@ using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
-// Workaround regression for https://github.com/microsoft/microsoft-ui-xaml/issues/11865.
-internal static class ItemsViewAnchorWorkaroundFixtures
+internal static class ItemsViewParkingFixtures
 {
+    private static UIElement? ParkingContent(WinUI.ItemContainer row) =>
+        Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(row) > 0
+            ? Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(row, 0) as UIElement
+            : row.Child;
+
     private static ElementFactory<int> CreateFactory(Func<int, Element> row) =>
         new(Enumerable.Range(0, 80).ToArray(), (i, _) => row(i),
             new Reconciler(), requestRerender: static () => { }, pool: null);
@@ -18,76 +22,49 @@ internal static class ItemsViewAnchorWorkaroundFixtures
     {
         public override async Task RunAsync()
         {
-            foreach (var kind in new[] { "Default", "Local", "Style", "BoundVisibility", "Transition" })
+            foreach (var kind in new[] { "Default", "Local", "Style" })
             {
-                var source = new WinUI.Border { Visibility = Visibility.Visible };
-                var opacityTransition = new ScalarTransition { Duration = TimeSpan.FromSeconds(1) };
-                var style = new Style(typeof(WinUI.ItemContainer));
-                style.Setters.Add(new Setter(UIElement.OpacityProperty, 0.6));
-                style.Setters.Add(new Setter(Control.IsEnabledProperty, false));
-                var factory = CreateFactory(i => ItemContainer(Button($"Row {i}", () => { }))
-                    .Set(row =>
-                    {
-                        if (kind == "Local")
-                        {
-                            row.Opacity = 0.4;
-                            row.IsEnabled = false;
-                            row.Visibility = Visibility.Collapsed;
-                        }
-                        else if (kind == "Style")
-                        {
-                            row.Style = style;
-                        }
-                        else if (kind == "BoundVisibility")
-                        {
-                            row.SetBinding(UIElement.VisibilityProperty, new Binding
-                            {
-                                Source = source,
-                                Path = new PropertyPath(nameof(UIElement.Visibility)),
-                                Mode = BindingMode.OneWay,
-                            });
-                        }
-                        else if (kind == "Transition")
-                        {
-                            row.OpacityTransition = opacityTransition;
-                        }
-                    }));
+                var factory = CreateFactory(i => ItemContainer(TextBlock($"Row {i}")));
                 var bridge = (IElementFactory)factory;
                 var row = (WinUI.ItemContainer)bridge.GetElement(new ElementFactoryGetArgs { Data = 0 });
                 H.SetContent(row);
                 await Harness.Render();
-                var opacity = row.ReadLocalValue(UIElement.OpacityProperty);
-                var enabled = row.ReadLocalValue(Control.IsEnabledProperty);
-                var visibility = row.ReadLocalValue(UIElement.VisibilityProperty);
-                var transition = row.OpacityTransition;
-                var effectiveOpacity = row.Opacity;
-                var effectiveEnabled = row.IsEnabled;
-                var child = (WinUI.Button)row.Child;
+                var content = (FrameworkElement)ParkingContent(row)!;
+                if (kind == "Local")
+                    content.Visibility = Visibility.Collapsed;
+                else if (kind == "Style")
+                {
+                    var style = new Style(typeof(FrameworkElement));
+                    style.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Collapsed));
+                    content.Style = style;
+                }
+                await Harness.Render();
+                var properties = new[]
+                {
+                    UIElement.VisibilityProperty, UIElement.OpacityProperty,
+                    Control.IsEnabledProperty, UIElement.IsHitTestVisibleProperty, Control.IsTabStopProperty,
+                };
+                var outerValues = properties.Select(row.ReadLocalValue).ToArray();
+                var transition = new ScalarTransition { Duration = TimeSpan.FromSeconds(1) };
+                row.OpacityTransition = transition;
+                var contentVisibility = content.ReadLocalValue(UIElement.VisibilityProperty);
+                var effectiveVisibility = content.Visibility;
 
                 bridge.RecycleElement(new ElementFactoryRecycleArgs { Element = row });
-                H.Check($"AnchorPark_{kind}_KeepsVisibilitySource",
-                    Equals(visibility, row.ReadLocalValue(UIElement.VisibilityProperty)));
-                H.Check($"AnchorPark_{kind}_HiddenAndDisabled", row.Opacity == 0 && !row.IsEnabled);
-                H.Check($"AnchorPark_{kind}_CannotFadeWhileParked", row.OpacityTransition is null);
-                H.Check($"AnchorPark_{kind}_ChildCannotFocus", !child.Focus(FocusState.Programmatic));
-                H.Check($"AnchorPark_{kind}_Pooled", factory.DebugRecyclePoolCount == 1);
+                H.Check($"Parking_{kind}_ContentCollapsed", content.Visibility == Visibility.Collapsed);
+                H.Check($"Parking_{kind}_OuterPropertiesUntouched",
+                    properties.Select(row.ReadLocalValue).SequenceEqual(outerValues)
+                    && Equals(transition, row.OpacityTransition));
+                H.Check($"Parking_{kind}_Pooled", factory.DebugRecyclePoolCount == 1);
 
                 var reused = bridge.GetElement(new ElementFactoryGetArgs { Data = 0 });
-                H.Check($"AnchorPark_{kind}_ReusesContainer", ReferenceEquals(row, reused));
-                H.Check($"AnchorPark_{kind}_RestoresOpacitySource",
-                    Equals(opacity, row.ReadLocalValue(UIElement.OpacityProperty)));
-                H.Check($"AnchorPark_{kind}_RestoresEnabledSource",
-                    Equals(enabled, row.ReadLocalValue(Control.IsEnabledProperty)));
-                H.Check($"AnchorPark_{kind}_RestoresTransitionSource",
-                    Equals(transition, row.OpacityTransition));
-                H.Check($"AnchorPark_{kind}_RestoresEffectiveValues",
-                    row.Opacity == effectiveOpacity && row.IsEnabled == effectiveEnabled);
-                if (kind == "BoundVisibility")
-                {
-                    source.Visibility = Visibility.Collapsed;
-                    await Harness.Render();
-                    H.Check("AnchorPark_VisibilityBindingStillLive", row.Visibility == Visibility.Collapsed);
-                }
+                H.Check($"Parking_{kind}_ReusesContainer", ReferenceEquals(row, reused));
+                H.Check($"Parking_{kind}_RestoresVisibilitySource",
+                    Equals(contentVisibility, content.ReadLocalValue(UIElement.VisibilityProperty))
+                    && content.Visibility == effectiveVisibility);
+                H.Check($"Parking_{kind}_ReuseLeavesOuterPropertiesUntouched",
+                    properties.Select(row.ReadLocalValue).SequenceEqual(outerValues)
+                    && Equals(transition, row.OpacityTransition));
                 H.SetContent(null);
             }
         }
@@ -95,30 +72,65 @@ internal static class ItemsViewAnchorWorkaroundFixtures
 
     internal class BoundRowsAndEviction(Harness h) : SelfTestFixtureBase(h)
     {
-        public override Task RunAsync()
+        public override async Task RunAsync()
         {
-            foreach (var property in new[] { UIElement.OpacityProperty, Control.IsEnabledProperty })
+            foreach (var (property, path) in new[]
+            {
+                (UIElement.VisibilityProperty, nameof(UIElement.Visibility)),
+                (UIElement.OpacityProperty, nameof(UIElement.Opacity)),
+                (Control.IsEnabledProperty, nameof(Control.IsEnabled)),
+                (UIElement.IsHitTestVisibleProperty, nameof(UIElement.IsHitTestVisible)),
+                (Control.IsTabStopProperty, nameof(Control.IsTabStop)),
+            })
             {
                 var source = new WinUI.Button { Opacity = 0.7, IsEnabled = true };
                 var factory = CreateFactory(i => ItemContainer(TextBlock($"Row {i}"))
                     .Set(row => row.SetBinding(property, new Binding
                     {
                         Source = source,
-                        Path = new PropertyPath(property == UIElement.OpacityProperty
-                            ? nameof(UIElement.Opacity) : nameof(Control.IsEnabled)),
+                        Path = new PropertyPath(path),
                     })));
                 var bridge = (IElementFactory)factory;
                 var row = (WinUI.ItemContainer)bridge.GetElement(new ElementFactoryGetArgs { Data = 0 });
                 H.Check("AnchorRetire_HasBinding",
                     !ReferenceEquals(row.ReadLocalValue(property), DependencyProperty.UnsetValue)
-                    && row.ReadLocalValue(property) is not double and not bool);
+                    && row.ReadLocalValue(property) is not double and not bool and not Visibility);
+                var binding = row.ReadLocalValue(property);
                 bridge.RecycleElement(new ElementFactoryRecycleArgs { Element = row });
-                H.Check("AnchorRetire_NotPooled", factory.DebugRecyclePoolCount == 0);
-                H.Check("AnchorRetire_Untracked", !factory.DebugTryGetLastElementByControl(row, out _));
-                H.Check("AnchorRetire_VisibleButHiddenAndDisabled",
-                    row.Visibility == Visibility.Visible && row.Opacity == 0 && !row.IsEnabled);
-                H.Check("AnchorRetire_NextRealizationIsFresh",
+                H.Check("AnchorBound_UnchangedBindingAllowsPooling", factory.DebugRecyclePoolCount == 1);
+                H.Check("AnchorBound_PooledRowStaysTracked", factory.DebugTryGetLastElementByControl(row, out _));
+                H.Check("AnchorBound_OuterVisibleAndContentCollapsed",
+                    row.Visibility == Visibility.Visible
+                    && ParkingContent(row)?.Visibility == Visibility.Collapsed);
+                H.Check("AnchorBound_UnchangedBindingPreserved", Equals(binding, row.ReadLocalValue(property)));
+                H.Check("AnchorBound_PooledRowReused",
+                    ReferenceEquals(row, bridge.GetElement(new ElementFactoryGetArgs { Data = 0 })));
+            }
+
+            foreach (var templated in new[] { false, true })
+            {
+                var source = new WinUI.Border { Visibility = Visibility.Visible };
+                var factory = CreateFactory(i => ItemContainer(TextBlock($"Row {i}")));
+                var bridge = (IElementFactory)factory;
+                var row = (WinUI.ItemContainer)bridge.GetElement(new ElementFactoryGetArgs { Data = 0 });
+                if (templated)
+                {
+                    H.SetContent(row);
+                    await Harness.Render();
+                }
+                var target = (FrameworkElement)ParkingContent(row)!;
+                target.SetBinding(UIElement.VisibilityProperty, new Binding
+                {
+                    Source = source,
+                    Path = new PropertyPath(nameof(UIElement.Visibility)),
+                });
+                bridge.RecycleElement(new ElementFactoryRecycleArgs { Element = row });
+                H.Check($"ParkingBound_{templated}_Retired", factory.DebugRecyclePoolCount == 0
+                    && !factory.DebugTryGetLastElementByControl(row, out _));
+                H.Check($"ParkingBound_{templated}_Collapsed", target.Visibility == Visibility.Collapsed);
+                H.Check($"ParkingBound_{templated}_NextRealizationFresh",
                     !ReferenceEquals(row, bridge.GetElement(new ElementFactoryGetArgs { Data = 0 })));
+                H.SetContent(null);
             }
 
             var evictionFactory = CreateFactory(i => ItemContainer(TextBlock($"Row {i}")).WithKey($"row:{i}"));
@@ -134,8 +146,8 @@ internal static class ItemsViewAnchorWorkaroundFixtures
             H.Check("AnchorEviction_FirstRetired",
                 first is not null && !evictionFactory.DebugTryGetLastElementByControl(first, out _));
             H.Check("AnchorEviction_StillVisibilityValidAndHidden",
-                first is { Visibility: Visibility.Visible, Opacity: 0, IsEnabled: false });
-            return Task.CompletedTask;
+                first is { Visibility: Visibility.Visible }
+                && ParkingContent(first)?.Visibility == Visibility.Collapsed);
         }
     }
 
@@ -175,21 +187,21 @@ internal static class ItemsViewAnchorWorkaroundFixtures
             var scroll = H.FindControl<WinUI.ScrollView>(_ => true)
                 ?? throw new InvalidOperationException("ScrollView was not mounted.");
             var observedAnchors = 0;
-            var retiredAnchors = 0;
+            var recycledAnchors = 0;
+            var recycledTargets = 0;
             void ObserveAnchor(WinUI.ScrollView sender, ScrollingAnchorRequestedEventArgs args)
             {
                 observedAnchors++;
                 if (args.AnchorElement is WinUI.ItemContainer anchor
-                    && Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(anchor) is WinUI.ItemsRepeater owner
-                    && owner.GetElementIndex(anchor) < 0)
-                    retiredAnchors++;
+                    && ReferenceEquals(anchor.Parent, repeater) && repeater.GetElementIndex(anchor) < 0)
+                    recycledAnchors++;
             }
             var options = new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 1 };
             var scrollOptions = new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore);
 
             try
             {
-                for (var cycle = 0; cycle < 12; cycle++)
+                for (var cycle = 0; cycle < (variableHeight ? 24 : 12); cycle++)
                 {
                     var nextSession = 1 - renderedSession;
                     view.StartBringItemIntoView(76, options);
@@ -204,10 +216,12 @@ internal static class ItemsViewAnchorWorkaroundFixtures
                         scroll.AnchorRequested += ObserveAnchor;
                     H.Check($"AnchorReset_{cycle}_OldTargetNotCollapsed",
                         oldTail.Visibility == Visibility.Visible);
-                    H.Check($"AnchorReset_{cycle}_ClearedRowsCannotPaintOrReceiveInput",
+                    if (repeater.GetElementIndex(oldTail) < 0)
+                        recycledTargets++;
+                    H.Check($"AnchorReset_{cycle}_ClearedContentCollapsed",
                         H.FindAllControls<WinUI.ItemContainer>(_ => true)
                             .Where(row => ReferenceEquals(row.Parent, repeater) && repeater.GetElementIndex(row) < 0)
-                            .All(row => row.Opacity == 0 && !row.IsEnabled));
+                            .All(row => ParkingContent(row)?.Visibility == Visibility.Collapsed));
 
                     scroll.ScrollTo(0, scroll.ScrollableHeight, scrollOptions);
                     // Fixed heights isolate exact tail positioning from WinUI's
@@ -234,7 +248,8 @@ internal static class ItemsViewAnchorWorkaroundFixtures
                 scroll.AnchorRequested -= ObserveAnchor;
             }
             H.Check("AnchorReset_ObservedNativeAnchorRequests", observedAnchors > 0);
-            H.Check("AnchorReset_NoRecycledAnchorEscapesGuard", retiredAnchors == 0);
+            H.Check("AnchorReset_ExercisedRecycledBringTargets", recycledTargets > 0);
+            H.Check("AnchorReset_OnlyRealizedRowsSelectedAsAnchors", recycledAnchors == 0);
         }
     }
 }
