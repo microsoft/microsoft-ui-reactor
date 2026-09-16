@@ -170,7 +170,7 @@ public UIElement GetElement(ElementFactoryGetArgs args)
         // Visible: an in-place diff whose Visibility modifier is unchanged
         // writes nothing, so forcing Visible would silently un-collapse a
         // row the author asked to hide.
-        RestoreParkedVisibility(reused, parkedVisibility);
+        RestoreParkedVisibility(parkedVisibility);
         var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
         if (replacement is not null && !ReferenceEquals(replacement, reused))
         {
@@ -198,7 +198,7 @@ public UIElement GetElement(ElementFactoryGetArgs args)
             else
             {
                 // Nothing can install `replacement` into `reused`. Retire `reused`
-                // — park it collapsed with its Reactor state detached — rather than
+                // — park it hidden with its Reactor state detached — rather than
                 // leaving a live ghost row painted over the list. Do NOT return it to
                 // the pool: it was unmounted inside Reconcile, so its tracked Element
                 // no longer describes it.
