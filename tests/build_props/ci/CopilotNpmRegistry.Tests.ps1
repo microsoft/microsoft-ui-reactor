@@ -357,6 +357,19 @@ try {
     $wsOverride = New-NpmRc -Name 'whitespace-override' -Lines @("registry=$proxy", 'registry=   ')
     Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $wsOverride }) `
         'a later whitespace-only registry= line does not override the mirror'
+
+    # The resolver accepts anything Uri.TryCreate does, so an apostrophe in the
+    # URL path is legal. The path group allows one inside the value but not at
+    # its end, which is what keeps a closing quote distinguishable from path data.
+    $apostrophePath = New-NpmRc -Name 'apostrophe-in-url' -Lines @("registry=https://packagefeedproxy.microsoft.io/npm/o'clock/")
+    Assert-Equal "https://packagefeedproxy.microsoft.io/npm/o'clock/" `
+        (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $apostrophePath }) `
+        'an apostrophe inside the registry URL path is preserved'
+
+    $bareSlash = New-NpmRc -Name 'bare-slash' -Lines @('registry=https://packagefeedproxy.microsoft.io/')
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/' `
+        (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $bareSlash }) `
+        'a bare-slash path is accepted'
     Assert-Equal (Join-Path $env:USERPROFILE '.npmrc') `
         (Invoke-ProbeProperty -Property 'USERCONFIG' `
         -Environment @{ NPM_CONFIG_USERCONFIG = '   ' }) `
@@ -473,6 +486,8 @@ try {
         'blank then proxy'        = @('registry=', "registry=$proxy")
         'zero-padded port'        = @('registry=https://packagefeedproxy.microsoft.io:00080/npm/')
         'padded port over range'  = @('registry=https://packagefeedproxy.microsoft.io:065536/npm/')
+        'apostrophe in url path'  = @("registry=https://packagefeedproxy.microsoft.io/npm/o'clock/")
+        'bare slash path'         = @('registry=https://packagefeedproxy.microsoft.io/')
         'highest valid port'      = @('registry=https://packagefeedproxy.microsoft.io:65535/npm/')
         'bare lookalike host'     = @('registry=https://packagefeedproxy.microsoft.io.evil.example')
         'plaintext http'          = @('registry=http://packagefeedproxy.microsoft.io/npm/')

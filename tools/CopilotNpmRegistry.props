@@ -85,6 +85,14 @@
         every anchored match silently fails on a real file.
       * `\x27` is the apostrophe. Written literally it would terminate the
         single-quoted MSBuild property-function argument.
+      * The .npmrc path group is `(?:/(?:[^\s?#"]*[^\s?#"\x27])?)?` — an
+        apostrophe is allowed INSIDE the path but the value may not END on one.
+        That is what keeps quote-stripping unambiguous without rejecting a legal
+        URL: in `registry='https://…/npm/'` the trailing `'` is the closing quote
+        and must fall to the lookahead, while in
+        `registry=https://…/npm/o'clock/` the apostrophe is path data and is
+        kept. Excluding apostrophes outright was simpler but diverged from the
+        resolver, which accepts anything Uri.TryCreate does.
       * The trailing `(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=[ \t]*\S)` is what
         implements last-assignment-wins: the match only succeeds when no LATER
         `registry=` line carries a value. The `\S` matters — the resolver's line
@@ -126,7 +134,7 @@
     <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY.Trim()), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
     <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == ''
                                       and '$(NPM_CONFIG_REGISTRY.Trim())' == ''
-                                      and $([System.IO.File]::Exists('$(_ReactorNpmUserConfig)'))">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*(?i:registry)[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#"\x27]*)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=[ \t]*\S)'))</CopilotNpmRegistryUrl>
+                                      and $([System.IO.File]::Exists('$(_ReactorNpmUserConfig)'))">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*(?i:registry)[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/(?:[^\s?#"]*[^\s?#"\x27])?)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=[ \t]*\S)'))</CopilotNpmRegistryUrl>
 
   </PropertyGroup>
 
