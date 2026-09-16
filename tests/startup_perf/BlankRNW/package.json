@@ -10,7 +10,7 @@
     "start": "react-native start"
   },
   "dependencies": {
-    "react": "19.1.1",
+    "react": "19.3.0",
     "react-native": "0.82.0"
   },
   "devDependencies": {
@@ -22,7 +22,7 @@
     "@react-native/eslint-config": "0.82.0",
     "@react-native/metro-config": "0.82.0",
     "@react-native/typescript-config": "0.82.0",
-    "@types/react": "^19.1.1",
+    "@types/react": "^19.3.0",
     "eslint": "^8.19.0",
     "prettier": "2.8.8",
     "react-native-windows": "1.0.0",
