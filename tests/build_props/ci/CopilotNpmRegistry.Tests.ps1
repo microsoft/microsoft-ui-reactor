@@ -266,6 +266,27 @@ try {
     Assert-Equal '' (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:443.evil.example/npm/' }) `
         'a lookalike host after a port-shaped segment is rejected'
 
+    # Uri.TryCreate rejects a port above 65535, so the bootstrap resolver takes the
+    # no-mirror path. An unbounded \d+ here would instead hand the SDK a URL that
+    # bootstrap refused.
+    Assert-Equal 'https://packagefeedproxy.microsoft.io:65535/npm/' `
+        (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:65535/npm/' }) `
+        'the highest valid port is accepted'
+
+    Assert-Equal '' (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:65536/npm/' }) `
+        'a port above the valid range is rejected'
+
+    # --- Whitespace is 'unset', matching [string]::IsNullOrWhiteSpace in the resolver. ---
+    # Treating an all-whitespace NPM_CONFIG_REGISTRY as set would skip the .npmrc
+    # entirely and silently leave the developer on the blocked public registry.
+    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = '   '; NPM_CONFIG_USERCONFIG = $proxyOnly }) `
+        'an all-whitespace NPM_CONFIG_REGISTRY falls through to the user config'
+
+    Assert-Equal (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.npmrc') `
+        (Invoke-ProbeProperty -Property 'USERCONFIG' `
+        -Environment @{ NPM_CONFIG_USERCONFIG = '   ' }) `
+        'an all-whitespace NPM_CONFIG_USERCONFIG falls back to the default path'
+
     # --- The default ~/.npmrc fallback path. ---
     # Every case above redirects NPM_CONFIG_USERCONFIG, so the fallback branch
     # would keep passing if it were mistyped. Assert the resolved path directly:
@@ -366,6 +387,8 @@ try {
         'mixed-case host'         = @('registry=HTTPS://PACKAGEFEEDPROXY.MICROSOFT.IO/npm')
         'explicit port'           = @('registry=https://packagefeedproxy.microsoft.io:443/npm/')
         'port-shaped userinfo'    = @('registry=https://packagefeedproxy.microsoft.io:443@evil.example/npm/')
+        'port above range'        = @('registry=https://packagefeedproxy.microsoft.io:65536/npm/')
+        'highest valid port'      = @('registry=https://packagefeedproxy.microsoft.io:65535/npm/')
         'bare lookalike host'     = @('registry=https://packagefeedproxy.microsoft.io.evil.example')
         'plaintext http'          = @('registry=http://packagefeedproxy.microsoft.io/npm/')
         'indented'                = @("  registry=$proxy")

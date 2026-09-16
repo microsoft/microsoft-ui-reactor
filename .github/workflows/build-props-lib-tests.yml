@@ -18,12 +18,20 @@ on:
   push:
     paths:
       - 'tools/CopilotNpmRegistry.props'
+      # The suite's differential corpus dot-sources this resolver and requires
+      # the props to agree with it, so a change there can invalidate the claimed
+      # parity while this job stays skipped.
+      - 'tools/BootstrapFeedResolver.ps1'
       - 'Directory.Build.props'
       - 'tests/build_props/ci/**'
       - '.github/workflows/build-props-lib-tests.yml'
   pull_request:
     paths:
       - 'tools/CopilotNpmRegistry.props'
+      # The suite's differential corpus dot-sources this resolver and requires
+      # the props to agree with it, so a change there can invalidate the claimed
+      # parity while this job stays skipped.
+      - 'tools/BootstrapFeedResolver.ps1'
       - 'Directory.Build.props'
       - 'tests/build_props/ci/**'
       - '.github/workflows/build-props-lib-tests.yml'

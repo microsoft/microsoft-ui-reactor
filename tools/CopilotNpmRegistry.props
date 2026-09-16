@@ -33,7 +33,11 @@
         short-circuit Resolve-ReactorNpmRegistry performs. An NPM_CONFIG_REGISTRY
         naming some other registry therefore yields no override rather than
         being quietly overruled by a stale line in ~/.npmrc.
-      * The user config path honors NPM_CONFIG_USERCONFIG, else ~/.npmrc.
+      * The user config path honors NPM_CONFIG_USERCONFIG, else ~/.npmrc. Both
+        env vars are compared after .Trim(), because the bootstrap resolver gates
+        on [string]::IsNullOrWhiteSpace: an all-whitespace NPM_CONFIG_REGISTRY
+        means "unset" there, and treating it as set here would skip the .npmrc
+        and silently leave the developer on the blocked public registry.
       * Within the .npmrc the LAST `registry=` assignment wins, because that is
         the one npm itself would use. Selecting the first *proxy* line instead
         would keep redirecting to a mirror a developer had already overridden by
@@ -95,13 +99,13 @@
                             and '$(CopilotCliBinaryPath)' == ''
                             and '$(CopilotSkipCliDownload)' != 'true'">
 
-    <_ReactorNpmUserConfig Condition="'$(NPM_CONFIG_USERCONFIG)' != ''">$(NPM_CONFIG_USERCONFIG)</_ReactorNpmUserConfig>
+    <_ReactorNpmUserConfig Condition="'$(NPM_CONFIG_USERCONFIG.Trim())' != ''">$(NPM_CONFIG_USERCONFIG)</_ReactorNpmUserConfig>
     <_ReactorNpmUserConfig Condition="'$(_ReactorNpmUserConfig)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(SpecialFolder.UserProfile)), '.npmrc'))</_ReactorNpmUserConfig>
 
-    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::\d+)?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
+    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
     <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == ''
-                                      and '$(NPM_CONFIG_REGISTRY)' == ''
-                                      and Exists('$(_ReactorNpmUserConfig)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*registry[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::\d+)?(?:/[^\s?#"\x27]*)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*registry[ \t]*=)'))</CopilotNpmRegistryUrl>
+                                      and '$(NPM_CONFIG_REGISTRY.Trim())' == ''
+                                      and Exists('$(_ReactorNpmUserConfig)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*registry[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#"\x27]*)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*registry[ \t]*=)'))</CopilotNpmRegistryUrl>
 
   </PropertyGroup>
 
