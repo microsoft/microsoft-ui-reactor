@@ -382,6 +382,25 @@ try {
         (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $trailingQuote }) `
         'an unquoted value ending in a quote character is trimmed, matching the resolver'
 
+    # --- Contract pin on the SDK this props steers. ---
+    # Everything above tests OUR parser. None of it would notice GitHub.Copilot.SDK
+    # renaming or dropping CopilotNpmRegistryUrl, which is the property the whole
+    # file exists to set -- the ordinary CI matrix sets CI=true, making the props
+    # inert, so a silent contract break would ship. Reading the SDK's own targets
+    # here would mean a package restore and a reachable feed, which would cost this
+    # suite its hermeticity, so instead the reviewed version is pinned: a bump fails
+    # this assertion and the workflow's path filter guarantees the job runs for it.
+    # On failure, re-read build/GitHub.Copilot.SDK.targets in the new package,
+    # confirm CopilotNpmRegistryUrl / CopilotSkipCliDownload / CopilotCliBinaryPath
+    # still behave as tools/CopilotNpmRegistry.props assumes, then bump the value.
+    $reviewedSdkVersion = '1.0.11'
+    $packagesProps = Join-Path $repoRoot 'Directory.Packages.props'
+    $sdkPinned = [regex]::Match(
+        [IO.File]::ReadAllText($packagesProps),
+        '<PackageVersion\s+Include="GitHub\.Copilot\.SDK"\s+Version="(?<v>[^"]+)"').Groups['v'].Value
+    Assert-Equal $reviewedSdkVersion $sdkPinned `
+        'the GitHub.Copilot.SDK version whose CopilotNpmRegistryUrl contract was reviewed is still the pinned one'
+
     # The resolver only overwrites on a line whose value starts non-whitespace, so
     # a trailing valueless registry= does not clear an earlier mirror.
     $blankOverride = New-NpmRc -Name 'blank-override' -Lines @("registry=$proxy", 'registry=')

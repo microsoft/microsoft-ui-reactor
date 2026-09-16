@@ -25,6 +25,11 @@ on:
       # parity while this job stays skipped.
       - 'tools/BootstrapFeedResolver.ps1'
       - 'Directory.Build.props'
+      # A GitHub.Copilot.SDK version bump can change or drop the
+      # CopilotNpmRegistryUrl contract this props depends on, and no other job
+      # would notice: the ordinary matrix sets CI=true, which makes the props
+      # inert. The suite pins the reviewed SDK version so a bump fails here.
+      - 'Directory.Packages.props'
       - 'tests/build_props/ci/**'
       - '.github/workflows/build-props-lib-tests.yml'
   pull_request:
@@ -35,6 +40,11 @@ on:
       # parity while this job stays skipped.
       - 'tools/BootstrapFeedResolver.ps1'
       - 'Directory.Build.props'
+      # A GitHub.Copilot.SDK version bump can change or drop the
+      # CopilotNpmRegistryUrl contract this props depends on, and no other job
+      # would notice: the ordinary matrix sets CI=true, which makes the props
+      # inert. The suite pins the reviewed SDK version so a bump fails here.
+      - 'Directory.Packages.props'
       - 'tests/build_props/ci/**'
       - '.github/workflows/build-props-lib-tests.yml'
 
