@@ -1,8 +1,0 @@
-<!--
-  Empty counterpart to Directory.Build.props in this folder. See the comment
-  there: it stops MSBuild's upward search so that the vcxproj node-gyp
-  generates under node_modules/better-sqlite3 does not inherit Reactor's
-  repo-root C# build.
--->
-<Project>
-</Project>

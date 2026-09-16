@@ -202,3 +202,20 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@babel/core"
         update-types: ["version-update:semver-major"]
+      # better-sqlite3 13 cannot be installed on a stock Windows machine, and
+      # this was proven by CI rather than argued. v11 declares
+      # `install: prebuild-install || node-gyp rebuild`, so it downloads a
+      # prebuilt binary and never invokes node-gyp. v13 declares no install
+      # script, so npm falls back to its implicit `node-gyp rebuild` for the
+      # package's binding.gyp. v13 *does* ship prebuilds and its binding.gyp
+      # sets every target to `type: none` when one matches the host -- but
+      # node-gyp evaluates binding.gyp only after its `configure` step, and
+      # configure needs a Visual Studio it can detect. On GitHub's
+      # windows-latest runner there is none, so `npm ci` dies at
+      # "find VS ... Could not find any Visual Studio installation to use"
+      # before the prebuild short-circuit is ever reached. Measured on this PR:
+      # the `samples/apps/headtrax/service (windows-latest)` job failed exactly
+      # that way with v13 and passes with v11. Security patches on 11.x still
+      # flow through.
+      - dependency-name: "better-sqlite3"
+        update-types: ["version-update:semver-major"]

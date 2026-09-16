@@ -117,16 +117,13 @@ jobs:
       matrix:
         project: ${{ fromJSON(needs.discover.outputs.projects) }}
         # Linux alone is structurally blind to a whole class of breakage here,
-        # and this repo is Windows-first. Measured case: better-sqlite3 13
-        # keeps a binding.gyp, so npm's implicit `node-gyp rebuild` runs on
-        # install. On Windows that generates build/binding.sln inside
-        # node_modules and hands it to MSBuild, which walks up for
-        # Directory.Build.props, finds the repo-root one, and tries to build
-        # src/Reactor.Analyzers -- taking `npm ci` down with it. There is no
-        # MSBuild on the Linux runner, so an ubuntu-only matrix reported green
-        # while the HeadTrax sample could not be installed by any contributor.
-        # The fix (empty Directory.Build.props/.targets in that service folder)
-        # is only exercised here.
+        # and this repo is Windows-first. This matrix earned itself
+        # immediately: the better-sqlite3 11 -> 13 bump passed every
+        # ubuntu-latest job and failed windows-latest outright, because v13
+        # drops the prebuild-install script and npm's implicit `node-gyp
+        # rebuild` then needs a Visual Studio the runner does not have. An
+        # ubuntu-only matrix would have reported green while shipping a sample
+        # no Windows contributor could install.
         os: [ubuntu-latest, windows-latest]
     steps:
       # persist-credentials: false — `npm ci` runs lifecycle scripts from
@@ -137,21 +134,23 @@ jobs:
         with:
           persist-credentials: false
 
-      # Node 22 because it is the lowest version every npm project here
-      # declares support for, so CI exercises the floor rather than a version
-      # no contributor is required to have. better-sqlite3 13 (HeadTrax) sets
-      # `engines.node: ">=22"`, and the React Native harnesses require
-      # `^22.13.0 || ^24.3.0 || >= 26.0.0` via @react-native/eslint-config.
-      # (This previously read "better-sqlite3 ^11.7.0 cannot build on Node 26";
-      # that constraint left with the v11 -> v13 bump. v13 still runs npm's
-      # implicit `node-gyp rebuild` on install -- the lockfile records
-      # hasInstallScript: true -- but it ships NAPI prebuilds under prebuilds/,
-      # and its binding.gyp sets every target to `type: none` when a prebuild
-      # matches the host, so the normal path compiles nothing. Source build
-      # remains the fallback on a platform with no prebuild.)
+      # Node 22.13.0 exactly, not '22': that is the floor every npm project
+      # here declares, and pinning the floor is what makes the declaration
+      # meaningful. `node-version: '22'` resolves to the newest 22.x, which
+      # would happily run code relying on APIs added after the supported
+      # minimum. The React Native harnesses require `^22.13.0 || ^24.3.0 ||
+      # >= 26.0.0` via @react-native/eslint-config, and the HeadTrax service
+      # requires `^20.19.0 || ^22.13.0 || ^23.5.0`; 22.13.0 is the lowest
+      # version satisfying both.
+      #
+      # (This previously read "better-sqlite3 ^11.7.0 cannot build on Node 26".
+      # The real constraint is narrower: v11 declares
+      # `install: prebuild-install || node-gyp rebuild`, so it fetches a
+      # prebuilt binary for the host ABI -- it publishes ABIs 108/115/127/131,
+      # i.e. Node 18/20/22/23 -- and only compiles when none matches.)
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '22'
+          node-version: '22.13.0'
           cache: npm
           cache-dependency-path: ${{ matrix.project.dir }}/package-lock.json
 
