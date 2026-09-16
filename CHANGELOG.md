@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Localization extraction now converts recognized count-based singular/plural ternaries
+  into ICU plural messages (spec 005 §10.4, #1131).
+- Localization extraction normalizes boolean select arguments to the string keys expected
+  by ICU MessageFormat when rewriting source (spec 005 §10.4, #1131).
+
 ### Deprecated
 
 ### Removed
@@ -40,6 +45,28 @@ Conventions for contributors:
   Parking collapses template content instead of the outer container and restores
   its original visibility value source on reuse. Recycled rows are excluded from
   scroll anchoring, preventing invalid-anchor and layout-cycle failures.
+
+- **Tray icon `Click` and `RightClick` no longer fire twice per interaction
+  (spec 036 §11.4, issue #1180).** Under `NOTIFYICON_VERSION_4` the shell
+  forwards both the legacy mouse message and the version-4 semantic
+  notification for a single physical interaction — a left click arrives as
+  `WM_LBUTTONUP` *and* `NIN_SELECT`, a right click as `WM_RBUTTONUP` *and*
+  `WM_CONTEXTMENU`. `TrayHiddenWindow` routed both arms of each pair, so
+  `ReactorTrayIcon.Click` and `ReactorTrayIcon.RightClick` raised twice per
+  click. Only the version-4 notifications are routed now. `DoubleClick` is
+  unaffected: `WM_LBUTTONDBLCLK` has no version-4 counterpart, so a physical
+  double click still raises `Click` once (from the first click's `NIN_SELECT`)
+  followed by `DoubleClick` once.
+
+- `ShutdownPolicy.Explicit` and `ShutdownPolicy.OnLastSurfaceClosed` now actually keep the process
+  running. Reactor takes ownership of the WinUI dispatcher loop at startup
+  (`Application.DispatcherShutdownMode = OnExplicitShutdown`), so the platform no longer ends the
+  process on last-window-close without consulting `EvaluateShutdownPolicy`. Closing the last window
+  of a tray-backed app used to exit with code 0 as if the policy were `OnPrimaryWindowClosed`.
+  Ownership is unconditional, which also makes the documented issue-#647 guarantee real: under the
+  default policy, closing an auxiliary window that opted out via `ExcludeFromShutdownPolicy` no
+  longer ends the app even when it was the last window on screen. Apps that embed
+  `ReactorHostControl` in their own `Application` are left alone. (spec 036 §6.2, issue #1204)
 
 ### Security
 

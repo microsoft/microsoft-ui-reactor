@@ -899,6 +899,27 @@ exit. Auxiliary windows that opt out of the shutdown policy (such as docking
 tear-off floating windows) are never elected primary, so closing one of them
 never exits the app even when it is the last *visible* window.
 
+Reactor takes ownership of WinUI's `Application.DispatcherShutdownMode` at
+startup, switching the platform to `OnExplicitShutdown`. Otherwise WinUI ends the
+process when the last window closes, without consulting the policy, a tray icon,
+or `ExcludeFromShutdownPolicy`. Ownership is unconditional — it does not vary with
+the policy — so the table above is exhaustive for surface closes: when a window or
+tray icon closes, the policy alone decides. The process can also end two other
+ways, both of which ask WinUI to exit outright rather than letting it decide: a
+startup callback that opens no surface at all exits immediately under
+`OnPrimaryWindowClosed`, and `ReactorApp.Exit()` always works.
+
+Set the policy before `ReactorApp.Run`, or on the UI thread before your startup
+callback returns. A surface close reads it at the moment it happens, so a change
+made any time beforehand counts — but a zero-surface startup is judged the instant
+the callback returns, so a write posted from another thread during startup can
+land too late to be seen. Changing the policy never moves
+`DispatcherShutdownMode`.
+
+Reactor only takes that ownership when it owns the `Application`. A WinUI app that
+embeds `ReactorHostControl` runs its own `Application` and manages its own
+windows, so Reactor leaves its shutdown mode — and its lifetime — alone.
+
 ## Tips
 
 **Memoize specs.** A stable `WindowSpec` avoids unnecessary chrome updates.

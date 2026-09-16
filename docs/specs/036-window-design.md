@@ -526,6 +526,52 @@ The startup callback is allowed to open zero surfaces. `ReactorApp.Run`
 does not require at least one `OpenWindow` or `OpenTrayIcon` call —
 only that the selected `ShutdownPolicy` permits the resulting state.
 
+**Platform ownership (issue #1204).** WinUI quits the thread's
+`DispatcherQueue` event loop when the last XAML window closes unless
+`Application.DispatcherShutdownMode` is `OnExplicitShutdown`, and
+`Application.Start` resets that property to `OnLastWindowClose`. Leaving
+it there makes the platform a second, uncoordinated decision-maker: it
+cannot see `Explicit`, a surviving tray icon, or a window that opted out
+via `ExcludeFromShutdownPolicy`, so it ends processes that this section
+says should keep running.
+
+`OnLaunched` therefore switches the mode to `OnExplicitShutdown` once,
+before any window exists, for **every** policy — not only the two that
+obviously need it. It does so on the launch shapes Reactor drives (the
+`Run(startup)` callback and the legacy `Run<TRoot>` bridge) and
+deliberately not when `ReactorApplication` is constructed directly
+without `ReactorApp.Run`: that host owns its own windows, never reaches
+the zero-surface check, and would be left pumping forever once its
+windows closed.
+
+That unconditional-per-policy ownership is what makes §6.2
+exhaustive, and in particular what makes §6.4's auxiliary-window
+guarantee real: closing a docking tear-off that was never elected primary
+leaves `closedWasPrimary` false, and now nothing else unwinds the loop
+behind Reactor's back. Every exit flows through one of three places —
+`EvaluateShutdownPolicy` on a surface close, the zero-surface check in
+`OnLaunched`, or an explicit `ReactorApp.Exit`. `ReactorWindow`
+subscribes to the native `Window.Closed`, so a user-initiated close is
+observed exactly like an app-initiated one.
+
+Because the mode no longer depends on the policy, `ShutdownPolicy` stays
+a plain store: settable from any thread, with no window in which the
+policy and the platform can disagree. Two moments consult it. A surface
+close reaches `EvaluateShutdownPolicy`, which reads it then, so any
+earlier change counts. Startup is the exception — the zero-surface
+decision runs the instant the launch path finishes, so it sees whatever
+the policy holds at that instant and a write posted from another thread
+during startup can land too late. Both launch paths run that decision
+from a `finally`: once ownership is taken, a startup that throws and is
+marked handled by the app's `OnUnhandledException` would otherwise leave
+the loop pumping with nothing on screen.
+
+Reactor only takes ownership when it owns the `Application` — when
+`Application.Current` is a `ReactorApplication`. A WinUI app that embeds
+`ReactorHostControl` runs its own `Application` and manages its own
+windows, so Reactor does not decide when that process ends and leaves its
+`DispatcherShutdownMode` at whatever the app chose or inherited.
+
 ### 6.3 Per-window teardown
 
 - `Window.Closed` → `ReactorWindow.Closed` event

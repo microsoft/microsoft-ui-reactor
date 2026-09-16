@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Microsoft.UI.Reactor.SelfTests;
@@ -1843,80 +1842,12 @@ public class SelfTestBatch
             .ToArray();
 
     // -- Process runner: async reads + timeout race with kill ------------------
+    //
+    // Lives in HostProcess so the shutdown-policy lifetime probe launches the
+    // Host exactly the way this batch does.
 
     private static (string Stdout, string Stderr, int ExitCode, bool TimedOut) RunProcess(
-        string exe, string args, int timeoutMs)
-    {
-        var psi = new ProcessStartInfo(exe, args)
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
+        string exe, string args, int timeoutMs) => HostProcess.Run(exe, args, timeoutMs);
 
-        using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start process: {exe} {args}");
-
-        // Read both streams concurrently so neither pipe can block the child by
-        // filling its OS buffer.
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        var exitTask = process.WaitForExitAsync();
-        var timeoutTask = Task.Delay(timeoutMs);
-
-        var completed = Task.WhenAny(exitTask, timeoutTask).GetAwaiter().GetResult();
-        var timedOut = completed != exitTask;
-
-        if (timedOut)
-        {
-            try { process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { /* already exited */ }
-            process.WaitForExit();
-        }
-
-        // At this point the process has exited; the stream tasks will complete.
-        var stdout = stdoutTask.GetAwaiter().GetResult();
-        var stderr = stderrTask.GetAwaiter().GetResult();
-
-        return (stdout, stderr, timedOut ? -1 : process.ExitCode, timedOut);
-    }
-
-    private static string FindHostExe()
-    {
-        // Allow callers to point the harness at an AOT-published Host (which
-        // lives under a `publish` directory, not the standard build output)
-        // or any other custom build. This lets the same MSTest harness validate
-        // the AOT binary that the developer is actually trying to ship.
-        var overrideExe = Environment.GetEnvironmentVariable("REACTOR_SELFTEST_HOST_EXE");
-        if (!string.IsNullOrWhiteSpace(overrideExe))
-        {
-            if (!File.Exists(overrideExe))
-                throw new FileNotFoundException(
-                    $"REACTOR_SELFTEST_HOST_EXE points at a path that does not exist: {overrideExe}");
-            return overrideExe;
-        }
-
-        var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.slnx")))
-            dir = Path.GetDirectoryName(dir);
-
-        if (dir == null)
-            throw new DirectoryNotFoundException("Could not find repo root (Reactor.slnx)");
-
-        var platform = RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.X64 => "x64",
-            Architecture.Arm64 => "ARM64",
-            _ => "x64"
-        };
-
-        var exe = Path.Combine(dir, "tests", "Reactor.AppTests.Host", "bin", platform,
-            "Debug", "net10.0-windows10.0.22621.0", "Reactor.AppTests.Host.exe");
-
-        if (!File.Exists(exe))
-            throw new FileNotFoundException($"Host app not built. Expected: {exe}");
-
-        return exe;
-    }
+    private static string FindHostExe() => HostProcess.FindHostExe();
 }
