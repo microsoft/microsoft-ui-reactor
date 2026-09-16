@@ -107,15 +107,27 @@ jobs:
           if [ "$count" -gt 0 ]; then echo "any=true" >> "$GITHUB_OUTPUT"; else echo "any=false" >> "$GITHUB_OUTPUT"; fi
 
   check:
-    name: ${{ matrix.project.dir }}
+    name: ${{ matrix.project.dir }} (${{ matrix.os }})
     needs: discover
     # An empty matrix is an error rather than a skip, so gate the whole job.
     if: needs.discover.outputs.any == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         project: ${{ fromJSON(needs.discover.outputs.projects) }}
+        # Linux alone is structurally blind to a whole class of breakage here,
+        # and this repo is Windows-first. Measured case: better-sqlite3 13
+        # keeps a binding.gyp, so npm's implicit `node-gyp rebuild` runs on
+        # install. On Windows that generates build/binding.sln inside
+        # node_modules and hands it to MSBuild, which walks up for
+        # Directory.Build.props, finds the repo-root one, and tries to build
+        # src/Reactor.Analyzers -- taking `npm ci` down with it. There is no
+        # MSBuild on the Linux runner, so an ubuntu-only matrix reported green
+        # while the HeadTrax sample could not be installed by any contributor.
+        # The fix (empty Directory.Build.props/.targets in that service folder)
+        # is only exercised here.
+        os: [ubuntu-latest, windows-latest]
     steps:
       # persist-credentials: false — `npm ci` runs lifecycle scripts from
       # PR-controlled dependencies, and the project's own scripts run right
@@ -131,8 +143,12 @@ jobs:
       # `engines.node: ">=22"`, and the React Native harnesses require
       # `^22.13.0 || ^24.3.0 || >= 26.0.0` via @react-native/eslint-config.
       # (This previously read "better-sqlite3 ^11.7.0 cannot build on Node 26";
-      # that constraint left with the v11 -> v13 bump. v13 ships NAPI prebuilds
-      # under prebuilds/ and no longer compiles on install.)
+      # that constraint left with the v11 -> v13 bump. v13 still runs npm's
+      # implicit `node-gyp rebuild` on install -- the lockfile records
+      # hasInstallScript: true -- but it ships NAPI prebuilds under prebuilds/,
+      # and its binding.gyp sets every target to `type: none` when a prebuild
+      # matches the host, so the normal path compiles nothing. Source build
+      # remains the fallback on a platform with no prebuild.)
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
@@ -147,6 +163,9 @@ jobs:
 
       - name: Run declared checks
         working-directory: ${{ matrix.project.dir }}
+        # Explicit bash: the Windows runner defaults to pwsh, where
+        # `set -euo pipefail` and the `for` loop below are not valid syntax.
+        shell: bash
         env:
           CHECKS: ${{ matrix.project.checks }}
         run: |
@@ -171,6 +190,8 @@ jobs:
       # about staleness.
       - name: Check committed build output is current
         working-directory: ${{ matrix.project.dir }}
+        # Explicit bash, as above: this script is bash, not pwsh.
+        shell: bash
         run: |
           set -euo pipefail
           stale=0

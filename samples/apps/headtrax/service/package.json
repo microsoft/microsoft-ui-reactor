@@ -20,7 +20,7 @@
     "express": "^4.22.2"
   },
   "engines": {
-    "node": ">=22"
+    "node": "^22.13.0 || ^23.5.0 || >=24.0.0"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.6.0"

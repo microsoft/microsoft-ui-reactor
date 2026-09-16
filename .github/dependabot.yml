@@ -124,13 +124,14 @@ updates:
       - "dependencies"
       - "npm"
     open-pull-requests-limit: 10
-    # Ungrouped, the first run of this entry opened 24 PRs in four minutes — one
-    # per package per directory — which is unreviewable and was the whole
-    # complaint. Grouping is scoped to minor/patch, the bumps that are routine
-    # and safe to read as a batch; a major still gets a dedicated PR, because a
-    # major is exactly where a breaking change hides and where a per-package
-    # diff is worth reading. Dependabot raises one grouped PR per directory, so
-    # each harness stays independently revertable.
+    # Ungrouped, the first run of this entry opened 24 PRs in four minutes —
+    # one per package per directory (#1219-#1242; the /src/vscode-reactor entry
+    # above accounted for a 25th, #1218) — which is unreviewable and was the
+    # whole complaint. Grouping is scoped to minor/patch, the bumps that are
+    # routine and safe to read as a batch; a major still gets a dedicated PR,
+    # because a major is exactly where a breaking change hides and where a
+    # per-package diff is worth reading. Dependabot raises one grouped PR per
+    # directory, so each harness stays independently revertable.
     groups:
       npm-minor-patch:
         patterns:
