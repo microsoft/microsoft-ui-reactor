@@ -36,7 +36,7 @@
     "typescript": "^5.8.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^22.13.0 || ^24.3.0 || >=26.0.0"
   },
   "react-native-windows": {
     "init-windows": {

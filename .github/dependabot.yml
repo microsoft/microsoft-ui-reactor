@@ -151,13 +151,19 @@ updates:
       #                     the peer range and the config format valid.
       #
       #   @babel/preset-env @babel/preset-env@8.0.5 declares
-      #   @babel/runtime    `peer @babel/core@"^8.0.0"`, but
-      #   @babel/core       @react-native/babel-preset@0.82.0 *depends* on
-      #                     `@babel/core@^7.25.2`. Taking Babel 8 for any one of
-      #                     these puts two major Babel cores in one tree and
-      #                     breaks the Metro transform. These three Babel
-      #                     packages move together, with react-native, or not
-      #                     at all.
+      #   @babel/core       `peer @babel/core@"^8.0.0"`, but
+      #                     @react-native/babel-preset@0.82.0 *depends* on
+      #                     `@babel/core@^7.25.2`. Taking preset-env 8 puts two
+      #                     major Babel cores in one tree and breaks the Metro
+      #                     transform, so core is pinned to 7 with it.
+      #
+      #   @babel/runtime    Declares no peer dependencies at all -- it is held
+      #                     for a different reason. It is the helper package
+      #                     that transform-runtime's emitted
+      #                     `@babel/runtime/helpers/*` imports resolve against,
+      #                     so its major must match the Babel core doing the
+      #                     emitting. With core pinned to 7 above, the runtime
+      #                     stays on 7.
       #
       # This is a rule about the *runtime/build* toolchain, not about every
       # package with a react-native-adjacent name. @react-native/eslint-config
@@ -175,13 +181,18 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@babel/core"
         update-types: ["version-update:semver-major"]
-      # better-sqlite3 13 removed `prebuild-install` (v11's install script was
-      # `prebuild-install || node-gyp rebuild`; v13 has no install script, no
-      # optionalDependencies, no `binary` field, and its GitHub release carries
-      # zero prebuilt assets), so `gypfile: true` makes every install compile
-      # SQLite from source. That is what the Node 22 pin in
-      # .github/workflows/node.yml exists to avoid, and it breaks `npm ci` for
-      # any contributor without a C++ toolchain. Security patches on 11.x still
-      # flow through.
+      # better-sqlite3 13 removed the install script that used to reach for a
+      # prebuilt binary: v11 declared `install: prebuild-install || node-gyp
+      # rebuild`, v13 declares no install script at all. It does ship
+      # `prebuilds/<platform>-<arch>.node` inside the npm tarball (win32-x64
+      # and linux-x64 among them) and sets `gypfile: false`, but npm never
+      # consults those prebuilds at install time -- with a `binding.gyp`
+      # present and no install script to short-circuit, npm falls through to
+      # its default `node-gyp rebuild`. Measured on Node 22 / npm 10.9.8:
+      # `npm install better-sqlite3@13.0.3` shells out to `node-gyp rebuild`
+      # and fails outright on a Windows machine whose Visual Studio is newer
+      # than node-gyp 11.5.0 can detect. Turning the HeadTrax sample's install
+      # into a source build is a poor trade for a sample in a Windows-first
+      # repo. Security patches on 11.x still flow through.
       - dependency-name: "better-sqlite3"
         update-types: ["version-update:semver-major"]
