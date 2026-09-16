@@ -134,6 +134,7 @@ function New-NpmRc {
 }
 
 $proxy = 'https://packagefeedproxy.microsoft.io/npm/'
+$proxyTrimmed = $proxy.TrimEnd('/')
 $public = 'https://registry.npmjs.org/'
 
 try {
@@ -149,7 +150,7 @@ try {
 
     # --- The blocked-network path. ---
     $proxyOnly = New-NpmRc -Name 'proxy-only' -Lines @("registry=$proxy")
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $proxyOnly }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $proxyOnly }) `
         'a proxy .npmrc selects the mirror'
 
     # A mirror line AFTER a public one wins, which a "first registry= line wins,
@@ -158,7 +159,7 @@ try {
     # immediately below and resolves to no mirror, because npm lets a later line
     # override an earlier one.
     $publicThenProxy = New-NpmRc -Name 'public-then-proxy' -Lines @("registry=$public", "registry=$proxy")
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $publicThenProxy }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $publicThenProxy }) `
         'the mirror is found when it follows a public registry line'
 
     # ...but a LATER public line overrides it, because that is the registry npm
@@ -178,7 +179,7 @@ try {
         "@scope:registry=$public"
         "registry=$proxy"
     )
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $messy }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $messy }) `
         'quotes and parentheses in .npmrc comments do not break evaluation'
 
     # A commented-out line is not configuration.
@@ -188,16 +189,16 @@ try {
 
     # A path with a space is ordinary on Windows (C:\Users\First Last\).
     $spaced = New-NpmRc -Name 'a path with spaces' -Lines @("registry=$proxy")
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $spaced }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $spaced }) `
         'a user-config path containing spaces is still read'
 
     # npm's ini parser strips surrounding quotes, so these are the same value.
     $dq = New-NpmRc -Name 'double-quoted' -Lines @("registry=`"$proxy`"")
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $dq }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $dq }) `
         'a double-quoted registry value is accepted'
 
     $sq = New-NpmRc -Name 'single-quoted' -Lines @("registry='$proxy'")
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $sq }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $sq }) `
         'a single-quoted registry value is accepted'
 
     # A scoped registry is not the default registry.
@@ -216,7 +217,7 @@ try {
         'a mirror URL carrying a fragment is rejected'
 
     # --- Precedence. ---
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = $proxy; NPM_CONFIG_USERCONFIG = $publicOnly }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = $proxy; NPM_CONFIG_USERCONFIG = $publicOnly }) `
         'NPM_CONFIG_REGISTRY selects the mirror ahead of the user config'
 
     Assert-Equal '' (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = $public; NPM_CONFIG_USERCONFIG = $proxyOnly }) `
@@ -264,7 +265,7 @@ try {
         (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'HTTPS://PACKAGEFEEDPROXY.MICROSOFT.IO/npm' }) `
         'scheme and host are matched case-insensitively'
 
-    Assert-Equal 'https://packagefeedproxy.microsoft.io:443/npm/' `
+    Assert-Equal 'https://packagefeedproxy.microsoft.io:443/npm' `
         (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:443/npm/' }) `
         'an explicit port is accepted'
 
@@ -279,7 +280,7 @@ try {
     # Uri.TryCreate rejects a port above 65535, so the bootstrap resolver takes the
     # no-mirror path. An unbounded \d+ here would instead hand the SDK a URL that
     # bootstrap refused.
-    Assert-Equal 'https://packagefeedproxy.microsoft.io:65535/npm/' `
+    Assert-Equal 'https://packagefeedproxy.microsoft.io:65535/npm' `
         (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:65535/npm/' }) `
         'the highest valid port is accepted'
 
@@ -289,7 +290,7 @@ try {
     # --- Whitespace is 'unset', matching [string]::IsNullOrWhiteSpace in the resolver. ---
     # Treating an all-whitespace NPM_CONFIG_REGISTRY as set would skip the .npmrc
     # entirely and silently leave the developer on the blocked public registry.
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = '   '; NPM_CONFIG_USERCONFIG = $proxyOnly }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = '   '; NPM_CONFIG_USERCONFIG = $proxyOnly }) `
         'an all-whitespace NPM_CONFIG_REGISTRY falls through to the user config'
 
 
@@ -298,11 +299,11 @@ try {
     # honors a Registry= assignment; ignoring it here would leave the developer on
     # the blocked public registry.
     $capitalKey = New-NpmRc -Name 'capital-key' -Lines @("Registry=$proxy")
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $capitalKey }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $capitalKey }) `
         'a capitalised Registry= key is honored'
 
     $upperKey = New-NpmRc -Name 'upper-key' -Lines @("REGISTRY=$proxy")
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $upperKey }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $upperKey }) `
         'an uppercase REGISTRY= key is honored'
 
     # Explicit [Aa] classes, not (?i:...): .NET ignore-case folding is culture
@@ -323,7 +324,7 @@ try {
     }
 
     # Bootstrap trims before validating and returns the trimmed value.
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = "  $proxy  " }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = "  $proxy  " }) `
         'a whitespace-padded NPM_CONFIG_REGISTRY is trimmed, not rejected'
 
     # The default user-config branch, driven for real. $(UserProfile) reads the
@@ -338,7 +339,7 @@ try {
     $redirected = Join-Path $tmp 'redirected-profile'
     New-Item -ItemType Directory -Path $redirected -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $redirected '.npmrc') -Value "registry=$redirectedUrl" -Encoding UTF8
-    Assert-Equal $redirectedUrl (Invoke-Probe -Environment @{ USERPROFILE = $redirected }) `
+    Assert-Equal $redirectedUrl.TrimEnd('/') (Invoke-Probe -Environment @{ USERPROFILE = $redirected }) `
         'the default ~/.npmrc fallback reads USERPROFILE, matching bootstrap'
 
     # A path containing an apostrophe is valid on Windows. MSBuild fixes
@@ -346,7 +347,7 @@ try {
     # apostrophe never participates in parsing -- pinned here because it looks like
     # it should break and has been reported as a defect twice.
     $apostrophe = New-NpmRc -Name "O'Brien dir" -Lines @("registry=$proxy")
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $apostrophe }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $apostrophe }) `
         'a user-config path containing an apostrophe is still read'
 
     # MSBuild's Exists() is true for directories too. If it gated the read, a
@@ -359,7 +360,7 @@ try {
         'a user-config path that is a directory is ignored, not an evaluation error'
 
     # Uri.TryCreate reads :00080 as port 80, so bootstrap selects the mirror.
-    Assert-Equal 'https://packagefeedproxy.microsoft.io:00080/npm/' `
+    Assert-Equal 'https://packagefeedproxy.microsoft.io:00080/npm' `
         (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:00080/npm/' }) `
         'a zero-padded port is accepted'
 
@@ -404,23 +405,23 @@ try {
     # The resolver only overwrites on a line whose value starts non-whitespace, so
     # a trailing valueless registry= does not clear an earlier mirror.
     $blankOverride = New-NpmRc -Name 'blank-override' -Lines @("registry=$proxy", 'registry=')
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $blankOverride }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $blankOverride }) `
         'a later valueless registry= line does not override the mirror'
 
     $wsOverride = New-NpmRc -Name 'whitespace-override' -Lines @("registry=$proxy", 'registry=   ')
-    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $wsOverride }) `
+    Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $wsOverride }) `
         'a later whitespace-only registry= line does not override the mirror'
 
     # The resolver accepts anything Uri.TryCreate does, so an apostrophe in the
     # URL path is legal. The path group allows one inside the value but not at
     # its end, which is what keeps a closing quote distinguishable from path data.
     $apostrophePath = New-NpmRc -Name 'apostrophe-in-url' -Lines @("registry=https://packagefeedproxy.microsoft.io/npm/o'clock/")
-    Assert-Equal "https://packagefeedproxy.microsoft.io/npm/o'clock/" `
+    Assert-Equal "https://packagefeedproxy.microsoft.io/npm/o'clock" `
         (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $apostrophePath }) `
         'an apostrophe inside the registry URL path is preserved'
 
     $bareSlash = New-NpmRc -Name 'bare-slash' -Lines @('registry=https://packagefeedproxy.microsoft.io/')
-    Assert-Equal 'https://packagefeedproxy.microsoft.io/' `
+    Assert-Equal 'https://packagefeedproxy.microsoft.io' `
         (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $bareSlash }) `
         'a bare-slash path is accepted'
     Assert-Equal (Join-Path $redirected '.npmrc') `
@@ -499,7 +500,7 @@ try {
     $savedHarness = $harness
     try {
         $harness = $integration
-        Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $proxyOnly }) `
+        Assert-Equal $proxyTrimmed (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $proxyOnly }) `
             'Directory.Build.props imports the props and resolves the mirror'
         # CI sets CI=true, which Directory.Build.props turns into
         # CopilotSkipCliDownload=true; the mirror must then be left alone.
@@ -565,7 +566,12 @@ try {
         [Environment]::SetEnvironmentVariable('NPM_CONFIG_USERCONFIG', $rc, 'Process')
         $resolved = Resolve-ReactorNpmRegistry
         $expected = if ($resolved) { $resolved.Registry } else { '' }
-        $actual = (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $rc }).TrimEnd('/')
+        # Compared verbatim. This used to TrimEnd('/') the actual value, which
+        # silently normalised away a real difference: the resolver trims trailing
+        # slashes before handing over the URL and the props did not, so the two
+        # entry points fed the SDK two spellings of the same URL and the oracle
+        # could not see it. The props now trims, so the comparison can be exact.
+        $actual = Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $rc }
         Assert-Equal $expected $actual "parity with Resolve-ReactorNpmRegistry: $name"
         if ($expected -eq $actual) { $agreed++ }
         if ($expected -ne '') { $mirrorSelected++ }

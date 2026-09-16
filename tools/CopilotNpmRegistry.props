@@ -156,6 +156,14 @@
                                       and '$(NPM_CONFIG_REGISTRY.Trim())' == ''
                                       and $([System.IO.File]::Exists('$(_ReactorNpmUserConfig)'))">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*["\x27]?)[Hh][Tt][Tt][Pp][Ss]://[Pp][Aa][Cc][Kk][Aa][Gg][Ee][Ff][Ee][Ee][Dd][Pp][Rr][Oo][Xx][Yy]\.[Mm][Ii][Cc][Rr][Oo][Ss][Oo][Ff][Tt]\.[Ii][Oo](?::0*(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:/(?:[^\s?#"]*[^\s?#"\x27])?)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*\S)'))</CopilotNpmRegistryUrl>
 
+    <!-- Normalize exactly as the resolver does before it passes
+         -p:CopilotNpmRegistryUrl, so both entry points hand the SDK an identical
+         value rather than two spellings of the same URL. Safe to hoist: by this
+         point the value has passed the allow-list, so it carries no credentials.
+         The SDK TrimEnd('/')s again before appending the package path, so this is
+         about parity being exact rather than about a broken download URL. -->
+    <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' != ''">$(CopilotNpmRegistryUrl.TrimEnd('/'))</CopilotNpmRegistryUrl>
+
   </PropertyGroup>
 
 </Project>
