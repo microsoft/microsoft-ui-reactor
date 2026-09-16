@@ -366,6 +366,22 @@ try {
     Assert-Equal '' (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:065536/npm/' }) `
         'a zero-padded port above the valid range is still rejected'
 
+    # .NET \d matches every Unicode decimal digit outside ECMAScript mode, so
+    # Arabic-Indic digits satisfied the port grammar while Uri.TryCreate -- and
+    # therefore the resolver -- rejects them. The grammar uses [0-9].
+    $arabicPort = 'https://packagefeedproxy.microsoft.io:' + [char]0x0661 + [char]0x0662 + [char]0x0663 + '/npm/'
+    Assert-Equal '' (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = $arabicPort }) `
+        'a port written in non-ASCII digits is rejected'
+
+    # Refutes a review claim: an UNQUOTED value ending in a quote character is
+    # accepted by the resolver (it Trim()s quotes unconditionally), and the path
+    # group backtracks to leave the trailing quote to the lookahead, so both sides
+    # yield the same trimmed value.
+    $trailingQuote = New-NpmRc -Name 'trailing-quote' -Lines @("registry=https://packagefeedproxy.microsoft.io/npm/foo'")
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm/foo' `
+        (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $trailingQuote }) `
+        'an unquoted value ending in a quote character is trimmed, matching the resolver'
+
     # The resolver only overwrites on a line whose value starts non-whitespace, so
     # a trailing valueless registry= does not clear an earlier mirror.
     $blankOverride = New-NpmRc -Name 'blank-override' -Lines @("registry=$proxy", 'registry=')
@@ -508,6 +524,8 @@ try {
         'padded port over range'  = @('registry=https://packagefeedproxy.microsoft.io:065536/npm/')
         'apostrophe in url path'  = @("registry=https://packagefeedproxy.microsoft.io/npm/o'clock/")
         'bare slash path'         = @('registry=https://packagefeedproxy.microsoft.io/')
+        'trailing apostrophe'     = @("registry=https://packagefeedproxy.microsoft.io/npm/foo'")
+        'trailing double quote'   = @('registry=https://packagefeedproxy.microsoft.io/npm/foo"')
         'highest valid port'      = @('registry=https://packagefeedproxy.microsoft.io:65535/npm/')
         'bare lookalike host'     = @('registry=https://packagefeedproxy.microsoft.io.evil.example')
         'plaintext http'          = @('registry=http://packagefeedproxy.microsoft.io/npm/')

@@ -114,6 +114,11 @@
         pattern is `^\s*registry\s*=\s*(\S.*?)\s*$`, whose capture requires a
         non-whitespace first character, so a trailing valueless `registry=` does
         not overwrite what came before it there either.
+      * Port digits are `[0-9]`, not `\d`. Outside RegexOptions.ECMAScript, .NET
+        `\d` matches every Unicode decimal digit, so a port written in Arabic-Indic
+        digits (`:١٢٣`) satisfied the grammar and was exported as the registry URL
+        while Uri.TryCreate — and therefore the resolver — rejected it, producing a
+        malformed download URL instead of the no-mirror fallback. Measured.
       * The port alternation is bounded to 0-65535 rather than written as `\d+`,
         because Uri.TryCreate rejects :65536 and an unbounded match would hand the
         SDK a URL bootstrap would have refused. The leading `0*` is the same
@@ -146,10 +151,10 @@
     <_ReactorNpmUserConfig Condition="'$(NPM_CONFIG_USERCONFIG.Trim())' != ''">$(NPM_CONFIG_USERCONFIG)</_ReactorNpmUserConfig>
     <_ReactorNpmUserConfig Condition="'$(_ReactorNpmUserConfig)' == '' and '$(UserProfile)' != ''">$([System.IO.Path]::Combine('$(UserProfile)', '.npmrc'))</_ReactorNpmUserConfig>
 
-    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY.Trim()), '^[Hh][Tt][Tt][Pp][Ss]://[Pp][Aa][Cc][Kk][Aa][Gg][Ee][Ff][Ee][Ee][Dd][Pp][Rr][Oo][Xx][Yy]\.[Mm][Ii][Cc][Rr][Oo][Ss][Oo][Ff][Tt]\.[Ii][Oo](?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
+    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY.Trim()), '^[Hh][Tt][Tt][Pp][Ss]://[Pp][Aa][Cc][Kk][Aa][Gg][Ee][Ff][Ee][Ee][Dd][Pp][Rr][Oo][Xx][Yy]\.[Mm][Ii][Cc][Rr][Oo][Ss][Oo][Ff][Tt]\.[Ii][Oo](?::0*(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
     <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == ''
                                       and '$(NPM_CONFIG_REGISTRY.Trim())' == ''
-                                      and $([System.IO.File]::Exists('$(_ReactorNpmUserConfig)'))">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*["\x27]?)[Hh][Tt][Tt][Pp][Ss]://[Pp][Aa][Cc][Kk][Aa][Gg][Ee][Ff][Ee][Ee][Dd][Pp][Rr][Oo][Xx][Yy]\.[Mm][Ii][Cc][Rr][Oo][Ss][Oo][Ff][Tt]\.[Ii][Oo](?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/(?:[^\s?#"]*[^\s?#"\x27])?)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*\S)'))</CopilotNpmRegistryUrl>
+                                      and $([System.IO.File]::Exists('$(_ReactorNpmUserConfig)'))">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*["\x27]?)[Hh][Tt][Tt][Pp][Ss]://[Pp][Aa][Cc][Kk][Aa][Gg][Ee][Ff][Ee][Ee][Dd][Pp][Rr][Oo][Xx][Yy]\.[Mm][Ii][Cc][Rr][Oo][Ss][Oo][Ff][Tt]\.[Ii][Oo](?::0*(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:/(?:[^\s?#"]*[^\s?#"\x27])?)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*\S)'))</CopilotNpmRegistryUrl>
 
   </PropertyGroup>
 
