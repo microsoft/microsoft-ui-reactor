@@ -123,16 +123,41 @@
     In CI we never need the GitHub.Copilot.SDK native CLI (copilot.exe), which the
     SDK's build targets fetch from registry.npmjs.org via an unauthenticated MSBuild
     DownloadFile task. That download can fail in restricted CI environments and cannot
-    use an authenticated package feed. The native binary is only a runtime artifact for
-    the demo-script-tool sample; it is not needed to compile the framework, pack the
-    NuGets, or run unit tests. Deriving the skip from $(CI) is reliable because $(CI)
-    is set as an explicit MSBuild global property by the build pipeline and is honored
-    in every project evaluation. Anyone can still override CopilotSkipCliDownload
-    explicitly.
+    use an authenticated package feed. The binary is purely a RUNTIME artifact: it is
+    not needed to compile the framework, pack the NuGets, or run unit tests, and CI
+    never executes a code path that starts it. Deriving the skip from $(CI) is reliable
+    because $(CI) is set as an explicit MSBuild global property by the build pipeline
+    and is honored in every project evaluation.
+
+    "Runtime artifact" is NOT the same as "sample-only", so do not reach for
+    CopilotSkipCliDownload=true as a local fix for a failing download. Three projects
+    reference the SDK, and the first is the shipped CLI, not a sample:
+
+      src/Reactor.Cli                    `mur loc translate` constructs
+                                         CopilotTranslationProvider (TranslateCommand.cs),
+                                         which does `new CopilotClient()` and StartAsync()
+                                         against the native binary.
+      samples/apps/widget-creator        generation pipeline
+      samples/apps/demo-script-tool      generation pipeline
+
+    Skipping the download locally therefore makes `mur loc translate` and both samples
+    fail at run time, with an error that points at the missing binary rather than at the
+    property that removed it. When the download itself is what is failing, redirect it
+    instead: see tools/CopilotNpmRegistry.props, imported below. Anyone can still
+    override CopilotSkipCliDownload explicitly when they genuinely only need a compile.
   -->
   <PropertyGroup Condition="'$(CopilotSkipCliDownload)' == '' and '$(CI)' == 'true'">
     <CopilotSkipCliDownload>true</CopilotSkipCliDownload>
   </PropertyGroup>
+
+  <!--
+    Outside CI the download DOES happen, and on a network that blocks
+    registry.npmjs.org it fails the build. Imported after the block above
+    because it reads $(CopilotSkipCliDownload) to stay inert in CI, where no
+    download is attempted at all. See the file for the full rationale.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)tools\CopilotNpmRegistry.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)tools\CopilotNpmRegistry.props')" />
 
   <Import Project="$(MSBuildThisFileDirectory)src\Reactor\build\Reactor.targets"
           Condition="Exists('$(MSBuildThisFileDirectory)src\Reactor\build\Reactor.targets')" />

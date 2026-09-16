@@ -1,0 +1,108 @@
+<Project>
+
+  <!--
+    Point GitHub.Copilot.SDK's native-CLI download at a package mirror the
+    developer has ALREADY configured for npm, when one is present.
+
+    Why this exists
+    ===============
+    GitHub.Copilot.SDK.targets fetches copilot-<platform>-<version>.tgz with an
+    MSBuild <DownloadFile>, hard-defaulting to https://registry.npmjs.org. On a
+    network that blocks the public registry that download fails the *build*:
+
+      GitHub.Copilot.SDK.targets(108,5): error MSB3923: Failed to download file
+      "https://registry.npmjs.org/@github/copilot-win32-x64/-/copilot-win32-x64-1.0.79.tgz".
+      The SSL connection could not be established ... TLS alert: 'HandshakeFailure'.
+
+    That hits every entry point that builds src/Reactor.Cli or the two samples
+    referencing the SDK — including `mur docs compile`, which the docs freshness
+    gate in ci.yml tells contributors to run by hand when docs/guide drifts.
+
+    bootstrap.ps1 already solved this for its own restores (tools/BootstrapFeedResolver.ps1
+    -> Resolve-ReactorNpmRegistry, surfaced as -p:CopilotNpmRegistryUrl). But a
+    plain `dotnet build` / `dotnet run` never goes through bootstrap, so the same
+    developer was still blocked. This file applies the same policy at MSBuild
+    evaluation time, so the documented command works unmodified on both networks
+    and CI needs no special invocation.
+
+    The policy, matching Resolve-ReactorNpmRegistry
+    ==============================================
+      * An explicit $(CopilotNpmRegistryUrl) always wins — nothing here overrides it.
+      * NPM_CONFIG_REGISTRY is consulted before the user .npmrc, and when it is
+        set the .npmrc is not read at all — npm's own precedence, and the same
+        short-circuit Resolve-ReactorNpmRegistry performs. An NPM_CONFIG_REGISTRY
+        naming some other registry therefore yields no override rather than
+        being quietly overruled by a stale line in ~/.npmrc.
+      * The user config path honors NPM_CONFIG_USERCONFIG, else ~/.npmrc.
+      * Within the .npmrc the LAST `registry=` assignment wins, because that is
+        the one npm itself would use. Selecting the first *proxy* line instead
+        would keep redirecting to a mirror a developer had already overridden by
+        appending a public `registry=` line — and a developer who has since left
+        that network would get an opaque 401/404 from a Microsoft host.
+        Surrounding single or double quotes are stripped, as npm's ini parser
+        does. `@scope:registry=` lines are ignored: they are not the default
+        registry.
+      * The selected URL must be https, on host packagefeedproxy.microsoft.io,
+        with no userinfo, query, or fragment — the same constraints
+        Test-ReactorPackageFeedUrl applies in the bootstrap resolver. A registry
+        URL can legitimately carry a token in its query string, so accepting one
+        would publish that token into an MSBuild property. Scheme and host are
+        compared case-insensitively and an explicit port is allowed, because the
+        bootstrap resolver compares System.Uri.Scheme/.Host, which are already
+        normalized; a literal case-sensitive match would reject a URL npm and
+        bootstrap both accept and silently leave the developer on the blocked
+        public registry.
+      * A contributor on an unrestricted network configures none of the above,
+        matches nothing here, and keeps the SDK's public default untouched.
+
+    tests/build_props/ci/CopilotNpmRegistry.Tests.ps1 pins the above, including a
+    differential suite that feeds the same .npmrc corpus to both this file and
+    Resolve-ReactorNpmRegistry and requires them to agree. Change one, run it.
+
+    Notes on the regex, all of which are load-bearing
+    ================================================
+      * The host is followed by either `/` or the end of the value. Allowing an
+        unconstrained tail would let 'https://packagefeedproxy.microsoft.io.evil.example/npm/'
+        match its own prefix, handing a native-binary download to an
+        attacker-controlled host. The end-anchor is what makes the bare-host form
+        safe to accept. Credentialed forms fail for the same reason: the pattern
+        is anchored at the scheme, so a userinfo prefix never lines up.
+      * `[^\s?#...]` stops the value before a query or fragment rather than
+        capturing it, so a tokenized registry URL does not match at all.
+      * `\r?` before `$` is required. A .npmrc is CRLF on Windows and `$` under
+        RegexOptions.Multiline matches before `\n`, not before `\r` — without it
+        every anchored match silently fails on a real file.
+      * `\x27` is the apostrophe. Written literally it would terminate the
+        single-quoted MSBuild property-function argument.
+      * The trailing `(?![\s\S]*^[ \t]*registry[ \t]*=)` is what implements
+        last-assignment-wins: the match only succeeds on the final `registry=`
+        line in the file.
+
+    Why the file contents are never stored in a property
+    ===================================================
+    A user .npmrc is mostly credentials: `//host/:_password=` lines holding live
+    feed tokens. Binding that text to a named MSBuild property would publish it
+    everywhere MSBuild publishes properties — the property table of any binlog
+    (which contributors routinely attach to build-failure reports), diagnostic
+    verbosity output, `msbuild -pp`, and `-getProperty`. So the read is nested
+    directly inside the Regex.Match argument: only the matched registry URL, or
+    nothing, ever becomes a property value. Keep it that way; hoisting the
+    ReadAllText into a `_ReactorNpmRc` property for readability would turn a
+    shared binlog into a credential disclosure.
+  -->
+
+  <PropertyGroup Condition="'$(CopilotNpmRegistryUrl)' == ''
+                            and '$(CopilotCliBinaryPath)' == ''
+                            and '$(CopilotSkipCliDownload)' != 'true'">
+
+    <_ReactorNpmUserConfig Condition="'$(NPM_CONFIG_USERCONFIG)' != ''">$(NPM_CONFIG_USERCONFIG)</_ReactorNpmUserConfig>
+    <_ReactorNpmUserConfig Condition="'$(_ReactorNpmUserConfig)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(SpecialFolder.UserProfile)), '.npmrc'))</_ReactorNpmUserConfig>
+
+    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::\d+)?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
+    <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == ''
+                                      and '$(NPM_CONFIG_REGISTRY)' == ''
+                                      and Exists('$(_ReactorNpmUserConfig)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*registry[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::\d+)?(?:/[^\s?#"\x27]*)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*registry[ \t]*=)'))</CopilotNpmRegistryUrl>
+
+  </PropertyGroup>
+
+</Project>
