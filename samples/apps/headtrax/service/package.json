@@ -19,6 +19,9 @@
     "cors": "^2.8.5",
     "express": "^4.22.2"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "devDependencies": {
     "@faker-js/faker": "^10.6.0"
   },

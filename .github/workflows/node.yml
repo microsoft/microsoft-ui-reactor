@@ -125,9 +125,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # Node 22, not latest: better-sqlite3 ^11.7.0 (HeadTrax) cannot build on
-      # Node 26, which removed the V8 APIs it uses. On 22 it takes a prebuilt
-      # binary.
+      # Node 22 because it is the lowest version every npm project here
+      # declares support for, so CI exercises the floor rather than a version
+      # no contributor is required to have. better-sqlite3 13 (HeadTrax) sets
+      # `engines.node: ">=22"`, and the React Native harnesses require
+      # `^22.13.0 || ^24.3.0 || >= 26.0.0` via @react-native/eslint-config.
+      # (This previously read "better-sqlite3 ^11.7.0 cannot build on Node 26";
+      # that constraint left with the v11 -> v13 bump. v13 ships NAPI prebuilds
+      # under prebuilds/ and no longer compiles on install.)
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'

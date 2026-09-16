@@ -1,0 +1,20 @@
+<!--
+  Intentionally empty, and intentionally not importing the repo-root
+  Directory.Build.props.
+
+  better-sqlite3 13 ships prebuilt binaries but keeps a binding.gyp, so npm's
+  implicit `node-gyp rebuild` still runs on install. On Windows that generates
+  build/binding.sln under node_modules/better-sqlite3 and hands it to MSBuild.
+  MSBuild then walks up looking for Directory.Build.props, finds the repo-root
+  one, and applies Reactor's whole C# build, which fails with NETSDK1004
+  against src/Reactor.Analyzers because nothing has been restored. `npm ci` in
+  this folder dies as a result.
+
+  This file stops that walk at the service directory. There is no MSBuild
+  project here (the HeadTrax WinUI app lives in ../HeadTrax/ and is
+  unaffected), so stopping traversal costs nothing and keeps `npm ci` working
+  on Windows. Directory.Build.targets alongside it does the same for the
+  targets pass.
+-->
+<Project>
+</Project>

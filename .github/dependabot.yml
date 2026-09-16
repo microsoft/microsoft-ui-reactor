@@ -173,6 +173,26 @@ updates:
       # allowed to move ahead of the 0.82.0 pin.
       #
       # Drop the relevant entry when react-native itself is upgraded.
+      #
+      # react-native and its two runtime/build satellites are pinned to exact
+      # versions in every harness, and every hold above is justified by that
+      # pin -- so the pin itself has to be enforced here. Semver treats 0.82.0
+      # -> 0.83.0 as a *minor*, which means the `npm-minor-patch` group above
+      # (`patterns: ["*"]`) would otherwise sweep a whole React Native
+      # generation in as a routine grouped update and silently invalidate the
+      # eslint and Babel rationales. Minor is blocked alongside major; 0.82.x
+      # patches still flow, and a real upgrade stays a deliberate, coordinated
+      # PR that moves react-native, babel-preset, metro-config, the Babel
+      # packages and eslint together.
+      - dependency-name: "react-native"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@react-native/babel-preset"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@react-native/metro-config"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@babel/preset-env"
