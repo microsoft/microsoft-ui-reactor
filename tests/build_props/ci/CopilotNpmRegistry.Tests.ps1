@@ -10,10 +10,8 @@
 
     No network access, package restore, or credentials required, and no case
     reads the developer's real npm configuration: each supplies its own
-    NPM_CONFIG_USERCONFIG / NPM_CONFIG_REGISTRY. The one branch that cannot be
-    driven that way is the default ~/.npmrc fallback — MSBuild resolves it via
-    SpecialFolder.UserProfile, which ignores a redirected USERPROFILE — so that
-    branch is covered by asserting the resolved path instead of its contents.
+    NPM_CONFIG_USERCONFIG / NPM_CONFIG_REGISTRY, or redirects USERPROFILE to drive
+    the default ~/.npmrc fallback.
 
     This suite is the ONLY coverage this policy gets. Every CI build sets CI=true,
     which makes Directory.Build.props set CopilotSkipCliDownload=true, which makes
@@ -93,11 +91,22 @@ function Invoke-Msbuild {
     )
 
     foreach ($name in $scrubbed) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
-    foreach ($key in $Environment.Keys) { [Environment]::SetEnvironmentVariable($key, $Environment[$key], 'Process') }
 
-    $output = & dotnet msbuild $harness -nologo "-v:$Verbosity" @Properties 2>&1 | Out-String
-    $rc = $LASTEXITCODE
-    $global:LASTEXITCODE = 0
+    # Restore anything this case sets. Cases may drive variables outside $scrubbed
+    # (USERPROFILE), which must not leak into the next probe.
+    $restore = @{}
+    foreach ($key in $Environment.Keys) {
+        $restore[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+        [Environment]::SetEnvironmentVariable($key, $Environment[$key], 'Process')
+    }
+
+    try {
+        $output = & dotnet msbuild $harness -nologo "-v:$Verbosity" @Properties 2>&1 | Out-String
+        $rc = $LASTEXITCODE
+        $global:LASTEXITCODE = 0
+    } finally {
+        foreach ($key in $restore.Keys) { [Environment]::SetEnvironmentVariable($key, $restore[$key], 'Process') }
+    }
     if ($rc -ne 0) { throw "dotnet msbuild exited $rc`n$output" }
     return $output
 }
@@ -282,16 +291,54 @@ try {
     Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = '   '; NPM_CONFIG_USERCONFIG = $proxyOnly }) `
         'an all-whitespace NPM_CONFIG_REGISTRY falls through to the user config'
 
+
+    # --- Parity cases raised by PR review. ---
+    # PowerShell's -match is case-insensitive by default, so the bootstrap resolver
+    # honors a Registry= assignment; ignoring it here would leave the developer on
+    # the blocked public registry.
+    $capitalKey = New-NpmRc -Name 'capital-key' -Lines @("Registry=$proxy")
+    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $capitalKey }) `
+        'a capitalised Registry= key is honored'
+
+    $upperKey = New-NpmRc -Name 'upper-key' -Lines @("REGISTRY=$proxy")
+    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $upperKey }) `
+        'an uppercase REGISTRY= key is honored'
+
+    # Bootstrap trims before validating and returns the trimmed value.
+    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = "  $proxy  " }) `
+        'a whitespace-padded NPM_CONFIG_REGISTRY is trimmed, not rejected'
+
+    # The default user-config branch, driven for real. $(UserProfile) reads the
+    # USERPROFILE environment variable -- which is what bootstrap reads -- so unlike
+    # SpecialFolder.UserProfile it can be redirected, and this branch can be tested
+    # rather than merely asserted about.
+    # The redirected value is deliberately DISTINCT from $proxy. A developer running
+    # this suite very likely has the mirror in their own ~/.npmrc, so asserting
+    # $proxy here would pass whether the fallback honored the redirect or silently
+    # read the real profile — the healthy and broken branches would coincide.
+    $redirectedUrl = 'https://packagefeedproxy.microsoft.io/npm-redirected/'
+    $redirected = Join-Path $tmp 'redirected-profile'
+    New-Item -ItemType Directory -Path $redirected -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $redirected '.npmrc') -Value "registry=$redirectedUrl" -Encoding UTF8
+    Assert-Equal $redirectedUrl (Invoke-Probe -Environment @{ USERPROFILE = $redirected }) `
+        'the default ~/.npmrc fallback reads USERPROFILE, matching bootstrap'
+
+    # A path containing an apostrophe is valid on Windows. MSBuild fixes
+    # property-function argument boundaries before expanding $(...), so the
+    # apostrophe never participates in parsing -- pinned here because it looks like
+    # it should break and has been reported as a defect twice.
+    $apostrophe = New-NpmRc -Name "O'Brien dir" -Lines @("registry=$proxy")
+    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $apostrophe }) `
+        'a user-config path containing an apostrophe is still read'
     Assert-Equal (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.npmrc') `
         (Invoke-ProbeProperty -Property 'USERCONFIG' `
         -Environment @{ NPM_CONFIG_USERCONFIG = '   ' }) `
         'an all-whitespace NPM_CONFIG_USERCONFIG falls back to the default path'
 
-    # --- The default ~/.npmrc fallback path. ---
-    # Every case above redirects NPM_CONFIG_USERCONFIG, so the fallback branch
-    # would keep passing if it were mistyped. Assert the resolved path directly:
-    # SpecialFolder.UserProfile ignores a redirected USERPROFILE, so the contents
-    # cannot be driven, but the path computation can be pinned.
+    # --- The resolved user-config path itself. ---
+    # The contents of this branch are driven above by redirecting USERPROFILE;
+    # these two pin the path computation on either side of the NPM_CONFIG_USERCONFIG
+    # override.
     $expectedDefault = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.npmrc'
     Assert-Equal $expectedDefault (Invoke-ProbeProperty -Property 'USERCONFIG') `
         'with NPM_CONFIG_USERCONFIG unset the user config path falls back to ~/.npmrc'
@@ -388,6 +435,9 @@ try {
         'explicit port'           = @('registry=https://packagefeedproxy.microsoft.io:443/npm/')
         'port-shaped userinfo'    = @('registry=https://packagefeedproxy.microsoft.io:443@evil.example/npm/')
         'port above range'        = @('registry=https://packagefeedproxy.microsoft.io:65536/npm/')
+        'capitalised key'         = @("Registry=$proxy")
+        'uppercase key'           = @("REGISTRY=$proxy")
+        'capital key then public' = @("Registry=$proxy", "registry=$public")
         'highest valid port'      = @('registry=https://packagefeedproxy.microsoft.io:65535/npm/')
         'bare lookalike host'     = @('registry=https://packagefeedproxy.microsoft.io.evil.example')
         'plaintext http'          = @('registry=http://packagefeedproxy.microsoft.io/npm/')

@@ -33,7 +33,11 @@
         short-circuit Resolve-ReactorNpmRegistry performs. An NPM_CONFIG_REGISTRY
         naming some other registry therefore yields no override rather than
         being quietly overruled by a stale line in ~/.npmrc.
-      * The user config path honors NPM_CONFIG_USERCONFIG, else ~/.npmrc. Both
+      * The user config path honors NPM_CONFIG_USERCONFIG, else $(UserProfile)\.npmrc.
+        $(UserProfile) is the USERPROFILE environment variable, which is what the
+        bootstrap resolver reads. SpecialFolder.UserProfile would ignore a
+        redirected USERPROFILE and send MSBuild to a different file than npm and
+        bootstrap, and it is also untestable for exactly that reason. Both
         env vars are compared after .Trim(), because the bootstrap resolver gates
         on [string]::IsNullOrWhiteSpace: an all-whitespace NPM_CONFIG_REGISTRY
         means "unset" there, and treating it as set here would skip the .npmrc
@@ -46,6 +50,9 @@
         Surrounding single or double quotes are stripped, as npm's ini parser
         does. `@scope:registry=` lines are ignored: they are not the default
         registry.
+      * The `registry` key is matched case-insensitively. PowerShell's -match is
+        case-insensitive by default, so the bootstrap resolver honors a
+        `Registry=` assignment and this must too.
       * The selected URL must be https, on host packagefeedproxy.microsoft.io,
         with no userinfo, query, or fragment — the same constraints
         Test-ReactorPackageFeedUrl applies in the bootstrap resolver. A registry
@@ -78,7 +85,7 @@
         every anchored match silently fails on a real file.
       * `\x27` is the apostrophe. Written literally it would terminate the
         single-quoted MSBuild property-function argument.
-      * The trailing `(?![\s\S]*^[ \t]*registry[ \t]*=)` is what implements
+      * The trailing `(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=)` is what implements
         last-assignment-wins: the match only succeeds on the final `registry=`
         line in the file.
 
@@ -100,12 +107,12 @@
                             and '$(CopilotSkipCliDownload)' != 'true'">
 
     <_ReactorNpmUserConfig Condition="'$(NPM_CONFIG_USERCONFIG.Trim())' != ''">$(NPM_CONFIG_USERCONFIG)</_ReactorNpmUserConfig>
-    <_ReactorNpmUserConfig Condition="'$(_ReactorNpmUserConfig)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(SpecialFolder.UserProfile)), '.npmrc'))</_ReactorNpmUserConfig>
+    <_ReactorNpmUserConfig Condition="'$(_ReactorNpmUserConfig)' == '' and '$(UserProfile)' != ''">$([System.IO.Path]::Combine('$(UserProfile)', '.npmrc'))</_ReactorNpmUserConfig>
 
-    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
+    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY.Trim()), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
     <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == ''
                                       and '$(NPM_CONFIG_REGISTRY.Trim())' == ''
-                                      and Exists('$(_ReactorNpmUserConfig)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*registry[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#"\x27]*)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*registry[ \t]*=)'))</CopilotNpmRegistryUrl>
+                                      and Exists('$(_ReactorNpmUserConfig)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*(?i:registry)[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#"\x27]*)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=)'))</CopilotNpmRegistryUrl>
 
   </PropertyGroup>
 
