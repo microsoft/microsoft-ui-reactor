@@ -383,6 +383,15 @@ try {
         (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $trailingQuote }) `
         'an unquoted value ending in a quote character is trimmed, matching the resolver'
 
+    # Refutes another review claim: Uri.TryCreate ACCEPTS a double quote in the
+    # path, so Test-ReactorPackageFeedUrl does not reject it and the resolver
+    # returns it. Excluding " from the environment path class -- as suggested --
+    # would have created the divergence it was meant to remove. Pinned so the
+    # agreement is a measured fact rather than a recurring argument.
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm/foo"' `
+        (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io/npm/foo"' }) `
+        'a double quote in the URL path is accepted, matching Uri.TryCreate'
+
     # --- Contract pin on the SDK this props steers. ---
     # Everything above tests OUR parser. None of it would notice GitHub.Copilot.SDK
     # renaming or dropping CopilotNpmRegistryUrl, which is the property the whole
