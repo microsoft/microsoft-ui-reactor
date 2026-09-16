@@ -8,10 +8,12 @@
 # green with the file deleted. The suite evaluates it directly against synthetic
 # npm configuration instead, needing no network, restore, or credentials.
 #
-# Runs on Windows because the props resolves the user profile via
-# SpecialFolder.UserProfile and reads a Windows-shaped ~/.npmrc path; `dotnet
-# msbuild` on a bare non-SDK project is the only build work involved, so it is
-# still a seconds-long job. Exits non-zero on any failed assertion.
+# Runs on Windows because the props reads a Windows-shaped ~/.npmrc path, resolved
+# from the MSBuild UserProfile property (i.e. the USERPROFILE environment variable,
+# which is what bootstrap reads and what the suite redirects to drive the fallback
+# branch). `dotnet msbuild` on a bare non-SDK project is the only build work
+# involved, so it is still a seconds-long job. Exits non-zero on any failed
+# assertion.
 name: Build props tests
 
 on:

@@ -85,9 +85,23 @@
         every anchored match silently fails on a real file.
       * `\x27` is the apostrophe. Written literally it would terminate the
         single-quoted MSBuild property-function argument.
-      * The trailing `(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=)` is what implements
-        last-assignment-wins: the match only succeeds on the final `registry=`
-        line in the file.
+      * The trailing `(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=[ \t]*\S)` is what
+        implements last-assignment-wins: the match only succeeds when no LATER
+        `registry=` line carries a value. The `\S` matters — the resolver's line
+        pattern is `^\s*registry\s*=\s*(\S.*?)\s*$`, whose capture requires a
+        non-whitespace first character, so a trailing valueless `registry=` does
+        not overwrite what came before it there either.
+      * The port alternation is bounded to 0-65535 rather than written as `\d+`,
+        because Uri.TryCreate rejects :65536 and an unbounded match would hand the
+        SDK a URL bootstrap would have refused. The leading `0*` is the same
+        concern in the other direction: Uri.TryCreate reads :00080 as port 80, so
+        rejecting zero-padded ports would break parity too.
+      * Existence is checked with System.IO.File::Exists, NOT MSBuild's Exists(),
+        which is also true for directories. A NPM_CONFIG_USERCONFIG pointing at a
+        directory would then reach ReadAllText and throw
+        `MSB4184 ... Access to the path ... is denied`, failing every project
+        evaluation in the repo over a stray npm setting — where the resolver's
+        `Test-Path -PathType Leaf` simply ignores it.
 
     Why the file contents are never stored in a property
     ===================================================
@@ -109,10 +123,10 @@
     <_ReactorNpmUserConfig Condition="'$(NPM_CONFIG_USERCONFIG.Trim())' != ''">$(NPM_CONFIG_USERCONFIG)</_ReactorNpmUserConfig>
     <_ReactorNpmUserConfig Condition="'$(_ReactorNpmUserConfig)' == '' and '$(UserProfile)' != ''">$([System.IO.Path]::Combine('$(UserProfile)', '.npmrc'))</_ReactorNpmUserConfig>
 
-    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY.Trim()), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
+    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY.Trim()), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
     <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == ''
                                       and '$(NPM_CONFIG_REGISTRY.Trim())' == ''
-                                      and Exists('$(_ReactorNpmUserConfig)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*(?i:registry)[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#"\x27]*)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=)'))</CopilotNpmRegistryUrl>
+                                      and $([System.IO.File]::Exists('$(_ReactorNpmUserConfig)'))">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*(?i:registry)[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#"\x27]*)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=[ \t]*\S)'))</CopilotNpmRegistryUrl>
 
   </PropertyGroup>
 

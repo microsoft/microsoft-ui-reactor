@@ -330,7 +330,34 @@ try {
     $apostrophe = New-NpmRc -Name "O'Brien dir" -Lines @("registry=$proxy")
     Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $apostrophe }) `
         'a user-config path containing an apostrophe is still read'
-    Assert-Equal (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.npmrc') `
+
+    # MSBuild's Exists() is true for directories too. If it gated the read, a
+    # NPM_CONFIG_USERCONFIG pointing at a directory would reach ReadAllText and
+    # throw MSB4184, failing EVERY project evaluation in the repo over a stray npm
+    # setting. The resolver's Test-Path -PathType Leaf just ignores it.
+    $directoryConfig = Join-Path $tmp 'config-is-a-directory'
+    New-Item -ItemType Directory -Path $directoryConfig -Force | Out-Null
+    Assert-Equal '' (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $directoryConfig }) `
+        'a user-config path that is a directory is ignored, not an evaluation error'
+
+    # Uri.TryCreate reads :00080 as port 80, so bootstrap selects the mirror.
+    Assert-Equal 'https://packagefeedproxy.microsoft.io:00080/npm/' `
+        (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:00080/npm/' }) `
+        'a zero-padded port is accepted'
+
+    Assert-Equal '' (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io:065536/npm/' }) `
+        'a zero-padded port above the valid range is still rejected'
+
+    # The resolver only overwrites on a line whose value starts non-whitespace, so
+    # a trailing valueless registry= does not clear an earlier mirror.
+    $blankOverride = New-NpmRc -Name 'blank-override' -Lines @("registry=$proxy", 'registry=')
+    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $blankOverride }) `
+        'a later valueless registry= line does not override the mirror'
+
+    $wsOverride = New-NpmRc -Name 'whitespace-override' -Lines @("registry=$proxy", 'registry=   ')
+    Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $wsOverride }) `
+        'a later whitespace-only registry= line does not override the mirror'
+    Assert-Equal (Join-Path $env:USERPROFILE '.npmrc') `
         (Invoke-ProbeProperty -Property 'USERCONFIG' `
         -Environment @{ NPM_CONFIG_USERCONFIG = '   ' }) `
         'an all-whitespace NPM_CONFIG_USERCONFIG falls back to the default path'
@@ -339,7 +366,10 @@ try {
     # The contents of this branch are driven above by redirecting USERPROFILE;
     # these two pin the path computation on either side of the NPM_CONFIG_USERCONFIG
     # override.
-    $expectedDefault = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.npmrc'
+    # Derived from USERPROFILE, not GetFolderPath: the props deliberately follows
+    # the environment variable so a redirected profile works, and the two differ
+    # exactly on the machines where that distinction matters.
+    $expectedDefault = Join-Path $env:USERPROFILE '.npmrc'
     Assert-Equal $expectedDefault (Invoke-ProbeProperty -Property 'USERCONFIG') `
         'with NPM_CONFIG_USERCONFIG unset the user config path falls back to ~/.npmrc'
 
@@ -438,6 +468,11 @@ try {
         'capitalised key'         = @("Registry=$proxy")
         'uppercase key'           = @("REGISTRY=$proxy")
         'capital key then public' = @("Registry=$proxy", "registry=$public")
+        'blank override'          = @("registry=$proxy", 'registry=')
+        'whitespace override'     = @("registry=$proxy", 'registry=   ')
+        'blank then proxy'        = @('registry=', "registry=$proxy")
+        'zero-padded port'        = @('registry=https://packagefeedproxy.microsoft.io:00080/npm/')
+        'padded port over range'  = @('registry=https://packagefeedproxy.microsoft.io:065536/npm/')
         'highest valid port'      = @('registry=https://packagefeedproxy.microsoft.io:65535/npm/')
         'bare lookalike host'     = @('registry=https://packagefeedproxy.microsoft.io.evil.example')
         'plaintext http'          = @('registry=http://packagefeedproxy.microsoft.io/npm/')
