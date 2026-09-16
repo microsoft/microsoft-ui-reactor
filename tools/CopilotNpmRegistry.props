@@ -53,6 +53,21 @@
       * The `registry` key is matched case-insensitively. PowerShell's -match is
         case-insensitive by default, so the bootstrap resolver honors a
         `Registry=` assignment and this must too.
+      * Case-insensitivity is spelled with explicit [Aa] classes rather than
+        (?i:...) or RegexOptions.IgnoreCase, and that is deliberate on two counts.
+        First, .NET ignore-case folding is CULTURE-SENSITIVE: under tr-TR, ASCII
+        `I` folds to dotless `ı`, so `HTTPS://PACKAGEFEEDPROXY.MICROSOFT.IO` —
+        which the resolver accepts — stops matching, silently dropping the mirror
+        and sending the build back to the blocked public registry. Measured:
+        (?i:...) gives False under tr-TR and True under en-US for that input.
+        RegexOptions.CultureInvariant would fix it, but MSBuild's property-function
+        allow-list has no three-argument Regex::Match overload (MSB4186), so it is
+        not reachable from here. Second, folding would make the host matcher accept
+        Turkish homographs: with IgnoreCase under tr-TR, `mıcrosoft` and `İo` can
+        compare equal to their ASCII forms. Explicit classes match exactly the
+        26 ASCII letters and nothing else, under every locale — verified against
+        `microsoft.ıo`, `mıcrosoft.io` and `microsoft.İo`, all rejected in both
+        en-US and tr-TR.
       * The selected URL must be https, on host packagefeedproxy.microsoft.io,
         with no userinfo, query, or fragment — the same constraints
         Test-ReactorPackageFeedUrl applies in the bootstrap resolver. A registry
@@ -93,7 +108,7 @@
         `registry=https://…/npm/o'clock/` the apostrophe is path data and is
         kept. Excluding apostrophes outright was simpler but diverged from the
         resolver, which accepts anything Uri.TryCreate does.
-      * The trailing `(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=[ \t]*\S)` is what
+      * The trailing `(?![\s\S]*^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*\S)` is what
         implements last-assignment-wins: the match only succeeds when no LATER
         `registry=` line carries a value. The `\S` matters — the resolver's line
         pattern is `^\s*registry\s*=\s*(\S.*?)\s*$`, whose capture requires a
@@ -131,10 +146,10 @@
     <_ReactorNpmUserConfig Condition="'$(NPM_CONFIG_USERCONFIG.Trim())' != ''">$(NPM_CONFIG_USERCONFIG)</_ReactorNpmUserConfig>
     <_ReactorNpmUserConfig Condition="'$(_ReactorNpmUserConfig)' == '' and '$(UserProfile)' != ''">$([System.IO.Path]::Combine('$(UserProfile)', '.npmrc'))</_ReactorNpmUserConfig>
 
-    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY.Trim()), '^(?i:https://packagefeedproxy\.microsoft\.io)(?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
+    <CopilotNpmRegistryUrl>$([System.Text.RegularExpressions.Regex]::Match($(NPM_CONFIG_REGISTRY.Trim()), '^[Hh][Tt][Tt][Pp][Ss]://[Pp][Aa][Cc][Kk][Aa][Gg][Ee][Ff][Ee][Ee][Dd][Pp][Rr][Oo][Xx][Yy]\.[Mm][Ii][Cc][Rr][Oo][Ss][Oo][Ff][Tt]\.[Ii][Oo](?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/[^\s?#]*)?$'))</CopilotNpmRegistryUrl>
     <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == ''
                                       and '$(NPM_CONFIG_REGISTRY.Trim())' == ''
-                                      and $([System.IO.File]::Exists('$(_ReactorNpmUserConfig)'))">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*(?i:registry)[ \t]*=[ \t]*["\x27]?)(?i:https://packagefeedproxy\.microsoft\.io)(?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/(?:[^\s?#"]*[^\s?#"\x27])?)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*(?i:registry)[ \t]*=[ \t]*\S)'))</CopilotNpmRegistryUrl>
+                                      and $([System.IO.File]::Exists('$(_ReactorNpmUserConfig)'))">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_ReactorNpmUserConfig)')), '(?m)(?&lt;=^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*["\x27]?)[Hh][Tt][Tt][Pp][Ss]://[Pp][Aa][Cc][Kk][Aa][Gg][Ee][Ff][Ee][Ee][Dd][Pp][Rr][Oo][Xx][Yy]\.[Mm][Ii][Cc][Rr][Oo][Ss][Oo][Ff][Tt]\.[Ii][Oo](?::0*(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|\d{1,4}))?(?:/(?:[^\s?#"]*[^\s?#"\x27])?)?(?=["\x27]?[ \t]*\r?$)(?![\s\S]*^[ \t]*[Rr][Ee][Gg][Ii][Ss][Tt][Rr][Yy][ \t]*=[ \t]*\S)'))</CopilotNpmRegistryUrl>
 
   </PropertyGroup>
 

@@ -152,10 +152,11 @@ try {
     Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $proxyOnly }) `
         'a proxy .npmrc selects the mirror'
 
-    # npm lets a later line override an earlier one, so BOTH orderings must land
-    # on the proxy. A "first registry= line wins, then validate the host" reading
-    # would silently fail the first of these — the exact shape the bootstrap
-    # resolver's own tests pin.
+    # A mirror line AFTER a public one wins, which a "first registry= line wins,
+    # then validate the host" reading would get wrong — the exact shape the
+    # bootstrap resolver's own tests pin. The converse ordering is covered
+    # immediately below and resolves to no mirror, because npm lets a later line
+    # override an earlier one.
     $publicThenProxy = New-NpmRc -Name 'public-then-proxy' -Lines @("registry=$public", "registry=$proxy")
     Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $publicThenProxy }) `
         'the mirror is found when it follows a public registry line'
@@ -304,6 +305,23 @@ try {
     Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $upperKey }) `
         'an uppercase REGISTRY= key is honored'
 
+    # Explicit [Aa] classes, not (?i:...): .NET ignore-case folding is culture
+    # sensitive and drops this exact value under tr-TR. See the props comment.
+    $mixedHost = New-NpmRc -Name 'mixed-case-host' -Lines @('registry=HTTPS://PACKAGEFEEDPROXY.MICROSOFT.IO/npm')
+    Assert-Equal 'HTTPS://PACKAGEFEEDPROXY.MICROSOFT.IO/npm' `
+        (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $mixedHost }) `
+        'a mixed-case scheme and host in .npmrc is honored'
+
+    # Turkish dotless/dotted i must never be folded into the ASCII host.
+    foreach ($homograph in @(
+        'https://packagefeedproxy.microsoft.ıo/npm/'
+        'https://packagefeedproxy.mıcrosoft.io/npm/'
+        'https://packagefeedproxy.microsoft.İo/npm/'
+    )) {
+        Assert-Equal '' (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = $homograph }) `
+            "a Turkish-homograph host is rejected: $homograph"
+    }
+
     # Bootstrap trims before validating and returns the trimmed value.
     Assert-Equal $proxy (Invoke-Probe -Environment @{ NPM_CONFIG_REGISTRY = "  $proxy  " }) `
         'a whitespace-padded NPM_CONFIG_REGISTRY is trimmed, not rejected'
@@ -370,20 +388,22 @@ try {
     Assert-Equal 'https://packagefeedproxy.microsoft.io/' `
         (Invoke-Probe -Environment @{ NPM_CONFIG_USERCONFIG = $bareSlash }) `
         'a bare-slash path is accepted'
-    Assert-Equal (Join-Path $env:USERPROFILE '.npmrc') `
+    Assert-Equal (Join-Path $redirected '.npmrc') `
         (Invoke-ProbeProperty -Property 'USERCONFIG' `
-        -Environment @{ NPM_CONFIG_USERCONFIG = '   ' }) `
+        -Environment @{ NPM_CONFIG_USERCONFIG = '   '; USERPROFILE = $redirected }) `
         'an all-whitespace NPM_CONFIG_USERCONFIG falls back to the default path'
 
     # --- The resolved user-config path itself. ---
     # The contents of this branch are driven above by redirecting USERPROFILE;
     # these two pin the path computation on either side of the NPM_CONFIG_USERCONFIG
     # override.
-    # Derived from USERPROFILE, not GetFolderPath: the props deliberately follows
-    # the environment variable so a redirected profile works, and the two differ
-    # exactly on the machines where that distinction matters.
-    $expectedDefault = Join-Path $env:USERPROFILE '.npmrc'
-    Assert-Equal $expectedDefault (Invoke-ProbeProperty -Property 'USERCONFIG') `
+    # Driven through the synthetic profile rather than the real one: leaving
+    # USERPROFILE alone would let the production ReadAllText branch consume the
+    # developer's own ~/.npmrc, making the result depend on local configuration
+    # and feeding real feed credentials through evaluation.
+    $expectedDefault = Join-Path $redirected '.npmrc'
+    Assert-Equal $expectedDefault (Invoke-ProbeProperty -Property 'USERCONFIG' `
+        -Environment @{ USERPROFILE = $redirected }) `
         'with NPM_CONFIG_USERCONFIG unset the user config path falls back to ~/.npmrc'
 
     Assert-Equal 'C:\redirected\.npmrc' (Invoke-ProbeProperty -Property 'USERCONFIG' `
