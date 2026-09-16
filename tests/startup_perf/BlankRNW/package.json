@@ -21,7 +21,7 @@
     "@react-native/babel-preset": "0.82.0",
     "@react-native/eslint-config": "0.82.0",
     "@react-native/metro-config": "0.82.0",
-    "@react-native/typescript-config": "0.82.0",
+    "@react-native/typescript-config": "0.87.1",
     "@types/react": "^19.1.1",
     "eslint": "^8.19.0",
     "prettier": "2.8.8",
