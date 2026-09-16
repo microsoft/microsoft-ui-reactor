@@ -42,7 +42,7 @@ type AppProps = {
 
 // ── Row renderer ────────────────────────────────────────────────────────────
 
-const Row = React.memo(function Row({ item, index }: { item: ListItem; index: number }) {
+function RowImpl({ item, index }: { item: ListItem; index: number }) {
   const bg = (index & 1) === 0 ? '#FFFFFF' : '#F5F5F5';
   const avatarBg = useMemo(() => hslToHex(item.avatarHue, 0.55, 0.45), [item.avatarHue]);
   return (
@@ -66,7 +66,9 @@ const Row = React.memo(function Row({ item, index }: { item: ListItem; index: nu
       </View>
     </View>
   );
-});
+}
+
+const Row = React.memo(RowImpl);
 
 // ── App ─────────────────────────────────────────────────────────────────────
 

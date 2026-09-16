@@ -91,6 +91,16 @@ updates:
     labels:
       - "dependencies"
       - "vscode-extension"
+    # Routine minor/patch bumps arrive as one PR; a major still gets its own so
+    # the breaking change is reviewed on its own merits. See the npm entry below
+    # for why grouping was introduced.
+    groups:
+      vscode-extension-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # The remaining npm projects — the HeadTrax sample service, the React Native
   # perf harnesses, and the Figma plugin. They were unmonitored until now, so
@@ -114,3 +124,64 @@ updates:
       - "dependencies"
       - "npm"
     open-pull-requests-limit: 10
+    # Ungrouped, the first run of this entry opened 24 PRs in four minutes — one
+    # per package per directory — which is unreviewable and was the whole
+    # complaint. Grouping is scoped to minor/patch, the bumps that are routine
+    # and safe to read as a batch; a major still gets a dedicated PR, because a
+    # major is exactly where a breaking change hides and where a per-package
+    # diff is worth reading. Dependabot raises one grouped PR per directory, so
+    # each harness stays independently revertable.
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # The three React Native harnesses pin `react-native` at 0.82.0 on
+      # purpose, and that pin transitively fixes the toolchain around it. Each
+      # entry below was measured against that pin, not assumed:
+      #
+      #   eslint            @react-native/eslint-config@0.87.1 declares
+      #                     `peer eslint@"^8.0.0 || ^9.0.0"`, so eslint 10 fails
+      #                     `npm install` outright with ERESOLVE. The harnesses
+      #                     also configure lint through `.eslintrc.js`, the
+      #                     format eslint 10 removed. Blocking major keeps both
+      #                     the peer range and the config format valid.
+      #
+      #   @babel/preset-env @babel/preset-env@8.0.5 declares
+      #   @babel/runtime    `peer @babel/core@"^8.0.0"`, but
+      #   @babel/core       @react-native/babel-preset@0.82.0 *depends* on
+      #                     `@babel/core@^7.25.2`. Taking Babel 8 for any one of
+      #                     these puts two major Babel cores in one tree and
+      #                     breaks the Metro transform. These three Babel
+      #                     packages move together, with react-native, or not
+      #                     at all.
+      #
+      # This is a rule about the *runtime/build* toolchain, not about every
+      # package with a react-native-adjacent name. @react-native/eslint-config
+      # and @react-native/typescript-config are deliberately NOT listed here:
+      # they are lint/tsconfig presets with no dependency or peer edge on
+      # react-native (typescript-config declares none at all), so they are
+      # allowed to move ahead of the 0.82.0 pin.
+      #
+      # Drop the relevant entry when react-native itself is upgraded.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/preset-env"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/runtime"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/core"
+        update-types: ["version-update:semver-major"]
+      # better-sqlite3 13 removed `prebuild-install` (v11's install script was
+      # `prebuild-install || node-gyp rebuild`; v13 has no install script, no
+      # optionalDependencies, no `binary` field, and its GitHub release carries
+      # zero prebuilt assets), so `gypfile: true` makes every install compile
+      # SQLite from source. That is what the Node 22 pin in
+      # .github/workflows/node.yml exists to avoid, and it breaks `npm ci` for
+      # any contributor without a C++ toolchain. Security patches on 11.x still
+      # flow through.
+      - dependency-name: "better-sqlite3"
+        update-types: ["version-update:semver-major"]

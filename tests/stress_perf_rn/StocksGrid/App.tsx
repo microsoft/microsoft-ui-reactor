@@ -60,7 +60,7 @@ const RED = '#FF0000';
 // comparable to the Reactor variant where the reconciler diffs per-cell text.
 type Cell = { symbol: string; currentPrice: number; isUp: boolean };
 
-const StockCell = React.memo(function StockCell({
+function StockCellImpl({
   cell,
   posStyle,
 }: {
@@ -77,7 +77,9 @@ const StockCell = React.memo(function StockCell({
       {cell.symbol} {cell.currentPrice.toFixed(2)}
     </Text>
   );
-});
+}
+
+const StockCell = React.memo(StockCellImpl);
 
 // Precomputed text styles — picked by isUp instead of an inline {color: ...}
 // object that would allocate per render and defeat downstream caching.
