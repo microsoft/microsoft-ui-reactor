@@ -49,8 +49,20 @@ public sealed class UnpackagedAppDataStore : IWindowPersistenceStore
 
     private readonly JsonFileStore _inner;
 
-    /// <summary>The on-disk file path this store reads and writes.</summary>
-    public string Path => _inner.Path;
+    /// <summary>
+    /// The on-disk file path this store reads and writes.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately <c>internal</c>, unlike <see cref="JsonFileStore.Path"/>. That type is
+    /// <i>definitionally</i> file-backed, so a path is part of what it is. This one is "the
+    /// Windows App SDK app-data store" — the file is an implementation detail of the surface
+    /// it happens to be built on (<c>LocalPath</c> rather than <c>LocalSettings</c>, spec 063
+    /// §6 D1), and that choice is open for revisit. Exposing a path would promise a file-backed
+    /// store we may not want to keep promising; widening to <c>public</c> later is additive and
+    /// non-breaking if an app author ever needs it. Visible to <c>Reactor.Tests</c> via
+    /// <c>InternalsVisibleTo</c>.
+    /// </remarks>
+    internal string Path => _inner.Path;
 
     /// <summary>
     /// Resolve the Windows App SDK app-data root for

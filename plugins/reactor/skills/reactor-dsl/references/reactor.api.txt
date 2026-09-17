@@ -6044,7 +6044,6 @@ new()
 
 ### class UnpackagedAppDataStore
 new(string publisher, string product)
-string Path { get; }
 TryRead(string id, ref byte[] data) → bool
 Write(string id, byte[] data) → void
 

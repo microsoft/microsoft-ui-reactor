@@ -326,6 +326,17 @@ Construction may throw `ArgumentException` for an empty or SDK-rejected publishe
 matches `JsonFileStore(path)`: an invalid identity is an authoring error, whereas `TryRead`/`Write`
 keep the `IWindowPersistenceStore` "never throw into the caller" contract.
 
+The public surface is deliberately just the constructor plus the two interface methods. The
+`Path` property is **`internal`** (visible to `Reactor.Tests`), unlike `JsonFileStore.Path`:
+that type is *definitionally* file-backed, so a path is part of what it is, whereas this one is
+"the SDK app-data store" and the file is an implementation detail of the `LocalPath`-vs-
+`LocalSettings` choice in §6 D1 — a choice §5 leaves open. Keeping it internal means the public
+surface is **identical under every outcome of that revisit**, so reversing D1 later would change
+no published API. Widening `internal` → `public` is additive and non-breaking if an app author
+ever needs the path for diagnostics; the reverse is not. Note `ReactorApp.WindowPersistenceStore`
+is typed `IWindowPersistenceStore?`, which has no `Path` member, so the property was only ever
+reachable through a caller's own concrete-typed reference.
+
 ### §4.2 Workarounds NOT removed
 
 The bump makes it tempting to simplify the existing unpackaged workarounds. Each was checked and
@@ -360,6 +371,7 @@ The bump makes it tempting to simplify the existing unpackaged workarounds. Each
 | D4 | Target version — **2.2.0** (minimum) vs. a later 2.x carrying the `LocalSettings` fix | **2.2.0.** Repo-owner call, consistent with spec 059 §3's "minimum, not latest". D1 means the defect is avoided by construction rather than by version, so the fix — and which release carries it (§3.2) — is not load-bearing for this spec. |
 | D5 | Sanitize `publisher` / `product` before handing them to the SDK? | **No.** Measured: the SDK already rejects traversal, rooted and empty values with `ArgumentException` (§3.1). A second sanitizer would diverge from the platform's rule over time. Reactor validates only non-emptiness, for a clearer message, and pins the SDK's rejection with a test. |
 | D6 | Spec home — standalone **063** vs. a section in **036** (window model) | **Standalone.** The SDK bump is repo-wide, and 059 is the precedent for an SDK-uptake spec. |
+| D7 | Expose `Path` on the new store, as `JsonFileStore` does? | **No — `internal`.** §4.1. `JsonFileStore` is definitionally file-backed; this store's file is an artifact of D1, which §5 explicitly leaves open for revisit. Internal keeps the public surface identical under every outcome of that revisit, and `internal` → `public` is additive if anyone ever needs it. |
 
 ## §7 Implementation phases
 
