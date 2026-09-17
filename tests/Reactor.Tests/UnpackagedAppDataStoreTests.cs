@@ -123,25 +123,31 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  The design decision, encoded as a guard (spec 063 §3.1 / §6 D1).
+    //  The design decision, encoded as a guard (spec 063 §3.1 / §3.2 / §6 D1).
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
     public void Does_Not_Route_Window_Placement_Through_The_Roaming_Registry_Hive()
     {
-        // On Windows App SDK 2.2.0, GetForUnpackaged().LocalSettings opens
-        // HKCU\SOFTWARE\<publisher>\<product> — a ROAMING hive — instead of the
-        // machine-local HKCU\SOFTWARE\Classes\Local Settings\Software\... it is
-        // contracted to use (WindowsAppSDK#6559, fixed in 2.5.1). Window placement is
-        // monitor-topology dependent and must not roam, so UnpackagedAppDataStore uses
-        // the LocalPath surface instead. This test is what stops someone "simplifying"
-        // it onto LocalSettings.
+        // On the Windows App Runtime this repo currently builds against,
+        // GetForUnpackaged().LocalSettings opens HKCU\SOFTWARE\<publisher>\<product> —
+        // a ROAMING hive — instead of the machine-local
+        // HKCU\SOFTWARE\Classes\Local Settings\Software\... it is contracted to use
+        // (WindowsAppSDK#6559). Window placement is monitor-topology dependent and must
+        // not roam, so UnpackagedAppDataStore uses the LocalPath surface instead. This
+        // test is what stops someone "simplifying" it onto LocalSettings.
         var roamingKey = @"SOFTWARE\" + _publisher;
 
         // ── Positive control ──────────────────────────────────────────────────────
         // A "the key isn't there" assertion is worthless unless the same probe can be
         // shown to find the key when the defect IS exercised. Drive LocalSettings
         // directly under a sibling product and confirm the roaming key appears.
+        //
+        // This control is ALSO the follow-up trigger for spec 063 §6 D1, which is why
+        // it is phrased as an observable condition rather than a version number: it
+        // fails the moment the loaded runtime starts writing to the machine-local hive,
+        // whichever release that turns out to be. A trigger keyed to a version inferred
+        // from release notes can rot; a trigger keyed to a measurement cannot.
         const string ControlProduct = "RoamingControl";
         global::Microsoft.Windows.Storage.ApplicationData
             .GetForUnpackaged(_publisher, ControlProduct)
@@ -156,11 +162,45 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
             Positive control failed: writing through GetForUnpackaged().LocalSettings did
             not create HKCU\{roamingKey}\{ControlProduct}.
 
-            Either the probe is wrong, or the Windows App SDK fixed
-            ApplicationData_GetForUnpackaged_LocalSettings (shipped in 2.5.1) and this
-            repo has now picked that fix up. If it is the latter, that is the trigger to
-            revisit spec 063 §6 D1 and reconsider making LocalSettings — and this store —
-            the unpackaged default.
+            Two possibilities, and they are distinguishable — do not guess:
+
+            (a) The probe is wrong. Check the machine-local path
+                HKCU\SOFTWARE\Classes\Local Settings\Software\{_publisher}\{ControlProduct}.
+                If the value is THERE, the runtime now behaves correctly (case b). If it
+                is in NEITHER hive, the probe is broken and this is not a measurement.
+
+            (b) The loaded Windows App Runtime has picked up the fix for
+                WindowsAppSDK#6559 (RuntimeCompatibilityChange
+                ApplicationData_GetForUnpackaged_LocalSettings).
+
+                ** This is the follow-up trigger for spec 063 §6 D1. **
+
+                Before acting on it, confirm WHICH runtime produced the result. This
+                suite sets WindowsAppSDKSelfContained=true, so it loads the runtime
+                bundled in its own output directory rather than the machine-wide
+                package — verify with:
+
+                    Process.GetCurrentProcess().Modules -> Microsoft.WindowsAppRuntime.dll -> FileName
+
+                A path under the test project's bin\ means the result reflects the
+                PINNED WindowsAppSDKVersion. A path under WindowsApps\ means it reflects
+                whatever 2.x runtime is installed on this machine, which is NOT evidence
+                about the pinned version (2.x services in place, so a newer runtime can
+                satisfy an app built against an older SDK).
+
+                The path only proves the runtime is bundled. To identify WHICH one —
+                the number the fix boundary actually attaches to — hash the loaded
+                Microsoft.WindowsAppRuntime.dll / Microsoft.Windows.Storage.Projection.dll
+                and match them back to a Microsoft.WindowsAppSDK.Foundation package in
+                the NuGet cache. The fix lives in Foundation, and the metapackage ->
+                Foundation pairing is neither stable nor monotonic (2.2.0 -> 2.1.0,
+                2.3.1 -> 2.3.5), so the metapackage version is two steps removed from
+                the behaviour. See spec 063 §3.2.
+
+                Once confirmed, revisit spec 063 §6 D1: LocalSettings becomes a viable
+                surface, and making this store the unpackaged default becomes worth
+                reconsidering — subject to the migration problem in §6 D2 and the
+                deployment-variance problem in §3.2, neither of which this solves.
             """);
 
         // ── The actual assertion ──────────────────────────────────────────────────

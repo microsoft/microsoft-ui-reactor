@@ -173,7 +173,7 @@ floor, failing the `Integration Tests` (template smoke) and `bootstrap.ps1` CI j
 
 ### §3.1 The `LocalSettings` roaming defect — measured, not assumed
 
-Windows App SDK **2.5.1** shipped this fix (RuntimeCompatibilityChange
+Windows App SDK **2.5.1**'s release notes claim this fix (RuntimeCompatibilityChange
 `ApplicationData_GetForUnpackaged_LocalSettings`, [WindowsAppSDK#6559](https://github.com/microsoft/WindowsAppSDK/issues/6559)):
 
 > Fixed `ApplicationData.GetForUnpackaged().LocalSettings()` opening a registry key at the wrong
@@ -195,6 +195,10 @@ The third arm matters: "found in neither" would have meant the probe was wrong, 
 behaviour was correct. It did not occur, so the result is a measurement. **The defect is real on
 2.2.0.**
 
+(That release note's *version* attribution turns out to be wrong — the fix actually lands at
+metapackage 2.3.1 / `Foundation` 2.3.5, established in §3.2. It does not change anything here:
+2.2.0 was measured directly, and the correction only moves the follow-up trigger earlier.)
+
 Two further properties were measured at the same time, and shape §4:
 
 | Surface | Behaviour on 2.2.0 |
@@ -205,8 +209,91 @@ Two further properties were measured at the same time, and shape §4:
 | `LocalCachePath` | Throws `NotImplementedException`. |
 
 **The defect is confined to `LocalSettings`.** The path surface is correct. That is what makes a
-useful adoption possible at 2.2.0 rather than forcing a wait for 2.5.1 — and it is why §4 builds on
-`LocalPath`.
+useful adoption possible at 2.2.0 rather than forcing a wait for a later release — and it is why §4
+builds on `LocalPath`.
+
+### §3.2 Which runtime produced that result — and why the fix version is deliberately not named
+
+Windows App SDK 2.x ships **one** side-by-side framework package per major
+(`Microsoft.WindowsAppRuntime.2`), serviced **in place** (spec 059 §3). `GetForUnpackaged`'s
+registry behaviour lives in that **runtime**, not in the compile-time reference. Two consequences,
+both load-bearing:
+
+**1. A framework-dependent measurement cannot attribute behaviour to a pinned SDK version.** An app
+built against 2.2.0 on a machine carrying a newer 2.x runtime loads the *newer* runtime, so it would
+observe the newer behaviour. "Version X fixed it" and "the installed runtime has the fix" are
+indistinguishable from such a probe.
+
+The measurement in §3.1 is not exposed to that confound, and this was verified rather than assumed.
+`Reactor.Tests` sets `WindowsAppSDKSelfContained=true`, so it loads the runtime **bundled in its own
+output directory**. Measured on a machine with `Microsoft.WindowsAppRuntime.2` registered at both
+2.4.0 and 2.5.1:
+
+```text
+Microsoft.WindowsAppRuntime.dll
+  path = <repo>\tests\Reactor.Tests\bin\x64\Debug\net10.0-windows10.0.22621.0\Microsoft.WindowsAppRuntime.dll
+```
+
+Not a `WindowsApps\` path — so the observed behaviour reflects the **pinned** `WindowsAppSDKVersion`.
+The direction of the confound also matters: §3.1 observed the *roaming* hive, i.e. the **old**
+behaviour, which accidentally loading a *newer, fixed* runtime cannot produce. Any future probe of
+this API should record the loaded module path alongside the registry result; the check is one line
+(`Process.GetCurrentProcess().Modules`), and without it a result is not attributable.
+
+**2. For a consumer, correctness varies by *deployment mode and machine*, not by their SDK pin.**
+This is the sharper form of the argument, and it is measured rather than hypothesised. The behaviour
+is decided by the **loaded** runtime, so one unchanged source tree pinned to one SDK version splits
+two ways:
+
+| Deployment | Runtime that loads | `LocalSettings` lands in |
+|---|---|---|
+| `WindowsAppSDKSelfContained=true` | the **bundled** `Foundation` | roaming hive (for a 2.2.0 pin) — even on a machine carrying a fixed 2.x runtime |
+| framework-dependent | the machine's installed 2.x runtime, serviced **in place** | machine-local hive wherever a fixed runtime is installed |
+
+Same source, same pin, opposite storage locations. **A default whose correctness depends on how the
+app was packaged and what happens to be installed on the user's machine is a bad default regardless
+of which release fixed the bug** — and unlike the roaming defect itself, this does not go away when
+the fix propagates, because the split persists for as long as any unfixed 2.x runtime is in the wild.
+That is an independent and more durable reason to keep `JsonFileStore` as the unpackaged default
+(§6 D2) than "2.2.0 is broken", and it survives the trigger in this section being corrected.
+`LocalPath` has no such variance: it resolves under `%LOCALAPPDATA%` on every 2.x runtime, in either
+deployment mode.
+
+Accordingly **this spec does not key its follow-up trigger to a release number.** The published
+release notes attribute the #6559 fix to 2.5.1. **That attribution is wrong** — a companion
+two-arm experiment, run on one machine from this spec's own 2.2.0 base with the registry and
+`%LOCALAPPDATA%` wiped between arms, places the fix at metapackage **2.3.1**:
+
+| Arm | Metapackage | Foundation | Runtime loaded from | roaming hive | machine-local hive |
+|---|---|---|---|---|---|
+| A | 2.2.0 | 2.1.0 | own build output | **present** | absent |
+| B | 2.3.1 | 2.3.5 | own build output | absent | **present** |
+
+Arm A is Arm B's negative control: it shows the probe *does* report the roaming key when the defect
+is live, so Arm B's "absent" is a measurement rather than a silent miss. Both arms loaded a bundled
+runtime, so the machine's 2.5.1 SbS package is excluded in both directions. Arm A also independently
+reproduces §3.1 from a separate worktree.
+
+**The boundary is a `Foundation` version, not a metapackage version** — and the pairing between them
+is neither stable nor even monotonic in appearance (verified against the metapackage nuspecs):
+
+| Metapackage | 2.2.0 | 2.3.1 | 2.4.0 | 2.5.1 |
+|---|---|---|---|---|
+| `…WindowsAppSDK.Foundation` | 2.1.0 | **2.3.5** | 2.3.9 | 2.3.12 |
+
+Foundation sits *below* the metapackage version at 2.2.0 and *above* it at 2.3.1. So a trigger naming
+a metapackage version is two indirections from the thing that decides behaviour — the loaded
+`Foundation` binaries — and a trigger naming a release note is simply wrong. The trigger is therefore
+expressed as an **observable condition** and enforced by the positive control in
+`UnpackagedAppDataStoreTests.Does_Not_Route_Window_Placement_Through_The_Roaming_Registry_Hive`: it
+fails the moment the loaded runtime stops writing to the roaming hive, and its message walks the
+reader through separating a broken probe from a real fix and through identifying which runtime
+produced the result (§8).
+
+For anyone re-running this: identify the runtime by **hashing the loaded binaries** and matching them
+back to the package cache, not merely by checking the module path. A `bin\` path proves the runtime
+is bundled rather than machine-wide — enough to exclude the SbS confound — but it does not say *which*
+`Foundation` produced the behaviour, which is the number the boundary actually attaches to.
 
 ## §4 API surface
 
@@ -255,7 +342,7 @@ The bump makes it tempting to simplify the existing unpackaged workarounds. Each
 | Candidate | Why deferred |
 |---|---|
 | Making `UnpackagedAppDataStore` the auto-detected unpackaged default | §6 D2. Revisit when the default-store guard's positive control flips (§8). |
-| Using the `LocalSettings` key/value surface | §3.1 — roams on 2.2.0. Revisit at the bump that picks up the 2.5.1 fix. |
+| Using the `LocalSettings` key/value surface | §3.1 — roams on 2.2.0. Revisit when the guard's positive control fails, i.e. when the loaded runtime starts writing to the machine-local hive (§3.2 — the fix version is deliberately not named, and the runtime, not the SDK pin, decides). |
 | Migrating existing `JsonFileStore` data into the app-data root | Requires a publisher/product pair the framework cannot invent on the app's behalf, and a one-way copy whose failure mode is silent data duplication. Only worth building alongside a default flip. |
 | `ApplicationData.MachinePath` / `IsMachinePathSupported` | Per-machine (all-users) app data. No Reactor surface wants machine-wide window placement. |
 | `ApplicationData.SharedLocalPath`, `TemporaryPath`, `LocalCacheFolder` | No consumer. `LocalCachePath` additionally throws `NotImplementedException` on 2.2.0 (§3.1). |
@@ -267,10 +354,10 @@ The bump makes it tempting to simplify the existing unpackaged workarounds. Each
 
 | # | Question | Resolution |
 |---|---|---|
-| D1 | Which storage surface — `LocalSettings` (the API's headline key/value store) or `LocalPath`? | **`LocalPath`.** Measured on 2.2.0: `LocalSettings` writes to a roaming hive (§3.1), `LocalPath` resolves under non-roaming `%LOCALAPPDATA%`. Window placement is machine-local data, so the settings surface is disqualified until the 2.5.1 fix is picked up. |
+| D1 | Which storage surface — `LocalSettings` (the API's headline key/value store) or `LocalPath`? | **`LocalPath`.** Measured on 2.2.0: `LocalSettings` writes to a roaming hive (§3.1), `LocalPath` resolves under non-roaming `%LOCALAPPDATA%`. Window placement is machine-local data, so the settings surface is disqualified until the fix is in the loaded runtime — and even then §3.2 shows that is a per-machine property rather than something the SDK pin guarantees. |
 | D2 | Does the new store become the unpackaged **default**? | **No — opt-in.** Not caution, but a correctness argument: the two stores key data differently (publisher/product vs. process name), so flipping the default would strand every existing unpackaged app's saved layout with no migration path (§5). Pinned by a test that reddens if the default changes (§8). |
 | D3 | Should the framework synthesise a default publisher/product? | **No.** Any guess (assembly name, process name) reintroduces exactly the fragile identity the API exists to replace, and a wrong guess collides across apps. The pair is required and explicit. |
-| D4 | Target version — **2.2.0** (minimum) vs. **2.5.1** (carries the `LocalSettings` fix) | **2.2.0.** Repo-owner call, consistent with spec 059 §3's "minimum, not latest". D1 means the defect is avoided by construction rather than by version, so the fix is not load-bearing for this spec. |
+| D4 | Target version — **2.2.0** (minimum) vs. a later 2.x carrying the `LocalSettings` fix | **2.2.0.** Repo-owner call, consistent with spec 059 §3's "minimum, not latest". D1 means the defect is avoided by construction rather than by version, so the fix — and which release carries it (§3.2) — is not load-bearing for this spec. |
 | D5 | Sanitize `publisher` / `product` before handing them to the SDK? | **No.** Measured: the SDK already rejects traversal, rooted and empty values with `ArgumentException` (§3.1). A second sanitizer would diverge from the platform's rule over time. Reactor validates only non-emptiness, for a clearer message, and pins the SDK's rejection with a test. |
 | D6 | Spec home — standalone **063** vs. a section in **036** (window model) | **Standalone.** The SDK bump is repo-wide, and 059 is the precedent for an SDK-uptake spec. |
 
@@ -324,7 +411,9 @@ were applied to the product code and each was caught by exactly the intended tes
 > UTF-16-encoded in the `#US` heap, so an ASCII scan for a string literal can never match. The
 > working instrument is a UTF-16 scan with a known-present literal as a positive control.
 
-**The roaming guard is also the follow-up trigger.** Its positive control asserts the 2.2.0 defect
-is present. When a future SDK bump picks up the 2.5.1 fix, that control fails — and its failure
-message says so explicitly, pointing back at D1/D2. The revisit therefore happens deliberately,
-announced by a red test, rather than by someone remembering this spec exists.
+**The roaming guard is also the follow-up trigger.** Its positive control asserts the defect
+is present in the loaded runtime. When that stops being true, the control fails — and its failure
+message walks the reader through distinguishing a broken probe from a real fix, through confirming
+*which* runtime produced the result (§3.2), and then points at §6 D1/D2. The revisit therefore
+happens deliberately, announced by a red test keyed to an **observable condition** rather than to a
+version number someone inferred from release notes.

@@ -18,15 +18,19 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 /// layouts. (spec 063 §6, D2 / D3)</para>
 /// <para><b>Why the path surface and not <c>LocalSettings</c>.</b> This store uses
 /// <c>ApplicationData.LocalPath</c> and deliberately does <b>not</b> use the sibling
-/// <c>LocalSettings</c> key/value surface. On 2.2.0, <c>GetForUnpackaged().LocalSettings</c>
-/// opens <c>HKCU\SOFTWARE\&lt;publisher&gt;\&lt;product&gt;</c> — a <b>roaming</b> hive —
+/// <c>LocalSettings</c> key/value surface. On the runtime this repo pins,
+/// <c>GetForUnpackaged().LocalSettings</c> opens
+/// <c>HKCU\SOFTWARE\&lt;publisher&gt;\&lt;product&gt;</c> — a <b>roaming</b> hive —
 /// rather than the machine-local <c>HKCU\SOFTWARE\Classes\Local Settings\Software\…</c>
-/// it is contracted to use (WindowsAppSDK issue 6559; fixed in 2.5.1 under
-/// RuntimeCompatibilityChange <c>ApplicationData_GetForUnpackaged_LocalSettings</c>).
-/// Window placement is monitor-topology- and DPI-dependent, so roaming it between a
-/// user's machines restores windows onto monitors that do not exist there.
-/// <c>LocalPath</c> resolves under <c>%LOCALAPPDATA%</c>, which does not roam, and is
-/// therefore correct on 2.2.0 today. (spec 063 §3.1)</para>
+/// it is contracted to use (WindowsAppSDK issue 6559, RuntimeCompatibilityChange
+/// <c>ApplicationData_GetForUnpackaged_LocalSettings</c>). Window placement is
+/// monitor-topology- and DPI-dependent, so roaming it between a user's machines
+/// restores windows onto monitors that do not exist there. <c>LocalPath</c> resolves
+/// under <c>%LOCALAPPDATA%</c>, which does not roam. (spec 063 §3.1)</para>
+/// <para>That behaviour is a property of the installed 2.x Windows App Runtime, which
+/// services in place, rather than of the SDK version an app pins — so it can differ
+/// machine to machine for the same build. <c>LocalPath</c> has no such variance, which
+/// is a second reason this store is built on it. (spec 063 §3.2)</para>
 /// <para>Read/write failures follow the <see cref="IWindowPersistenceStore"/>
 /// "warn-and-default" contract — they never throw into the caller. The
 /// <i>constructor</i> may throw, matching <see cref="JsonFileStore"/>: an invalid

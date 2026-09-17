@@ -52,10 +52,13 @@ Conventions for contributors:
   2.2.0, `GetForUnpackaged().LocalSettings` opens `HKCU\SOFTWARE\<publisher>\<product>` — a
   *roaming* hive — instead of the machine-local
   `HKCU\SOFTWARE\Classes\Local Settings\Software\…` it is contracted to use
-  ([WindowsAppSDK#6559](https://github.com/microsoft/WindowsAppSDK/issues/6559), fixed in 2.5.1).
+  ([WindowsAppSDK#6559](https://github.com/microsoft/WindowsAppSDK/issues/6559)).
   Window placement is monitor-topology and DPI dependent, so roaming it would restore windows onto
   monitors that do not exist on the current machine. `LocalPath` resolves under `%LOCALAPPDATA%`,
-  which does not roam, and is verified correct on 2.2.0 (spec 063 §3.1).
+  which does not roam, and is verified correct on 2.2.0 (spec 063 §3.1). Note that the
+  `LocalSettings` behaviour is a property of the *installed* 2.x runtime, which services in place,
+  rather than of the SDK version an app pins — so it can vary machine to machine for the same build
+  (spec 063 §3.2).
 
 ### Changed
 
