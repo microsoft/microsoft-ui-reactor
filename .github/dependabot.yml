@@ -202,19 +202,28 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@babel/core"
         update-types: ["version-update:semver-major"]
-      # better-sqlite3 13 cannot be installed on a stock Windows machine, and
-      # this was proven by CI rather than argued. v11 declares
-      # `install: prebuild-install || node-gyp rebuild`, so it downloads a
-      # prebuilt binary and never invokes node-gyp. v13 declares no install
-      # script, so npm falls back to its implicit `node-gyp rebuild` for the
-      # package's binding.gyp. v13 *does* ship prebuilds and its binding.gyp
-      # sets every target to `type: none` when one matches the host -- but
-      # node-gyp evaluates binding.gyp only after its `configure` step, and
-      # configure needs a Visual Studio it can detect. On GitHub's
-      # windows-latest runner there is none, so `npm ci` dies at
-      # "find VS ... Could not find any Visual Studio installation to use"
-      # before the prebuild short-circuit is ever reached. Measured on this PR:
-      # the `samples/apps/headtrax/service (windows-latest)` job failed exactly
+      # better-sqlite3 13 cannot currently be installed on Windows with the
+      # node-gyp npm bundles, and this was proven by CI rather than argued.
+      # v11 declares `install: prebuild-install || node-gyp rebuild`, so it
+      # downloads a prebuilt binary and never invokes node-gyp. v13 declares no
+      # install script, so npm falls back to its implicit `node-gyp rebuild`
+      # for the package's binding.gyp. v13 *does* ship prebuilds and its
+      # binding.gyp sets every target to `type: none` when one matches the
+      # host -- but node-gyp evaluates binding.gyp only after its `configure`
+      # step, and configure has to resolve a Visual Studio toolset first.
+      #
+      # Visual Studio is present on the windows-latest runner; node-gyp 11.5.0
+      # (bundled with npm 10.9.x) just cannot identify it, reporting
+      # `unknown version "undefined" found at
+      # "C:\Program Files\Microsoft Visual Studio\18\Enterprise"` and then
+      # `could not find a version of Visual Studio 2017 or newer to use`. That
+      # is the same VS 18.x detection gap tests/stress_perf_rn/README.md
+      # already documents for the react-native-windows CLI, not a missing
+      # toolchain. node-gyp 13 does detect VS 2026, so this unblocks itself
+      # once npm ships a newer bundled node-gyp.
+      #
+      # Measured on this PR: the
+      # `samples/apps/headtrax/service (windows-latest)` job failed exactly
       # that way with v13 and passes with v11. Security patches on 11.x still
       # flow through.
       - dependency-name: "better-sqlite3"

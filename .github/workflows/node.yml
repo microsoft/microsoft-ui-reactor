@@ -121,9 +121,11 @@ jobs:
         # immediately: the better-sqlite3 11 -> 13 bump passed every
         # ubuntu-latest job and failed windows-latest outright, because v13
         # drops the prebuild-install script and npm's implicit `node-gyp
-        # rebuild` then needs a Visual Studio the runner does not have. An
-        # ubuntu-only matrix would have reported green while shipping a sample
-        # no Windows contributor could install.
+        # rebuild` then has to resolve a Visual Studio toolset that node-gyp
+        # 11.5.0 cannot identify on that image (see the better-sqlite3 ignore
+        # entry in .github/dependabot.yml). An ubuntu-only matrix would have
+        # reported green while shipping a sample no Windows contributor could
+        # install.
         os: [ubuntu-latest, windows-latest]
     steps:
       # persist-credentials: false — `npm ci` runs lifecycle scripts from
