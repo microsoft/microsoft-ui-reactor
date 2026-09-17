@@ -251,13 +251,27 @@ two ways:
 | framework-dependent | the machine's installed 2.x runtime, serviced **in place** | machine-local hive wherever a fixed runtime is installed |
 
 Same source, same pin, opposite storage locations. **A default whose correctness depends on how the
-app was packaged and what happens to be installed on the user's machine is a bad default regardless
-of which release fixed the bug** — and unlike the roaming defect itself, this does not go away when
-the fix propagates, because the split persists for as long as any unfixed 2.x runtime is in the wild.
-That is an independent and more durable reason to keep `JsonFileStore` as the unpackaged default
-(§6 D2) than "2.2.0 is broken", and it survives the trigger in this section being corrected.
-`LocalPath` has no such variance: it resolves under `%LOCALAPPDATA%` on every 2.x runtime, in either
-deployment mode.
+app was packaged and on what happens to be installed on the user's machine is a bad default** —
+which is a reason to keep `JsonFileStore` as the unpackaged default (§6 D2) beyond "2.2.0 is
+broken". `LocalPath` has no such variance: it resolves under `%LOCALAPPDATA%` on every 2.x runtime,
+in either deployment mode.
+
+> **Correction (2026-09-17).** An earlier revision of this section claimed the split is *durable* —
+> that it "does not go away when the fix propagates, because it persists for as long as any unfixed
+> 2.x runtime is in the wild". **That is wrong**, and it was reasoning rather than measurement.
+> The split is a property of pinning **below** the fix, not a permanent property of in-place
+> servicing. The SDK's generated `MddBootstrapAutoInitializer` passes the **build-time**
+> `Runtime.Version` as `minVersion` and hard-exits when no compatible runtime resolves (measured by
+> varying only `minVersion`: `2.3.1.0` → `TryInitialize=True`; an impossible minimum →
+> `False` / `0x80670016`). So a framework-dependent app pinned at ≥ 2.3.1 cannot load an unfixed
+> runtime, and a self-contained one bundles a fixed `Foundation` — the two modes converge. Because
+> Reactor's pin is a transitive NuGet floor, that covers consumers too.
+>
+> The consequence for this spec: the deployment-variance argument is **real at the 2.2.0 pin this
+> spec ships** and is a legitimate supporting reason today, but it **expires when the pin reaches
+> 2.3.1**. It is therefore *not* the durable argument for D1. The durable one is §6 D1's
+> retirement test: adopting `LocalSettings` would retire no code and would *grow* this store from a
+> ~3-line composition into a near-duplicate of `PackagedSettingsStore`.
 
 Accordingly **this spec does not key its follow-up trigger to a release number.** The published
 release notes attribute the #6559 fix to 2.5.1. **That attribution is wrong** — a companion
@@ -360,12 +374,13 @@ The bump makes it tempting to simplify the existing unpackaged workarounds. Each
 | `XamlBindingHelper.SetPropertyFrom{Thickness,CornerRadius,Color}` and `Setter.ValueProperty` (both 2.2.0) | Still deferred, unchanged, per spec 059 §5. This bump makes them *available* but adopts neither. |
 | Entrance `outControlPoint1/2`, and the non-uniform DrillIn `BackNavigatingTo` scale curve | Surfaced while re-verifying §3's motion constants: `WinUiNavigationMotionParityTests` does not record the Entrance exit control points, and `BackNavigatingTo` uses a different scale easing (`{0.12, 0.0}` / `{0.0, 1.0}`) from the other three triggers. Both are **pre-existing** and independent of this bump. |
 | Packaged-process behaviour of `GetForUnpackaged()` | Unmeasured, and therefore unclaimed. The store targets unpackaged apps; packaged apps should use `PackagedSettingsStore`. Establishing the packaged behaviour needs the `Reactor.PackagedTests` tier and is out of scope. |
+| **Cross-process write safety** | **Known limitation, and this store widens its reach.** `JsonFileStore` does read-merge-write guarded by a per-*instance* `_ioLock` and a shared `.tmp` path, so two processes writing different persistence ids can lose each other's entries; its class doc claims a `FileShare.None` protection that is not in the code (both read sites use `FileShare.Read`). That doc also scopes cross-process out on the grounds that the store "is keyed off the entry process's name" — which held for `JsonFileStore`, where two differently-named executables get different files. **It does not hold here:** keying on publisher/product means two distinct executables from the same publisher/product share one file, so the collision is newly reachable for apps that previously could not hit it. The defect is pre-existing and lives in the shared `JsonFileStore` machinery, so it is fixed there rather than worked around in this store — and fixing it there benefits the default path too. Tracked separately; `LocalSettings` is genuinely better on this axis, which is the one real point in its favour (§6 D1). |
 
 ## §6 Decisions (resolved 2026-09-16)
 
 | # | Question | Resolution |
 |---|---|---|
-| D1 | Which storage surface — `LocalSettings` (the API's headline key/value store) or `LocalPath`? | **`LocalPath`.** Measured on 2.2.0: `LocalSettings` writes to a roaming hive (§3.1), `LocalPath` resolves under non-roaming `%LOCALAPPDATA%`. Window placement is machine-local data, so the settings surface is disqualified until the fix is in the loaded runtime — and even then §3.2 shows that is a per-machine property rather than something the SDK pin guarantees. |
+| D1 | Which storage surface — `LocalSettings` (the API's headline key/value store) or `LocalPath`? | **`LocalPath`.** Two reasons, in order of durability. (1) **Retirement test.** The repo's "don't reimplement platform machinery" principle (spec 033, spec 017) asks whether delegating lets us *avoid* an implementation. Here it does not: `JsonFileStore` stays (it is the default and holds all existing data) and `PackagedSettingsStore` stays, so `LocalSettings` retires nothing and would *grow* this store from a ~3-line composition into a near-duplicate of `PackagedSettingsStore`, WinRT catch arms and all. The shipped design already satisfies the principle where it applies, by delegating root resolution *and* publisher/product validation to the SDK. (2) **Correctness at the shipped pin.** Measured on 2.2.0: `LocalSettings` writes to a roaming hive (§3.1) while `LocalPath` resolves under non-roaming `%LOCALAPPDATA%`; window placement is machine-local data. Note (2) **expires at 2.3.1** (§3.2 correction) — (1) does not. |
 | D2 | Does the new store become the unpackaged **default**? | **No — opt-in.** Not caution, but a correctness argument: the two stores key data differently (publisher/product vs. process name), so flipping the default would strand every existing unpackaged app's saved layout with no migration path (§5). Pinned by a test that reddens if the default changes (§8). |
 | D3 | Should the framework synthesise a default publisher/product? | **No.** Any guess (assembly name, process name) reintroduces exactly the fragile identity the API exists to replace, and a wrong guess collides across apps. The pair is required and explicit. |
 | D4 | Target version — **2.2.0** (minimum) vs. a later 2.x carrying the `LocalSettings` fix | **2.2.0.** Repo-owner call, consistent with spec 059 §3's "minimum, not latest". D1 means the defect is avoided by construction rather than by version, so the fix — and which release carries it (§3.2) — is not load-bearing for this spec. |

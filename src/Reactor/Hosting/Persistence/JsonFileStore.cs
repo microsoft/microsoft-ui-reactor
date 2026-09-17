@@ -18,10 +18,19 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 /// <c>false</c> from <see cref="TryRead"/> with no exception bubbling out —
 /// the spec calls for "warn-and-default" semantics on corruption.</para>
 /// <para>Writes are best-effort and survive disk-full / permission denied
-/// without throwing. The file is opened with <see cref="FileShare.None"/> to
-/// prevent concurrent same-process writers from clobbering each other; cross-
-/// process writers are out of scope (the store is keyed off the entry
-/// process's name).</para>
+/// without throwing.</para>
+/// <para><b>Single-process only.</b> Writes are read-merge-write under a
+/// per-<i>instance</i> <c>_ioLock</c>, staged through a shared
+/// <c>&lt;path&gt;.tmp</c> and committed with <c>File.Move(overwrite: true)</c>.
+/// That serializes writers sharing one instance; it does <b>not</b> serialize
+/// separate instances or separate processes, which can interleave
+/// read-merge-write and drop each other's entries even when writing different
+/// persistence ids. Reads open with <see cref="FileShare.Read"/>.</para>
+/// <para>For <see cref="JsonFileStore"/> itself the exposure is narrow, because
+/// the default path is keyed on the entry process's name. It is wider for
+/// <see cref="UnpackagedAppDataStore"/>, which composes this type over a
+/// publisher/product root that two distinct executables can share. Tracked as a
+/// known limitation (spec 063 §5).</para>
 /// </remarks>
 public sealed class JsonFileStore : IWindowPersistenceStore
 {
