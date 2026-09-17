@@ -12,13 +12,21 @@ class RecipesIndexApp : Component
         Heading("Recipes"),
         TextBlock("Real-world compositions made of Reactor primitives.")
             .Opacity(0.7),
-        HStack(8,
-            Tile("Login", "Validation + async submit"),
-            Tile("Master-detail", "Selection-driven layout"),
-            Tile("Settings", "Persisted preferences")
+        VStack(8,
+            HStack(8,
+                Tile("Login", "Validation + async submit"),
+                Tile("Master-detail", "Selection-driven layout"),
+                Tile("Settings", "Persisted preferences")),
+            HStack(8,
+                Tile("Paginated list", "Loading + empty + error states"),
+                Tile("Modal dialog", "Scrim + confirmation flow"),
+                Tile("Multi-step form", "Wizard validation")),
+            HStack(8,
+                Tile("Search", "Memoized suggestions"),
+                Tile("Command palette", "Keyboard-opened overlay"),
+                Tile("Drag-reorder", "Keyed list reordering"))
         )
     ).Padding(20);
-// </snippet:app>
 
     // <snippet:tile>
     private static Element Tile(string title, string sub) => VStack(4,
@@ -27,6 +35,7 @@ class RecipesIndexApp : Component
     ).Padding(12);
     // </snippet:tile>
 }
+// </snippet:app>
 
 // <snippet:rendering-shape>
 // Every recipe page in this folder pulls a tiny dedicated doc app under

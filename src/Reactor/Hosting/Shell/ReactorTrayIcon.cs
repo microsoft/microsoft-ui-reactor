@@ -43,6 +43,14 @@ public sealed class ReactorTrayIcon : IDisposable
     /// <summary>Last-applied <see cref="TrayIconSpec"/> snapshot.</summary>
     public TrayIconSpec Spec => _spec;
 
+    /// <summary>
+    /// The <c>HICON</c> currently handed to the shell, or <c>0</c> when the icon source
+    /// produced none. Test-only accessor (InternalsVisibleTo Reactor.Tests /
+    /// Reactor.AppTests.Host) — the shell surface is otherwise unobservable in-process,
+    /// so this is how a fixture distinguishes "loaded" from "registered with no bitmap".
+    /// </summary>
+    internal nint CurrentHIcon => _hIcon;
+
     /// <summary>The icon bitmap source. Mutating triggers a shell re-apply.</summary>
     [UIThreadOnly]
     public WindowIcon Icon
@@ -246,7 +254,8 @@ public sealed class ReactorTrayIcon : IDisposable
         {
             // Resource icons (ms-appx:///) aren't directly loadable via
             // LoadImageW — apps that need a tray icon for a packaged app
-            // should ship a sidecar .ico and use FromPath. Silently skip.
+            // should ship a sidecar .ico and use FromPath, or hand the bytes
+            // to WindowIcon.FromBytes. Silently skip.
             if (icon.IsResource)
             {
                 Debug.WriteLine($"[Reactor] Tray icon: ms-appx resources cannot be loaded as HICON; ship a sidecar .ico file.");
@@ -276,6 +285,11 @@ public sealed class ReactorTrayIcon : IDisposable
             }
             if (cx <= 0) cx = 16;
             if (cy <= 0) cy = 16;
+
+            // Binary data goes through CreateIconFromResourceEx instead, at the same
+            // DPI-aware target — which is also the size a multi-frame .ico held in memory
+            // is selected against, so the two source kinds resolve the same frame.
+            if (icon.IsBinary) return icon.CreateBinaryHIcon(cx, cy);
 
             // LR_DEFAULTSIZE is intentionally omitted — it would override the
             // explicit size we just resolved when cx/cy are zero. Here cx/cy

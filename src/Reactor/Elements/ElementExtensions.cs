@@ -23,7 +23,7 @@ namespace Microsoft.UI.Reactor;
 /// Modifiers are stored inline on Element.Modifiers, preserving the concrete type
 /// through the entire fluent chain. This means .Set() works after any modifier:
 ///
-///   Text("Hello")
+///   TextBlock("Hello")
 ///       .Bold()
 ///       .Margin(16)
 ///       .HAlign(HorizontalAlignment.Center)
@@ -59,6 +59,14 @@ public static partial class ElementExtensions
     public static T Margin<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { Margin = new Thickness(left, top, right, bottom) });
 
+    // The struct overload exists so a `.Set(fe => fe.Margin = someThickness)` — the exact
+    // shape REACTOR_POOL_001 flags — is a lift-and-shift rather than a rewrite: the value
+    // moves across untouched, with no need to decompose it into four doubles or re-type
+    // the local holding it. Mirrors the BorderThickness(Thickness) overload below. The
+    // double overloads stay the ergonomic default.
+    public static T Margin<T>(this T el, Thickness thickness) where T : Element =>
+        ModifyLayout(el, new LayoutModifiers { Margin = thickness });
+
     public static T Padding<T>(this T el, double uniform) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(uniform) });
 
@@ -71,6 +79,10 @@ public static partial class ElementExtensions
     // to the more-specific overloads.
     public static T Padding<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(left, top, right, bottom) });
+
+    // Same lift-and-shift story as Margin(Thickness) above.
+    public static T Padding<T>(this T el, Thickness thickness) where T : Element =>
+        ModifyLayout(el, new LayoutModifiers { Padding = thickness });
 
     // ── Logical (BiDi-aware) layout modifiers ───────────────────────
     // InlineStart = left in LTR, right in RTL. InlineEnd = right in LTR, left in RTL.
@@ -590,7 +602,7 @@ public static partial class ElementExtensions
     /// <summary>
     /// Apply a named WinUI Style to the element's control. Style is on
     /// FrameworkElement — works on any element.
-    /// Usage: Text("Hello").ApplyStyle("BodyTextBlockStyle")
+    /// Usage: TextBlock("Hello").ApplyStyle("BodyTextBlockStyle")
     /// <para>
     /// <b>Applied at mount only.</b> This routes through <c>OnMount</c>, and the
     /// reconciler runs <c>OnMountAction</c> only when there is no previous
@@ -598,6 +610,20 @@ public static partial class ElementExtensions
     /// apply or remove it when the condition flips on an in-place update — give
     /// the variants different <see cref="WithKey{T}(T, string)"/> values to force
     /// a remount when the style itself must change.
+    /// </para>
+    /// <para>
+    /// <b>Unresolved keys do not throw.</b> If <paramref name="styleName"/> is not
+    /// found in the application's resources (including merged dictionaries), or is
+    /// found but is not a <see cref="Style"/>, the element keeps its default
+    /// appearance and a warning naming the key is emitted on the
+    /// <c>Microsoft-UI-Reactor</c> ETW provider (and to <c>Debug.WriteLine</c> in
+    /// DEBUG builds). Earlier versions threw out of the mount action instead.
+    /// The warning fires once per distinct key, so one bad key in a virtualized
+    /// list does not warn per realized item; past a few hundred distinct
+    /// unresolved keys the de-duplication stops and every miss warns again,
+    /// because staying quiet there would hide a real typo. Under NativeAOT the
+    /// ETW half is compiled out unless the app sets
+    /// <c>EventSourceSupport=true</c>; the DEBUG mirror is unaffected.
     /// </para>
     /// </summary>
     public static T ApplyStyle<T>(this T el, string styleName) where T : Element =>
@@ -614,6 +640,14 @@ public static partial class ElementExtensions
     // cache stops growing past StyleApplierCacheCap and falls back to a
     // per-call delegate (the pre-#174 behavior) — correctness is unchanged,
     // only the allocation optimization stops applying beyond the cap.
+    //
+    // The cap is deliberately approximate, not an invariant: the Count check and
+    // the insert are not atomic, so writers racing at the boundary can overshoot
+    // by at most the number of them. That is fine for what the cap is — a memory
+    // guard against a pathological caller, where 256 vs 258 entries is
+    // immaterial — and taking a lock on the miss path would put contention on a
+    // path that runs during render, which is the cost #174 exists to avoid. The
+    // same reasoning applies to the warned-key set below.
     private const int StyleApplierCacheCap = 256;
     private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Action<FrameworkElement>> _styleApplierCache = new();
 
@@ -624,11 +658,111 @@ public static partial class ElementExtensions
         // happens at most once per distinct style name.
         if (_styleApplierCache.TryGetValue(styleName, out var cached))
             return cached;
-        if (_styleApplierCache.Count >= StyleApplierCacheCap)
-            return fe => fe.Style = (Style)Application.Current.Resources[styleName];
+        // An overlong name is never cached, for the same reason the warned-key
+        // set refuses it: the cap bounds how many entries are retained but not
+        // how large each one is, and both the dictionary key and the cached
+        // delegate's capture hold the full string, so a data-driven caller
+        // could otherwise root 256 arbitrarily long keys for the process
+        // lifetime. Falls back to the per-call delegate, whose lifetime the
+        // caller's element tree controls.
+        if (styleName.Length > MaxKeyChars || _styleApplierCache.Count >= StyleApplierCacheCap)
+            return fe => ApplyNamedStyle(fe, styleName);
         return _styleApplierCache.GetOrAdd(styleName,
-            static name => fe => fe.Style = (Style)Application.Current.Resources[name]);
+            static name => fe => ApplyNamedStyle(fe, name));
     }
+
+    // Resolve a named Style out of the application resources and assign it.
+    //
+    // Previously this was a bare `fe.Style = (Style)Application.Current.Resources[name]`.
+    // `ResourceDictionary` implements `IDictionary`, so that indexer *throws* on a
+    // missing key, and the cast throws when a key resolves to a non-Style — so an
+    // author's typo surfaced as an exception out of `OnMountAction`, which
+    // `Reconciler.ApplyModifiers` invokes unguarded, failing the whole render.
+    // A misspelled style key is an authoring mistake, not a corrupt-state condition,
+    // so it now degrades to "keep the default appearance" and names the key in a
+    // warning instead. Lookup goes through `ResourceLookup.TryFind`, which is a
+    // single `TryGetValue` plus a typed check — `ResourceDictionary` performs the
+    // merged-dictionary traversal itself, so keys defined in a merged dictionary
+    // (`XamlControlsResources` and friends) still resolve.
+    private static void ApplyNamedStyle(FrameworkElement fe, string styleName)
+    {
+        if (ResourceLookup.TryFind<Style>(Application.Current?.Resources, styleName, out var style))
+        {
+            fe.Style = style;
+            return;
+        }
+
+        WarnUnresolvedStyle(styleName);
+    }
+
+    // A style key is resolved once per mount, so one bad key on a virtualized list
+    // would warn once per realized item. Warn once per distinct key instead, and
+    // skip building the message when nothing is listening — `DiagnosticLog.Warning`
+    // is an ordinary method, so an interpolated argument would otherwise be
+    // allocated and discarded on a path this file works to keep allocation-free (#174).
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, byte> _warnedStyles = new();
+
+    // Test seam. Both caches are process-wide and never cleared in normal
+    // operation, so a fixture that fills either to capacity silently changes the
+    // behaviour every later fixture in the same process sees — the warned-key
+    // set changes de-duplication, and a saturated applier cache pushes everyone
+    // onto the uncached fallback, masking the #174 cached path. Selftests that
+    // fill them reset both around themselves so they stay hermetic and
+    // order-independent.
+    internal static void ResetStyleCachesForTesting()
+    {
+        _warnedStyles.Clear();
+        _styleApplierCache.Clear();
+    }
+
+    private static void WarnUnresolvedStyle(string styleName)
+    {
+        // Repeat miss for a key already reported: lock-free, no allocation.
+        if (_warnedStyles.ContainsKey(styleName))
+            return;
+        // Checked before recording the key so that attaching a listener later
+        // still gets the first warning for it.
+        if (!Core.Diagnostics.DiagnosticLog.IsWarningEnabled)
+            return;
+
+        // Bounded like the applier cache above so a data-driven caller passing
+        // unbounded distinct bad keys cannot grow this set without limit — an
+        // approximate bound, for the reasons given on StyleApplierCacheCap. Past
+        // capacity we stop deduping rather than stop warning: going silent
+        // there would break the documented "unresolved keys are reported"
+        // contract exactly when an app is most badly misconfigured, and would
+        // hide a genuine typo behind 256 earlier ones.
+        //
+        // An overlong name is never stored, only warned: the entry cap bounds
+        // how MANY keys are retained but not how LARGE each one is, so a
+        // data-driven caller could otherwise root 256 arbitrarily long strings
+        // for the process lifetime. Skipping de-duplication for those matches
+        // the overflow behaviour above — warn every time, retain nothing.
+        var bounded = styleName.Length <= MaxKeyChars;
+        if (bounded && _warnedStyles.Count < StyleApplierCacheCap && !_warnedStyles.TryAdd(styleName, 0))
+            return;
+
+        // Spec 044 §6.2.1: resource keys are developer-authored identifiers and
+        // are allowed on the ETW payload (same category as IntlMissingKey's
+        // `key`), but payloads must still be length-bounded so a data-driven
+        // caller can't pump an oversized string through the ring buffer.
+        var safeName = bounded
+            ? styleName
+            : string.Concat(styleName.AsSpan(0, MaxKeyChars), "…");
+
+        Core.Diagnostics.DiagnosticLog.Warning(
+            Core.Diagnostics.LogCategory.Theme,
+            nameof(ApplyStyle),
+            $"Style '{safeName}' did not resolve to a Style in the application's resources; " +
+            "the element keeps its default appearance. Check the key spelling and that the " +
+            "resource dictionary defining it is merged into the application's resources.");
+    }
+
+    // Spec 044 §6.2.1 "typical cap: 256 chars". Bounds the variable part of the
+    // ETW message (the rest is a fixed literal), and doubles as the threshold
+    // past which a key is never retained — by either the applier cache or the
+    // warned-key set — so neither can be used to root unbounded strings.
+    private const int MaxKeyChars = 256;
 
     // ════════════════════════════════════════════════════════════════
     //  Sugar extensions (typed, return concrete element type)
@@ -1202,7 +1336,7 @@ public static partial class ElementExtensions
     /// <summary>
     /// Sets the foreground from a WinUI theme resource. Resolves at render time
     /// and adapts when the theme changes (Light ↔ Dark).
-    /// Usage: <c>Text("Hello").Foreground(Theme.PrimaryText)</c>
+    /// Usage: <c>TextBlock("Hello").Foreground(Theme.PrimaryText)</c>
     /// </summary>
     public static T Foreground<T>(this T el, ThemeRef theme) where T : Element =>
         ModifyTheme(el, "Foreground", theme);
@@ -1214,6 +1348,13 @@ public static partial class ElementExtensions
 
     public static T CornerRadius<T>(this T el, double topLeft, double topRight, double bottomRight, double bottomLeft) where T : Element =>
         ModifyVisual(el, new VisualModifiers { CornerRadius = new Microsoft.UI.Xaml.CornerRadius(topLeft, topRight, bottomRight, bottomLeft) });
+
+    // Same lift-and-shift story as Margin(Thickness) / Padding(Thickness) above.
+    // The parameter type is spelled out in full for symmetry with the two calls
+    // above it, which qualify to keep the method name and the type name distinct
+    // at a glance.
+    public static T CornerRadius<T>(this T el, Microsoft.UI.Xaml.CornerRadius radius) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { CornerRadius = radius });
 
     // ── Border brush/thickness (on Control and Border) ─────────────
 
@@ -1881,8 +2022,18 @@ public static partial class ElementExtensions
 
     /// <summary>
     /// Auto-syncs this NavigationView with a NavigationHandle: sets <c>SelectedTag</c>
-    /// from the current route, wires <c>OnSelectedTagChanged</c> to navigate,
-    /// <c>OnBackRequested</c> to <c>GoBack</c>, and <c>IsBackEnabled</c> to <c>CanGoBack</c>.
+    /// from the current route, navigates on selection change, wires <c>OnBackRequested</c>
+    /// to <c>GoBack</c>, and <c>IsBackEnabled</c> to <c>CanGoBack</c>.
+    /// NavigationView's recommended transition is forwarded to the navigation host, so
+    /// pane navigation uses WinUI's entrance motion and top navigation slides horizontally
+    /// according to the selected item's position.
+    /// <para>
+    /// Selection is wired through an internal transition-aware callback rather than the public
+    /// <see cref="NavigationViewElement.OnSelectedTagChanged"/>, which this deliberately leaves
+    /// null: setting that property yourself afterwards then takes precedence and suppresses the
+    /// auto-navigation, so an author can observe selection without this fighting them. The same
+    /// applies to <see cref="NavigationViewElement.OnSettingsSelected"/>.
+    /// </para>
     /// <para>
     /// The built-in settings item is opt-in: pass <paramref name="settingsRoute"/> to make
     /// selecting it navigate. It is a separate parameter rather than a
@@ -1911,23 +2062,31 @@ public static partial class ElementExtensions
     {
         SelectedTag = routeToTag(nav.CurrentRoute),
         IsBackEnabled = nav.CanGoBack,
-        OnSelectedTagChanged = tag =>
+        OnSelectedTagChanged = null,
+        OnSettingsSelected = null,
+        OnSelectedTagChangedWithTransition = (tag, transition) =>
         {
             if (tag is not null && tag != NavigationViewElement.SettingsTag)
-                NavigateTo(nav, tagToRoute(tag));
+                NavigateTo(nav, tagToRoute(tag), transition);
         },
-        OnSettingsSelected = settingsRoute is null
+        OnSettingsSelectedWithTransition = settingsRoute is null
             ? null
-            : () => NavigateTo(nav, settingsRoute()),
+            : transition => NavigateTo(nav, settingsRoute(), transition),
         OnBackRequested = () => nav.GoBack(),
     };
 
     private static void NavigateTo<TRoute>(
         Navigation.NavigationHandle<TRoute> nav,
-        TRoute route) where TRoute : notnull
+        TRoute route,
+        Navigation.NavigationTransition? transition = null) where TRoute : notnull
     {
         if (!EqualityComparer<TRoute>.Default.Equals(route, nav.CurrentRoute))
-            nav.Navigate(route);
+        {
+            var options = transition is null
+                ? null
+                : new Navigation.NavigateOptions { Transition = transition };
+            nav.Navigate(route, options);
+        }
     }
 
     // ── TitleBar sugar ──────────────────────────────────────────────
@@ -1956,12 +2115,23 @@ public static partial class ElementExtensions
         el with { RightHeader = rightHeader };
 
     /// <summary>Sets the icon shown in the leading slot. Pass a <see cref="SymbolIconData"/>, <see cref="FontIconData"/>, <see cref="ImageIconData"/>, or <see cref="BitmapIconData"/>.</summary>
+    /// <remarks>Only needed to show something <em>other</em> than the app's own icon — with no
+    /// explicit icon the title bar inherits the window's (<c>WindowSpec.Icon</c>, else
+    /// <c>Assets\AppIcon.ico</c>). Use <see cref="NoIcon"/> to show none at all.</remarks>
     public static TitleBarElement Icon(this TitleBarElement el, IconData icon) =>
-        el with { Icon = icon };
+        el with { Icon = icon, SuppressIcon = false };
 
     /// <summary>Convenience overload — sets the icon to a bundled image / .ico via a Uri string (e.g. <c>"ms-appx:///Assets/AppIcon.ico"</c>).</summary>
     public static TitleBarElement Icon(this TitleBarElement el, string imageUri) =>
-        el with { Icon = new ImageIconData(new Uri(imageUri)) };
+        el with { Icon = new ImageIconData(new Uri(imageUri)), SuppressIcon = false };
+
+    /// <summary>
+    /// Shows no icon at all, overriding the window icon the title bar would otherwise
+    /// inherit. The opt-out for a deliberately bare title bar on an app that ships an
+    /// icon.
+    /// </summary>
+    public static TitleBarElement NoIcon(this TitleBarElement el) =>
+        el with { Icon = null, SuppressIcon = true };
 
     /// <summary>
     /// When <c>true</c>, the title bar re-derives its drag regions on every layout
@@ -2752,7 +2922,7 @@ public static partial class ElementExtensions
     /// Sets AutomationProperties.HeadingLevel (Level1–Level9).
     /// Screen reader users navigate by headings, like HTML h1–h6.
     /// </summary>
-    /// <example>Text("Settings").HeadingLevel(AutomationHeadingLevel.Level1)</example>
+    /// <example>TextBlock("Settings").HeadingLevel(AutomationHeadingLevel.Level1)</example>
     public static T HeadingLevel<T>(this T el, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel level) where T : Element =>
         Modify(el, new ElementModifiers { HeadingLevel = level });
 
@@ -2938,7 +3108,7 @@ public static partial class ElementExtensions
     /// Sets AutomationProperties.LiveSetting. Screen readers announce content changes.
     /// Polite = queued after current speech. Assertive = interrupts immediately.
     /// </summary>
-    /// <example>Text(statusMessage).LiveRegion(AutomationLiveSetting.Polite)</example>
+    /// <example>TextBlock(statusMessage).LiveRegion(AutomationLiveSetting.Polite)</example>
     public static T LiveRegion<T>(this T el, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting mode = Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { LiveSetting = mode });
 

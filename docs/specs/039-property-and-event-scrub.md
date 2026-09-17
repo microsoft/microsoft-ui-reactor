@@ -771,7 +771,8 @@ changing wrappers like `Heading`/`Card`.
 
 ### 17.6 Items deliberately NOT promoted
 
-- **TextBlock type ramp** (`Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`)
+- **TextBlock type ramp** (`Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`/
+  `TitleLarge`/`Display`)
   — already factories per §14 #6. Don't also add fluents (two-ways trap).
 - **Progress `.ShowError()` / `.Paused()`** — too narrow; the existing init
   properties are already cheap to set, and the names don't add

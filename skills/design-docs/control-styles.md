@@ -32,11 +32,10 @@ Button("Primary Action", onClick).Resources(r => r
     .Set("ButtonForegroundPressed", Theme.Ref("TextOnAccentFillColorSecondaryBrush")))
 ```
 
-Or, if the WinUI `AccentButtonStyle` is available:
+Or, if the WinUI `AccentButtonStyle` is available, use the fluent that applies it:
 
 ```csharp
-Button("Primary Action", onClick).Set(b =>
-    b.Style = (Style)Application.Current.Resources["AccentButtonStyle"])
+Button("Primary Action", onClick).AccentButton()
 ```
 
 ### Why Not Just `.Background()`?
@@ -97,15 +96,21 @@ Consult the [WinUI Button theme resources](https://github.com/microsoft/microsof
 
 ## Applying WinUI Styles
 
-For built-in WinUI styles, use `.Set()`:
+For built-in WinUI styles, use `.ApplyStyle()`:
 
 ```csharp
-Button("Accent", onClick).Set(b =>
-    b.Style = (Style)Application.Current.Resources["AccentButtonStyle"])
+Button("Accent", onClick).AccentButton()   // dedicated fluent for this one
 
-TextBlock("Body strong").Set(tb =>
-    tb.Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"])
+BodyStrong("Body strong")   // type-ramp styles have factories — prefer them
+
+TextBlock("Custom").ApplyStyle("MyAppTextBlockStyle")   // anything else
 ```
+
+`.ApplyStyle()` resolves the key against the application's resources and, when
+it does not resolve, keeps the element's default appearance and names the key on
+the `Microsoft-UI-Reactor` trace. Do not assign
+`Application.Current.Resources[...]` through `.Set()`: that indexer *throws* on a
+missing key, and the exception escapes the mount action and fails the render.
 
 ## Rules
 
@@ -120,14 +125,12 @@ TextBlock("Body strong").Set(tb =>
    ```
 4. **Use `.Resources()` for single-control overrides** — don't create shared style resources for one-off customizations.
 5. **Don't override defaults** — if the default WinUI button style is what you want, don't set `.Resources()` at all. No-op resource overrides that repeat WinUI defaults add noise and block future WinUI updates.
-6. **Don't re-declare inherited properties** — when applying a WinUI style via `.Set()`, don't also set properties the style already defines (FontSize, FontWeight, etc.). They are redundant and block future updates.
+6. **Don't re-declare inherited properties** — when applying a WinUI style via `.ApplyStyle()`, don't also set properties the style already defines (FontSize, FontWeight, etc.). They are redundant and block future updates.
    ```csharp
-   // Wrong: FontSize is already in BodyStrongTextBlockStyle
-   TextBlock("Bold body").SemiBold().FontSize(14).Set(tb =>
-       tb.Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"])
+   // Wrong: FontSize and weight are already in BodyStrongTextBlockStyle
+   TextBlock("Bold body").SemiBold().FontSize(14).ApplyStyle("BodyStrongTextBlockStyle")
 
-   // Correct: style handles size and weight
-   TextBlock("Bold body").Set(tb =>
-       tb.Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"])
+   // Correct: the factory applies the style, which handles size and weight
+   BodyStrong("Bold body")
    ```
 7. **Empty HC is valid for `.Resources()` patterns** — when your overrides target only Light/Dark appearance and WinUI defaults already satisfy HC accessibility, you do not need HC-specific resource overrides. This is the common case for subtle/accent button patterns.

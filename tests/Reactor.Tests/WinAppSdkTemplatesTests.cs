@@ -190,6 +190,81 @@ public sealed class WinAppSdkTemplatesTests
             "that may not resolve destroys a working template install (exit 103).");
     }
 
+    // ── False-PASS guard: "pack installed" != "templates usable" ───────────
+    //
+    // Observed live during the de-stale merge: the machine had
+    // Microsoft.WindowsAppSDK.WinUI.CSharp.Templates 0.0.6-alpha installed —
+    // a version published *before* the Reactor templates were added. A
+    // package-id-only probe reported `mur doctor` PASS and `mur templates
+    // status` "installed", while `dotnet new list reactor` said
+    // "No templates found matching: 'reactor'." and exited 103.
+    //
+    // The trap is that the not-found message itself contains the search term
+    // ("...matching: 'reactor'" plus a "dotnet new search reactor" hint), so a
+    // naive `output.Contains("reactor")` returns true exactly when the template
+    // is missing. These pin the negative-marker-first rule.
+
+    [Fact]
+    public void InterpretTemplateListOutput_reports_missing_for_the_not_found_message()
+    {
+        // Verbatim output captured from `dotnet new list reactor` against an
+        // installed-but-too-old 0.0.6-alpha pack. Note it mentions "reactor"
+        // three times — a substring match on the short name would say "found".
+        const string notFound = """
+            No templates found matching: 'reactor'.
+
+            To search for the templates on NuGet.org, run:
+               dotnet new search reactor
+
+            For details on the exit code, refer to https://aka.ms/templating-exit-codes#103
+            """;
+
+        Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(notFound));
+    }
+
+    [Fact]
+    public void InterpretTemplateListOutput_reports_available_for_a_real_listing()
+    {
+        // Shape of a real `dotnet new list reactor` table.
+        const string listing = """
+            These templates matched your input: 'reactor'
+
+            Template Name                      Short Name                     Language  Tags
+            ---------------------------------  -----------------------------  --------  -------------
+            Reactor Blank App (Experimental)   reactor,reactor-blank          [C#]      Windows/WinUI
+            Reactor MVU App (Experimental)     reactor-mvu                    [C#]      Windows/WinUI
+            """;
+
+        Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(listing));
+    }
+
+    [Fact]
+    public void Doctor_probes_template_availability_not_just_package_presence()
+    {
+        // Source-level guard on the call site. The whole point of the fix is
+        // that DoctorCommand asks "can the user scaffold?" — if it reverts to
+        // the package-id probe for its PASS branch, the false PASS returns.
+        var (path, text) = ReadRepoFile(global::System.IO.Path.Combine(
+            "src", "Reactor.Cli", "Doctor", "DoctorCommand.cs"));
+        Assert.Contains("AreTemplatesAvailable()", text, StringComparison.Ordinal);
+    }
+
+    static (string path, string text) ReadRepoFile(string repoRelativePath)
+    {
+        var path = global::System.IO.Path.Combine(FindRoot(), repoRelativePath);
+        Assert.True(global::System.IO.File.Exists(path), $"Expected '{path}' to exist; file moved or removed?");
+        return (path, global::System.IO.File.ReadAllText(path));
+    }
+
+    static string FindRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir != null && !global::System.IO.File.Exists(global::System.IO.Path.Combine(dir, "Reactor.slnx")))
+            dir = global::System.IO.Path.GetDirectoryName(dir);
+        Assert.NotNull(dir);
+        return dir!;
+    }
+
     static (string path, string text) ReadCliSource()
     {
         var dir = AppContext.BaseDirectory;

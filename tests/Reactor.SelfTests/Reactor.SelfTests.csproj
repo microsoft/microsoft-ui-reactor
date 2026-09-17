@@ -16,6 +16,20 @@
     <PackageReference Include="MSTest.TestAdapter" />
     <PackageReference Include="MSTest.TestFramework" />
   </ItemGroup>
+  <!-- The Host's output path carries the configuration and TFM. Stamping in the values
+       MSBuild actually used lets HostProcess.FindHostExe locate the Host under any
+       configuration; hardcoding "Debug" made `dotnet test -c Release` run a stale Debug
+       host or fail outright. Mirrors Reactor.PackagedTests. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ReactorSelfTestsConfiguration</_Parameter1>
+      <_Parameter2>$(Configuration)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ReactorSelfTestsTargetFramework</_Parameter1>
+      <_Parameter2>$(TargetFramework)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
   <ItemGroup>
     <!-- Build dependency: ensures Host is built before tests, no runtime reference -->
     <ProjectReference Include="..\Reactor.AppTests.Host\Reactor.AppTests.Host.csproj" ReferenceOutputAssembly="false" Private="false" />

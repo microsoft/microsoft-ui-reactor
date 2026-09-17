@@ -4,8 +4,9 @@ using System.Diagnostics.Tracing;
 namespace Microsoft.UI.Reactor.Core.Diagnostics;
 
 /// <summary>
-/// Thin call-site helper that routes the two dominant <c>Debug.WriteLine</c>
-/// patterns — swallowed exceptions and bare HRESULT codes — to
+/// Thin call-site helper that routes the dominant <c>Debug.WriteLine</c>
+/// patterns — swallowed exceptions, bare HRESULT codes, and framework
+/// warnings — to
 /// <see cref="ReactorEventSource"/> (release-visible, keyword-gated) and
 /// additionally mirrors a richer line to <c>Debug.WriteLine</c> in DEBUG
 /// for the contributor's Output window.
@@ -13,10 +14,11 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <para>
 /// The public helpers are intentionally <b>not</b> <see cref="ConditionalAttribute"/> —
 /// the whole point of this helper is that the diagnostic is emitted in
-/// Release. Only the DEBUG mirror (<see cref="DebugSwallowedError"/> /
-/// <see cref="DebugHResult"/>), which can safely include the raw
+/// Release. Only the DEBUG mirrors (<see cref="DebugSwallowedError"/> /
+/// <see cref="DebugHResult"/> / <see cref="DebugWarning"/>), which can
+/// safely include the raw
 /// <see cref="Exception.Message"/> because it lands in the dev's local
-/// Output window, is marked <c>[Conditional("DEBUG")]</c>.
+/// Output window, are marked <c>[Conditional("DEBUG")]</c>.
 /// </para>
 ///
 /// <para>
@@ -91,9 +93,58 @@ internal static class DiagnosticLog
         DebugHResult(category, operation, hr);
     }
 
+    /// <summary>
+    /// Logs a framework-authored warning about a recoverable misconfiguration
+    /// the framework chose to continue past. Always emits to
+    /// <c>Microsoft-UI-Reactor</c>'s <c>Warning</c> event under the
+    /// <see cref="ReactorEventSource.Keywords.Errors"/> keyword; additionally
+    /// mirrors to <c>Debug.WriteLine</c> in DEBUG.
+    /// </summary>
+    /// <param name="category">Subsystem label.</param>
+    /// <param name="operation">Short, stable identifier for the operation that
+    /// produced the warning. May be <see langword="null"/>.</param>
+    /// <param name="message">Framework-authored explanation. Must not embed
+    /// user data — see the PII note on this class. Composing it from
+    /// developer-authored identifiers (resource keys, property names) is fine.
+    /// Callers that build this string with interpolation should first check
+    /// <see cref="IsWarningEnabled"/> so the allocation is skipped when no
+    /// consumer is listening.</param>
     public static void Warning(LogCategory category, string? operation, string? message)
     {
+        // Cost-of-disabled: mirrors SwallowedError / HResultFailed — when no
+        // consumer enables Keywords.Errors at Warning the whole branch is
+        // skipped. Critically, this is NOT [Conditional("DEBUG")]: before
+        // this event existed the entire helper compiled away in Release, so
+        // every warning routed through it was invisible in shipped apps.
+        if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Errors))
+        {
+            ReactorEventSource.Log.Warning(
+                category.ToString(),
+                operation ?? string.Empty,
+                message ?? string.Empty);
+        }
+
         DebugWarning(category, operation, message);
+    }
+
+    /// <summary>
+    /// Whether a <see cref="Warning"/> emitted now would reach any consumer —
+    /// an enabled ETW listener, or the DEBUG <c>Debug.WriteLine</c> mirror.
+    /// Call sites that must interpolate a message should gate on this so the
+    /// string is not built and immediately discarded.
+    /// </summary>
+    public static bool IsWarningEnabled
+    {
+        get
+        {
+            if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Errors))
+                return true;
+#if DEBUG
+            return true;
+#else
+            return false;
+#endif
+        }
     }
 
     [Conditional("DEBUG")]

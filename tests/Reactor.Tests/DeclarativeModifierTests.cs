@@ -406,11 +406,11 @@ public class DeclarativeModifierTests
         Assert.Equal(5, grid.Children.Length); // 3 items + 2 separators
 
         // Check column definitions: "1.000000*", "6", "1.000000*", "6", "1.000000*"
-        Assert.Contains("*", grid.Definition.Columns[0]);
-        Assert.Equal("6", grid.Definition.Columns[1]);
-        Assert.Contains("*", grid.Definition.Columns[2]);
-        Assert.Equal("6", grid.Definition.Columns[3]);
-        Assert.Contains("*", grid.Definition.Columns[4]);
+        Assert.Equal(GridSize.Star(1), grid.Definition.Columns[0]);
+        Assert.Equal(GridSize.Px(6), grid.Definition.Columns[1]);
+        Assert.Equal(GridSize.Star(1), grid.Definition.Columns[2]);
+        Assert.Equal(GridSize.Px(6), grid.Definition.Columns[3]);
+        Assert.Equal(GridSize.Star(1), grid.Definition.Columns[4]);
     }
 
     [Fact]
@@ -429,9 +429,9 @@ public class DeclarativeModifierTests
         Assert.Single(grid.Definition.Columns); // ["*"]
         Assert.Equal(3, grid.Children.Length);
 
-        Assert.Contains("0.7", grid.Definition.Rows[0]);
-        Assert.Equal("4", grid.Definition.Rows[1]);
-        Assert.Contains("0.3", grid.Definition.Rows[2]);
+        Assert.Equal(GridSize.Star(0.7), grid.Definition.Rows[0]);
+        Assert.Equal(GridSize.Px(4), grid.Definition.Rows[1]);
+        Assert.Equal(GridSize.Star(0.3), grid.Definition.Rows[2]);
     }
 
     [Fact]
@@ -501,7 +501,7 @@ public class DeclarativeModifierTests
         var grid = UniformGrid(Orientation.Horizontal, TextBlock("A"), TextBlock("B"), TextBlock("C"));
 
         Assert.Equal(3, grid.Definition.Columns.Length);
-        Assert.All(grid.Definition.Columns, col => Assert.Equal("*", col));
+        Assert.All(grid.Definition.Columns, col => Assert.Equal(GridSize.Star(), col));
         Assert.Single(grid.Definition.Rows);
         Assert.Equal(3, grid.Children.Length);
     }
@@ -512,7 +512,7 @@ public class DeclarativeModifierTests
         var grid = UniformGrid(Orientation.Vertical, TextBlock("A"), TextBlock("B"));
 
         Assert.Equal(2, grid.Definition.Rows.Length);
-        Assert.All(grid.Definition.Rows, row => Assert.Equal("*", row));
+        Assert.All(grid.Definition.Rows, row => Assert.Equal(GridSize.Star(), row));
         Assert.Single(grid.Definition.Columns);
     }
 

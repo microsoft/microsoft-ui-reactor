@@ -45,18 +45,25 @@ class EffectfulCounter : Component
             Log.Add($"effect:{count}");
             return () => Log.Add($"cleanup:{count}");
         }, count);
-        return Button($"count={count}", () => setCount(count + 1));
+        return Button($"count={count}", () => setCount(count + 1))
+            .AutomationName($"Counter is {count}");
     }
 }
 // </snippet:effectful>
 
 // <snippet:icon-only>
-// AccessibilityScanner fixture target. The scanner walks the element tree
-// post-render and returns one A11yDiagnostic per finding; an icon-only
-// button without an accessible name is the canonical positive case.
+// AccessibilityScanner fixture targets. The scanner walks an element tree
+// and returns one A11yDiagnostic per finding, each carrying a rule Id
+// ("A11Y_001" = icon-only Button with no accessible name).
 class IconOnlyButton : Component
 {
     public override Element Render() =>
-        Button("", () => { });   // no accessible name → diagnostic
+        Button(TextBlock("🔍"));            // icon content, no accessible name
+}
+
+class NamedButton : Component
+{
+    public override Element Render() =>
+        Button(TextBlock("🔍"), null).AutomationName("Search");
 }
 // </snippet:icon-only>

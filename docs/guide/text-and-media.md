@@ -1,15 +1,15 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Text Controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/text-controls).
 
-Text and media controls are the read-only-display half of the Microsoft.UI.Reactor (Reactor)
+Text and media controls are the display, rich-text, and media half of the Microsoft.UI.Reactor (Reactor)
 catalog: surfaces that show content the user is reading, watching, or
-inspecting rather than editing. Most of them are thin wrappers over the
+inspecting, plus `RichEditBox` for rich-text editing. Most of them are thin wrappers over the
 WinUI text and media surface, so the modifier names and accessibility
 behavior match what a WinUI developer already knows. The two outliers are
 [`Markdown(string)`](#markdown-reactor-original) — a Reactor-original
 renderer that parses GFM-style Markdown into the same element tree the
 rest of your UI uses, no WebView round trip — and the semantic text
-variants [`Heading`](#text-variants) / [`SubHeading`](#text-variants) /
-[`Caption`](#text-variants), which preset typography so that accessibility
+variants [`Heading`](#text-variants) / [`SubHeading`](#text-variants),
+which preset typography so that accessibility
 tooling can infer document outline without manually setting
 `AutomationProperties`. The trade-off the catalog makes here is bias
 toward composition: rich layouts come from many small text elements in a
@@ -19,27 +19,35 @@ prose, then jump to the control you need.
 
 # Text and Media
 
-This page covers every read-only-display and inline-rich-text control in
-Reactor. For input controls (`TextBox`, `PasswordBox`, `RichEditBox`),
+This page covers display text, inline rich text, rich-text editing, and media controls in
+Reactor. For single-line input controls (`TextBox`, `PasswordBox`),
 see [Forms](forms.md). For data-bound collections, see
 [Collections](collections.md).
 
 ## Text variants
 
 ```csharp
-Heading(string)         // section title, ~28pt
+Title(string)           // WinUI title text style, ~28pt
+Heading(string)         // semantic heading, ~28pt
 SubHeading(string)      // sub-section header, ~20pt
+Subtitle(string)        // supporting line under a heading
+BodyLarge(string)       // lead paragraph
 TextBlock(string)       // body prose
-Caption(string)         // ~12pt, dimmed
+BodyStrong(string)      // body prose, semibold
+Caption(string)         // ~12pt metadata text
 ```
 
 ```csharp
 class TextVariantsDemo : Component
 {
     public override Element Render() => VStack(8,
+        Title("Title — the largest variant"),
         Heading("Heading — page or section title"),
         SubHeading("SubHeading — region header"),
+        Subtitle("Subtitle — supporting line under a heading"),
+        BodyLarge("BodyLarge — lead paragraph."),
         TextBlock("Body text. The default size and weight for prose."),
+        BodyStrong("BodyStrong — emphasis within body copy."),
         Caption("Caption — secondary metadata, dates, labels.")
     ).Padding(24);
 }
@@ -48,7 +56,8 @@ class TextVariantsDemo : Component
 ![Heading / SubHeading / TextBlock / Caption stacked](images/text-and-media/text-variants.png)
 
 `Heading`, `SubHeading`, and `Caption` return [`TextBlockElement`](components.md)
-with preset `FontSize`, weight, and `Foreground` from the active theme.
+with preset text sizing; `Heading` and `SubHeading` also set heading
+automation levels.
 They are the right tool for document outline — screen readers and the
 [accessibility scanner](accessibility.md) treat them as hierarchical
 landmarks, where a bare `TextBlock` styled with `.FontSize(24).Bold()` is
@@ -58,10 +67,14 @@ match the visual weight you want.
 
 | Factory | Default size | Use when |
 |---|---|---|
-| `Heading` | ~28pt, bold | One per page — the document title. |
+| `Title` | ~28pt, semibold | WinUI title-ramp text without heading semantics. |
+| `Heading` | ~28pt, bold | One per page — the semantic document title. |
 | `SubHeading` | ~20pt, semibold | Section header inside a long page. |
+| `Subtitle` | ~20pt, regular | Supporting line directly under a heading. |
+| `BodyLarge` | ~18pt | Lead paragraph or callout prose. |
 | `TextBlock` | Body | Paragraphs, labels, inline help. |
-| `Caption` | ~12pt, dimmed | Timestamps, metadata, helper text under a field. |
+| `BodyStrong` | Body, semibold | Emphasis inside body copy without a size jump. |
+| `Caption` | ~12pt | Timestamps, metadata, helper text under a field. |
 
 WinUI design page: [Typography in Windows 11](https://learn.microsoft.com/en-us/windows/apps/design/style/typography).
 
@@ -178,7 +191,7 @@ WinUI design page: [Rich text block](https://learn.microsoft.com/en-us/windows/a
 ## RichEditBox
 
 ```csharp
-RichEditBox(string text = "", Action<string>? onTextChanged = null)
+RichEditBox(Optional<string> text = default, Action<string>? onTextChanged = null)
 ```
 
 ```csharp
@@ -225,15 +238,18 @@ WinUI design page: [Rich edit box](https://learn.microsoft.com/en-us/windows/app
 ## Markdown (Reactor-original)
 
 ```csharp
-Markdown(string source)
-Markdown(string source, MarkdownOptions options)
+Markdown(string markdown)
+Markdown(string markdown, MarkdownOptions options)
 ```
 
 > **Package note.** `Markdown(...)` ships in the optional
 > `Microsoft.UI.Reactor.Advanced` package (spec 062 §7). Add a
-> `<PackageReference Include="Microsoft.UI.Reactor.Advanced" />` and import
+> `<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.15" />` and import
 > its factories alongside the core ones:
-> `using static Microsoft.UI.Reactor.Advanced.Factories;`.
+> `using static Microsoft.UI.Reactor.Advanced.Factories;`. Both overloads
+> return the base `Element`, and `MarkdownOptions` stays in
+> `Microsoft.UI.Reactor.Markdown` — so the options overload also needs
+> `using Microsoft.UI.Reactor.Markdown;`.
 
 ```csharp
 class MarkdownDemo : Component
@@ -261,7 +277,8 @@ class MarkdownDemo : Component
 `Markdown` is the largest Reactor-original control on this page. It
 parses GitHub-flavored Markdown with the embedded `md4c` parser and
 emits a Reactor element tree: headings become `TextBlock` with the
-heading variant, list items become `HStack`s, links become inline
+heading variant, list items become two-column `Grid`s (`Auto` marker / `*`
+content), links become inline
 hyperlinks, code spans become monospace `TextBlock`. No WebView, no HTML
 round-trip — the output composes with every other modifier on this page
 (`.Padding`, `.Width`, `.TextWrapping`).
@@ -304,6 +321,8 @@ class ImageDemo : Component
         // Resource Uri — ms-appx:// for packaged assets, file:// for disk,
         // https:// for remote.
         Image("ms-appx:///Assets/StoreLogo.png")
+            .AutomationName("Reactor app logo")
+            .Set(img => img.Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill)
             .Width(96).Height(96),
         TextBlock("Stretch.UniformToFill for cover art; " +
                   "ImageFailed to detect missing assets.").Opacity(0.6)
@@ -350,8 +369,7 @@ class MediaPlayerDemo : Component
     public override Element Render() => VStack(8,
         SubHeading("MediaPlayerElement"),
         MediaPlayerElement(
-            "https://learn.microsoft.com/en-us/windows/apps/design/" +
-            "controls/images/ic_fluent_play_24_regular.svg")
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4")
             .Width(420).Height(240)
             .Set(m =>
             {
@@ -476,15 +494,15 @@ WinUI design page: [Map control](https://learn.microsoft.com/en-us/windows/apps/
 | Control | Factory | Reactor-original? | WinUI doc |
 |---|---|---|---|
 | `TextBlock` | `TextBlock(string)` | No | [Text block](https://learn.microsoft.com/en-us/windows/apps/design/controls/text-block) |
-| `Heading` / `SubHeading` / `Caption` | `Heading(string)` etc. | Variant presets | — |
+| `Title` / `Heading` / `SubHeading` / `Subtitle` / `BodyLarge` / `BodyStrong` / `Caption` | `Heading(string)` etc. | Variant presets | — |
 | `RichTextBlock` | `RichTextBlock(string)` or `RichTextBlock(RichTextParagraph[])` | No | [Rich text block](https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-text-block) |
 | `RichEditBox` | `RichEditBox(text, onChanged)` | No | [Rich edit box](https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-edit-box) |
-| `Markdown` | `Markdown(string)` | **Yes** | — |
+| `Markdown` | `Markdown(string)` — `Microsoft.UI.Reactor.Advanced` | **Yes** | — |
 | `Image` | `Image(string)` | No | [Images and image brushes](https://learn.microsoft.com/en-us/windows/apps/design/controls/images-imagebrushes) |
 | `MediaPlayerElement` | `MediaPlayerElement(string?)` | No | [Media player](https://learn.microsoft.com/en-us/windows/apps/design/controls/media-playback) |
 | `WebView2` | `WebView2(Uri?)` | No | [WebView2](https://learn.microsoft.com/en-us/microsoft-edge/webview2/) |
 | `MapControl` | `MapControl(token, zoom)` | No | [Map control](https://learn.microsoft.com/en-us/windows/apps/develop/maps/) |
-| `InkCanvas` | *Not yet wrapped* | — | [Ink controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/inking-controls) |
+| `InkCanvas` | *Not wrapped* — see [gap analysis](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/002-winui3-gap-analysis.md) | — | [Ink controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/inking-controls) |
 
 ## Patterns
 
@@ -499,12 +517,22 @@ inside a frequently-rendered parent; the parser is cheap but allocates,
 and memoization keeps GC pressure flat:
 
 ```csharp
-var rendered = UseMemo(() => Markdown(source), source);
-return Border(rendered).Padding(20).Width(640);
+class LongFormProseDemo : Component
+{
+    const string Source = "# Release notes\n\nShipped **today**.\n";
+
+    public override Element Render()
+    {
+        // The parser is cheap but allocates; memoize on the source string so a
+        // frequently-rendered parent doesn't re-parse unchanged prose.
+        var rendered = UseMemo(() => Markdown(Source), Source);
+        return Border(rendered).Padding(20).Width(640);
+    }
+}
 ```
 
 This is the same shape as the [`recipes/master-detail`](recipes/master-detail.md)
-content pane and the [chat sample](https://github.com/microsoft/reactor1/tree/main/samples/apps/chat)
+content pane and the [chat sample](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/chat)
 message bubble.
 
 ### Inline data display with RichTextBlock
@@ -534,9 +562,13 @@ VStack(8,
 class TextVariantsDemo : Component
 {
     public override Element Render() => VStack(8,
+        Title("Title — the largest variant"),
         Heading("Heading — page or section title"),
         SubHeading("SubHeading — region header"),
+        Subtitle("Subtitle — supporting line under a heading"),
+        BodyLarge("BodyLarge — lead paragraph."),
         TextBlock("Body text. The default size and weight for prose."),
+        BodyStrong("BodyStrong — emphasis within body copy."),
         Caption("Caption — secondary metadata, dates, labels.")
     ).Padding(24);
 }
@@ -553,19 +585,43 @@ landmark detection works.
 ```csharp
 // Don't:
 LazyVStack<Message>(messages, m => m.Id, (m, i) =>
-    Markdown(m.Body))  // re-parses on every scroll-induced re-render
+    Markdown(m.Body))  // re-parses on every scroll recycle
 ```
 
 ```csharp
-// Do:
-LazyVStack<Message>(messages, m => m.Id, (m, i) =>
-    Memo(_ => Markdown(m.Body), m.Body))
+class MarkdownRowsDemo : Component
+{
+    public override Element Render()
+    {
+        var messages = new List<Message>
+        {
+            new("m1", "**First** message."),
+            new("m2", "Second message with `code`."),
+        };
+
+        // Memo(key, factory) — the cross-recycle row cache. A scroll recycle
+        // re-asks for the key and gets the same element instance back, so the
+        // parser never runs again for an unchanged row.
+        //
+        // Key on the row identity *and* the body, not the body alone: this is a
+        // per-row cache, and two messages that happen to share text would
+        // otherwise collide on one entry. Including Id also reparses correctly
+        // when a single message's body is edited.
+        return LazyVStack<Message>(messages, m => m.Id, (m, i) =>
+            Memo((m.Id, m.Body), () => Markdown(m.Body))).Height(200);
+    }
+}
 ```
 
 Markdown parsing is fast but not free — at 60fps × hundreds of visible
-rows × every state change, parser allocation shows up in GC. The
-[`Memo`](components.md) wrapper keys on the source string so unchanged
-rows skip the parser entirely.
+rows × every state change, parser allocation shows up in GC. Use the
+keyed [`Memo(key, factory)`](collections.md#memoizing-rows-across-recycles)
+overload here, **not** `Memo(ctx => …, deps)`. They share a name but the
+compiler picks by argument shape, and only the keyed form owns the
+cross-recycle row cache: a scroll recycle re-asks for the key and gets the
+same element instance back, so the parser never runs again for an unchanged
+row. `Memo(ctx => …, deps)` only skips work when the *parent re-renders*,
+which is not what happens on a pure scroll.
 
 ## Tips
 
@@ -573,7 +629,7 @@ rows skip the parser entirely.
 `RichTextBlock` > `Markdown` > `WebView2` in increasing layout cost.
 Promote only when the lower tier can't represent the structure.
 
-**Use `Selectable()` on any text the user might want to copy.** Error
+**Use `.IsTextSelectionEnabled()` on any text the user might want to copy.** Error
 messages, IDs, paths, log lines, command output — all of them are more
 useful when the user can drag-select and Ctrl+C. The cost is one
 modifier per `TextBlock`.
@@ -591,7 +647,7 @@ The renderer composes with the rest of the catalog and stays accessible.
 ## Next Steps
 
 - **[Forms and Input](forms.md)** — Previous: editable input controls and the validation system.
-- **[Status and Info](status-and-info.md)** — Next: ProgressBar, InfoBar, badges, and non-interactive feedback.
+- **[Status and Info](status-and-info.md)** — Next: `Progress`, InfoBar, badges, and non-interactive feedback.
 - **[Styling](styling.md)** — Theme tokens and font fluents applied across every text element.
 - **[Accessibility](accessibility.md)** — How `Heading` / `SubHeading` map to document landmarks.
-- **[Markdown samples](https://github.com/microsoft/reactor1/tree/main/samples/apps/chat)** — End-to-end LLM-output rendering in the chat sample.
+- **[Markdown samples](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/chat)** — End-to-end LLM-output rendering in the chat sample.

@@ -1066,35 +1066,6 @@ internal static class DevtoolsFixtures
 
             using var mcp = new McpHarness(H.Window, () => null, nameof(PropertyToolsRoot));
 
-            var allProps = Result(await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button" }))
-                ?? throw new Exception("missing properties result");
-            // NOTE: these three checks are deliberately tolerant and are NOT coverage
-            // of the DP surface — see issue #1109. `properties` currently returns
-            // {"count":0,"properties":[]} for every element, and the attached-property
-            // read/write always fail, because DevtoolsPropertyTools discovers DPs with
-            // Type.GetField/GetFields while CsWinRT projects WinUI DependencyProperty
-            // statics as *properties*: typeof(Button) has 0 DP-typed static fields and
-            // 112 DP-typed static properties. `count >= 0` and "or any error" pass
-            // either way, which is why this went unnoticed. Left as-is here because
-            // fixing the tool is a product change out of scope for the AOT un-skip;
-            // the real coverage in this fixture is the resources/styles section below,
-            // which does work. Tighten these together with the #1109 fix.
-            H.Check("Devtools_Props_Enumerates",
-                allProps.GetProperty("count").GetInt32() >= 0
-                && allProps.GetProperty("properties").ValueKind == JsonValueKind.Array);
-
-            var attachedPropResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button", Name = "Grid.Row" });
-            H.Check("Devtools_Props_ReadAttached",
-                Result(attachedPropResp) is { } attachedProp
-                    ? attachedProp.GetProperty("name").GetString() == "Grid.Row"
-                    : Error(attachedPropResp) is not null);
-
-            var setAttachedResp = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#prop-button", Name = "Grid.Row", Value = "2" });
-            H.Check("Devtools_SetProp_Attached",
-                Result(setAttachedResp) is { } setAttached
-                    ? setAttached.GetProperty("ok").GetBoolean()
-                    : Error(setAttachedResp) is not null);
-
             H.Check("Devtools_PropButton_Found", button is not null);
 
             var resources = Result(await mcp.CallAsync("resources", new CallArgs { Selector = "#prop-button", Scope = "element", Filter = "Devtools" }))
@@ -1171,6 +1142,377 @@ internal static class DevtoolsFixtures
         }
     }
 
+    /// <summary>
+    /// Issue #1109: DependencyProperty *discovery* for the <c>properties</c> /
+    /// <c>setProperty</c> MCP tools, asserted both end-to-end over JSON-RPC and
+    /// directly against the two reflection helpers.
+    /// <para>
+    /// This lives apart from <see cref="PropertyToolsExercise"/> and
+    /// <see cref="PropertyToolsReflectionExercise"/> for one reason: it is the only
+    /// part of the property-tool surface that does not survive trimming, so it is the
+    /// only part that has to be muted under NativeAOT
+    /// (<c>SelfTestRunner.DefaultAotSkipPatterns</c>). Keeping it separate means the
+    /// AOT-safe majority of those two fixtures — resources, styles, ancestors, value
+    /// formatting and parsing — keeps running as live AOT coverage instead of being
+    /// switched off as collateral.
+    /// </para>
+    /// </summary>
+    internal sealed class PropertyToolsDpDiscovery(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var button = new Button
+            {
+                Content = "DP Target",
+                // A distinctive local value for the by-name read below, so the assertion
+                // doesn't depend on whatever the default/theme Padding happens to be.
+                Padding = new Thickness(7, 8, 9, 10),
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(button, "dp-button");
+
+            H.Check("Devtools_Dp_Start", true);
+            H.SetContent(new Border { Child = button });
+            await Harness.Render();
+
+            using var mcp = new McpHarness(H.Window, () => null, nameof(PropertyToolsRoot));
+
+            // Each check reads its response through `is { }` rather than `?? throw`, so a
+            // tool that regresses to an error envelope fails that one assertion instead
+            // of aborting the fixture and hiding the rest.
+            var allPropsResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button" });
+            var enumeratedNames = Result(allPropsResp) is { } allProps
+                ? allProps.GetProperty("properties").EnumerateArray()
+                    .Select(p => p.GetProperty("name").GetString())
+                    .ToArray()
+                : [];
+            // Before the fix, `properties` returned {"count":0,"properties":[]} for every
+            // element because DP discovery only looked at Type.GetField(s), while CsWinRT
+            // projects WinUI DependencyProperty statics as static *properties*. These
+            // names are the oracle: `Content` is declared on ContentControl and `Padding`
+            // on Control, so finding both also proves the walk climbs the base chain
+            // rather than stopping at Button.
+            H.Check("Devtools_Dp_Enumerates",
+                Result(allPropsResp) is { } props
+                && props.GetProperty("count").GetInt32() == enumeratedNames.Length
+                && enumeratedNames.Length > 0
+                && enumeratedNames.Contains("Content")
+                && enumeratedNames.Contains("Padding"));
+
+            // The single-property path uses a different lookup (FindDependencyProperty by
+            // name) than the enumeration, so it needs its own oracle.
+            var singleReadResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "Padding" });
+            H.Check("Devtools_Dp_ReadsSingleByName",
+                Result(singleReadResp) is { } singleRead
+                && singleRead.GetProperty("name").GetString() == "Padding"
+                && singleRead.GetProperty("declaringType").GetString() == "Control"
+                && singleRead.GetProperty("value").GetString() == "7,8,9,10"
+                && singleRead.GetProperty("isLocal").GetBoolean());
+
+            // Attached DP read: Grid.RowProperty exists only as a CsWinRT-projected static
+            // property, never as a field, so this is the exact shape #1109 broke. Grid.Row
+            // was never set, so it must read back as the DP's default of 0.
+            var attachedPropResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "Grid.Row" });
+            H.Check("Devtools_Dp_ReadAttached",
+                Result(attachedPropResp) is { } attachedProp
+                && attachedProp.GetProperty("name").GetString() == "Grid.Row"
+                && attachedProp.GetProperty("value").GetString() == "0"
+                && !attachedProp.GetProperty("isLocal").GetBoolean());
+
+            // Assert off the live control, not the tool's own echo: a setProperty that
+            // silently wrote nothing would still echo back ok:true for whatever it read.
+            var setAttachedResp = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#dp-button", Name = "Grid.Row", Value = "2" });
+            H.Check("Devtools_Dp_SetAttached",
+                Result(setAttachedResp) is { } setAttached
+                && setAttached.GetProperty("ok").GetBoolean()
+                && Microsoft.UI.Xaml.Controls.Grid.GetRow(button) == 2);
+
+            var setDirectResp = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#dp-button", Name = "Width", Value = "321" });
+            H.Check("Devtools_Dp_SetDirect",
+                Result(setDirectResp) is { } setDirect
+                && setDirect.GetProperty("ok").GetBoolean()
+                && button.Width == 321);
+
+            // Both tools document the 'Property' suffix as optional, so pin that contract
+            // rather than trusting the schema text: `properties` and `setProperty` share
+            // ToMemberName, and this asserts the suffixed form on the write path for both
+            // the plain and attached shapes, verified off the live control. Distinct
+            // values from the writes above so a no-op cannot pass.
+            var setSuffixed = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#dp-button", Name = "WidthProperty", Value = "456" });
+            var setAttachedSuffixed = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#dp-button", Name = "Grid.RowProperty", Value = "3" });
+            var readSuffixed = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "WidthProperty" });
+            H.Check("Devtools_Dp_PropertySuffixIsOptional",
+                Result(setSuffixed) is { } suffixed
+                && suffixed.GetProperty("ok").GetBoolean()
+                && button.Width == 456
+                && Result(setAttachedSuffixed) is { } attachedSuffixed
+                && attachedSuffixed.GetProperty("ok").GetBoolean()
+                && Microsoft.UI.Xaml.Controls.Grid.GetRow(button) == 3
+                && Result(readSuffixed) is { } readBack
+                && readBack.GetProperty("value").GetString() == "456");
+
+            // The by-name lookup must still reject genuinely absent DPs rather than
+            // matching some unrelated static now that properties are in scope — and it
+            // must not blame trimming for a plain typo. On any build where discovery
+            // works (JIT, or an AOT build that roots its DP statics) the error must
+            // carry no NativeAOT notice, or it sends the caller chasing a phantom.
+            var missingProp = await mcp.CallAsync("properties", new CallArgs { Selector = "#dp-button", Name = "NoSuchDevtoolsProperty" });
+            H.Check("Devtools_Dp_UnknownNameErrors",
+                Result(missingProp) is null
+                && Error(missingProp) is { } missingErr
+                && missingErr.GetProperty("message").GetString() is { } missingMsg
+                && missingMsg.Contains("NoSuchDevtoolsProperty", StringComparison.Ordinal)
+                && (enumeratedNames.Length > 0
+                    ? !missingMsg.Contains("NativeAOT", StringComparison.Ordinal)
+                    : missingMsg.Contains("NativeAOT", StringComparison.Ordinal)));
+
+            // The live listing and the notice must agree, whichever runtime this is on:
+            // a JIT build (or a correctly-rooted AOT one) finds DPs and must NOT carry a
+            // notice, and a build where discovery is trimmed away finds none and MUST
+            // explain why. Written as one coupled assertion so it is meaningful on both —
+            // forcing this fixture under AOT with --no-aot-skip verifies the notice is
+            // really emitted end-to-end, rather than failing on an unrelated shape.
+            H.Check("Devtools_Dp_NoticeMatchesListing",
+                Result(allPropsResp) is { } noticeProbe
+                && (noticeProbe.GetProperty("count").GetInt32() > 0
+                    ? !noticeProbe.TryGetProperty("notice", out _)
+                    : noticeProbe.TryGetProperty("notice", out var liveNotice)
+                      && liveNotice.GetString()!.Contains("NativeAOT", StringComparison.Ordinal)));
+
+            // The notice fires only for the combination that actually indicates trimming:
+            // an empty listing on a NativeAOT build. Each of the other three combinations
+            // must stay silent, so a regression to "always warn" or "never warn" reddens.
+            var noticeMethod = typeof(DevtoolsPropertyTools).GetMethod(
+                "EnumerationNotice",
+                global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!;
+            string? Notice(int count, bool isAot) => (string?)noticeMethod.Invoke(null, new object[] { count, isAot });
+
+            H.Check("Devtools_Dp_NoticeExplainsEmptyAotListing",
+                Notice(0, true) is { } aotNotice
+                && aotNotice.Contains("NativeAOT", StringComparison.Ordinal)
+                && aotNotice.Contains("docs/aot-support.md", StringComparison.Ordinal)
+                && Notice(0, false) is null
+                && Notice(12, true) is null
+                && Notice(12, false) is null);
+
+            // Same gate for the by-name path, and the combination that must stay silent
+            // is the one no JIT run can reproduce: a NativeAOT build that *does* root its
+            // DP statics, where discovery works and a failed lookup really is a typo.
+            // Driving the decision directly is the only way to cover it.
+            var warnMethod = typeof(DevtoolsPropertyTools).GetMethod(
+                "ShouldWarnAboutTrimming",
+                global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!;
+            bool ShouldWarn(bool isAot, bool declaresDp) => (bool)warnMethod.Invoke(null, new object[] { isAot, declaresDp })!;
+
+            H.Check("Devtools_Dp_TrimmingBlamedOnlyWhenMetadataIsGone",
+                ShouldWarn(isAot: true, declaresDp: false)
+                && !ShouldWarn(isAot: true, declaresDp: true)
+                && !ShouldWarn(isAot: false, declaresDp: false)
+                && !ShouldWarn(isAot: false, declaresDp: true));
+
+            H.SetContent(null);
+
+            // -- and the same two helpers, called directly ---------------------------
+
+            var toolsType = typeof(DevtoolsPropertyTools);
+            object? Invoke(string name, params object?[] args) =>
+                toolsType.GetMethod(name, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!
+                    .Invoke(null, args);
+
+            var bare = new Button { Width = 123 };
+
+            // FindDependencyProperty must return the *real* Grid.RowProperty, not just
+            // "something non-null": prove it by writing through the returned DP and
+            // reading the value back with Grid.GetRow. The lookup throws McpToolException
+            // when it finds nothing, so catch that and fail this one check rather than
+            // aborting the fixture.
+            (DependencyProperty Dp, global::System.Reflection.MemberInfo Member)? found = null;
+            try
+            {
+                found = ((DependencyProperty, global::System.Reflection.MemberInfo))
+                    Invoke("FindDependencyProperty", bare, "Grid.Row")!;
+            }
+            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
+            {
+                // Leave the tuple null; the H.Check below turns that into a red check.
+            }
+            if (found is { } attachedDp) bare.SetValue(attachedDp.Dp, 5);
+            H.Check("Devtools_Dp_ReflectFindsAttached",
+                found is { } resolved
+                && Microsoft.UI.Xaml.Controls.Grid.GetRow(bare) == 5
+                && resolved.Member.Name == "RowProperty"
+                && resolved.Member.DeclaringType == typeof(Microsoft.UI.Xaml.Controls.Grid));
+
+            bool missingDpThrows = false;
+            try { Invoke("FindDependencyProperty", bare, "NoSuchDevtoolsProperty"); }
+            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
+            {
+                missingDpThrows = true;
+            }
+            H.Check("Devtools_Dp_ReflectMissingThrows", missingDpThrows);
+
+            // Enumeration must reach DP statics declared across the whole base chain
+            // (Width on FrameworkElement, Content on ContentControl) and report each name
+            // exactly once even though a DP can surface as both a field and a
+            // CsWinRT-projected property.
+            var enumerated = (List<PropertyResult>)Invoke("EnumerateDependencyProperties", bare)!;
+            var reflectNames = enumerated.Select(p => p.Name).ToArray();
+            H.Check("Devtools_Dp_ReflectEnumerates",
+                reflectNames.Contains("Width")
+                && reflectNames.Contains("Content")
+                && reflectNames.Distinct().Count() == reflectNames.Length);
+
+            // …and it must report live values, not just names: Width was set to 123 above.
+            H.Check("Devtools_Dp_ReflectEnumeratesLiveValues",
+                enumerated.SingleOrDefault(p => p.Name == "Width")
+                    is { Value: "123", IsLocal: true, DeclaringType: "FrameworkElement" });
+
+            // -- the C#-authored shape: a DP that really is a static *field* -----------
+            //
+            // Everything above runs against CsWinRT-projected static properties. The
+            // fields arm is the pre-existing behaviour this change must not regress, and
+            // no WinUI type can exercise it (typeof(Button) has zero DP-typed static
+            // fields), so it needs a control that declares one.
+            var fieldControl = new DevtoolsFieldDpControl { FieldOnly = "field-dp-live" };
+
+            (DependencyProperty Dp, global::System.Reflection.MemberInfo Member)? fieldFound = null;
+            try
+            {
+                fieldFound = ((DependencyProperty, global::System.Reflection.MemberInfo))
+                    Invoke("FindDependencyProperty", fieldControl, "FieldOnly")!;
+            }
+            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
+            {
+                // Leave the tuple null; the H.Check below turns that into a red check.
+            }
+            H.Check("Devtools_Dp_FindsFieldDeclaredDp",
+                fieldFound is { } fieldResolved
+                && ReferenceEquals(fieldResolved.Dp, DevtoolsFieldDpControl.FieldOnlyProperty)
+                && fieldResolved.Member is global::System.Reflection.FieldInfo
+                && fieldResolved.Member.DeclaringType == typeof(DevtoolsFieldDpControl));
+
+            var fieldEnumerated = (List<PropertyResult>)Invoke("EnumerateDependencyProperties", fieldControl)!;
+            H.Check("Devtools_Dp_EnumeratesFieldDeclaredDp",
+                fieldEnumerated.SingleOrDefault(p => p.Name == "FieldOnly")
+                    is { Value: "field-dp-live", IsLocal: true, DeclaringType: nameof(DevtoolsFieldDpControl) });
+
+            // -- reflection shapes the helper has to survive ---------------------------
+            //
+            // TryReadDependencyPropertyStatic takes a bare Type, so these can be plain
+            // classes; they don't have to be UIElements.
+            //
+            // The result distinguishes "the helper returned null" from "the helper let an
+            // exception escape". Collapsing the two would make every `is null` assertion
+            // below vacuous: a helper that stopped swallowing reflection failures would
+            // still look like a clean not-found.
+            (bool Threw, (DependencyProperty Dp, global::System.Reflection.MemberInfo Member)? Value) TryRead(Type t, string member)
+            {
+                try
+                {
+                    var raw = (global::System.ValueTuple<DependencyProperty, global::System.Reflection.MemberInfo>?)
+                        Invoke("TryReadDependencyPropertyStatic", t, member);
+                    return (false, raw);
+                }
+                catch (global::System.Reflection.TargetInvocationException)
+                {
+                    return (true, null);
+                }
+            }
+
+            // A getter that throws must read back as "not found", not escape as a raw
+            // TargetInvocationException through the MCP transport.
+            H.Check("Devtools_Dp_ThrowingGetterIsNotFound",
+                TryRead(typeof(AwkwardDpStatics), "ThrowingProperty") is { Threw: false, Value: null });
+
+            // A write-only DP-typed static must be skipped before GetValue(null) is
+            // reached — that call throws ArgumentException, which is deliberately NOT in
+            // ReadStatic's catch list, so this reddens if the CanRead guard is dropped.
+            H.Check("Devtools_Dp_WriteOnlyPropertyIsNotFound",
+                TryRead(typeof(AwkwardDpStatics), "WriteOnlyProperty") is { Threw: false, Value: null });
+
+            // A DP field on a type whose static constructor threw reads back as
+            // not-found too. This is the one place the two runtimes disagree: JIT wraps
+            // the TypeInitializationException in a TargetInvocationException, NativeAOT
+            // surfaces it bare, so ReadStatic needs an arm for each. Only the AOT run
+            // catches a regression here.
+            H.Check("Devtools_Dp_FailingInitializerIsNotFound",
+                TryRead(typeof(FailingInitializerDpStatics), "BoomProperty") is { Threw: false, Value: null });
+
+            // `new`-hiding a base static DP member does not make reflection ambiguous —
+            // the binder resolves to the most-derived declaration. Asserted for both
+            // member kinds so the lookups aren't carrying a speculative catch: if a
+            // future runtime ever does throw AmbiguousMatchException here, these redden.
+            H.Check("Devtools_Dp_ShadowedPropertyResolvesToDerived",
+                TryRead(typeof(ShadowedDpStatics), "ShadowedProperty") is { Threw: false, Value: { } shadowedProp }
+                && shadowedProp.Member.DeclaringType == typeof(ShadowedDpStatics));
+
+            H.Check("Devtools_Dp_ShadowedFieldResolvesToDerived",
+                TryRead(typeof(ShadowedDpFields), "ShadowedProperty") is { Threw: false, Value: { } shadowedField }
+                && shadowedField.Member.DeclaringType == typeof(ShadowedDpFields));
+
+            // A member that exists but cannot be read must not claim the name: the
+            // derived type here hides a readable base DP *field* with a static property
+            // whose getter throws, and enumeration walks the derived type first. If the
+            // failed read consumed "ShadowedDp", the base's readable field would be
+            // skipped and the DP would disappear from the listing.
+            List<PropertyResult>? shadowEnumerated = null;
+            try
+            {
+                shadowEnumerated = (List<PropertyResult>)Invoke(
+                    "EnumerateDependencyProperties", new DevtoolsUnreadableShadowControl())!;
+            }
+            catch (global::System.Reflection.TargetInvocationException)
+            {
+                // Enumeration let the throwing getter escape; the check below goes red.
+            }
+            H.Check("Devtools_Dp_UnreadableMemberDoesNotHideReadableOne",
+                shadowEnumerated?.SingleOrDefault(p => p.Name == "ShadowedDp")
+                    is { Value: "readable-base-dp", DeclaringType: nameof(DevtoolsReadableBaseControl) });
+        }
+
+        /// <summary>Static DP members that misbehave when read reflectively.</summary>
+        private class AwkwardDpStatics
+        {
+            public static DependencyProperty ThrowingProperty =>
+                throw new InvalidOperationException("static DP getter blew up");
+
+            public static DependencyProperty WriteOnlyProperty
+            {
+                set { _ = value; }
+            }
+        }
+
+        /// <summary>A DP static whose declaring type fails to initialize.</summary>
+        private sealed class FailingInitializerDpStatics
+        {
+            public static readonly DependencyProperty BoomProperty = null!;
+
+            static FailingInitializerDpStatics() =>
+                throw new InvalidOperationException("static constructor blew up");
+        }
+
+        /// <summary>Re-declares an inherited static property; the binder must pick the derived one.</summary>
+        private sealed class ShadowedDpStatics : ShadowedDpStaticsBase
+        {
+            public static new DependencyProperty ShadowedProperty => DevtoolsFieldDpControl.FieldOnlyProperty;
+        }
+
+        private class ShadowedDpStaticsBase
+        {
+            public static DependencyProperty ShadowedProperty => DevtoolsFieldDpControl.FieldOnlyProperty;
+        }
+
+        /// <summary>Same, as fields — the arm that resolves C#-authored DPs.</summary>
+        private sealed class ShadowedDpFields : ShadowedDpFieldsBase
+        {
+            public static new readonly DependencyProperty ShadowedProperty = DevtoolsFieldDpControl.FieldOnlyProperty;
+        }
+
+        private class ShadowedDpFieldsBase
+        {
+            public static readonly DependencyProperty ShadowedProperty = DevtoolsFieldDpControl.FieldOnlyProperty;
+        }
+    }
+
     internal sealed class PropertyToolsReflectionExercise(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -1188,19 +1530,11 @@ internal static class DevtoolsFixtures
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red),
             };
 
-            bool findDpHandled = false;
-            try
-            {
-                findDpHandled = Invoke("FindDependencyProperty", button, "Grid.Row") is not null;
-            }
-            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
-            {
-                findDpHandled = true;
-            }
-            H.Check("Devtools_PropReflect_FindDpHandled", findDpHandled);
-
-            var enumerated = ((IEnumerable<object>)Invoke("EnumerateDependencyProperties", button)!).ToArray();
-            H.Check("Devtools_PropReflect_EnumeratesNoThrow", enumerated is not null);
+            // NOTE: DP *discovery* (FindDependencyProperty / EnumerateDependencyProperties)
+            // is asserted by Devtools_PropertyToolsDpDiscovery, not here — it is the one
+            // part of this surface that does not survive trimming, so it lives in a
+            // fixture that is skipped under NativeAOT. What remains below is the
+            // value-formatting / parsing / resource / style logic, which is AOT-safe.
 
             H.Check("Devtools_PropReflect_FormatValues",
                 (string?)Invoke("FormatValue", button.Background) == "#FFFF0000"
@@ -1479,6 +1813,60 @@ internal sealed record McpClientInfo(string Name, string Version);
 
 /// <summary>An empty JSON object (<c>{}</c>) — e.g. <c>capabilities</c>.</summary>
 internal sealed record McpEmptyObject;
+
+/// <summary>
+/// A control whose DependencyProperty is declared the C# way — a
+/// <c>public static readonly</c> <b>field</b> — rather than as the CsWinRT-projected
+/// static property WinUI types expose. Used by
+/// <see cref="DevtoolsFixtures.PropertyToolsDpDiscovery"/> to prove the fields arm of
+/// DP discovery still works after issue #1109 taught it to read properties too; no
+/// built-in WinUI type can cover that arm.
+/// <para>
+/// Declared at namespace scope, not nested in the fixture, because CsWinRT1028
+/// requires every enclosing type of a WinRT-derived class to be <c>partial</c>.
+/// </para>
+/// </summary>
+internal sealed partial class DevtoolsFieldDpControl : Control
+{
+    public static readonly DependencyProperty FieldOnlyProperty =
+        DependencyProperty.Register(
+            "FieldOnly",
+            typeof(string),
+            typeof(DevtoolsFieldDpControl),
+            new PropertyMetadata("field-dp-default"));
+
+    public string FieldOnly
+    {
+        get => (string)GetValue(FieldOnlyProperty);
+        set => SetValue(FieldOnlyProperty, value);
+    }
+}
+
+/// <summary>
+/// Declares a readable DP field that <see cref="DevtoolsUnreadableShadowControl"/>
+/// hides with an unreadable static property of the same name.
+/// </summary>
+internal partial class DevtoolsReadableBaseControl : Control
+{
+    public static readonly DependencyProperty ShadowedDpProperty =
+        DependencyProperty.Register(
+            "ShadowedDp",
+            typeof(string),
+            typeof(DevtoolsReadableBaseControl),
+            new PropertyMetadata("readable-base-dp"));
+}
+
+/// <summary>
+/// Hides the base's readable DP field with a static property whose getter throws.
+/// Enumeration walks the derived type first, so if a failed read were allowed to
+/// claim the name, the base's perfectly readable field would be skipped and the DP
+/// would vanish from the listing — the ordering bug this shape pins.
+/// </summary>
+internal sealed partial class DevtoolsUnreadableShadowControl : DevtoolsReadableBaseControl
+{
+    public static new DependencyProperty ShadowedDpProperty =>
+        throw new InvalidOperationException("shadowing DP getter blew up");
+}
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

@@ -17,6 +17,7 @@ public class AccessibilityScannerTests
     //  A11Y_001: Icon-only Button without accessible name
     // ════════════════════════════════════════════════════════════════
 
+    // <snippet:a11y-icon-button-tests>
     [Fact]
     public void A11Y_001_IconButton_Without_AutomationName()
     {
@@ -38,6 +39,7 @@ public class AccessibilityScannerTests
         var findings = AccessibilityScanner.Scan(tree);
         Assert.DoesNotContain(findings, f => f.Id == "A11Y_001");
     }
+    // </snippet:a11y-icon-button-tests>
 
     [Fact]
     public void A11Y_001_TextButton_Not_Flagged()

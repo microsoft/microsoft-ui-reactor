@@ -32,13 +32,14 @@
     Build configuration for the CLI nupkg. Default: Release.
 
 .PARAMETER InstallWinAppSdk
-    Install the Windows App Runtime 2.0 via winget without prompting.
+    Install the Windows App Runtime via winget without prompting. The exact
+    runtime is derived from WindowsAppSDKVersion in Directory.Build.props.
     Useful for CI / one-shot dev-box automation. Mutually exclusive with
     -NoWinAppSdk. The framework defaults to self-contained, so the
     runtime is only required for framework-dependent deployment.
 
 .PARAMETER NoWinAppSdk
-    Skip the Windows App Runtime 2.0 prompt silently. Useful for
+    Skip the Windows App Runtime prompt silently. Useful for
     non-interactive scripts that explicitly don't want the runtime
     installed. Mutually exclusive with -InstallWinAppSdk.
 
@@ -306,57 +307,133 @@ function Get-VsExtensionSkipReason {
 # proofs (tests/aot_trim_proof/*) keep =true explicitly so their build
 # output stays a standalone deployable.
 #
-# Net effect: the user needs the WindowsAppRuntime 2.0 install matching
-# our WindowsAppSDKVersion=2.1.3 to run most things in this repo. (Framework-
-# dependent projects reference the Microsoft.WindowsAppSDK.WinUI sub-package
-# rather than the full metapackage, but still bind that same machine-wide runtime.)
+# Net effect: the user needs the machine-wide Windows App Runtime matching our
+# WindowsAppSDKVersion to run most things in this repo. (Framework-dependent
+# projects reference the Microsoft.WindowsAppSDK.WinUI sub-package rather than
+# the full metapackage, but still bind that same machine-wide runtime.)
 #
 # So we prompt by default. `-InstallWinAppSdk` to force-install,
 # `-InstallWinAppSdk:$false` to skip the prompt non-interactively.
-
-function Test-WindowsAppRuntime20 {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Dbg "winget not on PATH; skipping WindowsAppRuntime probe"
-        return $true  # nothing we can check without winget
-    }
-    # --accept-source-agreements is needed even for `list` on a winget that
-    # hasn't been used before (e.g. a fresh CI runner). Without it, winget
-    # prompts for msstore terms and fails on a non-interactive shell with
-    # exit -1978335166.
-    Write-Dbg "winget list --id Microsoft.WindowsAppRuntime.2.0 --exact --accept-source-agreements"
-    if ($script:VerboseOn) {
-        & winget list --id Microsoft.WindowsAppRuntime.2.0 --exact --accept-source-agreements 2>&1 |
-            ForEach-Object { Write-Dbg "  winget> $_" }
-    } else {
-        & winget list --id Microsoft.WindowsAppRuntime.2.0 --exact --accept-source-agreements 2>$null | Out-Null
-    }
-    $rc = $LASTEXITCODE
-    Write-Dbg "winget list exit code: $rc"
-    $global:LASTEXITCODE = 0  # don't let winget's status leak out of the probe
-    return ($rc -eq 0)
+#
+# The runtime identity and the version comparison live in
+# tools/WindowsAppRuntimeId.ps1 -- see that file for why the 2.x winget id is
+# major-only and why its presence alone does not prove the runtime is new
+# enough. bootstrap.yml and WinAppSDKReferenceGuardTests.cs load the same file.
+$winAppRuntimeLib = Join-Path $repoRoot 'tools\WindowsAppRuntimeId.ps1'
+if (-not (Test-Path -LiteralPath $winAppRuntimeLib -PathType Leaf)) {
+    Write-Host "ERROR: Missing Windows App Runtime helper: $winAppRuntimeLib" -ForegroundColor Red
+    exit 1
 }
+. $winAppRuntimeLib
 
-if (-not (Test-WindowsAppRuntime20)) {
+$winAppSdkVersion = Get-PinnedWindowsAppSdkVersion -PropsPath (Join-Path $repoRoot 'Directory.Build.props')
+$winAppRuntimeId = Get-WindowsAppRuntimeWingetId $winAppSdkVersion
+if (-not $winAppRuntimeId) {
+    # Guessing an id here risks installing a runtime that cannot load what this
+    # checkout builds, which is worse than saying nothing. Loud rather than
+    # silent when the caller explicitly asked for the install.
+    $msg = "Could not read WindowsAppSDKVersion from Directory.Build.props, so the Windows App Runtime could not be identified."
     if ($InstallWinAppSdk) {
-        Install-WithWinget -Id 'Microsoft.WindowsAppRuntime.2.0' -Reason 'Windows App Runtime 2.0'
-    } elseif ($NoWinAppSdk) {
-        Write-Host '    [skip] Windows App Runtime 2.0 not installed (skipped per -NoWinAppSdk).' -ForegroundColor Yellow
-    } else {
-        Write-Host ''
-        Write-Host '    Windows App Runtime 2.0 is not installed on this machine.' -ForegroundColor Yellow
-        Write-Host '    The Reactor repo defaults to WindowsAppSDKSelfContained=false, so most'
-        Write-Host '    samples, perf benches, and apps in this repo need the machine-wide runtime'
-        Write-Host '    installed to launch. Skip only if you know your projects override'
-        Write-Host '    WindowsAppSDKSelfContained=true to bundle their own copy.'
-        $answer = Read-Host '    Install Windows App Runtime 2.0 via winget now? [y/N]'
-        if ($answer -match '^[Yy]') {
-            Install-WithWinget -Id 'Microsoft.WindowsAppRuntime.2.0' -Reason 'Windows App Runtime 2.0'
+        Fail "$msg -InstallWinAppSdk cannot be honored."
+    }
+    Write-Host "    [warn] $msg Skipping the runtime check." -ForegroundColor Yellow
+} else {
+    $winAppRuntimeLabel = "Windows App Runtime (for Windows App SDK $winAppSdkVersion)"
+    Write-Dbg "Windows App Runtime winget id derived from WindowsAppSDKVersion=$($winAppSdkVersion): $winAppRuntimeId"
+
+    # Returns 'satisfied' | 'outdated' | 'missing' | 'unreadable' | 'nowinget'.
+    #
+    # 'outdated' is a real state, not a theoretical one: the 2.x id is
+    # major-wide, so a machine carrying 2.0.1 reports the package as installed
+    # even though it cannot load an app built against 2.1.3. Treating presence
+    # as sufficient would print [ok] over exactly the mismatch this check exists
+    # to catch.
+    #
+    # 'nowinget' and 'unreadable' are kept apart because the remedy differs:
+    # one needs App Installer before any winget advice is actionable, the other
+    # already has winget and just needs the install run.
+    function Get-WindowsAppRuntimeState {
+        param(
+            [Parameter(Mandatory)][string]$Id,
+            [Parameter(Mandatory)][string]$RequiredSdkVersion
+        )
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Dbg "winget not on PATH; cannot probe WindowsAppRuntime"
+            return 'nowinget'
+        }
+        # --accept-source-agreements is needed even for `list` on a winget that
+        # hasn't been used before (e.g. a fresh CI runner). Without it, winget
+        # prompts for msstore terms and fails on a non-interactive shell with
+        # exit -1978335166.
+        Write-Dbg "winget list --id $Id --exact --accept-source-agreements"
+        $output = & winget list --id $Id --exact --accept-source-agreements 2>$null | Out-String
+        $rc = $LASTEXITCODE
+        Write-Dbg "winget list exit code: $rc"
+        $global:LASTEXITCODE = 0  # don't let winget's status leak out of the probe
+        if ($script:VerboseOn) {
+            $output -split "`r?`n" | ForEach-Object { if ($_) { Write-Dbg "  winget> $_" } }
+        }
+        if ($rc -ne 0) { return 'missing' }
+
+        $installed = Get-WindowsAppRuntimeVersionFromWingetOutput -Output $output
+        if ($null -eq $installed) {
+            # Present, but the version column could not be read. Do not claim it
+            # is too old on the strength of a parse failure.
+            Write-Dbg "winget reported $Id installed but no version could be parsed"
+            return 'unreadable'
+        }
+        Write-Dbg "installed $Id version: $installed (need >= $RequiredSdkVersion)"
+        if (Test-WindowsAppRuntimeSatisfied -Installed $installed -RequiredSdkVersion $RequiredSdkVersion) {
+            return 'satisfied'
+        }
+        return 'outdated'
+    }
+
+    $winAppRuntimeState = Get-WindowsAppRuntimeState -Id $winAppRuntimeId -RequiredSdkVersion $winAppSdkVersion
+    $winAppRuntimeUnverified = @('unreadable', 'nowinget') -contains $winAppRuntimeState
+    if ($winAppRuntimeState -eq 'satisfied') {
+        Write-Ok "$winAppRuntimeLabel installed"
+    } elseif ($winAppRuntimeUnverified -and -not $InstallWinAppSdk) {
+        # Not proven missing, so do not nag an interactive user or fail -NoWinAppSdk.
+        # -InstallWinAppSdk is handled below instead: an explicit force-install must
+        # not become a no-op just because the probe could not read winget's output.
+        if ($winAppRuntimeState -eq 'nowinget') {
+            Write-Host "    [warn] Could not verify $winAppRuntimeLabel - winget is not on PATH." -ForegroundColor Yellow
+            Write-Host "           Install App Installer from the Microsoft Store, then re-run ./bootstrap.ps1."
+            Write-Host "           Or install the runtime by hand: https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads"
         } else {
-            Write-Host "    Skipped. Re-run later with: winget install Microsoft.WindowsAppRuntime.2.0" -ForegroundColor Cyan
+            Write-Host "    [warn] Could not verify $winAppRuntimeLabel - winget's output could not be read." -ForegroundColor Yellow
+            Write-Host "           If samples fail to launch, install it with: winget install $winAppRuntimeId"
+        }
+    } else {
+        $problem = switch ($winAppRuntimeState) {
+            'outdated'   { "$winAppRuntimeLabel is installed but too old for Windows App SDK $winAppSdkVersion." }
+            'unreadable' { "$winAppRuntimeLabel could not be verified." }
+            'nowinget'   { "$winAppRuntimeLabel could not be verified (winget is not on PATH)." }
+            default      { "$winAppRuntimeLabel is not installed on this machine." }
+        }
+        if ($InstallWinAppSdk) {
+            # winget exits 'no applicable update' when the runtime is already current,
+            # which Install-WithWinget already treats as success -- so installing on an
+            # unverifiable state is safe, and safer than skipping.
+            Install-WithWinget -Id $winAppRuntimeId -Reason $winAppRuntimeLabel
+        } elseif ($NoWinAppSdk) {
+            Write-Host "    [skip] $problem (skipped per -NoWinAppSdk)." -ForegroundColor Yellow
+        } else {
+            Write-Host ''
+            Write-Host "    $problem" -ForegroundColor Yellow
+            Write-Host '    The Reactor repo defaults to WindowsAppSDKSelfContained=false, so most'
+            Write-Host '    samples, perf benches, and apps in this repo need the machine-wide runtime'
+            Write-Host '    installed to launch. Skip only if you know your projects override'
+            Write-Host '    WindowsAppSDKSelfContained=true to bundle their own copy.'
+            $answer = Read-Host "    Install $winAppRuntimeId via winget now? [y/N]"
+            if ($answer -match '^[Yy]') {
+                Install-WithWinget -Id $winAppRuntimeId -Reason $winAppRuntimeLabel
+            } else {
+                Write-Host "    Skipped. Re-run later with: winget install $winAppRuntimeId" -ForegroundColor Cyan
+            }
         }
     }
-} else {
-    Write-Ok 'Windows App Runtime 2.0 installed'
 }
 
 # ---------------------------------------------------------------------------
@@ -424,11 +501,19 @@ Write-Dbg "Local nupkg feed: $feed"
 # apphost) succeeds. The packed IL itself is platform-portable.
 Write-Dbg "Host arch resolved to: $hostArch"
 
+# Stamp a unique, monotonically-increasing local version. Get-ReactorLocalCliVersion
+# (tools/BootstrapFeedResolver.ps1) documents why the encoding looks the way it
+# does; it lives there rather than inline so its shape, bounds, and ordering are
+# covered by tests/vs_reactor/ci/BootstrapFeedResolver.Tests.ps1.
+$cliLocalVersion = Get-ReactorLocalCliVersion
+Write-Dbg "Local mur version stamp: $cliLocalVersion"
+
 $cliPackArgs = @(
     'pack',
     (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj'),
     '-c', $Configuration,
     "-p:Platform=$hostArch",
+    "-p:Version=$cliLocalVersion",
     '-o', $feed,
     '--nologo', '-v:m'
 )
@@ -461,7 +546,8 @@ if ($SkipMurInstall) {
     $toolArgs = Get-ReactorToolArguments `
         -Feed $feed `
         -NuGetConfig $effectiveNuGetConfig `
-        -NuGetSource $effectiveNuGetSource
+        -NuGetSource $effectiveNuGetSource `
+        -Version $cliLocalVersion
     if ($existing) {
         Write-Dbg "Existing global tool detected ($($existing.Line.Trim())); using 'dotnet tool update'"
         & dotnet tool update @toolArgs
@@ -484,6 +570,54 @@ if ($SkipMurInstall) {
             Write-Dbg "$dotnetTools already on current-process PATH"
         }
     }
+
+    # Prove the binary on PATH is the one we just built.
+    #
+    # The exit-code check above cannot detect a stale tool: a no-op `dotnet
+    # tool update` exits 0. That is exactly how installs drifted months behind
+    # HEAD while every bootstrap run reported success. The SDK appends the
+    # source revision to AssemblyInformationalVersion, so `mur --version`
+    # prints `mur <ver>+<40-hex-sha>` — compare that against HEAD.
+    #
+    # git is resolved via Get-Command rather than invoked speculatively: under
+    # $ErrorActionPreference = 'Stop' a missing executable raises a terminating
+    # CommandNotFoundException, so `& git ...` would abort bootstrap instead of
+    # reaching the non-fatal warning below.
+    $expectedSha = $null
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $expectedSha = & git -C $repoRoot rev-parse HEAD 2>$null
+        if ($LASTEXITCODE -ne 0) { $expectedSha = $null }
+    }
+
+    # Collect the output fully before inspecting it. Piping a native command
+    # straight into `Select-Object -First 1` closes the pipeline early, which
+    # can surface as a broken pipe and leaves $LASTEXITCODE non-deterministic —
+    # so the exit code is captured from the unpiped call.
+    $murOutput = & mur --version 2>$null
+    $murExit = $LASTEXITCODE
+    $murVersionLine = @($murOutput) | Select-Object -First 1
+
+    # A `mur` that runs but fails is a broken install, not an unverifiable one.
+    # Falling through to the warning below would mask exactly the class of
+    # defect this block exists to catch.
+    if ($murExit -ne 0) {
+        Fail ("The installed ``mur`` failed to run (``mur --version`` exited $murExit). " +
+              "The global tool is present but broken. Run: dotnet tool uninstall -g Microsoft.UI.Reactor.Cli, then re-run ./bootstrap.ps1.")
+    }
+
+    if ($expectedSha -and $murVersionLine -match '\+([0-9a-fA-F]{40})') {
+        $installedSha = $Matches[1]
+        if ($installedSha -ne $expectedSha) {
+            Fail ("Installed mur reports revision $($installedSha.Substring(0,8)) but HEAD is $($expectedSha.Substring(0,8)). " +
+                  "The global tool was not replaced. Run: dotnet tool uninstall -g Microsoft.UI.Reactor.Cli, then re-run ./bootstrap.ps1.")
+        }
+        Write-Ok "mur verified at revision $($expectedSha.Substring(0,8)) (version $cliLocalVersion)"
+    } else {
+        # Non-fatal: a shallow/exported tree has no git, and a consumer build
+        # may strip the revision suffix. Say so rather than implying success.
+        Write-Host "    [warn] Could not verify the installed mur revision (mur --version returned '$murVersionLine')." -ForegroundColor Yellow
+    }
+
     Write-Ok "mur installed as global tool (also on this shell's PATH)"
 }
 
@@ -676,7 +810,7 @@ if ($SkipVsExtension) {
 
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {
-        Write-Host '    [skip] vswhere.exe not found — Visual Studio is not installed. The framework + mur + template + plugin are still ready.' -ForegroundColor Yellow
+        Write-Host '    [skip] vswhere.exe not found - Visual Studio is not installed. The framework + mur + template + plugin are still ready.' -ForegroundColor Yellow
         Write-Host "           To install the preview extension later, install VS 2022/2026 with the 'Visual Studio extension development' workload, then re-run ./bootstrap.ps1."
     } else {
         # `-requires Microsoft.VisualStudio.Workload.VisualStudioExtension` filters to
@@ -710,8 +844,19 @@ if ($SkipVsExtension) {
                     # the VSIXInstaller against the per-user data dir, plus a synchronous
                     # `devenv /updateconfiguration` to merge the pkgdef so menus appear on
                     # the next launch. -VsInstanceId pins to the same instance we probed.
+                    # The feed resolved above has to be forwarded explicitly. This step
+                    # runs in a child process, so it never sees the restore environment
+                    # the rest of the bootstrap sets up for its own commands, and would
+                    # otherwise fall through to the repo's public nuget.config -- which
+                    # not every network can reach.
+                    $vsixFeedArgs = @()
+                    if ($effectiveNuGetConfig) {
+                        $vsixFeedArgs = @('-NuGetConfig', $effectiveNuGetConfig)
+                    } elseif ($effectiveNuGetSource) {
+                        $vsixFeedArgs = @('-NuGetSource', $effectiveNuGetSource)
+                    }
                     $powerShellExe = (Get-Process -Id $PID).Path
-                    & $powerShellExe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $reinstall -Configuration $Configuration -VsInstanceId $target.instanceId
+                    & $powerShellExe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $reinstall -Configuration $Configuration -VsInstanceId $target.instanceId @vsixFeedArgs
                     $vsixExit = $LASTEXITCODE
                     # Reinstall-Vsix.ps1's exit-code contract (see its .OUTPUTS):
                     # 3 == VSIX installed but `devenv /updateconfiguration`
@@ -726,8 +871,9 @@ if ($SkipVsExtension) {
                         # so users debugging install issues see it.
                         Write-Host ''
                         Write-Host "    [warn] VS extension install reported a non-zero exit code ($vsixExit). The rest of the bootstrap completed; re-run src\vs-reactor\Reinstall-Vsix.ps1 directly to retry." -ForegroundColor Yellow
+                        Write-Host "           If the log shows NU1301 against nuget.org, the restore had no reachable feed: re-run with -NuGetSource <url> or -NuGetConfig <path>." -ForegroundColor Yellow
                     } else {
-                        Write-Ok "VS extension installed into $($target.displayName) — launch VS, then View -> Other Windows -> Reactor Preview."
+                        Write-Ok "VS extension installed into $($target.displayName) - launch VS, then View -> Other Windows -> Reactor Preview."
                     }
                     # Write-Host does NOT clear $LASTEXITCODE, so without this
                     # the child's non-zero code survives to the end of the

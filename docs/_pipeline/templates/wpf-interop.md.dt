@@ -23,17 +23,51 @@ Host a Reactor component tree from WPF by embedding
 [`DesktopWindowXamlSource`](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.hosting.desktopwindowxamlsource)
 directly — the same WinAppSDK primitive that
 [WinForms Interop](winforms-interop.md) wraps in `XamlIslandControl`.
-Inside the island, mount a `ReactorHostControl` and assign it a
-`ComponentType`. The Reactor side of the boundary is identical to any
-other host: components, hooks, modifiers, and
-[`UseObservable<T>`](hooks.md) for bridging an `INotifyPropertyChanged`
-view-model all work unchanged.
+WPF adopts a foreign HWND through `HwndHost`, so the island lives inside
+an `HwndHost` subclass:
+
+```csharp snippet="wpf-interop/hwnd-host"
+```
+
+Inside the island, the WinUI element you mount is a `ReactorHostControl`.
+
+> **`ReactorHostControl` has no `ComponentType` property.** That property
+> belongs to the WinForms `XamlIslandControl` wrapper, not to the host
+> control itself. On the WinUI side, set `ComponentFactory` (parameterless
+> components) or call `Mount(component)` / `Mount(renderFunc)`.
+
+```csharp snippet="wpf-interop/mount-directly"
+```
+
+The Reactor side of the boundary is identical to any other host:
+components, hooks, modifiers, and [`UseObservable<T>`](hooks.md) for
+bridging an `INotifyPropertyChanged` view-model all work unchanged.
+
+```csharp snippet="wpf-interop/reactor-component"
+```
+
+Two lifetime rules the WinForms wrapper handles for you and an
+`HwndHost` does not:
+
+- `DesktopWindowXamlSource.Dispose()` does **not** dispose its content.
+  Dispose the `ReactorHostControl` yourself in `DestroyWindowCore`, or the
+  reconciler and every live effect leak for the process lifetime.
+- Re-create the source if WPF recreates the host window; reusing a
+  disposed source throws.
 
 The WPF `Dispatcher` and WinUI `DispatcherQueue` are distinct objects
 on the same UI thread, so plain property writes from WPF event handlers
 into Reactor setters work without marshalling — see
 [Threading and Dispatch](threading-and-dispatch.md) for the invariants
 the WinUI side enforces.
+
+Keyboard input, theming, and popup constraint are the parts
+`XamlIslandControl` invests in that this recipe does not: WinUI needs a
+`DispatcherQueue` and an `Application` instance on the UI thread before
+the first island is created, and `ContentPreTranslateMessage` must be
+pumped for keys to reach XAML. Read
+[`XamlIslandBootstrap`](winforms-interop.md) as the reference for that
+setup — a WPF host has to reproduce it.
 
 ## Next Steps
 

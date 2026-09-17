@@ -67,11 +67,19 @@ jobs:
           Write-Host "=== winget --version ==="
           winget --version
           Write-Host ""
-          Write-Host "=== Windows App Runtime 2.0 (winget list) ==="
+          Write-Host "=== Windows App Runtime (winget list) ==="
           # --accept-source-agreements: a fresh runner hasn't accepted the
           # msstore source terms. Without it, winget prompts and fails on a
           # non-interactive shell.
-          winget list --id Microsoft.WindowsAppRuntime.2.0 --exact --accept-source-agreements 2>&1
+          #
+          # The id comes from the same helper bootstrap.ps1 uses, so this
+          # diagnostic cannot report a different package than the one bootstrap
+          # actually checks.
+          . ./tools/WindowsAppRuntimeId.ps1
+          $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath ./Directory.Build.props
+          $wartId = Get-WindowsAppRuntimeWingetId $sdk
+          Write-Host "WindowsAppSDKVersion=$sdk -> $wartId"
+          if ($wartId) { winget list --id $wartId --exact --accept-source-agreements 2>&1 }
           Write-Host "exit=$LASTEXITCODE"
           $global:LASTEXITCODE = 0
 
@@ -104,6 +112,32 @@ jobs:
           $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
           mur doctor
           if ($LASTEXITCODE -ne 0) { throw "mur doctor failed (exit $LASTEXITCODE)" }
+
+      # Regression guard: `mur check` loads Roslyn at runtime, and a
+      # PrivateAssets="all" reference once excluded Microsoft.CodeAnalysis*.dll
+      # from the packed tools/ payload. The assemblies were still in bin/, so
+      # `dotnet run` worked while every *installed* `mur check` threw
+      # FileNotFoundException at startup — invisible to every check above,
+      # which only exercise commands that don't touch Roslyn.
+      #
+      # --list-rules is the cheapest command that forces the load: it resolves
+      # the rule registry and exits without running a build.
+      - name: Verify installed mur check loads Roslyn
+        shell: pwsh
+        run: |
+          $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
+          $out = mur check --list-rules 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host $out
+              throw "mur check --list-rules exited $LASTEXITCODE"
+          }
+          # Exit 0 alone is not proof: assert the registry actually rendered.
+          # A rule name that vanishes is a real signal, not a formatting nit.
+          if ($out -notmatch 'GridSizePxRenameRule') {
+              Write-Host $out
+              throw "mur check --list-rules did not list the expected ruleset"
+          }
+          Write-Host $out
 
       - name: Verify local-nupkgs/ produced
         shell: pwsh

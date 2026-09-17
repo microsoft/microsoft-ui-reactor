@@ -22,6 +22,7 @@ REACTOR_REF_001 | Reactor.Reference | Warning | ReferenceCurrentReadAnalyzer - U
 REACTOR_DSL_001 | Reactor.Dsl | Warning | MissingWithKeyAnalyzer - Dynamic list item missing .WithKey
 REACTOR_DSL_002 | Reactor.Dsl | Info | MissingWithKeyAnalyzer - Non-stable .WithKey (index / Guid.NewGuid / DateTime.Now)
 REACTOR_DSL_003 | Reactor.Dsl | Warning | ConstantKeySelectorAnalyzer - Typed collection keySelector never keys by item (returns constant/null or ignores the item), forcing a keyed-diff bailout
+REACTOR_DSL_004 | Reactor.Dsl | Info | MissingWithKeyAnalyzer - Redundant .WithKey inside a ForEach over IReactorKeyed items; the factory already supplies that exact key
 REACTOR_DOCK_001 | Reactor.Docking | Warning | OnLiveLayoutRoundTripAnalyzer - OnLiveLayoutChanged feeds the live layout back into state
 REACTOR_EVENT_001 | Reactor.Events | Warning | SetEventSubscriptionAnalyzer - Event wired via .Set(+=/-=) re-subscribes every render; use a declarative On* modifier or .OnMountAdd/.OnUnmountAdd
 REACTOR_POOL_001 | Reactor.Pool | Warning | PoolResetSetAnalyzer - .Set assigns to a property reset on pool return; use the surviving Reactor modifier
@@ -63,3 +64,4 @@ REACTOR_DYM_003 | Reactor.DidYouMean | Warning | FuzzyFactoryNameAnalyzer - Mist
 REACTOR_DYM_004 | Reactor.DidYouMean | Warning | MissingFactoryArgumentAnalyzer - Reactor factory called with too few arguments (CS7036); suggests the full parameter shape (single unique overload only)
 REACTOR_DYM_005 | Reactor.DidYouMean | Warning | StringForElementArgumentAnalyzer - String passed where a Reactor Element is expected (CS1503); wrap it in a text factory (e.g. TextBlock)
 REACTOR_ITEMS_002 | Reactor.Collections | Warning | ItemsViewContainerRootAnalyzer - ItemsView viewBuilder returns a non-ItemContainer root (mount-time InvalidOperationException); wrap it with ItemContainer(...)
+REACTOR_ICON_001 | Reactor.Windowing | Warning | WindowIconSurfaceAnalyzer - WindowIcon source kind the target surface silently skips (FromResource on tray/overlay/thumbnail, which need an HICON; FromBytes/FromRgba on the window caption or a jump list, which need a path or Uri); only fires when the kind is provably known at the use site

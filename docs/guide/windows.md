@@ -11,9 +11,11 @@ declarative component model used inside a page.
 
 ## Lifecycle basics
 
-`ReactorApp.Run<TRoot>(...)` opens the primary window. `ReactorApp.OpenWindow`
-opens a secondary window from the UI thread and returns a `ReactorWindow` handle
-for imperative lifecycle operations.
+`ReactorApp.Run<TRoot>(...)` opens the primary window. Pass a `WindowSpec` instead
+of the individual arguments when the primary window needs the full declarative
+surface — icon, min/max size, backdrop, corner style, or placement persistence.
+`ReactorApp.OpenWindow` opens a secondary window from the UI thread and returns a
+`ReactorWindow` handle for imperative lifecycle operations.
 
 ```csharp
 ReactorApp.Run<WindowsApp>("Windows Demo", width: 640, height: 520
@@ -21,12 +23,15 @@ ReactorApp.Run<WindowsApp>("Windows Demo", width: 640, height: 520
 ```
 
 ```csharp
-var settings = ReactorApp.OpenWindow(
-    new WindowSpec { Title = "Settings", Width = 520, Height = 420 },
-    () => new SettingsWindow());
+public static void OpenSettings()
+{
+    var settings = ReactorApp.OpenWindow(
+        new WindowSpec { Title = "Settings", Width = 520, Height = 420 },
+        () => new SettingsWindow());
 
-settings.Activate();
-settings.Close();
+    settings.Activate();
+    settings.Close();
+}
 ```
 
 Caveats:
@@ -58,17 +63,26 @@ chrome resize policy by `ResizeMode`, interactive aspect locks by `AspectRatio`,
 and content-driven sizing by `SizeToContent`.
 
 ```csharp
-new WindowSpec
+class PreviewWindow : Component
 {
-    Title = "Preview",
-    Width = 640,
-    Height = 360,
-    ResizeMode = WindowResizeMode.CanMinimize,
-    AspectRatio = 16.0 / 9.0,
-};
+    public static WindowSpec Spec => new()
+    {
+        Title = "Preview",
+        Width = 640,
+        Height = 360,
+        ResizeMode = WindowResizeMode.CanMinimize,
+        AspectRatio = 16.0 / 9.0,
+    };
 
-window.SetAspectRatio(4.0 / 3.0);
-UseWindowAspectRatio(1.0); // lifetime-bound hook; unmount clears it
+    public override Element Render()
+    {
+        var window = UseWindow();
+
+        UseWindowAspectRatio(1.0); // lifetime-bound hook; unmount clears it
+
+        return Button("Widescreen", () => window?.SetAspectRatio(4.0 / 3.0));
+    }
+}
 ```
 
 | API | Values / behavior |
@@ -93,25 +107,38 @@ Use `StartPosition` for initial placement, `SetPosition` for imperative moves,
 to live moves.
 
 ```csharp
-var spec = new WindowSpec
+class CommandPalette : Component
 {
-    Title = "Command Palette",
-    StartPosition = WindowStartPosition.CenterOnCurrent,
-    IsMovableByBackground = true,
-};
+    public static WindowSpec Spec => new()
+    {
+        Title = "Command Palette",
+        StartPosition = WindowStartPosition.CenterOnCurrent,
+        IsMovableByBackground = true,
+    };
 
-var (x, y) = UseWindowPosition();
-var drag = UseWindowDragMove();
-Button("Drag window", drag);
+    public override Element Render()
+    {
+        var (x, y) = UseWindowPosition();
+        var drag = UseWindowDragMove();
+
+        return VStack(8,
+            TextBlock($"at {x}, {y}"),
+            Button("Drag window", drag));
+    }
+}
 ```
 
 `IsMovableByBackground` starts the OS move loop when a non-interactive part of
 the root is pressed. Mark custom interactive regions with `.Drag(false)`:
 
 ```csharp
-HStack(
-    TextBlock("Palette"),
-    Button("Settings").Drag(false));
+class PaletteChrome : Component
+{
+    public override Element Render() =>
+        HStack(
+            TextBlock("Palette"),
+            Button("Settings").Drag(false));
+}
 ```
 
 Placement options:
@@ -127,10 +154,14 @@ Placement options:
 Persistence is opt-in and explicit:
 
 ```csharp
-var spec = new WindowSpec { Title = "Shell" }
-    .WithPersistence("main-window", fallback: WindowStartPosition.CenterOnCurrent);
+public static WindowSpec ShellSpec { get; } =
+    new WindowSpec { Title = "Shell" }
+        .WithPersistence("main-window", fallback: WindowStartPosition.CenterOnCurrent);
 
-window.SavePlacement(); // manual best-effort flush
+public static void FlushPlacement(ReactorWindow window)
+{
+    window.SavePlacement(); // manual best-effort flush
+}
 ```
 
 Caveats:
@@ -147,15 +178,22 @@ separate because the taskbar button and Alt-Tab visibility are separate shell
 concepts.
 
 ```csharp
-new WindowSpec
+class FloatingPalette : Component
 {
-    Title = "Palette",
-    Level = WindowLevel.Floating,
-    ShowInTaskbar = false,
-    ShowInSwitcher = true,
-};
+    public static WindowSpec Spec => new()
+    {
+        Title = "Palette",
+        Level = WindowLevel.Floating,
+        ShowInTaskbar = false,
+        ShowInSwitcher = true,
+    };
 
-var isCovered = UseIsCovered(); // hint from ZOrderChanged
+    public override Element Render()
+    {
+        var isCovered = UseIsCovered(); // hint from ZOrderChanged
+        return TextBlock(isCovered ? "(covered)" : "(visible)");
+    }
+}
 ```
 
 | `WindowLevel` | Behavior |
@@ -185,7 +223,7 @@ DWM corner preference. Backdrops are applied either on `WindowSpec.Backdrop` or
 with a root `.Backdrop(...)` modifier.
 
 ```csharp
-new WindowSpec
+public static WindowSpec HudSpec { get; } = new()
 {
     Title = "HUD",
     Style = WindowStyle.None,
@@ -207,9 +245,13 @@ is `null` (the default), mounting a `TitleBar(...)` element automatically sets
 spec wins over inference.
 
 ```csharp
-VStack(
-    TitleBar("My app"),
-    TextBlock("Body"));
+class TitleBarWindow : Component
+{
+    public override Element Render() =>
+        VStack(
+            TitleBar("My app"),
+            TextBlock("Body"));
+}
 ```
 
 `TitleBar(...)` accepts custom `Content` (and a trailing `RightHeader`). Interactive
@@ -222,11 +264,65 @@ visual clickable or `.IsDragRegion(true)` to force it draggable, and set
 (TitleBar("Gallery") with
 {
     Content = HStack(8,
-        AutoSuggestBox("", _ => {}).Width(200),
+        AutoSuggestBox("", _ => {})
+            .AutomationName("Search gallery")
+            .Width(200),
         Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
             .AutomationName("Settings").IsDragRegion(false)),
 }).AutoRefreshDragRegions();
 ```
+
+### Title bar icon
+
+A `TitleBar(...)` with no `.Icon(...)` shows the **window's** icon: `WindowSpec.Icon`
+if one was declared, otherwise the `Assets\AppIcon.ico` convention. An app that
+already ships an icon does not restate it:
+
+```csharp
+// A TitleBar(...) with no .Icon(...) inherits the window's icon, so an app that
+// already ships one does not restate it.
+static class TitleBarIconSetup
+{
+    public static void Run() =>
+        ReactorApp.Run<InheritedIconApp>("My app",
+            icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
+}
+
+class InheritedIconApp : Component
+{
+    public override Element Render() =>
+        VStack(
+            TitleBar("My app"),          // shows Assets/AppIcon.ico, nothing to declare
+            TextBlock("Body"));
+}
+
+// Opt out where a bare title bar is what you want:
+class BareTitleBarApp : Component
+{
+    public override Element Render() =>
+        VStack(
+            TitleBar("My app").NoIcon(),
+            TextBlock("Body"));
+}
+```
+
+The WinUI control does not do this itself. Two limits are worth knowing:
+
+- An icon that exists *only* as an executable PE resource (`<ApplicationIcon>`) is
+  **not** inherited. That stage of the window's own icon chain yields a raw `HICON`
+  with no path, and a XAML `IconSource` needs an image source. The window caption and
+  Alt-Tab still show it; the in-window title bar does not.
+- An embedded window (`WindowSpec.Embed`) never receives a window icon, so its title
+  bar has none to inherit.
+
+`.Icon(...)` still wins where you want a different mark — a monochrome glyph in the
+title bar against a full-colour `.ico` in the caption, say. `.NoIcon()` is the
+opt-out for a deliberately bare title bar on an app that ships an icon.
+
+> **Behaviour change.** Before this, a `TitleBar(...)` without `.Icon(...)` always
+> rendered no icon. An existing app that ships a window icon — or an
+> `Assets\AppIcon.ico` — and deliberately wanted a bare title bar should add
+> `.NoIcon()` to keep that. Apps that set `.Icon(...)` explicitly are unaffected.
 
 ### Tall title bar
 
@@ -234,7 +330,7 @@ A title bar that hosts navigation chrome — a back button, a pane toggle — us
 tall (48 DIP) caption. `.Tall()` declares it:
 
 ```csharp
-TitleBar("My app")
+var titleBar = TitleBar("My app")
     .WithNavigation(nav)
     .PaneToggleButtonVisible(true)
     .Tall();                                  // or .HeightOption(WindowTitleBarHeight.Tall)
@@ -251,7 +347,7 @@ element (it requires content extension either way, and wins over the element's
 declaration when both are set):
 
 ```csharp
-new WindowSpec
+public static WindowSpec Spec { get; } = new()
 {
     Title = "My app",
     ExtendsContentIntoTitleBar = true,
@@ -275,14 +371,23 @@ Earlier code — including the Windows App SDK `reactor-navview` template — re
 the assignment onto the dispatcher queue:
 
 ```csharp
-// Don't do this any more.
-var window = UseWindow();
-UseEffect(() =>
+class LegacyTallTitleBar : Component
 {
-    if (window is not { } win) return;
-    win.NativeWindow?.DispatcherQueue.TryEnqueue(() =>
-        win.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall);
-});
+    public override Element Render()
+    {
+        // Don't do this any more.
+        var window = UseWindow();
+        UseEffect(() =>
+        {
+            if (window is not { } win) return;
+            win.NativeWindow?.DispatcherQueue.TryEnqueue(() =>
+                win.AppWindow.TitleBar.PreferredHeightOption =
+                    Microsoft.UI.Windowing.TitleBarHeightOption.Tall);
+        });
+
+        return TitleBar("My app");
+    }
+}
 ```
 
 Delete the whole effect and declare `.Tall()` instead.
@@ -316,10 +421,247 @@ Caveats:
   never extends, Reactor warns and skips the write rather than throwing — and
   re-applies the declared height automatically if the window later extends.
 
+## Window icon
+
+The window icon is the Win32 `HICON` Windows shows in the window's caption and the
+Alt-Tab switcher. Set it declaratively with `icon:` on `ReactorApp.Run`, or with
+`WindowSpec.Icon` for a secondary window:
+
+```csharp
+// The window icon is the Win32 HICON shown in the window caption and Alt-Tab —
+// distinct from TitleBar(...).Icon(...), which draws a mark inside the window.
+// Use an .ico. Unpackaged, this also drives the taskbar button; packaged, the
+// taskbar comes from the manifest's Square44x44Logo instead.
+static class WindowIconSetup
+{
+    // Unpackaged: a file deployed beside the app.
+    public static void RunWithFileIcon() =>
+        ReactorApp.Run<WindowsApp>("Windows Demo",
+            icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
+
+    // Packaged: an .ico shipped with Build Action = Content.
+    public static void RunWithPackagedIcon() =>
+        ReactorApp.Run<WindowsApp>("Windows Demo",
+            icon: WindowIcon.FromResource("ms-appx:///Assets/AppIcon.ico"));
+
+    // A full WindowSpec reaches the fields the flat arguments cannot.
+    public static void RunWithSpec() =>
+        ReactorApp.Run<WindowsApp>(new WindowSpec
+        {
+            Title = "Windows Demo",
+            Width = 640,
+            Height = 520,
+            MinWidth = 400,
+            Icon = WindowIcon.FromPath("Assets/AppIcon.ico"),
+        });
+}
+```
+
+This is **not** the same as `TitleBar(...).Icon(...)`, which draws an app mark
+*inside* the window's client area. A window can legitimately have both, and they
+may differ — a monochrome mark in the title bar, a full-colour `.ico` in the
+taskbar.
+
+When no icon is declared, Reactor falls back in order to `Assets\AppIcon.ico`
+beside the app, then to the icon embedded in the executable by
+`<ApplicationIcon>`.
+
+### Where an icon can come from
+
+`WindowIcon` has four factories across three source kinds, and not every surface
+accepts every kind:
+
+| Factory | Source |
+| --- | --- |
+| `WindowIcon.FromPath(path)` | A file beside the app — the usual unpackaged spelling. |
+| `WindowIcon.FromResource(uri)` | An `ms-appx:///Assets/App.ico` package resource. |
+| `WindowIcon.FromBytes(data)` | Encoded `.ico` or PNG data already in memory. |
+| `WindowIcon.FromRgba(pixels, w, h)` | A raw straight-alpha RGBA8 buffer, top-down. |
+
+| Surface | `FromPath` | `FromResource` | `FromBytes` / `FromRgba` |
+| --- | --- | --- | --- |
+| Window caption / Alt-Tab | ✅ | ✅ | ❌ |
+| Tray icon | ✅ | ❌ | ✅ |
+| Taskbar overlay | ✅ | ❌ | ✅ |
+| Thumbnail-toolbar button | ✅ | ❌ | ✅ |
+| Jump-list entry | unpackaged only | packaged only | ❌ |
+
+The pattern behind the table is which primitive each surface needs. The three
+shell surfaces need a raw `HICON`, which comes either from `LoadImageW` on a file
+or from `CreateIconFromResourceEx` on in-memory data — neither can read a packaged
+resource URI. Jump lists need a `Uri`. The window caption needs a filesystem path,
+because `AppWindow.SetIcon` takes one.
+
+A source a surface cannot use is skipped with a diagnostic rather than throwing.
+On the window that means falling through to `Assets\AppIcon.ico` or the PE icon,
+so a binary `icon:` leaves the window no barer than declaring none.
+
+### Which surface shows which icon
+
+This trips people up, so it is worth being precise. Three different assets feed
+four different shell surfaces, and which one wins depends on the surface and on
+whether your app has package identity:
+
+| Surface | Unpackaged | Packaged (MSIX) |
+| --- | --- | --- |
+| Window caption | window icon | window icon |
+| Alt-Tab | window icon | window icon |
+| Taskbar button | window icon | `Square44x44Logo` from the manifest |
+| Task Manager, window rows | window icon | `Square44x44Logo` from the manifest |
+| Task Manager, process rows | `<ApplicationIcon>` | `Square44x44Logo` from the manifest |
+| Explorer, the `.exe` itself | `<ApplicationIcon>` | `<ApplicationIcon>` |
+
+Two consequences worth internalising:
+
+- **`icon:` alone never covers everything.** It sets the window handle's `HICON`,
+  which is the caption and Alt-Tab. The process row Task Manager groups windows
+  under, and the `.exe` in Explorer, come from the executable's embedded PE icon
+  — a build-time resource that only `<ApplicationIcon>` can set. Reactor cannot
+  change it at runtime.
+- **A packaged app needs a matching manifest logo too.** The shell resolves the
+  taskbar button through package identity and never looks at the window handle,
+  so a correct `icon:` with a mismatched `Square44x44Logo` looks exactly like the
+  window icon "did not apply".
+
+So an app that wants one icon everywhere sets all three, pointing at the same
+`.ico`: `icon:` (or the `Assets\AppIcon.ico` convention), `<ApplicationIcon>` in
+the csproj, and — when packaged — the manifest logo. `mur --create` scaffolds the
+first two for you.
+
+Caveats:
+
+- Prefer a real `.ico`. It is the format `AppWindow.SetIcon` documents, and — for a
+  file source — the only one the tray-icon, taskbar-overlay, and thumbnail-toolbar
+  surfaces can load, since they need a raw `HICON` via `LoadImageW`. Reactor passes
+  the source to the platform unchanged rather than pre-validating the extension.
+- A packaged app does **not** get its window icon from `Package.appxmanifest`.
+  The manifest drives the taskbar button and Task Manager through package identity,
+  which bypasses the window handle entirely — so without an explicit icon the
+  caption and Alt-Tab entry still show a generic glyph, even though the taskbar
+  button looks right.
+- `<ApplicationIcon>` alone sets the icon Explorer shows for the `.exe`, and the icon
+  Task Manager shows on the *process* row that windows are grouped under. Reactor's
+  fallback is what carries it onto the window; WinUI does not do so on its own.
+- A `FromPath` source that does not exist is reported as a failure so the fallback
+  still runs — a declared-but-missing icon never leaves the window barer than
+  declaring none. A `FromResource` URI is mapped to the matching file beside the
+  app before it reaches the platform, because `AppWindow.SetIcon` wants a
+  filesystem path: given the URI itself, a packaged app silently gets a default
+  icon instead of the asset.
+- A binary icon holds its bytes for the lifetime of the `WindowIcon`. That is the
+  point of the API, but keep it in mind for a long-lived spec carrying a large
+  multi-resolution `.ico`.
+
+## Tray icons
+
+`ReactorApp.OpenTrayIcon` registers a notification-area icon for the process;
+`UseTrayIcon` scopes one to a component and closes it on unmount. Both take a
+`TrayIconSpec`, and mutating `Icon`, `Tooltip` or `IsVisible` re-applies through
+`Shell_NotifyIcon`.
+
+```csharp
+class TrayHost : Component
+{
+    public override Element Render()
+    {
+        var icon = UseMemo(() => WindowIcon.FromPath("Assets/TrayIcon.ico"));
+        var tray = UseTrayIcon(new TrayIconSpec(
+            Icon: icon,
+            Tooltip: "My App",
+            Key: WindowKey.Of("main-tray")));
+
+        UseEffect(() =>
+        {
+            if (tray is null) return () => { };
+            void onClick(object? s, EventArgs e)
+                => ReactorApp.PrimaryWindow?.Activate();
+            tray.Click += onClick;
+            return () => tray.Click -= onClick;
+        }, tray ?? (object)"no-tray");
+
+        return TextBlock("Tray icon registered while this component is mounted.");
+    }
+}
+```
+
+The icon does not have to be a file. `WindowIcon.FromBytes` takes encoded `.ico`
+or PNG data, and `WindowIcon.FromRgba` takes a raw pixel buffer — so an embedded
+resource, a downloaded asset, or a badge you draw at runtime reaches the shell
+without a temporary file on disk:
+
+```csharp
+// A tray icon can also come from bytes already in memory — no temporary file.
+class BinaryTrayHost : Component
+{
+    public override Element Render()
+    {
+        // Encoded .ico or PNG data: an embedded resource, a download, a database blob.
+        var embedded = UseMemo(() => WindowIcon.FromBytes(LoadEmbeddedIcon()));
+
+        // Or a raw RGBA8 buffer you drew yourself, for a badge that changes at runtime.
+        var drawn = UseMemo(() => WindowIcon.FromRgba(UnreadBadge(16, 16), 16, 16));
+
+        var tray = UseTrayIcon(new TrayIconSpec(
+            Icon: embedded,
+            Tooltip: "My App",
+            Key: WindowKey.Of("binary-tray")));
+
+        UseEffect(() =>
+        {
+            // Swapping the source reloads the shell bitmap.
+            if (tray is not null) tray.Icon = drawn;
+            return () => { };
+        }, drawn);
+
+        return TextBlock("Tray icon built from in-memory data.");
+    }
+
+    static byte[] LoadEmbeddedIcon()
+    {
+        var assembly = typeof(BinaryTrayHost).Assembly;
+        using var stream = assembly.GetManifestResourceStream("MyApp.TrayIcon.ico")
+            ?? throw new InvalidOperationException(
+                "Embedded resource 'MyApp.TrayIcon.ico' not found — check the file's Build Action.");
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
+    // width * height * 4 bytes, top-down, one pixel as R, G, B, A.
+    static byte[] UnreadBadge(int width, int height)
+    {
+        var pixels = new byte[width * height * 4];
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            pixels[i] = 0xE8;     // R
+            pixels[i + 1] = 0x11; // G
+            pixels[i + 2] = 0x23; // B
+            pixels[i + 3] = 0xFF; // A
+        }
+        return pixels;
+    }
+}
+```
+
+Caveats:
+
+- Ship a multi-size `.ico` (16, 20, 24, 32, 40 px) where you can. The tray asks for
+  the DPI-aware small-icon size, and both the file loader and the in-memory loader
+  pick the closest frame rather than rescaling a single one.
+- `ms-appx:///` resources are not usable here — see the table above. A packaged app
+  should ship a sidecar `.ico` or embed the bytes.
+- Tooltips are truncated to the shell's 127-character `szTip` buffer, and surface to
+  Narrator as the icon's accessible name.
+- **Tray clicks are not authenticated.** The callback arrives as a Win32 message any
+  process at the same integrity level can synthesise. Use click handlers for
+  reversible UI actions; gate anything destructive behind an in-app confirmation.
+
 ## Taskbar integration
 
-`TaskbarItem` groups all taskbar features while keeping the older shortcuts on
-`ReactorWindow` for compatibility.
+`TaskbarItem` groups the per-window taskbar features while keeping the older
+shortcuts on `ReactorWindow` for compatibility. The jump list is the one
+taskbar surface that is *not* on `TaskbarItem`, because it is per-process
+rather than per-window — see [Jump list](#jump-list) below.
 
 ```csharp
 var taskbar = UseWindow()!.TaskbarItem;
@@ -343,7 +685,82 @@ Caveats:
 
 - Shell COM calls are best-effort; Reactor keeps last-set managed state where relevant.
 - Thumbnail toolbars support at most seven buttons.
-- Overlay icons need HICON-compatible sources; resource URIs are not overlay HICONs.
+- Overlay and thumbnail icons need HICON-compatible sources: a `FromPath` file or
+  `FromBytes` / `FromRgba` data. Resource URIs are not overlay HICONs.
+
+### Jump list
+
+`JumpList` is a process-wide static: the shell attaches one list per
+application identity, not per window. `JumpList.UpdateAsync` replaces the
+whole list, and `JumpList.ClearAsync` removes it.
+
+Activating an entry re-launches the process with the entry's `Arguments`
+string. Reactor surfaces that as `LaunchKind.JumpList` on the
+`ReactorAppContext` handed to the `ReactorApp.Run(Action<ReactorAppContext>)`
+startup callback. The recommended convention is to put a deep-link URI in
+`Arguments` (that is what `JumpListItem.ForUri` is for) and resolve it through
+a [`DeepLinkMap<TRoute>`](navigation.md):
+
+```csharp
+// Unpackaged apps must set an AppUserModelId once, before the first
+// UpdateAsync — the shell has no other stable identity to hang the
+// jump list off. Packaged apps inherit it from the manifest.
+public static async Task PublishAsync()
+{
+    JumpList.AppUserModelId = "Contoso.Reactor.Demo";
+    JumpList.ShowRecent = true;
+
+    await JumpList.UpdateAsync([
+        JumpListItem.ForUri("New document", "contoso://new"),
+        JumpListItem.ForUri("Open dashboard", "contoso://dashboard",
+            description: "Jump straight to the dashboard"),
+        new JumpListItem("Report a bug", "contoso://bug",
+            Kind: JumpListItemKind.Custom, GroupCategory: "Help"),
+    ]);
+}
+
+// Entries come back as a plain process re-launch. Resolve the argument
+// string through the same DeepLinkMap the app already uses for routes;
+// never act on it unvalidated. DeepLinkResult.Routes is the resolved
+// back stack, deepest route last.
+public static void Start(DeepLinkMap<string> routes) =>
+    ReactorApp.Run(ctx =>
+    {
+        if (ctx.LaunchActivation.Kind == LaunchKind.JumpList &&
+            ctx.LaunchActivation.TryResolve(routes, out var deepLink))
+        {
+            ReactorApp.OpenWindow(
+                new WindowSpec { Title = deepLink.Routes[^1] },
+                () => new SettingsWindow());
+        }
+    });
+```
+
+| API | Purpose |
+| --- | --- |
+| `JumpList.AppUserModelId` | Shell identity. Required before the first `UpdateAsync` on unpackaged apps; ignored under MSIX. |
+| `JumpList.ShowRecent` / `ShowFrequent` | Toggle the OS-managed categories. Contents are shell-owned. |
+| `JumpList.UpdateAsync(items)` | Replace the whole list. UI thread only. |
+| `JumpList.ClearAsync()` | Remove the app's entries. |
+| `JumpListItem.ForUri(...)` | Deep-link entry — `Arguments` is the URI. |
+| `JumpListItem.ForCommandLine(...)` | argv-style entry; escapes each value for `CommandLineToArgvW`. |
+| `JumpListItemKind` | `Task`, `Custom` (needs `GroupCategory`), `Separator` |
+
+Caveats:
+
+- **Argument strings round-trip through the shell into the next process
+  launch.** Reactor never auto-executes them. Validate through `DeepLinkMap`
+  before acting, and build entries carrying non-literal data with
+  `JumpListItem.ForCommandLine` so a hostile value cannot break out into a
+  neighbouring argv slot.
+- Jump-list entries, tray "Open", and thumbnail-toolbar buttons are
+  indistinguishable at the WinUI activation surface — all three arrive as
+  `LaunchKind.JumpList`. Encode any finer distinction in the URI itself.
+- Icons on the packaged path require `WindowIcon.FromResource`
+  (`ms-appx:///…`); `FromPath` values are silently ignored there.
+- `UpdateAsync` validates the whole batch before touching the shell, so one
+  bad entry never leaves a half-populated list behind. Non-separator entries
+  must have a non-empty `Title`.
 
 ## Displays
 
@@ -379,13 +796,19 @@ window HWND, so the picker is modal to the correct window without app code doing
 HWND interop.
 
 ```csharp
-async Task OpenAsync()
-{
-    var file = await UseFilePickerAsync(new FilePickerOptions(
-        FileTypeFilter: [".txt", ".md"]));
-}
+// Both helpers return null when the user cancels the dialog.
+var pickFile = UseFilePickerAsync;
+var pickFolder = UseFolderPickerAsync;
 
-var folder = await UseFolderPickerAsync(new FolderPickerOptions());
+return Button("Open...", async () =>
+{
+    var file = await pickFile(new FilePickerOptions(
+        FileTypeFilter: [".txt", ".md"]));
+    if (file is null) return;
+
+    var folder = await pickFolder(new FolderPickerOptions());
+    if (folder is null) return;
+});
 ```
 
 Caveats:
@@ -395,6 +818,10 @@ Caveats:
 - Tests should inject the picker service rather than opening native dialogs.
 
 ## WPF / UWP migration map
+
+Coming from a pre-054 Reactor app instead? See
+[Migration: Windowing evolution](migration/054-windowing-evolution.md) for the
+fields that were removed and what replaced them.
 
 | Prior stack concept | Reactor 054 shape | Notes |
 | --- | --- | --- |
@@ -407,14 +834,18 @@ Caveats:
 | WPF taskbar visibility | `ShowInTaskbar` | Split from `ShowInSwitcher`. |
 | Manual settings persistence | `.WithPersistence(id)` | Opt-in, one line. |
 | `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. |
+| WPF `JumpTask` / `JumpList` | `JumpListItem` / `JumpList` | Process-wide, not per-window; `UpdateAsync` replaces the whole list. |
 | UWP/WinUI picker HWND setup | `UseFilePickerAsync` / `UseFolderPickerAsync` | Owning HWND is wired automatically. |
 
 ## Finding and enumerating windows
 
 ```csharp
-ReactorApp.Windows          // IReadOnlyList<ReactorWindow> snapshot
-ReactorApp.PrimaryWindow    // first window opened, or null after it closes
-ReactorApp.FindWindow(key)  // look up by WindowKey
+public static void Inspect(WindowKey key)
+{
+    IReadOnlyList<ReactorWindow> all = ReactorApp.Windows; // snapshot
+    ReactorWindow? primary = ReactorApp.PrimaryWindow;     // null after it closes
+    ReactorWindow? found = ReactorApp.FindWindow(key);     // look up by WindowKey
+}
 ```
 
 Use `WindowKey` for any window you might want to find again. `UseOpenWindow`
@@ -468,6 +899,27 @@ exit. Auxiliary windows that opt out of the shutdown policy (such as docking
 tear-off floating windows) are never elected primary, so closing one of them
 never exits the app even when it is the last *visible* window.
 
+Reactor takes ownership of WinUI's `Application.DispatcherShutdownMode` at
+startup, switching the platform to `OnExplicitShutdown`. Otherwise WinUI ends the
+process when the last window closes, without consulting the policy, a tray icon,
+or `ExcludeFromShutdownPolicy`. Ownership is unconditional — it does not vary with
+the policy — so the table above is exhaustive for surface closes: when a window or
+tray icon closes, the policy alone decides. The process can also end two other
+ways, both of which ask WinUI to exit outright rather than letting it decide: a
+startup callback that opens no surface at all exits immediately under
+`OnPrimaryWindowClosed`, and `ReactorApp.Exit()` always works.
+
+Set the policy before `ReactorApp.Run`, or on the UI thread before your startup
+callback returns. A surface close reads it at the moment it happens, so a change
+made any time beforehand counts — but a zero-surface startup is judged the instant
+the callback returns, so a write posted from another thread during startup can
+land too late to be seen. Changing the policy never moves
+`DispatcherShutdownMode`.
+
+Reactor only takes that ownership when it owns the `Application`. A WinUI app that
+embeds `ReactorHostControl` runs its own `Application` and manages its own
+windows, so Reactor leaves its shutdown mode — and its lifetime — alone.
+
 ## Tips
 
 **Memoize specs.** A stable `WindowSpec` avoids unnecessary chrome updates.
@@ -484,6 +936,7 @@ transparency or arbitrary region corners, see [Advanced Windowing](windowing-adv
 ## Next Steps
 
 - **[Advanced Windowing](windowing-advanced.md)** — unsupported / interop-heavy window recipes
+- **[Migration: Windowing evolution](migration/054-windowing-evolution.md)** — the spec 054 breaking changes and their replacements
 - **[Docking Windows](docking.md)** — dock panes, floating document tear-outs, persistence
 - **[Persistence](persistence.md)** — persisted scopes beyond window placement
 - **[Dialogs and Flyouts](dialogs-and-flyouts.md)** — modal in-window UI

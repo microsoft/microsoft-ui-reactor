@@ -266,6 +266,20 @@ internal sealed class ReactorEventSource : EventSource
     }
     // </snippet:hresult-failed-event>
 
+    // Spec 044 §6.1 — generic framework-warning event used by
+    // DiagnosticLog.Warning. PII: `message` is framework-authored prose
+    // composed from developer-authored identifiers (a resource key, a
+    // property name). DiagnosticLog is internal, so every caller is
+    // in-framework — no user data, exception message, or window title
+    // reaches this payload (spec §6.2.1).
+    [Event(39, Level = EventLevel.Warning, Keywords = Keywords.Errors,
+        Message = "Warning (category={category}, op={operation}, message={message})")]
+    public void Warning(string category, string operation, string message)
+    {
+        if (IsEnabled(EventLevel.Warning, Keywords.Errors))
+            WriteEvent(39, category ?? string.Empty, operation ?? string.Empty, message ?? string.Empty);
+    }
+
     // ── Hosting (spec 044 Phase B §2.1) ─────────────────────────────────
     //
     // PII: windowType is the C# type name (developer-authored, OK).
@@ -489,6 +503,7 @@ internal sealed class ReactorEventSource : EventSource
     //       18-32 (spec 044 Phase B subsystem coverage),
     //       33-35 (spec 044 Phase C §4.2 navigation transition + deep link),
     //       36    (spec 045 §2.7 docking layout load fallback),
-    //       37-38 (spec 049 §6 hot reload state migration).
-    // Next free EventId: 39.
+    //       37-38 (spec 049 §6 hot reload state migration),
+    //       39    (spec 044 §6.1 generic framework Warning).
+    // Next free EventId: 40.
 }

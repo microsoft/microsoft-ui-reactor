@@ -55,7 +55,7 @@ class TwoPaneDemo : Component
                                 TextBlock(""),
                                 TextBlock("class MainView : Component"),
                                 TextBlock("{"),
-                                TextBlock("    public override Element Render() => Text(\"Hello\");"),
+                                TextBlock("    public override Element Render() => TextBlock(\"Hello\");"),
                                 TextBlock("}")
                             ).Padding(16)
                         }
@@ -83,7 +83,7 @@ class TabGroupDemo : Component
                         TextBlock("public sealed class App : Component"),
                         TextBlock("{"),
                         TextBlock("    public override Element Render() =>"),
-                        TextBlock("        Text(\"hello, world\");"),
+                        TextBlock("        TextBlock(\"hello, world\");"),
                         TextBlock("}")
                     ).Padding(16)
                 },
@@ -104,6 +104,56 @@ class TabGroupDemo : Component
     };
 }
 // </snippet:tab-group>
+
+class DocumentWellDemo : Component
+{
+    public override Element Render() => TextBlock("Document well demo");
+
+    private static DockNode CreateLayout()
+    {
+        // <snippet:document-well>
+        var galleryItemsToolWindow = new ToolWindow { Title = "Gallery", Key = "tool:gallery" };
+        var configurationToolWindow = new ToolWindow { Title = "Configuration", Key = "tool:configuration" };
+
+        return new DockSplit(Orientation.Horizontal, new DockNode[]
+        {
+            new DockTabGroup(
+                new[] { galleryItemsToolWindow },
+                Width: 260,
+                Role: DockGroupRole.ToolWindowStrip),
+            new DockTabGroup(
+                Array.Empty<DockableContent>(),
+                Role: DockGroupRole.DocumentArea),
+            new DockTabGroup(
+                new[] { configurationToolWindow },
+                Width: 320,
+                Role: DockGroupRole.ToolWindowStrip),
+        });
+        // </snippet:document-well>
+    }
+}
+
+class ConstrainedToolWindowDemo : Component
+{
+    public override Element Render() => new DockManager
+    {
+        Layout = CreateErrorsPane(),
+    };
+
+    private static ToolWindow CreateErrorsPane()
+    {
+        // <snippet:allowed-sides>
+        var errors = new ToolWindow
+        {
+            Title = "Errors",
+            Key = "tool:errors",
+            AllowedSides = DockSides.Bottom,
+        };
+        // </snippet:allowed-sides>
+
+        return errors;
+    }
+}
 
 // <snippet:side-pin>
 class SidePinDemo : Component

@@ -199,6 +199,14 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="samples/TransitionComparison.Reactor/TransitionComparison.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/TransitionComparison.Xaml/TransitionComparison.Xaml.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="samples/WinFormsInterop/WinFormsInterop.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
@@ -265,6 +273,12 @@
   </Folder>
   <Folder Name="/samples/apps/monaco-editor/">
     <Project Path="samples/apps/monaco-editor/MonacoEditorApp.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/source-map-explorer/">
+    <Project Path="samples/apps/source-map-explorer/SourceMapExplorer.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
@@ -361,7 +375,16 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="tests/Reactor.PackagedTests.Host/Reactor.PackagedTests.Host.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/Reactor.PackagedTests/Reactor.PackagedTests.csproj" />
     <Project Path="tests/Reactor.SelfTests/Reactor.SelfTests.csproj" />
+    <Project Path="tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="tests/Reactor.Tests/Reactor.Tests.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
@@ -483,6 +506,7 @@
   </Project>
   <Project Path="src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj" />
   <Project Path="src/Reactor.Wrappers.Generator/Reactor.Wrappers.Generator.csproj" />
+  <Project Path="src/Reactor.SourceMap.Generator/Reactor.SourceMap.Generator.csproj" />
   <Project Path="src/Reactor.Devtools/Reactor.Devtools.csproj" />
   <Project Path="src/Reactor/Reactor.csproj" />
   <Project Path="src/Reactor.Wrappers.Abstractions/Reactor.Wrappers.Abstractions.csproj">

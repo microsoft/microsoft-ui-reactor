@@ -244,8 +244,11 @@ Use the predefined text factories or WinUI style tokens. Never set `FontSize` an
 | `SubHeading("text")` | 20px | 600 | Section headers, card titles (Reactor preset) |
 | `Title("text")` | 28px | Semibold | WinUI `TitleTextBlockStyle` — page titles |
 | `Heading("text")` | 28px | 700 | Page titles (Reactor preset, slightly heavier) |
+| `TitleLarge("text")` | 40px | Semibold | WinUI `TitleLargeTextBlockStyle` — primary titles on feature/landing pages |
+| `Display("text")` | 68px | Semibold | WinUI `DisplayTextBlockStyle` — hero banners, at most one per page |
 
-The `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge` factories map 1:1 to
+The `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`/`TitleLarge`/`Display`
+factories map 1:1 to
 WinUI's named TextBlock styles (Spec 039 §17.6). Prefer them when matching
 WinUI design specs; the `Heading`/`SubHeading` factories are the older
 Reactor presets and remain valid.
@@ -272,8 +275,8 @@ TextBlock("Page Title").Bold()
 | `BodyLargeTextBlockStyle` | 18px | Regular | Prominent body text |
 | `SubtitleTextBlockStyle` | 20px | Semibold | Section headings, card group labels |
 | `TitleTextBlockStyle` | 28px | Semibold | Page titles, dialog headings |
-| `TitleLargeTextBlockStyle` | 40px | Semibold | Primary page titles on feature pages |
-| `DisplayTextBlockStyle` | 68px | Semibold | Hero banners — one per page at most |
+| `TitleLargeTextBlockStyle` | 40px | Semibold | Primary page titles on feature pages — prefer the `TitleLarge()` factory |
+| `DisplayTextBlockStyle` | 68px | Semibold | Hero banners — one per page at most; prefer the `Display()` factory |
 
 For sizes not covered by the factories, use `.ApplyStyle()` to apply WinUI text block styles. This sets size, weight, line height, and optical sizing in one call:
 
@@ -289,9 +292,17 @@ Heading("Page Title")
 SubHeading("Section")
 Caption("Fine print")
 
-// Escape hatch: .Set() for styles not exposed via .ApplyStyle()
-TextBlock("Prominent text").Set(tb => tb.Style =
-    (Style)Application.Current.Resources["BodyLargeTextBlockStyle"])
+// Every WinUI type-ramp style has a factory except CaptionTextBlockStyle —
+// Caption() is a size-only preset, so use .ApplyStyle("CaptionTextBlockStyle")
+// when you need that style's line height and other setters
+BodyLarge("Prominent text")
+TitleLarge("Feature title")
+Display("Hero")
+
+// For any other named style, use .ApplyStyle(): it reports an unresolved key
+// instead of throwing. Never assign Application.Current.Resources[...] through
+// .Set() — that indexer throws out of the mount action on a misspelled key.
+TextBlock("Custom").ApplyStyle("MyAppTextBlockStyle")
 
 // Wrong: raw font properties for standard UI text
 TextBlock("Title").FontSize(28).FontWeight(new FontWeight(700))
@@ -391,7 +402,7 @@ VStack(8, items).Padding(16)       // ✓ works
 TextBlock("Hello").Padding(8)      // ✓ works
 ```
 
-Both `.Margin()` and `.Padding()` accept three overloads:
+Both `.Margin()` and `.Padding()` accept four overloads:
 
 ```csharp
 // Uniform — same on all sides
@@ -402,6 +413,9 @@ element.Margin(horizontal: 24, vertical: 8)
 
 // Per-side: left, top, right, bottom
 element.Margin(left: 4, top: 8, right: 16, bottom: 24)
+
+// A Thickness you already have — useful when lifting a value out of a .Set(...)
+element.Margin(new Thickness(68, 4, 40, 4))
 ```
 
 #### Corner Radius
@@ -724,7 +738,7 @@ Caption("Detail").HeadingLevel(AutomationHeadingLevel.Level4) // skipped 2 and 3
 Use `UseFocusTrap` to keep focus inside a modal:
 
 ```csharp
-var trap = UseFocusTrap(isActive: true);
+var trap = this.UseFocusTrap(isActive: true);
 
 return Border(
     VStack(12,
@@ -817,7 +831,7 @@ These run as warnings by default. Promote to errors in CI:
 Combine validation with accessibility:
 
 ```csharp
-var validation = UseValidationContext();
+var validation = this.UseValidationContext();
 var (email, setEmail) = UseState("");
 
 return FormField(

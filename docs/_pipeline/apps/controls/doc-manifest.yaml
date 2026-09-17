@@ -52,3 +52,21 @@ screenshots:
     description: "Charting category — Line, Bar, Area, Pie, ForceGraph."
     region: client
     format: png
+  - id: layout
+    kind: catalog-thumb
+    component: LayoutGroup
+    description: "Layout and containers category — Card, Expander, Viewbox."
+    region: client
+    format: png
+  - id: navigation
+    kind: catalog-thumb
+    component: NavigationGroup
+    description: "Navigation category — BreadcrumbBar, SelectorBar."
+    region: client
+    format: png
+  - id: shapes
+    kind: catalog-thumb
+    component: ShapesGroup
+    description: "Shapes and icons category — Rectangle, Ellipse, Line."
+    region: client
+    format: png

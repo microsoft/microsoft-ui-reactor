@@ -54,25 +54,43 @@ public partial record GridElement
             },
             comparer: GridDefinitionReferenceComparer.Instance);
 
-    private static WinUI.ColumnDefinition ParseColumnDef(string def) => def switch
+    private static WinUI.ColumnDefinition ParseColumnDef(GridSize def)
     {
-        "*" => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new WinUI.ColumnDefinition { Width = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new WinUI.ColumnDefinition { Width = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new WinUI.ColumnDefinition { Width = new GridLength(stars, GridUnitType.Star) },
-        _ => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-    };
+        var colDef = def.Type switch
+        {
+            GridUnitType.Star => new WinUI.ColumnDefinition { Width = new GridLength(def.Value, GridUnitType.Star) },
+            GridUnitType.Auto => new WinUI.ColumnDefinition { Width = GridLength.Auto },
+            GridUnitType.Pixel => new WinUI.ColumnDefinition { Width = new GridLength(def.Value) },
+            _ => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
+        };
 
-    private static WinUI.RowDefinition ParseRowDef(string def) => def switch
+        if(def.Min is not null)
+            colDef.MinWidth = def.Min.Value;
+
+        if(def.Max is not null)
+            colDef.MaxWidth = def.Max.Value;
+
+        return colDef;
+    }
+
+    private static WinUI.RowDefinition ParseRowDef(GridSize def)
     {
-        "*" => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new WinUI.RowDefinition { Height = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new WinUI.RowDefinition { Height = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new WinUI.RowDefinition { Height = new GridLength(stars, GridUnitType.Star) },
-        _ => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-    };
+        var rowDef = def.Type switch
+        {
+            GridUnitType.Star => new WinUI.RowDefinition { Height = new GridLength(def.Value, GridUnitType.Star) },
+            GridUnitType.Auto => new WinUI.RowDefinition { Height = GridLength.Auto },
+            GridUnitType.Pixel => new WinUI.RowDefinition { Height = new GridLength(def.Value) },
+            _ => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) }
+        };
+
+        if(def.Min is not null)
+            rowDef.MinHeight = def.Min.Value;
+
+        if(def.Max is not null)
+            rowDef.MaxHeight = def.Max.Value;
+
+        return rowDef;
+    }
 
     private sealed class GridDefinitionReferenceComparer : IEqualityComparer<GridDefinition>
     {

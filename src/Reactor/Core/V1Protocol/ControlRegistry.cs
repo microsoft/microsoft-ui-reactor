@@ -61,6 +61,31 @@ public static class ControlRegistry
     // O(1) per derived type.
     private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>> s_baseEntries = new();
     private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>?> s_baseCache = new();
+    private static readonly ConcurrentDictionary<Type, (int Generation, IV1SourceTargetResolver? Resolver)> s_sourceTargetResolvers = new();
+
+    /// <summary>
+    /// True once any decorator registration has been made. Latched, never cleared on
+    /// unregister — a stale <c>true</c> only costs the slower path, while a stale
+    /// <c>false</c> would lose source attribution, so the safe direction is one-way.
+    ///
+    /// <para>This exists so the common case can skip the registry entirely.
+    /// <c>ReactorSourceMap.DecoratorTarget</c> runs on the reconciler's shallow-skip
+    /// path for EVERY callback-free element, and most apps register no decorators of
+    /// their own, so an unguarded <see cref="TryGetSourceTarget"/> call added a
+    /// <see cref="ConcurrentDictionary{TKey,TValue}"/> lookup (and a handler-factory
+    /// invocation on first touch) to every skip.</para>
+    /// </summary>
+    internal static bool HasDecoratorRegistrations => s_hasDecoratorRegistrations;
+
+    private static volatile bool s_hasDecoratorRegistrations;
+
+    /// <summary>
+    /// Bumped whenever a registration invalidates <see cref="s_sourceTargetResolvers"/>.
+    /// <see cref="TryGetSourceTarget"/> reads it before resolving and publishes only if it is
+    /// unchanged, so a resolve that raced an invalidation is discarded rather than
+    /// cached forever.
+    /// </summary>
+    private static volatile int s_registryGeneration;
 
     /// <summary>
     /// Spec §8 — register a handler factory for <typeparamref name="TElement"/>.
@@ -115,7 +140,18 @@ public static class ControlRegistry
         // First-wins: TryAdd silently no-ops on repeat. Lock-free — relies on
         // ConcurrentDictionary's per-bucket fine-grained locking, not a
         // process-wide monitor.
-        s_entries.TryAdd(typeof(TElement), adapterFactory);
+        if (s_entries.TryAdd(typeof(TElement), adapterFactory))
+        {
+            // Invalidate + bump: a new registration changes what TryResolve returns for
+            // this type, so any cached source-target resolution for it is stale.
+            //
+            // The decorator latch is deliberately NOT set here. This registers an
+            // ORDINARY control, and every built-in factory reaches this method, so
+            // latching would make HasDecoratorRegistrations true in every app and
+            // defeat the fast path that keeps the registry off the shallow-skip path.
+            s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
+            global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
+        }
     }
 
     /// <summary>
@@ -190,7 +226,12 @@ public static class ControlRegistry
         Func<IV1HandlerEntry> adapterFactory = () =>
             new V1DecoratorHandlerAdapter<TElement>(handlerFactory());
 
-        s_entries.TryAdd(typeof(TElement), adapterFactory);
+        if (s_entries.TryAdd(typeof(TElement), adapterFactory))
+        {
+            s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
+            global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
+            s_hasDecoratorRegistrations = true;
+        }
     }
 
     /// <summary>
@@ -228,6 +269,8 @@ public static class ControlRegistry
             // on its next dispatch. Exact-match cache entries don't apply
             // here (s_entries is consulted before s_baseCache).
             s_baseCache.Clear();
+            s_sourceTargetResolvers.Clear();
+            global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
         }
     }
 
@@ -246,6 +289,13 @@ public static class ControlRegistry
         if (s_baseEntries.TryAdd(typeof(TBase), adapterFactory))
         {
             s_baseCache.Clear();
+            s_sourceTargetResolvers.Clear();
+            global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
+
+            // Base-derived decorators are decorators too. Missing this would make
+            // DecoratorTarget's fast path skip the registry and silently drop their
+            // source attribution — see ControlRegistry.HasDecoratorRegistrations.
+            s_hasDecoratorRegistrations = true;
         }
     }
 
@@ -291,6 +341,66 @@ public static class ControlRegistry
         s_baseCache.TryAdd(elementType, null);
         entry = null;
         return false;
+    }
+
+    /// <summary>
+    /// Resolves the source-map target for a globally registered decorator
+    /// element, if its handler provides one.
+    /// </summary>
+    /// <summary>
+    /// Resolves the source-map target for a globally registered element.
+    ///
+    /// <para>Tri-state on purpose. The return value answers "is there a registration for
+    /// this element type at all", which is different from "did that registration name a
+    /// target". An app can register its own ordinary handler for <c>FlyoutElement</c> and
+    /// mount its own control, or register a decorator whose <c>GetSourceTarget</c>
+    /// deliberately returns null; in both cases the registration OWNS the answer and
+    /// <c>ReactorSourceMap</c>'s built-in unwrap must not override it with
+    /// <c>Target</c>. Collapsing those onto a plain <c>Element?</c> made a registered
+    /// override silently report the target factory's line instead of the factory that
+    /// actually created the realized control.</para>
+    /// </summary>
+    /// <param name="element">The element whose source target is being resolved.</param>
+    /// <param name="target">The registration's source target, which may legitimately be
+    /// null when the registration exists but names no target.</param>
+    /// <returns>True if a registration exists for the element's type.</returns>
+    internal static bool TryGetSourceTarget(Element element, out Element? target)
+    {
+        target = null;
+
+        var elementType = element.GetType();
+        var generation = s_registryGeneration;
+
+        // The generation is stored WITH the entry and validated on lookup, rather than
+        // checked just before publishing. A check-then-publish is not atomic: a
+        // registration can invalidate and bump between the check and the assignment, so
+        // the stale entry would be reinserted and then used forever, and a concurrently
+        // registered decorator would never expose its source target. Validating on READ
+        // makes a stale entry self-correcting — it is ignored and re-resolved.
+        if (!s_sourceTargetResolvers.TryGetValue(elementType, out var cached)
+            || cached.Generation != generation)
+        {
+            var resolver = TryResolve(elementType, out var factory)
+                ? factory() as IV1SourceTargetResolver ?? NullSourceTargetResolver.Instance
+                : null;
+
+            cached = (generation, resolver);
+            s_sourceTargetResolvers[elementType] = cached;
+        }
+
+        if (cached.Resolver is null) return false;
+
+        target = cached.Resolver.GetSourceTarget(element);
+        return true;
+    }
+
+    private sealed class NullSourceTargetResolver : IV1SourceTargetResolver
+    {
+        internal static readonly NullSourceTargetResolver Instance = new();
+
+        private NullSourceTargetResolver() { }
+
+        public Element? GetSourceTarget(Element element) => null;
     }
 
     /// <summary>

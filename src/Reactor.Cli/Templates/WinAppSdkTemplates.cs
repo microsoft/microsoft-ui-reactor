@@ -56,20 +56,65 @@ public static class WinAppSdkTemplates
         "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.winui.csharp.templates/index.json";
 
     /// <summary>
-    /// True when the template pack is registered with the `dotnet new` engine.
-    /// Returns null when the installed-package list could not be enumerated at
-    /// all (no `dotnet` on PATH, engine error) so callers can distinguish
-    /// "definitely missing" from "couldn't tell".
+    /// True when the template *package* is registered with the `dotnet new`
+    /// engine. Returns null when the installed-package list could not be
+    /// enumerated at all (no `dotnet` on PATH, engine error) so callers can
+    /// distinguish "definitely missing" from "couldn't tell".
     /// </summary>
-    public static bool? IsInstalled()
+    /// <remarks>
+    /// This answers "is the pack installed?", NOT "can I run `dotnet new
+    /// reactor`?" — the pack shipped versions (e.g. 0.0.6-alpha) that predate
+    /// the Reactor templates, so it can be installed and still not provide
+    /// them. Use <see cref="AreTemplatesAvailable"/> for the user-facing
+    /// question; this one exists to decide whether an install would be
+    /// replacing something.
+    /// </remarks>
+    public static bool? IsPackageInstalled()
     {
         // `dotnet new uninstall` with no arguments lists installed template
-        // *packages* by id. `dotnet new list` would only show template short
-        // names, which can't tell our legacy `reactorapp` pack apart from the
-        // Windows App SDK one when both happen to be installed.
+        // *packages* by id. `dotnet new list` only shows template short names,
+        // which can't tell our legacy `reactorapp` pack apart from the Windows
+        // App SDK one when both happen to be installed.
         var output = RunCapture("new", "uninstall");
         if (output is null) return null;
         return output.Contains(PackageId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// True when `dotnet new reactor` will actually resolve — i.e. the blank
+    /// Reactor template short name is registered. Returns null when the
+    /// template engine could not be queried at all.
+    /// </summary>
+    /// <remarks>
+    /// Checking the package id alone is a false PASS: `dotnet new list reactor`
+    /// reports "No templates found" against an installed-but-too-old pack, so a
+    /// package-only probe tells a developer they're ready to scaffold when the
+    /// very next command fails. Ask the engine the question the user cares about.
+    /// </remarks>
+    public static bool? AreTemplatesAvailable()
+    {
+        // `dotnet new list <name>` exits non-zero (103) and prints
+        // "No templates found matching" when nothing matches. Match on the
+        // short name in the output rather than the exit code alone so an
+        // unrelated non-zero exit doesn't read as a definitive "missing".
+        var output = RunCapture("new", "list", BlankShortName);
+        if (output is null) return null;
+        return InterpretTemplateListOutput(output);
+    }
+
+    /// <summary>
+    /// Interprets `dotnet new list reactor` output. Split out (and internal) so
+    /// the rule is unit-testable without shelling out to the template engine.
+    /// </summary>
+    internal static bool InterpretTemplateListOutput(string output)
+    {
+        // The "not found" message also contains the search term ("No templates
+        // found matching: 'reactor'." plus a "dotnet new search reactor" hint),
+        // so a naive short-name substring match reports the template as present
+        // precisely when it is absent. Check the negative marker first.
+        if (output.Contains("No templates found", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return output.Contains(BlankShortName, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

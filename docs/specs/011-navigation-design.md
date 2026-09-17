@@ -687,41 +687,95 @@ accelerated animation system used by Reactor's existing `LayoutAnimation` and
 ```csharp
 public abstract record NavigationTransition
 {
-    /// <summary>Platform default: slide from right on push, slide from left on pop.</summary>
-    public static readonly NavigationTransition Default = new SlideTransition();
+    /// <summary>
+    /// Whatever a host or navigation gets when it doesn't ask for one — a policy alias,
+    /// currently resolving to <see cref="Entrance"/>.
+    /// </summary>
+    public static readonly NavigationTransition Default = new EntranceTransition();
 
     /// <summary>No animation.</summary>
     public static readonly NavigationTransition None = new SuppressTransition();
 
-    /// <summary>Slide in from a direction.</summary>
+    /// <summary>
+    /// Slide up + fade in on the incoming page. This is WinUI's own default page
+    /// transition — a Frame with no NavigationTransitionInfo plays
+    /// EntranceNavigationTransitionInfo, the "page refresh" animation.
+    /// </summary>
+    public static NavigationTransition Entrance()
+        => new EntranceTransition();
+
+    /// <summary>
+    /// Slide in from a direction. With no arguments this is WinUI's slide specification;
+    /// supplying duration, easing, or distance selects Reactor's customizable slide.
+    /// </summary>
     public static NavigationTransition Slide(
-        SlideDirection direction = SlideDirection.FromRight,
+        SlideDirection direction = SlideDirection.FromBottom,
         TimeSpan? duration = null,
-        CompositionEasingFunction? easing = null)
-        => new SlideTransition(direction, duration, easing);
+        CompositionEasingFunction? easing = null,
+        float? distance = null)
+        => new SlideTransition
+        {
+            Direction = direction,
+            Duration = duration,
+            Easing = easing,
+            Distance = distance,
+        };
 
     /// <summary>Crossfade between old and new content.</summary>
     public static NavigationTransition Fade(TimeSpan? duration = null)
-        => new FadeTransition(duration);
+        => new FadeTransition { Duration = duration };
 
     /// <summary>Drill in (scale up from center) for hierarchical navigation.</summary>
     public static NavigationTransition DrillIn(TimeSpan? duration = null)
-        => new DrillInTransition(duration);
+        => new DrillInTransition { Duration = duration };
 
     /// <summary>Connected animation: shared element transitions between pages.</summary>
     public static NavigationTransition Connected(string animationKey)
-        => new ConnectedTransition(animationKey);
+        => new ConnectedTransition { AnimationKey = animationKey };
 
-    /// <summary>Spring-based slide with configurable physics.</summary>
+    /// <summary>
+    /// Spring-based slide with configurable physics. A Reactor extension with no WinUI
+    /// counterpart, so it keeps a horizontal default rather than following Slide's.
+    /// </summary>
     public static NavigationTransition Spring(
-        float dampingRatio = 0.7f,
-        float period = 0.15f,
+        float dampingRatio = 0.6f,
+        float period = 0.08f,
         SlideDirection direction = SlideDirection.FromRight)
-        => new SpringSlideTransition(dampingRatio, period, direction);
+        => new SpringSlideTransition
+        {
+            DampingRatio = dampingRatio,
+            Period = period,
+            Direction = direction,
+        };
 }
 
 public enum SlideDirection { FromRight, FromLeft, FromBottom, FromTop }
 ```
+
+> **On the default.** `Default` is the *entrance* motion because that is what a stock
+> WinUI app does: `Frame.Navigate(...)` with no `NavigationTransitionInfo` uses
+> `NavigationThemeTransition`, which resolves to `EntranceNavigationTransitionInfo` —
+> the incoming page slides up a short distance and fades in. Slide-from-right is the
+> iOS `UINavigationController` convention, not a Windows one, and an earlier revision of
+> this spec described it as the "platform default". It wasn't. A Reactor app should
+> animate like its WinUI XAML counterpart unless the author chose otherwise.
+>
+> `Default` and `Entrance()` are deliberately separate: `Default` names a *policy*
+> ("whatever Reactor defaults to") and `Entrance()` names a *motion*. Code that means the
+> entrance animation specifically — such as the mapping from WinUI's
+> `RecommendedNavigationTransitionInfo` — must say `Entrance()`, so it doesn't silently
+> change meaning if the default is ever revisited again.
+
+> **Where the motion values come from.** Because Reactor replays these animations on the
+> Composition layer instead of handing a `NavigationTransitionInfo` to a `Frame`, WinUI's
+> timings, offsets, scales and easing curves are *copied* into
+> `TransitionEngine`. Each one is taken from `microsoft/microsoft-ui-xaml`:
+> `dxaml/phone/lib/ThemeTransitions.cpp` for the entrance, slide and drill-in storyboards,
+> `dxaml/phone/lib/ThemeTransitions.h` for the drill-in durations, and
+> `dxaml/phone/lib/NavigateTransitionHelper.h` for the vertical slide's `SLIDE_*` constants.
+> `WinUiNavigationMotionParityTests` records each value beside the Reactor constant it backs,
+> and fails if the repo's pinned Windows App SDK version changes — an SDK bump is the signal to
+> re-read those sources, since nothing else would notice WinUI retuning a value.
 
 #### Per-navigation override
 
@@ -746,8 +800,10 @@ NavigationHost(nav, routeMap) with
 #### Automatic reverse transitions
 
 When `GoBack()` is called, the transition plays in reverse automatically:
-- `SlideFromRight` reverses to slide-out-to-right for old + slide-in-from-left
-  for restored.
+- `Entrance` reverses: the outgoing page slides down and fades out, then the restored
+  page fades back in.
+- `Slide` reverses its direction — a slide-from-right push becomes a slide-out-to-right
+  for the old page plus a slide-in-from-left for the restored one.
 - `DrillIn` reverses to drill-out (scale down to center).
 - `Fade` plays the same in both directions.
 - `Connected` plays the connected animation in reverse.
@@ -1265,7 +1321,7 @@ class DetailPage : Component<DetailProps>
 ### Phase 2: Composition-layer transitions
 
 **Deliverables:**
-- `NavigationTransition` record hierarchy (Slide, Fade, DrillIn, Connected,
+- `NavigationTransition` record hierarchy (Entrance, Slide, Fade, DrillIn, Connected,
   Spring, Suppress)
 - Transition engine using `CompositionScopedBatch` + `Visual.StartAnimation()`
 - Automatic reverse transitions on GoBack

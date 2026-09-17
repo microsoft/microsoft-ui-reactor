@@ -316,8 +316,14 @@ internal static class NavigationCoverageFixtures
             var spring = NavigationTransition.Spring(0.7f, 0.05f, SlideDirection.FromBottom);
             H.Check("NavTrans_Spring", spring is SpringSlideTransition sp && sp.DampingRatio == 0.7f);
 
+            var entrance = NavigationTransition.Entrance();
+            H.Check("NavTrans_Entrance", entrance is EntranceTransition);
+
             var defaultT = NavigationTransition.Default;
-            H.Check("NavTrans_Default", defaultT is SlideTransition);
+            H.Check("NavTrans_Default", defaultT is EntranceTransition);
+
+            // Default is an alias for the entrance motion, so the two must stay interchangeable.
+            H.Check("NavTrans_Default_Is_Entrance", defaultT == entrance);
 
             var none = NavigationTransition.None;
             H.Check("NavTrans_None", none is SuppressTransition);
@@ -325,6 +331,468 @@ internal static class NavigationCoverageFixtures
             var host = H.CreateHost();
             host.Mount(ctx => TextBlock("Transitions done"));
             await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6b. NavigationViewElement.GetRecommendedNavigationTransition
+    //      Targets: the WinUI NavigationTransitionInfo → NavigationTransition mapping.
+    //      Lives here rather than in Reactor.Tests because NavigationTransitionInfo is a
+    //      Microsoft.UI.Xaml type and cannot be constructed headless.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavRecommendedTransitionMapping(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var entrance = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.EntranceNavigationTransitionInfo());
+            H.Check("NavRecTrans_Entrance", entrance is EntranceTransition);
+
+            var drillIn = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.DrillInNavigationTransitionInfo());
+            H.Check("NavRecTrans_DrillIn", drillIn is DrillInTransition);
+
+            var suppress = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.SuppressNavigationTransitionInfo());
+            H.Check("NavRecTrans_Suppress", suppress is SuppressTransition);
+
+            var slide = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.SlideNavigationTransitionInfo
+                {
+                    Effect = global::Microsoft.UI.Xaml.Media.Animation
+                        .SlideNavigationTransitionEffect.FromRight,
+                });
+            H.Check(
+                "NavRecTrans_Slide",
+                slide is SlideTransition sl && sl.Direction == SlideDirection.FromRight);
+
+            // An unrecognised info must map to null, not to Default — a non-null value becomes
+            // an explicit per-navigation override that outranks the host's own Transition.
+            var unknown = NavigationViewElement.GetRecommendedNavigationTransition(
+                new global::Microsoft.UI.Xaml.Media.Animation.ContinuumNavigationTransitionInfo());
+            H.Check("NavRecTrans_Unknown_Is_Null", unknown is null);
+
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Recommended transitions done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6c. TransitionEngine hit-test suppression — nesting behaviour
+    //      Targets: SuppressHitTesting / RestoreHitTesting. Overlapping navigations
+    //      must not leave a page permanently unclickable. Needs a live UIElement,
+    //      so it cannot run headless.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavHitTestSuppressionNesting(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var page = new Border();
+            H.Check("NavHitTest_StartsVisible", page.IsHitTestVisible);
+
+            // First transition suppresses.
+            TransitionEngine.SuppressHitTesting(page);
+            H.Check("NavHitTest_SuppressedOnce", !page.IsHitTestVisible);
+
+            // A second, overlapping transition suppresses the same page.
+            TransitionEngine.SuppressHitTesting(page);
+            H.Check("NavHitTest_SuppressedTwice", !page.IsHitTestVisible);
+
+            // The first finishing must NOT re-enable it — the second is still running.
+            TransitionEngine.RestoreHitTesting(page);
+            H.Check("NavHitTest_StillSuppressedAfterFirstRestore", !page.IsHitTestVisible);
+
+            // Only the last one restores. Naive per-transition snapshotting would capture the
+            // first transition's `false` here and restore that, leaving the page dead forever.
+            TransitionEngine.RestoreHitTesting(page);
+            H.Check("NavHitTest_RestoredAfterLastRestore", page.IsHitTestVisible);
+
+            // An unbalanced restore is a no-op rather than flipping the value.
+            TransitionEngine.RestoreHitTesting(page);
+            H.Check("NavHitTest_ExtraRestoreIsNoOp", page.IsHitTestVisible);
+
+            // An element the app itself made non-hit-testable keeps that value.
+            var inert = new Border { IsHitTestVisible = false };
+            TransitionEngine.SuppressHitTesting(inert);
+            TransitionEngine.RestoreHitTesting(inert);
+            H.Check("NavHitTest_PreservesAuthorFalse", !inert.IsHitTestVisible);
+
+            // An instant-swap navigation must leave both its pages interactive even when an
+            // older animated transition still holds a claim on one of them: navigating A→B with
+            // a slide and then straight back to A instantly would otherwise show A while it is
+            // still non-hit-testable. Nesting depth is irrelevant here — clear outright.
+            var preempted = new Border();
+            TransitionEngine.SuppressHitTesting(preempted);
+            TransitionEngine.SuppressHitTesting(preempted);
+            H.Check("NavHitTest_PreemptedIsSuppressed", !preempted.IsHitTestVisible);
+
+            var swapTarget = new Border();
+            var swapDone = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                swapTarget, preempted, NavigationTransition.None, NavigationMode.Push,
+                onComplete: () => swapDone.TrySetResult());
+
+            H.Check(
+                "NavHitTest_InstantSwapClearsSuppression",
+                preempted.IsHitTestVisible);
+
+            // The older transition's completion then finds nothing to restore, rather than
+            // flipping the page back to non-hit-testable.
+            TransitionEngine.RestoreHitTesting(preempted);
+            H.Check("NavHitTest_LateRestoreAfterClearIsNoOp", preempted.IsHitTestVisible);
+
+            // Same hazard when the preempting navigation is an *animated* non-slide transition:
+            // Entrance/DrillIn/Fade never suppress, so without the clear they would inherit an
+            // overlapping slide's suppression on the page they are about to show.
+            var preemptedByAnimated = new Border();
+            TransitionEngine.SuppressHitTesting(preemptedByAnimated);
+            H.Check("NavHitTest_AnimatedPreemptStartsSuppressed", !preemptedByAnimated.IsHitTestVisible);
+
+            var animatedDone = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                new Border(), preemptedByAnimated,
+                NavigationTransition.Entrance(), NavigationMode.Push,
+                onComplete: () => animatedDone.TrySetResult());
+
+            H.Check(
+                "NavHitTest_AnimatedNonSlideClearsSuppression",
+                preemptedByAnimated.IsHitTestVisible);
+
+            await global::System.Threading.Tasks.Task.WhenAny(
+                animatedDone.Task, global::System.Threading.Tasks.Task.Delay(5000));
+
+            var host2 = H.CreateHost();
+            host2.Mount(ctx => TextBlock("Hit-test suppression done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6d. TransitionEngine — the outgoing page is normalized after a transition
+    //      NavigationCacheMode can hand the outgoing control back as a later page, and
+    //      the instant-swap path adds a cached control without touching its visual, so a
+    //      page cached while still faded out would return invisible.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavTransitionNormalizesOutgoing(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Outgoing normalization"));
+            await Harness.Render();
+
+            var outgoing = new Border { Width = 100, Height = 100 };
+            var incoming = new Border { Width = 100, Height = 100 };
+
+            // RunContinuationsAsynchronously matters: the default resumes the await *inside*
+            // TrySetResult, i.e. inside onComplete, before RunTransition has normalized the
+            // outgoing visual — the assertions below would race the code they test.
+            var done = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                outgoing, incoming,
+                NavigationTransition.Entrance(), NavigationMode.Push,
+                onComplete: () => done.TrySetResult());
+
+            var completed = await global::System.Threading.Tasks.Task.WhenAny(
+                done.Task, global::System.Threading.Tasks.Task.Delay(5000)) == done.Task;
+            H.Check("NavOutNorm_Completed", completed);
+
+            if (!completed) return;
+
+            var outVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+                .GetElementVisual(outgoing);
+
+            // Entrance fades the outgoing page to 0. Left that way, a cached page comes back
+            // invisible on a later NavigationTransition.None navigation.
+            H.Check("NavOutNorm_OpacityRestored", IsApproximately(outVisual.Opacity, 1f));
+            H.Check("NavOutNorm_OffsetReset", IsApproximately(outVisual.Offset, global::System.Numerics.Vector3.Zero));
+            H.Check("NavOutNorm_ScaleReset", IsApproximately(outVisual.Scale, global::System.Numerics.Vector3.One));
+        }
+    }
+
+    /// <summary>
+    /// Compositor properties are floats; compare them with a tolerance rather than for exact
+    /// equality, even where the value was assigned directly.
+    /// </summary>
+    private static bool IsApproximately(float actual, float expected) =>
+        global::System.MathF.Abs(actual - expected) < 0.0001f;
+
+    private static bool IsApproximately(
+        global::System.Numerics.Vector3 actual, global::System.Numerics.Vector3 expected) =>
+        IsApproximately(actual.X, expected.X)
+        && IsApproximately(actual.Y, expected.Y)
+        && IsApproximately(actual.Z, expected.Z);
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6e. Composition behaviour this engine depends on
+    //      Every reset in TransitionEngine's completion handler is a direct assignment to a
+    //      property that was just animated. Whether completion alone hands the property back
+    //      is a Composition question, not a Reactor one — so measure it rather than assume it.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavCompletedAnimationReleasesProperty(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Animation property release"));
+            await Harness.Render();
+
+            var element = new Border { Width = 100, Height = 100 };
+            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+                .GetElementVisual(element);
+            var compositor = visual.Compositor;
+
+            // Note on instrumentation: reading the property back is NOT a valid probe. A
+            // Composition getter returns the last value the app assigned, not what the
+            // compositor is rendering, so it cannot distinguish "the write took effect" from
+            // "the write was stored and ignored". TryGetAnimationController reports whether a
+            // time-based animation is still attached, which is the thing that matters here.
+            H.Check(
+                "NavAnimRelease_NoControllerBeforeStart",
+                visual.TryGetAnimationController("Opacity") is null);
+
+            var batch = compositor.CreateScopedBatch(
+                global::Microsoft.UI.Composition.CompositionBatchTypes.Animation);
+            var done = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            batch.Completed += (_, _) => done.TrySetResult();
+
+            var fade = compositor.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(1f, 0f);
+            fade.Duration = TimeSpan.FromMilliseconds(60);
+            visual.StartAnimation("Opacity", fade);
+            batch.End();
+
+            var completed = await global::System.Threading.Tasks.Task.WhenAny(
+                done.Task, global::System.Threading.Tasks.Task.Delay(5000)) == done.Task;
+            H.Check("NavAnimRelease_Completed", completed);
+            if (!completed) return;
+
+            // The finding: finishing does NOT detach the animation. The property stays
+            // associated with it until StopAnimation, which is exactly why
+            // TransitionEngine.ReleaseAnimatedProperties exists rather than the completion
+            // handler simply assigning over the animated values.
+            H.Check(
+                "NavAnimRelease_CompletionDoesNotDetach",
+                visual.TryGetAnimationController("Opacity") is not null);
+
+            visual.StopAnimation("Opacity");
+            H.Check(
+                "NavAnimRelease_StopDetaches",
+                visual.TryGetAnimationController("Opacity") is null);
+
+            batch.Dispose();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6f. Transition ownership across overlapping navigations
+    //      A page can be the incoming half of one transition and the outgoing half of the
+    //      next before the first finishes. The older transition must not reset it.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavTransitionOwnership(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var a = new Border();
+            var b = new Border();
+            var c = new Border();
+
+            // Transition 1: A -> B.
+            var first = TransitionEngine.ClaimForTransition(a, b);
+            H.Check("NavOwn_FirstOwnsOutgoing", TransitionEngine.StillOwns(a, first));
+            H.Check("NavOwn_FirstOwnsIncoming", TransitionEngine.StillOwns(b, first));
+
+            // Transition 2 starts before 1 finishes: B -> C. B changes hands.
+            var second = TransitionEngine.ClaimForTransition(b, c);
+            H.Check("NavOwn_GenerationAdvances", second > first);
+            H.Check("NavOwn_SecondOwnsShiftedPage", TransitionEngine.StillOwns(b, second));
+
+            // The crux: when transition 1 completes it must NOT reset B, which transition 2 is
+            // still animating. Without the stamp it would stop those animations and snap B.
+            H.Check("NavOwn_FirstNoLongerOwnsSharedPage", !TransitionEngine.StillOwns(b, first));
+
+            // A was untouched by transition 2, so transition 1 still cleans it up.
+            H.Check("NavOwn_FirstStillOwnsUnsharedPage", TransitionEngine.StillOwns(a, first));
+
+            // An element no transition ever claimed is owned by nobody.
+            H.Check("NavOwn_UnclaimedElement", !TransitionEngine.StillOwns(new Border(), first));
+
+            // Instant-swap navigations claim ownership too, so an in-flight predecessor cannot
+            // reach back and undo the swap. Run a real SuppressTransition over a page the
+            // earlier transition owned and confirm ownership moved.
+            var d = new Border();
+            var swapped = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                c, d, NavigationTransition.None, NavigationMode.Push,
+                onComplete: () => swapped.TrySetResult());
+
+            var swapDone = await global::System.Threading.Tasks.Task.WhenAny(
+                swapped.Task, global::System.Threading.Tasks.Task.Delay(5000)) == swapped.Task;
+            H.Check("NavOwn_SuppressCompleted", swapDone);
+            H.Check("NavOwn_SuppressRevokesOlderOwner", !TransitionEngine.StillOwns(c, second));
+
+            // ...and it normalizes both pages, so neither is left in an interrupted state for
+            // NavigationCacheMode to hand back later.
+            var cVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(c);
+            var dVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(d);
+            H.Check("NavOwn_SuppressNormalizesOutgoing", IsApproximately(cVisual.Opacity, 1f));
+            H.Check("NavOwn_SuppressNormalizesIncoming", IsApproximately(dVisual.Opacity, 1f));
+
+            // onComplete can start another navigation synchronously — an onNavigatedTo handler
+            // doing so is ordinary. That navigation claims these same pages, so the outgoing
+            // normalization must re-check ownership rather than reuse the answer from before
+            // onComplete ran, or it would snap a transition that is already in flight.
+            var e = new Border();
+            var f = new Border();
+            var reclaimed = 0L;
+            var reentered = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+
+            TransitionEngine.RunTransition(
+                e, f, NavigationTransition.Entrance(), NavigationMode.Push,
+                onComplete: () =>
+                {
+                    // Stand in for a nested navigation starting from onNavigatedTo.
+                    reclaimed = TransitionEngine.ClaimForTransition(e, f);
+                    reentered.TrySetResult();
+                });
+
+            var reentryDone = await global::System.Threading.Tasks.Task.WhenAny(
+                reentered.Task, global::System.Threading.Tasks.Task.Delay(5000)) == reentered.Task;
+            H.Check("NavOwn_ReentrantCompleted", reentryDone);
+            H.Check("NavOwn_ReentrantClaimWins", TransitionEngine.StillOwns(e, reclaimed));
+
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Transition ownership done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6g. Reduced motion — Settings → Accessibility → Visual effects → Animation effects
+    //      WinUI's own theme transitions honour this. Reactor replays those motions on the
+    //      Composition layer, so nothing honours it for us unless TransitionEngine does.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavReducedMotion(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Reduced motion"));
+            await Harness.Render();
+
+            // With animations off, an animated transition must behave exactly like
+            // NavigationTransition.None: onComplete synchronously, both pages resting.
+            using (TransitionEngine.OverrideAnimationsEnabled(false))
+            {
+                var outgoing = new Border { Width = 100, Height = 100 };
+                var incoming = new Border { Width = 100, Height = 100 };
+                var inVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+                    .GetElementVisual(incoming);
+
+                // The host mounts the incoming page hidden and relies on the transition to
+                // reveal it. If the gate skipped that, a reduced-motion navigation would land
+                // on an invisible page — a worse bug than the animation it was avoiding.
+                inVisual.Opacity = 0;
+
+                var completedSynchronously = false;
+                TransitionEngine.RunTransition(
+                    outgoing, incoming,
+                    NavigationTransition.Entrance(), NavigationMode.Push,
+                    onComplete: () => completedSynchronously = true);
+
+                H.Check("NavReducedMotion_CompletesSynchronously", completedSynchronously);
+                H.Check("NavReducedMotion_IncomingVisible", IsApproximately(inVisual.Opacity, 1f));
+                H.Check(
+                    "NavReducedMotion_IncomingNotOffset",
+                    IsApproximately(inVisual.Offset, global::System.Numerics.Vector3.Zero));
+                H.Check(
+                    "NavReducedMotion_NoAnimationAttached",
+                    inVisual.TryGetAnimationController("Offset") is null);
+            }
+
+            // Positive control: the same call animates when the setting is on, so the checks
+            // above are reporting the gate rather than something that never animates.
+            using (TransitionEngine.OverrideAnimationsEnabled(true))
+            {
+                var outgoing = new Border { Width = 100, Height = 100 };
+                var incoming = new Border { Width = 100, Height = 100 };
+                var inVisual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+                    .GetElementVisual(incoming);
+
+                var completedSynchronously = false;
+                var done = new global::System.Threading.Tasks.TaskCompletionSource(
+                    global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+
+                TransitionEngine.RunTransition(
+                    outgoing, incoming,
+                    NavigationTransition.Entrance(), NavigationMode.Push,
+                    onComplete: () => { completedSynchronously = true; done.TrySetResult(); });
+
+                H.Check("NavReducedMotion_AnimatedDoesNotCompleteSynchronously", !completedSynchronously);
+
+                var finished = await global::System.Threading.Tasks.Task.WhenAny(
+                    done.Task, global::System.Threading.Tasks.Task.Delay(5000)) == done.Task;
+                H.Check("NavReducedMotion_AnimatedStillCompletes", finished);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6h. Transitioned pages are compositor-tainted
+    //      GetElementVisual permanently costs an element the XAML implicit-transition APIs, so
+    //      ElementPool refuses to pool anything it has been called on. Navigation pages are
+    //      often Borders or Grids, which are poolable.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class NavTransitionMarksCompositorTainted(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("Compositor taint"));
+            await Harness.Render();
+
+            var outgoing = new Border();
+            var incoming = new Border();
+
+            H.Check(
+                "NavTaint_CleanBeforeTransition",
+                !ElementPool.IsCompositorTainted(outgoing) && !ElementPool.IsCompositorTainted(incoming));
+
+            var done = new global::System.Threading.Tasks.TaskCompletionSource(
+                global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            TransitionEngine.RunTransition(
+                outgoing, incoming, NavigationTransition.Entrance(), NavigationMode.Push,
+                onComplete: () => done.TrySetResult());
+
+            H.Check("NavTaint_OutgoingTainted", ElementPool.IsCompositorTainted(outgoing));
+            H.Check("NavTaint_IncomingTainted", ElementPool.IsCompositorTainted(incoming));
+
+            await global::System.Threading.Tasks.Task.WhenAny(
+                done.Task, global::System.Threading.Tasks.Task.Delay(5000));
+
+            // The instant-swap path reads the visuals too, so it has to mark as well.
+            var suppressOut = new Border();
+            var suppressIn = new Border();
+            TransitionEngine.RunTransition(
+                suppressOut, suppressIn, NavigationTransition.None, NavigationMode.Push,
+                onComplete: () => { });
+
+            H.Check("NavTaint_InstantSwapAlsoTaints",
+                ElementPool.IsCompositorTainted(suppressOut) && ElementPool.IsCompositorTainted(suppressIn));
         }
     }
 

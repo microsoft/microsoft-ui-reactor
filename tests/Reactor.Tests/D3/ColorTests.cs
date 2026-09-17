@@ -220,6 +220,36 @@ public class ColorTests
         Assert.Equal("rgba(128, 64, 32, 0.5)", c.ToRgb());
     }
 
+    [CulturedFact(new[] { "nl-NL" })]
+    public void ToRgb_With_Alpha_Is_Invariant_Under_Comma_Decimal_Culture()
+    {
+        // rgba() is machine-readable CSS, so it must not pick up the
+        // ambient decimal separator. Interpolating the opacity with the current
+        // culture emitted "rgba(128, 64, 32, 0,5)" on nl-NL/de-DE/fr-FR/pt-BR/… —
+        // an invalid color for every consumer.
+        var c = new D3Color(128, 64, 32, 0.5);
+        Assert.Equal("rgba(128, 64, 32, 0.5)", c.ToRgb());
+        // ToString() delegates to ToRgb(), so it inherited the same defect.
+        Assert.Equal("rgba(128, 64, 32, 0.5)", c.ToString());
+    }
+
+    [CulturedFact(new[] { "nl-NL" })]
+    public void ToRgb_Round_Trips_Through_Parse_Under_Comma_Decimal_Culture()
+    {
+        // Parse has always read invariant, so the culture-sensitive ToRgb() broke the
+        // round-trip in a specifically nasty way: the extra comma made Parse see five
+        // components instead of four, so it read the opacity from "0" — turning a
+        // half-transparent color into a fully transparent one rather than throwing.
+        var original = new D3Color(128, 64, 32, 0.5);
+
+        var round = D3Color.Parse(original.ToRgb());
+
+        Assert.Equal(original.R, round.R);
+        Assert.Equal(original.G, round.G);
+        Assert.Equal(original.B, round.B);
+        Assert.Equal(0.5, round.Opacity);
+    }
+
     [Fact]
     public void ToString_Matches_ToRgb()
     {

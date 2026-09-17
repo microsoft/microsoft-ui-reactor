@@ -7,6 +7,6 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.AnnounceRegionElement.Customize(Microsoft.
 
 ## Summary
 
-Author hook — add the bespoke descriptor entries for the <c>[WrapManual]</c> props.
+Author hook — add the bespoke descriptor entries for the `[WrapManual]` props.
 
 

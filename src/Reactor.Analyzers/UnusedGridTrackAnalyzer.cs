@@ -43,7 +43,7 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// body) — its cell is not provable, so it is treated as opaque, not as <c>(0,0)</c>.</item>
 /// </list>
 /// A child with no <c>.Grid()</c> only counts as the framework default <c>(0,0)</c> when its
-/// root is a known <c>Microsoft.UI.Reactor.Factories</c> factory (<c>Text(...)</c>,
+/// root is a known <c>Microsoft.UI.Reactor.Factories</c> factory (<c>TextBlock(...)</c>,
 /// <c>Button(...)</c>, a nested <c>Grid(...)</c>, …) — those return a fresh, unplaced element,
 /// so <c>(0,0)</c> is provable, matching the documented "a child with no explicit column is at
 /// column 0" model. The two axes are judged independently: an unused row is still reported even

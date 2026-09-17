@@ -75,13 +75,6 @@ public class PoolResetSetConsistencyTests
             { "XYFocusDown", "modifier takes ElementRef, not FrameworkElement" },
             { "XYFocusLeft", "modifier takes ElementRef, not FrameworkElement" },
             { "XYFocusRight", "modifier takes ElementRef, not FrameworkElement" },
-
-            // No matching modifier — the framework sets IsHitTestVisible imperatively
-            // (chart label/tick subtree hiding, issue #162) and the pool resets it
-            // alongside IsTabStop. There is deliberately no user-facing .IsHitTestVisible
-            // modifier, so there is nothing to trap; documented here so the reset is
-            // recognized as intentional rather than an oversight.
-            { "IsHitTestVisible", "no modifier; framework-internal, reset for chart-label hiding (#162)" },
         };
 
     [Fact]
@@ -115,33 +108,75 @@ public class PoolResetSetConsistencyTests
         }
     }
 
+    /// <summary>
+    /// Every property <c>CleanElement</c> resets that has a Reactor modifier must be
+    /// <em>classified</em> — mapped in <c>ModifierTable.Properties</c> at whatever severity, or
+    /// listed in <c>DeliberatelyExcluded</c> with a reason.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The drift guard issue #1193 asked for, and the reason it now catches something: it reads
+    /// <see cref="CleanElementScan"/>, which covers the whole method, where this test previously
+    /// read only the FE-common block and so could not see a single reset in the type dispatch.
+    /// <c>StretchDirection</c> and <c>IsActive</c> were in neither table when the scan was widened
+    /// — reset on a pooled control, modifier sitting in <c>ElementExtensions.cs</c>, and no
+    /// diagnostic offering it — because the staleness tests' WinUI probe never reaches
+    /// <c>Viewbox</c> or <c>ProgressRing</c>.
+    /// </para>
+    /// <para>
+    /// <b>Classification, not severity.</b> This deliberately does not require
+    /// <c>poolReset: true</c>, which is what an earlier draft of the #1193 fix did — it would have
+    /// promoted fifteen properties from MOD_002 (Info) to POOL_001 (Warning), a build break for
+    /// consumers on <c>TreatWarningsAsErrors</c>, on a premise the code does not support.
+    /// <c>CleanElement</c> runs on pool <em>return</em>, and the next mount re-applies setters:
+    /// <c>DescriptorHandler.Mount</c> rents the control and ends in <c>ApplySetters</c>, and
+    /// <c>Element.SettersEqual</c> keeps any element carrying setters on the Update path, which
+    /// ends in <c>ApplySetters</c> too. The selftest
+    /// <c>Issue950TextBlockPaddingFixture.ModifierResetOutranksASetterWrite</c> pins where a
+    /// <c>.Set</c> write really is discarded — a modifier set → unset transition, because
+    /// <c>ApplyModifiers</c> runs after <c>ApplySetters</c> — and its own comment names MOD_002
+    /// as the diagnostic for it. So the useful invariant is that the property is <em>known</em>,
+    /// which is what makes the modifier suggestion reach the user at all.
+    /// </para>
+    /// <para>
+    /// <see cref="IntentionallyExcluded"/> still applies, and stays deliberately small: it is for
+    /// properties with no clean modifier-based replacement, not a place to park a decision.
+    /// </para>
+    /// </remarks>
     [Fact]
-    public void Every_Reset_Property_With_Matching_Modifier_Is_Tracked()
+    public void Every_Reset_Property_With_Matching_Modifier_Is_Classified()
     {
-        // This is the load-bearing invariant: if someone adds a new
-        // property to CleanElement's reset list, and ElementExtensions already
-        // has a same-named modifier, then PoolResetSetAnalyzer MUST flag
-        // .Set writes to that property — otherwise the trap is silent.
         var resetProps = ReadResetProperties();
         var modifierNames = ReadModifierNames();
-        var tracked = PoolResetSetAnalyzer.TrappedProperties.Keys;
+        modifierNames.UnionWith(ReadTypeSpecificModifierNames());
 
-        var missing = resetProps
+        // Non-vacuity floor. Both sides are read from source, and an empty either side makes the
+        // assertion below true over nothing — the exact silent failure #1193 was.
+        Assert.True(
+            resetProps.Count >= 40,
+            $"Only {resetProps.Count} instance reset(s) were read out of CleanElement. The scan " +
+            "has stopped matching, which would make this invariant pass over a truncated set.");
+
+        var unclassified = resetProps
             .Where(prop =>
                 !IntentionallyExcluded.ContainsKey(prop) &&
                 modifierNames.Contains(prop) &&
-                !tracked.Contains(prop))
+                !ModifierTable.Properties.ContainsKey(prop) &&
+                !ModifierTable.DeliberatelyExcluded.ContainsKey(prop))
+            .OrderBy(prop => prop, StringComparer.Ordinal)
             .ToList();
 
         Assert.True(
-            missing.Count == 0,
-            "These properties are reset in ElementPool.CleanElement AND have " +
-            "a matching '.PROP(...)' modifier in ElementExtensions.cs, but " +
-            "are NOT in PoolResetSetAnalyzer.TrappedProperties: " +
-            $"[{string.Join(", ", missing)}]. " +
-            "Either add them to TrappedProperties (so REACTOR_POOL_001 fires " +
-            "on .Set writes to them), or — if intentional — add them to " +
-            "IntentionallyExcluded in this test with a documented reason.");
+            unclassified.Count == 0,
+            "These properties are reset in ElementPool.CleanElement AND have a matching " +
+            $"'.PROP(...)' modifier in ElementExtensions.cs, but appear in neither " +
+            $"ModifierTable.Properties nor ModifierTable.DeliberatelyExcluded: [{string.Join(", ", unclassified)}]. " +
+            "So no diagnostic mentions them and nothing records why. Map the property (so " +
+            "REACTOR_MOD_002 offers the modifier for '.Set(x => x.PROP = ...)'), or exclude it " +
+            "with the real reason the modifier is not an equivalent replacement. Note the " +
+            "receivers matter: the modifier must apply to the control CleanElement resets it on — " +
+            "'.Source' exists only for ParallaxViewElement while the reset is on Image, which is " +
+            "why that one is excluded rather than mapped.");
     }
 
     /// <summary>
@@ -220,12 +255,12 @@ class C
 
         // Name the mixed-owner case explicitly. A `Grid.Row` reset reaching this list is the
         // #1067 shape, and the surrounding evidence points the wrong way: Grid is in
-        // InstancePropertyOwnerProbes, and two other Grid.* clears one line above are instance
+        // CleanElementScan.InstancePropertyOwnerProbes, and two other Grid.* clears one line above are instance
         // properties nothing complains about. Without this sentence the obvious "fix" is to
         // declare the owner instance-only again, which is what silenced the failure in the
         // first place.
         var mixedOwner = missing
-            .Where(key => InstancePropertyOwnerProbes.ContainsKey(key.Substring(0, key.IndexOf('.'))))
+            .Where(key => CleanElementScan.InstancePropertyOwnerProbes.ContainsKey(key.Substring(0, key.IndexOf('.'))))
             .ToList();
 
         Assert.True(
@@ -239,7 +274,7 @@ class C
                 ? string.Empty
                 : $" Note: [{string.Join(", ", mixedOwner)}] — each sits on a MIXED owner, one whose " +
                   "other clears really are instance properties (Grid.Padding), which is why the " +
-                  "owner is in InstancePropertyOwnerProbes. That is not a reason to reclassify " +
+                  "owner is in CleanElementScan.InstancePropertyOwnerProbes. That is not a reason to reclassify " +
                   "them: they declare the static Owner.SetPROP setter, so they are attached and " +
                   "belong in one of the two tables above."));
     }
@@ -272,11 +307,11 @@ class C
         // "not attached" for everything, which is exactly today's owner-keyed behaviour with
         // every test still green. So assert both directions on the same owner, where the only
         // thing that differs between the rows is the property.
-        Assert.True(InstancePropertyOwnerProbes.ContainsKey(owner),
-            $"'{owner}' is not in InstancePropertyOwnerProbes, so this row proves nothing about " +
+        Assert.True(CleanElementScan.InstancePropertyOwnerProbes.ContainsKey(owner),
+            $"'{owner}' is not in CleanElementScan.InstancePropertyOwnerProbes, so this row proves nothing about " +
             "the probe — IsAttachedReset short-circuits to 'attached' for unknown owners.");
 
-        Assert.Equal(expectedAttached, IsAttachedReset(owner, property));
+        Assert.Equal(expectedAttached, CleanElementScan.IsAttachedReset(owner, property));
     }
 
     [Fact]
@@ -286,7 +321,7 @@ class C
         // Nothing else ties the two together, and a mismatched pair
         // (["Grid"] = typeof(StackPanel)) would probe a type with no Grid.SetRow and answer
         // "instance" for every attached Grid property — the original bug, restored.
-        var mismatched = InstancePropertyOwnerProbes
+        var mismatched = CleanElementScan.InstancePropertyOwnerProbes
             .Where(entry => !string.Equals(entry.Key, entry.Value.OwnerType.Name, StringComparison.Ordinal))
             .Select(entry => $"'{entry.Key}' -> {entry.Value.OwnerType.FullName}")
             .OrderBy(text => text, StringComparer.Ordinal)
@@ -294,7 +329,7 @@ class C
 
         Assert.True(
             mismatched.Count == 0,
-            "These InstancePropertyOwnerProbes entries are keyed by a name their typeof does not " +
+            "These CleanElementScan.InstancePropertyOwnerProbes entries are keyed by a name their typeof does not " +
             $"have: [{string.Join(", ", mismatched)}]. The key must be the type's simple name — " +
             "that is the spelling the CleanElement scan captures, and the probe is only meaningful " +
             "when it interrogates the type that owns the property being classified.");
@@ -302,7 +337,7 @@ class C
 
     /// <summary>
     /// No <c>DeliberatelyExcludedAttached</c> row may name an owner that
-    /// <see cref="InstancePropertyOwnerProbes"/> classifies per property — and every key must stay
+    /// <see cref="CleanElementScan.InstancePropertyOwnerProbes"/> classifies per property — and every key must stay
     /// in the <c>Owner.Property</c> form both that check and the owner split in
     /// <see cref="Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names"/> read it as.
     /// </summary>
@@ -375,7 +410,7 @@ class C
         Assert.True(
             offenders.Count == 0,
             "These ModifierTable.DeliberatelyExcludedAttached rows name an owner that " +
-            $"InstancePropertyOwnerProbes already classifies per property: [{string.Join(", ", offenders)}]. " +
+            $"CleanElementScan.InstancePropertyOwnerProbes already classifies per property: [{string.Join(", ", offenders)}]. " +
             "Delete them. That list suppresses genuinely attached properties the " +
             "'Owner.SetPROP(x, v)' rule cannot match, and neither thing a probed owner's property " +
             "can be needs suppressing: if it declares the static setter it is matchable, so map it " +
@@ -429,12 +464,12 @@ class C
 
     /// <summary>
     /// The <paramref name="keys"/> whose owner segment names an entry of
-    /// <see cref="InstancePropertyOwnerProbes"/>, in ordinal order.
+    /// <see cref="CleanElementScan.InstancePropertyOwnerProbes"/>, in ordinal order.
     /// </summary>
     private static List<string> ExclusionRowsOnInstanceOwners(IEnumerable<string> keys) =>
         keys.Where(key =>
                 key.IndexOf('.') > 0
-                && InstancePropertyOwnerProbes.ContainsKey(key.Substring(0, key.IndexOf('.'))))
+                && CleanElementScan.InstancePropertyOwnerProbes.ContainsKey(key.Substring(0, key.IndexOf('.'))))
             .OrderBy(key => key, StringComparer.Ordinal)
             .ToList();
 
@@ -484,34 +519,92 @@ class C
                   "to touch the scan — see Excluded_Attached_Rows_Never_Name_An_Instance_Owner."));
     }
 
+    /// <summary>
+    /// No <c>DeliberatelyExcluded</c> row may claim a modifier does not exist when one does.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the check whose absence let issue #1193 sit undetected. The staleness tests in
+    /// <c>ModifierTableIntegrityTests</c> force every candidate modifier into <em>one of</em>
+    /// <c>Properties</c> or <c>DeliberatelyExcluded</c> — and an exclusion counts as a
+    /// classification, so a row is never revisited once written. Nothing read the stated reason
+    /// back against reality, so <c>IsHitTestVisible</c> sat excluded as "No modifier exists" while
+    /// <c>.IsHitTestVisible(bool)</c> was in <c>ElementExtensions.cs</c> the whole time. The
+    /// consequence was not cosmetic: an excluded property is invisible to <c>REACTOR_MOD_002</c>,
+    /// so users writing <c>.Set(b =&gt; b.IsHitTestVisible = false)</c> were never offered the
+    /// modifier.
+    /// </para>
+    /// <para>
+    /// Deliberately narrow. It does not assert that an exclusion is <em>right</em> — most rows
+    /// exclude a property that does have a same-named modifier, for signature or semantic reasons
+    /// (<c>Content</c> takes an Element, <c>Translation</c> takes three floats), and those are
+    /// judgements a test cannot make. It asserts only the one claim that is mechanically
+    /// checkable, and only where the row actually makes it.
+    /// </para>
+    /// <para>
+    /// Non-vacuous by construction: <c>Name</c> makes the same claim truthfully and keeps the
+    /// predicate exercised in the passing direction, so a row-matching regression that found
+    /// nothing would not go unnoticed. MEASURED: restoring the <c>IsHitTestVisible</c> row fails
+    /// this test alone, naming the property and the modifier's declaration shape.
+    /// </para>
+    /// </remarks>
     [Fact]
-    public void Every_ClearValue_In_CleanElement_Is_Recognized_By_The_Reset_Scan()
+    public void No_Exclusion_Claims_A_Modifier_Is_Missing_When_It_Exists()
     {
-        // Both reset scans are regexes over the literal `RECEIVER.ClearValue(OWNER.PROPProperty)`
-        // shape. A reset written any other way — `var dp = X.YProperty; fe.ClearValue(dp);`, or
-        // a helper — is invisible to them, and an invisible reset makes
-        // Every_Reset_Attached_Property_Is_Classified pass vacuously for the property it
-        // clears. Counting is the cheap way to notice: the scan must account for every
-        // ClearValue in the block, not just the ones it happens to parse.
-        var commonBlock = ReadCleanElementCommonBlock(out _);
+        var generic = ReadModifierNames();
+        var typeSpecific = ReadTypeSpecificModifierNames();
 
-        var total = Regex.Matches(commonBlock, @"\.ClearValue\s*\(").Count;
-        var recognized = Regex.Matches(commonBlock,
-            @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(\w+)\.(\w+)Property\s*\)").Count;
+        var claimsNoModifier = ModifierTable.DeliberatelyExcluded
+            .Where(entry => entry.Value.IndexOf("No modifier exists", StringComparison.OrdinalIgnoreCase) >= 0)
+            .ToList();
 
         Assert.True(
-            total > 0,
-            "No ClearValue calls found in CleanElement's FE-common block — the block boundary " +
-            "detection in ReadCleanElementCommonBlock has probably drifted.");
+            claimsNoModifier.Count > 0,
+            "No DeliberatelyExcluded row states 'No modifier exists' any more. Either the phrase " +
+            "was reworded — in which case update this test's predicate, because it is now " +
+            "checking nothing — or the last such row was mapped, in which case delete this test.");
+
+        var contradicted = claimsNoModifier
+            .Where(entry => generic.Contains(entry.Key) || typeSpecific.Contains(entry.Key))
+            .Select(entry => generic.Contains(entry.Key)
+                ? $"'{entry.Key}' (generic .{entry.Key}<T>(...))"
+                : $"'{entry.Key}' (type-specific .{entry.Key}(...))")
+            .OrderBy(text => text, StringComparer.Ordinal)
+            .ToList();
 
         Assert.True(
-            total == recognized,
-            $"CleanElement's FE-common block has {total} ClearValue call(s) but the reset scan " +
-            $"only recognizes {recognized}. A reset written in a shape the regex does not match " +
-            "(a local dependency-property alias, a helper method) is silently excluded from the " +
-            "REACTOR_POOL_001 consistency invariants. Either write it in the " +
-            "'receiver.ClearValue(Owner.PropProperty)' form, or teach ReadResetProperties / " +
-            "ReadResetAttachedProperties about the new shape.");
+            contradicted.Count == 0,
+            "These ModifierTable.DeliberatelyExcluded rows say no modifier exists, but one does: " +
+            $"[{string.Join(", ", contradicted)}]. The exclusion suppresses REACTOR_MOD_002 for " +
+            "the property, so users never get told about the modifier that is sitting right " +
+            "there. Map the property in ModifierTable.Properties instead — or, if the modifier " +
+            "is genuinely not an equivalent replacement, keep the row and replace the reason " +
+            "with the real one (signature mismatch, different receiver, owned by another rule).");
+    }
+
+    /// <summary>
+    /// Names of the type-specific modifiers — <c>public static XxxElement Name(this XxxElement …)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Needed because <see cref="ReadModifierNames"/> only sees the generic
+    /// <c>T Name&lt;T&gt;(this T el, …)</c> shape. <c>Stretch</c>, <c>StretchDirection</c> and
+    /// <c>IsActive</c> exist only in this form, so a generic-only probe would report them as
+    /// having no modifier at all — the same blind spot, one shape over.
+    /// </remarks>
+    private static HashSet<string> ReadTypeSpecificModifierNames()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+        var path = Path.Join(root!, "src", "Reactor", "Elements", "ElementExtensions.cs");
+        Assert.True(File.Exists(path), $"ElementExtensions.cs not found at {path}");
+
+        var names = Regex.Matches(
+                File.ReadAllText(path),
+                @"public\s+static\s+\w+\s+(\w+)\s*\(\s*this\s+(\w+Element)\s+\w+")
+            .Cast<Match>()
+            .Select(m => m.Groups[1].Value);
+
+        return new HashSet<string>(names, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -608,291 +701,37 @@ namespace Microsoft.UI.Reactor
     // ── Source-scanning helpers ─────────────────────────────────────────
 
     /// <summary>
-    /// Extract the set of <em>instance</em> property names reset in the FE-common block of
-    /// <c>ElementPool.CleanElement</c> — from the method's opening brace up
-    /// to (but not including) the <c>switch (fe)</c> that begins type-specific
-    /// cleanup. Captures both <c>fe.PROP = ...</c> direct sets and every
-    /// <c>RECEIVER.ClearValue(OWNER.PROPProperty)</c> that <see cref="IsAttachedReset"/>
-    /// classifies as an instance property.
+    /// The <em>instance</em> property names reset anywhere in <c>ElementPool.CleanElement</c>.
     /// </summary>
-    private static HashSet<string> ReadResetProperties()
-    {
-        var commonBlock = ReadCleanElementCommonBlock(out var paramName);
-
-        // ClearValue() is a method call caught separately by the second regex;
-        // filter it out of the direct-assignment match set.
-        var escapedParam = Regex.Escape(paramName);
-        var directAssignments = Regex.Matches(commonBlock, $@"\b{escapedParam}\.(\w+)\s*=")
-            .Cast<Match>()
-            .Select(m => m.Groups[1].Value)
-            .Where(name => name != "ClearValue");
-
-        // ClearValue(OWNER.PROPProperty) resets. Receiver is `\w+` (not pinned to
-        // the captured param) because some resets run on a narrowed cast — e.g.
-        // `if (fe is Control c) c.ClearValue(Control.IsTabStopProperty)` (issue #162).
-        // Only the clears IsAttachedReset says are instance properties: attached owners
-        // are captured separately by ReadResetAttachedProperties, owner-qualified, because
-        // their bare names collide with instance properties (AutomationProperties.Name vs
-        // FrameworkElement.Name).
-        var clearValueProps = Regex.Matches(commonBlock, ClearValuePattern)
-            .Cast<Match>()
-            .Where(m => !IsAttachedReset(m.Groups[1].Value, m.Groups[2].Value))
-            .Select(m => m.Groups[2].Value);
-
-        return new HashSet<string>(directAssignments.Concat(clearValueProps), StringComparer.Ordinal);
-    }
+    /// <remarks>
+    /// Delegates to <see cref="CleanElementScan"/>, which reads the whole method. Until issue
+    /// #1193 this was a local regex over the FE-common block only — everything below
+    /// <c>switch (fe)</c> was invisible, so the type-specific arms' resets were exempt from every
+    /// invariant here and #985/#950 had to <em>relocate</em> clears up into the scanned region to
+    /// get them covered. Properties declared on one control (TextBlock's font DPs, Viewbox's
+    /// Stretch) cannot be relocated, so they were never covered at all.
+    /// </remarks>
+    private static HashSet<string> ReadResetProperties() =>
+        CleanElementScan.InstanceResets
+            .Select(reset => reset.Property)
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
-    /// Extract the <c>Owner.Property</c> names of the <em>attached</em> properties reset in
-    /// the FE-common block of <c>ElementPool.CleanElement</c> — every
-    /// <c>RECEIVER.ClearValue(...OWNER.PROPProperty)</c> that <see cref="IsAttachedReset"/>
-    /// classifies as attached; the exact complement of <see cref="ReadResetProperties"/>'
-    /// <c>ClearValue</c> half, over the same matches.
+    /// The <c>Owner.Property</c> names of the <em>attached</em> properties reset in
+    /// <c>CleanElement</c> — the exact complement of <see cref="ReadResetProperties"/> over the
+    /// same matches, split by <see cref="CleanElementScan.IsAttachedReset(string, string)"/>.
     /// </summary>
     /// <remarks>
     /// The owner may be written with any amount of qualification in the source
     /// (<c>Microsoft.UI.Xaml.Automation.AutomationProperties</c>, <c>WinUI.ToolTipService</c>,
-    /// <c>Layout.FlexPanel</c>), so only the rightmost segment before the property is kept —
-    /// which is exactly how <c>ModifierTable.AttachedProperties</c> is keyed, and how the
-    /// analyzer sees the owner at a call site.
+    /// <c>Layout.FlexPanel</c>), so only the rightmost segment is kept — which is exactly how
+    /// <c>ModifierTable.AttachedProperties</c> is keyed, and how the analyzer sees the owner at a
+    /// call site.
     /// </remarks>
-    private static HashSet<string> ReadResetAttachedProperties()
-    {
-        var commonBlock = ReadCleanElementCommonBlock(out _);
-
-        var attached = Regex.Matches(commonBlock, ClearValuePattern)
-            .Cast<Match>()
-            .Where(m => IsAttachedReset(m.Groups[1].Value, m.Groups[2].Value))
-            .Select(m => m.Groups[1].Value + "." + m.Groups[2].Value);
-
-        return new HashSet<string>(attached, StringComparer.Ordinal);
-    }
-
-    /// <summary>
-    /// Matches <c>RECEIVER.ClearValue(OWNER.PROPProperty)</c>, capturing the owner's rightmost
-    /// segment and the bare property name. The single shape both reset scans read, so that
-    /// instance ∪ attached is every recognized clear by construction and
-    /// <see cref="IsAttachedReset"/> is the only thing that decides which half a clear lands in.
-    /// </summary>
-    /// <remarks>
-    /// The optional <c>[\w.]+.</c> prefix absorbs whatever qualification the source uses
-    /// (<c>Microsoft.UI.Xaml.Automation.AutomationProperties</c>, <c>WinUI.Border</c>,
-    /// <c>Layout.FlexPanel</c>) — the rightmost segment is how
-    /// <c>ModifierTable.AttachedProperties</c> is keyed and how the analyzer sees the owner at a
-    /// call site. <c>Every_ClearValue_In_CleanElement_Is_Recognized_By_The_Reset_Scan</c> pins
-    /// that every clear in the block really is written in this shape.
-    /// </remarks>
-    private const string ClearValuePattern =
-        @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(\w+)\.(\w+)Property\s*\)";
-
-    /// <summary>
-    /// Whether <c>OWNER.PROPProperty</c> names an <em>attached</em> dependency property —
-    /// the one discriminator that splits the reset scan in two.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Owner membership alone cannot answer this, which is issue #1067: <c>Grid</c> is a
-    /// <em>mixed</em> owner. <c>Grid.Padding</c> / <c>Grid.CornerRadius</c> are ordinary instance
-    /// DPs (which is why <c>Grid</c> is in <see cref="InstancePropertyOwnerProbes"/>) while
-    /// <c>Grid.Row</c> / <c>Column</c> / <c>RowSpan</c> / <c>ColumnSpan</c> are genuinely attached.
-    /// Keyed by owner, a <c>Grid.Row</c> clear was absorbed by the instance bucket and
-    /// <c>Every_Reset_Attached_Property_Is_Classified</c> never saw it — no failure, so no triage
-    /// moment to get wrong. That is not hypothetical: <c>PanelAttachedHooks.ApplyGridAttached</c>
-    /// already clears all four for pooled reuse, just outside the scanned region.
-    /// </para>
-    /// <para>
-    /// So ask the property, not the owner, and ask it the same question the analyzer asks: an
-    /// attached property is one whose owner declares the static
-    /// <c>Owner.SetPROP(DependencyObject, value)</c> that <c>PoolResetSetAnalyzer</c> matches
-    /// inside a <c>.Set(...)</c> lambda. <c>Grid.SetRow</c> exists, so <c>Grid.Row</c> is attached;
-    /// there is no <c>Grid.SetPadding</c>, so <c>Grid.Padding</c> stays instance. A future mixed
-    /// owner needs no edit here.
-    /// </para>
-    /// <para>
-    /// Both error directions are not equal, and the bias is deliberate. Calling an instance
-    /// property attached fails <c>Every_Reset_Attached_Property_Is_Classified</c> loudly and
-    /// someone triages it; calling an attached property instance is silent — the whole bug. So
-    /// anything unresolvable resolves to attached: an owner absent from the probe table is
-    /// attached by default.
-    /// </para>
-    /// </remarks>
-    private static bool IsAttachedReset(string owner, string property) =>
-        !InstancePropertyOwnerProbes.TryGetValue(owner, out var probe)
-        || probe.DeclaresAttachedSetter(property);
-
-    /// <summary>
-    /// The <c>DependencyObject</c> base types that back <em>FrameworkElement instance</em>
-    /// properties in <c>CleanElement</c>'s FE-common block, each paired with a metadata probe
-    /// over the real type so <see cref="IsAttachedReset"/> can carve the attached DPs back out.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Issue #985: CleanElement's FE-common block clears the Padding / CornerRadius /
-    /// BorderThickness / BorderBrush / Background family through a Control | Border |
-    /// Panel/Grid/StackPanel | TextBlock chain that mirrors ApplyModifiers' receivers.
-    /// <c>Border.PaddingProperty</c> and friends are ordinary instance properties; without them
-    /// here the attached scan would claim them and
-    /// <c>Every_Reset_Attached_Property_Is_Classified</c> would fail on owners that have no
-    /// business being in the attached table. <c>Grid</c> arrived with #1003, which widened those
-    /// gates to the concrete panels; <c>TextBlock</c> because #985 moved TextBlock.Padding (added
-    /// by #950) into the scanned block.
-    /// </para>
-    /// <para>
-    /// Two hazards live here and this list only ever closed the first. Route the family through
-    /// <c>DeliberatelyExcludedAttached</c> instead and a future attached <c>Grid.*</c> reset does
-    /// fail the classification test — but the two existing <c>Grid.*</c> suppression rows sitting
-    /// right there invite the wrong triage ("add another row"). Route it through owner membership,
-    /// as this list does, and that same future reset produces <em>no failure at all</em>, because
-    /// bare-owner membership cannot express that <c>Grid</c> owns instance <em>and</em> attached
-    /// DPs (#1067). Naming the owners is therefore necessary but not sufficient:
-    /// <see cref="IsAttachedReset"/> asks per property, and this list supplies the type it asks.
-    /// </para>
-    /// <para>
-    /// Hand-listed as <c>typeof(...)</c> literals rather than resolved from a name via
-    /// <c>Type.GetType</c>, so the probes stay statically analyzable (IL2057/IL2072) and adding an
-    /// owner is a deliberate edit — the same rationale as <c>ModifierTableIntegrityTests</c>'
-    /// <c>KnownAttachedOwners</c>. The key must equal the type's simple name, which is exactly how
-    /// the scan spells an owner; <c>Every_Instance_Owner_Key_Names_Its_Own_Type</c> pins that.
-    /// Reflection reads metadata only — no WinUI object is constructed, which this headless suite
-    /// cannot do.
-    /// </para>
-    /// </remarks>
-    private static readonly IReadOnlyDictionary<string, (Type OwnerType, Func<string, bool> DeclaresAttachedSetter)>
-        InstancePropertyOwnerProbes =
-            new Dictionary<string, (Type, Func<string, bool>)>(StringComparer.Ordinal)
-            {
-                ["FrameworkElement"] = ProbeFor(typeof(Microsoft.UI.Xaml.FrameworkElement)),
-                ["UIElement"] = ProbeFor(typeof(Microsoft.UI.Xaml.UIElement)),
-                ["Control"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Control)),
-                ["Border"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Border)),
-                ["Panel"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Panel)),
-                ["StackPanel"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.StackPanel)),
-                ["Grid"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Grid)),
-                ["TextBlock"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.TextBlock)),
-            };
-
-    /// <summary>
-    /// One entry of <see cref="InstancePropertyOwnerProbes"/>, with the probe derived from the very
-    /// <see cref="Type"/> stored beside it.
-    /// </summary>
-    /// <remarks>
-    /// Naming the owner twice per entry — once for <c>OwnerType</c>, once inside the probe — would
-    /// let the two drift apart, and <c>Every_Instance_Owner_Key_Names_Its_Own_Type</c> would not
-    /// notice: it pins the key to <c>OwnerType</c> and never looks at what the probe reads. A pair
-    /// like <c>(typeof(Grid), AttachedSetterProbe(typeof(StackPanel)))</c> answers "instance" for
-    /// every attached <c>Grid</c> property, which is #1067 restored. For <c>Grid</c> and
-    /// <c>Control</c> the probe theory catches it, but the other six owners carry no
-    /// attached-expecting row, so there the whole class of mistake is silent. Taking the type once
-    /// and deriving both from it makes the mismatch inexpressible rather than merely tested for.
-    /// </remarks>
-    private static (Type OwnerType, Func<string, bool> DeclaresAttachedSetter) ProbeFor(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type type)
-        => (type, AttachedSetterProbe(type));
-
-    /// <summary>
-    /// A probe over <paramref name="type"/>'s <c>public static void SetPROP(target, value)</c>
-    /// declarations — the shape <c>PoolResetSetAnalyzer</c> matches, so this asks the rule's own
-    /// question about a property rather than an approximation of it.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The reflection pass runs once per owner, when this map initializes; the returned probe is
-    /// an ordinal set lookup, so classifying a <c>ClearValue</c> match costs no reflection and the
-    /// per-owner method list is never re-materialized.
-    /// </para>
-    /// <para>
-    /// <c>FlattenHierarchy</c> is deliberate: an attached setter inherited from a base is still an
-    /// attached setter, and the direction it can err in (instance read as attached) is the loud
-    /// one. The one shape this misses is an attached property with <em>no</em> static setter — the
-    /// <c>AutomationProperties.DescribedBy</c> collection form, which WinUI exposes as
-    /// <c>GetXxx(...)</c> returning a mutable list. None of the owners above has one, and it is
-    /// precisely the shape the <c>Owner.SetPROP(x, v)</c> rule cannot match either, which is why
-    /// those three live in <c>ModifierTable.DeliberatelyExcludedAttached</c>.
-    /// </para>
-    /// <para>
-    /// Deliberately <em>not</em> shared with <c>ModifierTableIntegrityTests.HasStaticTwoArgMethod</c>,
-    /// which looks similar but asks a weaker question: it omits <c>FlattenHierarchy</c> and checks
-    /// neither the <c>void</c> return nor that the first parameter is a <c>DependencyObject</c> —
-    /// enough for the pure attached-property holders it runs against (<c>AutomationProperties</c>,
-    /// <c>ToolTipService</c>, <c>TitleBar</c>, <c>FlexPanel</c>), where no instance member can
-    /// collide. This probe runs against <em>mixed</em> owners, where a loose match silently
-    /// reclassifies a property, so the extra constraints are the point. Reusing the looser helper
-    /// here would reintroduce #1067 by a different route; unifying them would have to tighten it
-    /// for callers that do not need it.
-    /// </para>
-    /// </remarks>
-    private static Func<string, bool> AttachedSetterProbe(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type type)
-    {
-        const BindingFlags Flags =
-            BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
-
-        var setterNames = type.GetMethods(Flags)
-            .Where(method =>
-                method.ReturnType == typeof(void)
-                && method.GetParameters() is { Length: 2 } parameters
-                && typeof(Microsoft.UI.Xaml.DependencyObject).IsAssignableFrom(parameters[0].ParameterType))
-            .Select(method => method.Name)
+    private static HashSet<string> ReadResetAttachedProperties() =>
+        CleanElementScan.AttachedResets
+            .Select(reset => reset.Owner + "." + reset.Property)
             .ToHashSet(StringComparer.Ordinal);
-
-        return propertyName => setterNames.Contains("Set" + propertyName);
-    }
-
-    /// <summary>
-    /// The FE-common block of <c>ElementPool.CleanElement</c> — from the method's opening
-    /// brace up to (but not including) the <c>switch (fe)</c> that begins type-specific
-    /// cleanup — plus the name of the method's parameter.
-    /// </summary>
-    private static string ReadCleanElementCommonBlock(out string paramName)
-    {
-        var root = RepoRootFinder.FindRepoRoot();
-        Assert.NotNull(root);
-        // Path.Join (vs Path.Combine) avoids the "rooted segment silently
-        // discards the base path" behavior flagged by CodeQL cs/path-combine.
-        // All segments here are hardcoded literals, so the warning is a
-        // false positive — but the equivalent Path.Join keeps the analyzer
-        // quiet and is otherwise identical for non-rooted segments.
-        var path = Path.Join(root!, "src", "Reactor", "Core", "ElementPool.cs");
-        Assert.True(File.Exists(path), $"ElementPool.cs not found at {path}");
-        var source = File.ReadAllText(path);
-
-        // Locate `(internal|private|...) static void CleanElement(FrameworkElement <param>)`,
-        // capturing the parameter name. Matching by signature shape — not by the
-        // exact `(FrameworkElement fe)` string — keeps the test robust to harmless
-        // renames or spacing changes.
-        var sigMatch = Regex.Match(source,
-            @"static\s+void\s+CleanElement\s*\(\s*FrameworkElement\s+(\w+)\s*\)");
-        Assert.True(sigMatch.Success,
-            "Could not locate CleanElement(FrameworkElement) signature in ElementPool.cs — has it been removed or had its type changed?");
-        paramName = sigMatch.Groups[1].Value;
-
-        var braceStart = source.IndexOf('{', sigMatch.Index + sigMatch.Length);
-        Assert.True(braceStart > sigMatch.Index, "CleanElement opening brace not found");
-
-        // The FE-common block runs from the opening brace up to the first
-        // `switch (<param>)` that starts the type-specific cleanup. Anchored to the start
-        // of a line (Multiline) so a `//` comment mentioning the dispatch cannot masquerade
-        // as the boundary — an unanchored match truncated the scanned region at a doc comment
-        // once, which silently shrank every invariant built on this block.
-        //
-        // The anchor closes the `//` case, not every case: a block comment whose inner line
-        // BEGINS with the dispatch text still matches `^\s*switch` and truncates the region
-        // (MEASURED: 12922 -> 7335 chars). Truncation cannot fail an absence-shaped assertion
-        // — a smaller region holds fewer offenders — so the detectors are the presence-shaped
-        // ones: Every_TrappedProperty_Is_Reset_In_CleanElement,
-        // Every_TrappedAttachedProperty_Is_Reset_In_CleanElement and
-        // Attached_Reset_Scan_Sees_Every_Owner_The_Table_Names in this file all redden on that
-        // mutation (54/0 -> 54/3), as does
-        // ModifierUnsetClearValueTests.CleanElement_Releases_Every_Modifier_Backed_Dependency_Property.
-        // They are load-bearing for this helper's correctness, not just for their own subject.
-        var switchRegex = new Regex(
-            $@"^\s*switch\s*\(\s*{Regex.Escape(paramName)}\s*\)", RegexOptions.Multiline);
-        var switchMatch = switchRegex.Match(source, braceStart);
-        Assert.True(switchMatch.Success,
-            $"CleanElement layout changed — could not find 'switch ({paramName})' boundary after the opening brace.");
-
-        return source.Substring(braceStart, switchMatch.Index - braceStart);
-    }
 
     /// <summary>
     /// Extract the set of modifier method names defined in

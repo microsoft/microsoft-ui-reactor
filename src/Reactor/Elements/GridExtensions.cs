@@ -4,7 +4,7 @@ namespace Microsoft.UI.Reactor;
 
 /// <summary>
 /// Fluent extension methods for Grid attached properties.
-/// Usage: Text("hello").Grid(row: 1, column: 2)
+/// Usage: TextBlock("hello").Grid(row: 1, column: 2)
 /// </summary>
 public static class GridExtensions
 {

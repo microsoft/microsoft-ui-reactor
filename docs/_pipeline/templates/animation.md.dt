@@ -160,6 +160,23 @@ is mounted, WinUI animates a snapshot from the old position to the new one:
 
 Both the source and destination elements must use the same key string. The
 animation runs automatically when the reconciler detects the transition.
+Source and destination must appear in the **same render** — the reconciler
+publishes the outgoing element's snapshot during the reconcile pass and plays
+it into the incoming element at the end of that same pass.
+
+Reactor snapshots *every* outgoing element that carries a key, because it cannot
+know which sibling you activated. Collapsing a list of keyed rows to one detail
+element therefore leaves the unpicked rows' snapshots behind, and WinUI keeps
+each of those painted at its old position for about a second before expiring it.
+Keep the keyed set small — key the rows you actually navigate between — if that
+overlap is distracting.
+
+Connected animation does not compose with an exit `.Transition(...)` on the
+**same** element: the exit transition defers the element's teardown, and with it
+the snapshot, past the point where the destination looks for it, so the
+animation silently does not play. Put the key and the exit transition on
+different elements.
+
 Use connected animations for list-to-detail [navigation](navigation.md)
 where an element "flies" from the list into the detail view.
 
@@ -170,22 +187,7 @@ animation primitive. Wrap a state mutation, and any **structural** change to
 a keyed list (insert, move, remove) that comes out of that mutation picks up
 the kind — without a per-element modifier in sight.
 
-```csharp
-class TodoList : Component
-{
-    public override Element Render()
-    {
-        var (items, setItems) = UseState<IReadOnlyList<Todo>>(_seed);
-
-        return VStack(12,
-            Button("Add", () =>
-                Animations.Animate(AnimationKind.Spring, () =>
-                    setItems([.. items, new Todo(Guid.NewGuid().ToString(), "New")]))),
-            ListView<Todo>(items, (t, _) => TextBlock(t.Title).Padding(8))
-                .Height(400)
-        );
-    }
-}
+```csharp snippet="animation/transactional-animate"
 ```
 
 `AnimationKind` is the declarative knob — `Spring`, `EaseIn`, `EaseOut`,
@@ -196,41 +198,36 @@ diff pass so `ListView`, `GridView`, `LazyVStack` (and hand-built
 `FlexColumn(items.Select(...).WithKey(...))` children) all animate the
 resulting insert / move / remove. (See spec 042 §6.)
 
+The templated `ListView<T>(items, viewBuilder)` overload constrains
+`T : IReactorKeyed` — the model exposes a stable `string Key`, which is
+what lets the reconciler classify a change as an insert rather than a
+replace. Use the
+`ListView<T>(items, keySelector, viewBuilder)` overload when the model
+type can't implement the interface.
+
 ### What `Animate` does *not* do
 
 `Animate` is **scoped to structural changes**. A leaf `TextBlock` whose
 `Foreground` changes inside `Animate(.Spring)` does **not** animate the
-foreground — that remains the job of per-element modifiers like
-`.WithImplicitTransition(...)` or
+foreground — that remains the job of per-element implicit-transition
+modifiers like `.OpacityTransition(...)` / `.ScaleTransition(...)` /
+`.TranslationTransition(...)` / `.RotationTransition(...)`, or
 [`AnimationScope.WithAnimation(...)`](#withanimation-scope). The two
 channels are deliberately independent so the SwiftUI "`withAnimation` only
 animates layout-shape ops" contract holds; conflating them would surprise
 users coming from that mental model.
 
 Per-element animation modifiers continue to win when set: declaring
-`.Transition(Fade)` on a row makes that row's enter / exit use Fade
-regardless of the ambient. The ambient is a default for the transactional
-case, not a hammer for every change.
+`.Transition(Transition.Fade)` on a row makes that row's enter / exit use
+Fade regardless of the ambient. The ambient is a default for the
+transactional case, not a hammer for every change.
 
 ### Nesting and explicit suppression
 
 Nested `Animate` calls stack like `using` blocks — the inner kind wins for
 state changes inside its scope, and the outer kind resumes after:
 
-```csharp
-Animations.Animate(AnimationKind.Spring, () =>
-{
-    // Insert: animates with Spring.
-    setItems([.. items, x]);
-
-    Animations.Animate(AnimationKind.None, () =>
-    {
-        // Insert inside None: no animation, even though we're still inside
-        // an outer Spring transaction. Useful when a child component needs
-        // to opt out of the caller's implicit animation intent.
-        setOtherItems([.. others, y]);
-    });
-});
+```csharp snippet="animation/animate-nesting"
 ```
 
 ### Reduced motion
@@ -239,11 +236,7 @@ Animations.Animate(AnimationKind.Spring, () =>
 site*. Read `UseReducedMotion()` and skip the wrapper when the user has
 opted out:
 
-```csharp
-var reduceMotion = UseReducedMotion();
-Action commit = () => setItems([.. items, x]);
-if (reduceMotion) commit();
-else              Animations.Animate(AnimationKind.Spring, commit);
+```csharp snippet="animation/animate-reduced-motion"
 ```
 
 ## WithAnimation Scope

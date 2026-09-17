@@ -36,7 +36,7 @@ Doc apps inherit `Reactor.DevtoolsSupport=true` from `docs/_pipeline/apps/Direct
 | `UseRef<T>(initial)` | `Ref<T>` | Mutable value that does *not* trigger re-render. |
 | `UseContext<T>(ctx)` | `T` | Read a [context](context.md) value. |
 | `UsePersisted<T>(key, initial, scope)` | `(T, Action<T>)` | Survive re-mount via [LRU cache](persistence.md). |
-| `UseColorScheme()` | `ColorScheme` | Reactive light/dark/HighContrast. |
+| `UseColorScheme()` | `ColorScheme` | Reactive app-global light/dark. Forced colors: `UseHighContrast()`. |
 | `UseResource(fetcher, cache, deps, opts?)` | `AsyncValue<T>` | [`async-resources`](async-resources.md). |
 | `UseFocusTrap(isActive)` | `FocusTrapHandle` | Trap Tab inside a sub-tree. |
 | `UseAnnounce()` | `AnnounceHandle` | Push a screen-reader announcement (via `.Announce(string)` method). |
@@ -49,7 +49,8 @@ class StateVignette : Component
     public override Element Render()
     {
         var (count, setCount) = UseState(0);
-        return Button($"clicked {count}×", () => setCount(count + 1));
+        return Button($"clicked {count}×", () => setCount(count + 1))
+            .AutomationName($"Increment counter; clicked {count} times");
     }
 }
 ```
@@ -59,14 +60,14 @@ class EffectVignette : Component
 {
     public override Element Render()
     {
-        var (tick, setTick) = UseState(0);
+        var (tick, incrementTick) = UseReducer(0, threadSafe: true);
         UseEffect(() =>
         {
             var timer = new System.Timers.Timer(1000);
-            timer.Elapsed += (_, _) => setTick(tick + 1);
+            timer.Elapsed += (_, _) => incrementTick(t => t + 1);
             timer.Start();
             return () => timer.Dispose();
-        });
+        }, []);
         return TextBlock($"Tick: {tick}");
     }
 }
@@ -129,12 +130,12 @@ Full coverage on [Styling](styling.md), [Animation](animation.md),
 
 | API | Purpose |
 |---|---|
-| `ReactorApp.Run<TComp>(title, width?, height?, preview?)` | Single-window app. |
-| `ReactorWindow.Open<TComp>(...)` | Additional window from a Component. |
+| `ReactorApp.Run<TComp>(title, width?, height?, fullScreen?, configure?)` | Single-window app. |
+| `ReactorApp.OpenWindow(spec, root)` | Additional window from a `WindowSpec`. |
 | `ReactorHost` / `ReactorHostControl` | Embed Reactor in XAML / WinForms. |
 | `NavigationHost(nav, routeMap)` | Multi-page navigation. |
 | `DeepLinkMap<TRoute>` | URI-pattern routing. |
-| `Command<T>` / `.Bind(button)` | [Commanding](commanding.md). |
+| `Command` / `Button(command)` / `.Command(cmd)` | [Commanding](commanding.md). |
 | `IDataSource<T>` / `DataGrid<T>` | [Data system](data-system.md). |
 | `ApplicationPersistedScope.Default` | Process-wide [persistence](persistence.md) cache. |
 
@@ -150,15 +151,15 @@ Full coverage on [Styling](styling.md), [Animation](animation.md),
 | `Theme.SystemSuccess` / `Theme.SystemCaution` / `Theme.SystemCritical` | Signal. |
 | `Theme.Ref("CustomKey")` | Escape hatch for an app-level key. |
 
-Full 35-token catalog on [Theming Tokens](theming-tokens.md).
+Full token catalog on [Theming Tokens](theming-tokens.md).
 
 ## Patterns at a glance
 
 **Controlled input.** `var (v, set) = UseState("")` →
 `TextBox(v, set)`.
 
-**Effect with cleanup.** Return a `Func<void>` from the effect lambda;
-Reactor calls it before the next run and on unmount.
+**Effect with cleanup.** Return a cleanup lambda from the effect lambda;
+Reactor calls it before the next run (when deps change) and on unmount.
 
 **Conditional render.** `cond ? Element1 : Empty()` keeps the element
 out of the tree when `cond` is false — see the
@@ -167,7 +168,7 @@ out of the tree when `cond` is false — see the
 **List with stable keys.** `ForEach(items, x => Card(x).WithKey(x.Id))`
 so the reconciler can move rows rather than rebuild them.
 
-**Reference prop.** `var target = UseElementRef<FrameworkElement>()` →
+**Reference prop.** `var target = this.UseElementRef<FrameworkElement>()` →
 `Button("Open", show).Ref(target)` →
 `TeachingTip("Tip", target: target)`. Use reference props, not
 `target.Current`, for relationships that must survive late mount or

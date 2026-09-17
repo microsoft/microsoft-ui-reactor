@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using Windows.System;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -40,11 +41,13 @@ class CommandPalette : Component
     {
         // <snippet:state>
         // Three pieces of state run the palette: whether it's open, the
-        // typed query, and the highlighted row in the filtered list.
+        // typed query, and the highlighted row in the filtered list. The
+        // focus helper is separate; it moves focus into the query box on open.
         var (open, setOpen) = UseState(false);
         var (query, setQuery) = UseState("");
         var (index, setIndex) = UseState(0);
         var (last, setLast) = UseState<string?>(null);
+        var (queryRef, requestQueryFocus) = this.UseElementFocus();
         // </snippet:state>
 
         // <snippet:filter>
@@ -113,21 +116,32 @@ class CommandPalette : Component
                 : TextBlock($"Last command: {last}").Opacity(0.6)
         ).Padding(24);
 
+        UseEffect(() =>
+        {
+            if (open)
+                requestQueryFocus();
+            return () => { };
+        }, open);
+
         Element palette = Border(
             VStack(0,
                 TextBox(query, v => { setQuery(v); setIndex(0); },
-                    placeholderText: "Type a command…").Width(420),
+                    placeholderText: "Type a command…")
+                    .AutomationName("Command search")
+                    .Width(420)
+                    .Ref(queryRef),
                 matches.Length == 0
-                    ? TextBlock("No commands match.").Padding(12).Opacity(0.6)
+                    ? (Element)TextBlock("No commands match.").Padding(12).Opacity(0.6)
                     : VStack(0,
                         matches.Select((c, i) =>
-                            TextBlock(c.Label)
-                                .Padding(10)
-                                .Background(i == safeIndex ? "#E5F1FB" : "#FFFFFF")
+                            Border(
+                                TextBlock(c.Label).Padding(10)
+                            ).Background(i == safeIndex ? Theme.AccentTertiary : Theme.CardBackground)
+                             .WithKey(c.Label)
                         ).ToArray<Element>()
                     )
-            ).Background("#FFFFFF").CornerRadius(8).Width(440)
-        ).Background("#80000000").Padding(60)
+            ).Background(Theme.CardBackground).CornerRadius(8).Width(440)
+        ).Background(Theme.SmokeFill).Padding(60)
          .OnPreviewKeyDown(OnPaletteKey);
 
         var root = (open ? Group(page, palette) : page)

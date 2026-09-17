@@ -60,6 +60,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
+    <InternalsVisibleTo Include="Reactor.PackagedTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
     <!-- Spec 062 §7 Track B (B1/B2): the charting, docking, and markdown
          subsystems moved from this assembly into Reactor.Advanced. Each reaches
@@ -112,6 +113,15 @@
          shipping beside it those attributes would resolve but be inert. -->
     <ProjectReference Include="..\Reactor.Wrappers.Generator\Reactor.Wrappers.Generator.csproj"
                       OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <!-- Spec 010 Route B — the source-map interceptor generator. Deliberately NOT
+         registered as an analyzer on this project: it must run in the CONSUMER's
+         compilation (that is where the DSL call sites are), and running it here
+         would try to intercept Reactor's own internal factory calls. It is only
+         referenced so its build output exists for the <None Pack="true"> block
+         below, which is the same "build it, don't run it, ship it" arrangement
+         Reactor.Analyzers uses. -->
+    <ProjectReference Include="..\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
                       ReferenceOutputAssembly="false" />
     <!-- The wrapper generator's authoring attributes ([GenerateReactorWrapper],
          [WrapControlled], …). Hosting them in their own assembly rather than
@@ -194,13 +204,34 @@
          Reactor.Wrappers.Abstractions.dll. -->
     <None Include="..\Reactor.Wrappers.Generator\$(_ReactorAnalyzerBinDir)\Reactor.Wrappers.Generator.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <!-- Spec 010 Route B — source-map interceptor generator. Packed OUTSIDE
+         analyzers/dotnet/cs on purpose: everything in that folder is loaded into
+         every consumer compilation, and this generator classifies every
+         invocation semantically. The targets add it as an <Analyzer> only when
+         ReactorSourceMap is true, which by default is Debug-only — so a Release
+         consumer does not load it and pays nothing. Setting the property true
+         explicitly does load it in Release, and then source paths are baked into
+         the binary.
+
+         One copy, under buildTransitive\, because that is where the targets BODY
+         lives; build\Microsoft.UI.Reactor.targets is only a forwarder, and the
+         body's Exists() probe and <Analyzer Include> resolve relative to its own
+         folder. -->
+    <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
+          Pack="true" PackagePath="buildTransitive/sourcemap" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
     <!-- Packed under the PackageId-matching name so NuGet auto-imports it into
          consuming projects (build/<PackageId>.targets). The source file keeps
          the short name for the repo's own Directory.Build.props import. -->
-    <None Include="build\Reactor.targets" Pack="true" PackagePath="build\Microsoft.UI.Reactor.targets" Visible="false" />
+    <None Include="build\Reactor.Forwarder.targets" Pack="true" PackagePath="build\Microsoft.UI.Reactor.targets" Visible="false" />
+    <!-- Same file again under buildTransitive\, which is the only folder NuGet flows
+         to a project that references Reactor INDIRECTLY. Without it such a project
+         compiles against the DSL with no generator and no REACTOR_SOURCEMAP, so every
+         CallSite is silently null. The file carries an idempotence guard so being
+         imported from both folders in one evaluation is harmless. -->
+    <None Include="build\Reactor.targets" Pack="true" PackagePath="buildTransitive\Microsoft.UI.Reactor.targets" Visible="false" />
     <!-- WinUI LoadComponent needs the compiled XBF sidecar at runtime for
          ReactorApplication.xaml. SDK pack includes the XAML but not the XBF by
          default, so PackageReference consumers otherwise crash in native XAML
@@ -287,3 +318,4 @@
   </ItemGroup>
 
 </Project>
+

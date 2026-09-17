@@ -402,6 +402,14 @@ class RegeditApp : Component
                     var result = await SearchService.FindNextAsync(startPath, null, searchText, findFlags, cts.Token);
                     syncContext?.Post(_ =>
                     {
+                        // Cancellation alone does not make this callback safe: the
+                        // search can finish just before a newer one calls Cancel,
+                        // in which case nothing throws and this stale result would
+                        // navigate the tree and overwrite the newer search's status.
+                        // Identity is the check that actually holds -- only the
+                        // search that is still current may touch the UI.
+                        if (!ReferenceEquals(searchCtsRef.Current, cts)) return;
+
                         if (result is not null)
                         {
                             NavigateToKey(result.KeyPath);
@@ -413,7 +421,11 @@ class RegeditApp : Component
                         }
                     }, null);
                 }
-                catch (OperationCanceledException) { }
+                // Expected: starting another search cancels the running one (the
+                // only cancellation path here -- there is no unmount cleanup).
+                // The status text now belongs to that newer search, so writing
+                // to it here would clobber the newer search's message.
+                catch (OperationCanceledException) { return; }
             });
         }
 

@@ -7,7 +7,7 @@ _cref_: `T:Microsoft.UI.Reactor.Hooks.InfiniteHookState`2`
 
 ## Summary
 
-Per-hook state for <c>UseInfiniteResource</c>. Coordinates in-flight page fetches,
+Per-hook state for `UseInfiniteResource`. Coordinates in-flight page fetches,
 cache subscriptions, deps-change restart, and unmount teardown.
 
 

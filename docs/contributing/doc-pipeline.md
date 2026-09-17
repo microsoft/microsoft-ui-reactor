@@ -179,12 +179,20 @@ separately: the phase compares the chosen XML against the newest `.cs` under
 with [`REACTOR_DOC_REFGEN_W002`](#6-snippet--image--diagram-error-codes) when the
 source is newer. Run `dotnet build src/Reactor` and compile again.
 
-If no `Reactor.xml` exists at all the phase skips reference generation rather
-than failing, printing:
+If no `Reactor.xml` exists at all, **a local compile** skips reference generation
+rather than failing, printing:
 
 ```
   (Reactor.xml not found — run `dotnet build src/Reactor` first)
 ```
+
+That degradation is deliberate: on a first compile you should still get your
+guide pages. Under `--ci` the same condition **exits 1** instead. CI always
+builds, so a missing input there means the run is not the run that was asked
+for, and skipping the phase would leave the ~117 pages under
+`docs/guide/reference/` silently at whatever was committed. The same applies to
+a missing `reference-map.yaml`. `ReferenceStalenessWiringTests` pins both
+directions.
 
 CI does build it. The `docs-build` job runs `docs compile --no-screenshots --ci`
 *without* `--no-build`, so Phase 2 builds every doc app, each of which
@@ -192,6 +200,12 @@ CI does build it. The `docs-build` job runs `docs compile --no-screenshots --ci`
 runs for real on every PR. `REACTOR_DOC_REFGEN_W002` still stays quiet there, for
 an ordering reason rather than a missing-build one: `actions/checkout` writes the
 sources before that build runs, so the emitted XML always postdates every `.cs`.
+
+That is no longer left as a property of how the job happens to be spelled. The
+freshness gate ([§10](#10-compiled-output-freshness-gate)) reads a clean
+`git status -- docs/guide` as proof the committed output matches a fresh
+compile, and that reading is only sound if every page was actually written — so
+the non-zero exit above is what the gate stands on.
 
 [i1068]: https://github.com/microsoft/microsoft-ui-reactor/issues/1068
 
@@ -202,6 +216,51 @@ binary writer in the pipeline. `--skip-screenshots` (alias `--no-screenshots`)
 skips it outright, so a compile with that flag leaves every committed screenshot
 byte-identical — the CI `docs-build` job proves this on every PR with
 `git status --porcelain -- docs/guide/images` immediately after the compile.
+
+#### Capture at 150% display scaling
+
+Screenshots are captured **only on a contributor's machine** — every workflow
+runs `--no-screenshots`, and the `docs-build` gate asserts capture never writes
+in CI. So the image dimensions committed to this repo are a property of whoever
+last ran capture, not of a build server.
+
+Capture at **150%** display scaling. A doc app's `doc-manifest.yaml` declares a
+window size in *logical* pixels, so a captured PNG scales roughly with the
+display scale factor — but not by an exact multiple. Most manifests use
+`region: client`, which captures the client area only and so excludes the
+window frame, and the window manager may adjust the requested extent. Treat the
+scale as the thing to match and the pixel dimensions as an observed
+consequence, not a formula to validate against: `v1-protocol` declares
+`width: 520`, and its committed `led-indicator.png` measures 640px wide when
+captured at 125% and 766px at 150%.
+
+The practical check is comparative, not arithmetic — if your regenerated image
+is close in size to the one you replaced, you captured at the same scale as the
+last contributor; if it jumped by ~20%, you did not.
+
+That number is a convention, not a law of the pipeline — it was chosen because
+it is what most of the corpus already used and it renders sharply on modern
+displays. What matters is that it is *written down*: before this section existed
+the corpus silently mixed scales (`docking` and `v1-protocol` at 125%,
+`win2d-canvas` at 150%), because nothing told anyone what to use. If you
+regenerate a page's images at a different scale, that page becomes inconsistent
+with the rest of the docset for no reason a reader can see.
+
+Check your scale before capturing (Settings → System → Display → Scale), and
+regenerate a topic with:
+
+```powershell
+# one topic
+dotnet run --project src/Reactor.Cli -- docs compile --topic layout
+
+# one image (the ref must belong to --topic, or omit --topic entirely)
+dotnet run --project src/Reactor.Cli -- docs compile --screenshots layout/card
+```
+
+Capture needs an **interactive desktop** — it launches each doc app and
+screenshots its window. Over RDP with no console session, or on a locked
+machine, Phase 3 reports `N failed screenshot capture(s)` and leaves the
+existing images untouched rather than writing blanks.
 
 It is *not* the only phase that writes under `docs/guide/images/`, and the
 distinction matters if you are reasoning about that directory rather than about
@@ -542,3 +601,243 @@ mur docs check-tier --topic <name>
 # toward Comprehensive):
 mur docs check-tier --tier solid
 ```
+
+## 9. Doc-snippet analyzer gate
+
+Every `snippet=` block in `docs/guide/` is extracted verbatim from a doc app
+under `docs/_pipeline/apps/`. A doc app is therefore not a scratch project —
+it is the code the guides tell readers to write, and it is held to the same
+analyzer rules those readers get from the NuGet package.
+
+Two gaps used to hide that:
+
+1. Only `win2d-canvas` was listed in `Reactor.slnx`, so CI never built the
+   other 52 doc apps at all.
+2. A `ProjectReference` to `src/Reactor` does **not** flow `Reactor.Analyzers`
+   — it ships as a packed `<None Pack="true">` item — so even that one app
+   compiled without the rules its own readers are subject to.
+
+`docs/_pipeline/apps/Directory.Build.props` now wires the consumer analyzer
+bundle into every doc app, and the `docs-snippet-gate` job in
+`.github/workflows/ci.yml` builds them all through
+`docs/_pipeline/apps/DocApps.proj`. Any `REACTOR_*` diagnostic fails the job
+and is echoed as a GitHub annotation with its `file:line`.
+
+Rules that fire most often here, and what they mean for a snippet:
+
+| Rule | Why it matters in a doc app |
+|------|-----------------------------|
+| `REACTOR_THEME_001/004` | A hard-coded colour ignores the reader's theme. Use a `Theme` token. |
+| `REACTOR_MOD_003` | The receiver silently drops the modifier — the snippet does not do what the prose says. |
+| `REACTOR_A11Y_001/002/003/004` | The sample teaches an inaccessible control. |
+| `REACTOR_HOOKS_001/005` | The sample violates the rules of hooks. |
+| `REACTOR_DSL_001/002` | The sample teaches unstable list keys. |
+
+### Fix at the source
+
+Fix the code in `docs/_pipeline/apps/<topic>/App.cs`. Do **not** add
+`<NoWarn>`, `#pragma warning disable`, or an `.editorconfig` severity
+downgrade — `DocAppGateWiringTests` rejects those, because a suppression ships
+the anti-pattern to every reader who copies the snippet.
+
+The one exception is a page whose subject *is* the thing the rule flags: the
+provisional-API pages acknowledge `REACTOR_V1_PREVIEW`, and
+`rules-of-reactor` deliberately shows hook and key violations under "Wrong:"
+labels. Those pairs live in the `AllowedSuppressions` ledger in
+`tests/Reactor.DocPipeline.Tests/DocAppGateWiringTests.cs`, each with the
+justification that earned it. Adding a suppression without a ledger entry
+fails the test; leaving a ledger entry whose suppression is gone also fails it.
+
+### Running the same check locally
+
+```powershell
+# All doc apps, exactly as CI runs them.
+dotnet build docs/_pipeline/apps/DocApps.proj -t:Rebuild -c Debug -p:Platform=x64 `
+  -p:TreatWarningsAsErrors=true -p:WarningsNotAsErrors=NU1900
+
+# A single app while iterating.
+dotnet build docs/_pipeline/apps/<topic>/<topic>.csproj -c Debug -p:Platform=x64 `
+  --no-restore -p:BuildProjectReferences=false -t:Rebuild
+```
+
+`-t:Rebuild` is load-bearing: without it an up-to-date build never re-runs
+`csc`, so the analyzers do not run and a dirty app reports zero warnings.
+`-p:BuildProjectReferences=false` keeps several single-app builds from racing
+on `src/Reactor`'s `obj/bin`.
+
+## 10. Compiled-output freshness gate
+
+`docs/guide/**` is generated. The `docs-build` job recompiles all of it on every
+PR — 72 topic pages, `README.md`, and ~117 pages under `reference/` — and then
+asserts that recompiling changed nothing:
+
+```pwsh
+git status --porcelain --untracked-files=all -- docs/guide
+```
+
+Non-empty output fails the PR. The fix is never to edit the reported file:
+
+```powershell
+dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots
+```
+
+then commit the result.
+
+Until [issue #1052][i1052] this check covered **two** of those files. CI ran the
+full compile, produced a complete answer about all of them, and threw it away —
+so a `src/` edit that moved a `snippet="source:..."` region left the published
+page stale with the job green. It bit twice in a month: `architecture-overview.md`
+published a `GetElement` body that no longer existed, and [PR #1157][p1157]
+would have shipped an analyzer alongside ten guide pages that the analyzer
+itself rejects. The doc-app snippet gate (§9) does not catch that second one —
+it checks the *source* a page is generated from, not the generated page.
+
+### Why the gate reads the compile log first
+
+A clean tree only means *fresh* if the compile that was supposed to rewrite the
+tree actually rewrote it. An empty diff produced by a compile that never wrote
+anything looks exactly like an empty diff produced by an up-to-date corpus, so
+the gate refuses to return a verdict unless the log shows the run completed:
+
+- `Documentation compiled successfully.` must be present. A compile that dies in
+  Phase 2 prints `✗ build failed` and returns 1 — and locally that is easy to
+  miss, because the tree it leaves behind is clean. Offline this is the common
+  case: `--ci` builds Release, `TreatWarningsAsErrors` promotes `NU1900`, and the
+  run dies before assembling anything. Pass `-p:WarningsNotAsErrors=NU1900` when
+  measuring from a machine that cannot reach the NuGet vulnerability API.
+- No phase other than 2 (build), 3 (capture) and 5 (AI author) may report
+  `(skipped)`. Those three write no page; anything else does, so a `--skip-*`
+  added to the invocation would silently narrow the gate instead of failing it.
+  Only the workflow can see this one — the CLI cannot know that a flag it was
+  handed was a mistake.
+
+Each of those is a way for the gate to become a check that cannot fail — which
+is the defect it was added to fix, one level up.
+
+There is a third way a compile can exit 0 without regenerating, and it is
+**not** checked here on purpose. Phase 5.7 prints its header and then bails when
+`Reactor.xml` or `reference-map.yaml` is missing (see *Which `Reactor.xml` the
+reference phase reads*), leaving ~117 reference pages unwritten. `mur docs
+compile --ci` now **returns non-zero** for that, so the compile step catches it
+and the gate never sees it. The first version of this gate grepped stdout for
+`Reactor.xml not found` instead, which was both the wrong owner and the wrong
+direction of failure: reword the message in `CompileCommand.cs` and the grep
+silently stops matching — it fails *open*. `ReferenceStalenessWiringTests` pins
+the exit code, in both the `--ci` and the local direction, so the contract is a
+test rather than a string.
+
+Note the asymmetry that makes this correct rather than merely stricter: locally,
+a missing `Reactor.xml` is the first-compile case and still just skips with a
+message, because an author who hasn't built yet should still get their guide
+pages. Under `--ci` there is no such case — CI always builds.
+
+### Why `git status` and not `git diff`
+
+The same reason given for the images gate above, and it bites harder here:
+`git diff` reports tracked modifications only. A new topic template or a newly
+generated reference page lands as an *untracked* file, which `git diff` reports
+as nothing at all. Measured against a planted
+`docs/guide/reference/hooks/PlantedProbe.md`: `git status` reports
+`?? docs/guide/reference/hooks/PlantedProbe.md`, `git diff --name-only` reports
+an empty string.
+
+### It does not replace the images gate
+
+The freshness gate watches a superset of `docs/guide/images`, but the two say
+opposite things. The images gate says *nothing may be written here* and you fix
+it by removing the write; the freshness gate says *what was written must be
+committed* and you fix it by committing. Merged, a reintroduced screenshot write
+would be answered with "commit the regenerated output" — the exact wrong
+instruction, and the one [issue #989][i989] exists to prevent. The images gate
+therefore runs **first**, so the specific diagnosis lands before the general one.
+
+### Consequence for ordinary PRs
+
+Any `src/` change that alters a region a guide page snippets from now turns
+`docs-build` red until the page is recompiled. That is the point, but it means a
+red docs job is a routine outcome of framework work rather than a sign something
+is broken — recompile and commit, and check the diff belongs to your change.
+
+### The job has to be armed for a docs-only edit
+
+`docs-build` runs on the `non-md` change filter, which is false when every
+changed file ends in `.md`. Hand-editing a generated page under `docs/guide` is
+exactly that shape — and it is the likeliest way to introduce the drift this
+gate catches, so the gate would have skipped the change it exists for. A
+separate `compiled-docs` filter (`^docs/guide/`) re-arms the job, ORed into its
+`if:`. Unrelated pure-Markdown edits still skip it, so this costs nothing
+elsewhere. Same fix as the `audit-ledger` filter beside it
+([issue #959][i959]). `VersionSingleSourceTests` pins both halves.
+
+[i959]: https://github.com/microsoft/microsoft-ui-reactor/issues/959
+
+[i1052]: https://github.com/microsoft/microsoft-ui-reactor/issues/1052
+[p1157]: https://github.com/microsoft/microsoft-ui-reactor/pull/1157
+
+## 11. Inline C# in templates
+
+A ` ```csharp snippet="topic/id" ` block is extracted from a real doc app, so CI compiles it and
+the `docs-snippet-gate` job holds it to the same analyzer rules a reader's own project uses.
+
+A plain ` ```csharp ` block is just text. Nothing compiles it, nothing analyses it, and it renders
+identically on the published page — so a reader cannot tell the verified one from the unverified
+one. That gap shipped real defects: `testing.md` taught a `ProfileCard`/`Mount` API that does not
+exist, `hooks-internals.md` read `Ref<T>.Value` when the property is `.Current`, and `layout.md`
+referenced an undeclared `window`.
+
+`InlineSnippetLedgerTests` now fails the build on any new hand-typed C# example. You have three
+ways to satisfy it.
+
+### A — move it into the topic's doc app
+
+The default for ordinary app-level Reactor code. Wrap the code in `// <snippet:id>` /
+`// </snippet:id>` inside `docs/_pipeline/apps/<topic>/App.cs`, then reference it:
+
+````markdown
+```csharp snippet="<topic>/<id>"
+```
+````
+
+Supporting types the example needs in order to compile go *outside* the markers, so they do not
+appear on the page.
+
+### B — point at real repo source
+
+For code that *is* framework, analyzer, or test code. Add the same markers to the real file and
+reference it by path:
+
+````markdown
+```csharp snippet="source:src/Reactor/Core/RenderContext.cs#use-state-slot"
+```
+````
+
+This is the right choice on the under-the-hood pages, and it is strictly better than copying:
+the page can no longer drift from the implementation it documents. It also works against
+`tests/` — a page that shows a test which is itself a passing test in this repo is the strongest
+guarantee available.
+
+Only ever add **comment markers** to files under `src/` or `tests/`; never change their behaviour.
+
+### C — leave it inline, and say why
+
+Legitimate when the block genuinely cannot compile: a migration guide's "before" half, a two-line
+syntax fragment, or a deliberately-wrong example the prose (rather than a `// Don't` comment)
+introduces as the trap. Add it to `AllowedInlineExamples` in
+`tests/Reactor.DocPipeline.Tests/InlineSnippetLedgerTests.cs`, keyed by template and then by the
+block's **full text**, with the reason.
+
+Use a raw string literal for the key and paste the block verbatim — the gate normalizes both sides
+(LF endings, no trailing whitespace, no leading or trailing blank lines), so indentation inside the
+block is preserved and must match. The failure message prints each offending block in exactly the
+form the key needs. Entries are keyed on the whole block rather than its first line because openers
+are shared: `hooks-internals` has two different examples that both begin
+`var (count, setCount) = UseState(0);`, and a first-line key silently excused both while only one
+had been reviewed.
+
+Two shapes need no ledger entry because they are self-evidently not code to copy: a signature
+listing (no `;` or `{` anywhere, and every parameter reads as a declaration — `Markdown(string
+markdown)`, `Border(Element)` — rather than a passed value like `TextBlock(message)`), and a block
+whose first line labels it a counterexample (`// Don't`, `// Wrong`, `// Avoid`, …).
+
+C is for code that *should not* be compiled — never for code that *will not* compile. If a block
+fails to build, that is the bug this system exists to surface: fix the code, don't ledger it.

@@ -86,7 +86,7 @@ internal static partial class CompileCommand
         // ── Phase 1: Validate ─────────────────────────────────────────────
         Console.WriteLine("═══ Phase 1: Validate ═══");
 
-        var apps = DiscoverApps(appsDir, topic);
+        var apps = DiscoverApps(appsDir, appIds: null);
         var screenshotTopics = screenshotFilter is null
             ? null
             : screenshotFilter
@@ -96,9 +96,6 @@ internal static partial class CompileCommand
         {
             apps = apps.Where(app => screenshotTopics.Contains(app.topicId)).ToList();
         }
-        Console.WriteLine($"  Found {apps.Count} doc app(s)");
-        foreach (var (id, dir) in apps)
-            Console.WriteLine($"    • {id} → {Path.GetRelativePath(repoRoot, dir)}");
 
         List<(string topicId, DocTemplate template)> templates;
         try
@@ -110,6 +107,19 @@ internal static partial class CompileCommand
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+
+        // Narrow the app set to what the selected templates actually need.
+        // This has to be keyed off the templates' `app:` binding, not the
+        // topic id — see DiscoverApps.
+        if (topic is not null)
+        {
+            var appIds = ResolveAppIds(templates);
+            apps = apps.Where(app => appIds.Contains(app.topicId)).ToList();
+        }
+
+        Console.WriteLine($"  Found {apps.Count} doc app(s)");
+        foreach (var (id, dir) in apps)
+            Console.WriteLine($"    • {id} → {Path.GetRelativePath(repoRoot, dir)}");
 
         // --tier <stub|solid|comprehensive> subsets templates to those that
         // explicitly declared the matching tier — for fast iteration on one
@@ -329,17 +339,62 @@ internal static partial class CompileCommand
         }
         Console.WriteLine($"  Cross-link findings: {xlinkFindings.Count} ({xlinkErrors} error, {xlinkFindings.Count - xlinkErrors} warning).");
 
+        // ── Phantom-API lint (REACTOR_DOC_PHANTOM_001) ────────────────────
+        // Walk the ASSEMBLED body of every template — assembly has already
+        // inlined each snippet= block, so one pass covers both the bare
+        // ```csharp blocks that live in the template and the example code that
+        // comes from a doc app's App.cs (including code carried inside string
+        // literals, which the C# compiler never validates). Fenced blocks are
+        // linted whole; outside a fence only inline code spans are, since code
+        // formatting in prose reads as an endorsement. Plain prose is never
+        // linted, so a sentence that names a phantom in order to warn against it
+        // stays silent — and where it must show the phantom in code formatting,
+        // <!-- phantom:skip "Name" --> scopes an opt-out to that paragraph.
+        // Unlike the cross-link lint this reports at Error and fails --ci:
+        // Warning was tried first and did not gate CI, which let new rot land
+        // green. The pre-existing backlog stays passing through the
+        // per-(file, phantom) ceiling budget in Reactor.Tests, not a blanket
+        // suppression.
+        Console.WriteLine();
+        Console.WriteLine("═══ Phantom API Lint ═══");
+        var phantomFindings = new List<PhantomFinding>();
+        foreach (var (topicId, template) in templates)
+        {
+            var body = AssembleForLint(template, allSnippets, allScreenshots, topicId, reactorVersion).body;
+            phantomFindings.AddRange(PhantomSymbolLint.Lint(
+                template.FilePath, body, PhantomSymbolLint.Surface.Markdown));
+        }
+        var phantomErrors = 0;
+        foreach (var f in phantomFindings)
+        {
+            if (f.Severity == TierLintSeverity.Error)
+            {
+                Console.Error.WriteLine(f.Format());
+                phantomErrors++;
+            }
+            else
+            {
+                Console.WriteLine($"  ⚠ {f.Format()}");
+            }
+        }
+        Console.WriteLine($"  Phantom-API findings: {phantomFindings.Count} ({phantomErrors} error, {phantomFindings.Count - phantomErrors} warning).");
+
         if (validateOnly)
         {
             Console.WriteLine();
-            var combined = hasErrors || tierHasErrors || xlinkErrors > 0;
+            var combined = hasErrors || tierHasErrors || xlinkErrors > 0 || phantomErrors > 0;
             Console.WriteLine(combined ? "Validation finished with errors." : "Validation passed.");
             return combined ? 1 : 0;
         }
 
-        if (tierHasErrors && ci)
+        if (ci && (tierHasErrors || phantomErrors > 0))
         {
-            Console.Error.WriteLine("Tier lint failed in --ci mode.");
+            if (tierHasErrors)
+                Console.Error.WriteLine("Tier lint failed in --ci mode.");
+            if (phantomErrors > 0)
+                Console.Error.WriteLine(
+                    $"Phantom-API lint failed in --ci mode ({phantomErrors} error(s)). " +
+                    "A documented symbol does not exist in the public API.");
             return 1;
         }
 
@@ -505,6 +560,32 @@ internal static partial class CompileCommand
                 }
                 Console.WriteLine($"  Generated: {phaseRefResult.Pages.Count} page(s)");
             }
+            else if (ci)
+            {
+                // A null result means RunReferenceGeneration bailed on a missing
+                // input — no Reactor.xml, or no reference-map.yaml — having
+                // already said so on stdout. Locally that is a reasonable
+                // degradation: an author who hasn't built yet still gets their
+                // guide pages. Under --ci it is not. CI always builds, so a
+                // missing input means the run is not the run that was asked
+                // for, and the ~117 pages under docs/guide/reference/ are
+                // silently left at whatever was committed.
+                //
+                // Exiting 0 there is what let the freshness gate in
+                // .github/workflows/ci.yml be lied to: a compile that wrote no
+                // reference page leaves a clean tree, which is indistinguishable
+                // from an up-to-date one by `git status`. The gate used to
+                // re-derive this by grepping stdout for the two "not found"
+                // strings, which fails *open* the moment either string is
+                // reworded here. Owning the verdict where the state lives makes
+                // it a typed exit code instead (issue #1052).
+                Console.Error.WriteLine(
+                    "Reference generation was skipped for want of an input (see above), so no page " +
+                    "under docs/guide/reference was written. That is a failure in --ci mode: pass " +
+                    "--skip-reference to skip the phase deliberately, or build src/Reactor so " +
+                    "Reactor.xml exists.");
+                return 1;
+            }
             if (hasErrors && ci)
             {
                 Console.Error.WriteLine("Reference generation failed.");
@@ -662,7 +743,21 @@ internal static partial class CompileCommand
 
     // ── Discovery ─────────────────────────────────────────────────────────
 
-    internal static List<(string topicId, string dir)> DiscoverApps(string appsDir, string? topic)
+    /// <summary>
+    /// Discovers doc apps under <paramref name="appsDir"/>, optionally
+    /// restricted to <paramref name="appIds"/> (directory names). Pass
+    /// <c>null</c> for "every app".
+    ///
+    /// Callers must filter by <em>app id</em>, never by topic id: a
+    /// template's app directory is named by its <c>app:</c> front-matter
+    /// field and frequently differs from the template id
+    /// (<c>async-resources</c> → <c>async-resources-cookbook</c>, every
+    /// <c>recipes/&lt;x&gt;</c> → <c>recipe-&lt;x&gt;</c>). Filtering by
+    /// topic id silently discovers nothing for those pages, which makes
+    /// snippet resolution fail and tier-lint report a fabricated
+    /// <c>REACTOR_DOC_TIER_003</c>. Use <see cref="ResolveAppIds"/>.
+    /// </summary>
+    internal static List<(string topicId, string dir)> DiscoverApps(string appsDir, IReadOnlySet<string>? appIds)
     {
         var result = new List<(string, string)>();
         if (!Directory.Exists(appsDir)) return result;
@@ -670,13 +765,38 @@ internal static partial class CompileCommand
         foreach (var dir in Directory.GetDirectories(appsDir))
         {
             var topicId = Path.GetFileName(dir);
-            if (topic != null && !topicId.Equals(topic, StringComparison.OrdinalIgnoreCase))
+            if (appIds is not null && !appIds.Contains(topicId))
                 continue;
             // Must have at least one .cs file
             if (Directory.GetFiles(dir, "*.cs", SearchOption.TopDirectoryOnly).Length > 0)
                 result.Add((topicId, dir));
         }
         return result;
+    }
+
+    /// <summary>
+    /// The set of doc-app directory names a group of templates depends on:
+    /// each template's declared <c>app:</c>, its own topic id (for templates
+    /// that predate the field and rely on the names matching), and the
+    /// leading segment of every <c>snippet="&lt;app&gt;/&lt;id&gt;"</c>
+    /// reference, so a page that borrows a snippet from another topic's app
+    /// still resolves it.
+    /// </summary>
+    internal static HashSet<string> ResolveAppIds(IEnumerable<(string topicId, DocTemplate template)> templates)
+    {
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (topicId, template) in templates)
+        {
+            if (!string.IsNullOrWhiteSpace(template.App)) ids.Add(template.App.Trim());
+            ids.Add(topicId);
+            foreach (var snippetRef in ExtractSnippetRefs(template.Body))
+            {
+                if (SnippetExtractor.TryParseSourceReference(snippetRef, out _, out _)) continue;
+                var slash = snippetRef.IndexOf('/');
+                if (slash > 0) ids.Add(snippetRef[..slash]);
+            }
+        }
+        return ids;
     }
 
     /// <summary>

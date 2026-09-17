@@ -60,16 +60,21 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // repeater. Bounded by <see cref="TrimPool"/>, so the scan is short.
     private readonly List<PoolEntry> _recyclePool = new();
 
-    // A parked container plus the value its Visibility DP carried before
+    // A parked target plus the value its Visibility DP carried before
     // RecycleElement collapsed it. We store the *value source* — whatever
     // ReadLocalValue returned — rather than the evaluated enum. A row whose
     // Visibility comes from a Style (or is simply at its default) has NO local
     // value, and writing the evaluated enum back on reuse would pin a local
     // value that permanently outranks the style. UnsetValue therefore means
-    // "restore by clearing"; a boxed Visibility means "restore by writing";
-    // anything else is a BindingExpression, which cannot be re-established from
-    // here, so such a container is never parked in the first place.
-    private readonly record struct PoolEntry(UIElement Control, object? ParkedVisibility);
+    // "restore by clearing"; a boxed Visibility means "restore by writing".
+    // A BindingExpression cannot be re-established from that captured value,
+    // so a container is never pooled if parking would overwrite such a binding.
+    //
+    // Ordinary controls park by collapsing their own Visibility; ItemContainer
+    // collapses its content root instead. Visibility stores that target's value
+    // source and Target remembers the element we collapsed.
+    private readonly record struct ParkedVisibility(UIElement? Target, object? Visibility);
+    private readonly record struct PoolEntry(UIElement Control, ParkedVisibility ParkedVisibility);
 
     // Retaining a container that cannot serve the current row is what bounds the
     // working set across a root-type flip (issue #919) — but it only ever pays
@@ -79,7 +84,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // retain N containers and make the scan quadratic. Cap the pool at one
     // realized window per distinct root shape currently pooled (with a floor of
     // two windows, and never fewer than 32 entries) and evict oldest-first
-    // beyond that — an evicted container is unmounted, parked collapsed and
+    // beyond that — an evicted container is unmounted, parked hidden and
     // untracked, which is the pre-#919 outcome and no worse.
     //
     // The per-shape term matters: a list that cycles its rows through three or
@@ -223,12 +228,19 @@ public sealed partial class ElementFactory<T> : IElementFactory
         // returned on every subsequent hit (preserving ReferenceEquals).
         //
         // Only a "bare" wrapper is memoized: resolution returns the inner element, so any
-        // modifiers / Key / Extensions applied ON the wrapper itself (the non-idiomatic
-        // `Memo(k, …).Margin(8)` shape — modifiers belong inside the factory lambda) would be
-        // dropped. A decorated wrapper instead falls through unchanged and is rendered by the
-        // reconciler's transparent unwrap path (Mount/Update), which preserves those modifiers.
+        // modifiers / Key / behavioral Extensions applied ON the wrapper itself (the
+        // non-idiomatic `Memo(k, …).Margin(8)` shape — modifiers belong inside the factory
+        // lambda) would be dropped. A decorated wrapper instead falls through unchanged and is
+        // rendered by the reconciler's transparent unwrap path (Mount/Update), which preserves
+        // those modifiers.
+        //
+        // Spec 010: the test is HasBehavioralExtras, not `Extensions is null`. A source-map
+        // CallSite stamp materializes the extras bucket but carries no behavior, and the inner
+        // element gets its own stamp from its own call site — so dropping the wrapper's stamp is
+        // harmless. Testing raw nullness here would disable this cache for every memoized row
+        // whenever source mapping is on.
         if (built is KeyedMemoElement km
-            && km.Modifiers is null && km.Key is null && km.Extensions is null)
+            && km.Modifiers is null && km.Key is null && !Element.HasBehavioralExtras(km))
             built = _keyedMemoCache.Resolve(km, keyed ? key : null);
         else if (keyed)
             built = ApplyItemIdentityKey(built, key);
@@ -438,6 +450,14 @@ public sealed partial class ElementFactory<T> : IElementFactory
                     // `child` now hosts the fresh component subtree — tracking
                     // stays anchored on the still-realized `child`.
                     _lastElementByControl[child] = newElement;
+                    // Adoption moves the component node and Border.Child but not
+                    // ReactorAttached.StateProperty, so the still-parented wrapper
+                    // would keep pointing at the OLD element. Harmless for
+                    // rendering, but ReactorSourceMap.GetSource reads that
+                    // back-pointer, so without this the wrapper reports the
+                    // previous row's call site (spec 010).
+                    if (child is FrameworkElement adoptedFe)
+                        Reconciler.SetElementTagIfNeeded(adoptedFe, newElement);
                 }
                 else
                 {
@@ -446,7 +466,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
                     // points at it, tear the orphaned replacement down (otherwise its component
                     // effect cleanups leak — it is mounted but unreachable), and route the row
                     // back through the framework's realize channel. `child` cannot be
-                    // un-parented from the repeater, so retire it: park it collapsed with its
+                    // un-parented from the repeater, so retire it: park it hidden with its
                     // Reactor state fully detached rather than leaving an unmounted ghost
                     // painted over the row with live trampolines still attached. (Issue #919)
                     RetireAlreadyUnmounted(child);
@@ -590,7 +610,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
             // Visible: an in-place diff whose Visibility modifier is unchanged
             // writes nothing, so forcing Visible would silently un-collapse a
             // row the author asked to hide.
-            RestoreParkedVisibility(reused, parkedVisibility);
+            RestoreParkedVisibility(parkedVisibility);
             var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
             if (replacement is not null && !ReferenceEquals(replacement, reused))
             {
@@ -609,11 +629,16 @@ public sealed partial class ElementFactory<T> : IElementFactory
                     && _reconciler.TryAdoptRealizedReplacement(reused, replacement))
                 {
                     control = reused;
+                    // Same as the adopt path above: refresh the back-pointer the
+                    // adoption itself does not move, so the reported source
+                    // location follows the row that is actually live (spec 010).
+                    if (reused is FrameworkElement adoptedFe)
+                        Reconciler.SetElementTagIfNeeded(adoptedFe, element);
                 }
                 else
                 {
                     // Nothing can install `replacement` into `reused`. Retire `reused`
-                    // — park it collapsed with its Reactor state detached — rather than
+                    // — park it hidden with its Reactor state detached — rather than
                     // leaving a live ghost row painted over the list. Do NOT return it to
                     // the pool: it was unmounted inside Reconcile, so its tracked Element
                     // no longer describes it.
@@ -683,7 +708,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
         Element element,
         [NotNullWhen(true)] out UIElement? reused,
         [NotNullWhen(true)] out Element? oldElement,
-        out object? parkedVisibility)
+        out ParkedVisibility parkedVisibility)
     {
         for (var pass = 0; pass < 2; pass++)
         {
@@ -694,7 +719,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
                 {
                     // Untracked pool entry (its tracking was dropped elsewhere) can
                     // never be reconciled — evict it so the scan stays short. It
-                    // stays parented but collapsed, which is the best available
+                    // stays parented but hidden, which is the best available
                     // outcome for a repeater child.
                     //
                     // Parking is sufficient here rather than a shortcut: the only
@@ -725,15 +750,42 @@ public sealed partial class ElementFactory<T> : IElementFactory
 
         reused = null;
         oldElement = null;
-        parkedVisibility = null;
+        parkedVisibility = default;
         return false;
     }
 
-    // Park a container we can neither reuse nor un-parent. Collapsing is what
-    // keeps it from rendering: an ItemsRepeater child it no longer owns is never
-    // re-arranged, so it would otherwise keep painting at its last arranged
-    // bounds on top of the live rows.
-    private static void ParkOrphan(UIElement control) => control.Visibility = Visibility.Collapsed;
+    // Park a container that is not currently in use and cannot be un-parented.
+    // An ItemsRepeater child that has left the realized layout stays in the
+    // visual tree, so it can otherwise keep painting at its last arranged bounds
+    // on top of the live rows. Parking must suppress that rendering without
+    // relying on another layout pass or on the pool being drained immediately.
+    // For ordinary controls, collapsing Visibility provides that guarantee.
+    //
+    // Keep ItemContainer itself visibility-valid: ItemsView can retain it as a
+    // bring-into-view anchor after recycling. Collapse its template content to
+    // suppress rendering, hit testing and descendant focus without disabled-state
+    // transitions through the row. Reject recycled anchors before their offscreen
+    // bounds feed back into scrolling layout.
+    private static void ParkOrphan(UIElement control)
+    {
+        if (control is ItemContainer container)
+        {
+            ItemsViewAnchoring.Ensure(container);
+            if (GetParkingContent(container) is { } content)
+                content.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            control.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    // Include template-owned controls (for example selection chrome), not only
+    // Child. Before template application, Child is the only content to park.
+    private static UIElement? GetParkingContent(ItemContainer container) =>
+        Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(container) > 0
+            ? Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(container, 0) as UIElement
+            : container.Child;
 
     // The ONLY shape TryAdoptRealizedReplacement can rescue without losing
     // state. Adoption transplants the fresh component subtree plus its
@@ -748,13 +800,20 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // Callers that fail this gate must fall back to something that produces a
     // genuinely fresh container — the framework's realize channel
     // (ScheduleReRealize) or a plain mount — never a silent adopt.
+    //
+    // Spec 010: the extras test is HasBehavioralExtras, not `Extensions is null`.
+    // The reason this gate rejects extras is that ApplyModifiers installs runtime
+    // bookkeeping keyed on the replacement control; a source-map CallSite stamp
+    // installs none, so it must not disqualify adoption. Testing raw nullness
+    // here would force re-realization of every stamped row whenever source
+    // mapping is on.
     private static bool CanSafelyAdopt(UIElement control, Element oldElement, Element newElement)
         => control is Border
             && oldElement is ComponentElement oldComp
             && newElement is ComponentElement newComp
             && oldComp.ComponentType == newComp.ComponentType
             && oldComp.Modifiers is null && newComp.Modifiers is null
-            && oldComp.Extensions is null && newComp.Extensions is null;
+            && !Element.HasBehavioralExtras(oldComp) && !Element.HasBehavioralExtras(newComp);
 
     // Retire a container for good: it will never be handed back to the
     // repeater, but the repeater keeps it parented regardless, so everything
@@ -766,8 +825,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // Element pointer and the ModifierEventHandlerState trampolines in place,
     // and a permanently-parented control can still raise size/property events
     // afterwards; DetachReactorState is exactly the "leaves Reactor's ownership
-    // but stays alive" primitive for that. Only then collapse it, so the
-    // collapse itself can't re-enter a live handler.
+    // but stays alive" primitive for that. Only then hide it, so parking
+    // itself can't re-enter a live handler.
     private void RetireContainer(UIElement control)
     {
         _reconciler.UnmountChild(control);
@@ -818,23 +877,26 @@ public sealed partial class ElementFactory<T> : IElementFactory
             DetachReactorStateRecursive(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
     }
 
-    // Collapse a container on its way into the pool, handing back the
-    // Visibility value source to restore on reuse. Returns false when the
-    // container cannot be parked reversibly: its Visibility is bound, and
+    // Collapse a container's parking target on its way into the pool, handing back
+    // the target and Visibility value source to restore on reuse. Returns false
+    // when the target cannot be parked reversibly: its Visibility is bound, and
     // ReadLocalValue yields a BindingExpression that no public API can
     // reinstall. Such a container must be retired rather than pooled — pooling
-    // it un-collapsed would leave a visible, no-longer-arranged repeater child
-    // painting at its last bounds, which is the ghost row this whole change
+    // it un-collapsed would leave a visible, no-longer-realized repeater child
+    // painting at its last bounds, which is the ghost row this parking machinery
     // exists to prevent.
-    private static bool TryParkForPool(UIElement control, out object? restore)
+    private static bool TryParkForPool(UIElement control, out ParkedVisibility restore)
     {
-        restore = control.ReadLocalValue(UIElement.VisibilityProperty);
-        if (restore is not Visibility && !ReferenceEquals(restore, DependencyProperty.UnsetValue))
+        var target = control is ItemContainer container ? GetParkingContent(container) : control;
+        var visibility = target?.ReadLocalValue(UIElement.VisibilityProperty);
+        if (target is not null && visibility is not Visibility
+            && !ReferenceEquals(visibility, DependencyProperty.UnsetValue))
         {
-            restore = null;
+            restore = default;
             return false;
         }
 
+        restore = new ParkedVisibility(target, visibility);
         ParkOrphan(control);
         return true;
     }
@@ -842,12 +904,15 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // Undo TryParkForPool. Clearing (rather than writing Visible) when there was
     // no local value is what keeps a Style- or default-provided Visibility from
     // being permanently overridden by a local value we invented.
-    private static void RestoreParkedVisibility(UIElement control, object? parked)
+    private static void RestoreParkedVisibility(ParkedVisibility parked)
     {
-        if (ReferenceEquals(parked, DependencyProperty.UnsetValue))
-            control.ClearValue(UIElement.VisibilityProperty);
-        else if (parked is Visibility v)
-            control.Visibility = v;
+        if (parked.Target is { } target)
+        {
+            if (ReferenceEquals(parked.Visibility, DependencyProperty.UnsetValue))
+                target.ClearValue(UIElement.VisibilityProperty);
+            else if (parked.Visibility is Visibility v)
+                target.Visibility = v;
+        }
     }
 
     // Detach a UIElement from whatever container it's parented to.
@@ -893,15 +958,17 @@ public sealed partial class ElementFactory<T> : IElementFactory
         // tearing down Reactor state here would just be discarded work.
         // The _lastElementByControl entry stays valid for the next realize.
         //
-        // Collapse while parked, remembering the visibility to restore. The
-        // repeater stops arranging a recycled child but keeps it parented, so a
-        // still-Visible one paints at its last arranged bounds — a ghost row over
-        // the live list whenever the pool isn't drained in the same pass
-        // (issue #919). This mirrors WinUI's own RecyclePool.
+        // Hide while parked, remembering the local values to restore. The
+        // repeater stops arranging a recycled child as a live row but keeps it
+        // parented, so without parking it can paint at its last arranged bounds:
+        // a ghost row over the live list whenever the pool isn't drained in the same pass
+        // (issue #919). Ordinary controls retain the collapse behavior that
+        // mirrors WinUI's own RecyclePool; ItemContainer collapses its content
+        // instead, preserving the same no-ghost invariant and a valid outer anchor.
         if (!TryParkForPool(args.Element, out var restore))
         {
-            // Cannot be parked reversibly (bound Visibility). Retire it rather
-            // than pool a still-visible ghost or clobber the binding.
+            // Cannot be parked reversibly (bound target Visibility). Retire it
+            // rather than pool a still-visible ghost or clobber the binding.
             RetireContainer(args.Element);
             return;
         }

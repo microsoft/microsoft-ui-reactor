@@ -9,6 +9,16 @@ internal static class SelfTestFixtureRegistry
 {
     public static readonly string[] AllFixtures =
     [
+        "SourceMapReadPath_Enabled",
+        "SourceMapReadPath_DistinctLines",
+        "SourceMapReadPath_Disabled",
+        "SourceMapReadPath_HandStamped",
+        "SourceMapReadPath_Callback",
+        "SourceMapReadPath_BranchSwitch",
+        "SourceMapReadPath_FlagOffClears",
+        "SourceMapReadPath_ComponentWrapper",
+        "SourceMapReadPath_Decorator",
+        "SourceMapReadPath_DecoratorBranch",
         "ErrorBoundary_CatchesRenderError",
         "ErrorBoundary_Recovery",
         "Reconciler_MountText",
@@ -56,6 +66,16 @@ internal static class SelfTestFixtureRegistry
         "Markdown_Links",
         "Markdown_BlockQuotes",
         "Markdown_UnorderedList",
+        "Markdown_ListLayout_Plain",
+        "Markdown_ListLayout_Bold",
+        "Markdown_ListLayout_Ordered",
+        "Markdown_ListLayout_Loose",
+        "Markdown_ListLayout_Nested",
+        "Markdown_ListLayout_Code",
+        "Markdown_ListLayout_Tasks",
+        "Markdown_ListLayout_Unified",
+        "Markdown_ListLayout_Short",
+        "Markdown_ListLayout_RowMeasureEquivalence",
         "Markdown_OrderedList",
         "Markdown_TaskList",
         "Markdown_TableWithAlignment",
@@ -234,6 +254,14 @@ internal static class SelfTestFixtureRegistry
         "Issue522_SharedStyleAcrossMultipleElements_IsolatedRemoval",
         "Issue522_ThemeBindingsRemoval_AfterCacheClear_StillWorks",
         "Issue522_ThemeRef_CycleAcrossDifferentKeys",
+        // Named-style (.ApplyStyle) resolution against live app resources —
+        // the only tier that can prove a style key actually resolves.
+        "NamedStyle_TypeRampStylesResolve",
+        "NamedStyle_NewRampKeysAreDistinctAndNonDefault",
+        "NamedStyle_UnresolvedStyleKeyDoesNotBreakRender",
+        "NamedStyle_UnresolvedStyleKeyEmitsWarning",
+        "NamedStyle_UnresolvedStyleWarningOverflowBranches",
+        "NamedStyle_ResourceLookupHonoursPrecedence",
         // Issue #950 — the common Padding modifier (and the BiDi PaddingInline*
         // pair that folds into it) must reach a TextBlock, which is not a Control.
         "Issue950_PaddingMountUpdateUnset",
@@ -285,6 +313,9 @@ internal static class SelfTestFixtureRegistry
         // Issue #480 follow-up — incremental RTB update preserves child identity
         "InlineUI_IncrementalUpdate_PreservesChildIdentity",
         "InlineUI_IncrementalUpdate_RunMutatedInPlace",
+        // Reconcile ETW span depth bookkeeping
+        "ReconcileTraceDepth_TopLevelSpansSurviveNestedPasses",
+        "FocusTrapContentDialog_ContainmentProbe",
         // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
         "Issue487_ScrollOffsetRestoredAfterRunMutation",
         "Issue487_RepeatedMutationDoesNotDrift",
@@ -321,12 +352,17 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_BoundVisibilityRow_IsRetiredNotPooled",
         "EFR_Factory_PoolEviction_UnmountsEvictedRows",
         "EFR_Factory_PoolParking_PreservesVisibilityValueSource",
+        "ItemsView_Parking_PoolRestoresValueSources",
+        "ItemsView_Parking_BoundRowsAndEviction",
+        "ItemsView_Parking_PendingBringThenKeyedReset",
+        "ItemsView_Parking_VariableHeightReset",
         "EFR_Factory_RefreshRealizedItems_SyncsLastElementByControl",
         "EFR_LazyStack_Unmount_CleansUpAllRecycledRowComponents",
         "EFR_Factory_KeyChangeRecycle_ResetsRowComponentState",
         "EFR_Factory_SameItemReuse_PreservesRowComponentState",
         "EFR_Factory_RefreshKeyChange_RemountsRealizedRow",
         "EFR_Factory_RefreshKeyChange_ModifiedRootKeepsRefLive",
+        "EFR_Factory_SuccessfulAdoption_RefreshesTheReportedCallSite",
         "EFR_Factory_DecoratorSubstitution_IsNotSilentlyAdopted",
         "EFR_Factory_HostTypeKeyCycle_KeepsContainerSetBounded",
         "EFR_Factory_RetiredContainer_DetachesNestedStateAndOwnership",
@@ -553,6 +589,9 @@ internal static class SelfTestFixtureRegistry
         "LayoutAnimation_SpringSetup",
         "LayoutAnimation_SizeSetup",
         "ConnectedAnimation_MountUnmount",
+        "ConnectedAnimation_StartsAcrossReplace",
+        "ConnectedAnimation_NoSourceDoesNotStart",
+        "ConnectedAnimation_OrphanOnlyPassDoesNotCrash",
         // Thread-safe hook stress tests — real WinUI rendering + background threads
         "ThreadSafe_RapidBackgroundSetState",
         "ThreadSafe_MultipleHooksConcurrent",
@@ -745,6 +784,13 @@ internal static class SelfTestFixtureRegistry
         "NavCov_HandleNavigateOptions",
         "NavCov_DeepLinkMap",
         "NavCov_TransitionFactories",
+        "NavCov_RecommendedTransitionMapping",
+        "NavCov_HitTestSuppressionNesting",
+        "NavCov_TransitionNormalizesOutgoing",
+        "NavCov_CompletedAnimationReleasesProperty",
+        "NavCov_TransitionOwnership",
+        "NavCov_ReducedMotion",
+        "NavCov_TransitionMarksCompositorTainted",
         "NavCov_HandleEvents",
         "NavCov_DestinationGuard",
         "NavCov_DeepLinkQueryString",
@@ -910,6 +956,7 @@ internal static class SelfTestFixtureRegistry
         "Devtools_InitializeHandshake",
         "Devtools_SwitchComponentInvalidatesIds",
         "Devtools_PropertyToolsExercise",
+        "Devtools_PropertyToolsDpDiscovery",
         "Devtools_PropertyToolsReflectionExercise",
         "Devtools_McpServerProtocolEdges",
         // Coverage boost — targeting remaining gaps to reach 85%
@@ -1197,11 +1244,18 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents",
+        "WindowModel_WindowIconApplied",
+        // Packaged (MSIX) tier. Declared SelfTestTier.Packaged in TierRequirements below, so the
+        // unpackaged host does not run them at all — see issue #1154.
+        "Packaged_IdentityGuard",
+        "Packaged_SettingsStoreRoundTrip",
+        "Packaged_WindowIconFromResource",
         "WindowModel_ClosingEventCancels",
         "WindowModel_TaskbarProgressLiveCom",
         "WindowModel_ThumbnailToolbarLiveCom",
         "WindowModel_PersistedScopeIsolated",
         "WindowModel_TrayIconRoundTrip",
+        "WindowModel_TrayIconBinarySource",
         "WindowModel_UseOpenWindowReusesByKey",
         "WindowModel_MutatorsOwnerAndGuards",
         "WindowModel_OpacityRoundTrip",
@@ -1209,6 +1263,8 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_IgnorePointerInputRoundTrip",
         "WindowModel_OpacityIgnorePointerInvariants",
         "WindowModel_DefaultSizeDefersToOs",
+        // Issue #1204 — Reactor owns the dispatcher loop; the policy alone decides exits.
+        "ShutdownPolicy_OwnsDispatcherLifetime",
         // Spec 054 Phase 1 — window position/z-order/display read-back.
         "Position_ReadBack",
         "PositionChanged_FiresOnMove",
@@ -1255,6 +1311,12 @@ internal static class SelfTestFixtureRegistry
         "SizeToContent_WidthAndHeight",
         "SizeToContent_RespectsMinMax",
         "SizeToContent_NoOpWhenMaximized",
+        "SizeToContent_MaximizedWarningSurvivesRootSwap",
+        "SizeToContent_MaximizedWarningSurvivesEmptyRoot",
+        "SizeToContent_MaximizedWarningRearmsAfterRestoreWithNullRoot",
+        "SizeToContent_MaximizedWarningRearmsAfterManual",
+        "Window_NoDragAffordanceWarningIsEdgeTriggered",
+        "Window_TitleBarHeightWarningIsEdgeTriggered",
         "SizeToContent_AspectRatio_BothRejected",
         "SizeToContent_NoReentrancy",
         // Spec 054 Phase 6 — TaskbarItem facade.
@@ -1271,6 +1333,25 @@ internal static class SelfTestFixtureRegistry
         "TitleBar_ExitPrep",
         "TitleBar_NoElement_NullStaysFalse",
         // Issue #917 — declarative caption height (spec + element).
+        // TitleBar inherits the window icon when it declares none.
+        "TitleBarIcon_Convention",
+        "TitleBarIcon_ZeroControl",
+        "TitleBarIcon_WindowSpec",
+        "TitleBarIcon_ExplicitAndOptOut",
+        "TitleBarIcon_FollowsWindowIconChange",
+        "TitleBarIcon_NotExtendedTracksIcon",
+        "TitleBarIcon_DeferredAssetAppears",
+        "TitleBarIcon_TypeReplacement",
+        "TitleBarIcon_TwoBarsInOneWindow",
+        "TitleBarIcon_DepartedBarHeight",
+        "TitleBarIcon_OnMountIconSurvives",
+        "TitleBarIcon_OneShotBoundaries",
+        "TitleBarIcon_ExplicitSurvivesWindowIconChange",
+        "TitleBarIcon_PerWindow",
+        "TitleBarIcon_SetterNotClobbered",
+        "TitleBarIcon_NullSetterNotClobbered",
+        "TitleBarIcon_TogglesOnRerender",
+        "TitleBarIcon_RefreshesReplacedFile",
         "TitleBarHeight_ElementTall",
         "TitleBarHeight_SpecPrecedence",
         "TitleBarHeight_ExplicitHeightWins",
@@ -1710,7 +1791,153 @@ internal static class SelfTestFixtureRegistry
         // Positive control for the three-state verdict (issue #1061). Asserts nothing on purpose;
         // its SKIPPED result is what SelfTestBatch.SkippedFixtures_AreReported checks for.
         SkipVerdictPositiveControl.FixtureName,
+
+        // Guards TierRequirements below against outliving its fixtures (issue #1154).
+        TierDeclarationConsistencyFixture.FixtureName,
     ];
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Tier applicability
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Which host a fixture needs. <see cref="SelfTestTier.Any"/> — the overwhelming default —
+    /// means "runs everywhere"; <see cref="SelfTestTier.Packaged"/> means the fixture is
+    /// <b>structurally</b> unable to assert in the unpackaged host.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>There is deliberately no <c>Unpackaged</c> member</b>, although the concept is
+    /// symmetric and Reactor does branch on <c>PackageRuntime.IsPackaged</c> in both directions.
+    /// An earlier revision defined one "because it costs no extra code path"; that was wrong.
+    /// <c>PackagedSelfTestBatch.EveryFixture_IsApplicableToThePackagedTier</c> requires the
+    /// packaged host to exclude <b>nothing</b>, so the first legitimately unpackaged-only fixture
+    /// would fail that assertion while behaving perfectly — an enum member that cannot be used
+    /// without breaking a test in another project, and one nothing here could test today because
+    /// no such fixture exists.</para>
+    /// <para>Adding it later is a small change, but it is <i>two</i> changes: this enum, and
+    /// relaxing that packaged assertion to reject only excluded <see cref="SelfTestTier.Packaged"/>
+    /// fixtures. Do both at once, with a real fixture to pin the contract against.</para>
+    /// </remarks>
+    internal enum SelfTestTier
+    {
+        /// <summary>Runs in every tier. The default for a fixture with no declaration.</summary>
+        Any,
+
+        /// <summary>Needs MSIX package identity; only <c>Reactor.PackagedTests</c> can run it.</summary>
+        Packaged,
+    }
+
+    /// <summary>
+    /// Fixtures that only apply to one tier. Everything absent from this map is
+    /// <see cref="SelfTestTier.Any"/>.
+    ///
+    /// <para><b>This is the declaration that removes a fixture from the other tier's corpus
+    /// entirely</b> — it is not run there, emits no TAP, and gets no test case. Before issue #1154
+    /// these fixtures ran everywhere and self-skipped, which put three permanent entries in
+    /// <c>SkippedFixtures_AreReported</c>'s amber inventory on every unpackaged run: a channel
+    /// whose value depends on being rare, describing a condition that is structural rather than
+    /// incidental. Declaring the requirement says the same thing once, as data.</para>
+    ///
+    /// <para><b>Keep the runtime gate too, but not because it re-checks identity.</b> A fixture
+    /// declared here must still call <c>PackagedIdentityFixtures.RequirePackagedTier</c> — yet
+    /// that gate reads the <i>same</i> <c>IsPackagedTier</c> entry-assembly predicate
+    /// <see cref="AppliesToCurrentTier"/> does, so once selection admits a fixture the gate
+    /// necessarily returns true. It is not an independent identity check, and a mis-launched
+    /// packaged host is caught by <c>Packaged_IdentityGuard</c> failing its
+    /// <c>PackageRuntime.IsPackaged</c> / <c>Package.Current</c> assertions instead. The gate
+    /// earns its place as the safety net for a <i>missing</i> declaration: delete an entry from
+    /// this map and the fixture degrades to a clean skip with a stated reason rather than an
+    /// opaque <c>COMException</c>.</para>
+    ///
+    /// <para>Every key must also name a live entry in <see cref="AllFixtures"/> — see
+    /// <see cref="StaleTierDeclarations"/> for why a stale one is invisible to every other guard
+    /// here.</para>
+    /// </summary>
+    private static readonly Dictionary<string, SelfTestTier> TierRequirements =
+        new(StringComparer.Ordinal)
+        {
+            ["Packaged_IdentityGuard"] = SelfTestTier.Packaged,
+            ["Packaged_SettingsStoreRoundTrip"] = SelfTestTier.Packaged,
+            ["Packaged_WindowIconFromResource"] = SelfTestTier.Packaged,
+        };
+
+    /// <summary>
+    /// The tier <paramref name="fixture"/> requires; <see cref="SelfTestTier.Any"/> when undeclared.
+    /// </summary>
+    internal static SelfTestTier RequiredTier(string fixture) =>
+        TierRequirements.TryGetValue(fixture, out var tier) ? tier : SelfTestTier.Any;
+
+    /// <summary>
+    /// Whether this host runs <paramref name="fixture"/>.
+    /// </summary>
+    /// <remarks>
+    /// Keys off <c>PackagedIdentityFixtures.IsPackagedTier</c> — the <i>same</i> entry-assembly
+    /// probe <c>RequirePackagedTier</c> uses, so selection and that gate are one predicate rather
+    /// than two independent ones. Neither observes MSIX identity; <c>Packaged_IdentityGuard</c>
+    /// is what does.
+    /// </remarks>
+    private static bool AppliesToCurrentTier(string fixture) =>
+        RequiredTier(fixture) switch
+        {
+            SelfTestTier.Packaged => PackagedIdentityFixtures.IsPackagedTier,
+            _ => true,
+        };
+
+    /// <summary>
+    /// Names in <see cref="TierRequirements"/> that are not in <see cref="AllFixtures"/>, i.e.
+    /// declarations for fixtures that no longer exist. Empty is the healthy answer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Why a stale key is worse than dead weight.</b> Both filtered corpora scan
+    /// <see cref="AllFixtures"/>, so a key naming a deleted fixture is <i>invisible</i> to every
+    /// other guard in this mechanism: the unpackaged trailer just drops from 3 to 2 — still
+    /// satisfying <c>NotApplicableFixtures_AreExcludedFromThisTier</c>'s <c>&gt; 0</c> — and the
+    /// packaged trailer stays 0, so both new assertions pass while a fixture has silently
+    /// vanished from the corpus. That is precisely the partial-deletion case this whole
+    /// mechanism exists to make visible, and it would have walked straight through it.</para>
+    /// <para>Asserted by the <c>SelfTestRegistry_TierDeclarationsMatchCorpus</c> fixture, which
+    /// runs in both tiers.</para>
+    /// </remarks>
+    internal static string[] StaleTierDeclarations() =>
+        TierRequirements.Keys
+            .Where(name => Array.IndexOf(AllFixtures, name) < 0)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>
+    /// How many fixtures carry a tier declaration. Exposed so
+    /// <c>SelfTestRegistry_TierDeclarationsMatchCorpus</c> can assert the map is non-empty —
+    /// without that, its "no stale keys" check would pass vacuously against an emptied map.
+    /// </summary>
+    internal static int DeclaredTierFixtureCount => TierRequirements.Count;
+
+    /// <summary>
+    /// The corpus this host actually runs. Both <c>--self-test</c> and <c>--list-fixtures</c> use
+    /// it, so discovery and execution cannot disagree about the set.
+    /// </summary>
+    /// <remarks>
+    /// A property rather than a cached <c>static readonly</c> array on purpose: the cached form
+    /// would silently depend on being declared textually after <see cref="AllFixtures"/> and
+    /// <see cref="TierRequirements"/>, and moving either — an ordinary-looking edit in a 3000-line
+    /// registry — would evaluate it against a null array or an empty map and quietly return the
+    /// wrong corpus. Recomputing costs one scan of ~1500 strings, on the two or three calls a
+    /// process makes, against a suite measured in minutes.
+    /// </remarks>
+    public static string[] FixturesForCurrentTier => Array.FindAll(AllFixtures, AppliesToCurrentTier);
+
+    /// <summary>
+    /// The corpus this host deliberately does <b>not</b> run, named so the exclusion is a reported
+    /// fact rather than a silent absence. The Host prints these as a TAP trailer and both wrappers
+    /// assert on them: the unpackaged one that they really were excluded, the packaged one that
+    /// this list is <i>empty</i>. The packaged direction is a narrower guard than it first looks —
+    /// dropping the <i>whole</i> identity set is already caught by
+    /// <c>IdentityDependentFixtures_Actually_Asserted</c>, which fails when
+    /// <c>Packaged_IdentityGuard</c> is missing. What it adds is the selectively-misdeclared case
+    /// (a non-guard fixture dropped while the guard survives) and proof that the trailer itself
+    /// still works.
+    /// </summary>
+    public static string[] FixturesNotApplicableToCurrentTier =>
+        Array.FindAll(AllFixtures, name => !AppliesToCurrentTier(name));
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
@@ -1762,6 +1989,16 @@ internal static class SelfTestFixtureRegistry
         "Markdown_Links" => new MarkdownFixtures.Links(harness),
         "Markdown_BlockQuotes" => new MarkdownFixtures.BlockQuotes(harness),
         "Markdown_UnorderedList" => new MarkdownFixtures.UnorderedList(harness),
+        "Markdown_ListLayout_Plain" => new MarkdownListLayoutFixtures.Plain(harness),
+        "Markdown_ListLayout_Bold" => new MarkdownListLayoutFixtures.Bold(harness),
+        "Markdown_ListLayout_Ordered" => new MarkdownListLayoutFixtures.Ordered(harness),
+        "Markdown_ListLayout_Loose" => new MarkdownListLayoutFixtures.Loose(harness),
+        "Markdown_ListLayout_Nested" => new MarkdownListLayoutFixtures.Nested(harness),
+        "Markdown_ListLayout_Code" => new MarkdownListLayoutFixtures.Code(harness),
+        "Markdown_ListLayout_Tasks" => new MarkdownListLayoutFixtures.Tasks(harness),
+        "Markdown_ListLayout_Unified" => new MarkdownListLayoutFixtures.Unified(harness),
+        "Markdown_ListLayout_Short" => new MarkdownListLayoutFixtures.Short(harness),
+        "Markdown_ListLayout_RowMeasureEquivalence" => new MarkdownListLayoutFixtures.RowMeasureEquivalence(harness),
         "Markdown_OrderedList" => new MarkdownFixtures.OrderedList(harness),
         "Markdown_TaskList" => new MarkdownFixtures.TaskList(harness),
         "Markdown_TableWithAlignment" => new MarkdownFixtures.TableWithAlignment(harness),
@@ -1936,6 +2173,13 @@ internal static class SelfTestFixtureRegistry
         "Issue522_SharedStyleAcrossMultipleElements_IsolatedRemoval" => new Issue522TextBlockStyleResetFixture.SharedStyleAcrossMultipleElements_IsolatedRemoval(harness),
         "Issue522_ThemeBindingsRemoval_AfterCacheClear_StillWorks" => new Issue522TextBlockStyleResetFixture.ThemeBindingsRemoval_AfterCacheClear_StillWorks(harness),
         "Issue522_ThemeRef_CycleAcrossDifferentKeys" => new Issue522TextBlockStyleResetFixture.ThemeRef_CycleAcrossDifferentKeys(harness),
+        // Named-style (.ApplyStyle) resolution against live app resources.
+        "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
+        "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),
+        "NamedStyle_UnresolvedStyleKeyDoesNotBreakRender" => new NamedStyleResolutionFixture.UnresolvedStyleKeyDoesNotBreakRender(harness),
+        "NamedStyle_UnresolvedStyleKeyEmitsWarning" => new NamedStyleResolutionFixture.UnresolvedStyleKeyEmitsWarning(harness),
+        "NamedStyle_UnresolvedStyleWarningOverflowBranches" => new NamedStyleResolutionFixture.UnresolvedStyleWarningOverflowBranches(harness),
+        "NamedStyle_ResourceLookupHonoursPrecedence" => new NamedStyleResolutionFixture.ResourceLookupHonoursPrecedence(harness),
         // Issue #950 — Padding / PaddingInline* on a TextBlock.
         "Issue950_PaddingMountUpdateUnset" => new Issue950TextBlockPaddingFixture.PaddingMountUpdateUnset(harness),
         "Issue950_InlinePaddingResolvesPerFlowDirection" => new Issue950TextBlockPaddingFixture.InlinePaddingResolvesPerFlowDirection(harness),
@@ -1976,6 +2220,8 @@ internal static class SelfTestFixtureRegistry
         // Issue #480 follow-up — incremental RTB update preserves child identity.
         "InlineUI_IncrementalUpdate_PreservesChildIdentity" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_PreservesChildIdentity(harness),
         "InlineUI_IncrementalUpdate_RunMutatedInPlace" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_RunMutatedInPlace(harness),
+        "ReconcileTraceDepth_TopLevelSpansSurviveNestedPasses" => new ReconcileTraceDepth_TopLevelSpansSurviveNestedPasses(harness),
+        "FocusTrapContentDialog_ContainmentProbe" => new FocusTrapContentDialog_ContainmentProbe(harness),
         "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),
         "Issue487_RepeatedMutationDoesNotDrift" => new Issue487ScrollAnchorFixtures.Issue487_RepeatedMutationDoesNotDrift(harness),
         "Issue487_ScrollViewOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollViewOffsetRestoredAfterRunMutation(harness),
@@ -1998,12 +2244,17 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_BoundVisibilityRow_IsRetiredNotPooled" => new ElementFactoryRecyclingFixtures.Factory_BoundVisibilityRow_IsRetiredNotPooled(harness),
         "EFR_Factory_PoolEviction_UnmountsEvictedRows" => new ElementFactoryRecyclingFixtures.Factory_PoolEviction_UnmountsEvictedRows(harness),
         "EFR_Factory_PoolParking_PreservesVisibilityValueSource" => new ElementFactoryRecyclingFixtures.Factory_PoolParking_PreservesVisibilityValueSource(harness),
+        "ItemsView_Parking_PoolRestoresValueSources" => new ItemsViewParkingFixtures.PoolRestoresValueSources(harness),
+        "ItemsView_Parking_BoundRowsAndEviction" => new ItemsViewParkingFixtures.BoundRowsAndEviction(harness),
+        "ItemsView_Parking_PendingBringThenKeyedReset" => new ItemsViewParkingFixtures.PendingBringThenKeyedReset(harness),
+        "ItemsView_Parking_VariableHeightReset" => new ItemsViewParkingFixtures.PendingBringThenKeyedReset(harness, variableHeight: true),
         "EFR_Factory_RefreshRealizedItems_SyncsLastElementByControl" => new ElementFactoryRecyclingFixtures.Factory_RefreshRealizedItems_SyncsLastElementByControl(harness),
         "EFR_LazyStack_Unmount_CleansUpAllRecycledRowComponents" => new ElementFactoryRecyclingFixtures.LazyStack_Unmount_CleansUpAllRecycledRowComponents(harness),
         "EFR_Factory_KeyChangeRecycle_ResetsRowComponentState" => new ElementFactoryRecyclingFixtures.Factory_KeyChangeRecycle_ResetsRowComponentState(harness),
         "EFR_Factory_SameItemReuse_PreservesRowComponentState" => new ElementFactoryRecyclingFixtures.Factory_SameItemReuse_PreservesRowComponentState(harness),
         "EFR_Factory_RefreshKeyChange_RemountsRealizedRow" => new ElementFactoryRecyclingFixtures.Factory_RefreshKeyChange_RemountsRealizedRow(harness),
         "EFR_Factory_RefreshKeyChange_ModifiedRootKeepsRefLive" => new ElementFactoryRecyclingFixtures.Factory_RefreshKeyChange_ModifiedRootKeepsRefLive(harness),
+        "EFR_Factory_SuccessfulAdoption_RefreshesTheReportedCallSite" => new ElementFactoryRecyclingFixtures.Factory_SuccessfulAdoption_RefreshesTheReportedCallSite(harness),
         "EFR_Factory_DecoratorSubstitution_IsNotSilentlyAdopted" => new ElementFactoryRecyclingFixtures.Factory_DecoratorSubstitution_IsNotSilentlyAdopted(harness),
         "EFR_Factory_HostTypeKeyCycle_KeepsContainerSetBounded" => new ElementFactoryRecyclingFixtures.Factory_HostTypeKeyCycle_KeepsContainerSetBounded(harness),
         "EFR_Factory_RetiredContainer_DetachesNestedStateAndOwnership" => new ElementFactoryRecyclingFixtures.Factory_RetiredContainer_DetachesNestedStateAndOwnership(harness),
@@ -2228,6 +2479,9 @@ internal static class SelfTestFixtureRegistry
         "LayoutAnimation_SpringSetup" => new LayoutAnimationFixtures.SpringAnimationSetup(harness),
         "LayoutAnimation_SizeSetup" => new LayoutAnimationFixtures.SizeAnimationSetup(harness),
         "ConnectedAnimation_MountUnmount" => new LayoutAnimationFixtures.ConnectedAnimationMountUnmount(harness),
+        "ConnectedAnimation_StartsAcrossReplace" => new LayoutAnimationFixtures.ConnectedAnimationStartsAcrossReplace(harness),
+        "ConnectedAnimation_NoSourceDoesNotStart" => new LayoutAnimationFixtures.ConnectedAnimationNoSourceDoesNotStart(harness),
+        "ConnectedAnimation_OrphanOnlyPassDoesNotCrash" => new LayoutAnimationFixtures.ConnectedAnimationOrphanOnlyPassDoesNotCrash(harness),
         // Thread-safe hook stress tests
         "ThreadSafe_RapidBackgroundSetState" => new ThreadSafeHookFixtures.RapidBackgroundSetState(harness),
         "ThreadSafe_MultipleHooksConcurrent" => new ThreadSafeHookFixtures.MultipleHooksConcurrent(harness),
@@ -2248,9 +2502,19 @@ internal static class SelfTestFixtureRegistry
         "AnimScope_NestingBehavior" => new AnimationScopeTests.NestingBehavior(harness),
         "AnimScope_NullCurveSuppresses" => new AnimationScopeTests.NullCurveSuppresses(harness),
         "AnimScope_WithAnimationIntegration" => new AnimationScopeTests.WithAnimationIntegration(harness),
+        // Spec 010 — source-map read path (UIElement → ReactorState → Element.CallSite)
+        "SourceMapReadPath_Enabled" => new SourceMapReadPathTests.LeafIsReadableWhenEnabled(harness),
+        "SourceMapReadPath_DistinctLines" => new SourceMapReadPathTests.DistinctLeavesReportDistinctLines(harness),
+        "SourceMapReadPath_Disabled" => new SourceMapReadPathTests.LeafIsNotTaggedWhenDisabled(harness),
+        "SourceMapReadPath_HandStamped" => new SourceMapReadPathTests.HandStampedLeafIsTaggedWithFlagOff(harness),
+        "SourceMapReadPath_Callback" => new SourceMapReadPathTests.CallbackControlAlsoCarriesSource(harness),
+        "SourceMapReadPath_BranchSwitch" => new SourceMapReadPathTests.BranchSwitchRefreshesTheReportedLine(harness),
+        "SourceMapReadPath_FlagOffClears" => new SourceMapReadPathTests.FlagOffClearsTheReportedLocation(harness),
+        "SourceMapReadPath_ComponentWrapper" => new SourceMapReadPathTests.ComponentWrapperIsResolvable(harness),
+        "SourceMapReadPath_Decorator" => new SourceMapReadPathTests.DecoratedControlReportsItsTargetsCallSite(harness),
+        "SourceMapReadPath_DecoratorBranch" => new SourceMapReadPathTests.DecoratedTargetBranchSwitchRefreshes(harness),
         // Animation system — .Animate() modifier
-        "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),
-        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
+        "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),
         // Animation system — InteractionStates
         "InterState_StateMachineTransitions" => new InteractionStatesTests.StateMachineTransitions(harness),
@@ -2418,6 +2682,13 @@ internal static class SelfTestFixtureRegistry
         "NavCov_HandleNavigateOptions" => new NavigationCoverageFixtures.NavHandleNavigateOptions(harness),
         "NavCov_DeepLinkMap" => new NavigationCoverageFixtures.DeepLinkMapExercise(harness),
         "NavCov_TransitionFactories" => new NavigationCoverageFixtures.NavTransitionFactories(harness),
+        "NavCov_RecommendedTransitionMapping" => new NavigationCoverageFixtures.NavRecommendedTransitionMapping(harness),
+        "NavCov_HitTestSuppressionNesting" => new NavigationCoverageFixtures.NavHitTestSuppressionNesting(harness),
+        "NavCov_TransitionNormalizesOutgoing" => new NavigationCoverageFixtures.NavTransitionNormalizesOutgoing(harness),
+        "NavCov_CompletedAnimationReleasesProperty" => new NavigationCoverageFixtures.NavCompletedAnimationReleasesProperty(harness),
+        "NavCov_TransitionOwnership" => new NavigationCoverageFixtures.NavTransitionOwnership(harness),
+        "NavCov_ReducedMotion" => new NavigationCoverageFixtures.NavReducedMotion(harness),
+        "NavCov_TransitionMarksCompositorTainted" => new NavigationCoverageFixtures.NavTransitionMarksCompositorTainted(harness),
         "NavCov_HandleEvents" => new NavigationCoverageFixtures.NavHandleEvents(harness),
         "NavCov_DestinationGuard" => new NavigationCoverageFixtures.NavDestinationGuard(harness),
         "NavCov_DeepLinkQueryString" => new NavigationCoverageFixtures.NavDeepLinkQueryString(harness),
@@ -2579,6 +2850,7 @@ internal static class SelfTestFixtureRegistry
         "Devtools_InitializeHandshake" => new DevtoolsFixtures.InitializeHandshake(harness),
         "Devtools_SwitchComponentInvalidatesIds" => new DevtoolsFixtures.SwitchComponentInvalidatesIds(harness),
         "Devtools_PropertyToolsExercise" => new DevtoolsFixtures.PropertyToolsExercise(harness),
+        "Devtools_PropertyToolsDpDiscovery" => new DevtoolsFixtures.PropertyToolsDpDiscovery(harness),
         "Devtools_PropertyToolsReflectionExercise" => new DevtoolsFixtures.PropertyToolsReflectionExercise(harness),
         "Devtools_McpServerProtocolEdges" => new DevtoolsFixtures.McpServerProtocolEdges(harness),
         // Coverage boost
@@ -2878,11 +3150,18 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 036 — Window model live-shell coverage
         "WindowModel_LifecycleEvents" => new WindowModelFixtures.WindowLifecycleEvents(harness),
+        "WindowModel_WindowIconApplied" => new WindowModelFixtures.WindowIconApplied(harness),
+        // Packaged (MSIX) tier; self-skip when the entry assembly is not
+        // the packaged host.
+        "Packaged_IdentityGuard" => new PackagedIdentityFixtures.IdentityGuard(harness),
+        "Packaged_SettingsStoreRoundTrip" => new PackagedIdentityFixtures.SettingsStoreRoundTrip(harness),
+        "Packaged_WindowIconFromResource" => new WindowModelFixtures.PackagedWindowIconFromResource(harness),
         "WindowModel_ClosingEventCancels" => new WindowModelFixtures.WindowClosingEventCancels(harness),
         "WindowModel_TaskbarProgressLiveCom" => new WindowModelFixtures.TaskbarProgressLiveCom(harness),
         "WindowModel_ThumbnailToolbarLiveCom" => new WindowModelFixtures.ThumbnailToolbarLiveCom(harness),
         "WindowModel_PersistedScopeIsolated" => new WindowModelFixtures.WindowPersistedScopeIsolated(harness),
         "WindowModel_TrayIconRoundTrip" => new WindowModelFixtures.TrayIconRoundTrip(harness),
+        "WindowModel_TrayIconBinarySource" => new WindowModelFixtures.TrayIconBinarySource(harness),
         "WindowModel_UseOpenWindowReusesByKey" => new WindowModelFixtures.UseOpenWindowReusesByKey(harness),
         "WindowModel_MutatorsOwnerAndGuards" => new WindowModelFixtures.WindowMutatorsOwnerAndGuards(harness),
         "WindowModel_OpacityRoundTrip" => new WindowModelFixtures.WindowOpacityRoundTrip(harness),
@@ -2890,6 +3169,8 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_IgnorePointerInputRoundTrip" => new WindowModelFixtures.WindowIgnorePointerInputRoundTrip(harness),
         "WindowModel_OpacityIgnorePointerInvariants" => new WindowModelFixtures.WindowOpacityIgnorePointerInvariants(harness),
         "WindowModel_DefaultSizeDefersToOs" => new WindowModelFixtures.WindowDefaultSizeDefersToOs(harness),
+        // Issue #1204 — Reactor owns the dispatcher loop; the policy alone decides exits.
+        "ShutdownPolicy_OwnsDispatcherLifetime" => new ShutdownPolicyDispatcherModeFixtures.ShutdownPolicyOwnsDispatcherLifetime(harness),
         // Spec 054 Phase 1 — window position/z-order/display read-back.
         "Position_ReadBack" => new Phase1WindowingFixtures.PositionReadBack(harness),
         "PositionChanged_FiresOnMove" => new Phase1WindowingFixtures.PositionChangedFiresOnMove(harness),
@@ -2939,6 +3220,12 @@ internal static class SelfTestFixtureRegistry
         "SizeToContent_WidthAndHeight" => new Phase5WindowingFixtures.SizeToContentWidthAndHeight(harness),
         "SizeToContent_RespectsMinMax" => new Phase5WindowingFixtures.SizeToContentRespectsMinMax(harness),
         "SizeToContent_NoOpWhenMaximized" => new Phase5WindowingFixtures.SizeToContentNoOpWhenMaximized(harness),
+        "SizeToContent_MaximizedWarningSurvivesRootSwap" => new Phase5WindowingFixtures.SizeToContentMaximizedWarningSurvivesRootSwap(harness),
+        "SizeToContent_MaximizedWarningSurvivesEmptyRoot" => new Phase5WindowingFixtures.SizeToContentMaximizedWarningSurvivesEmptyRoot(harness),
+        "SizeToContent_MaximizedWarningRearmsAfterRestoreWithNullRoot" => new Phase5WindowingFixtures.SizeToContentMaximizedWarningRearmsAfterRestoreWithNullRoot(harness),
+        "SizeToContent_MaximizedWarningRearmsAfterManual" => new Phase5WindowingFixtures.SizeToContentMaximizedWarningRearmsAfterManual(harness),
+        "Window_NoDragAffordanceWarningIsEdgeTriggered" => new Phase5WindowingFixtures.NoDragAffordanceWarningIsEdgeTriggered(harness),
+        "Window_TitleBarHeightWarningIsEdgeTriggered" => new Phase5WindowingFixtures.TitleBarHeightWarningIsEdgeTriggered(harness),
         "SizeToContent_AspectRatio_BothRejected" => new Phase5WindowingFixtures.SizeToContentAspectRatioBothRejected(harness),
         "SizeToContent_NoReentrancy" => new Phase5WindowingFixtures.SizeToContentNoReentrancy(harness),
         "SizeToContent_MinMaxInfoSuite" => new Phase5WindowingFixtures.SizeToContentMinMaxInfoSuite(harness),
@@ -2955,6 +3242,24 @@ internal static class SelfTestFixtureRegistry
         "TitleBar_OwnedTree" => new Phase7WindowingFixtures.TitleBarOwnedTreeFlipsRecursively(harness),
         "TitleBar_ExitPrep" => new Phase7WindowingFixtures.TitleBarExitPrepFlipsOpenWindows(harness),
         "TitleBar_NoElement_NullStaysFalse" => new Phase7WindowingFixtures.TitleBarNoElementNullStaysFalse(harness),
+        "TitleBarIcon_Convention" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultFromConvention(harness),
+        "TitleBarIcon_ZeroControl" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultZeroControl(harness),
+        "TitleBarIcon_WindowSpec" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultFromWindowSpec(harness),
+        "TitleBarIcon_ExplicitAndOptOut" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultExplicitAndOptOut(harness),
+        "TitleBarIcon_FollowsWindowIconChange" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultFollowsWindowIconChange(harness),
+        "TitleBarIcon_NotExtendedTracksIcon" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultTracksIconWhenNotExtended(harness),
+        "TitleBarIcon_DeferredAssetAppears" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultTracksSameIconInstanceAppearing(harness),
+        "TitleBarIcon_TypeReplacement" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultSurvivesTypeReplacement(harness),
+        "TitleBarIcon_TwoBarsInOneWindow" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultRefreshesEveryMountedBar(harness),
+        "TitleBarIcon_DepartedBarHeight" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultDropsDepartedBarHeight(harness),
+        "TitleBarIcon_OnMountIconSurvives" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultKeepsOnMountIcon(harness),
+        "TitleBarIcon_OneShotBoundaries" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultOneShotBoundaries(harness),
+        "TitleBarIcon_ExplicitSurvivesWindowIconChange" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultExplicitSurvivesWindowIconChange(harness),
+        "TitleBarIcon_PerWindow" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultIsPerWindow(harness),
+        "TitleBarIcon_SetterNotClobbered" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultDoesNotClobberSetterIcon(harness),
+        "TitleBarIcon_NullSetterNotClobbered" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultDoesNotClobberNullSetterIcon(harness),
+        "TitleBarIcon_TogglesOnRerender" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultTogglesOnRerender(harness),
+        "TitleBarIcon_RefreshesReplacedFile" => new TitleBarIconDefaultFixtures.TitleBarIconDefaultRefreshesReplacedFile(harness),
         "TitleBarHeight_ElementTall" => new TitleBarHeightFixtures.TitleBarHeightElementTall(harness),
         "TitleBarHeight_SpecPrecedence" => new TitleBarHeightFixtures.TitleBarHeightSpecPrecedence(harness),
         "TitleBarHeight_ExplicitHeightWins" => new TitleBarHeightFixtures.TitleBarHeightExplicitHeightWins(harness),
@@ -3341,7 +3646,12 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks" => new CommandBarFlyoutWiringFixtures.TargetKeepsItsOwnCallbacks(harness),
 
         SkipVerdictPositiveControl.FixtureName => new SkipVerdictPositiveControl(harness),
+        TierDeclarationConsistencyFixture.FixtureName => new TierDeclarationConsistencyFixture(harness),
 
         _ => null,
     };
 }
+
+
+
+

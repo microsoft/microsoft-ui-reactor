@@ -199,6 +199,7 @@ public interface IReactorKeyed
 When `T : IReactorKeyed`, all of these become optional:
 
 - `KeySelector` on `ListView<T>` / `GridView<T>` / `LazyVStack<T>` / `LazyHStack<T>` defaults to `t => t.Key`.
+- `ForEach(items, render)` keys each projected element from `t.Key` when the element does not already carry one. Added after Phase 2 (issue #1156): `ForEach` was omitted from the list above, so the same `T` auto-keyed through `ListView` but not through the hand-built path — `REACTOR_DSL_001` then demanded a key the author had no reason to think was missing. An explicit `.WithKey(...)` still wins, and `REACTOR_DSL_004` reports the two spellings that merely restate the default.
 - An overload `WithKey<T>(this Element el, T item) where T : IReactorKeyed` shortens hand-built sites.
 
 ### Option B — convention-based property discovery

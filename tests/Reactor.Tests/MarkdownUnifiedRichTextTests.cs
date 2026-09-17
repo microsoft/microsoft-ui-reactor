@@ -106,9 +106,14 @@ public class MarkdownUnifiedRichTextTests
 
         var listInline = Assert.IsType<RichTextInlineUIContainer>(rtb.Paragraphs[1].Inlines[0]);
         Assert.NotNull(listInline.Child);
-        // Default list rendering is a VStack of HStack(marker, content) items.
+        // Default list rendering is a VStack of Grid(marker, content) items.
         var listStack = Assert.IsType<StackElement>(listInline.Child);
         Assert.Equal(2, listStack.Children.Length);
+        Assert.All(listStack.Children, item =>
+        {
+            var grid = Assert.IsType<GridElement>(item);
+            Assert.Equal([GridSize.Auto, GridSize.Star()], grid.Definition.Columns);
+        });
 
         Assert.IsType<RichTextRun>(rtb.Paragraphs[2].Inlines[0]);
     }

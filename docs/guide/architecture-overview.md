@@ -84,7 +84,9 @@ go through the same `RenderContext` machinery.
 > If you cache a control reference outside Reactor (e.g. stash a `Button`
 > from a captured ref in a long-lived field) and the element it
 > materialized later gets replaced because its type changed, your stash
-> points at an unmounted control still tagged with its old element. Use
+> points at an unmounted control — one that may already have been
+> returned to the [element pool](element-pool.md), stripped of its
+> element tag, and re-rented by an unrelated part of the tree. Use
 > [`UseElementRef`](hooks-internals.md) and read `.Current` inside an
 > effect — the ref is the only thing the reconciler keeps current.
 
@@ -101,7 +103,7 @@ public abstract record Element
 
     /// <summary>
     /// Layout modifiers (margin, padding, size, alignment, etc.) applied to this element.
-    /// Set via fluent extension methods: Text("hi").Margin(10).Width(200)
+    /// Set via fluent extension methods: TextBlock("hi").Margin(10).Width(200)
     /// Modifiers are stored inline so the concrete element type is preserved through chaining.
     /// </summary>
     public ElementModifiers? Modifiers { get; init; }
@@ -116,7 +118,7 @@ on collection items so the [child reconciler](reconciliation.md) can
 match elements across reorderings.
 
 Modifiers ride inside `ElementModifiers`. A chain like
-`Text("hi").FontSize(24).Margin(8)` produces one `TextElement` with a
+`TextBlock("hi").FontSize(24).Margin(8)` produces one `TextBlockElement` with a
 merged `Modifiers` record, not three nested wrappers — the
 [modifier system](modifier-system.md) folds them so the reconciler only
 sees one shape per concept.
@@ -168,7 +170,7 @@ public UIElement GetElement(ElementFactoryGetArgs args)
         // Visible: an in-place diff whose Visibility modifier is unchanged
         // writes nothing, so forcing Visible would silently un-collapse a
         // row the author asked to hide.
-        RestoreParkedVisibility(reused, parkedVisibility);
+        RestoreParkedVisibility(parkedVisibility);
         var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
         if (replacement is not null && !ReferenceEquals(replacement, reused))
         {
@@ -187,11 +189,16 @@ public UIElement GetElement(ElementFactoryGetArgs args)
                 && _reconciler.TryAdoptRealizedReplacement(reused, replacement))
             {
                 control = reused;
+                // Same as the adopt path above: refresh the back-pointer the
+                // adoption itself does not move, so the reported source
+                // location follows the row that is actually live (spec 010).
+                if (reused is FrameworkElement adoptedFe)
+                    Reconciler.SetElementTagIfNeeded(adoptedFe, element);
             }
             else
             {
                 // Nothing can install `replacement` into `reused`. Retire `reused`
-                // — park it collapsed with its Reactor state detached — rather than
+                // — park it hidden with its Reactor state detached — rather than
                 // leaving a live ghost row painted over the list. Do NOT return it to
                 // the pool: it was unmounted inside Reconcile, so its tracked Element
                 // no longer describes it.
@@ -249,26 +256,83 @@ public UIElement? Reconcile(
     UIElement? existingControl,
     Action requestRerender)
 {
-    if (oldElement is null && newElement is not null)
-        return Mount(newElement, requestRerender);
-
-    if (oldElement is not null && newElement is null)
+    ReferenceDirtySet.BeginCommit();
+    try
     {
-        Unmount(existingControl);
-        return null;
+    // Trace only top-level reconcile passes (depth == 0) to avoid flooding
+    // the provider with per-subtree entries; nested Reconcile() calls during
+    // the same pass don't emit their own start/stop. Gate the depth counter
+    // and Start emit on IsEnabled so the disabled path pays nothing extra.
+    // `traceEnabled` and `emitTrace` are tracked separately: every enabled
+    // call must decrement the depth it incremented, but only the outermost
+    // one emits. Decrementing on `emitTrace` alone would leak the counter
+    // once a pass contained a nested reconcile, permanently suppressing
+    // every later top-level trace.
+    bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
+        global::System.Diagnostics.Tracing.EventLevel.Informational,
+        Diagnostics.ReactorEventSource.Keywords.Reconcile);
+    bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
+    if (emitTrace)
+    {
+        Diagnostics.ReactorEventSource.Log.ReconcileStart(
+            newElement?.GetType().Name ?? "null");
     }
+    if (_debugReconcileDepth++ == 0)
+    {
+        DebugElementsDiffed = 0;
+        DebugElementsSkipped = 0;
+        DebugUIElementsCreated = 0;
+        DebugUIElementsModified = 0;
+        // Drop destination references a previous pass queued but never flushed. Every
+        // shipped host flushes at the end of each render, but a pass that threw
+        // mid-reconcile — or a Reconcile() caller that never flushes (tests,
+        // embedders) — must not accumulate strong UIElement refs. A list clear, so
+        // nothing here can throw and strand the depth counter incremented just above.
+        _pendingConnectedAnimationStarts.Clear();
+        _preparedConnectedAnimationKeys.Clear();
+        if (ReactorFeatureFlags.HighlightReconcileChanges)
+        {
+            (_highlightMounted ??= new()).Clear();
+            (_highlightModified ??= new()).Clear();
+        }
+        // Consume the hot-reload signal exactly once per top-level pass so
+        // every component re-runs Render() even when props/deps are unchanged.
+        _forceFullRenderActive = ForceFullRenderPending;
+        ForceFullRenderPending = false;
 
-    return Update(oldElement!, newElement!, existingControl!, requestRerender);
-}
+        // Build the dirty-ancestor path. For every component node
+        // whose SelfTriggered is true, walk up the realized visual
+        // tree and add each ancestor control. Consumed by Update's
+        // shallow-equality short-circuit so the walk can reach the
+        // self-triggered descendant even when its ancestor element
+        // records are structurally unchanged.
+        PopulateDirtyAncestorPath();
+    }
+    try {
+    try
+    {
+        if (newElement is null or EmptyElement)
+        {
+            if (existingControl is not null)
+                Unmount(existingControl);
+            return null;
+        }
+
+        if (oldElement is null or EmptyElement || existingControl is null)
+            return Mount(newElement, requestRerender);
+
+        return ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
 ```
 
 `Reconcile` is a tri-state dispatch: `(oldElement, newElement)` resolves
-into Unmount, Mount, or [Update](reconciliation.md). The Mount path
-walks down the new tree allocating WinUI controls (or renting them from
-the [element pool](element-pool.md)); the Update path uses
-`CanUpdate(old, new)` to decide whether to patch the existing control
-in place or unmount-and-remount. The Unmount path returns to the pool
-and walks effect cleanups in reverse slot order.
+into Unmount, Mount, or [Update](reconciliation.md). A `newElement` that
+is `null` *or* `EmptyElement` unmounts; a missing `oldElement` (or a
+missing `existingControl`) mounts; anything else falls through to
+`ReconcileImperative`, the update walk. The Mount path allocates WinUI
+controls (or rents them from the [element pool](element-pool.md)); the
+update path uses `CanUpdate(old, new)` to decide whether to patch the
+existing control in place or unmount-and-remount. The Unmount path
+returns to the pool and walks effect cleanups in slot order.
 
 The reconciler is split across partial files: `Reconciler.Mount.cs`
 and `Reconciler.Update.cs` hold the dispatch logic plus the
@@ -360,7 +424,7 @@ the runtime is doing what you expect.
 
 ```csharp
 // Don't:
-private TextElement _label = Text("hello");
+private TextBlockElement _label = TextBlock("hello");
 public override Element Render() => _label;  // same record every render
 ```
 
@@ -375,7 +439,7 @@ public abstract record Element
 
     /// <summary>
     /// Layout modifiers (margin, padding, size, alignment, etc.) applied to this element.
-    /// Set via fluent extension methods: Text("hi").Margin(10).Width(200)
+    /// Set via fluent extension methods: TextBlock("hi").Margin(10).Width(200)
     /// Modifiers are stored inline so the concrete element type is preserved through chaining.
     /// </summary>
     public ElementModifiers? Modifiers { get; init; }
@@ -404,9 +468,11 @@ the handlers live in `Reconciler.Mount.cs`. Same for Update / gestures
 
 **The element pool is opt-in by type.** If a custom control needs
 pooling, the type must be in `ElementPool.PoolableTypes` and survive a
-`Return` cleanup pass. Interactive controls (Button, TextBox) are
-deliberately not pooled today; the [element-pool](element-pool.md) page
-documents the current set.
+`CleanElement` reset pass. Interactive controls (`Button`, `TextBox`,
+`ToggleSwitch`) *are* pooled today — safe because their event
+trampolines resolve the live element through the attached DP rather
+than capturing it; the [element-pool](element-pool.md) page documents
+the current set.
 
 ## Next Steps
 

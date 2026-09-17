@@ -216,7 +216,7 @@ The `goal` field is the core instruction to the AI. It describes what the docume
 Invoked via:
 
 ```bash
-duct docs compile [--topic <name>] [--no-ai] [--no-screenshots] [--validate-only]
+mur docs compile [--topic <name>] [--no-ai] [--no-screenshots] [--validate-only]
 ```
 
 ### Phases
@@ -391,7 +391,7 @@ The AI cannot:
 
 1. **Developer creates a template** (`.md.dt`) with front-matter: title, audience, goal
 2. **Developer creates a doc app** with snippet markers and a manifest
-3. **`duct docs compile`** builds apps, captures screenshots, runs AI, assembles output
+3. **`mur docs compile`** builds apps, captures screenshots, runs AI, assembles output
 4. **Developer reviews output** — edits `goal` to steer AI, adds `ai:lock` for critical content
 5. **On framework changes**: re-run compile. Apps are rebuilt, screenshots refreshed, AI rewrites prose around the updated snippets.
 6. **AI flags gaps**: `<!-- doc:needs-snippet -->` directives appear in output when the AI needs code that doesn't exist yet. Developer creates the snippet, re-compiles.
@@ -429,7 +429,7 @@ A developer (or the AI in a subsequent agent pass) can then create the doc app c
 Add a CI step that runs:
 
 ```bash
-duct docs compile --ci --no-screenshots
+mur docs compile --ci --no-screenshots
 ```
 
 This validates:
@@ -444,7 +444,7 @@ Screenshots are excluded from CI validation because they require a graphical env
 A scheduled pipeline or manual trigger runs the full compile with screenshots:
 
 ```bash
-duct docs compile --ci
+mur docs compile --ci
 ```
 
 This captures fresh screenshots and verifies that the committed `docs/guide/` matches the generated output. If they differ, the build fails — signaling that docs need to be recompiled.
@@ -576,7 +576,7 @@ Note how the locked prerequisites block appears verbatim. The AI chose to use th
 ### Phase 1: Core Infrastructure
 - Snippet extraction tool (parse markers, build registry)
 - Template parser (resolve `snippet=` and `screenshot://` directives)
-- `duct docs compile --validate-only` and `--no-screenshots` modes
+- `mur docs compile --validate-only` and `--no-screenshots` modes
 - First doc app + template as proof of concept
 
 ### Phase 2: Screenshot Capture

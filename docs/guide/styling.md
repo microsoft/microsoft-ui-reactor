@@ -33,18 +33,18 @@ of mode.
 |---|---|---|
 | `Theme.Accent`, `Theme.PrimaryText`, etc. | Typed token | Always — these are the canonical brush references. |
 | `Theme.Ref("AnyResourceKey")` | String token | The brush isn't surfaced as a typed accessor (rare). |
-| `.Background(token)` / `.Foreground(token)` | Color modifier | Apply a token to any element. |
+| `.Background(token)` / `.Foreground(token)` | Color modifier | Apply a token to elements that expose that property (for example `Border` for backgrounds, `TextBlock` for foregrounds). |
 | `.Background("#RRGGBB")` | Color modifier | Brand colors that must stay constant across themes. |
 | `.AccentButton()`, `.SubtleButton()`, `.TextLink()` | Named-style fluent | The four canonical button shapes. No `.Resources` needed. |
 | `.Informational()` / `.Success()` / `.Warning()` / `.Error()` | Named-style fluent | InfoBar severity. |
 | `.Resources(r => r.Set(key, value))` | Lightweight styling | Override individual WinUI resource keys for a subtree. |
 | `.RequestedTheme(ElementTheme.Dark)` | Region root | Pin a subtree to a specific scheme. |
-| `UseColorScheme()` / `UseIsDarkTheme()` | Hook | Branch logic (not just colors) on the effective theme. |
+| `UseColorScheme()` / `UseIsDarkTheme()` | Hook | Branch logic (not just colors) on the app-global theme. |
 | `.Set(control => control.Foreground = ...)` | Escape hatch | The control has a property neither tokens nor `.Resources` reach. |
 
 ## Theme tokens
 
-Apply a typed token with `.Background()` or `.Foreground()`:
+Apply a theme token with `.Background()` or `.Foreground()`:
 
 ```csharp
 class ThemeTokensExample : Component
@@ -55,11 +55,12 @@ class ThemeTokensExample : Component
             TextBlock("Primary Text").Foreground(Theme.PrimaryText),
             TextBlock("Secondary Text").Foreground(Theme.SecondaryText),
             TextBlock("Accent Text").Foreground(Theme.AccentText).SemiBold(),
-            TextBlock("On Accent Background")
-                .Foreground("#FFFFFF")
-                .Padding(horizontal: 8, vertical: 4)
-                .Background(Theme.Accent)
-                .CornerRadius(4)
+            Border(
+                TextBlock("On Accent Background")
+                    .Foreground(Theme.Ref("TextOnAccentFillColorPrimaryBrush"))
+                    .Padding(horizontal: 8, vertical: 4)
+            ).Background(Theme.Accent)
+             .CornerRadius(4)
         ).Padding(24);
     }
 }
@@ -115,7 +116,8 @@ that looks native in both light and dark mode.
 
 ## Color modifiers
 
-`.Background()` and `.Foreground()` accept three input shapes:
+`.Background()` and `.Foreground()` accept typed tokens and `Theme.Ref`
+tokens for theme-aware colors:
 
 ```csharp
 class ColorModifiersExample : Component
@@ -123,10 +125,14 @@ class ColorModifiersExample : Component
     public override Element Render()
     {
         return VStack(8,
-            TextBlock("Theme token").Background(Theme.SubtleFill).Padding(8),
-            TextBlock("Hex string").Background("#E8F5E9").Padding(8),
-            TextBlock("Mixed").Foreground(Theme.PrimaryText)
-                .Background("#1E1E2E").Padding(8)
+            Border(TextBlock("Typed token").Padding(8))
+                .Background(Theme.SubtleFill),
+            Border(TextBlock("Theme.Ref token").Padding(8))
+                .Background(Theme.Ref("AcrylicBackgroundFillColorDefaultBrush")),
+            Border(TextBlock("Token foreground + token background")
+                .Foreground(Theme.PrimaryText)
+                .Padding(8))
+                .Background(Theme.ControlFill)
         ).Padding(24);
     }
 }
@@ -136,10 +142,10 @@ class ColorModifiersExample : Component
 |---|---|---|
 | Typed token | `.Background(Theme.Accent)` | yes |
 | `Theme.Ref` | `.Background(Theme.Ref("MyCustomBrush"))` | yes |
-| Hex string | `.Background("#FF5733")` | no — frozen |
-| `Windows.UI.Color` | `.Background(Colors.Blue)` | no — frozen |
+| Hex string | `.Background("#FF5733")` | no — frozen; reserve for brand colors |
+| `Brush` | `.Background(new SolidColorBrush(...))` | no — frozen; avoid unless the color must not follow theme |
 
-Tokens are the right default. Reserve hex and `Color` for brand colors
+Tokens are the right default. Reserve hex and `Brush` for brand colors
 that should stay constant regardless of mode.
 
 ## Signal colors
@@ -160,12 +166,13 @@ class SignalColorsExample : Component
     }
 
     static Element Badge(string label, ThemeRef color) =>
-        TextBlock(label)
-            .FontSize(12).SemiBold()
-            .Foreground(color)
-            .Padding(horizontal: 8, vertical: 4)
-            .Background(Theme.SubtleFill)
-            .CornerRadius(4);
+        Border(
+            TextBlock(label)
+                .FontSize(12).SemiBold()
+                .Foreground(color)
+                .Padding(horizontal: 8, vertical: 4)
+        ).Background(Theme.SubtleFill)
+         .CornerRadius(4);
 }
 ```
 
@@ -231,9 +238,9 @@ colors.
 
 ## Reactive theme hooks
 
-`UseColorScheme()` returns the effective scheme at the component's
-position in the tree. `UseIsDarkTheme()` is a convenience wrapper that
-narrows it to a boolean:
+`UseColorScheme()` returns the app-global scheme; it does not observe
+per-element `RequestedTheme` overrides. `UseIsDarkTheme()` is a
+convenience wrapper that narrows it to a boolean:
 
 ```csharp
 class ColorSchemeHookExample : Component

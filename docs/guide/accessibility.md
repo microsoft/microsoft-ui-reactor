@@ -108,7 +108,7 @@ class Tier2Demo : Component
             ).FullDescription(
                 "Bar chart showing Q1 revenue: East $4.2M, " +
                 "West $3.8M, Central $2.1M")
-             .Padding(16).Background("#f5f5f5").CornerRadius(8),
+             .Padding(16).Background(Theme.CardBackground).CornerRadius(8),
             TextBlock("Decorative divider")
                 .Opacity(0.2)
                 .AccessibilityHidden()
@@ -136,11 +136,13 @@ need a label and heading level.
 
 Some accessibility properties point at another realized element rather
 than a string. Use `ElementRef<FrameworkElement>` for those
-relationships:
+relationships. `UseElementRef<T>` is an extension on `Component` /
+`RenderContext`, so inside a component call it as `this.UseElementRef<T>()`
+(it lives in `Microsoft.UI.Reactor.Hooks`):
 
 ```csharp
-var label = UseElementRef<FrameworkElement>();
-var help = UseElementRef<FrameworkElement>();
+var label = this.UseElementRef<FrameworkElement>();
+var help = this.UseElementRef<FrameworkElement>();
 
 return VStack(4,
     TextBlock("Email").Ref(label),
@@ -296,21 +298,21 @@ class FocusTrapDemo : Component
         return VStack(12,
             SubHeading("Focus Trapping"),
             Button("Open Modal", () => setShowModal(true)),
-            When(showModal, () =>
-                Border(
-                    VStack(12,
-                        TextBlock("Modal Dialog").FontSize(18).Bold(),
-                        TextBlock("Tab/Shift+Tab stays inside this panel."),
-                        TextBox("", _ => { }, placeholderText: "Name")
-                            .TabIndex(0),
-                        Button("Close", () => setShowModal(false))
-                            .TabIndex(1)
-                    ).Padding(24)
-                ).WithBorder("#888", 1)
-                 .CornerRadius(8)
-                 .Background("#ffffff")
-                 .FocusTrap(trap)
-            )
+            Border(
+                VStack(12,
+                    TextBlock("Modal Dialog").FontSize(18).Bold(),
+                    TextBlock("Tab/Shift+Tab stays inside this panel."),
+                    TextBox("", _ => { }, placeholderText: "Name")
+                        .AutomationName("Name")
+                        .TabIndex(0),
+                    Button("Close", () => setShowModal(false))
+                        .TabIndex(1)
+                ).Padding(24)
+            ).WithBorder(Theme.CardStroke, 1)
+             .CornerRadius(8)
+             .Background(Theme.SolidBackground)
+             .FocusTrap(trap)
+             .IsVisible(showModal)
         ).Padding(24);
     }
 }
@@ -412,6 +414,8 @@ class SemanticPanelDemo : Component
                 Button(i <= rating ? "\u2605" : "\u2606",
                     () => setRating(i))
                     .AutomationName($"{i} star{(i == 1 ? "" : "s")}")
+                    .AccessibilityHidden()
+                    .WithKey($"star-{i}")
             ).ToArray())
             .Semantics(
                 role: "slider",
@@ -537,7 +541,7 @@ ListView(contacts, c => c.Id, (contact, i) =>
     HStack(
         Image(contact.AvatarUrl).AccessibilityHidden(),
         VStack(TextBlock(contact.Name).Bold(), TextBlock(contact.Role))
-    ).AutomationName($"{contact.Name}, {contact.Role}"))
+    ).AutomationName($"{contact.Name}, {contact.Role}"));
 ```
 
 Leave it off when the composite already reads well descendant by
@@ -593,8 +597,8 @@ borders, redundant labels).
 
 ```csharp
 // Don't:
-TextBlock("Page Title").HeadingLevel(Level1),
-TextBlock("Subtle Detail").HeadingLevel(Level4)
+TextBlock("Page Title").HeadingLevel(AutomationHeadingLevel.Level1),
+TextBlock("Subtle Detail").HeadingLevel(AutomationHeadingLevel.Level4)
 ```
 
 Screen readers build a page outline by walking heading levels in

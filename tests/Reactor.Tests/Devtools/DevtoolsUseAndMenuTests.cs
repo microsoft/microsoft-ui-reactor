@@ -10,7 +10,13 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// <see cref="ReactorApp.DevtoolsEnabled"/> flag; the <c>DevtoolsMenu</c>
 /// factory renders to <c>Empty</c> (and skips the items lambda) when the
 /// flag is off so retail builds pay only the bool check.
+///
+/// <para>In the SourceMapGlobals collection (spec 010): the <c>DevtoolsEnabled</c>
+/// setter and <c>ResetDevtoolsEnabledForTests()</c> both write
+/// <c>ReactorSourceMap.Enabled</c>, so the ctor/Dispose here would otherwise clear
+/// that flag out from under <c>SourceMapElementSlotTests</c> running in parallel.</para>
 /// </summary>
+[Collection("SourceMapGlobals")]
 public class DevtoolsUseAndMenuTests : IDisposable
 {
     public DevtoolsUseAndMenuTests() => ReactorApp.ResetDevtoolsEnabledForTests();
@@ -30,6 +36,49 @@ public class DevtoolsUseAndMenuTests : IDisposable
         ReactorApp.DevtoolsEnabled = true;
         var ctx = new RenderContext();
         Assert.True(ctx.UseDevtools());
+    }
+
+    // ── Spec 010: the devtools flag mirrors into source mapping ───────────
+    //
+    // This is the activation path real users take (`--devtools app` / `--devtools
+    // run`); every other source-map test sets ReactorSourceMap.Enabled directly, so
+    // without these three the mirror could be deleted and the whole source-map suite
+    // would stay green while devtools produced no stamps at all.
+
+    [Fact]
+    public void EnablingDevtools_TurnsSourceMappingOn()
+    {
+        Assert.False(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+
+        ReactorApp.DevtoolsEnabled = true;
+
+        Assert.True(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+    }
+
+    [Fact]
+    public void DisablingDevtools_TurnsSourceMappingOff()
+    {
+        ReactorApp.DevtoolsEnabled = true;
+        Assert.True(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+
+        ReactorApp.DevtoolsEnabled = false;
+
+        Assert.False(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+    }
+
+    [Fact]
+    public void ResettingDevtools_TurnsSourceMappingOff()
+    {
+        // The reset helper writes the backing field directly, bypassing the property
+        // setter that normally mirrors — so it needs its own assertion. A reset that
+        // left source mapping on would leak the flag into every later test.
+        ReactorApp.DevtoolsEnabled = true;
+        Assert.True(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+
+        ReactorApp.ResetDevtoolsEnabledForTests();
+
+        Assert.False(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+        Assert.False(ReactorApp.DevtoolsEnabled);
     }
 
     [Fact]
@@ -66,3 +115,4 @@ public class DevtoolsUseAndMenuTests : IDisposable
     // Reactor.TestApp with `--devtools app`. Don't reintroduce an enabled-path
     // unit test here without a WinUI harness — it will flake on COMException.
 }
+

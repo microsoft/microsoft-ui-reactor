@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Interop.WinForms;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -69,7 +70,7 @@ class KeyboardDemo : Component
         // Tab/Shift+Tab cycles through Reactor controls normally.
         // Tab out of the last Reactor control returns focus to WinForms.
         return VStack(12,
-            TextBox(text, setText, placeholderText: "Type here...")
+            TextBox(text, setText, placeholderText: "Type here...", header: "Message")
                 .TabIndex(0),
             Button("Submit", () => { })
                 .TabIndex(1)
@@ -114,35 +115,43 @@ class BackgroundDemo : Component
         // Always set an explicit background on root content.
         // XAML Islands have no default background — without this,
         // content renders on a transparent surface.
-        return VStack(12,
-            TextBlock("Theme-aware background").Bold(),
-            TextBlock($"Count: {count}"),
-            Button("Increment", () => setCount(count + 1))
-        ).Padding(24).Background(SolidBackground);
+        return Grid([GridSize.Star()], [GridSize.Star()],
+            VStack(12,
+                TextBlock("Theme-aware background").Bold(),
+                TextBlock($"Count: {count}"),
+                Button("Increment", () => setCount(count + 1))
+            ).Padding(24)
+        ).Background(SolidBackground);
     }
 }
 // </snippet:background>
 
 // <snippet:content-factory>
-// Use ContentFactory for components needing parameters:
-//
-// var island = new XamlIslandControl
-// {
-//     ContentFactory = () =>
-//     {
-//         var host = new ReactorHostControl();
-//         host.SetComponent<ConfigurableComponent>();
-//         return host;
-//     }
-// };
+// ContentFactory runs on the UI thread once the island is ready. Return any
+// UIElement — typically a ReactorHostControl wrapping your component.
+// ReactorHostControl has no SetComponent<T>() method: use ComponentFactory for
+// parameterless components, or Mount(...) when the component needs arguments.
+static class ConfigurableIsland
+{
+    public static XamlIslandControl Create(string title) => new()
+    {
+        ContentFactory = () =>
+        {
+            var host = new ReactorHostControl();
+            host.Mount(new ConfigurableComponent(title));
+            return host;
+        },
+        Dock = SWF.DockStyle.Fill,
+    };
+}
 
-class ConfigurableComponent : Component
+class ConfigurableComponent(string title) : Component
 {
     public override Element Render()
     {
         var (count, setCount) = UseState(0);
         return VStack(12,
-            Heading("Dashboard"),
+            Heading(title),
             TextBlock($"Value: {count}"),
             Button("+1", () => setCount(count + 1))
         ).Padding(24).Background(SolidBackground);

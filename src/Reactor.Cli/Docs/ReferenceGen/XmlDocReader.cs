@@ -33,7 +33,16 @@ internal sealed record MemberDoc(
     string Remarks,
     IReadOnlyList<string> Examples,
     IReadOnlyList<string> Caveats,
-    IReadOnlyList<string> SeeAlsos);
+    IReadOnlyList<string> SeeAlsos)
+{
+    /// <summary>
+    /// Documented <c>&lt;typeparam&gt;</c> entries in declaration order.
+    /// Used by <see cref="CrefSignature"/> to name the <c>``N</c> markers a
+    /// cref carries; an undocumented generic falls back to <c>T1</c>,
+    /// <c>T2</c>, … so overload headings stay readable either way.
+    /// </summary>
+    public IReadOnlyList<ParamDoc> TypeParams { get; init; } = Array.Empty<ParamDoc>();
+}
 
 /// <summary>
 /// Parses <c>Reactor.xml</c> documentation files using
@@ -87,7 +96,14 @@ internal static class XmlDocReader
                 SeeAlsos: m.Elements("seealso")
                     .Select(s => (string?)s.Attribute("cref") ?? string.Empty)
                     .Where(s => !string.IsNullOrEmpty(s))
-                    .ToList()));
+                    .ToList())
+            {
+                TypeParams = m.Elements("typeparam")
+                    .Select(p => new ParamDoc(
+                        (string?)p.Attribute("name") ?? string.Empty,
+                        GetInnerText(p)))
+                    .ToList(),
+            });
         }
         return members;
     }

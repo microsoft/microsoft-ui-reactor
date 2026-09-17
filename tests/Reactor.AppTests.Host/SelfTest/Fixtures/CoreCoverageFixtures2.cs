@@ -263,7 +263,7 @@ internal static class CoreCoverageFixtures2
             var host = H.CreateHost();
             host.Mount(ctx =>
             {
-                var ductCmd = CommandInterop.FromCommand(
+                var reactorCmd = CommandInterop.FromCommand(
                     icommand, "Test",
                     icon: new SymbolIconData("Save"),
                     description: "Test desc",
@@ -277,15 +277,15 @@ internal static class CoreCoverageFixtures2
                     description: "Typed desc");
 
                 return VStack(
-                    Button(ductCmd.Label, () =>
+                    Button(reactorCmd.Label, () =>
                     {
-                        ductCmd.Execute?.Invoke();
+                        reactorCmd.Execute?.Invoke();
                     }),
                     Button("TypedExec", () =>
                     {
                         typedCmd.Execute?.Invoke("hello");
                     }),
-                    TextBlock($"CanExec:{ductCmd.CanExecute}")
+                    TextBlock($"CanExec:{reactorCmd.CanExecute}")
                 );
             });
 

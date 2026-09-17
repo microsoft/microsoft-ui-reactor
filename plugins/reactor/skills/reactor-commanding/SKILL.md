@@ -81,7 +81,7 @@ Button(save)
 
 // .Command() binds execute + isEnabled + icon/accelerator/accessKey/description
 // onto any custom-content clickable, and auto-disables while !command.IsEnabled:
-Button(HStack(Icon(SymbolIcon("Save")), Text("Save"))).Command(save)
+Button(HStack(Icon(SymbolIcon("Save")), TextBlock("Save"))).Command(save)
 ```
 
 `.Command()` re-applies `IsEnabled` on every update (so `UseCommand`

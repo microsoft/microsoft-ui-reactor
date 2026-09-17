@@ -30,11 +30,393 @@ Conventions for contributors:
 
 ### Changed
 
+- Localization extraction now converts recognized count-based singular/plural ternaries
+  into ICU plural messages (spec 005 §10.4, #1131).
+- Localization extraction normalizes boolean select arguments to the string keys expected
+  by ICU MessageFormat when rewriting source (spec 005 §10.4, #1131).
+
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+
+- **Content-collapse parking for recycled ItemsView rows (issue #1213).**
+  Parking collapses template content instead of the outer container and restores
+  its original visibility value source on reuse. Recycled rows are excluded from
+  scroll anchoring, preventing invalid-anchor and layout-cycle failures.
+
+- **Tray icon `Click` and `RightClick` no longer fire twice per interaction
+  (spec 036 §11.4, issue #1180).** Under `NOTIFYICON_VERSION_4` the shell
+  forwards both the legacy mouse message and the version-4 semantic
+  notification for a single physical interaction — a left click arrives as
+  `WM_LBUTTONUP` *and* `NIN_SELECT`, a right click as `WM_RBUTTONUP` *and*
+  `WM_CONTEXTMENU`. `TrayHiddenWindow` routed both arms of each pair, so
+  `ReactorTrayIcon.Click` and `ReactorTrayIcon.RightClick` raised twice per
+  click. Only the version-4 notifications are routed now. `DoubleClick` is
+  unaffected: `WM_LBUTTONDBLCLK` has no version-4 counterpart, so a physical
+  double click still raises `Click` once (from the first click's `NIN_SELECT`)
+  followed by `DoubleClick` once.
+
+- `ShutdownPolicy.Explicit` and `ShutdownPolicy.OnLastSurfaceClosed` now actually keep the process
+  running. Reactor takes ownership of the WinUI dispatcher loop at startup
+  (`Application.DispatcherShutdownMode = OnExplicitShutdown`), so the platform no longer ends the
+  process on last-window-close without consulting `EvaluateShutdownPolicy`. Closing the last window
+  of a tray-backed app used to exit with code 0 as if the policy were `OnPrimaryWindowClosed`.
+  Ownership is unconditional, which also makes the documented issue-#647 guarantee real: under the
+  default policy, closing an auxiliary window that opted out via `ExcludeFromShutdownPolicy` no
+  longer ends the app even when it was the last window on screen. Apps that embed
+  `ReactorHostControl` in their own `Application` are left alone. (spec 036 §6.2, issue #1204)
+
+### Security
+
+## [0.1.0-preview.15] — 2026-09-11
+
+### Added
+
+- **Binary icon sources on `WindowIcon` (spec 036 §4.1, issue #1185).**
+  `WindowIcon.FromBytes(ReadOnlySpan<byte>)` takes encoded `.ico` or PNG data and
+  `WindowIcon.FromRgba(ReadOnlySpan<byte>, int, int)` takes a raw straight-alpha RGBA8
+  buffer, so an icon that lives in an embedded resource, a download, or a
+  procedurally-drawn badge no longer has to be written to a temporary file before the
+  shell can show it. Consumed by the three surfaces that need a raw `HICON`: the tray
+  icon (spec 036 §11.4), the taskbar overlay (§11.2), and thumbnail-toolbar buttons
+  (§11.5). Both factories copy the caller's buffer, and a multi-frame `.ico` held in
+  memory has its closest frame selected the same way `LoadImageW` would from a file.
+  The new `WindowIcon.Kind` (`WindowIconKind.Path` / `Resource` / `Binary`) reports which
+  factory produced an icon; `IsResource` is unchanged.
+
+  `WindowSpec.Icon` does **not** accept a binary source — `AppWindow.SetIcon` needs a
+  filesystem path — and reports it as not applied, so the window falls through to the
+  `Assets\AppIcon.ico` convention or its PE icon rather than showing nothing. Jump lists
+  and the `TitleBar` icon default skip it for the reason they already skip a PE icon:
+  they need a `Uri` or a path, and binary data is neither.
+
+- **`REACTOR_ICON_001` — a `WindowIcon` source kind the target surface silently skips
+  (spec 061, issue #1185).** Every `WindowIcon` factory type-checks against every
+  icon-taking surface, but the surfaces need different primitives and quietly drop what
+  they cannot use — a `Debug.WriteLine` and a missing glyph, invisible in a Release build.
+  The analyzer reports `FromResource` handed to a tray icon, taskbar overlay or
+  thumbnail-toolbar button (all need a raw `HICON`, which cannot come from an `ms-appx:`
+  URI), and `FromBytes` / `FromRgba` handed to `WindowSpec.Icon`, `ReactorApp.Run(icon:)`
+  or a jump-list entry (which need a filesystem path or a `Uri`).
+
+  It fires only when the icon's kind is provably known at the use site — a direct factory
+  call, or a write-once local whose initializer is one (including through the documented
+  `UseMemo(() => WindowIcon.FromPath(...))` idiom). A conditional, field, parameter or
+  method result stays silent, as does either non-binary kind on a jump-list entry, since
+  packaged-versus-unpackaged is a runtime property. Reactor's own spec 036 carried the
+  `FromResource`-for-a-tray-icon mistake in its worked example, which is the case for
+  surfacing this in the editor.
+
+- **Struct-typed overloads for `.Margin(...)`, `.Padding(...)` and `.CornerRadius(...)`
+  (issue #1192).** All four common layout modifiers now accept their WinUI struct
+  directly, matching the `.BorderThickness(Thickness)` overload that has shipped since
+  #775: `.Margin(Thickness)`, `.Padding(Thickness)` and
+  `.CornerRadius(CornerRadius)`. This makes the `REACTOR_POOL_001` migration a
+  lift-and-shift for struct-typed writes — `.Set(fe => fe.Margin = someThickness)`
+  becomes `.Margin(someThickness)` instead of forcing the value to be decomposed into
+  four doubles and any struct-typed local to be re-typed. Purely additive; the `double`
+  overloads keep their existing binding and stay the ergonomic default.
+
+  Two consequences for hand-written code, both from the bare literal converting to
+  `double` and to the struct alike. `.Margin(default)`, `.Padding(default)` and
+  `.CornerRadius(default)` are now ambiguous (`CS0121`); `.BorderThickness(default)`
+  has always behaved this way for the same reason. The parameterless target-typed
+  `.Margin(new())`, `.Padding(new())` and `.CornerRadius(new())` are newly ambiguous
+  too — they previously bound the `double` overload as `new double()`, i.e. zero.
+  Name the type in either shape — `default(Thickness)` / `new Thickness()` for
+  `.Margin` / `.Padding` / `.BorderThickness`, `default(CornerRadius)` /
+  `new CornerRadius()` for `.CornerRadius` — or pass a value.
+
+### Changed
+
+- **Markdown list-item defaults now use `GridElement` rather than `StackElement`
+  ([openclaw/openclaw-windows-node#1362](https://github.com/openclaw/openclaw-windows-node/issues/1362)).**
+  `MarkdownOptions.ListItem` still receives an `Element` after default construction
+  and may wrap or replace it. Callbacks that cast the default to `StackElement`
+  must adapt to the Auto/Star Grid.
+
+- **The documentation site is published per release, with a version selector (no
+  product code changed).** <https://microsoft.github.io/microsoft-ui-reactor/> was
+  rebuilt from the tip of `main` on every docs push, so it only ever showed unreleased
+  documentation and there was no way to read the docs matching the release you were
+  running. The site is now versioned with [mike](https://github.com/jimporter/mike):
+  each version renders once into a `gh-pages` branch and stays byte-identical
+  afterwards, a release tag publishes its version and takes the `latest` alias, and
+  `main` is published separately as `main (development)`. The site root redirects to
+  `latest`, and every version that is not `latest` carries a banner saying so.
+
+  Versioning moves every page under a version directory, which would turn already
+  published links into 404s, so the published site root also carries a `404.html` that
+  forwards legacy unversioned paths to the same page under `latest`, preserving the
+  query string and anchor — existing links such as `.../getting-started/#manual-setup`
+  keep working. See
+  [the release runbook](docs/contributing/release-runbook.md#versioned-documentation-site).
+
+- **`PoolResetSetCodeFix` now fixes struct-typed `.Set(...)` writes it previously left
+  alone (issue #1192).** It could only rewrite a literal `new Thickness(uniform)` or
+  `new Thickness(l, t, r, b)`, so every other right-hand side — an opaque local, a
+  field, a call, a ternary — was reported and left for a human. With the struct
+  overloads above those values now pass straight through to the modifier. Both
+  spellings of a constructor literal still decompose, including the target-typed
+  `new(8)`, so `.Margin(8)` remains the output rather than `.Margin(new Thickness(8))`.
+  A literal carrying an object initializer or a named argument is no longer
+  decomposed: `new Thickness(8) { Left = 5 }` is `Thickness(5,8,8,8)`, so emitting
+  `.Margin(8)` would have silently dropped the initializer, and the struct's parameter
+  names differ from the modifier's (`Thickness(uniformLength)` against
+  `Margin(uniform)`), so copying a named argument across produced `CS1739`. Both now
+  ride the struct overload whole. A target-typed `new(...)` that cannot be decomposed
+  is still left unfixed, because it carries no type of its own and the rewrite would
+  be ambiguous.
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+- **Long Markdown list content wraps within finite available width
+  ([openclaw/openclaw-windows-node#1362](https://github.com/openclaw/openclaw-windows-node/issues/1362)).**
+  Default list rows now measure content in a Star column beside an Auto-sized marker
+  instead of a horizontal StackPanel's infinite-width measure. Plain, formatted,
+  ordered, nested, task-list and multi-block content keep their markers, spacing
+  and selection, including in unified rich-text mode.
+
+- `REACTOR_MOD_002` now covers four properties `ElementPool.CleanElement` resets that no
+  diagnostic mentioned at all: `IsHitTestVisible`, `Stretch`, `StretchDirection` and `IsActive`.
+  `IsHitTestVisible` was excluded on the stated grounds that no modifier existed, while
+  `.IsHitTestVisible(bool)` had been in `ElementExtensions.cs` all along, and `Stretch` was
+  excluded as a "Viewbox-only modifier" — a description of what the element-type gate is for
+  rather than a reason to skip the property. Because an exclusion counts as a classification,
+  nothing ever rechecked either claim (issue #1193).
+- `ElementPool.CleanElement` now clears `IsTabStop` on every pooled element rather than only on
+  `Control` receivers. WinUI 3 declares the property on `UIElement` and `ApplyModifiers` writes it
+  ungated, so `.IsTabStop(false)` reaches poolable non-`Control`s — `TextBlock`, `RichTextBlock`,
+  `Grid`, `StackPanel`, `Border`, `Canvas`, `Viewbox`, `Image` — and each could carry a stale tab
+  stop into its next renter, making a control unexpectedly unreachable by keyboard. This is the
+  same missing-reset shape as issue #985, found by the widened consistency scan (issue #1193).
+- The pool ⇄ analyzer consistency invariants now scan the whole of `CleanElement` instead of
+  stopping at its `switch (fe)` dispatch, so resets in the type-specific arms — the `TextBlock`
+  font/text family, the `TextBox`, `Viewbox` and `ProgressRing` arms — are checked against
+  `ModifierTable` for the first time. Previously a clear placed after the dispatch was invisible
+  to every invariant, and #985/#950 had to relocate clears into the FE-common block to get them
+  covered (issue #1193).
+
+### Security
+
+## [0.1.0-preview.14] — 2026-09-01
+
+### Added
+
+- **`REACTOR_DSL_004` — a `.WithKey(...)` that only restates what `ForEach` already
+  supplies (spec 042 §5, issue #1156).** The complement to `ForEach`'s new auto-keying:
+  once the factory keys `IReactorKeyed` items itself, `.WithKey(item)` and
+  `.WithKey(item.Key)` inside that projection are noise. Info severity, and — like
+  `REACTOR_DSL_002` — no automatic fix: a key the receiver picks up inside a called
+  factory is invisible to syntax, so deleting the call cannot be proven safe to
+  automate. Deliberately narrow: only those two
+  spellings are reported, because they are the only ones provably equal to what the
+  factory assigns. `.WithKey(item.Id)` is left alone even where `Key => Id`, since
+  proving that means reading through the `Key` property body, and it is exactly how an
+  author expresses a deliberate override. Silent inside `Select`, which does no keying.
+
+- **`MinSize(double min)` and `MaxSize(double max)` (issue #1106).**
+  Added fluent extension for `GridSize` to allow for defining minimum and maximum sizes. 
+- **Strict validation checks for `GridSize`.**
+  Validation is in place for `GridSize` throwing an exception based on the `GridUnitType` and value.
+
+- **Per-element source mapping — `Element.CallSite` and `ReactorSourceMap.GetSource()`
+  (spec 010).** Intercepted `Factories` DSL calls record the file and line they were
+  written on, so a live `UIElement` created through those factories can be traced back
+  to its source. Implemented with C# interceptors, generated by
+  `Reactor.SourceMap.Generator`, so **no factory signature or call site changes** —
+  the factory surface is unchanged, and the `params Element?[]` container factories
+  (`VStack`, `Grid`, `Flex`, …) are covered, which a `[CallerLineNumber]` approach
+  cannot do because C# forbids an optional parameter after `params`. Controlled by the
+  `ReactorSourceMap` MSBuild property (`true` in Debug, unset in Release; opting in for
+  Release embeds mapped source paths in the binary) plus the runtime
+  `ReactorSourceMap.Enabled` switch, which the devtools verb sets automatically. When
+  the runtime switch is off, no locations are populated; in Release, the generator is
+  not loaded unless the MSBuild property is explicitly enabled.
+- **`[ReactorSourceTransparent]` — attribute a thin helper to its caller, and per-argument
+  source mapping for implicitly converted children (spec 010).** Two follow-ups that close
+  the attribution gaps the initial source-mapping drop documented.
+
+  Marking a static, `Element`-returning helper
+  `[Microsoft.UI.Reactor.Diagnostics.ReactorSourceTransparent]` stops the generator
+  stamping DSL calls inside it and instead stamps calls *to* it, so a forwarder like
+  `Field(label, value)` reports each caller's own line rather than collapsing every call
+  site onto one line in its body. Annotated helpers compose: the deferral walks outward
+  until it reaches a caller that is not annotated. It is deliberately opt-in — for a
+  `Component.Render()` body the body line is the correct answer. An annotation the
+  generator cannot honour (a `private` helper, an instance method, a local function)
+  reports **`REACTOR_SOURCEMAP_001`** and leaves attribution exactly as it would be
+  without the attribute, so a bad annotation is never worse than none. The attribute is
+  read from metadata, so libraries can annotate their own forwarders;
+  `PendingFactory.Pending` now does, and its callers get a location where they
+  previously got `null`.
+
+  Separately, arguments that reach an `Element` parameter through an implicit
+  user-defined conversion — `VStack("a", "b")`, via `implicit operator Element(string)` —
+  are now stamped at **the argument's own line**. Those elements are built by an operator
+  body inside Reactor, which interceptors structurally cannot reach (they intercept
+  ordinary method calls, never operators), so they previously reported no location at
+  all. Applies to any user-defined conversion to `Element`, respects first-stamp-wins,
+  and never writes into a `params` array the caller owns.
+- **A declarative window icon — `icon:` on `ReactorApp.Run`, plus `Run(WindowSpec, …)`
+  overloads (spec 036 §4.1 and §4.3, issue #1143).** The Win32 `HICON` Windows draws in
+  the window caption and Alt-Tab had no declarative route: `TitleBar(...).Icon(...)` only
+  sets the app mark drawn *inside* the client area, and `WindowSpec.Icon` was unreachable
+  because `ReactorApp.Run<TRoot>(...)` accepted no `WindowSpec` — leaving five lines of
+  `WinRT.Interop` / `Win32Interop` in a `configure:` callback as the only route, which is
+  exactly what `samples/apps/chat` and `samples/apps/demo-script-tool` both did. Both flat
+  `Run` overloads now take `WindowIcon? icon` (placed after `fullScreen:` and before the
+  trailing `configure:`, where it reads as one more window property), and new
+  `Run<TRoot>(WindowSpec, …)` / `Run(WindowSpec, Func<…>, …)` overloads close the wider
+  structural gap — min/max size, backdrop, corner style and placement persistence were all
+  unreachable on the primary window too.
+- **`TitleBarElement.NoIcon()` — opt out of the inherited title-bar icon (spec 036 §4.1).**
+  The companion to the inheritance change below: use it where a bare title bar is the intent
+  on an app that ships an icon. `.Icon(...)` still wins where a *different* mark belongs in
+  the title bar than in the window caption.
+- **`NavigationTransition.Entrance()` — the WinUI page-refresh motion as a first-class
+  transition (spec 011 §6).** The incoming page slides up a short distance and fades in,
+  mirroring WinUI's `EntranceNavigationTransitionInfo`. `EntranceTransition` is public and
+  pattern-matchable like every other transition record. Prefer `Entrance()` when you mean the
+  motion; `NavigationTransition.Default` is a *policy* alias meaning "whatever Reactor
+  defaults to", and a call site that means the entrance animation should not silently follow a
+  future change of default.
+- **`TitleLarge()` and `Display()` type-ramp factories (spec 039 §17.6).** Extend the
+  named-style factory set alongside `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`,
+  mapping to `TitleLargeTextBlockStyle` (40px Semibold) and `DisplayTextBlockStyle`
+  (68px Semibold). `CaptionTextBlockStyle` still has no style-applying factory —
+  `Caption()` is a size-only preset — so reach for `.ApplyStyle()` when you need that
+  style's full setters.
+
+### Changed
+- **`ForEach` keys its elements from `IReactorKeyed` items, matching the templated
+  factories (spec 042 §5, issue #1156).** Spec 042 Phase 2 already defaults the key
+  selector to `t => t.Key` for `ListView<T>` / `GridView<T>` / `LazyVStack<T>` /
+  `LazyHStack<T>`; `ForEach` was left off that list, so the *same* `T` auto-keyed through
+  `ListView` but not through the hand-built path — and `REACTOR_DSL_001` then demanded a
+  key the author had no reason to think was missing. `ForEach` now fills a null key the
+  same way, so those lists take `ChildReconciler`'s keyed path — the difference between
+  moving a row and re-mounting it. **An explicit key still wins**, so `.WithKey(item.Id)`
+  or any deliberate override is untouched. The interface test is hoisted to a one-time
+  per-`T` static, so the per-item cost is a branch on a cached bool rather than a type
+  test that would box a struct `T` on every row. `REACTOR_DSL_001` no longer fires on a
+  `ForEach` over `IReactorKeyed` items, since there is nothing left to add — it still
+  fires for `Select`, which does no keying. Nothing is auto-keyed for items *without*
+  identity: an index key is the position, so it would reproduce positional matching while
+  forcing the LIS path, and sibling `ForEach` groups flatten into one parent, so `"0"`,
+  `"1"`, … would collide across them and trip the duplicate-key bailout.
+- **`GridSize` Allow for min and max size (issue 1106).**
+  Changed the base constructor to `GridSize(double value, GridUnitType type, double? min = null, double? max = null)` to accomodate passing in the min and max value for `GridSize`. This will be passed on to WinUI's `ColumnDefinition` or `RowDefinition`. The old constructor is still valid but has no way of passing in min and max values.
+- **`GridSize` String value checks.**
+  The new constructor for `GridSize` rejects invalid values when the string constructor is used. For example, `new GridDefinition(["This is not a grid"], ["*"])` now fails with a `FormatException`.  
+- **The `with { ... }` construct returns `CS0200`.**
+  To allow for reliable validation the only path to initialize the record is the constructor. This also means that something like `var grid2 = grid1 with { Size = -1 }` would succeed in the past but fail now. This is the desired behavior as the old way led to potential unrendered content.
+
+- **`TitleBar(...)` inherits the window's icon when it declares none (spec 036 §4.1).**
+  Previously a title bar with no `.Icon(...)` rendered no icon, so apps that already set a
+  window icon had to restate it. It now shows `WindowSpec.Icon` when declared, otherwise the
+  `Assets\AppIcon.ico` convention beside the app. An icon that exists *only* as an
+  executable PE resource (`<ApplicationIcon>`) is not inherited — that stage of the window's
+  own icon chain yields a raw `HICON` with no path, and a XAML `IconSource` needs an image
+  source — and an embedded window never receives a window icon, so it has none to inherit.
+  **An app that ships an icon and deliberately wants a bare title bar should add the new
+  `.NoIcon()` to preserve its previous appearance;** apps that set `.Icon(...)` explicitly
+  are unaffected.
+- **`NavigationTransition.Default` is now the entrance motion, not a slide from the right
+  (spec 011 §6, issue #1144).** A WinUI `Frame` navigated with no `NavigationTransitionInfo`
+  plays `EntranceNavigationTransitionInfo`, so a Reactor app now animates like its WinUI XAML
+  counterpart out of the box. Slide-from-right is the iOS `UINavigationController`
+  convention; an earlier revision of spec 011 described it as the "platform default", which
+  was wrong for Windows. Apps that want the old motion can ask for
+  `NavigationTransition.Slide(SlideDirection.FromRight)` explicitly.
+- **`NavigationTransition.Slide()` defaults to `FromBottom` and follows WinUI's motion
+  specification (spec 011 §6).** The parameterless call was previously a 250 ms horizontal
+  slide; it is now WinUI's vertical slide. **Passing any of `duration`, `distance`, or
+  `easing` opts out of the WinUI specification** and back into Reactor's customizable
+  simultaneous slide — so `Slide(duration: …)` is not "the WinUI slide but slower", it is a
+  structurally different animation. `SlideDirection.FromTop` is Reactor-only and always takes
+  the custom path. `NavigationTransition.Spring(...)` keeps its horizontal `FromRight`
+  default: it is a Reactor extension with no WinUI counterpart.
+- **`DrillIn()` follows WinUI's scale, timing, and opacity staging (spec 011 §6).** Passing an
+  explicit `duration` keeps Reactor's older symmetric behavior.
+- **`NavigationView` forwards its recommended transition through `WithNavigation` (spec 011
+  §6).** Pane navigation uses the entrance motion and top navigation slides horizontally
+  according to the selected item's position, matching WinUI. When WinUI supplies no
+  recommendation, the host's own `Transition` still applies.
+- **`NavigationTransition.Connected()`'s unimplemented stub falls back to the entrance
+  motion rather than a slide (spec 011 §6).** Shared-element animation is still deferred; the
+  previous fallback constructed a default `SlideTransition`, which silently became a 600 ms
+  vertical slide once `Slide` adopted WinUI's specification.
+- **`.ApplyStyle()` reports an unresolved style key instead of throwing (spec 044 §6.1).**
+  A missing key — or one that resolves to something that is not a `Style` — previously threw
+  out of the mount action, which `Reconciler.ApplyModifiers` invokes unguarded, failing the
+  whole render over an authoring typo. The element now keeps its default appearance and the
+  key is named in a warning on the `Microsoft-UI-Reactor` ETW provider (`Keywords.Errors`),
+  emitted once per distinct key — until a few hundred distinct keys have been reported, past
+  which de-duplication stops and every miss warns again rather than going silent. Overlong
+  keys are never de-duplicated and are truncated on the payload. Note that a NativeAOT app
+  emits no ETW at all unless it sets `EventSourceSupport=true`.
+- **`DiagnosticLog.Warning` is release-visible (spec 044 §6.1).** It previously only called a
+  `[Conditional("DEBUG")]` mirror, so every warning routed through it — backdrop fallback,
+  `SizeToContent` on a maximized window, and now unresolved style keys — was silently
+  discarded in shipped apps. It now emits ETW like its `SwallowedError` / `HResultFailed`
+  siblings.
+- **`dotnet new reactorapp` references the latest Windows App SDK at scaffold time (spec 022,
+  PR #1096).** The template pinned whatever Windows App SDK version was current when the
+  template package was built, so a scaffold from an older `ProjectTemplates` package started
+  life on a stale runtime. It now resolves the newest release through a templating
+  `add-reference` post-action, so the generated app is current without reinstalling the
+  template. The framework reference itself is still stamped at pack time (see the release
+  runbook) — the conditional-section support needed to float it the same way is not yet
+  available in the SDK ([dotnet/sdk#55927](https://github.com/dotnet/sdk/issues/55927)).
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+- **`REACTOR_DSL_001` no longer false-positives on a non-Reactor `ForEach`, and the
+  guide's list samples are keyed (spec 042 Q2, issue #1156).** Follow-up to #1157, which
+  widened the rule from `Select(...)` to Reactor's `ForEach(items, item => …)`. Three
+  gaps remained. The `ForEach` arm matched on receiver *shape* alone, so a bare
+  `ForEach(items, lambda)` from any other `using static` — same shape, element-typed, in
+  a layout-child slot — raised a warning that `TreatWarningsAsErrors` turns into a build
+  break; it now confirms the callee's namespace through the semantic model, after every
+  cheap syntactic gate, and `REACTOR_DSL_002` shares that one helper so the two rules
+  cannot drift into disagreeing about what a Reactor projection is. An explicitly generic
+  `ForEach<T>(...)` was skipped entirely, because the name extraction handled
+  `IdentifierNameSyntax` but not `GenericNameSyntax`. And the 10 guide pages whose
+  snippets #1157 keyed were never regenerated, so the published docs still taught the
+  unkeyed `ForEach` the rule now flags — nothing in CI covers that today (see #1052).
+
+- **`D3Color.ToRgb()` / `ToString()` no longer emit malformed CSS on comma-decimal locales
+  (issue #1159).** The `double` opacity was interpolated with the ambient culture, so
+  `rgba(...)` — a machine-readable format — came out as `rgba(128, 64, 32, 0,5)` on nl-NL,
+  de-DE, fr-FR, pt-BR and friends. Because `Parse` has always read invariant, that stray
+  comma also broke the round-trip in a silent way: `Parse` saw five components instead of
+  four and read the opacity from `"0"`, turning a half-transparent color fully transparent
+  rather than throwing. Both arms now format with `CultureInfo.InvariantCulture`, matching
+  `PathBuilder.F()` elsewhere in the same D3 port. Two `mur` sites had the same defect and
+  are fixed alongside: the `mur loc status` coverage column (`100,0%`), and the similarity
+  score in `mur check` suggestion evidence (`similarity 0,95`), which is printed to stdout
+  *and* written into the structured trace. Output on en-US hosts is unchanged,
+  which is exactly why CI — whose runner is en-US — was structurally blind to this. The
+  regression guards are `[CulturedFact(new[] { "nl-NL" })]`, which pins the culture per test
+  case and therefore bites on the en-US CI runner too; `REACTOR_TESTS_CULTURE` additionally
+  re-runs the whole suite under another locale to find the tests nobody thought to pin (see
+  [`TESTING.md`](TESTING.md)). Deliberately *not* changed: the user-facing formatting seams
+  — `CellRenderers.FormatValue`, `ColumnHelpers.FormatWithSpec`, `Editors.Combo`'s label
+  projection and `ChartSummarizer.FormatValue` — stay on the current culture, because a grid
+  cell, a choice label and a screen-reader summary are text a person reads: a Dutch user
+  should see `1,5`. Each of those now carries a comma-decimal test that fails if it is ever
+  "hardened" to invariant, which an en-US-pinned assertion cannot detect.
 
 - **A fully-skipped selftest fixture is no longer reported as PASSED (issue #1061).**
   `Harness.Skip` emits `ok <name> # SKIP <reason>`, and `SelfTestBatch.ParseTap` treated any
@@ -56,6 +438,115 @@ Conventions for contributors:
   `SelfTestVerdict_OnlySkips_PositiveControl`, asserts nothing on purpose so the SKIPPED verdict
   has an end-to-end positive control on every run — the Host half of the mechanism lives in a
   project no test can reference, so a fabricated TAP stream cannot reach it.
+
+- **`.ConnectedAnimation(key)` now actually plays across a replaced subtree (PR #1124).**
+  The list-to-detail shape every hero animation uses never animated: `Mount()` resolved the
+  key against `ConnectedAnimationService` immediately, but the reconciler mounts a
+  replacement *before* unmounting what it replaces — `ChildReconciler` calls `Mount(newEl)`,
+  then `ReplaceChildWithExitTransition`, which unmounts the old control and runs
+  `PrepareToAnimate`. The lookup therefore ran before the snapshot existed, returned `null`,
+  and the animation was dropped in silence; the destination simply appeared at its final
+  position, which is why the *settled* state looked correct and the bug hid. Resolution now
+  happens in `FlushConnectedAnimations`, after the whole pass, so visit order no longer
+  matters. Deliberately **not** included: withdrawing the unclaimed snapshots Reactor
+  prepares for every outgoing keyed sibling (it cannot know which one was activated).
+  `ConnectedAnimation.Cancel()` at flush time crashes the process with `0xC0000005` inside
+  `Microsoft.UI.Xaml.dll`, because by then the source has been unmounted and returned to
+  `ElementPool`, so the animation holds an already-reset visual. The ~1s of ghosting from
+  unclaimed snapshots remains.
+
+- **A controlled `SelectedIndex` that WinUI cannot honor no longer eats the user's next real
+  selection (issue #1090, PRs #1091 and #1097).** Echo suppression arms one token per
+  *expected* change event, and the controlled write was gated only on drift
+  (`control != requested`). That is not sufficient: **WinUI will not honor a selection past
+  the end of its `ItemsSource`** — the property stays put, no `SelectionChanged` is raised,
+  and the armed token strands, later swallowing a genuine selection. The common trigger is
+  an items array still empty on mount while its data loads, which is idiomatic for
+  `UseState<T[]>([])` plus a fetch: two clamped writes arm two tokens, the single coalesced
+  materialization event consumes one, and the leftover eats the first real click. The
+  signature is a suppress counter that never returns to 0 after startup. The guard is
+  reachability, not emptiness — an index past the end of a *short non-empty* source has the
+  same defect, and on the typed path additionally throws `ArgumentException` from the setter
+  rather than merely swallowing an event. `-1` stays always-reachable: it is the spec-050
+  force-clear sentinel and is meaningful against any source. The rule is centralized in
+  `SelectionWriteGuard` and covers the untyped `ListView` / `GridView` handlers plus the
+  typed/templated lifecycle path (Mount and Update × `ListView` / `GridView` / `FlipView`)
+  that the first fix missed.
+
+- **Legacy text-node `TreeView` renders under NativeAOT (PR #1108).** Node text goes through
+  a classic `{Binding}` that hops `TreeViewNode.Content` (native WinRT) →
+  `TreeViewNodeData.Content` (a *managed* record property). That managed hop runs through
+  CsWinRT's reflection-based `ICustomPropertyProvider`, which trimming removes — so the
+  `TextBlock` rendered empty **with no build-time warning**, because the reflection crosses
+  the WinRT ABI where the IL trim analyzers cannot see it (the publish reports zero
+  IL2xxx/IL3xxx). `TreeViewNodeData` now carries `[WinRT.GeneratedBindableCustomProperty]`
+  so CsWinRT emits strongly-typed binding metadata; no public API surface is added. Scoped to
+  `"Content"` deliberately — it is the only member the template binds, and the unscoped
+  overload also emits an accessor for the `[Obsolete]` `ContentElement`, which fails the
+  warnings-as-errors Release build with `CS0618`. This retires an unexplained
+  `DefaultAotSkipPatterns` entry: `ControlUpdate_Collections` was skipped under AOT as a
+  *"control-collection assertion still under investigation"* and was this bug all along, so
+  it now guards the fix.
+
+- **Devtools `properties` / `setProperty` find DependencyProperties again (issue #1109).**
+  Discovery went exclusively through `Type.GetField` / `Type.GetFields`, but CsWinRT projects
+  WinUI `DependencyProperty` statics as static **properties**, not fields — `typeof(Button)`
+  exposes 0 DP-typed static fields and 112 DP-typed static properties, and `Grid.RowProperty`
+  exists only as a property. Every lookup on every element therefore returned
+  `{"count":0,"properties":[]}`, and a by-name lookup always failed. Both member kinds are now
+  resolved, **fields first** so C#-authored DPs (Reactor's own, and third-party controls,
+  which really are fields) are unchanged, deduped on the trimmed name. Because reading a
+  property executes a getter, a failing static initializer or WinRT activation maps to "not
+  found" rather than escaping through the MCP transport, and a write-only DP-typed static is
+  skipped before `GetValue(null)` throws. Under NativeAOT the metadata is trimmed away and the
+  lookups still come back empty — previously indistinguishable from an element that genuinely
+  has no DPs — so the tool now **detects an AOT build and says so**, naming the fix, instead
+  of returning the same message it gives for a typo.
+
+- **The window-icon fallbacks work (issue #1143).** Two defects surfaced while verifying the
+  new `icon:` parameter above. The executable-icon fallback had been dead code since it was
+  written: it called `LoadImageW` with `LR_LOADFROMFILE` against `Environment.ProcessPath`,
+  but that flag reads standalone image files and returns 0 for every `.exe` — measured against
+  `C:\Windows\explorer.exe`, which demonstrably has an icon and still yielded 0 while
+  `ExtractIconExW` on the same binary returned a valid handle. It now uses `ExtractIconExW`,
+  which is why apps setting `<ApplicationIcon>` reported `ICON_BIG=0 ICON_SMALL=0 class
+  HICON=0`. Separately, `WindowIcon.FromResource` did not work in a packaged app — the case it
+  exists for: `AppWindow.SetIcon` wants a filesystem path, and handed an `ms-appx:` URI inside
+  an MSIX process it does not fault, it silently applies a *default* icon. `WindowIcon.Apply`
+  now maps `ms-appx:` onto a path under `AppContext.BaseDirectory` and reports failure when
+  that names no file, so the fallback runs instead of locking in a blank icon. Worth knowing
+  for anyone re-measuring this: in the **unpackaged** selftest host `ms-appx:` happens to map
+  to the executable directory, so the URI form looks fine there; inside two real MSIX
+  processes it produced the *same shared handle* while path forms produced distinct real ones.
+
+- **An installed `mur` is no longer frozen at the version you first bootstrapped, and
+  `mur check` runs (PR #1130).** Two independent packaging bugs, each invisible from a dev
+  machine because the local path worked and only the shipped path was broken.
+  `dotnet pack src/Reactor.Cli` ran without `-p:Version`, so every commit packed as `1.0.0`;
+  `bootstrap.ps1` detects an existing install and calls `dotnet tool update`, which compared
+  `1.0.0` to `1.0.0` and **no-opped with exit 0**. Since the only guard was the exit code,
+  bootstrap printed success while leaving the old binary in place — and `mur upgrade`
+  explicitly disclaims updating the tool itself and refers you back to `bootstrap.ps1`, so
+  both documented refresh paths dead-ended. Packing now stamps a per-run version pinned on
+  install, and bootstrap compares the SHA in `mur --version` against `HEAD` and fails loudly
+  with remediation steps, because an exit-code check structurally cannot detect a no-op —
+  which is what let this drift for months. Second, `Reactor.Cli` referenced Roslyn with
+  `PrivateAssets="all"` — correct for an *analyzer* project, wrong for a `PackAsTool` global
+  tool — so `Microsoft.CodeAnalysis{,.CSharp}.dll` were excluded from the shipped payload and
+  every installed `mur check` threw `FileNotFoundException` at startup. The CLI does not just
+  compile against Roslyn, it executes it.
+
+- **`mur loc` and `mur docs` help output names `mur`, not `duct` (PR #1129).** Every
+  `mur loc <sub> --help` and `mur docs --help` printed usage lines and unknown-command errors
+  for `duct loc …` / `duct docs …` — a command name that does not exist — left over from the
+  Duct → Reactor rename. Live docs describing the current CLI surface are corrected alongside;
+  the historical record is deliberately untouched.
+
+- **A project scaffolded from the template runs in Visual Studio 26 (issue #1084).** The
+  template's `launchSettings.json` carried comments as repeated single-line `"//"` keys.
+  Visual Studio 26 refuses to launch a project with that shape, so a freshly created app built
+  but would not run, and the comments are now consolidated into a single array of strings
+  under one `"//"` key — which also removes the duplicate JSON keys the old form relied on.
 
 ### Security
 

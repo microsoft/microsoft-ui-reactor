@@ -213,7 +213,9 @@ use `ContentFactory` instead of `ComponentType`:
 
 The factory function runs on the UI thread after the XAML Island is ready.
 Return any `UIElement` — typically a `ReactorHostControl` wrapping your
-component.
+component. Note that `ComponentType` lives on `XamlIslandControl`, not on
+`ReactorHostControl`: inside a factory you set `ComponentFactory` for a
+parameterless component, or call `Mount(component)` when it takes arguments.
 
 ## Patterns
 
@@ -298,7 +300,7 @@ handles lifecycle automatically. Reserve `ContentFactory` for components
 that need parameters or custom host setup.
 
 **Set an explicit background on root components.** XAML Islands have no
-default background. Use `.Background(SolidBackgroundFillColorBase)` for
+default background. Use `.Background(Theme.SolidBackground)` for
 theme-aware backgrounds.
 
 **Dock or anchor the island control.** `XamlIslandControl` supports

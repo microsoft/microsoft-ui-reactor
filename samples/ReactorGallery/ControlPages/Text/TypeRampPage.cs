@@ -9,7 +9,8 @@ namespace WinUIGalleryReactor.ControlPages.Text;
 
 /// <summary>
 /// Phase 8.1 — exercises the spec-039 §17.6 type-ramp factories
-/// (<see cref="Factories.Title"/>, <see cref="Factories.Subtitle"/>,
+/// (<see cref="Factories.Display"/>, <see cref="Factories.TitleLarge"/>,
+/// <see cref="Factories.Title"/>, <see cref="Factories.Subtitle"/>,
 /// <see cref="Factories.Body"/>, <see cref="Factories.BodyStrong"/>,
 /// <see cref="Factories.BodyLarge"/>). The type ramp lives only as
 /// factories — never as fluents — per §17.6's "no two-ways trap" rule.
@@ -24,13 +25,17 @@ class TypeRampPage : Component
 
             SampleCard("Factories",
                 VStack(8,
+                    Display("Display — 68px Semibold"),
+                    TitleLarge("TitleLarge — 40px Semibold"),
                     Title("Title — 28px Semibold"),
                     Subtitle("Subtitle — 20px Semibold"),
                     BodyLarge("BodyLarge — 18px regular"),
                     BodyStrong("BodyStrong — 14px Semibold"),
                     Body("Body — 14px regular body text")
                 ),
-                sourceCode: @"Title(""Title — 28px Semibold"")
+                sourceCode: @"Display(""Display — 68px Semibold"")
+TitleLarge(""TitleLarge — 40px Semibold"")
+Title(""Title — 28px Semibold"")
 Subtitle(""Subtitle — 20px Semibold"")
 BodyLarge(""BodyLarge — 18px regular"")
 BodyStrong(""BodyStrong — 14px Semibold"")

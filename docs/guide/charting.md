@@ -29,7 +29,7 @@ optional `Microsoft.UI.Reactor.Advanced` package (spec 062 §7), so add its
 package reference first:
 
 ```xml
-<PackageReference Include="Microsoft.UI.Reactor.Advanced" />
+<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.15" />
 ```
 
 ```csharp
@@ -45,19 +45,19 @@ collection and accessor functions for X and Y:
 ```csharp
 class LineChartDemo : Component
 {
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 120), new(2, 180), new(3, 150),
+        new(4, 220), new(5, 310), new(6, 280),
+        new(7, 350), new(8, 400), new(9, 380),
+        new(10, 420), new(11, 460), new(12, 510)
+    ];
+
     public override Element Render()
     {
-        var data = new SalesPoint[]
-        {
-            new(1, 120), new(2, 180), new(3, 150),
-            new(4, 220), new(5, 310), new(6, 280),
-            new(7, 350), new(8, 400), new(9, 380),
-            new(10, 420), new(11, 460), new(12, 510)
-        };
-
         return VStack(12,
             SubHeading("Line Chart"),
-            LineChart(data, d => d.Month, d => d.Revenue)
+            LineChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Monthly Revenue — Line")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
@@ -84,16 +84,16 @@ maps to the Y value:
 ```csharp
 class BarChartDemo : Component
 {
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 340), new(2, 420), new(3, 510), new(4, 380)
+    ];
+
     public override Element Render()
     {
-        var data = new SalesPoint[]
-        {
-            new(1, 340), new(2, 420), new(3, 510), new(4, 380)
-        };
-
         return VStack(12,
             SubHeading("Bar Chart"),
-            BarChart(data, d => d.Month, d => d.Revenue)
+            BarChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Quarterly Revenue — Bar")
                 .SeriesName("Revenue")
                 .Units("quarters", "USD")
@@ -121,19 +121,19 @@ combines a filled area with a line overlay:
 ```csharp
 class AreaChartDemo : Component
 {
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 50), new(2, 120), new(3, 200),
+        new(4, 350), new(5, 480), new(6, 600),
+        new(7, 720), new(8, 850), new(9, 1020),
+        new(10, 1150), new(11, 1300), new(12, 1500)
+    ];
+
     public override Element Render()
     {
-        var data = new SalesPoint[]
-        {
-            new(1, 50), new(2, 120), new(3, 200),
-            new(4, 350), new(5, 480), new(6, 600),
-            new(7, 720), new(8, 850), new(9, 1020),
-            new(10, 1150), new(11, 1300), new(12, 1500)
-        };
-
         return VStack(12,
             SubHeading("Area Chart"),
-            AreaChart(data, d => d.Month, d => d.Revenue)
+            AreaChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Monthly Revenue — Area")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
@@ -161,19 +161,19 @@ for a donut chart:
 ```csharp
 class PieChartDemo : Component
 {
+    private static readonly CategoryData[] Data =
+    [
+        new("Engineering", 42),
+        new("Marketing", 18),
+        new("Sales", 25),
+        new("Support", 15)
+    ];
+
     public override Element Render()
     {
-        var data = new CategoryData[]
-        {
-            new("Engineering", 42),
-            new("Marketing", 18),
-            new("Sales", 25),
-            new("Support", 15)
-        };
-
         return VStack(12,
             SubHeading("Pie Chart"),
-            PieChart(data, d => d.Value, d => d.Name)
+            PieChart(Data, d => d.Value, d => d.Name)
                 .Title("Team Distribution")
                 .Description("Pie chart showing team size across Engineering, Marketing, Sales, and Support.")
                 .Width(300).Height(300)
@@ -197,7 +197,7 @@ All chart types share a common set of builder methods:
 |--------|---------|---------|
 | `.Width(n)` | 400 | Canvas width in pixels |
 | `.Height(n)` | 300 | Canvas height in pixels |
-| `.Margin(t, r, b, l)` | 20, 20, 30, 40 | Axis/label margins |
+| `.Margin(l, t, r, b)` | 40, 20, 20, 30 | Axis/label margins, in `left, top, right, bottom` order |
 | `.Stroke(color)` | `#4285f4` | Line/border color |
 | `.Fill(color)` | `#4285f4` | Fill color |
 | `.StrokeWidth(n)` | 2 | Line thickness |
@@ -218,27 +218,28 @@ with the new data:
 ```csharp
 class CombinedChartDemo : Component
 {
+    private static readonly SalesPoint[] Data2024 =
+    [
+        new(1, 100), new(2, 140), new(3, 180),
+        new(4, 200), new(5, 260), new(6, 300)
+    ];
+
+    private static readonly SalesPoint[] Data2025 =
+    [
+        new(1, 160), new(2, 220), new(3, 280),
+        new(4, 320), new(5, 390), new(6, 450)
+    ];
+
+    private static readonly string[] Years = ["2024", "2025"];
+
     public override Element Render()
     {
         var (year, setYear) = UseState(0);
-        var years = new[] { "2024", "2025" };
-
-        var data2024 = new SalesPoint[]
-        {
-            new(1, 100), new(2, 140), new(3, 180),
-            new(4, 200), new(5, 260), new(6, 300)
-        };
-        var data2025 = new SalesPoint[]
-        {
-            new(1, 160), new(2, 220), new(3, 280),
-            new(4, 320), new(5, 390), new(6, 450)
-        };
-
-        var data = year == 0 ? data2024 : data2025;
+        var data = year == 0 ? Data2024 : Data2025;
 
         return VStack(12,
             SubHeading("Interactive Chart"),
-            ComboBox(years, year, setYear),
+            ComboBox(Years, year, setYear),
             AreaChart(data, d => d.Month, d => d.Revenue)
                 .Title("Revenue by Year")
                 .SeriesName("Revenue")
@@ -268,12 +269,14 @@ diffs the old and new element trees and patches only what changed:
 ```csharp
 class DynamicDataDemo : Component
 {
+    private static readonly List<SalesPoint> InitialPoints =
+        Enumerable.Range(1, 8)
+            .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
+            .ToList();
+
     public override Element Render()
     {
-        var (points, updatePoints) = UseReducer(
-            Enumerable.Range(1, 8)
-                .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
-                .ToList());
+        var (points, updatePoints) = UseReducer(InitialPoints);
 
         return VStack(12,
             SubHeading("Dynamic Data"),
@@ -317,13 +320,13 @@ geometry, and returns any Element:
 ```csharp
 // Percent rendered inside the slice. The string label accessor
 // is still passed so screen readers describe the slice.
-PieChart(data, d => d.Value, d => d.Name)
+PieChart(Data, d => d.Value, d => d.Name)
     .Title("Team Distribution")
     .Width(300).Height(300)
     .InnerRadius(50).PadAngle(0.02)
     .LabelView((d, layout) =>
         TextBlock($"{layout.Fraction:P0}")
-            .FontSize(12).Bold().Foreground("White"))
+            .FontSize(12).Bold().Foreground(Theme.AccentText))
 ```
 
 ![Pie chart with the percent rendered inside each slice](images/charting/pie-label-view.png)
@@ -340,14 +343,14 @@ any Element. Each delegate receives the tick's domain value:
 
 ```csharp
 // X axis ticks: render month name plus a caption per tick.
-LineChart(data, d => d.Month, d => d.Revenue)
+LineChart(Data, d => d.Month, d => d.Revenue)
     .Title("Revenue by Month")
     .SeriesName("Revenue")
     .Width(600).Height(220)
     .Stroke("#0078D4").StrokeWidth(2.5)
     .ShowGrid(true).ShowAxes(true)
     .XTickLabelView(t => VStack(2,
-        TextBlock(months[Math.Clamp((int)t - 1, 0, months.Length - 1)])
+        TextBlock(Months[Math.Clamp((int)t - 1, 0, Months.Length - 1)])
             .FontSize(11).SemiBold(),
         TextBlock("month").FontSize(8).Opacity(0.6)))
 ```
@@ -400,19 +403,19 @@ annotations, and `.Interactive()` for keyboard navigation:
 /// </summary>
 class AccessibleChartDemo : Component
 {
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 120), new(2, 180), new(3, 150),
+        new(4, 220), new(5, 310), new(6, 280)
+    ];
+
     public override Element Render()
     {
-        var data = new SalesPoint[]
-        {
-            new(1, 120), new(2, 180), new(3, 150),
-            new(4, 220), new(5, 310), new(6, 280)
-        };
-
         return VStack(12,
             SubHeading("Accessible Chart"),
 
             // Static accessible chart: Title + SeriesName + Units
-            LineChart(data, d => d.Month, d => d.Revenue)
+            LineChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Monthly Revenue 2024")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
@@ -423,7 +426,7 @@ class AccessibleChartDemo : Component
                 .ShowGrid(true).ShowAxes(true),
 
             // Interactive accessible chart: adds keyboard nav and point invocation
-            BarChart(data, d => d.Month, d => d.Revenue)
+            BarChart(Data, d => d.Month, d => d.Revenue)
                 .Title("Monthly Revenue — Interactive")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
@@ -469,16 +472,30 @@ for any multi-series chart that ships to forced-colors users.
 ## Low-Level Drawing
 
 For custom visualizations, ReactorD3 provides shape generators and a Canvas
-DSL. Import `using static Microsoft.UI.Reactor.Charting.D3.D3Charts` for:
+DSL. Import `using static Microsoft.UI.Reactor.Charting.D3Charts;` for:
 
 - **`D3Canvas(w, h, children)`** — create a drawing surface
 - **`D3Rect`, `D3Circle`, `D3Line`, `D3Path`** — primitive shapes
-- **`D3Text`, `D3TextRight`, `D3TextCenter`** — positioned text
+- **`Text`, `TextRight`, `TextCenter`** — positioned text
 - **`D3LinePath<T>`, `D3AreaPath<T>`, `D3ArcPath`** — generator helpers
 - **`D3Axes`, `D3Grid`, `D3Legend`** — axis/legend composites
-- **`LinearScale`, `BandScale`, `LogScale`** — map data to pixels
+- **`Brush(color)`, `Palette`** — brushes and the default categorical palette
+
+These three are **positional**: `Text(x, y, text, …)` takes canvas
+coordinates and is unrelated to the core `TextBlock(...)` factory. Reactor has
+no core `Text(...)` element factory — the `Text(...)` members that exist
+elsewhere are the DataGrid cell-renderer and editor helpers, which return
+`Func<object, Element>`, not an `Element`.
+
+The scales are types, not `D3Charts` members — they live one namespace deeper.
+Add `using Microsoft.UI.Reactor.Charting.D3;` to reach them.
 
 ## Scale Types
+
+Every scale exposes `.Map(value)` to project a domain value into range space —
+scales are objects, not delegates, so `scale(v)` does not compile. Construct
+one with `new LinearScale(domain, range)` or configure it fluently with
+`.SetDomain(...)` / `.SetRange(...)`.
 
 | Scale | Purpose |
 |-------|---------|
@@ -508,28 +525,58 @@ DSL. Import `using static Microsoft.UI.Reactor.Charting.D3.D3Charts` for:
 A streaming chart — a price feed, a sensor reading — drives a sliding
 window of points. Hold the window in `UseReducer` (each tick derives the
 next window from the previous one), append on tick, drop the head once
-`Count` exceeds the window size:
+`Count` exceeds the window size. `UseEffect` takes a synchronous
+`Action`/`Func<Action>`, never an `async` lambda, so start the pump from
+the effect and cancel it from the returned cleanup:
 
 ```csharp
-var (samples, updateSamples) = UseReducer<IReadOnlyList<Sample>>(Array.Empty<Sample>());
+record Sample(DateTime Time, double Value);
 
-UseEffect(() =>
+class LiveChartDemo : Component
 {
-    using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(200));
-    while (await timer.WaitForNextTickAsync(token))
+    public override Element Render()
     {
-        updateSamples(prev =>
-        {
-            var next = prev.Append(Sample.Now()).ToList();
-            return next.Count > 60 ? next.Skip(next.Count - 60).ToList() : next;
-        });
-    }
-}, Array.Empty<object>());
+        var (samples, updateSamples) = UseReducer<IReadOnlyList<Sample>>(Array.Empty<Sample>());
 
-return LineChart(samples, s => s.Time.Ticks, s => s.Value)
-    .Title("Live feed")
-    .Width(600).Height(220)
-    .Stroke("#0078D4");
+        // UseEffect takes a synchronous Action/Func<Action> — never an async lambda.
+        // Start the pump from the effect and cancel it from the returned cleanup.
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            _ = PumpAsync(cts.Token);
+            return () => { cts.Cancel(); };
+        }, Array.Empty<object>());
+
+        return VStack(12,
+            SubHeading("Live feed"),
+            LineChart(samples, s => s.Time.Ticks, s => s.Value)
+                .Title("Live feed")
+                .SeriesName("Value")
+                .Width(600).Height(220)
+                .Stroke("#0078D4")
+        ).Padding(24);
+
+        async Task PumpAsync(CancellationToken token)
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(200));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    updateSamples(prev =>
+                    {
+                        var next = prev.Append(new Sample(DateTime.Now, Random.Shared.Next(0, 100))).ToList();
+                        return next.Count > 60 ? next.Skip(next.Count - 60).ToList() : next;
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected on unmount.
+            }
+        }
+    }
+}
 ```
 
 The chart redraws on every tick. For sub-100ms cadence, drop into
@@ -540,22 +587,43 @@ the timer-cleanup pattern.
 ### Switching chart type without losing the data binding
 
 The same data feeds a line, a bar, or an area chart — let users pick
-the shape. Hold the chart kind in state, switch the factory call:
+the shape. Hold the selected `ComboBox` **index** in state and switch the
+factory call on it:
 
 ```csharp
-var (kind, setKind) = UseState("line");
+class ChartSwitchDemo : Component
+{
+    private static readonly SalesPoint[] Data =
+    [
+        new(1, 120), new(2, 180), new(3, 150), new(4, 220), new(5, 310), new(6, 280)
+    ];
 
-return VStack(8,
-    ComboBox(new[] { "line", "bar", "area" }, kind, setKind),
-    (kind switch
+    public override Element Render()
     {
-        "line"  => LineChart(data, d => d.X, d => d.Y),
-        "bar"   => BarChart(data, d => d.X, d => d.Y),
-        _       => AreaChart(data, d => d.X, d => d.Y),
-    })
-    .Title("Revenue")
-    .Width(600).Height(250)
-    .Stroke("#0078D4"));
+        // ComboBox reports the selected *index*, so hold an int and branch on it.
+        var (kind, setKind) = UseState(0);
+        var kinds = new[] { "line", "bar", "area" };
+
+        // Each factory returns ChartElement<T>, so the switch has one common type
+        // and the modifier chain below is shared.
+        ChartElement<SalesPoint> chart = kind switch
+        {
+            0 => LineChart(Data, d => d.Month, d => d.Revenue),
+            1 => BarChart(Data, d => d.Month, d => d.Revenue),
+            _ => AreaChart(Data, d => d.Month, d => d.Revenue),
+        };
+
+        return VStack(8,
+            SubHeading("Switch chart type"),
+            ComboBox(kinds, kind, setKind),
+            chart
+                .Title("Revenue")
+                .SeriesName("Revenue")
+                .Width(600).Height(250)
+                .Stroke("#0078D4")
+        ).Padding(24);
+    }
+}
 ```
 
 Because each factory returns a `ChartElement<T>`, the modifier chain is
@@ -565,18 +633,44 @@ identical — the only branching is the constructor.
 
 When the high-level surface doesn't fit (heatmap, parallel coordinates,
 swarm plot), render `D3Canvas` directly and compose D3 shape generators.
-The `LinearScale` / `BandScale` factories are the same ones the high-level
-charts use internally, so behavior matches — `.Nice()`, `.Ticks()`,
-`.Domain()` and friends work identically:
+The `LinearScale` / `BandScale` types are the same ones the high-level
+charts use internally, so behavior matches — `.Nice()`, `.Ticks()`, and
+the domain/range setters work identically. `D3Axes` and `D3Grid` return
+`Element[]`, so spread them into the canvas children with `..`:
 
 ```csharp
-var x = new LinearScale().Domain(0, 100).Range(0, 600);
-var y = new LinearScale().Domain(min, max).Range(220, 20).Nice();
+class D3CustomDemo : Component
+{
+    public override Element Render()
+    {
+        const double w = 600, h = 240;
+        const double left = 50, top = 20, right = 20, bottom = 40;
+        double plotW = w - left - right, plotH = h - top - bottom;
 
-return D3Canvas(600, 240,
-    D3Axes(x, y),
-    D3LinePath(data, d => x(d.X), d => y(d.Y)).Stroke("#0078D4"),
-    ForEach(data, d => D3Circle(x(d.X), y(d.Y), 3).Fill("#0078D4")));
+        var data = Enumerable.Range(0, 40)
+            .Select(i => (x: (double)i, y: 40 + 30 * Math.Sin(i / 4.0) + i))
+            .ToArray();
+
+        var (yMin, yMax) = D3Extent.Extent(data.Select(d => d.y));
+
+        // Scales are plain objects: Set* mutates fluently, Map projects a value.
+        var xs = new LinearScale([0, 39], [left, left + plotW]);
+        var ys = new LinearScale([yMax, yMin], [top, top + plotH]).Nice();
+
+        var line = D3Charts.Brush("#0078D4");
+
+        return VStack(12,
+            SubHeading("Custom D3 canvas"),
+            D3Charts.D3Canvas(w, h,
+                [.. D3Charts.D3Grid(ys, left, plotW),
+                 .. D3Charts.D3Axes(xs, ys, left, top, plotW, plotH),
+                 D3Charts.D3LinePath(data, x: d => xs.Map(d.x), y: d => ys.Map(d.y),
+                     stroke: line, strokeWidth: 2),
+                 .. data.Select(d => (Element)(D3Charts.D3Circle(xs.Map(d.x), ys.Map(d.y), 3)
+                     with { Fill = line }))])
+        ).Padding(24);
+    }
+}
 ```
 
 This is the same composition strategy Observable Plot uses — geometric
@@ -600,12 +694,14 @@ public override Element Render()
 ```csharp
 class DynamicDataDemo : Component
 {
+    private static readonly List<SalesPoint> InitialPoints =
+        Enumerable.Range(1, 8)
+            .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
+            .ToList();
+
     public override Element Render()
     {
-        var (points, updatePoints) = UseReducer(
-            Enumerable.Range(1, 8)
-                .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
-                .ToList());
+        var (points, updatePoints) = UseReducer(InitialPoints);
 
         return VStack(12,
             SubHeading("Dynamic Data"),
@@ -641,22 +737,24 @@ LineChart(serverC, ...).Stroke("blue")
 
 In forced-colors mode (Windows High Contrast), every stroke collapses
 to the active accent color and the user can't tell the series apart.
-Pair color with `.SeriesShapes(MarkerShape.Circle, Square, Triangle)`
-or `.SeriesDashes(DashStyle.Solid, Dot, Dash)` so the series is
-identifiable without color. Same principle as charts in WCAG 2.2 SC
-1.4.1.
+Pair color with
+`.SeriesShapes(MarkerShape.Circle, MarkerShape.Square, MarkerShape.Triangle)`
+or `.SeriesDashes(DashStyle.Solid, DashStyle.Dash4_2, DashStyle.Dash2_2)`
+so the series is identifiable without color. Same principle as charts in
+WCAG 2.2 SC 1.4.1.
 
 ### Animating individual D3 shapes by hand
 
 ```csharp
 // Don't:
-D3Circle(x(d.X), y(d.Y), 3)
+D3Circle(xs.Map(d.X), ys.Map(d.Y), 3)
     .Set(c =>
     {
         var anim = c.Compositor.CreateScalarKeyFrameAnimation();
         anim.InsertKeyFrame(0f, 0.0f);
         anim.InsertKeyFrame(1f, 1.0f);
-        c.StartAnimation("Opacity", anim);
+        anim.Target = "Opacity";
+        c.StartAnimation(anim);
     })
 ```
 

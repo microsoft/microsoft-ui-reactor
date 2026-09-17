@@ -40,8 +40,11 @@ variables:
   # The SDK's GitHub.Copilot.SDK.targets downloads copilot-<rid>.tgz via an MSBuild
   # DownloadFile task hardcoded to registry.npmjs.org, which can fail in a restricted
   # CI environment and cannot use an authenticated package feed. The native copilot.exe
-  # is only a RUNTIME artifact for the demo-script-tool sample; it is not needed to
-  # compile the framework, pack the NuGets, or run unit tests. MSBuild surfaces this env
+  # is purely a RUNTIME artifact: it is not needed to compile the framework, pack the
+  # NuGets, or run unit tests, and CI never executes a code path that starts it. It is
+  # NOT sample-only though -- `mur loc translate` in src/Reactor.Cli starts it too, so
+  # this is safe for CI but is not a fix to copy into a local build. See the comment on
+  # CopilotSkipCliDownload in Directory.Build.props. MSBuild surfaces this env
   # var as the property the targets gate on ($(CopilotSkipCliDownload) != 'true'), so the
   # download target is skipped.
   CopilotSkipCliDownload: true

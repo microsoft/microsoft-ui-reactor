@@ -61,9 +61,39 @@
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
   </ItemGroup>
 
+  <!--
+    Spec 010 — source mapping. ReactorSourceMap defaults to true in Debug via
+    build/Reactor.targets, which also supplies the required InterceptorsNamespaces
+    entry. In-repo projects still need this ProjectReference because they consume
+    Reactor by project rather than from the nupkg, which carries the generator at
+    buildTransitive/sourcemap and adds it as an <Analyzer> only when ReactorSourceMap is true.
+    The selftest fixtures in
+    SelfTest/Fixtures/SourceMapReadPathTests.cs depend on it being wired here.
+  -->
+  <!-- Spec 010 - the constant travels WITH the generator reference: it means
+       "interceptors are compiled into this assembly", so it must never be
+       defined where the generator is not actually wired. -->
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+    <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ReactorSourceMap)' == 'true'">
+    <ProjectReference Include="..\..\src\Reactor.SourceMap.Generator\Reactor.SourceMap.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Window-icon selftest asset (WindowModel_WindowIcon fixtures). Deliberately NOT
+       named AppIcon.ico: ReactorWindow's no-icon fallback probes Assets\AppIcon.ico, and
+       an asset by that name here would give every window an icon and silently make the
+       fixtures' zero-icon control vacuous. -->
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
-    <!-- Issue #433: md4c HTML renderer used by MarkdownHtmlFixtures. -->
+    <Content Include="Assets\SelfTestWindowIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />    <!-- Issue #433: md4c HTML renderer used by MarkdownHtmlFixtures. -->
     <ProjectReference Include="..\Reactor.Markdown.TestRenderer\Reactor.Markdown.TestRenderer.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Devtools\Reactor.Devtools.csproj" />

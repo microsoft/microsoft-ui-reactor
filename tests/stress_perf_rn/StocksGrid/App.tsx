@@ -33,7 +33,6 @@ import {
   ROWS,
   TOTAL_ITEMS,
   StockDataSource,
-  formatCell,
 } from './StockDataSource';
 import { PerfTracker } from './PerfTracker';
 
@@ -61,7 +60,7 @@ const RED = '#FF0000';
 // comparable to the Reactor variant where the reconciler diffs per-cell text.
 type Cell = { symbol: string; currentPrice: number; isUp: boolean };
 
-const StockCell = React.memo(function StockCell({
+function StockCellImpl({
   cell,
   posStyle,
 }: {
@@ -78,13 +77,15 @@ const StockCell = React.memo(function StockCell({
       {cell.symbol} {cell.currentPrice.toFixed(2)}
     </Text>
   );
-});
+}
+
+const StockCell = React.memo(StockCellImpl);
 
 // Precomputed text styles — picked by isUp instead of an inline {color: ...}
 // object that would allocate per render and defeat downstream caching.
 const cellTextStyles = StyleSheet.create({
-  up:   { color: '#008000', fontSize: 8, paddingHorizontal: 2, paddingVertical: 1 },
-  down: { color: '#FF0000', fontSize: 8, paddingHorizontal: 2, paddingVertical: 1 },
+  up:   { color: GREEN, fontSize: 8, paddingHorizontal: 2, paddingVertical: 1 },
+  down: { color: RED, fontSize: 8, paddingHorizontal: 2, paddingVertical: 1 },
 });
 
 // ── App ─────────────────────────────────────────────────────────────────────

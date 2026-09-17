@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Cli.Docs;
 using Microsoft.UI.Reactor.Cli.Docs.ReferenceGen;
 using Xunit;
@@ -80,8 +81,60 @@ defaults:
         var template = "<!-- ref:DoesNotExist -->";
         var expanded = ReferenceLinkInjector.ExpandMarkers(template, "hooks", result, findings);
 
-        Assert.Equal(template, expanded);
+        // The marker must not survive into the output: it's an HTML comment,
+        // so passing it through renders as nothing at all and silently
+        // deletes the cross-reference from the published page.
+        Assert.DoesNotContain("<!-- ref:", expanded, StringComparison.Ordinal);
+        Assert.Equal("`DoesNotExist`", expanded);
         Assert.Contains(findings, f => f.Code == "REACTOR_DOC_REFMARKER_001");
+    }
+
+    /// <summary>
+    /// The regression oracle for the raw-marker leak. Reference generation
+    /// is gated to one category, so any marker naming a type outside it
+    /// fails to resolve; before this fix the marker was emitted verbatim and
+    /// the reader saw an empty gap mid-sentence with no indication that a
+    /// cross-reference had gone missing.
+    /// </summary>
+    [Fact]
+    public void MarkerExpansion_UnresolvableMarker_NeverLeaksIntoOutput()
+    {
+        var result = GenerateFromXml(TinyXml);
+        var findings = new List<RefGenFinding>();
+
+        var template = """
+            Draw with <!-- ref:Win2DCanvas --> and size it via
+            <!-- ref:T:Microsoft.UI.Reactor.Factories.Win2DCanvasElement --> today.
+            """;
+        var expanded = ReferenceLinkInjector.ExpandMarkers(template, "win2d-canvas", result, findings);
+
+        Assert.DoesNotContain("<!-- ref:", expanded, StringComparison.Ordinal);
+        Assert.DoesNotContain("-->", expanded, StringComparison.Ordinal);
+        // Degrades exactly as an unresolvable <see cref> does, so the
+        // sentence still names the thing it is talking about.
+        Assert.Contains("Draw with `Win2DCanvas` and size it via", expanded, StringComparison.Ordinal);
+        Assert.Contains("`Win2DCanvasElement` today.", expanded, StringComparison.Ordinal);
+        Assert.Equal(2, findings.Count(f => f.Code == "REACTOR_DOC_REFMARKER_001"));
+    }
+
+    /// <summary>
+    /// Positive control for the test above: a marker that *does* resolve is
+    /// still expanded to a link, so the "no raw marker" assertion is passing
+    /// because the marker was replaced rather than because the pattern never
+    /// matched.
+    /// </summary>
+    [Fact]
+    public void MarkerExpansion_ResolvableMarker_AlsoLeavesNoRawMarker()
+    {
+        var result = GenerateFromXml(TinyXml);
+        var findings = new List<RefGenFinding>();
+
+        var expanded = ReferenceLinkInjector.ExpandMarkers(
+            "Use <!-- ref:UseState --> here.", "hooks", result, findings);
+
+        Assert.DoesNotContain("<!-- ref:", expanded, StringComparison.Ordinal);
+        Assert.Equal("Use [UseState](reference/hooks/UseState.md) here.", expanded);
+        Assert.Empty(findings);
     }
 
     [Fact]
@@ -115,6 +168,42 @@ defaults:
         // The CrefResolver only writes a See Also section for <seealso>
         // entries; verify the resulting link carries the guide annotation.
         Assert.Contains("[UseState](UseState.md) ([guide](../../hooks.md))", injected);
+    }
+
+    /// <summary>
+    /// The dual-link pass must also match a link carrying a member anchor.
+    /// Overloaded members get their own anchors, so every cref to an overloaded
+    /// page emits <c>Foo.md#foobar</c>; a pattern anchored on <c>.md)</c> stops
+    /// matching exactly those pages and drops the guide annotation silently
+    /// rather than failing. Observed on <c>AnnounceHandle.md</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("[UseState](UseState.md)")]
+    [InlineData("[UseState](UseState.md#usestate)")]
+    [InlineData("[UseState](UseState.md#usestatet-t-rendercontext)")]
+    [InlineData("[UseState](../hooks/UseState.md#usestate)")]
+    public void InlineDualLinkPattern_MatchesWithAndWithoutAnAnchor(string link)
+    {
+        var m = ReferenceLinkInjector.InlineDualLinkPattern.Match(link);
+        Assert.True(m.Success, $"pattern did not match {link}");
+        // The whole link is what gets re-emitted, so the anchor must round-trip.
+        Assert.Equal(link, m.Value);
+    }
+
+    /// <summary>
+    /// An already-annotated link must not be annotated twice. Note the inner
+    /// <c>[guide](../../hooks.md)</c> is itself shaped like a candidate and does
+    /// match; that is harmless because no page has the short name "guide", so
+    /// the replace callback returns it unchanged. The invariant that matters is
+    /// that the <i>outer</i> link is skipped.
+    /// </summary>
+    [Theory]
+    [InlineData("[UseState](UseState.md) ([guide](../../hooks.md))")]
+    [InlineData("[UseState](UseState.md#usestate) ([guide](../../hooks.md))")]
+    public void InlineDualLinkPattern_SkipsTheAlreadyAnnotatedOuterLink(string link)
+    {
+        foreach (Match m in ReferenceLinkInjector.InlineDualLinkPattern.Matches(link))
+            Assert.NotEqual("UseState", m.Groups["name"].Value);
     }
 
     [Fact]

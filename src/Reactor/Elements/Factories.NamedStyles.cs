@@ -7,7 +7,8 @@ namespace Microsoft.UI.Reactor;
 // Named-style factories. Spec 039 §17.5 and §14 #6.
 //
 //   Card(child)                                       — preset BorderElement
-//   Title / Subtitle / Body / BodyStrong / BodyLarge  — WinUI 3 type-ramp
+//   Title / Subtitle / Body / BodyStrong / BodyLarge
+//     / TitleLarge / Display                          — WinUI 3 type-ramp
 public static partial class Factories
 {
     // ── §17.5 Card factory ─────────────────────────────────────────────
@@ -55,4 +56,14 @@ public static partial class Factories
     /// <summary>WinUI 3 <c>BodyLargeTextBlockStyle</c> — 18px regular body text.</summary>
     public static TextBlockElement BodyLarge(string content) =>
         TextBlock(content).ApplyStyle("BodyLargeTextBlockStyle");
+
+    /// <summary>WinUI 3 <c>TitleLargeTextBlockStyle</c> — 40px Semibold large title.
+    /// Use for primary page titles on feature or landing pages.</summary>
+    public static TextBlockElement TitleLarge(string content) =>
+        TextBlock(content).ApplyStyle("TitleLargeTextBlockStyle");
+
+    /// <summary>WinUI 3 <c>DisplayTextBlockStyle</c> — 68px Semibold hero text.
+    /// Use sparingly: hero banners and splash screens, at most one per page.</summary>
+    public static TextBlockElement Display(string content) =>
+        TextBlock(content).ApplyStyle("DisplayTextBlockStyle");
 }

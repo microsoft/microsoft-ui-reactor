@@ -30,7 +30,7 @@ namespace Microsoft.UI.Reactor;
 /// <para>Disposal is idempotent — a second <see cref="Close"/> or
 /// <see cref="Dispose"/> is a no-op, not an exception.</para>
 /// </remarks>
-public sealed class ReactorWindow : IDisposable
+public sealed partial class ReactorWindow : IDisposable
 {
     // Spec 044 §6.7 catch-shape conventions used throughout this file:
     //
@@ -82,6 +82,61 @@ public sealed class ReactorWindow : IDisposable
     // SetIcon returns, so destruction at window-close is safe and avoids
     // leaking one HICON per window.
     private nint _exeFallbackHIcon;
+
+    // Set once the fallback has looked for an icon, whether or not it found one, so a
+    // window with no icon source anywhere does not re-probe on every chrome update.
+    private bool _exeFallbackAttempted;
+
+    // True once Reactor has put an icon on this window (declared or fallback). Gates
+    // ClearWindowIcon so Reactor only ever takes down an icon it applied itself.
+    private bool _reactorAppliedIcon;
+
+    /// <summary>
+    /// Whether the last <c>ApplyChrome</c> saw <see cref="WindowSpec.Icon"/> actually
+    /// reach the window, or fall through to the convention/PE fallback.
+    /// <c>null</c> until chrome has been applied once.
+    /// </summary>
+    /// <remarks>
+    /// Read by the <c>TitleBar</c> icon default so the two surfaces agree on which
+    /// <em>source</em> won, not merely on which file a declaration names.
+    /// <c>WindowIcon.Apply</c> is <c>TryResolvePath</c> plus a catch-wrapped
+    /// <c>AppWindow.SetIcon</c>, so a declared file that exists but is not a loadable icon
+    /// resolves fine and is then rejected — leaving the window on its fallback. Without
+    /// this the title bar would keep projecting the rejected file and render nothing.
+    /// <para>Tri-state on purpose. <c>null</c> means "no decision yet", under which the
+    /// projection stays optimistic and honours the declaration, so a title bar that
+    /// mounts before the first <c>ApplyChrome</c> behaves exactly as it did before this
+    /// flag existed. <c>SyncTitleBarIcon</c> runs at the end of the same <c>ApplyChrome</c>
+    /// that sets it, so the authoritative answer lands immediately afterwards.</para>
+    /// </remarks>
+    internal bool? DeclaredIconApplied { get; private set; }
+
+    /// <summary>
+    /// The <c>Assets\AppIcon.ico</c> the window's fallback probed but did <b>not</b> end
+    /// up displaying, or <c>null</c> when there was no such file or the window adopted it.
+    /// </summary>
+    /// <remarks>
+    /// Read by the <c>TitleBar</c> icon default for the same reason as
+    /// <see cref="DeclaredIconApplied"/>: the asset existing is not evidence the window
+    /// adopted it. Two things can go wrong after <c>File.Exists</c> succeeds —
+    /// <c>LoadImageW</c> can refuse to decode the file, and the
+    /// <c>GetIconIdFromIcon</c>/<c>SetIcon</c> boundary can throw — and in both cases the
+    /// window ends up showing something else.
+    /// <para>Recorded <b>pessimistically</b>: set as soon as a candidate file is found and
+    /// cleared only after <c>SetIcon</c> has returned, so neither failure path can leave it
+    /// claiming an adoption that did not happen. A PE icon adopted after the convention
+    /// asset failed to load does not clear it either — the convention really was not
+    /// adopted, and the title bar cannot project a PE resource.</para>
+    /// <para>A <b>path</b> rather than a <c>bool</c>, deliberately. The title bar must act
+    /// on this verdict only when it is a verdict about <em>the same file</em> the title bar
+    /// resolved. The two probe roots are independent (the title bar's is redirectable for
+    /// tests; this one is always <see cref="AppContext.BaseDirectory"/>, because
+    /// redirecting the window's native icon load is not something a test should do), so a
+    /// bare boolean could make the title bar blank itself over a file it never looked at.
+    /// Comparing paths is not deriving the same fact twice — it is checking that two facts
+    /// refer to the same object before combining them.</para>
+    /// </remarks>
+    internal string? UnloadableConventionIconPath { get; private set; }
     // Lazy-init shell wrappers — apps that never read these never instantiate
     // them, keeping the cold-start budget clean (spec 036 §0.7 / §11.7).
     private TaskbarProgress? _taskbarProgress;
@@ -148,6 +203,33 @@ public sealed class ReactorWindow : IDisposable
     // not to the declaration, so the two halves never disagree.
     private WindowTitleBarHeight? _effectiveTitleBarHeight;
     private WeakReference<FrameworkElement>? _titleBarControl;
+
+    /// <summary>
+    /// Every mounted WinUI <c>TitleBar</c> in this window's content, for the inherited-icon
+    /// push. A list rather than a single reference: multiple title bars in one window are a
+    /// supported shape — <c>samples/ReactorGallery</c> mounts the shell's own bar plus
+    /// three previews on its TitleBar page — and holding only the most recent one would
+    /// leave every other bar showing a stale icon after a <see cref="WindowSpec.Icon"/>
+    /// change.
+    /// </summary>
+    /// <remarks>
+    /// <b>Strong</b> references, removed at explicit unmount. A <c>WeakReference</c> here
+    /// would track the managed RCW rather than the native control: the wrapper can be
+    /// collected while XAML still owns the element, after which the entry is pruned and the
+    /// visible title bar silently stops following the window icon. Holding the wrapper also
+    /// keeps the <c>TitleBarIconDefault</c> record — which is keyed on it — reachable and
+    /// consistent, so the push and the record can never end up on different wrappers for
+    /// one native element. That duplicate-RCW hazard is documented in
+    /// <c>Reconciler.cs</c>'s <c>ReactorAttached.StateProperty</c> notes, where it caused a
+    /// real event-subscription bug.
+    /// <para>Released on unmount by <see cref="ClearTitleBarControl"/>, and unconditionally
+    /// in <see cref="Dispose"/> — the close path does not unmount the root tree, so
+    /// without that a retained closed window would keep every wrapper alive.</para>
+    /// </remarks>
+    private readonly List<Microsoft.UI.Xaml.Controls.TitleBar> _titleBarIconControls = new();
+
+    /// <summary>Test hook: how many mounted title bars this window is holding.</summary>
+    internal int TitleBarIconControlCountForTests => _titleBarIconControls.Count;
     private bool _titleBarControlExplicitHeight;
     private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
@@ -160,6 +242,14 @@ public sealed class ReactorWindow : IDisposable
     private SizeChangedEventHandler? _sizeToContentSizeChangedHandler;
     private EventHandler<object>? _sizeToContentLayoutUpdatedHandler;
     private bool _sizeToContentApplying;
+    // Edge-trigger for the "ignored while maximized" warning. ApplySizeToContent
+    // runs off LayoutUpdated, i.e. every layout pass, so this tracks whether the
+    // warning has already been emitted for the current maximized spell.
+    private bool _sizeToContentMaximizedWarned;
+    // Edge-trigger for WindowSpec's no-drag-affordance warning. Update validates
+    // ahead of its own equality check, so without this an app holding that
+    // configuration would emit one warning per spec change, indefinitely.
+    private bool _warnedNoDragAffordance;
     internal int SizeToContentApplyCountForTests;
 
     /// <summary>Stable id, e.g. <c>"win-3"</c>. Allocated monotonically per process.</summary>
@@ -354,6 +444,9 @@ public sealed class ReactorWindow : IDisposable
     {
         ArgumentNullException.ThrowIfNull(spec);
         spec.Validate();
+        // Validate() warned if the spec needs it; record that so Update doesn't
+        // repeat it for the same unchanged condition.
+        _warnedNoDragAffordance = spec.HasNoDragAffordance;
 
         _id = $"win-{Interlocked.Increment(ref s_nextId)}";
         _spec = spec;
@@ -610,10 +703,45 @@ public sealed class ReactorWindow : IDisposable
 
         if (spec.Embed is null)
         {
-            if (spec.Icon is { } icon)
-                icon.Apply(_appWindow);
-            else if (isInitial)
-                TryApplyExeIconFallback();
+            // A declared icon that cannot be resolved (wrong format, missing file, or a
+            // resource URI with no matching asset) would otherwise leave the window with
+            // no icon at all, because a non-null spec.Icon used to suppress the fallback.
+            bool applied;
+            var declaredApplied = spec.Icon is { } icon && icon.Apply(_appWindow);
+            if (declaredApplied)
+            {
+                // The declared icon is what the window shows now, so a cached fallback
+                // handle no longer describes it. Drop it: otherwise removing the
+                // declaration later would hit the "already applied" early-return in
+                // TryApplyExeIconFallback and strand the declared icon on the window
+                // instead of reverting to the fallback.
+                ReleaseExeIconFallback();
+                applied = true;
+            }
+            else
+            {
+                applied = TryApplyExeIconFallback();
+            }
+
+            // Record which source actually won, for the TitleBar projection. A declared
+            // icon can resolve to a real file and still be rejected by SetIcon.
+            DeclaredIconApplied = declaredApplied;
+
+            if (applied)
+            {
+                _reactorAppliedIcon = true;
+            }
+            else if (!isInitial && _reactorAppliedIcon)
+            {
+                // Reactor put this window's icon there and the declaration that
+                // justified it is now gone, so take it back down. Gated on having
+                // applied one ourselves: an app that set its own icon imperatively
+                // (a `configure:` callback calling AppWindow.SetIcon, say) must not
+                // have it wiped by an unrelated chrome update, and a window that
+                // never had an icon keeps whatever default the platform gave it.
+                ClearWindowIcon();
+                _reactorAppliedIcon = false;
+            }
         }
 
         // Spec 045 §2.6 tear-off — window-wide alpha via WS_EX_LAYERED +
@@ -644,6 +772,46 @@ public sealed class ReactorWindow : IDisposable
                 DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetOwner", ex);
             }
             owner.AddOwned(this);
+        }
+
+        // The window's icon is ambient state for a mounted TitleBar(...) element: it is
+        // not part of the element, so no element diff can observe it changing. Push it,
+        // the same way the caption height is pushed via SyncTitleBarControlHeight.
+        SyncTitleBarIcon(spec);
+    }
+
+    /// <summary>
+    /// Re-resolves the inherited icon on the mounted <c>TitleBar(...)</c> control after
+    /// the window's own icon may have changed. No-op when no title bar is mounted, or
+    /// when the element declares its own icon (or opted out with <c>.NoIcon()</c>) —
+    /// those own the slot.
+    /// </summary>
+    /// <param name="spec">
+    /// This window's spec. Passed down rather than resolved from the ambient active
+    /// host: <c>ApplyChrome</c> is reachable from <c>Update</c> at any time, so with two
+    /// windows open the ambient host is routinely some *other* window.
+    /// </param>
+    private void SyncTitleBarIcon(WindowSpec spec)
+    {
+        if (_titleBarIconControls.Count == 0) return;
+
+        // Snapshot: ResyncInheritedIcon touches the visual tree, and a teardown-reentry
+        // path could in principle re-enter and mutate the list mid-iteration.
+        foreach (var bar in _titleBarIconControls.ToArray())
+        {
+            try
+            {
+                Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(
+                    bar, spec, DeclaredIconApplied, UnloadableConventionIconPath);
+            }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                // The WinUI TitleBar control throws teardown-reentry COMExceptions while the
+                // window is closing (issue #537). A cosmetic icon refresh must never take the
+                // window down. Caught per control so one closing bar does not stop the rest
+                // of them being refreshed.
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SyncTitleBarIcon", ex);
+            }
         }
     }
 
@@ -869,69 +1037,236 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>
-    /// Best-effort: when no explicit <see cref="WindowSpec.Icon"/> was supplied,
-    /// load the first icon embedded in the running executable's PE resources
-    /// (the one the build wired in via <c>&lt;ApplicationIcon&gt;</c>) and
-    /// apply it to the AppWindow so the taskbar / Alt-Tab / Win11 thumbnail
-    /// show the developer's icon instead of the WinUI default.
+    /// Best-effort: when no explicit <see cref="WindowSpec.Icon"/> was supplied (or the one
+    /// supplied could not be resolved), find an icon for the window so the caption /
+    /// Alt-Tab / Win11 thumbnail show the developer's icon instead of the WinUI default.
+    /// Unpackaged, this also reaches the taskbar button and Task Manager; packaged, those
+    /// two come from package identity and the manifest logo instead (see
+    /// <see cref="WindowSpec.Icon"/>).
     /// </summary>
     /// <remarks>
-    /// <para>Skipped under MSIX-packaged execution — packaged apps get their
-    /// AppWindow icon from <c>Package.appxmanifest</c>'s
-    /// <c>VisualElements</c> tiles automatically; overriding here would just
-    /// fight the manifest. Unpackaged apps have no manifest to fall back to,
-    /// so the EXE PE resource is the next best source.</para>
-    /// <para>Failures are silent — if there's no embedded icon, the AppWindow
-    /// keeps its default. (spec 036 §4.1 — implementation-time addition)</para>
+    /// <para>Two sources are tried, in order:</para>
+    /// <list type="number">
+    /// <item><description><c>Assets\AppIcon.ico</c> beside the app — the asset name the
+    /// official WinUI 3 packaged template ships. Tried <b>first</b> because it is
+    /// unambiguously author-supplied.</description></item>
+    /// <item><description>The first icon embedded in the running executable's PE resources
+    /// (what <c>&lt;ApplicationIcon&gt;</c> wires in). Second, so an explicit asset always
+    /// wins over whatever the build happened to embed.</description></item>
+    /// </list>
+    /// <para>This runs for packaged apps too. A packaged app does <b>not</b> get its window
+    /// <c>HICON</c> from <c>Package.appxmanifest</c>: the manifest's <c>VisualElements</c>
+    /// tiles drive the shell's taskbar button through package identity, which bypasses the
+    /// HWND entirely, so <c>WM_GETICON</c> stays 0 and Alt-Tab shows a generic icon. See
+    /// microsoft-ui-xaml#6104 — which is why the official packaged template calls
+    /// <c>AppWindow.SetIcon</c> explicitly. The manifest assets are not usable here either:
+    /// they are named by MRT resource identifier rather than filename, so the literal
+    /// manifest string does not exist on disk.</para>
+    /// <para>Failures are silent — if neither source yields an icon, the AppWindow keeps
+    /// its default. A .NET apphost built without <c>&lt;ApplicationIcon&gt;</c> carries no
+    /// PE icon at all, so that is the ordinary outcome for an app that ships none.
+    /// (spec 036 §4.1 — implementation-time addition)</para>
     /// </remarks>
-    private void TryApplyExeIconFallback()
+    private bool TryApplyExeIconFallback()
     {
+        if (_exeFallbackHIcon != 0)
+        {
+            // Already applied to this window and SetIcon took its own copy, so the icon
+            // is still on the HWND — re-writing it would be redundant, and would also
+            // clobber an icon the app set imperatively after this fallback first ran.
+            return true;
+        }
+
+        // This runs on every chrome application, not just the first, so an app that
+        // ships no icon at all would otherwise re-probe the filesystem and both
+        // loaders on every Update. One attempt per window is enough: neither source
+        // can appear while the window is alive.
+        if (_exeFallbackAttempted) return false;
+        _exeFallbackAttempted = true;
+
+        // Load first, outside the try: both loaders are non-throwing (the generated
+        // interop stubs return 0 on failure and LoadConventionAssetIcon guards its
+        // own file probe).
+        var hIcon = LoadConventionAssetIcon(out var conventionCandidate);
+
+        // Which loader produced the handle. Captured before the reassignment below,
+        // because after it `hIcon` no longer says where it came from.
+        var fromConvention = hIcon != 0;
+
+        // Pessimistic: an existing convention asset counts as "not adopted" until the
+        // window has actually taken it. Set optimistically it would be wrong on both of
+        // the failure paths below — a LoadImageW miss, and a throw out of the SetIcon
+        // boundary — and in each case the title bar would project a file the caption is
+        // not showing. Cleared only after SetIcon returns.
+        UnloadableConventionIconPath = conventionCandidate;
+
+        if (hIcon == 0) hIcon = LoadExecutablePeIcon();
+        if (hIcon == 0) return false;
+
+        // This method owns hIcon until SetIcon has taken it. Tracking that explicitly
+        // rather than relying on the catch means every exit — success, a swallowed
+        // failure, or a throw from the loaders' marshalling — frees the handle exactly
+        // once instead of leaking it for the process lifetime.
+        var owned = true;
         try
         {
-            // Packaged apps: the manifest's Square*Logo assets are the
-            // canonical icon source; let the platform resolve them.
-            if (Hosting.Shell.PackageRuntime.IsPackaged) return;
-
-            var exePath = global::System.Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exePath)) return;
-
-            // LR_LOADFROMFILE on a .exe path loads the first icon group
-            // from its PE resources. LR_DEFAULTSIZE picks the system
-            // default size (usually 32x32) — Windows will scale to the
-            // taskbar's needs from there.
-            var hIcon = NativeIcon.LoadImageW(0, exePath, NativeIcon.IMAGE_ICON,
-                0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
-            if (hIcon == 0) return;
-
             var iconId = Microsoft.UI.Win32Interop.GetIconIdFromIcon(hIcon);
             _appWindow.SetIcon(iconId);
-            // Stash the HICON for Dispose to free — see field comment for
-            // ownership rationale.
+            // Ownership transfers to the window here — Dispose frees it. Assigned only
+            // after SetIcon succeeds, so a throw above still leaves the handle to the
+            // finally below.
             _exeFallbackHIcon = hIcon;
+            owned = false;
+
+            // Adopted. Only a convention-sourced handle clears the record: a PE icon
+            // adopted after the convention asset failed to load leaves the convention
+            // genuinely unadopted, which is what the record should keep saying.
+            if (fromConvention) UnloadableConventionIconPath = null;
+            return true;
         }
-        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        catch (Exception ex) when (IsIconApplyFailure(ex))
         {
-            // _appWindow.SetIcon during teardown reentry — the only WinRT call
-            // in the try that can plausibly fail here. LoadImageW returns 0 on
-            // failure (handled inline) and GetIconIdFromIcon is non-throwing.
+            // Best-effort by contract: this is a cosmetic fallback for an app that
+            // shipped no icon, so no failure of it may reach the caller — ApplyChrome
+            // runs during render, and a propagating COMException would take the window
+            // down over a missing icon. Mirrors WindowIcon.Apply, which swallows the
+            // same AppWindow.SetIcon boundary.
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
+            return false;
+        }
+        finally
+        {
+            // DestroyIcon is a [LibraryImport] bool — it cannot throw at the marshal
+            // boundary, so this is safe to run while an exception is in flight.
+            if (owned) NativeIcon.DestroyIcon(hIcon);
         }
     }
 
-    private static class NativeIcon
+    /// <summary>
+    /// The failures the icon boundary can raise: a COM/WinRT fault out of
+    /// <c>SetIcon</c> or the <c>IconId</c> factory, a handle the platform rejects, or a
+    /// window that has already gone away (<see cref="ObjectDisposedException"/> derives
+    /// from <see cref="InvalidOperationException"/>). Anything else is a genuine bug and
+    /// propagates — the <c>finally</c> above still frees the handle either way.
+    /// </summary>
+    private static bool IsIconApplyFailure(Exception ex)
+        => ex is COMException
+              or ArgumentException
+              or InvalidOperationException;
+
+    /// <summary>
+    /// Drops the cached fallback handle once a declared icon has replaced it on the
+    /// window, so removing that declaration later re-runs the fallback instead of
+    /// leaving the declared icon in place.
+    /// </summary>
+    private void ReleaseExeIconFallback()
     {
+        if (_exeFallbackHIcon != 0)
+        {
+            // Safe for the same reason as in Dispose: the AppWindow holds its own
+            // reference, and this handle is no longer the one the window displays.
+            NativeIcon.DestroyIcon(_exeFallbackHIcon);
+            _exeFallbackHIcon = 0;
+        }
+
+        _exeFallbackAttempted = false;
+    }
+
+    /// <summary>
+    /// Sends <c>WM_SETICON</c> with a null handle to drop the window's small and big
+    /// icons. Only called for an icon Reactor itself applied — see the call site.
+    /// </summary>
+    private void ClearWindowIcon()
+    {
+        _ = NativeIcon.SendMessageW(_hwnd, NativeIcon.WM_SETICON, NativeIcon.ICON_SMALL, 0);
+        _ = NativeIcon.SendMessageW(_hwnd, NativeIcon.WM_SETICON, NativeIcon.ICON_BIG, 0);
+    }
+
+    /// <summary>
+    /// Loads <c>Assets\AppIcon.ico</c> from the app's base directory, which resolves to the
+    /// package install root for a packaged app. Returns 0 when absent.
+    /// </summary>
+    /// <remarks>
+    /// The path half lives in <see cref="Hosting.AppIconConvention"/> because the
+    /// <c>TitleBar</c> icon default needs the same file as a XAML <c>IconSource</c>
+    /// rather than as an <c>HICON</c>, and the two must not disagree about which file
+    /// the convention names.
+    /// </remarks>
+    /// <param name="candidate">
+    /// The path probed, or <c>null</c> when no convention asset exists. Reported even on a
+    /// load failure so the caller can tell "no such file" from "file there, would not
+    /// load" — only the second is a divergence the title bar has to mirror.
+    /// </param>
+    private static nint LoadConventionAssetIcon(out string? candidate)
+    {
+        candidate = null;
+
+        // Always AppContext.BaseDirectory, never a redirectable root: this is a native
+        // LoadImageW + AppWindow.SetIcon + DestroyIcon sequence on the real window, and a
+        // test has no business steering it. (The TitleBar projection's own probe root is
+        // redirectable; the two are reconciled by comparing paths, not by sharing a root.)
+        if (!Hosting.AppIconConvention.TryGetAssetPath(AppContext.BaseDirectory, out var path))
+            return 0;
+
+        candidate = path;
+        return NativeIcon.LoadImageW(0, path, NativeIcon.IMAGE_ICON,
+            0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
+    }
+
+    /// <summary>
+    /// Loads the icon embedded in the running executable's PE resources (what
+    /// <c>&lt;ApplicationIcon&gt;</c> wires in). Returns 0 when the image carries none.
+    /// </summary>
+    /// <remarks>
+    /// Uses <c>ExtractIconExW</c>, not <c>LoadImageW</c> with <c>LR_LOADFROMFILE</c>:
+    /// that flag loads a standalone <i>image file</i> (<c>.ico</c>/<c>.bmp</c>/<c>.cur</c>)
+    /// and returns 0 for every <c>.exe</c>, PE icon resources included — measured against
+    /// <c>explorer.exe</c>, which has an icon and still yields 0 that way.
+    /// </remarks>
+    private static nint LoadExecutablePeIcon()
+    {
+        var exePath = global::System.Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath)) return 0;
+
+        // nIcons=1 extracts the first icon group only; nint.Zero for the small-icon
+        // slot means there is no second handle to own and destroy.
+        _ = NativeIcon.ExtractIconExW(exePath, 0, out var large, 0, 1);
+        return large;
+    }
+
+    private static partial class NativeIcon
+    {
+        public const uint WM_SETICON = 0x0080;
+        public const nint ICON_SMALL = 0;
+        public const nint ICON_BIG = 1;
         public const uint IMAGE_ICON = 1;
         public const uint LR_LOADFROMFILE = 0x00000010;
         public const uint LR_DEFAULTSIZE = 0x00000040;
 
-        [global::System.Runtime.InteropServices.DllImport("user32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
-        public static extern nint LoadImageW(nint hInst,
-            [global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.LPWStr)] string lpszName,
+        // Correct for standalone .ico files. Does NOT read PE resources — see
+        // LoadExecutablePeIcon.
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll",
+            EntryPoint = "LoadImageW",
+            StringMarshalling = global::System.Runtime.InteropServices.StringMarshalling.Utf16,
+            SetLastError = true)]
+        public static partial nint LoadImageW(nint hInst, string lpszName,
             uint uType, int cxDesired, int cyDesired, uint fuLoad);
 
-        [global::System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        // Reads icon groups out of a PE image. Both phicon parameters are
+        // [out, optional] arrays; with nIcons = 1 a single `out nint` is the
+        // equivalent blittable shape, and `nint.Zero` asks for large icons only.
+        [global::System.Runtime.InteropServices.LibraryImport("shell32.dll",
+            EntryPoint = "ExtractIconExW",
+            StringMarshalling = global::System.Runtime.InteropServices.StringMarshalling.Utf16)]
+        public static partial uint ExtractIconExW(string lpszFile, int nIconIndex,
+            out nint phiconLarge, nint phiconSmall, uint nIcons);
+
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll", SetLastError = true)]
         [return: global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.Bool)]
-        public static extern bool DestroyIcon(nint hIcon);
+        public static partial bool DestroyIcon(nint hIcon);
+
+        [global::System.Runtime.InteropServices.LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
+        public static partial nint SendMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
     }
 
     private static class NativeOwnership
@@ -1439,6 +1774,21 @@ public sealed class ReactorWindow : IDisposable
         if (args.DidPositionChange)
             TryUpdatePositionCache(raiseEvent: true);
 
+        // The size-to-content maximized warning latches for one maximized spell.
+        // This is the only root-independent observer of window state:
+        // ApplySizeToContent's re-arm is driven by the root's SizeChanged /
+        // LayoutUpdated handlers and returns at its own null-root guard, so with
+        // no root attached (an Empty() tree) nothing on the content path can see
+        // a restore and the next maximized spell would be silently suppressed.
+        // Deliberately above the presenter/visibility filter below: a
+        // ShowWindow-driven restore reports neither of those, only a size change.
+        // The latch read is free and false in the common case, so the state
+        // resolution is only paid while a spell is actually latched — this
+        // handler also runs per move event. Uses the same predicate as the warning
+        // itself, so the two can never disagree about what "maximized" means.
+        if (_sizeToContentMaximizedWarned && ResolveCurrentState() != WindowState.Maximized)
+            _sizeToContentMaximizedWarned = false;
+
         if (!args.DidPresenterChange && !args.DidVisibilityChange) return;
         var newState = ResolveCurrentState();
         var prev = (WindowState)Volatile.Read(ref _stateValue);
@@ -1542,11 +1892,26 @@ public sealed class ReactorWindow : IDisposable
     /// including the <c>ExtendsContentIntoTitleBar=false</c> case where Reactor
     /// deliberately skips <c>SetTitleBar</c>. Drives
     /// <see cref="PrepareTitleBarForClose"/>. (issue #537)
+    /// <para>Also captures the control itself, which is what <see cref="SyncTitleBarIcon"/>
+    /// pushes the inherited icon to. Deliberately <b>not</b> reusing
+    /// <see cref="_titleBarControl"/>: that reference is assigned only by
+    /// <see cref="SetElementTitleBarHeight"/>, which <c>RegisterWindowTitleBar</c> skips
+    /// entirely when <see cref="WindowSpec.ExtendsContentIntoTitleBar"/> is explicitly
+    /// <c>false</c> (the native caption-height setter throws <c>ERROR_INVALID_STATE</c> on
+    /// a non-extended window). Reusing it would leave the icon push a permanent no-op in
+    /// that supported mode — the icon would be right at mount and then never track a
+    /// <c>WindowSpec.Icon</c> change. Tracking separately also keeps this out of the
+    /// height state machine, whose <c>sameControl</c> fast path would otherwise start
+    /// skipping caption writes it previously performed.</para>
     /// </summary>
-    internal void MarkTitleBarControlPresent()
+    /// <param name="control">The mounted WinUI <c>TitleBar</c> control.</param>
+    internal void MarkTitleBarControlPresent(Microsoft.UI.Xaml.Controls.TitleBar control)
     {
         _titleBarControlPresent = true;
         _titleBarControlMounted = true;
+
+        if (!_titleBarIconControls.Contains(control))
+            _titleBarIconControls.Add(control);
     }
 
     /// <summary>
@@ -1562,9 +1927,72 @@ public sealed class ReactorWindow : IDisposable
     /// one.
     /// </para>
     /// </summary>
-    internal void ClearTitleBarControl()
+    /// <param name="unmounting">
+    /// The control being unmounted, or <c>null</c> from a caller that does not know.
+    /// Its entry is dropped, and the window-wide state below is withdrawn only once no
+    /// mounted title bar remains.
+    /// <para>That "only once none remain" is load-bearing, and subsumes an earlier
+    /// identity check. A keyed or type replacement can mount the new <c>TitleBar</c>
+    /// <em>before</em> unmounting the old one (<c>ChildReconciler</c>'s type-mismatch
+    /// branch mounts the replacement subtree, then unmounts), so this call is often
+    /// <em>stale</em>: the state already describes the replacement. Withdrawing it then
+    /// would strand the live bar — losing the reference the icon push needs, and clearing
+    /// <see cref="_titleBarControlMounted"/>, whose loss makes the next <c>ApplyChrome</c>
+    /// resolve <c>spec.ExtendsContentIntoTitleBar ?? _titleBarControlMounted</c> to
+    /// <c>false</c> and drop the window out of content-extended mode with a title bar
+    /// still mounted.</para>
+    /// </param>
+    internal void ClearTitleBarControl(Microsoft.UI.Xaml.Controls.TitleBar? unmounting = null)
     {
+        if (unmounting is null)
+        {
+            _titleBarIconControls.Clear();
+        }
+        else
+        {
+            _titleBarIconControls.Remove(unmounting);
+
+            // Another title bar is still mounted, so the window-wide state below stays.
+            if (_titleBarIconControls.Count > 0)
+            {
+                DropHeightContributionIfWrittenBy(unmounting);
+                return;
+            }
+        }
+
         _titleBarControlMounted = false;
+        _titleBarControl = null;
+        _titleBarControlExplicitHeight = false;
+        _titleBarControlHeightOwned = false;
+        _elementTitleBarHeight = null;
+        ApplyTitleBarHeight(warnWhenNotExtended: false);
+    }
+
+    /// <summary>
+    /// Withdraws the caption-height contribution when the bar that supplied it is the one
+    /// going away, while other title bars remain mounted.
+    /// </summary>
+    /// <remarks>
+    /// The issue-#917 height state is a single slot — <c>_elementTitleBarHeight</c>,
+    /// <see cref="_titleBarControl"/> and its two flags describe whichever bar wrote last.
+    /// With several bars mounted, returning early to protect the others would otherwise
+    /// leave the window sized to a bar that no longer exists, still holding a reference to
+    /// it. Dropping the contribution is the honest state: nothing currently claims a
+    /// height, and a remaining bar re-establishes its own on its next
+    /// <c>SetElementTitleBarHeight</c>.
+    /// <para>Deliberately does <em>not</em> promote another bar's height here. Which of
+    /// several simultaneously-mounted bars should own the caption is an open question in
+    /// the height design (today's answer is "the last one to write"), and inventing an
+    /// answer inside an unmount path would settle it by accident.</para>
+    /// </remarks>
+    private void DropHeightContributionIfWrittenBy(Microsoft.UI.Xaml.Controls.TitleBar? unmounting)
+    {
+        if (unmounting is null || _titleBarControl is null) return;
+
+        // A dead weak target counts as "the writer is gone" too.
+        if (_titleBarControl.TryGetTarget(out var writer) && !ReferenceEquals(writer, unmounting))
+            return;
+
         _titleBarControl = null;
         _titleBarControlExplicitHeight = false;
         _titleBarControlHeightOwned = false;
@@ -1634,6 +2062,13 @@ public sealed class ReactorWindow : IDisposable
         var resolved = _specTitleBarHeight ?? _elementTitleBarHeight;
         if (resolved is null)
         {
+            // No height is declared, so the invalid "height set on a
+            // non-extended window" combination cannot hold — re-arm, or
+            // re-declaring the height later would be a new invalid state that
+            // never warned. Must happen before the early return below: an
+            // invalid height is never applied, so _appliedTitleBarHeight stays
+            // null and that return is exactly the path a removal takes.
+            _warnedTitleBarHeightNotExtended = false;
             if (_appliedTitleBarHeight is null) return; // never declared — leave the app's value alone
             resolved = WindowTitleBarHeight.Standard;   // declaration removed — return to the default
         }
@@ -1648,7 +2083,15 @@ public sealed class ReactorWindow : IDisposable
 
         if (!extended)
         {
-            if (warnWhenNotExtended)
+            // Warn on entering the invalid combination, not on every re-apply.
+            // ApplyChrome runs for any unequal spec, so an app that leaves
+            // TitleBarHeight set on a non-extended window would otherwise emit
+            // one release-visible warning per unrelated field change. Re-armed
+            // below once the window is content-extended again.
+            if (warnWhenNotExtended && !_warnedTitleBarHeightNotExtended)
+            {
+                _warnedTitleBarHeightNotExtended = true;
+                Interlocked.Increment(ref TitleBarHeightNotExtendedWarningCountForTests);
                 DiagnosticLog.Warning(
                     LogCategory.Hosting,
                     "ReactorWindow.TitleBarHeight",
@@ -1661,11 +2104,16 @@ public sealed class ReactorWindow : IDisposable
                           + "The height option was not applied."
                         : "TitleBarHeight requires a content-extended window; set WindowSpec.ExtendsContentIntoTitleBar = true "
                           + "or render a TitleBar(...) element. The height option was not applied.");
+            }
             // The caption stayed Standard, so the control must not go tall either.
             _effectiveTitleBarHeight = WindowTitleBarHeight.Standard;
             SyncTitleBarControlHeight();
             return;
         }
+
+        // Content-extended: the invalid combination is gone, so a later relapse
+        // is a new edge and warns again.
+        _warnedTitleBarHeightNotExtended = false;
 
         try
         {
@@ -1917,8 +2365,26 @@ public sealed class ReactorWindow : IDisposable
 
     private void AttachSizeToContentRoot(WindowSpec spec, FrameworkElement? root)
     {
-        if (spec.SizeToContent == WindowSizeToContent.Manual || root is null)
+        if (spec.SizeToContent == WindowSizeToContent.Manual)
         {
+            DetachSizeToContentRoot();
+            // Size-to-content is off, which ends any ignored-while-maximized
+            // spell — re-arm so enabling it again reports. Deliberately here and
+            // not inside DetachSizeToContentRoot: that also runs when the
+            // reconciler merely swaps the root (below) while the window stays
+            // maximized, and re-arming there would emit one warning per render.
+            _sizeToContentMaximizedWarned = false;
+            return;
+        }
+
+        if (root is null)
+        {
+            // Size-to-content is still on; the tree just rendered to nothing
+            // (an Empty() root reconciles to a null control, as does a root that
+            // is not a FrameworkElement). That is a detach, not the end of the
+            // spell, so the latch is deliberately preserved — exactly as for the
+            // root-replacement path below. Re-arming here would let a component
+            // alternating Empty() with a real root warn once per render.
             DetachSizeToContentRoot();
             return;
         }
@@ -1962,21 +2428,43 @@ public sealed class ReactorWindow : IDisposable
 
     internal static int SizeToContentMaximizedWarningCountForTests;
 
+    // Edge-trigger for the title-bar-height "not extended" warning. ApplyChrome
+    // re-applies on any unequal spec, so without this an app that keeps the
+    // invalid combination would warn on every unrelated field change.
+    private bool _warnedTitleBarHeightNotExtended;
+    internal static int TitleBarHeightNotExtendedWarningCountForTests;
+
     internal void ApplySizeToContentForTests() => ApplySizeToContent();
 
     private void ApplySizeToContent()
     {
         var spec = Volatile.Read(ref _spec);
+        // Size-to-content off: nothing to apply. Re-arming the maximized-warning
+        // latch is AttachSizeToContentRoot's Manual branch's job, which ApplyChrome
+        // reaches via OnHostContentRendered on every spec change. Doing it here too
+        // would be redundant, and this method also runs for reasons unrelated to a
+        // spec change.
         if (spec.SizeToContent == WindowSizeToContent.Manual) return;
         var root = _sizeToContentRoot;
         if (root is null || _sizeToContentApplying) return;
 
         if (ResolveCurrentState() == WindowState.Maximized)
         {
-            Interlocked.Increment(ref SizeToContentMaximizedWarningCountForTests);
-            DiagnosticLog.Warning(LogCategory.Hosting, "ReactorWindow.SizeToContent", "SizeToContent is ignored while the window is maximized.");
+            // Warn on the edge into the ignored state, not on every layout pass.
+            // LayoutUpdated drives this method continuously, and DiagnosticLog.Warning
+            // is release-visible, so warning per pass would emit an unbounded ETW
+            // stream for as long as the window stays maximized. Re-armed below once
+            // it is restored, so a later maximize warns again.
+            if (!_sizeToContentMaximizedWarned)
+            {
+                _sizeToContentMaximizedWarned = true;
+                Interlocked.Increment(ref SizeToContentMaximizedWarningCountForTests);
+                DiagnosticLog.Warning(LogCategory.Hosting, "ReactorWindow.SizeToContent", "SizeToContent is ignored while the window is maximized.");
+            }
             return;
         }
+
+        _sizeToContentMaximizedWarned = false;
 
         var desiredDip = ResolveSizeToContentDesiredDip(root);
         if (!(desiredDip.Width > 0) || !(desiredDip.Height > 0)) return;
@@ -2130,6 +2618,7 @@ public sealed class ReactorWindow : IDisposable
     /// <c>ACCESS_VIOLATION</c> (0xC0000005) that corrupts later windows in the
     /// process — the multi-window batch teardown crash this guards. (issue #647)
     /// </summary>
+    // <snippet:teardown-reentry-diagnostic>
     private void CloseNativeWindowOnce()
     {
         if (_disposed || _nativeCloseRequested) return;
@@ -2138,6 +2627,7 @@ public sealed class ReactorWindow : IDisposable
         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Close", ex); }
     }
+    // </snippet:teardown-reentry-diagnostic>
 
     /// <summary>Force-save the current window placement when placement persistence is enabled.</summary>
     [UIThreadOnly]
@@ -2159,7 +2649,23 @@ public sealed class ReactorWindow : IDisposable
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Update));
         if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
 
-        next.Validate();
+        next.ValidateThrowing();
+
+        // Warn on entering the condition, not on every Update. The throwing
+        // invariants above must run every time, but this validation happens
+        // ahead of the equality check below — so an app that keeps a chromeless,
+        // non-draggable window while changing any other field (a title, an
+        // opacity tween) would otherwise emit one ETW event per update for the
+        // life of the window. Re-armed when the condition clears.
+        if (!next.HasNoDragAffordance)
+        {
+            _warnedNoDragAffordance = false;
+        }
+        else if (!_warnedNoDragAffordance)
+        {
+            _warnedNoDragAffordance = true;
+            next.WarnOnSuspiciousCombinations();
+        }
 
         // Only re-apply chrome when something visible changed. Equality on the
         // record handles all simple scalar fields; reference-types (Icon,
@@ -2793,6 +3299,14 @@ public sealed class ReactorWindow : IDisposable
         // alive. Idempotent and a no-op when a close path already prepared it
         // (the usual order: Window.Closed → Dispose). (issue #537)
         PrepareTitleBarForClose();
+
+        // The mounted title bars are held strongly for the icon push, and nothing else
+        // drops them on this path: Reconciler.Dispose runs component cleanups and unmounts
+        // navigation-host children, but never the root visual tree, so
+        // ClearTitleBarControl is not reached on an ordinary native close. An app that
+        // keeps a reference to a closed ReactorWindow would otherwise keep every TitleBar
+        // wrapper and its applied-icon record alive with it.
+        _titleBarIconControls.Clear();
 
         _embedWatchdog?.Stop();
         DetachBackgroundDragRoot();

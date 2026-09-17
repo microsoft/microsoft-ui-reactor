@@ -43,7 +43,7 @@ class DependencyEffectExample : Component
         }, query);
 
         return VStack(12,
-            TextBox(query, setQuery, placeholderText: "Search...").Width(300),
+            TextBox(query, setQuery, placeholderText: "Search...", header: "Search query").Width(300),
             TextBlock(results).Foreground(Theme.SecondaryText)
         ).Padding(24);
     }
@@ -63,10 +63,15 @@ class TimerCleanupExample : Component
             if (!isRunning) return () => { };
             var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             var cts = new CancellationTokenSource();
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
             _ = Task.Run(async () =>
             {
-                while (await timer.WaitForNextTickAsync(cts.Token))
-                    updateSeconds(s => s + 1);
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateSeconds(s => s + 1);
+                }
+                catch (OperationCanceledException) { /* expected on cleanup */ }
             });
             return () => { cts.Cancel(); timer.Dispose(); };
         }, isRunning);
@@ -74,7 +79,8 @@ class TimerCleanupExample : Component
         return VStack(12,
             TextBlock($"Elapsed: {seconds}s").FontSize(24).Bold(),
             HStack(8,
-                Button(isRunning ? "Stop" : "Start", () => setIsRunning(!isRunning)),
+                Button(isRunning ? "Stop" : "Start", () => setIsRunning(!isRunning))
+                    .AutomationName(isRunning ? "Stop timer" : "Start timer"),
                 Button("Reset", () => updateSeconds(_ => 0))
             )
         ).Padding(24);
@@ -103,7 +109,7 @@ class AsyncLoadingExample : Component
 
         return VStack(8,
             Heading("Loaded Users"),
-            VStack(4, items.Select(name => TextBlock(name)).ToArray())
+            VStack(4, items.Select(name => TextBlock(name).WithKey(name)).ToArray())
         ).Padding(24);
     }
 }
@@ -129,6 +135,267 @@ class InfiniteLoopWarning : Component
     }
 }
 // </snippet:infinite-loop-warning>
+
+// <snippet:fetch-cancellation>
+class FetchCancellationExample : Component
+{
+    static Task<string[]> FetchAsync(string q, CancellationToken ct) =>
+        Task.FromResult(new[] { $"{q} result" });
+
+    public override Element Render()
+    {
+        var (query, setQuery) = UseState("reactor");
+        var (items, setItems) = UseState(Array.Empty<string>());
+
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var data = await FetchAsync(query, cts.Token);
+                    setItems(data);
+                }
+                catch (OperationCanceledException) { /* expected */ }
+            });
+            return () => { cts.Cancel(); };
+        }, query);
+
+        return VStack(8,
+            TextBox(query, setQuery, header: "Search query").Width(250),
+            ForEach(items, item => TextBlock(item).WithKey(item))
+        ).Padding(24);
+    }
+}
+// </snippet:fetch-cancellation>
+
+// <snippet:subscription-cleanup>
+class EventSource
+{
+    public event EventHandler? Changed;
+    public void Fire() => Changed?.Invoke(this, EventArgs.Empty);
+}
+
+class SubscriptionCleanupExample : Component
+{
+    static readonly EventSource Source = new();
+
+    public override Element Render()
+    {
+        var (tick, updateTick) = UseReducer(0);
+
+        UseEffect(() =>
+        {
+            void Handler(object? s, EventArgs e) => updateTick(t => t + 1);
+            Source.Changed += Handler;
+            return () => Source.Changed -= Handler;
+        }, Source); // re-attach if Source identity changes
+
+        return VStack(8,
+            TextBlock($"Ticks: {tick}"),
+            Button("Fire", Source.Fire)
+        ).Padding(24);
+    }
+}
+// </snippet:subscription-cleanup>
+
+// <snippet:deps-literal-dont>
+class DepsLiteralDontExample : Component
+{
+    static Task FetchAsync(object options) => Task.CompletedTask;
+
+    public override Element Render()
+    {
+        var (url, setUrl) = UseState("https://example.test");
+
+        // Don't — `options` is a fresh anonymous object on every render, so the
+        // effect re-runs every commit and the fetch fires in a loop.
+        var options = new { Url = url, Limit = 10 };
+        UseEffect(() => FetchAsync(options), options);
+
+        return TextBox(url, setUrl, header: "Request URL").Width(250).Padding(24);
+    }
+}
+// </snippet:deps-literal-dont>
+
+// <snippet:deps-literal-do>
+class DepsLiteralDoExample : Component
+{
+    static Task FetchAsync(string url, int limit) => Task.CompletedTask;
+
+    public override Element Render()
+    {
+        var (url, setUrl) = UseState("https://example.test");
+
+        // Do — pass the primitives, which compare by value.
+        UseEffect(() => FetchAsync(url, 10), url);
+
+        return TextBox(url, setUrl, header: "Request URL").Width(250).Padding(24);
+    }
+}
+// </snippet:deps-literal-do>
+
+// <snippet:missing-cleanup-dont>
+class MissingCleanupDontExample : Component
+{
+    public override Element Render()
+    {
+        var (tick, updateTick) = UseReducer(0);
+
+        // Don't — no cleanup, so the timer fires forever after unmount.
+        // UseEffect(() =>
+        // {
+        //     var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        //     _ = Task.Run(async () =>
+        //     {
+        //         while (await timer.WaitForNextTickAsync())
+        //             updateTick(t => t + 1);
+        //     });
+        // }, Array.Empty<object>());
+
+        return TextBlock($"Ticks: {tick}").Padding(24);
+    }
+}
+// </snippet:missing-cleanup-dont>
+
+// <snippet:missing-cleanup-do>
+class MissingCleanupDoExample : Component
+{
+    public override Element Render()
+    {
+        var (tick, updateTick) = UseReducer(0);
+
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateTick(t => t + 1);
+                }
+                catch (OperationCanceledException) { /* expected on unmount */ }
+            });
+            // Cancel the source and dispose the timer; do NOT dispose the
+            // source. The fire-and-forget worker shares ownership of it, and
+            // CancellationTokenSource.Dispose is not safe alongside concurrent
+            // member access — a call still registering against the token would
+            // see ObjectDisposedException. A CTS with no timer holds no
+            // unmanaged resource, so dropping the reference is enough.
+            return () => { cts.Cancel(); timer.Dispose(); };
+        }, Array.Empty<object>());
+
+        return TextBlock($"Ticks: {tick}").Padding(24);
+    }
+}
+// </snippet:missing-cleanup-do>
+
+// <snippet:effect-vs-memo-dont>
+class EffectVsMemoDontExample : Component
+{
+    public override Element Render()
+    {
+        var (first, setFirst) = UseState("Ada");
+        var (last, setLast) = UseState("Lovelace");
+
+        // Don't — this pays for two extra renders just to derive a string.
+        var (full, setFull) = UseState("");
+        UseEffect(() => setFull($"{first} {last}"), first, last);
+
+        return VStack(8,
+            TextBox(first, setFirst, header: "First name").Width(150),
+            TextBox(last, setLast, header: "Last name").Width(150),
+            TextBlock(full)
+        ).Padding(24);
+    }
+}
+// </snippet:effect-vs-memo-dont>
+
+// <snippet:effect-vs-memo-do>
+class EffectVsMemoDoExample : Component
+{
+    static string Compute(string input) => input.ToUpperInvariant();
+
+    public override Element Render()
+    {
+        var (first, setFirst) = UseState("Ada");
+        var (last, setLast) = UseState("Lovelace");
+
+        var full = $"{first} {last}";                        // inline
+        var stats = UseMemo(() => Compute(full), full);      // memoized when expensive
+
+        return VStack(8,
+            TextBox(first, setFirst, header: "First name").Width(150),
+            TextBox(last, setLast, header: "Last name").Width(150),
+            TextBlock(full),
+            TextBlock(stats)
+        ).Padding(24);
+    }
+}
+// </snippet:effect-vs-memo-do>
+
+class SchedulingSubscribeCleanupExample : Component
+{
+    public override Element Render()
+    {
+        // <snippet:scheduling-subscribe-cleanup>
+        var (seconds, updateSeconds) = UseReducer(0);
+
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
+            _ = Task.Run(async () =>
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateSeconds(s => s + 1);
+                }
+                catch (OperationCanceledException) { /* expected on cleanup */ }
+            });
+            // Cancel only, and deliberately so. The fire-and-forget worker shares ownership of the
+            // source: disposing here while it is still inside WaitForNextTickAsync can surface an
+            // ObjectDisposedException on the token. Nothing leaks — a CTS with no timer and no
+            // WaitHandle access holds no unmanaged resource, so dropping the reference is enough.
+            // Dispose only where a single owner can prove the worker has finished.
+            return () => { cts.Cancel(); };
+        }, Array.Empty<object>());
+        // </snippet:scheduling-subscribe-cleanup>
+
+        return TextBlock($"Elapsed: {seconds}s").Padding(24);
+    }
+}
+
+class SchedulingObserveChangeExample : Component
+{
+    static void LogTelemetry(string eventName)
+    {
+        _ = eventName;
+    }
+
+    public override Element Render()
+    {
+        var (isOpen, setIsOpen) = UseState(false);
+
+        // <snippet:scheduling-observe-change>
+        UseEffect(() =>
+        {
+            if (!isOpen) return () => { };
+            LogTelemetry("dialog_opened");
+            return () => LogTelemetry("dialog_closed");
+        }, isOpen);
+        // </snippet:scheduling-observe-change>
+
+        return Button(isOpen ? "Close" : "Open", () => setIsOpen(!isOpen))
+            .AutomationName(isOpen ? "Close dialog" : "Open dialog");
+    }
+}
 
 // Main app
 class EffectsApp : Component

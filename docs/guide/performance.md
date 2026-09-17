@@ -120,18 +120,38 @@ Every reconcile pass starts here. The event-id pair is `1` / `2`
 `ReconcileStop` are the per-pass cost summary:
 
 ```csharp
-ReconcileStart(elementType);
-ResetDebugCounters();
-
-var result = ReconcileCore(oldElement, newElement, existingControl);
-
-ReconcileStop(
-    elementsDiffed,
-    elementsSkipped,
-    uiElementsCreated,
-    uiElementsModified);
-return result;
+bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
+    global::System.Diagnostics.Tracing.EventLevel.Informational,
+    Diagnostics.ReactorEventSource.Keywords.Reconcile);
+bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
+if (emitTrace)
+{
+    Diagnostics.ReactorEventSource.Log.ReconcileStart(
+        newElement?.GetType().Name ?? "null");
+}
 ```
+
+The matching `finally` decrements exactly the depth it incremented and
+emits the stop payload only for the outermost pass:
+
+```csharp
+if (traceEnabled)
+{
+    _reconcileTraceDepth--;
+    if (emitTrace)
+    {
+        Diagnostics.ReactorEventSource.Log.ReconcileStop(
+            DebugElementsDiffed, DebugElementsSkipped,
+            DebugUIElementsCreated, DebugUIElementsModified);
+    }
+}
+```
+
+Only *top-level* passes emit — the depth counter suppresses the
+nested `Reconcile()` calls a single pass makes into subtrees, so one
+band in the viewer is one user-visible update rather than hundreds of
+overlapping fragments. The real code lives in
+`Reconciler.Reconcile` in `src/Reactor/Core/Reconciler.cs`.
 
 In a flame-graph viewer you see a band whose top edge is
 `ReconcileStart` and whose bottom edge is `ReconcileStop`. The band's

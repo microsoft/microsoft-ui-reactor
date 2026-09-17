@@ -7,7 +7,7 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.PendingScope.SetLoading(System.Object,Syst
 
 ## Summary
 
-Update <paramref name="token" />'s loading state. Silently ignored if the token
+Update `token`'s loading state. Silently ignored if the token
 was never registered (defensive — avoids forcing the caller to track whether they
 registered).
 

@@ -7,10 +7,10 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.PendingFactory.Pending(Microsoft.UI.Reacto
 
 ## Summary
 
-Wraps <paramref name="child" /> with a fresh [PendingScope](PendingScope.md) ([guide](../../hooks.md)). Renders
-<paramref name="fallback" /> instead of <paramref name="child" /> while any
-<c>UseResource</c>/<c>UseInfiniteResource</c> in the subtree is in the
-<c>Loading</c> state. <c>Reloading(previous)</c> does <b>not</b> trigger the
+Wraps `child` with a fresh [PendingScope](PendingScope.md) ([guide](../../hooks.md)). Renders
+`fallback` instead of `child` while any
+`UseResource`/`UseInfiniteResource` in the subtree is in the
+`Loading` state. `Reloading(previous)` does **not** trigger the
 fallback — spec §10.1.
 
 ## Discussion
@@ -18,5 +18,16 @@ fallback — spec §10.1.
 The child subtree is always mounted so its hooks register with the scope. The
 element simply chooses which rendered tree to show — there is no unwinding
 of rendering, and no reconciler involvement.
+
+
+Marked `[ReactorSourceTransparent]` (see
+`ReactorSourceTransparentAttribute`, spec 010) because it is a
+pure forwarder: the element is really built by the `Component<,>` call
+on the next line, inside Reactor's own assembly, where no consumer call site
+exists to intercept. Without the annotation a `Pending(...)` element reports
+no location at all. With it, the interceptor in the consumer's compilation stamps
+the line they wrote `Pending(` on, which is the answer they were looking for.
+
+
 
 

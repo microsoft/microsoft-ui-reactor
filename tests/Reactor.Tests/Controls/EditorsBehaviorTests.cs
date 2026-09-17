@@ -683,15 +683,29 @@ public class EditorsBehaviorTests
         Assert.Equal(Color.Blue, captured);
     }
 
-    [Fact]
+    [CulturedFact(new[] { "en-US" })]
     public void Combo_NameMapping_Uses_ToString()
     {
         var factory = Editors.Combo(new object?[] { 1, 2.5, "x" });
         var el = (ComboBoxElement)factory(2.5, _ => { });
         // ToString() on each → "1", "2.5", "x". Verifies the projection
         // doesn't crash on heterogeneous lists.
+        //
+        // Pinned: double.ToString() follows the host locale, so the "2.5" literal is
+        // about en-US, not about the projection under test.
         Assert.Equal(3, el.Items.Length);
         Assert.Equal("2.5", el.Items[1]);
+    }
+
+    [CulturedFact(new[] { "nl-NL" })]
+    public void Combo_NameMapping_Honors_CurrentCulture()
+    {
+        // Companion to the en-US test above, which cannot detect the projection being
+        // switched to invariant — both render 2.5 as "2.5". These are user-facing choice
+        // labels, so a Dutch user should see "2,5".
+        var factory = Editors.Combo(new object?[] { 1, 2.5, "x" });
+        var el = (ComboBoxElement)factory(2.5, _ => { });
+        Assert.Equal("2,5", el.Items[1]);
     }
 
     [Fact]

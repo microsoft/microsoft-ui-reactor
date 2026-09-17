@@ -126,8 +126,9 @@ public abstract class Component
         => Context.UseBreakpoint(window, minWidth);
 
     /// <summary>
-    /// Parameterless overload — resolves the host window. Returns
-    /// <c>false</c> outside a window. (spec 036 §5.2)
+    /// Window-inferring overload — takes only <paramref name="minWidth"/> and
+    /// resolves the host window from the current host. Returns <c>false</c>
+    /// outside a window. (spec 036 §5.2)
     /// </summary>
     protected bool UseBreakpoint(double minWidth)
         => Context.UseBreakpoint(minWidth);

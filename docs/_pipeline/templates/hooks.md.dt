@@ -20,8 +20,8 @@ replace what classic XAML / WPF apps build with `DependencyProperty`,
 `INotifyPropertyChanged`, view models, and lifecycle methods — instead of
 those four mechanisms, you keep state with `UseState`, derive values with
 `UseMemo`, run side effects with [`UseEffect`](effects.md), share data
-without prop drilling via [`UseContext`](context.md), and persist values
-across launches with [`UsePersisted`](persistence.md). Every hook on this
+without prop drilling via [`UseContext`](context.md), and keep values
+across unmount/remount with [`UsePersisted`](persistence.md). Every hook on this
 page reads as a function call inside `Render()` and writes back through a
 setter closure; understanding that single shape makes the rest of Reactor
 fall out as composition.
@@ -46,7 +46,7 @@ lifecycle methods.
 | <!-- ref:UseObservable --> | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
 | <!-- ref:UseExternalStore --> | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
 | <!-- ref:UseResource --> | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
-| <!-- ref:UsePersisted --> | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
+| <!-- ref:UsePersisted --> | `(T, Action<T>)` | `UseState` that survives unmount/remount within the process — in-memory, cleared on exit (see [Persistence](persistence.md)). |
 
 Every hook on this page is summarized again in the auto-generated
 [hooks reference](reference/hooks/index.md); the rest of the page is the
@@ -181,27 +181,7 @@ subscribe to notifications, then ask for the latest snapshot. For that class of
 store, `UseExternalStore` removes the usual `UseEffect` plus `UseReducer`
 boilerplate:
 
-```csharp
-public sealed class SessionStore
-{
-    public event Action? Changed;
-    public SessionSnapshot Snapshot => _snapshot;
-
-    public Action Subscribe(Action onChanged)
-    {
-        Changed += onChanged;
-        return () => Changed -= onChanged;
-    }
-}
-
-public override Element Render()
-{
-    var snapshot = UseExternalStore(
-        _store.Subscribe,
-        () => _store.Snapshot);
-
-    return TextBlock(snapshot.Title);
-}
+```csharp snippet="hooks/external-store"
 ```
 
 `UseExternalStore` reads the snapshot during render, subscribes in an effect,
@@ -234,25 +214,7 @@ and the resulting re-render onto the UI dispatcher. You write the same code
 you'd write on the UI thread:
 
 <!-- ai:lock -->
-```csharp
-public override Element Render()
-{
-    var (seconds, updateSeconds) = UseReducer(0);
-
-    UseEffect(() =>
-    {
-        var cts = new CancellationTokenSource();
-        _ = Task.Run(async () =>
-        {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            while (await timer.WaitForNextTickAsync(cts.Token))
-                updateSeconds(s => s + 1);   // auto-marshals to the UI thread
-        });
-        return () => cts.Cancel();
-    });
-
-    return TextBlock($"Elapsed: {seconds}s");
-}
+```csharp snippet="hooks/background-setter"
 ```
 <!-- /ai:lock -->
 
@@ -264,9 +226,7 @@ that hammer the same hook from multiple producers), pass `threadSafe: true` to
 the hook:
 
 <!-- ai:lock -->
-```csharp
-var (count, setCount) = UseState(0, threadSafe: true);
-var (sum, addToSum) = UseReducer(0, threadSafe: true);
+```csharp snippet="hooks/thread-safe-hooks"
 ```
 <!-- /ai:lock -->
 
@@ -293,14 +253,7 @@ of `_hookIndex` against `_hooks[currentIndex]` is described in
 
 **Do:**
 <!-- ai:lock -->
-```csharp
-public override Element Render()
-{
-    var (a, setA) = UseState(0);     // always first
-    var (b, setB) = UseState("");    // always second
-    UseEffect(() => { ... }, a);     // always third
-    return Text($"{a} {b}");
-}
+```csharp snippet="hooks/hook-order-do"
 ```
 <!-- /ai:lock -->
 
@@ -312,15 +265,14 @@ public override Element Render()
     var (a, setA) = UseState(0);
     if (a > 0)
         UseEffect(() => { ... }, a);  // WRONG: conditional hook
-    return Text($"{a}");
+    return TextBlock($"{a}");
 }
 ```
 <!-- /ai:lock -->
 
 Put the condition **inside** the hook instead:
 <!-- ai:lock -->
-```csharp
-UseEffect(() => { if (a > 0) { /* ... */ } }, a);
+```csharp snippet="hooks/conditional-effect-body"
 ```
 <!-- /ai:lock -->
 
@@ -350,31 +302,15 @@ hooks inside it. The analyzer treats `Use*` methods as legitimate hook
 contexts, so you can compose `UseState`, `UseEffect`, and friends into a
 named, reusable bundle without losing the rules.
 
-```csharp
-static (string Value, Action<string> Set) UseDebouncedText(string initial, int ms)
-{
-    var ctx = RenderContext.Current;
-    var (value, setValue) = ctx.UseState(initial);
-    var (debounced, setDebounced) = ctx.UseState(initial);
-
-    ctx.UseEffect(() =>
-    {
-        var cts = new CancellationTokenSource();
-        _ = Task.Run(async () =>
-        {
-            try { await Task.Delay(ms, cts.Token); setDebounced(value); }
-            catch (OperationCanceledException) { }
-        });
-        return () => cts.Cancel();
-    }, value);
-
-    return (debounced, setValue);
-}
+```csharp snippet="hooks/custom-hook-debounce"
 ```
 
 The hook owns three slots — two `UseState` and one `UseEffect` — and the
 caller still gets the simple `(value, setter)` shape they'd get from
-`UseState`. The compiled [Rules of Reactor](rules-of-reactor.md) page
+`UseState`. Custom hooks are `RenderContext` extension methods, so they take
+the context explicitly (`this RenderContext ctx`) and are called off the `ctx`
+of a `Memo(ctx => …)` function component or a class component's `Context`.
+The compiled [Rules of Reactor](rules-of-reactor.md) page
 catalogs the full set of custom-hook conventions.
 
 ### Lifted state
@@ -394,9 +330,7 @@ must **not** trigger them. Storing the previous prop value for diffing,
 holding a `CancellationTokenSource`, or counting renders for diagnostics
 all belong in a ref:
 
-```csharp
-var prev = UseRef<int?>(null);
-UseEffect(() => { /* compare prev.Current to current */ prev.Current = current; }, current);
+```csharp snippet="hooks/deferred-ref"
 ```
 
 The setter writes to `.Current` immediately without scheduling a render —
@@ -425,8 +359,7 @@ The next render finds `EffectHookState` where it expected `ValueHookState`
 and throws `HookOrderException`. The fix is to call the hook
 unconditionally and put the condition **inside** it:
 
-```csharp
-UseEffect(() => { if (!open) return () => { }; return Subscribe(); }, open);
+```csharp snippet="hooks/conditional-subscribe-fix"
 ```
 
 ### Stale closures
@@ -451,19 +384,14 @@ previous-value update.)
 
 ### Setter chain that should use `UseReducer`
 
-```csharp
-// Don't:
-var (count, setCount) = UseState(0);
-Button("+3", () => { setCount(count + 1); setCount(count + 1); setCount(count + 1); });
+```csharp snippet="hooks/setter-chain-dont"
 ```
 
 The three setter calls all read the same captured `count` and all write
 `count + 1` — the button advances by one, not three. Switch to `UseReducer`
 so each functional update sees the previous one's result:
 
-```csharp
-var (count, updateCount) = UseReducer(0);
-Button("+3", () => { updateCount(c => c + 1); updateCount(c => c + 1); updateCount(c => c + 1); });
+```csharp snippet="hooks/setter-chain-do"
 ```
 
 This is the same Reactor-wide rule as the [stale closure](#stale-closures)
@@ -474,14 +402,7 @@ reads the latest committed value, not a snapshot.
 
 ### Reading state right after calling its setter
 
-```csharp
-// Don't:
-var (sizeFitIdx, setSizeFitIdx) = UseState(0);
-ComboBox(SizeFitNames, sizeFitIdx, i =>
-{
-    setSizeFitIdx(i);
-    Apply(sizeFitIdx); // reads the PREVIOUS index — the setter only queued a re-render
-});
+```csharp snippet="hooks/stale-read-dont"
 ```
 
 A setter never mutates the local variable in the current closure; it
@@ -490,12 +411,7 @@ render pass. Reading `sizeFitIdx` again later in the same handler returns
 the stale, pre-update value — switching the dropdown appears to activate
 the previously selected item. Use the value you already have in hand:
 
-```csharp
-ComboBox(SizeFitNames, sizeFitIdx, i =>
-{
-    setSizeFitIdx(i);
-    Apply(i); // use the new value directly
-});
+```csharp snippet="hooks/stale-read-do"
 ```
 
 The **REACTOR_HOOKS_008** analyzer flags a state variable read after its
@@ -539,5 +455,5 @@ own dependency arrays. See [Effects and Lifecycle](effects.md) for advanced patt
 - **[Effects and Lifecycle](effects.md)** — Advanced UseEffect patterns, cleanup, and async work
 - **[Context](context.md)** — Share state across the tree without prop drilling
 - **[Hooks Internals](hooks-internals.md)** — How the slot table actually works under the surface
-- **[Persistence](persistence.md)** — `UsePersisted` for state that survives launches
+- **[Persistence](persistence.md)** — `UsePersisted` for state that survives unmount/remount in-process
 - **[Rules of Reactor](rules-of-reactor.md)** — Hook rules, idioms, and anti-patterns in one place

@@ -25,7 +25,7 @@ namespace System.Runtime.CompilerServices
 namespace Microsoft.UI.Reactor.Core
 {
     public interface IReactorKeyed { string Key { get; } }
-    public abstract record Element { }
+    public abstract record Element { public string? Key { get; init; } }
     public sealed record TextBlockElement(string Text) : Element { }
 
     public static class Factories
@@ -45,6 +45,7 @@ namespace Microsoft.UI.Reactor.Core
 
     public static class ElementExtensions
     {
+        public static T Bold<T>(this T el) where T : Element => el;
         public static T WithKey<T>(this T el, string key) where T : Element => el;
         public static T WithKey<T, TKey>(this T el, TKey item)
             where T : Element where TKey : IReactorKeyed => el;
@@ -97,6 +98,305 @@ namespace TestApp
     {
         public static Element Build(IReadOnlyList<Row> rows)
             => FlexColumn(rows.Select(r => TextBlock(r.Text).WithKey(r.Id)).ToArray());
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_On_ForEach_Into_FlexColumn_Without_WithKey()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn({|REACTOR_DSL_001:ForEach(rows, (r, i) => TextBlock(r.Text))|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_On_Qualified_Factories_ForEach_Without_WithKey()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => Factories.FlexColumn({|REACTOR_DSL_001:Factories.ForEach(rows, (r, i) => Factories.TextBlock(r.Text))|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_When_WithKey_Already_Present_On_ForEach()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, (r, i) => TextBlock(r.Text).WithKey(r.Id)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_On_Explicitly_Generic_ForEach()
+    {
+        // `ForEach<T>(...)` is a GenericNameSyntax, not an IdentifierNameSyntax —
+        // a shape that slipped past the name extraction until SimpleName started
+        // covering SimpleNameSyntax.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn({|REACTOR_DSL_001:ForEach<Row>(rows, r => TextBlock(r.Text))|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_When_ForEach_Is_Not_Consumed_As_Layout_Children()
+    {
+        // Same layout-children gate the Select arm uses: a projection that isn't
+        // handed to a layout factory is left alone.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => ForEach(rows, r => TextBlock(r.Text));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_On_A_NonReactor_Static_ForEach()
+    {
+        // Why the ForEach arm resolves the symbol instead of trusting syntax.
+        // A bare `ForEach(items, lambda)` from someone else's `using static` is
+        // syntactically identical to Reactor's factory, sits in a layout-child
+        // position, and returns an Element — every syntactic gate passes. Only
+        // the namespace check keeps DSL_001 (a Warning, and an error under
+        // TreatWarningsAsErrors) off it.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static TestApp.Helpers;
+
+    public record Row(string Id, string Text);
+
+    public static class Helpers
+    {
+        public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render) => null!;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => Factories.FlexColumn(ForEach(rows, r => Factories.TextBlock(r.Text)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_On_A_Custom_Receiver_ForEach()
+    {
+        // `X.ForEach(items, lambda)` — right argument shape, right return type,
+        // right position, wrong receiver. Excluded by the receiver check alone,
+        // so this reddens if that check is ever loosened.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class Helpers
+    {
+        public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render) => null!;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(Helpers.ForEach(rows, r => TextBlock(r.Text)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_On_The_Bcl_ForEach_Shapes()
+    {
+        // `List<T>.ForEach` returns void and `Parallel.ForEach` returns
+        // ParallelLoopResult, so neither can occupy a layout-child slot at all —
+        // they are excluded by type before any gate runs. Pinned here anyway
+        // because DSL_001 and DSL_002 now share one receiver check: this is the
+        // DSL_001 half of the pair that DSL_002_Does_Not_Fire_On_Bcl_List_ForEach
+        // and DSL_002_Does_Not_Fire_On_Parallel_ForEach hold up from the other side.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(List<Row> rows)
+        {
+            rows.ForEach(r => { _ = TextBlock(r.Text); });
+            Parallel.ForEach(rows, r => { _ = TextBlock(r.Text); });
+            return VStack();
+        }
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_When_ForEach_Items_Are_IReactorKeyed()
+    {
+        // ForEach keys IReactorKeyed items itself, so there is nothing to add.
+        // Without this suppression the rule would demand a key the framework
+        // already supplies — and DSL_004 would then call that key redundant.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Text)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Still_Fires_For_Select_Over_IReactorKeyed_Items()
+    {
+        // The suppression is a property of the ForEach *factory*, not of the
+        // item type: LINQ Select does no keying, so an IReactorKeyed item
+        // projected through it still needs an explicit .WithKey.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Linq;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn({|REACTOR_DSL_001:rows.Select(r => TextBlock(r.Text))|}.ToArray());
     }
 }";
 
@@ -221,6 +521,57 @@ namespace TestApp
     {
         public static Element Build(IReadOnlyList<Row> rows)
             => FlexColumn(rows.Select(r => TextBlock(r.Text).WithKey(r.Id)).ToArray());
+    }
+}";
+
+        await new CSharpCodeFixTest<MissingWithKeyAnalyzer, MissingWithKeyCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.Id}_WithKey_Item_Id",
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Offers_WithKey_ItemId_On_ForEach()
+    {
+        // Was CodeFix_Offers_WithKey_Item_On_ForEach over an IReactorKeyed Row.
+        // ForEach now keys those itself, so DSL_001 no longer fires there and
+        // there is no diagnostic left to fix. The coverage that matters here is
+        // the *shape* — lambda at argument 1, and the argument/invocation span
+        // tie that FindNode has to resolve — so the type is plain and the offer
+        // is the Id one. The IReactorKeyed `.WithKey(item)` offer stays covered
+        // by CodeFix_Offers_WithKey_Item_When_Type_Is_IReactorKeyed, which goes
+        // through Select and is therefore unaffected by the auto-keying.
+        var before = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn({|REACTOR_DSL_001:ForEach(rows, (r, i) => TextBlock(r.Text))|});
+    }
+}";
+
+        var after = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, (r, i) => TextBlock(r.Text).WithKey(r.Id)));
     }
 }";
 
@@ -704,6 +1055,290 @@ namespace TestApp
     {
         public static void Build(IReadOnlyList<Row> rows)
             => Parallel.ForEach(rows, r => { _ = TextBlock(r.Text).WithKey(Guid.NewGuid().ToString()); });
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // -- REACTOR_DSL_004: key that restates the ForEach default -----------
+
+    private const string KeyedRowStub = @"
+    public record Row(string Id, string Text) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+";
+
+    [Fact]
+    public async Task DSL_004_Fires_On_WithKey_Item_Inside_A_Keyed_ForEach()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => {|REACTOR_DSL_004:TextBlock(r.Text).WithKey(r)|}));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_Fires_On_WithKey_ItemKey_Inside_A_Keyed_ForEach()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => {|REACTOR_DSL_004:TextBlock(r.Text).WithKey(r.Key)|}));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_Does_Not_Fire_On_A_Deliberate_Override()
+    {
+        // A composite is not the framework default, so it stays. Note the rule
+        // also leaves `.WithKey(r.Id)` alone even where Key => Id: proving that
+        // equivalence means reading through the Key property body.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Text).WithKey($""row-{r.Id}"")));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_Does_Not_Fire_When_The_Item_Is_Not_Self_Keying()
+    {
+        // No IReactorKeyed, so ForEach supplies nothing and the explicit key is
+        // load-bearing. Reddens if the rule ever stops checking the item type.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public record Row(string Id, string Text);
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Text).WithKey(r.Id)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_Does_Not_Fire_Inside_A_Select_Projection()
+    {
+        // Select does no keying, so `.WithKey(r)` over an IReactorKeyed item is
+        // required there. The rule keys off the factory, not the item type.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Linq;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(rows.Select(r => TextBlock(r.Text).WithKey(r)).ToArray());
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_001_Does_Not_Fire_When_T_Is_IReactorKeyed_Itself()
+    {
+        // AllInterfaces does not include the interface itself, so a collection
+        // typed directly as IReactorKeyed was auto-keyed at runtime while the
+        // analyzer still demanded a key.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<IReactorKeyed> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Key)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Offers_WithKey_Item_When_T_Is_IReactorKeyed_Itself()
+    {
+        // Select does no keying, so a collection typed directly as
+        // IReactorKeyed still needs an explicit key -- and the fix should offer
+        // the `.WithKey(item)` form. It did not, because the code fix kept its
+        // own AllInterfaces loop, which excludes the type itself.
+        var before = Stubs + @"
+namespace TestApp
+{
+    using System.Linq;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<IReactorKeyed> rows)
+            => FlexColumn({|REACTOR_DSL_001:rows.Select(r => TextBlock(r.Key))|}.ToArray());
+    }
+}";
+
+        var after = Stubs + @"
+namespace TestApp
+{
+    using System.Linq;
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<IReactorKeyed> rows)
+            => FlexColumn(rows.Select(r => TextBlock(r.Key).WithKey(r)).ToArray());
+    }
+}";
+
+        await new CSharpCodeFixTest<MissingWithKeyAnalyzer, MissingWithKeyCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = $"{MissingWithKeyAnalyzer.Id}_WithKey_Item",
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_Does_Not_Fire_When_The_Call_Overrides_An_Earlier_Key()
+    {
+        // Element.Key is last-write-wins and AutoKey only fills a *null*, so
+        // deleting the trailing call here would leave "other" as the key rather
+        // than falling back to r.Key. Reporting it would be a false positive
+        // whose fix silently changes behaviour.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Text).WithKey(""other"").WithKey(r)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_Override_Guard_Survives_Trivia_Between_Name_And_Args()
+    {
+        // The guard matches syntax, not `.Contains(".WithKey(")`. A comment
+        // between the name and the argument list defeats the substring form,
+        // and a miss here is an unsafe fix rather than a missed diagnostic.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => TextBlock(r.Text).WithKey /* pinned */ (""other"").WithKey(r)));
+    }
+}";
+
+        await new CSharpAnalyzerTest<MissingWithKeyAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DSL_004_Does_Not_Fire_When_The_Receiver_Sets_Key_In_A_With_Expression()
+    {
+        // `with { Key = ... }` sets the key just as .WithKey does, so the
+        // trailing call is an override. AutoKey only fills a null, so treating
+        // this as redundant would misread it.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using System.Collections.Generic;
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Core.Factories;
+" + KeyedRowStub + @"
+    public static class C
+    {
+        public static Element Build(IReadOnlyList<Row> rows)
+            => FlexColumn(ForEach(rows, r => (TextBlock(r.Text) with { Key = ""other"" }).WithKey(r)));
     }
 }";
 

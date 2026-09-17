@@ -153,8 +153,11 @@ defaults:
                 categoryAllowList: new HashSet<string>() { "hooks" });
 
             Assert.DoesNotContain(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_002");
-            // First-seen overload wins the page in Phase 1B.
-            Assert.Single(result.Pages);
+            // Both overloads share one page — and both are on it.
+            var page = Assert.Single(result.Pages);
+            Assert.Equal(2, page.Members.Count);
+            Assert.Contains("Set the value to an int.", page.Body, StringComparison.Ordinal);
+            Assert.Contains("Set the value to a string.", page.Body, StringComparison.Ordinal);
         }
         finally { File.Delete(tmp); }
     }

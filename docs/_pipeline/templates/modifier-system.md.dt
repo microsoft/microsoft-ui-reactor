@@ -179,13 +179,11 @@ instead of forcing the reconciler to walk a delegate dictionary.
 
 ### Authoring a custom modifier
 
-If you find yourself writing `.Padding(8).WithBorder("#DDD").Background(Theme.CardBackground)`
+If you find yourself writing `.Padding(8).WithBorder(Theme.CardStroke).Background(Theme.CardBackground)`
 on every card, hoist it into a single extension that calls the existing
 modifiers in order:
 
-```csharp
-public static T Card<T>(this T el) where T : Element =>
-    el.Padding(8).WithBorder("#DDD").Background(Theme.CardBackground);
+```csharp snippet="modifier-system/card-modifier"
 ```
 
 The generic constraint `T : Element` is the only ceremony — every
@@ -208,31 +206,12 @@ through the public `Attached` slot directly — it is a `Type`-keyed
 writes it with a `with` expression and the parent reads its own record
 back out by type:
 
-```csharp
-public record BadgeAttached(string Label);
-
-public static T Badge<T>(this T el, string label) where T : Element
-{
-    // Copy any existing entries first — replacing the dictionary wholesale
-    // would drop another provider's attached record on the same element.
-    var attached = new Dictionary<Type, object>();
-    if (el.Attached is { } existing)
-    {
-        foreach (var kv in existing) attached[kv.Key] = kv.Value;
-    }
-    attached[typeof(BadgeAttached)] = new BadgeAttached(label);
-    return el with { Attached = attached };
-}
+```csharp snippet="modifier-system/badge-modifier"
 ```
 
 The parent panel reads it back keyed by its own record type:
 
-```csharp
-if (child.Attached?.TryGetValue(typeof(BadgeAttached), out var data) == true
-    && data is BadgeAttached badge)
-{
-    ApplyBadge(realizedChild, badge);
-}
+```csharp snippet="modifier-system/badge-reader"
 ```
 
 ### Reading the merged modifier in a custom panel
@@ -257,7 +236,7 @@ appearance.
 
 ```csharp
 // Don't expect a red stripe inside the padding:
-Text("hi").Padding(10).Background("#FF0000");
+TextBlock("hi").Padding(10).Background("#FF0000");
 ```
 
 ```csharp snippet="source:src/Reactor/Elements/ElementExtensions.cs#modifier-chain"
@@ -269,15 +248,15 @@ inside. In Reactor, both calls land in the same `Modifiers.Layout.Padding`
 and `Modifiers.Visual.Background` slots, and the WinUI control gets
 one padding and one background — the order doesn't change the
 geometry. If you want the SwiftUI semantics, wrap the inner element in
-a [`Border`](styling.md) explicitly: `Border(Text("hi").Padding(10)).Background("#FF0000")`
-gives you the outer stripe; `Border(Text("hi")).Padding(10).Background("#FF0000")`
+a [`Border`](styling.md) explicitly: `Border(TextBlock("hi").Padding(10)).Background("#FF0000")`
+gives you the outer stripe; `Border(TextBlock("hi")).Padding(10).Background("#FF0000")`
 gives you the inner.
 
 ### Re-setting the same property and expecting an additive effect
 
 ```csharp
 // Don't:
-Text("hi").Margin(8).Margin(left: 16);   // last wins — margin is (16,8,8,8)? NO. it's (16,0,0,0)
+TextBlock("hi").Margin(8).Margin(left: 16);   // last wins — margin is (16,8,8,8)? NO. it's (16,0,0,0)
 ```
 
 ```csharp snippet="source:src/Reactor/Elements/ElementExtensions.cs#modifier-chain"

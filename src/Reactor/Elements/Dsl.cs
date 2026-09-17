@@ -1306,6 +1306,10 @@ public static partial class Factories
     /// <summary>
     /// Map a list to elements (like .map() in React JSX):
     ///   ForEach(items, item =&gt; TextBlock(item.Name))
+    /// <para>When <typeparamref name="T"/> implements
+    /// <see cref="IReactorKeyed"/>, each projected element is keyed from
+    /// <c>item.Key</c> unless the projection already set one, so the
+    /// reconciler matches rows by identity instead of by position.</para>
     /// </summary>
     public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render)
     {
@@ -1316,15 +1320,45 @@ public static partial class Factories
         {
             var arr = new Element[list.Count];
             for (int i = 0; i < arr.Length; i++)
-                arr[i] = render(list[i]);
+                arr[i] = AutoKey(render(list[i]), list[i]);
             return new GroupElement(arr);
         }
-        return new GroupElement(items.Select(render).ToArray());
+        // Build directly rather than `Select(item => AutoKey(render(item), item))`:
+        // that lambda captures `render`, so it allocates a display class per call
+        // on top of the Select iterator. The pre-#1156 code passed the delegate
+        // straight through as `Select(render)` and captured nothing; a manual walk
+        // keeps that, and pre-sizes when the source can report a count.
+        return new GroupElement(BuildKeyed(items, render));
+    }
+
+    static Element[] BuildKeyed<T>(IEnumerable<T> items, Func<T, Element> render)
+    {
+        // Pre-size from a reported count, then grow or trim if the enumeration
+        // disagrees. A count is only a snapshot — a concurrent source can yield
+        // a different number of items than it just claimed — and getting that
+        // wrong would leave trailing nulls or throw. Same contract as
+        // Enumerable.ToArray, without its closure.
+        var buffer = items.TryGetNonEnumeratedCount(out var count)
+            ? (count == 0 ? Array.Empty<Element>() : new Element[count])
+            : new Element[4];
+        var at = 0;
+        foreach (var item in items)
+        {
+            // Math.Max, not `* 2`: a source that reported zero starts on a
+            // zero-length buffer, and doubling that never grows.
+            if (at == buffer.Length) Array.Resize(ref buffer, Math.Max(4, buffer.Length * 2));
+            buffer[at++] = AutoKey(render(item), item);
+        }
+        if (at == 0) return Array.Empty<Element>();
+        if (at != buffer.Length) Array.Resize(ref buffer, at);
+        return buffer;
     }
 
     /// <summary>
     /// Map with index:
     ///   ForEach(items, (item, i) =&gt; TextBlock($"{i}: {item}"))
+    /// <para>Keys from <see cref="IReactorKeyed"/> items exactly as the
+    /// single-parameter overload does.</para>
     /// </summary>
     public static Element ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render)
     {
@@ -1332,10 +1366,81 @@ public static partial class Factories
         {
             var arr = new Element[list.Count];
             for (int i = 0; i < arr.Length; i++)
-                arr[i] = render(list[i], i);
+                arr[i] = AutoKey(render(list[i], i), list[i]);
             return new GroupElement(arr);
         }
-        return new GroupElement(items.Select((item, i) => render(item, i)).ToArray());
+        // Same reasoning as the single-parameter overload: no captured lambda.
+        return new GroupElement(BuildKeyedIndexed(items, render));
+    }
+
+    static Element[] BuildKeyedIndexed<T>(IEnumerable<T> items, Func<T, int, Element> render)
+    {
+        // Same pre-size / grow / trim contract as BuildKeyed.
+        var buffer = items.TryGetNonEnumeratedCount(out var count)
+            ? (count == 0 ? Array.Empty<Element>() : new Element[count])
+            : new Element[4];
+        var at = 0;
+        foreach (var item in items)
+        {
+            if (at == buffer.Length) Array.Resize(ref buffer, Math.Max(4, buffer.Length * 2));
+            buffer[at] = AutoKey(render(item, at), item);
+            at++;
+        }
+        if (at == 0) return Array.Empty<Element>();
+        if (at != buffer.Length) Array.Resize(ref buffer, at);
+        return buffer;
+    }
+
+    /// <summary>
+    /// Spec 042 §5 — identity-on-data. When the item carries its own identity,
+    /// key the projected element from it so the reconciler takes the keyed path
+    /// without the author repeating <c>.WithKey(item.Key)</c> on every row.
+    /// </summary>
+    /// <remarks>
+    /// Brings <c>ForEach</c> in line with the templated factories, which have
+    /// defaulted their key selector to <c>t =&gt; t.Key</c> since Phase 2 (the
+    /// 2-arg <c>ListView&lt;T&gt;</c> / <c>GridView&lt;T&gt;</c> /
+    /// <c>TreeView&lt;T&gt;</c> overloads constrained
+    /// <c>where T : IReactorKeyed</c>). <c>ForEach</c> was simply omitted from
+    /// that list, so the same T auto-keyed through <c>ListView</c> but not here.
+    /// <para>An explicit key always wins: this only fills a null, so
+    /// <c>.WithKey(item.Id)</c> or any deliberate override is untouched.</para>
+    /// <para>Deliberately NOT a positional fallback for non-keyed items. An
+    /// index key is the position, so it would reproduce positional matching
+    /// while forcing the LIS path (<c>ChildReconciler.Reconcile</c> switches on
+    /// <c>HasAnyKeys</c>), and sibling <c>ForEach</c> groups flatten into one
+    /// parent — so <c>"0"</c>, <c>"1"</c>, … would collide across them and trip
+    /// the duplicate-key bailout. <c>REACTOR_DSL_002</c> flags exactly that
+    /// shape when an author writes it by hand.</para>
+    /// </remarks>
+    static Element AutoKey<T>(Element element, T item)
+    {
+        // SelfKeyingItem<T> hoists the interface test, so the common case — T
+        // does not implement IReactorKeyed — costs one branch on a cached bool
+        // per item instead of a type test.
+        //
+        // It does NOT make the keyed path allocation-free: `item is
+        // IReactorKeyed` below boxes once per row when T is a struct that
+        // implements the interface. Calling an interface member on an
+        // unconstrained T cannot avoid that, and a constrained overload is not
+        // possible because constraints are not part of the signature. Records
+        // are the documented shape for keyed items (spec 042 §5), so that path
+        // is rare; ForEach_Keys_From_A_Struct_IReactorKeyed_Item pins that it
+        // still produces the right keys.
+        if (!SelfKeyingItem<T>.Supported) return element;
+        // `Func<T, Element>` is non-nullable, so a null here is already a
+        // contract violation — but ChildReconciler.Filter drops null children
+        // rather than throwing, and before #1156 the null simply flowed through
+        // to that filter. The `!` is that tolerance made explicit: the array
+        // element type is non-nullable, exactly like the delegate's return.
+        if (element is null) return element!;
+        if (element.Key is not null) return element;
+        return item is IReactorKeyed keyed ? element with { Key = keyed.Key } : element;
+    }
+
+    static class SelfKeyingItem<T>
+    {
+        internal static readonly bool Supported = typeof(IReactorKeyed).IsAssignableFrom(typeof(T));
     }
 
     /// <summary>
@@ -1864,7 +1969,7 @@ public static partial class Factories
     /// <summary>
     /// Creates a new AcrylicBrush. This allocates a WinRT DependencyObject on every call.
     /// On hot paths (e.g., inside Render methods), cache the result with <c>UseMemo</c>:
-    /// <code>var brush = ctx.UseMemo(() => UI.AcrylicBrush(color, 0.8), color);</code>
+    /// <code>var brush = ctx.UseMemo(() => AcrylicBrush(color, 0.8), color);</code>
     /// </summary>
     public static Microsoft.UI.Xaml.Media.AcrylicBrush AcrylicBrush(
         global::Windows.UI.Color tintColor,

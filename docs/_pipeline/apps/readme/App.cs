@@ -45,7 +45,7 @@ class StyledText : Component
             Heading("Heading element"),
             SubHeading("SubHeading element"),
             TextBlock("Regular text with modifiers")
-                .FontSize(14).Foreground("#0078D4"),
+                .FontSize(14).Foreground(Theme.Accent),
             Caption("Caption for fine print")
         ).Padding(24);
     }
@@ -68,6 +68,7 @@ class ReadmeShowcase : Component
                         SubHeading("Interactive greeting"),
                         TextBlock($"Hello, {name}!").FontSize(18),
                         TextBox(name, setName, placeholderText: "Your name")
+                            .AutomationName("Your name")
                             .Width(250)
                     );
                 }),

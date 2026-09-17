@@ -30,7 +30,7 @@
 ;   REACTOR_A11Y_003   184   form fields need header / AutomationName / LabeledBy
 ;   REACTOR_A11Y_001    74   icon-only buttons need AutomationName
 ;   REACTOR_HOOKS_001   42   hook called outside Render / custom-hook method
-;   REACTOR_DSL_001     36   Select(...) element without .WithKey(...)
+;   REACTOR_DSL_001     36   Select/ForEach(...) element without .WithKey(...)
 ;   REACTOR_HOOKS_013   32   hook called inside a nested lambda / local function
 ;   REACTOR_HOOKS_005   24   control cached instead of going through the ref
 ;   REACTOR_A11Y_002     8   images need AutomationName / AccessibilityHidden

@@ -1,0 +1,338 @@
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Diagnostics;
+using Xunit;
+using static Microsoft.UI.Reactor.Factories;
+
+namespace Microsoft.UI.Reactor.Tests;
+
+/// <summary>
+/// Spec 010 — headless contract tests for the source-map slot itself
+/// (<see cref="SourceLocation"/> and <c>Element.CallSite</c>), independent of
+/// which provider populates it. These are the tests that must hold for any
+/// provider, so they live here rather than in the interception-enabled
+/// Reactor.SourceMap.Tests consumer.
+///
+/// <para>In the SourceMapGlobals collection because the last few cases read and write
+/// <see cref="ReactorSourceMap.Enabled"/>, which <c>ReactorApp.DevtoolsEnabled</c>
+/// mirrors — without the collection a devtools test in the parallel pool can clear the
+/// flag between this class's set and its assert.</para>
+/// </summary>
+[Collection("SourceMapGlobals")]
+public sealed class SourceMapElementSlotTests
+{
+    // ── The slot must be invisible to reconciliation ──────────────────────
+
+    [Fact]
+    public void ShallowEquals_IgnoresCallSite()
+    {
+        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999) };
+
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_PositiveControl_StillDetectsRealDifferences()
+    {
+        // Guards the test above from passing for the wrong reason: if
+        // ShallowEquals had degenerated into "always true", the CallSite test
+        // would look green while proving nothing.
+        var a = TextBlock("one") with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void CanSkipUpdate_IgnoresCallSite()
+    {
+        // ShallowEquals is only half the child-skip gate; the reconciler
+        // actually calls CanSkipUpdate, so assert the composed predicate too.
+        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999) };
+
+        Assert.True(Element.CanSkipUpdate(a, b));
+    }
+
+    // ── The slot must be invisible to synthesized record equality ─────────
+
+    [Fact]
+    public void RecordEquality_IgnoresCallSite()
+    {
+        // ShallowEquals/CanSkipUpdate above cover the reconciler, but Element is a
+        // record, so `==` and GetHashCode are part of its public surface too. A
+        // diagnostic stamp must not make two otherwise identical elements unequal:
+        // with source mapping on in a Debug run, `Assert.Equal(expected, actual)`
+        // over elements would otherwise start failing purely because the two were
+        // constructed on different lines.
+        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999) };
+
+        Assert.Equal(a, b);
+        Assert.True(a == b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void RecordEquality_PositiveControl_StillDetectsRealDifferences()
+    {
+        // Guards the test above from passing for the wrong reason: if Element
+        // equality had degenerated into "always true", the CallSite test would
+        // look green while proving nothing.
+        var a = TextBlock("one") with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void RecordEquality_IgnoresCallSiteAlongsideRealExtras()
+    {
+        // The CallSite-only case can collapse its bucket to null via
+        // NormalizeExtras, which would hide a real inequality behind
+        // "both buckets are null". Pin the case where the bucket must
+        // survive because it carries a behavioral extra as well.
+        //
+        // Both elements are derived from one base so the behavioral extra is the
+        // SAME reference in each: Attached is an IReadOnlyDictionary, which has
+        // reference equality, so building the two independently would make them
+        // unequal for a reason that has nothing to do with CallSite.
+        var withExtras = TextBlock("same").Grid(row: 1);
+        var a = withExtras with { CallSite = new SourceLocation("A.cs", 1) };
+        var b = withExtras with { CallSite = new SourceLocation("B.cs", 999) };
+
+        Assert.NotNull(a.Extensions);
+        Assert.NotNull(b.Extensions);
+        Assert.NotNull(a.Attached);
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void RecordEquality_AttachedControl_IndependentBucketsAreUnequalWithoutAnyCallSite()
+    {
+        // Control for the test above, and the reason it derives from a shared base:
+        // two independently-built .Grid() elements are already unequal with NO
+        // CallSite involved, because Attached is a reference-equality dictionary.
+        // Without this, a future reader could "fix" the test above by building the
+        // two elements separately and conclude CallSite had regressed.
+        var a = TextBlock("same").Grid(row: 1);
+        var b = TextBlock("same").Grid(row: 1);
+
+        Assert.Null(a.CallSite);
+        Assert.Null(b.CallSite);
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void RecordEquality_ExtrasBucket_IgnoresCallSiteDirectly()
+    {
+        // Same invariant one level down, on the bucket itself, so a regression
+        // is attributed to ElementExtras rather than to Element.
+        var a = new ElementExtras { CallSite = new SourceLocation("A.cs", 1) };
+        var b = new ElementExtras { CallSite = new SourceLocation("B.cs", 999) };
+
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void RecordEquality_BareVersusStamped()
+    {
+        // The half the EqualityIgnored<T> field fix does NOT cover on its own:
+        // stamping materializes the Extensions bucket, so a bare element holds
+        // null while a stamped one holds a CallSite-only ElementExtras. Those
+        // compare unequal on the bucket's presence, before the ignored field is
+        // ever reached. This is the case that actually bites: with source mapping
+        // on, factory-built elements are stamped while an expected value built
+        // with `new TextBlockElement(...)` is not.
+        var bare = TextBlock("same");
+        var stamped = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.Null(bare.Extensions);
+        Assert.NotNull(stamped.Extensions);
+        Assert.Equal(bare, stamped);
+        Assert.Equal(bare.GetHashCode(), stamped.GetHashCode());
+    }
+
+    [Fact]
+    public void RecordEquality_BareVersusStamped_PositiveControl()
+    {
+        // Pins that the bare-vs-stamped path still detects a real difference,
+        // so the test above cannot pass by equality collapsing to "always true".
+        var bare = TextBlock("one");
+        var stamped = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.NotEqual(bare, stamped);
+    }
+
+    [Fact]
+    public void RecordEquality_BareVersusStamped_RealExtrasStillCompared()
+    {
+        // Guards the normalization from going too far: a bucket carrying a
+        // behavioral extra must NOT be treated as equivalent to no bucket just
+        // because the other side is bare.
+        var bare = TextBlock("same");
+        var withRealExtra = TextBlock("same").Grid(row: 1) with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.NotEqual(bare, withRealExtra);
+    }
+
+    // ── Record plumbing ───────────────────────────────────────────────────
+
+    [Fact]
+    public void CallSite_SurvivesWithExpressions()
+    {
+        // Fluent modifiers are all `with` expressions, so this is what makes
+        // .Margin(8).Bold() preserve the stamp without any per-modifier work.
+        var stamped = TextBlock("hi") with { CallSite = new SourceLocation("A.cs", 7) };
+        var modified = stamped.Margin(8).Bold();
+
+        Assert.Equal(new SourceLocation("A.cs", 7), modified.CallSite);
+    }
+
+    [Fact]
+    public void CallSite_DefaultsToNull()
+    {
+        Assert.Null(TextBlock("hi").CallSite);
+        Assert.Null(VStack(TextBlock("a")).CallSite);
+    }
+
+    // ── SourceLocation formatting ─────────────────────────────────────────
+
+    [Theory]
+    [InlineData(@"C:\src\MainPage.cs", 34, "MainPage.cs:34")]
+    [InlineData("/_/src/Reactor/Elements/Dsl.cs", 512, "Dsl.cs:512")]   // deterministic-build path
+    [InlineData("MainPage.cs", 1, "MainPage.cs:1")]                      // already bare
+    public void ToShortString_HandlesBothSeparatorStyles(string path, int line, string expected)
+    {
+        // Both separators matter: DeterministicSourcePaths (Directory.Build.props
+        // when CI=true) rewrites Windows paths to '/'-separated ones, so a
+        // Path.GetFileName-based implementation would return the whole string on
+        // a CI-built binary.
+        Assert.Equal(expected, new SourceLocation(path, line).ToShortString());
+    }
+
+    [Fact]
+    public void ToString_IsFullPathColonLine()
+    {
+        Assert.Equal(@"C:\src\MainPage.cs:34", new SourceLocation(@"C:\src\MainPage.cs", 34).ToString());
+    }
+
+    [Fact]
+    public void ToShortString_EmptyPathFallsBackToLineNumber()
+    {
+        Assert.Equal("34", new SourceLocation("", 34).ToShortString());
+    }
+
+    // ── Behavioral-extras predicate (guards the ElementFactory fast paths) ──
+
+    [Fact]
+    public void HasBehavioralExtras_IsFalseForACallSiteOnlyBucket()
+    {
+        // Regression guard. Bucketing CallSite into ElementExtras makes a stamped
+        // element's Extensions non-null, which silently disqualified it from two
+        // engine fast paths that gate on `Extensions is null`: the virtualized
+        // keyed-memo cache (ElementFactory.cs) and safe component adoption. Those
+        // gates exist to exclude BEHAVIOR that resolution/adoption would drop; a
+        // source location carries none.
+        var stamped = TextBlock("hi") with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.NotNull(stamped.Extensions);          // the bucket really is materialized
+        Assert.False(Element.HasBehavioralExtras(stamped));
+    }
+
+    [Fact]
+    public void HasBehavioralExtras_IsTrueForRealExtras()
+    {
+        // Positive control for the test above: if the predicate had degenerated
+        // into "always false", the CallSite assertion would look green while
+        // silently re-admitting elements the gates must reject.
+        var themed = TextBlock("hi").ConnectedAnimation("hero");
+
+        Assert.NotNull(themed.Extensions);
+        Assert.True(Element.HasBehavioralExtras(themed));
+    }
+
+    [Fact]
+    public void HasBehavioralExtras_IsTrueWhenCallSiteAccompaniesRealExtras()
+    {
+        // A stamped element that ALSO carries behavior must still be excluded —
+        // the stamp must not mask the behavioral extra.
+        var both = (TextBlock("hi").ConnectedAnimation("hero"))
+            with { CallSite = new SourceLocation("A.cs", 1) };
+
+        Assert.True(Element.HasBehavioralExtras(both));
+    }
+
+    [Fact]
+    public void HasBehavioralExtras_IsFalseWhenThereIsNoBucketAtAll()
+    {
+        Assert.Null(TextBlock("hi").Extensions);
+        Assert.False(Element.HasBehavioralExtras(TextBlock("hi")));
+    }
+
+    // ── NormalizeExtras collapse contract (PR #455 CR item #2) ─────────────
+
+    [Fact]
+    public void ClearingCallSite_CollapsesTheBucketAndRestoresEquality()
+    {
+        // ElementExtras.IsEmpty exists so that writing a bucketed field back to
+        // null collapses the bucket to a null slot — otherwise an "empty but
+        // non-null" bucket breaks record equality against a never-stamped
+        // element. Adding CallSite to IsEmpty is what keeps that true here.
+        var bare = TextBlock("hi");
+        var stamped = bare with { CallSite = new SourceLocation("A.cs", 7) };
+        var cleared = stamped with { CallSite = null };
+
+        Assert.NotNull(stamped.Extensions);
+        Assert.Null(cleared.Extensions);
+        Assert.Equal(bare, cleared);
+    }
+
+    // ── Runtime flag ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void EnvironmentContract_OnlyExactlyOneEnables()
+    {
+        // The REACTOR_SOURCEMAP seed contract, tested directly rather than through
+        // ReactorSourceMap.Enabled. Asserting the live flag "defaults to false" would
+        // fail under this very opt-in - running the suite with REACTOR_SOURCEMAP=1 is
+        // supported, and correctly initializes it to true - and could also observe a
+        // write from another class sharing the process-global.
+        Assert.True(ReactorSourceMap.IsEnabledByEnvironment("1"));
+
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment(null));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment(""));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment("0"));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment("true"));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment("True"));
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment(" 1"));
+    }
+
+    [Fact]
+    public void EnvironmentContract_DefaultIsOff()
+    {
+        // The default is what preserves PR #468's leaf-tagging allocation win for every
+        // retail app: absent the explicit opt-in, source mapping must be off. Pinned on
+        // the parser so it holds regardless of how this process was launched.
+        Assert.False(ReactorSourceMap.IsEnabledByEnvironment(null));
+    }
+
+    [Fact]
+    public void Enabled_RoundTrips()
+    {
+        var previous = ReactorSourceMap.Enabled;
+        try
+        {
+            ReactorSourceMap.Enabled = true;
+            Assert.True(ReactorSourceMap.Enabled);
+            ReactorSourceMap.Enabled = false;
+            Assert.False(ReactorSourceMap.Enabled);
+        }
+        finally
+        {
+            ReactorSourceMap.Enabled = previous;
+        }
+    }
+}

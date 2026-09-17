@@ -59,6 +59,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
+    <InternalsVisibleTo Include="Reactor.PackagedTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
     <InternalsVisibleTo Include="Microsoft.UI.Reactor.Devtools" />
     <!-- Issue #433 / spec 062 §7 B2: the md4c HTML renderer (MarkdownHtml) lives

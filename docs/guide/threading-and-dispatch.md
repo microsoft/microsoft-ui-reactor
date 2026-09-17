@@ -163,8 +163,29 @@ background tasks update state.
 
 A separate UI-thread-only concern: programmatic writes to a control
 that raise a `Changed` event would re-enter the user's `OnChanged`
-callback with a value the framework just wrote. The reconciler
-suppresses one such event per programmatic write:
+callback with a value the framework just wrote. Reactor drops those
+echoes with a documented hybrid — two mechanisms, both parked on the
+same attached `ReactorState`.
+
+**Value-diff (the arm).** For controlled round-trips that are single
+valued, exactly comparable, and synchronous — `ComboBox`, `FlipView`,
+`GridView`, `ListBox`, `Pivot`, `PipsPager`, `RadioButtons`,
+`SelectorBar`, `TabView`, `TemplatedFlipView`, `ToggleSwitch`,
+`TextBox` — the engine arms `ReactorState.PendingEchoMatch` with a
+one-shot predicate describing the value it is about to write
+(`ArmExpectedEcho`), then writes bare. The change trampoline calls
+`ShouldSuppressEcho`, which consumes the arm and drops the single event
+whose readback matches. A mismatch means a real user change superseded
+the pending write, so the arm is cleared and the event falls through.
+Descriptor authors opt in via `.Controlled` / `.HandCodedControlled`
+(`valueDiffEcho`).
+
+**Counter (the fallback).** `ChangeEchoSuppressor` is retained for
+everything value-diff cannot model: doubles (`Slider` / `NumberBox`
+value), `NumberBox` coercion, `CalendarView`'s collection diff,
+deferred or coercing strings (AutoSuggest / Password / RichEdit),
+`Expander`, `CheckBox` path B, the `ApplySetters` suppression scope,
+and the public `WriteSuppressed` primitive.
 
 ```csharp
 internal static void BeginSuppress(UIElement control)
@@ -214,10 +235,20 @@ internal static bool ShouldSuppress(Reconciler.ReactorState state)
 handler. The pair is one-for-one with the programmatic write — if a
 write doesn't actually change the value, suppress is balanced by an
 event that never fires, so callers guard with an equality check first.
-The counter lives on a `DependencyObject` attached property rather
-than a `ConditionalWeakTable` because [WinRT projection](reactor-vs-xaml.md)
+`EchoSuppressScopeDepth` is the non-consuming sibling: while an
+`ApplySetters` scope is open, every change event on the control is
+dropped without spending a token, because the engine cannot predict
+which DPs a user's `.Set(...)` will write. Both counters live on a
+`DependencyObject` attached property rather than
+a `ConditionalWeakTable` because [WinRT projection](reactor-vs-xaml.md)
 can hand the same native object back as different managed wrappers,
 and only the attached DP survives that round-trip.
+
+Custom-control authors never touch `ChangeEchoSuppressor` directly — it
+is `internal` by design. The supported entry points are
+`ReactorBinding.WriteSuppressed` (reached in a handler via
+`ctx.BindFor(ctrl, el).WriteSuppressed(...)`) and, for descriptor
+authors, the `.Controlled` / `.HandCodedControlled` opt-ins.
 
 An equality guard is necessary but not sufficient: it proves the write
 isn't a no-op, not that the control will *accept* it. A write the

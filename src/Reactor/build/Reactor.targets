@@ -1,4 +1,111 @@
 <Project>
+  <!--
+    Single-evaluation sentinel. This body is packed ONLY to buildTransitive\, and
+    build\Microsoft.UI.Reactor.targets is a one-line forwarder that imports it —
+    because NuGet flows build\ to a DIRECT PackageReference only, so an app that
+    gets Reactor through an intermediate library needs the buildTransitive\ copy or
+    it compiles against the DSL with no generator and no REACTOR_SOURCEMAP, and
+    every CallSite is silently null.
+
+    One body, imported once, rather than two copies with a skip guard. A guard does
+    not work here: MSBuild evaluates every PropertyGroup in the file before any
+    ItemGroup, so a property set by the "second" import is already visible when the
+    FIRST import's items are evaluated — measured, and it suppressed the wiring
+    entirely rather than just the duplicate. The forwarder reads this property in an
+    <Import Condition>, which IS evaluated in order, so it is skipped when NuGet has
+    already imported this file directly.
+  -->
+  <PropertyGroup>
+    <_MicrosoftUIReactorTargetsLoaded>true</_MicrosoftUIReactorTargetsLoaded>
+  </PropertyGroup>
+
+  <!--
+    Spec 010 — source mapping.
+
+    Mirrors the platform precedent rather than inventing one. WPF gates XAML
+    source info on <XamlDebuggingInformation>, which defaults TRUE in Debug and
+    FALSE in Release; WinUI 3's Live Visual Tree / XAML Hot Reload likewise
+    require a Debug configuration. So source mapping follows the build
+    configuration, not a bespoke property the app author has to discover.
+
+    Debug  → generated. The interceptors are compiled in, but stamp nothing
+             until Reactor.Diagnostics.ReactorSourceMap.Enabled is set, which
+             ReactorApp does when the process is launched with the devtools
+             verb. A Debug build that never runs devtools pays no runtime
+             allocation (measured: byte-identical per-render bytes to a build
+             with no generator at all).
+             Release, BY DEFAULT, not generated. No build cost, and no absolute source paths
+             are baked into shipped binaries. This is a default, not a prohibition: the
+             analyzer below keys on $(ReactorSourceMap) alone, so an explicit
+             <ReactorSourceMap>true</ReactorSourceMap> DOES generate interceptors in Release
+             and DOES embed mapped source paths in the binary. Only opt in for a Release
+             build you are not distributing.
+
+    Cost of the Debug default, measured on samples/ReactorGallery (9,272 lines,
+    1,660 intercepted call sites): +0.99s on an incremental one-line rebuild,
+    +2.18s on a clean compile. Scales at roughly 0.5-0.6 ms per intercepted call
+    site, so set <ReactorSourceMap>false</ReactorSourceMap> explicitly on a very
+    large app if the edit loop matters more than element attribution.
+
+    The InterceptorsNamespaces line below is not optional: emitting an
+    [InterceptsLocation] into a compilation that has not opted the namespace in
+    is CS9137, a hard build error rather than a silent no-op. It is welded to the
+    same condition so the two can never drift apart, and so no app author ever
+    has to know the namespace exists.
+  -->
+  <!--
+    Debug default. NOTE the empty-string arm: this file is imported by the repo's
+    own Directory.Build.props at the TOP of a project, and $(Configuration) is not
+    defaulted until the SDK props are imported later, so it is genuinely EMPTY
+    here for any build that does not pass -c / -p:Configuration explicitly (which
+    is exactly what CI does). Treating empty as Debug matches MSBuild's own
+    default. A real Release build passes Configuration as a global property, so it
+    is already set by this point and correctly declines.
+
+    A PackageReference consumer imports this file after the project body, where
+    $(Configuration) is always set, so the empty arm is inert for them.
+  -->
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
+    <ReactorSourceMap>true</ReactorSourceMap>
+  </PropertyGroup>
+
+  <!--
+    Wire the generator and its compile-time signal TOGETHER, and only for a
+    PackageReference consumer (the DLL sits under buildTransitive\sourcemap\ in the
+    package, not analyzers\dotnet\cs, precisely so it is not auto-loaded).
+
+    Two reasons this is conditional rather than always-on:
+
+      * Cost. An analyzer under analyzers/dotnet/cs loads into EVERY consumer
+        compilation, and this generator's syntax provider visits every
+        invocation to classify it semantically. Gating the DLL's presence is
+        what actually delivers the "Release costs nothing" claim; gating only
+        the emit still pays the whole discovery pass.
+
+      * Honesty of the signal. REACTOR_SOURCEMAP means "interceptors are
+        compiled into this assembly". Defining it anywhere the generator is not
+        actually running would make guarded inspector code treat an unavailable
+        provider as a broken one. The constant is therefore defined in the same
+        conditional block that adds the analyzer, and never on its own.
+
+    In-repo projects do not go through this path; they consume Reactor by
+    project reference, so they add the generator ProjectReference and the
+    constant themselves. Only the handful that opt in get either.
+  -->
+  <ItemGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+    <Analyzer Include="$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+    <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets the generator read $(ReactorSourceMap) via the analyzer config. -->
+    <CompilerVisibleProperty Include="ReactorSourceMap" />
+  </ItemGroup>
+
   <ItemGroup>
     <!--
       ReactorApplication.InitializeComponent loads XAML resources from these
@@ -39,7 +146,7 @@
 
   <Target Name="_NormalizeReactorDevtoolsSupportSwitch"
           BeforeTargets="_GenerateRuntimeConfigurationFilesInputCache;GenerateBuildRuntimeConfigurationFiles;PrepareForILLink">
-    <ItemGroup Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
+  <ItemGroup Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
       <RuntimeHostConfigurationOption Remove="Reactor.DevtoolsSupport" />
       <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                       Value="true"
@@ -51,7 +158,7 @@
           AfterTargets="PrepareForILLink"
           BeforeTargets="WriteIlcRspFileForCompilation"
           Condition="'@(_TrimmerFeatureSettings->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
-    <ItemGroup>
+  <ItemGroup>
       <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                       Value="true" />
     </ItemGroup>

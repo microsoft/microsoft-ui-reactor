@@ -376,12 +376,12 @@ ordered list of them). The descriptor declares the edge:
 
 ```csharp
 descriptor.Reference<FrameworkElement>(
-    get: e => e.Target,
-    set: (c, target) => c.Target = target);
+    get: static e => e.Target,
+    set: static (c, target) => c.Target = target);
 
 descriptor.ReferenceList<FrameworkElement>(
-    get: e => e.Related,
-    apply: (c, targets) =>
+    get: static e => e.Related,
+    apply: static (c, targets) =>
     {
         c.Related.Clear();
         foreach (var target in targets)
@@ -401,7 +401,7 @@ that is only a snapshot and breaks late binding and clear-on-unmount.
 
 > **Caveat:** For reference-type optionals, the implicit conversion is deliberate
 > but easy to misread: `with { Background = null }` for an
-> `Optional<Brush>` property becomes `Optional.Of(null)` — an explicit
+> `Optional<Brush>` property becomes `Optional<Brush>.Of(null)` — an explicit
 > force-assert of `null` — **not** `Optional<Brush>.Unset`. Write
 > `Optional<Brush>.Unset` when the control should own the value.
 
@@ -503,7 +503,7 @@ public static class StarMeter
         int maxRating = 5,
         string? caption = null,
         bool isClearEnabled = true) =>
-        Of(value, onValueChanged, maxRating, caption, isClearEnabled);
+        Of(Optional<double>.Of(value), onValueChanged, maxRating, caption, isClearEnabled);
 
     public static StarMeterElement Of(
         Optional<double> value,

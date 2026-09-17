@@ -145,19 +145,36 @@ public static class DoctorCommand
         }
 
         // 4. `dotnet new reactor` templates (Windows App SDK template pack).
-        var templatePackInstalled = WinAppSdkTemplates.IsInstalled();
-        if (templatePackInstalled is null)
+        //    Probe the template short name, not just the package id: the pack
+        //    shipped versions that predate the Reactor templates, so a package-id
+        //    check reports PASS while `dotnet new reactor` fails.
+        var templatesAvailable = WinAppSdkTemplates.AreTemplatesAvailable();
+        if (templatesAvailable is null)
         {
-            Warn("dotnet new template", "could not enumerate installed `dotnet new` template packages");
+            Warn("dotnet new template", "could not enumerate `dotnet new` templates");
             warnings++;
         }
-        else if (templatePackInstalled.Value)
+        else if (templatesAvailable.Value)
         {
-            Pass("dotnet new template", $"{WinAppSdkTemplates.PackageId} registered (`dotnet new {WinAppSdkTemplates.BlankShortName}`)");
+            var ver = WinAppSdkTemplates.GetInstalledVersion();
+            var detail = ver is null
+                ? $"`dotnet new {WinAppSdkTemplates.BlankShortName}` available"
+                : $"`dotnet new {WinAppSdkTemplates.BlankShortName}` available ({WinAppSdkTemplates.PackageId} {ver})";
+            Pass("dotnet new template", detail);
+        }
+        else if (WinAppSdkTemplates.IsPackageInstalled() == true)
+        {
+            // Installed, but this version doesn't carry the Reactor templates.
+            // Distinct remediation from "not installed", so say so explicitly.
+            var ver = WinAppSdkTemplates.GetInstalledVersion() ?? "(unknown)";
+            Fail("dotnet new template",
+                $"{WinAppSdkTemplates.PackageId} {ver} is installed but does not provide `dotnet new {WinAppSdkTemplates.BlankShortName}`. " +
+                $"Update to a version that ships the Reactor templates: `mur templates install`.");
+            failures++;
         }
         else
         {
-            Fail("dotnet new template", $"{WinAppSdkTemplates.PackageId} not registered, so `dotnet new {WinAppSdkTemplates.BlankShortName}` is unavailable. Run `./bootstrap.ps1`, `mur upgrade`, or `dotnet new install {WinAppSdkTemplates.PackageId}`.");
+            Fail("dotnet new template", $"{WinAppSdkTemplates.PackageId} not registered, so `dotnet new {WinAppSdkTemplates.BlankShortName}` is unavailable. Run `./bootstrap.ps1`, `mur upgrade`, or `mur templates install`.");
             failures++;
         }
 

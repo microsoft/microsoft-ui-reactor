@@ -9,12 +9,16 @@ Set `Domain: alternative-solution` on every finding.
 
 - **Adding a control → `ControlDescriptor`, not a hand-rolled handler.** The
   primary path for a new WinUI control is a
-  `ControlDescriptor<TElement, TControl>` registered in
-  `RegisterV1BuiltInHandlers`. A hand-coded `IElementHandler<TElement, TControl>`
+  `ControlDescriptor<TElement, TControl>`. Registration is lazy: the factory body
+  carries the `Reg<…>.Done` touch, so the handler registers on first factory call
+  (spec-048 §3.4 deleted the old eager `RegisterV1BuiltInHandlers` bootstrap for
+  trimming). Explicit registration goes through `ControlRegistry.Register` /
+  `RegisterDecorator`; `ReactorApp.RegisterAllBuiltIns()` is the opt-in bulk path.
+  A hand-coded `IElementHandler<TElement, TControl>`
   is only for irregular controls. The legacy `MountXxx`/`UpdateXxx`
   dispatch-switch path is gone — flag new code that re-introduces it or hand-rolls
   mount/update logic a descriptor could express. (See
-  `docs/guide/extending-reactor-controls.md` and spec-047.)
+  `docs/guide/extending-reactor-controls.md`, spec-047 and spec-048.)
 - **Echo handling → `WriteSuppressed` / `.Controlled` / `valueDiffEcho`, never
   the suppressor directly.** New value-control code should use the stable
   `WriteSuppressed` primitive or declare `.Controlled` / `valueDiffEcho` on a

@@ -1,10 +1,13 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Input;
 using static Microsoft.UI.Reactor.Factories;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Component = Microsoft.UI.Reactor.Core.Component;
@@ -23,10 +26,10 @@ class ErrorBoundaryDemo : Component
                 Component<BuggyComponent>(),
                 (Exception ex) => VStack(8,
                     TextBlock("Something went wrong").Bold()
-                        .Foreground("#d13438"),
+                        .Foreground(Theme.SystemCritical),
                     TextBlock(ex.Message).FontSize(12).Opacity(0.7)
                 ).Padding(12)
-                 .Background("#fde7e9")
+                 .Background(Theme.SystemCriticalBackground)
                  .CornerRadius(8)
             )
         ).Padding(24);
@@ -65,7 +68,7 @@ class MemoSubtreeDemo : Component
                         TextBlock("Skips re-render when deps unchanged")
                             .FontSize(12).Opacity(0.6)
                     ).Padding(12)
-                ).Background("#f0f0f0").CornerRadius(8);
+                ).Background(Theme.CardBackground).CornerRadius(8);
             }, label)
         ).Padding(24);
     }
@@ -144,7 +147,8 @@ class ObservableTreeDemo : Component
                 header: "User Name"),
             ToggleSwitch(vm.DarkMode, v => vm.DarkMode = v,
                 header: "Dark Mode"),
-            Slider(vm.FontSize, 10, 32, v => vm.FontSize = (int)v),
+            Slider(vm.FontSize, 10, 32, v => vm.FontSize = (int)v)
+                .AutomationName("Font size"),
             TextBlock($"Preview: {vm.UserName}")
                 .FontSize(vm.FontSize).Bold()
         ).Padding(24);
@@ -155,8 +159,11 @@ class ObservableTreeDemo : Component
 // <snippet:observable-collection>
 class ObservableCollectionDemo : Component
 {
-    private static readonly ObservableCollection<string> _tasks = new()
-        { "Review pull request", "Update documentation" };
+    private record TaskItem(int Id, string Title);
+
+    private static int _nextId = 3;
+    private static readonly ObservableCollection<TaskItem> _tasks = new()
+        { new TaskItem(1, "Review pull request"), new TaskItem(2, "Update documentation") };
 
     public override Element Render()
     {
@@ -167,18 +174,21 @@ class ObservableCollectionDemo : Component
             SubHeading("UseCollection"),
             HStack(8,
                 TextBox(input, setInput, placeholderText: "New task")
+                    .AutomationName("New task")
                     .Width(200),
                 Button("Add", () => {
                     if (!string.IsNullOrWhiteSpace(input))
-                    { _tasks.Add(input.Trim()); setInput(""); }
+                    { _tasks.Add(new TaskItem(_nextId++, input.Trim())); setInput(""); }
                 })
             ),
             TextBlock($"{tasks.Count} tasks:").SemiBold(),
             VStack(4, tasks.Select((task, i) =>
                 HStack(8,
-                    TextBlock($"{i + 1}. {task}"),
-                    Button("Remove", () => _tasks.RemoveAt(i))
-                ).WithKey($"task-{i}-{task}")
+                    // The index is fine for display; it must not become the key.
+                    TextBlock($"{i + 1}. {task.Title}"),
+                    Button("Remove", () => _tasks.Remove(task))
+                        .AutomationName($"Remove {task.Title}")
+                ).WithKey(task.Id.ToString())   // stable identity survives removal
             ).ToArray())
         ).Padding(24);
     }
@@ -195,7 +205,9 @@ class ElementRefFocusDemo : Component
 
         return VStack(12,
             SubHeading("Imperative focus via ElementRef<T>"),
-            TextBox(name, setName, placeholderText: "Name").Ref(fieldRef),
+            TextBox(name, setName, placeholderText: "Name")
+                .AutomationName("Name")
+                .Ref(fieldRef),
             Button("Focus the field", () =>
                 fieldRef.Current?.Focus(FocusState.Programmatic))
         ).Padding(24);
@@ -223,9 +235,10 @@ class CustomHookDemo : Component
         var (isOn, toggle) = ctx.UseToggler();
         return VStack(8,
             SubHeading("Custom hook: UseToggler"),
-            Button(isOn ? "On" : "Off", toggle),
+            Button(isOn ? "On" : "Off", toggle)
+                .AutomationName("Toggle state"),
             TextBlock(isOn ? "State is on." : "State is off.")
-                .Foreground(isOn ? "#107c10" : "#666666")
+                .Foreground(isOn ? Theme.SystemSuccess : Theme.SecondaryText)
         ).Padding(24);
     });
 }
@@ -243,12 +256,12 @@ class ErrorBoundaryRetryDemo : Component
             ErrorBoundary(
                 Component<FlakyComponent>().WithKey($"flaky-{resetKey}"),
                 ex => VStack(8,
-                    TextBlock("Couldn't load.").Bold().Foreground("#d13438"),
+                    TextBlock("Couldn't load.").Bold().Foreground(Theme.SystemCritical),
                     TextBlock(ex.Message).FontSize(12).Opacity(0.7),
                     // Bumping resetKey reassigns identity to the child, so the
                     // ErrorBoundary mounts a fresh subtree on the next render.
                     Button("Retry", () => setResetKey(resetKey + 1))
-                ).Padding(12).Background("#fde7e9").CornerRadius(8)
+                ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8)
             )
         ).Padding(24);
     }
@@ -260,10 +273,126 @@ class FlakyComponent : Component
     {
         var (attempt, _) = UseState(Random.Shared.Next(0, 3));
         if (attempt == 0) throw new InvalidOperationException("Service unavailable");
-        return TextBlock("Loaded.").Foreground("#107c10");
+        return TextBlock("Loaded.").Foreground(Theme.SystemSuccess);
     }
 }
 // </snippet:error-boundary-retry>
+
+// <snippet:snap-back>
+class SnapBackDemo : Component
+{
+    public override Element Render()
+    {
+        // RenderContext.UseReducer<T>(T initialValue) returns
+        // (T Value, Action<Func<T, T>> Update). Toggling the bool guarantees
+        // a changed reducer result and therefore a re-render.
+        var (_, bump) = UseReducer(false);
+
+        return Slider(
+            value: Optional<double>.Of(5.0),
+            onValueChanged: _ => bump(b => !b));
+    }
+}
+// </snippet:snap-back>
+
+// <snippet:clear-value-channel>
+public sealed record CardElement : Element
+{
+    public Optional<Brush?> Background { get; init; } = Optional<Brush?>.Unset;
+}
+
+static class CardDescriptorHost
+{
+    public static readonly ControlDescriptor<CardElement, Microsoft.UI.Xaml.Controls.Border> Descriptor =
+        new ControlDescriptor<CardElement, Microsoft.UI.Xaml.Controls.Border>()
+            .OneWay(
+                get: static e => e.Background,
+                set: static (c, v) => c.Background = v,
+                dp: Microsoft.UI.Xaml.Controls.Border.BackgroundProperty);
+}
+// </snippet:clear-value-channel>
+
+// <snippet:hot-loop-cells>
+static class HotLoopCells
+{
+    record Quote(bool IsUp);
+
+    static readonly Brush GreenBrush = new SolidColorBrush(Colors.Green);
+    static readonly Brush RedBrush = new SolidColorBrush(Colors.Red);
+
+    public static void Build(string label, int r, int c)
+    {
+        var item = new Quote(IsUp: true);
+
+        // Fluent — five clones per cell. Right tool for ordinary UI.
+        var fluentCell = TextBlock(label)
+            .FontSize(8)
+            .Foreground(item.IsUp ? GreenBrush : RedBrush)
+            .Padding(2, 1, 2, 1)
+            .Grid(row: r, column: c);
+
+        // Direct record initializer — one TextBlockElement, one ElementModifiers,
+        // two bucket sub-records, one Attached dictionary. Use only when the
+        // allocation cost shows up in profiles.
+        var directCell = new TextBlockElement(label)
+        {
+            FontSize = 8,
+            Modifiers = new ElementModifiers
+            {
+                Layout = new LayoutModifiers { Padding = new Thickness(2, 1, 2, 1) },
+                Visual = new VisualModifiers { Foreground = item.IsUp ? GreenBrush : RedBrush },
+            },
+            Attached = new Dictionary<Type, object>(1)
+            {
+                [typeof(GridAttached)] = new GridAttached(r, c, 1, 1),
+            },
+        };
+
+        _ = (fluentCell, directCell);
+    }
+}
+// </snippet:hot-loop-cells>
+
+// <snippet:memo-cells>
+class MemoCellsDemo : Component
+{
+    record Stock(string Symbol, double Price);
+
+    static Element Cell(Stock item, ColorScheme scheme) =>
+        TextBlock($"{item.Symbol} {item.Price:F2}")
+            .Foreground(scheme == ColorScheme.Dark ? Theme.PrimaryText : Theme.SecondaryText);
+
+    public override Element Render() => Memo(ctx =>
+    {
+        var stocks = new[] { new Stock("MSFT", 431.2), new Stock("GOOG", 176.5) };
+
+        var scheme = ctx.UseColorScheme();
+        var children = ctx.UseMemoCells(
+            stocks,
+            (item, i) => Cell(item, scheme),
+            scheme);   // ← deps; framework invalidates on change
+
+        return VStack(4, children);
+    });
+}
+// </snippet:memo-cells>
+
+// <snippet:wrong-this-capture>
+// Don't — `.Set` runs on every mount AND update, so each render adds another
+// subscription, and the lambda captures the parent component instance that was
+// current when the closure was created.
+class WrongThisCaptureDemo : Component
+{
+    public override Element Render()
+    {
+        // Don't do this:
+        // return Button("Load").Set(b => b.Loaded += (s, e) => this.OnChildLoaded());
+        return Button("Load");
+    }
+
+    void OnChildLoaded() { }
+}
+// </snippet:wrong-this-capture>
 
 // Main app
 class AdvancedApp : Component

@@ -30,11 +30,67 @@ public abstract record Element
 
     /// <summary>
     /// Layout modifiers (margin, padding, size, alignment, etc.) applied to this element.
-    /// Set via fluent extension methods: Text("hi").Margin(10).Width(200)
+    /// Set via fluent extension methods: TextBlock("hi").Margin(10).Width(200)
     /// Modifiers are stored inline so the concrete element type is preserved through chaining.
     /// </summary>
     public ElementModifiers? Modifiers { get; init; }
 // </snippet:element-record>
+
+    /// <summary>
+    /// Spec 010 — the C# source location that created this element, or
+    /// <c>null</c> when nothing stamped it.
+    ///
+    /// <para>This is a property of the ELEMENT, not of the current flag state. An
+    /// element stamped while mapping was on keeps its location after the flag is turned
+    /// off, and a hand-assigned value is honoured regardless of the flag; conversely an
+    /// element built while mapping was off, or produced by a factory the provider does
+    /// not reach, stays <c>null</c> forever. Elements are immutable, so this is fixed at
+    /// construction.</para>
+    ///
+    /// <para>NOTE ON THE NAME: spec 010 proposes <c>Element.Source</c>. That name
+    /// is unusable — five existing element records already declare a positional
+    /// <c>Source</c> member of an incompatible type (<c>ImageElement(string
+    /// Source)</c>, <c>WebView2Element(Uri? Source)</c>,
+    /// <c>MediaPlayerElementElement(string? Source)</c>, plus <c>AnimatedIconElement</c>
+    /// and <c>ParallaxViewElement</c>), and a base property of a different type
+    /// makes their positional parameters fail to bind (CS8866). <c>CallSite</c>
+    /// is the collision-free equivalent.</para>
+    ///
+    /// <para>The slot is present in every build configuration (the library
+    /// ships as a Release-built NuGet package, so a <c>#if DEBUG</c> gate would
+    /// make the property invisible to consumers). The <em>cost</em> is what is
+    /// gated: nothing writes this slot unless a source-map provider is wired
+    /// into the consuming compilation, and the generated interceptors check
+    /// <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/>
+    /// before stamping.</para>
+    ///
+    /// <para>Tagging is NOT keyed on that runtime flag. A stamped element carries this
+    /// value in its <see cref="Extensions"/> bucket, and <c>Reconciler.NeedsTag</c>
+    /// already tags anything with a non-null bucket — so the back-pointer follows the
+    /// stamp, not the flag. A hand-assigned <c>CallSite</c> is therefore tagged and
+    /// readable even with the flag off (see the <c>HandStampedLeafIsTaggedWithFlagOff</c>
+    /// selftest), and an element the provider never reached stays untagged and reports
+    /// no location rather than a wrong one.</para>
+    ///
+    /// <para>Populated per call site, so it is a compile-time constant for a
+    /// given DSL invocation and survives fluent modifier chains automatically
+    /// (record <c>with</c> copies it). It is deliberately NOT consulted by
+    /// <see cref="ShallowEquals"/> — see the reconciler's allow-list.</para>
+    ///
+    /// <para>STORAGE: this is a shim over the spec 047 §4.4
+    /// <see cref="Extensions"/> bucket, exactly like <see cref="Attached"/> and
+    /// <see cref="ThemeBindings"/>. Declaring it inline on the record instead
+    /// costs +24 bytes on every element ever allocated, measured, in every
+    /// build — a permanent retail tax for a debug-only feature. The public
+    /// shape is identical either way, so this is a storage decision, not an API
+    /// one.</para>
+    /// </summary>
+    public SourceLocation? CallSite
+    {
+        get => Extensions?.CallSite;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { CallSite = value } : Extensions with { CallSite = value });
+    }
 
     /// <summary>
     /// Outer margin shim that routes to <see cref="Modifiers"/>. Lets
@@ -79,7 +135,19 @@ public abstract record Element
     /// still set it directly.
     /// </summary>
     /// <remarks>Spec 047 §4.4.</remarks>
-    public ElementExtras? Extensions { get; internal init; }
+    public ElementExtras? Extensions
+    {
+        get => _extensions.Value;
+        internal init => _extensions = new ExtrasSlot(value);
+    }
+
+    /// <summary>
+    /// Backing store for <see cref="Extensions"/>. An <see cref="ExtrasSlot"/> rather
+    /// than a plain auto-property so that a bucket holding nothing but a
+    /// <see cref="ElementExtras.CallSite"/> compares equal to no bucket at all —
+    /// see that type for why the equality-ignored field alone is not enough.
+    /// </summary>
+    private readonly ExtrasSlot _extensions;
 
     /// <summary>
     /// Collapses an all-null <see cref="ElementExtras"/> back to a null
@@ -96,7 +164,7 @@ public abstract record Element
 
     /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
-    /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
+    /// Set via fluent extension methods: TextBlock("hi").Grid(row: 1, column: 2)
     /// Stored as a type-keyed dictionary so each provider defines its own data record.
     /// </summary>
     public IReadOnlyDictionary<Type, object>? Attached
@@ -108,7 +176,7 @@ public abstract record Element
 
     /// <summary>
     /// Implicit transitions (opacity, scale, rotation, translation, background).
-    /// Set via fluent extension methods: Rectangle().WithOpacityTransition()
+    /// Set via fluent extension methods: Rectangle().OpacityTransition()
     /// Applied by the reconciler after mount/update, so they are always present when
     /// property values are set via .Set() callbacks.
     /// </summary>
@@ -121,7 +189,7 @@ public abstract record Element
 
     /// <summary>
     /// Theme transitions (children, item container).
-    /// Set via fluent extension methods: VStack(children).WithThemeTransitions(...)
+    /// Set via fluent extension methods: VStack(children).WithTransitions(...)
     /// </summary>
     public ThemeTransitions? ThemeTransitions
     {
@@ -133,7 +201,7 @@ public abstract record Element
     /// <summary>
     /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
     /// When set, the reconciler resolves from WinUI theme resources instead of using local values.
-    /// Set via fluent extension methods: Text("hi").Background(Theme.Accent)
+    /// Set via fluent extension methods: TextBlock("hi").Background(Theme.Accent)
     /// </summary>
     public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings
     {
@@ -337,7 +405,7 @@ public abstract record Element
 
     /// <summary>
     /// Convenience: implicitly convert a string to a TextBlockElement.
-    /// Allows writing: VStack("Hello", "World") instead of VStack(Text("Hello"), Text("World"))
+    /// Allows writing: VStack("Hello", "World") instead of VStack(TextBlock("Hello"), TextBlock("World"))
     /// </summary>
     public static implicit operator Element(string text) => Microsoft.UI.Reactor.Factories.TextBlock(text);
 
@@ -411,6 +479,21 @@ public abstract record Element
         => ShallowEquals(oldEl, newEl)
             && !ChildDiffHints.IsThemeSensitive(newEl)
             && oldEl.HasCallbacks == newEl.HasCallbacks;
+
+    /// <summary>
+    /// Spec 010 — true when the element carries a bucketed extra that affects
+    /// <em>behavior</em>, as opposed to a source-map <see cref="CallSite"/>
+    /// stamp, which is inert diagnostic metadata.
+    ///
+    /// <para>Engine fast paths that used to test <c>Extensions is null</c>
+    /// directly must use this instead: once <c>CallSite</c> is bucketed, a
+    /// stamped element has a non-null bucket and would otherwise be excluded
+    /// from those paths whenever source mapping is active — silently changing
+    /// virtualization behavior in exactly the builds a developer is profiling.
+    /// </para>
+    /// </summary>
+    internal static bool HasBehavioralExtras(Element element)
+        => element.Extensions is { } extras && !extras.IsBehaviorallyEmpty;
 
     /// <summary>
     /// Fast structural comparison that avoids the pitfalls of record Equals
@@ -845,6 +928,15 @@ public abstract record Element
                 && ta.IsBackButtonVisible == tb.IsBackButtonVisible
                 && ta.IsBackButtonEnabled == tb.IsBackButtonEnabled
                 && ta.IsPaneToggleButtonVisible == tb.IsPaneToggleButtonVisible
+                // Icon and SuppressIcon decide what the icon slot renders, so a change to
+                // either is a change to the element's own WinUI-mapped props — which is
+                // exactly what this method reports. Without them the highlight overlay
+                // would leave a title bar unmarked on a render that swapped its icon.
+                // (Note this method gates the devtools overlay only; the reconciler's
+                // skip gate is ShallowEquals, which has no TitleBarElement arm and so
+                // returns false for every TitleBar pair.)
+                && Equals(ta.Icon, tb.Icon)
+                && ta.SuppressIcon == tb.SuppressIcon
                 && SettersEqual(ta.Setters, tb.Setters),
 
             // Pure composition wrappers — they never write their own WinUI
@@ -1630,6 +1722,80 @@ public partial record SemanticElement(Element Child, SemanticDescription Semanti
 }
 
 /// <summary>
+/// Storage wrapper that keeps its payload out of a containing record's
+/// synthesized equality. A C# record compares and hashes every instance field,
+/// so a field whose value is inert metadata — carried for diagnostics but not
+/// part of the value's identity — has to opt out at the storage level.
+/// <see cref="Equals(EqualityIgnored{T})"/> is unconditionally true and
+/// <see cref="GetHashCode"/> unconditionally zero, so the containing record's
+/// generated members treat the slot as constant while every other field is
+/// still compared normally.
+///
+/// <para>Used for <see cref="ElementExtras.CallSite"/> (spec 010): stamping a
+/// source location must not make two otherwise identical elements unequal.
+/// Preferred over hand-writing <c>Equals</c>/<c>GetHashCode</c> on
+/// <see cref="ElementExtras"/>, which would silently stop comparing any field
+/// added to that record later.</para>
+/// </summary>
+internal readonly struct EqualityIgnored<T> : global::System.IEquatable<EqualityIgnored<T>>
+    where T : struct
+{
+    internal EqualityIgnored(T? value) => Value = value;
+
+    internal T? Value { get; }
+
+    public bool Equals(EqualityIgnored<T> other) => true;
+
+    public override bool Equals(object? obj) => obj is EqualityIgnored<T>;
+
+    public override int GetHashCode() => 0;
+
+    public static bool operator ==(EqualityIgnored<T> left, EqualityIgnored<T> right) => true;
+
+    public static bool operator !=(EqualityIgnored<T> left, EqualityIgnored<T> right) => false;
+}
+
+/// <summary>
+/// Backing slot for <see cref="Element.Extensions"/> that compares two buckets by
+/// their <em>behavioral</em> content only.
+///
+/// <para>Making <see cref="ElementExtras.CallSite"/> an equality-ignored field is
+/// necessary but not sufficient. Stamping a previously bare element materializes the
+/// bucket, so a bare element holds <c>null</c> while a stamped one holds a
+/// CallSite-only <see cref="ElementExtras"/> — and those differ on the bucket's
+/// <em>presence</em>, before the ignored field is ever compared. That is the case that
+/// actually bites: with source mapping on, factory-built elements are stamped while an
+/// expected value built with <c>new SomeElement(...)</c> is not.</para>
+///
+/// <para>A bucket carrying nothing but a source location is therefore treated as
+/// equivalent to no bucket at all. A bucket carrying any real extra is still compared
+/// normally, so this normalization cannot mask a behavioral difference.</para>
+/// </summary>
+internal readonly struct ExtrasSlot : global::System.IEquatable<ExtrasSlot>
+{
+    internal ExtrasSlot(ElementExtras? value) => Value = value;
+
+    internal ElementExtras? Value { get; }
+
+    /// <summary>
+    /// The bucket if it carries behavior, otherwise null — collapsing "no bucket" and
+    /// "diagnostic-metadata-only bucket" onto the same value.
+    /// </summary>
+    private ElementExtras? Behavioral => Value is { IsBehaviorallyEmpty: false } ? Value : null;
+
+    public bool Equals(ExtrasSlot other)
+        => global::System.Collections.Generic.EqualityComparer<ElementExtras?>.Default.Equals(Behavioral, other.Behavioral);
+
+    public override bool Equals(object? obj) => obj is ExtrasSlot other && Equals(other);
+
+    public override int GetHashCode() => Behavioral?.GetHashCode() ?? 0;
+
+    public static bool operator ==(ExtrasSlot left, ExtrasSlot right) => left.Equals(right);
+
+    public static bool operator !=(ExtrasSlot left, ExtrasSlot right) => !left.Equals(right);
+}
+
+/// <summary>
 /// Cross-cutting "extras" bucket for <see cref="Element"/> (spec 047 §4.4).
 /// Holds the 14 rarely-set fields (attached properties, transitions, theme
 /// bindings, animation configs, resource overrides, context values) that used
@@ -1657,14 +1823,14 @@ public record ElementExtras
 {
     /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
-    /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
+    /// Set via fluent extension methods: TextBlock("hi").Grid(row: 1, column: 2)
     /// Stored as a type-keyed dictionary so each provider defines its own data record.
     /// </summary>
     public IReadOnlyDictionary<Type, object>? Attached { get; init; }
 
     /// <summary>
     /// Implicit transitions (opacity, scale, rotation, translation, background).
-    /// Set via fluent extension methods: Rectangle().WithOpacityTransition()
+    /// Set via fluent extension methods: Rectangle().OpacityTransition()
     /// Applied by the reconciler after mount/update, so they are always present when
     /// property values are set via .Set() callbacks.
     /// </summary>
@@ -1672,14 +1838,14 @@ public record ElementExtras
 
     /// <summary>
     /// Theme transitions (children, item container).
-    /// Set via fluent extension methods: VStack(children).WithThemeTransitions(...)
+    /// Set via fluent extension methods: VStack(children).WithTransitions(...)
     /// </summary>
     public ThemeTransitions? ThemeTransitions { get; init; }
 
     /// <summary>
     /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
     /// When set, the reconciler resolves from WinUI theme resources instead of using local values.
-    /// Set via fluent extension methods: Text("hi").Background(Theme.Accent)
+    /// Set via fluent extension methods: TextBlock("hi").Background(Theme.Accent)
     /// </summary>
     public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings { get; init; }
 
@@ -1756,13 +1922,75 @@ public record ElementExtras
     public IReadOnlyDictionary<ContextBase, object?>? ContextValues { get; init; }
 
     /// <summary>
+    /// Spec 010 — the DSL call site that produced the owning element.
+    ///
+    /// <para>Bucketed here rather than declared inline on <see cref="Element"/>
+    /// so that an element nobody stamped pays nothing. An inline
+    /// <c>SourceLocation?</c> widens EVERY element instance by 24 bytes in
+    /// every build and every configuration — measured at +24.0 B/op on the M12
+    /// control-model bench with source mapping switched off — which is a
+    /// permanent retail tax for a debug-only feature. Living in the §4.4 extras
+    /// bucket makes the cost proportional to the number of stamped elements
+    /// instead of the number of elements.</para>
+    ///
+    /// <para>It is NOT free, and the trade is worth stating precisely. As a nullable
+    /// struct this field is stored inline, so it widens the bucket itself: measured at
+    /// 152 B/instance with it and 24 B of that attributable to this field (an 8-byte
+    /// path reference, a 4-byte line, the nullable flag, padded). Any element carrying a
+    /// behavioral extra — Attached, ThemeBindings, animations, ResourceOverrides,
+    /// ContextValues — pays that whether or not source mapping is on, and whether or not
+    /// the consumer even has the generator. The M12 benchmark cannot see it, because M12
+    /// leaves are extras-free and allocate no bucket at all. Accepted because it is
+    /// bounded and proportional to elements that already allocate this object, versus
+    /// +24 B on EVERY element (measured) for the inline-on-the-record alternative.
+    /// ElementExtrasAllocationTests pins both halves.</para>
+    ///
+    /// <para>Read through <c>Element.CallSite</c>, which is the public shim; the
+    /// bucket is an implementation detail.</para>
+    /// </summary>
+    /// <remarks>Spec 047 §4.4 bucketing; spec 010 slot.</remarks>
+    public SourceLocation? CallSite
+    {
+        get => _callSite.Value;
+        init => _callSite = new EqualityIgnored<SourceLocation>(value);
+    }
+
+    /// <summary>
+    /// Backing store for <see cref="CallSite"/>. Deliberately an
+    /// <see cref="EqualityIgnored{T}"/> rather than a plain auto-property: a record
+    /// synthesizes <c>Equals</c>/<c>GetHashCode</c> over EVERY instance field, so
+    /// storing the location directly would make two otherwise identical elements
+    /// built on different lines compare unequal and hash differently. A source
+    /// location is inert diagnostic metadata and must not change element semantics
+    /// (spec 010), so the wrapper makes the field equality-neutral while leaving
+    /// every other field — including ones added later — compared normally.
+    /// <c>SourceMapElementSlotTests.RecordEquality_*</c> pins this.
+    /// </summary>
+    private readonly EqualityIgnored<SourceLocation> _callSite;
+
+    /// <summary>
     /// True when every bucketed field is null. The <see cref="Element"/> shim
     /// setters use this (via <c>Element.NormalizeExtras</c>) to collapse an
     /// all-null bucket back to a null <c>Extensions</c> slot, so record
     /// equality between an extras-free element and one whose only "extra" is a
     /// field explicitly set to null stays symmetric (PR #455 CR item #2).
     /// </summary>
-    internal bool IsEmpty =>
+    internal bool IsEmpty => IsBehaviorallyEmpty && CallSite is null;
+
+    /// <summary>
+    /// True when every bucketed field EXCEPT <see cref="CallSite"/> is null —
+    /// i.e. the bucket carries diagnostic metadata only and no behavior.
+    ///
+    /// <para>Spec 010: bucketing <see cref="CallSite"/> here made a stamped
+    /// element's <c>Extensions</c> non-null, which silently disqualified it from
+    /// two engine fast paths that gate on <c>Extensions is null</c> — the
+    /// virtualized keyed-memo cache and safe component adoption. Those gates
+    /// exist to exclude elements carrying <em>behavior</em> (attached props,
+    /// theme bindings, transitions, context values) that resolution or adoption
+    /// would drop or mis-key. A source location installs no runtime bookkeeping
+    /// and is safe to drop, so they test this instead of raw nullness.</para>
+    /// </summary>
+    internal bool IsBehaviorallyEmpty =>
         Attached is null
         && ImplicitTransitions is null
         && ThemeTransitions is null
@@ -2413,7 +2641,7 @@ public record LayoutAnimationConfig
 //  Supporting data records (non-Element, used as structured params)
 // ════════════════════════════════════════════════════════════════════════
 
-public record GridDefinition(string[] Columns, string[] Rows)
+public record GridDefinition(GridSize[] Columns, GridSize[] Rows)
 {
     /// <summary>
     /// Construct a <see cref="GridDefinition"/> from the strongly-typed
@@ -2422,17 +2650,17 @@ public record GridDefinition(string[] Columns, string[] Rows)
     /// Spec 033 §1.
     /// </summary>
     /// <exception cref="global::System.ArgumentNullException">Thrown when either array is null.</exception>
-    public GridDefinition(GridSize[] columns, GridSize[] rows)
-        : this(ToStrings(columns), ToStrings(rows))
+    public GridDefinition(string[] columns, string[] rows)
+        : this(ToGridSizes(columns), ToGridSizes(rows))
     {
     }
 
-    private static string[] ToStrings(GridSize[] sizes)
+    private static GridSize[] ToGridSizes(string[] sizes)
     {
         if (sizes is null) throw new global::System.ArgumentNullException(nameof(sizes));
-        var result = new string[sizes.Length];
+        var result = new GridSize[sizes.Length];
         for (int i = 0; i < sizes.Length; i++)
-            result[i] = sizes[i].ToString();
+            result[i] = GridSize.Parse(sizes[i]);
         return result;
     }
 }
@@ -2955,6 +3183,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
     /// </summary>
     internal bool EffectiveIsEnabled => IsEnabled && (Command?.IsEnabled ?? true);
 
+    // <snippet:click-trampoline>
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __ClickTrampoline = (s, _) =>
     {
         if (global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag((WinUI.Button)s!) is ButtonElement live)
@@ -2964,6 +3193,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
             else if (live.Command is not null) global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(live.Command);
         }
     };
+    // </snippet:click-trampoline>
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ButtonElement, WinUI.Button> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ButtonElement, WinUI.Button> d)
@@ -3633,7 +3863,7 @@ public partial record RadioButtonElement(
     internal override bool HasCallbacks => OnIsCheckedChanged is not null;
 }
 
-/// <summary>RadioButtons element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+/// <summary>RadioButtons element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.RadioButtons))]  // spec 058 §15 (P5.4)
 [global::Microsoft.UI.Reactor.Wrappers.WrapControlled("SelectedIndex", Events = new[] { "SelectionChanged" })]
 public partial record RadioButtonsElement(
@@ -3647,7 +3877,7 @@ public partial record RadioButtonsElement(
     internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
-/// <summary>ComboBox element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+/// <summary>ComboBox element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
 // Spec 058 §15 (P5.21) — items control. Header/IsEditable/Description auto-map. The bespoke
 // parts (all in Customize): the dual-source ItemsHost (ItemElements Element[] takes precedence
 // over Items string[] — overwrites the auto single-source strategy), the value-diff SelectedIndex
@@ -4672,6 +4902,8 @@ public partial record NavigationViewElement(
 
     public string? SelectedTag { get; init; }
     public Action<string?>? OnSelectedTagChanged { get; init; }
+    internal Action<string?, Navigation.NavigationTransition?>? OnSelectedTagChangedWithTransition { get; init; }
+    internal Action<Navigation.NavigationTransition?>? OnSettingsSelectedWithTransition { get; init; }
     /// <summary>
     /// Raised when NavigationView's built-in settings item becomes selected — by the user,
     /// or by setting <see cref="SelectedTag"/> to <see cref="SettingsTag"/>. Distinguishes the
@@ -4779,6 +5011,8 @@ public partial record NavigationViewElement(
     internal Action<WinUI.NavigationView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks =>
         OnSelectedTagChanged is not null
+        || OnSelectedTagChangedWithTransition is not null
+        || OnSettingsSelectedWithTransition is not null
         || OnBackRequested is not null
         || OnSettingsSelected is not null
         || OnItemInvoked is not null
@@ -4838,8 +5072,25 @@ public partial record TitleBarElement(
     /// <see cref="ImageIconData"/> / <see cref="BitmapIconData"/> for a
     /// bundled <c>.ico</c> / image (e.g. <c>new ImageIconData(new
     /// Uri("ms-appx:///Assets/AppIcon.ico"))</c>).
+    /// <para>Left unset, the title bar inherits the <b>window's</b> icon —
+    /// <see cref="WindowSpec.Icon"/> if declared, otherwise the
+    /// <c>Assets\AppIcon.ico</c> convention — so an app that already has an icon
+    /// need not restate it here. The WinUI control does not do this itself. An icon
+    /// that exists only as an executable PE resource is not inherited: that stage
+    /// yields a raw <c>HICON</c> with no path, and a XAML <c>IconSource</c> needs an
+    /// image source. Set <see cref="SuppressIcon"/> via <c>.NoIcon()</c> to show none.</para>
     /// </summary>
     public IconData? Icon { get; init; }
+    /// <summary>
+    /// Suppresses the icon entirely, including the one Reactor would otherwise
+    /// inherit from the window (see <see cref="Icon"/>). Set via <c>.NoIcon()</c>.
+    /// </summary>
+    /// <remarks>
+    /// A separate flag rather than a null <see cref="Icon"/>, because record
+    /// <c>init</c> properties make "never set an icon" and "explicitly set none"
+    /// indistinguishable — and those now mean opposite things.
+    /// </remarks>
+    public bool SuppressIcon { get; init; }
     internal Action<WinUI.TitleBar>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnBackRequested is not null || OnPaneToggleRequested is not null;
 
@@ -4872,9 +5123,9 @@ public partial record TitleBarElement(
             },
         });
         return d
-            .OneWay(
-                get: static e => e.Icon,
-                set: static (c, v) => c.IconSource = global::Microsoft.UI.Reactor.Core.V1Protocol.IconResolver.ResolveIconSource(v))
+            .Imperative(
+                mount:  static (c, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(c, e, force: true),
+                update: static (c, _, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(c, e, force: false))
             .Imperative(
                 mount: static (c, e) => RegisterWindowTitleBar(c, e),
                 update: static (c, _, e) => ApplyTitleBarHeightOption(c, e))
@@ -4907,7 +5158,7 @@ public partial record TitleBarElement(
             // The control corrupts the heap on teardown when the window is NOT in
             // content-extended mode, so the window flips ExtendsContentIntoTitleBar
             // back to true just before native close. (issue #537)
-            owningWindow?.MarkTitleBarControlPresent();
+            owningWindow?.MarkTitleBarControlPresent(titleBar);
 
             var explicitValue = owningWindow?.Spec.ExtendsContentIntoTitleBar;
             if (explicitValue == false) return;
@@ -4994,7 +5245,7 @@ public partial record TabViewElement(
     TabViewItemData[] Tabs
 ) : Element
 {
-    /// <summary>Selected tab index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected tab index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnTabCloseRequested { get; init; }
@@ -5096,7 +5347,7 @@ public partial record PivotElement(
 PivotItemData[] Items
 ) : Element
 {
-/// <summary>Selected pivot item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+/// <summary>Selected pivot item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
 public Optional<int> SelectedIndex { get; init; } = default;
 public Action<int>? OnSelectedIndexChanged { get; init; }
 public string? Title { get; init; }
@@ -5150,7 +5401,7 @@ public record ListViewElement(
     Element[] Items
 ) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnItemClick { get; init; }
@@ -5178,7 +5429,7 @@ public record GridViewElement(
     Element[] Items
 ) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnItemClick { get; init; }
@@ -5265,7 +5516,7 @@ public partial record FlipViewElement(
     Element[] Items
 ) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
@@ -5940,7 +6191,7 @@ public record TemplatedFlipViewElement<T>(
     Func<T, int, Element> ViewBuilder
 ) : TemplatedFlipViewElementBase
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
@@ -6676,7 +6927,7 @@ public partial record SemanticZoomElement(Element ZoomedInView, Element ZoomedOu
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("SelectedIndex")]
 public partial record ListBoxElement(string[] Items) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     /// <summary>
@@ -6737,7 +6988,7 @@ public partial record ListBoxElement(string[] Items) : Element
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("SelectedIndex")]
 public partial record SelectorBarElement(SelectorBarItemData[] Items) : Element
 {
-    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.SelectorBar>[] Setters { get; init; } = [];
@@ -6814,7 +7065,7 @@ public record SelectorBarItemData(string Text, string? Icon = null);
 [global::Microsoft.UI.Reactor.Wrappers.WrapControlled("SelectedPageIndex", ChangedEvent = "SelectedIndexChanged")]
 public partial record PipsPagerElement(int NumberOfPages) : Element
 {
-    /// <summary>Selected page index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no page selection.</summary>
+    /// <summary>Selected page index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no page selection.</summary>
     public Optional<int> SelectedPageIndex { get; init; } = default;
     public Action<int>? OnSelectedPageIndexChanged { get; init; }
     /// <summary>Whether the selected index wraps around the ends. Defaults to <c>None</c>.</summary>

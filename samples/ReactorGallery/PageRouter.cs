@@ -122,6 +122,10 @@ static class PageRouter
         // Patterns
         "commands" => Component<ControlPages.Patterns.CommandsPage>(),
 
+        // Motion
+        "connected-animation" => Component<ControlPages.Motion.ConnectedAnimationPage>(),
+        "transitions" => Component<ControlPages.Motion.TransitionsPage>(),
+
         // Styles
         "acrylic" => Component<ControlPages.Styles.AcrylicPage>(),
 

@@ -249,7 +249,7 @@ Test-tier legend:
 | `Hosting/Shell/JumpListComInterop.cs`   | 0.0% | 338 | S | deferred? | COM aggregate. `[ExcludeFromCodeCoverage]` is reasonable. |
 | `Hosting/Shell/JumpList.cs`             | 46.5% | 200 | U+S | todo | Builder is testable; commit-to-shell is not. |
 | `Hosting/Shell/ReactorTrayIcon.cs`      | 58.2% | 164 | S | todo | Already partially covered by selftests. |
-| `Hosting/Shell/TrayHiddenWindow.cs`     | 55.9% | 164 | S | todo |   |
+| `Hosting/Shell/TrayHiddenWindow.cs`     | 55.9% | 164 | S | todo | Line %/Missed predate the issue #1180 follow-up, which moved the notification→interaction mapping out to `Hosting/Shell/TrayNotificationRouter.cs` — that part is tier **U** and is now covered by `Reactor.Tests/Hosting/TrayNotificationRouterTests.cs`. What is left here is `WndProcStatic`/HWND/`TryEnqueue` plumbing plus the entry lookup, still tier S. Re-measure before claiming a number. |
 | `Hosting/Shell/TrayFlyoutHostWindow.cs` |  0.0% | 230 | S | deferred? | Hidden host window — only meaningful in a real app. |
 | `Hosting/Shell/TaskbarOverlay.cs`       |  0.0% |  98 | S | deferred? | Same. |
 

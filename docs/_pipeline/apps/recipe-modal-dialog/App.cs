@@ -30,8 +30,7 @@ class DeleteConfirmation : Component
 
         // <snippet:modal>
         // Pair the dialog with a scrim (SmokeFill) so clicks outside the
-        // dialog don't reach the page underneath. The focus trap lives on
-        // the modal Border.
+        // dialog don't reach the page underneath.
         Element modal = Border(
             VStack(16,
                 Heading("Delete this item?"),
@@ -40,8 +39,8 @@ class DeleteConfirmation : Component
                     Button("Cancel", () => setOpen(false)),
                     Button("Delete", () => { setDeleted(true); setOpen(false); })
                 ).HAlign(Microsoft.UI.Xaml.HorizontalAlignment.Right)
-            ).Padding(20).Background("#FFFFFF").CornerRadius(8)
-        ).Background("#80000000").Padding(40);
+            ).Padding(20).Background(Theme.CardBackground).CornerRadius(8)
+        ).Background(Theme.SmokeFill).Padding(40);
         // </snippet:modal>
 
         return open ? Group(page, modal) : page;

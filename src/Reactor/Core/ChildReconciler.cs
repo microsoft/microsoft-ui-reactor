@@ -233,10 +233,11 @@ internal static class ChildReconciler
                 // hazard as Tag). Fetch the control once for either need.
                 if ((newEl.HasCallbacks
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers))
+                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                     && (existingControl ??= children.Get(i)) is FrameworkElement fe)
                 {
-                    if (newEl.HasCallbacks)
+                    if (newEl.HasCallbacks || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                         Reconciler.SetElementTag(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
@@ -321,11 +322,12 @@ internal static class ChildReconciler
                 // (excluded from the skip predicate). Fetch the control once.
                 if ((newEl.HasCallbacks
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers))
+                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                     && prefixLen < childCount
                     && (existingControl ??= children.Get(prefixLen)) is FrameworkElement fe)
                 {
-                    if (newEl.HasCallbacks)
+                    if (newEl.HasCallbacks || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                         Reconciler.SetElementTag(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
@@ -374,12 +376,13 @@ internal static class ChildReconciler
                 // #721 — refresh Tag + cached gesture/drag dispatch closures on skip.
                 if ((newEl.HasCallbacks
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers))
+                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                     && panelIdx >= 0
                     && panelIdx < childCount
                     && (existingControl ??= children.Get(panelIdx)) is FrameworkElement fe)
                 {
-                    if (newEl.HasCallbacks)
+                    if (newEl.HasCallbacks || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                         Reconciler.SetElementTag(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }

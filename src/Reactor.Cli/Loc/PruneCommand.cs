@@ -4,7 +4,7 @@ using System.Xml.Linq;
 namespace Microsoft.UI.Reactor.Cli.Loc;
 
 /// <summary>
-/// Implements `duct loc prune`: finds and removes .resw keys not referenced in source code.
+/// Implements `mur loc prune`: finds and removes .resw keys not referenced in source code.
 /// </summary>
 internal static class PruneCommand
 {
@@ -215,9 +215,9 @@ internal static class PruneCommand
 
     private static void ShowHelp()
     {
-        Console.WriteLine("duct loc prune — Find and remove unused localization keys");
+        Console.WriteLine("mur loc prune — Find and remove unused localization keys");
         Console.WriteLine();
-        Console.WriteLine("Usage: duct loc prune [options]");
+        Console.WriteLine("Usage: mur loc prune [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --source <dir>      Source directory to scan for references (default: .)");

@@ -17,6 +17,9 @@ dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 # Selftests — real WinUI window, in-process (~10s)
 dotnet test tests/Reactor.SelfTests
 
+# Packaged selftests — same fixtures under MSIX identity (needs Developer Mode)
+dotnet test tests/Reactor.PackagedTests -p:Platform=x64
+
 # Raw TAP output (faster iteration, supports --filter prefix)
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 
@@ -37,7 +40,7 @@ MSTest accepts **only** `--filter` and rejects `--filter-class` with exit 5),
 `--logger "trx;…"` becomes `--report-trx`, and `--blame-hang-*` becomes
 `--hangdump …`.
 
-CI runs unit tests + selftests + full solution build on every PR. .NET 10 SDK, `windows-latest` runner.
+CI runs unit tests + selftests + packaged selftests + full solution build on every PR. .NET 10 SDK, `windows-latest` runner.
 
 Full testing guide — tier selection, NativeAOT runs, code coverage — in [`TESTING.md`](TESTING.md).
 
@@ -71,7 +74,7 @@ Echo handling is a documented hybrid (spec-047 §8.3). Synchronous, exact-compar
 
 ### Element pooling
 
-`ElementPool` recycles WinUI controls. Poolable types track one-time event wiring via `ConditionalWeakTable<FrameworkElement, PoolableWireFlags>` to avoid double-subscribing across rent/return cycles.
+`ElementPool` recycles WinUI controls. `PoolableTypes` includes interactive controls (`Button`, `TextBox`, `ToggleSwitch`) alongside the non-interactive ones: their event trampolines subscribe **once for the control's lifetime** and read the current element from attached state at invocation time, so a recycled control dispatches to the new element's callbacks. `Reconciler.ReturnControl<T>` therefore deliberately **preserves** `ReactorState.ControlEventState` across rent/return (issue #114) — clearing it would re-allocate on every rent and double-subscribe; the box is dropped only on full detach (`DetachReactorState`). New event wiring on a poolable control must go through that one-time trampoline, never a fresh per-rent subscription. It also keeps a `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements that have had `GetElementVisual()` called on them — those permanently lose the XAML implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …), so they are excluded from pooling rather than handed to a future user that might need those APIs.
 
 ### Per-element state via attached DP
 
@@ -114,7 +117,21 @@ The legacy Element-record + `MountXxx`/`UpdateXxx` dispatch-switch path is gone.
 
 1. **Element record** in `src/Reactor/Core/Element.cs`
 2. **Authoring shape** — a `ControlDescriptor<TElement, TControl>` (the primary path) or a hand-coded `IElementHandler<TElement, TControl>` for irregular controls.
-3. **Register** it in `RegisterV1BuiltInHandlers`.
+3. **Register** it. Spec 048 §3.4 removed the old bootstrap: built-in handlers now
+   self-register **lazily on the first factory call**, via the per-control
+   `Reg<>` / `RegDecorator<>` cctor latch in `Dsl.cs`. A `[GenerateReactorWrapper]`
+   element gets a static constructor emitting `ControlRegistry.Register` (spec 058).
+   To register a third-party control or override a built-in globally, call
+   `ControlRegistry.Register<TElement, TControl>` (or `RegisterDecorator`,
+   `RegisterForDerivedTypes`) at startup. `ReactorApp.RegisterAllBuiltIns()` is the
+   opt-in bulk path for direct-record/AOT callers. Note the two latches differ:
+   for a **hand-authored built-in** the `Reg<>` touch lives in the factory body,
+   so `new MyElement(...)` alone registers nothing and the factory call is what
+   latches it; a **`[GenerateReactorWrapper]`** element registers from its
+   generated static constructor, so constructing one is already enough
+   (`UnregisteredHandlerAndRegisterAllBuiltInsTests` depends on that, and the
+   "unregistered handler" message deliberately never names
+   `GenerateReactorWrapper` as a cause).
 4. **Selftest fixture** in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`.
 
 See [`docs/guide/extending-reactor-controls.md`](docs/guide/extending-reactor-controls.md) for the authoring-shape decision tree (prop/engine shapes, children strategies, echo handling, pooling).
@@ -127,9 +144,28 @@ Optionally: a factory method in `src/Reactor/Elements/Dsl.cs`, fluent modifiers 
 |---|---|---|
 | Algorithm, pure function, hook bookkeeping, D3 math | Unit test (xUnit) | `tests/Reactor.Tests/` |
 | Element mount/update against real WinUI controls | Selftest fixture | `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` |
+| Behaviour that differs under MSIX identity (`ms-appx:`, `Package.Current`, MRT, `PackageRuntime.IsPackaged` branches) | Selftest fixture gated with `PackagedIdentityFixtures.RequirePackagedTier` **and** declared `SelfTestTier.Packaged` | same folder; runs for real in `tests/Reactor.PackagedTests` |
 | Real user input, UIA properties, cross-process | E2E test (winapp ui) | `tests/Reactor.AppTests/Tests/` |
 
 Start with unit tests. Use selftests only when you need a live WinUI control. E2E is the slowest tier.
+
+The packaged tier (`tests/Reactor.PackagedTests` + `tests/Reactor.PackagedTests.Host`) exists because
+every other tier runs unpackaged and is structurally blind to identity-dependent bugs.
+`Reactor.PackagedTests.Host` owns no source; it links every `.cs` from `Reactor.AppTests.Host` and
+adds only MSIX properties plus a `Package.appxmanifest`. The whole corpus runs under identity.
+**Gotcha worth not re-deriving:** the manifest's `uap5:AppExecutionAlias` is load-bearing — launching
+the alias stub inherits stdout while keeping package identity, which AUMID activation cannot do
+(it is brokered, so stdout can't be redirected at all).
+**Second gotcha:** a packaged fixture needs *two* declarations, not one. The
+`RequirePackagedTier` gate decides whether the body asserts; `SelfTestFixtureRegistry.TierRequirements`
+decides whether the unpackaged host runs it at all. Skip the second and the fixture self-skips
+into the amber skip inventory on every unpackaged run forever (issue #1154). **The gate is not an
+independent identity check** — it and the tier filter share one entry-assembly predicate, so inside
+the packaged host it always returns true; `Packaged_IdentityGuard` failing its
+`PackageRuntime.IsPackaged` / `Package.Current` assertions is what detects a mis-launched packaged
+host. Consequence worth knowing: **`--list-fixtures` is tier-dependent**, and both hosts print
+`# Total not-applicable fixtures:` / `# Not applicable fixture list:` after `# Total failures:`
+so the exclusion is an assertable fact rather than a silent absence.
 
 ### Console-mutating tests need collection isolation
 
@@ -187,13 +223,51 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   solution defaults; single app/test projects usually do not.)
 - **A green Debug build does not clear the `Build solution` CI job.**
   `TreatWarningsAsErrors` is Release-only and CI builds Release, so verify with
-  `dotnet build Reactor.slnx -c Release`. If `WMC0110` / `WMC1509` follows a C# error,
+  `dotnet restore Reactor.slnx` followed by `dotnet build Reactor.slnx --no-restore -c Release`.
+  Keep those two steps split, exactly as the `Restore` and `Build` steps of the
+  `build-solution` job in `ci.yml` do. The one-shot
+  `dotnet build Reactor.slnx -c Release` also restores under `Configuration=Release`, and NuGet
+  honors `TreatWarningsAsErrors` during restore, so on a proxied or offline feed `NU1900`
+  ("unable to get package vulnerability data") becomes a hard error — measured on this repo, the
+  one-shot form raised NU errors across **127 projects** versus **12** for the split form, burying
+  the real result before a single file compiles. On a healthy feed neither form emits `NU1900` and
+  the distinction is invisible; it only bites behind a TLS-inspecting proxy or offline. CI is
+  immune because it restores without `-c Release`. If `WMC0110` / `WMC1509` follows a C# error,
   treat the markup errors as a likely cascade: fix the earlier error first, then confirm
   they disappear before investigating them independently.
 - **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
   XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Reactor.dll' ... used by another process`. If it still races under
-  parallel WinUI builds, prebuild `src/Reactor` alone first, then add `-m:1`
-  `-nodereuse:false` and `$env:MSBUILDDISABLENODEREUSE='1'`. (`-p:CI=true` also skips it.)
+  parallel WinUI builds, prebuild `src/Reactor` alone first, then escalate **on the build
+  command only** — `-m:1 -nodereuse:false` (or `$env:MSBUILDDISABLENODEREUSE='1'`) — and run
+  the suite separately with `--no-build`. (`-p:CI=true` also skips SignaturesGen.)
+  ```powershell
+  dotnet build src/Reactor/Reactor.csproj -p:Platform=x64 -m:1 -nodereuse:false
+  dotnet build tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+  dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64
+  ```
+- **Never append an MSBuild-only switch to `dotnet test`** (issue #1140). `-m:1`,
+  `-nodereuse:false`, `--nologo`, `-warnaserror` and friends are *not* `dotnet test`
+  options, and anything `dotnet test` does not recognise is forwarded to the **test
+  executable**. That forwarding is normal — it is how `--filter-class`, `--parallel` and
+  `--report-trx` reach the runner — but an MSBuild-only switch is recognised by *neither*
+  layer, so MTP rejects it and exits **5 (`InvalidCommandLine`)** before running anything.
+  **The rejected-option message is never surfaced**, so the only signals are the exit code
+  and a summary that reads green in prose:
+  ```text
+  ...\Reactor.Tests.dll (net10.0-windows10.0.22621.0) Zero tests ran
+  Test run summary: Zero tests ran
+    error: 1
+    total: 0   failed: 0   succeeded: 0   skipped: 0
+  ```
+  The reliable tell is the module label: a run that actually started prints the
+  handshake-derived `net10.0|x64`, so the full `net10.0-windows10.0.22621.0` means the test
+  host died before its handshake. Exit 5 is *invalid command line*, **not** MTP's zero-tests
+  policy (that is exit 8). `-p:…` **is** a real `dotnet test` option, which is why
+  `-p:SkipSignaturesGen=true` and `-p:Platform=x64` are safe there; measured on this tree,
+  `$env:MSBUILDDISABLENODEREUSE='1'` is also safe, because an environment variable is not an
+  argv token. Note `dotnet test --help` is not a reliable safe-list — `-t:`/`-target:` and
+  `--property` are accepted but unlisted. See
+  [`TESTING.md`](TESTING.md#msbuild-switches-are-not-dotnet-test-switches).
 - **Fast selftest loop** (TAP `ok`/`not ok`): `dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter "<Prefix>"`.
 - **Headless unit tests cannot construct any `Microsoft.UI.Xaml` object** — control, brush,
   geometry, `BitmapImage`, or **`AutomationPeer`-derived** type — you get a `COMException`.

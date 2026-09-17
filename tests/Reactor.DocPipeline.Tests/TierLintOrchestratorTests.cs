@@ -139,6 +139,157 @@ public class TierLintOrchestratorTests : IDisposable
         Assert.Equal(1, result.TemplatesScanned);
     }
 
+    // ── Topic → doc-app binding ───────────────────────────────────────────
+
+    private void WriteApp(string appId, params string[] snippetIds)
+    {
+        var dir = Path.Combine(_appsDir, appId);
+        Directory.CreateDirectory(dir);
+        var body = string.Join("\n\n", snippetIds.Select(id => $"""
+            // <snippet:{id}>
+            var {id.Replace('-', '_')} = 1;
+            // </snippet:{id}>
+            """));
+        File.WriteAllText(Path.Combine(dir, "App.cs"), body);
+    }
+
+    private const string SolidTemplateShell = """
+        ---
+        title: Async Resources
+        order: 1
+        tier: solid
+        app: {APP}
+        ---
+
+        # Async Resources
+
+        Lead paragraph one. Lead paragraph two.
+
+        ```csharp snippet="{APP}/one"
+        ```
+
+        ```csharp snippet="{APP}/two"
+        ```
+
+        ```csharp snippet="{APP}/three"
+        ```
+
+        | Col | Val |
+        |-----|-----|
+        | a   | 1   |
+
+        ## Tips
+
+        A tip.
+
+        ## Next Steps
+
+        - [a](a.md)
+        - [b](b.md)
+        - [c](c.md)
+        """;
+
+    /// <summary>
+    /// The regression oracle for the fabricated <c>REACTOR_DOC_TIER_003</c>.
+    /// App discovery used to filter by directory name against the topic id;
+    /// for a topic whose app is named differently — <c>async-resources</c> →
+    /// <c>async-resources-cookbook</c>, and every <c>recipes/&lt;x&gt;</c> →
+    /// <c>recipe-&lt;x&gt;</c> — that discovered no app, so every
+    /// <c>snippet=</c> failed to resolve and the lint reported "found 0"
+    /// against a page that was entirely correct.
+    ///
+    /// Differential: byte-identical page content must lint identically
+    /// whether or not the app directory happens to share the topic's name.
+    /// The matching-name arm is the positive control — it passed even with
+    /// the bug present, so it pins that any difference comes from the name
+    /// mismatch rather than from a malformed fixture.
+    /// </summary>
+    [Fact]
+    public void Topic_lints_identically_whether_or_not_its_app_dir_shares_its_name()
+    {
+        WriteApp("matching", "one", "two", "three");
+        WriteTemplate("matching", SolidTemplateShell.Replace("{APP}", "matching"));
+
+        WriteApp("async-resources-cookbook", "one", "two", "three");
+        WriteTemplate("async-resources", SolidTemplateShell.Replace("{APP}", "async-resources-cookbook"));
+
+        var control = TierLintOrchestrator.Run(_root, _appsDir, _templatesDir, topic: "matching");
+        var subject = TierLintOrchestrator.Run(_root, _appsDir, _templatesDir, topic: "async-resources");
+
+        Assert.Equal(1, control.TemplatesScanned);
+        Assert.Equal(1, subject.TemplatesScanned);
+
+        // The control resolves its snippets, so TIER_003 must be absent from
+        // it — if it were present, the equality below would be satisfied by
+        // both arms being broken.
+        Assert.DoesNotContain(control.Findings, f => f.Code == "REACTOR_DOC_TIER_003");
+        Assert.DoesNotContain(subject.Findings, f => f.Code == "REACTOR_DOC_TIER_003");
+
+        Assert.Equal(
+            control.Findings.Select(f => f.Code).OrderBy(c => c, StringComparer.Ordinal),
+            subject.Findings.Select(f => f.Code).OrderBy(c => c, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A nested topic id (<c>recipes/login</c>) is never a directory name
+    /// under <c>apps/</c>, so this shape was un-lintable via <c>--topic</c>
+    /// for all ten shipping recipes.
+    /// </summary>
+    [Fact]
+    public void Nested_topic_id_resolves_its_flat_app_directory()
+    {
+        WriteApp("recipe-login", "one", "two", "three");
+        WriteTemplate("recipes/login", SolidTemplateShell.Replace("{APP}", "recipe-login"));
+
+        var result = TierLintOrchestrator.Run(_root, _appsDir, _templatesDir, topic: "recipes/login");
+
+        Assert.Equal(1, result.TemplatesScanned);
+        Assert.DoesNotContain(result.Findings, f => f.Code == "REACTOR_DOC_TIER_003");
+    }
+
+    /// <summary>
+    /// The app set is still narrowed to what the topic needs — the fix must
+    /// not silently degrade <c>--topic</c> into "discover and extract every
+    /// app", which would undo the point of the fast inner loop.
+    /// </summary>
+    [Fact]
+    public void Topic_filter_does_not_pull_in_unrelated_apps()
+    {
+        WriteApp("async-resources-cookbook", "one", "two", "three");
+        WriteApp("unrelated-app", "one", "two", "three");
+        WriteTemplate("async-resources", SolidTemplateShell.Replace("{APP}", "async-resources-cookbook"));
+
+        var ids = CompileCommand.ResolveAppIds(
+            CompileCommand.DiscoverTemplates(_templatesDir, "async-resources"));
+
+        Assert.Contains("async-resources-cookbook", ids);
+        Assert.DoesNotContain("unrelated-app", ids);
+        Assert.Single(CompileCommand.DiscoverApps(_appsDir, ids));
+    }
+
+    /// <summary>
+    /// A page may borrow a snippet from another topic's app; the app id is
+    /// the reference's leading segment, so that app has to be discovered too.
+    /// </summary>
+    [Fact]
+    public void Cross_app_snippet_reference_pulls_in_the_other_app()
+    {
+        WriteApp("recipe-login", "one", "two", "three");
+        WriteApp("shared-helpers", "helper");
+        WriteTemplate("recipes/login",
+            SolidTemplateShell.Replace("{APP}", "recipe-login")
+                .Replace("snippet=\"recipe-login/three\"", "snippet=\"shared-helpers/helper\""));
+
+        var ids = CompileCommand.ResolveAppIds(
+            CompileCommand.DiscoverTemplates(_templatesDir, "recipes/login"));
+
+        Assert.Contains("recipe-login", ids);
+        Assert.Contains("shared-helpers", ids);
+
+        var result = TierLintOrchestrator.Run(_root, _appsDir, _templatesDir, topic: "recipes/login");
+        Assert.DoesNotContain(result.Findings, f => f.Code == "REACTOR_DOC_TIER_003");
+    }
+
     [Fact]
     public void Tier_filter_excludes_non_matching_tiers()
     {

@@ -16,6 +16,14 @@ namespace Microsoft.UI.Reactor;
 /// <summary>
 /// Configuration for ReactorApp.Run. Scoped as a single record to avoid scattered static fields.
 /// </summary>
+/// <remarks>
+/// Parameter order groups the flat window-shape options together
+/// (<c>WindowTitle</c> through <c>WindowIcon</c>), then the alternate-entry fields that
+/// replace them wholesale: <c>Startup</c> for the multi-window entry, and
+/// <c>InitialWindowSpec</c> for the <c>Run(WindowSpec, ...)</c> overloads. Every
+/// construction site passes arguments by name, so the order is documentation rather
+/// than contract.
+/// </remarks>
 internal record ReactorAppOptions(
     Func<Component>? RootFactory = null,
     Func<RenderContext, Element>? RootRenderFunc = null,
@@ -24,6 +32,7 @@ internal record ReactorAppOptions(
     double? WindowWidth = null,
     double? WindowHeight = null,
     bool FullScreen = false,
+    WindowIcon? WindowIcon = null,
     Action<ReactorAppContext>? Startup = null,
     WindowSpec? InitialWindowSpec = null);
 
@@ -166,10 +175,104 @@ public static partial class ReactorApp
     }
 
     /// <summary>Process-shutdown policy. Defaults to <see cref="ShutdownPolicy.OnPrimaryWindowClosed"/>.</summary>
+    /// <remarks>
+    /// <para>Settable from any thread and at any point in the process lifetime,
+    /// and read back immediately. Reactor takes ownership of the event loop at
+    /// startup (see <see cref="TakeOwnershipOfDispatcherLifetime"/>), so this
+    /// value is consulted when a decision is due rather than mirrored into
+    /// platform state — there is no window in which the policy and the platform
+    /// can disagree.</para>
+    /// <para>Two moments consult it. A surface close reaches
+    /// <see cref="EvaluateShutdownPolicy"/>, which reads the value then, so a
+    /// change made any time beforehand counts. Startup is the exception:
+    /// <see cref="ExitIfStartupOpenedNoSurface"/> runs the instant the launch
+    /// path finishes, so a zero-surface startup is judged against whatever the
+    /// policy holds at that instant. Set it before <c>Run</c>, or on the UI
+    /// thread before the startup callback returns — a write posted from another
+    /// thread during startup can land too late to be seen.</para>
+    /// </remarks>
     public static ShutdownPolicy ShutdownPolicy
     {
         get => (ShutdownPolicy)Volatile.Read(ref _shutdownPolicy);
         set => Volatile.Write(ref _shutdownPolicy, (int)value);
+    }
+
+    /// <summary>
+    /// Hands the lifetime of this thread's event loop to
+    /// <see cref="EvaluateShutdownPolicy"/>. UI-thread only; called once from
+    /// <c>OnLaunched</c>. (spec 036 §6.2)
+    /// </summary>
+    /// <remarks>
+    /// <para>WinUI quits the thread's <c>DispatcherQueue</c> event loop when the
+    /// last XAML window closes unless
+    /// <see cref="Application.DispatcherShutdownMode"/> is
+    /// <see cref="DispatcherShutdownMode.OnExplicitShutdown"/>, and
+    /// <c>Application.Start</c> resets that property to
+    /// <see cref="DispatcherShutdownMode.OnLastWindowClose"/>. Leaving it there
+    /// makes the platform a second, uncoordinated decision-maker: it cannot see
+    /// <see cref="ShutdownPolicy.Explicit"/>, a surviving tray icon, or a window
+    /// that opted out via <c>ExcludeFromShutdownPolicy</c>, so it would end
+    /// processes that §6.2 says should keep running.</para>
+    /// <para>Called from <c>OnLaunched</c> on the launch shapes Reactor drives —
+    /// the <c>Run(startup)</c> callback and the legacy <c>Run&lt;TRoot&gt;</c>
+    /// bridge — before any window exists. It is deliberately NOT called when
+    /// <see cref="ReactorApplication"/> was constructed directly without
+    /// <c>ReactorApp.Run</c> (the selftest harness shape): that host owns its own
+    /// windows, never reaches the zero-surface check, and would be left pumping
+    /// forever once its windows closed.</para>
+    /// <para>Taking ownership unconditionally — rather than only for the
+    /// policies that obviously need it — is what makes §6.2 exhaustive. Every
+    /// exit then flows through one place: <see cref="EvaluateShutdownPolicy"/>
+    /// on a surface close, the zero-surface check in <c>OnLaunched</c>, or an
+    /// explicit <see cref="Exit(int)"/>. The default policy reaches
+    /// <see cref="SafeExit"/> whenever the elected primary closes, and
+    /// <c>ReactorWindow</c> subscribes to the native <c>Window.Closed</c>, so a
+    /// user-initiated close is observed exactly like an app-initiated one.</para>
+    /// <para>Only written when Reactor owns the <see cref="Application"/> — that
+    /// is, when <see cref="Application.Current"/> is a
+    /// <see cref="ReactorApplication"/>. A WinUI app that embeds
+    /// <c>ReactorHostControl</c> runs its own <see cref="Application"/> and
+    /// manages its own windows; Reactor does not decide when that process ends,
+    /// so it leaves that app's <see cref="Application.DispatcherShutdownMode"/>
+    /// at whatever the app chose or inherited.</para>
+    /// <para>A failed write is fatal, not best-effort. This is the one write
+    /// standing between the app and issue #1204: continuing without it leaves
+    /// <see cref="ShutdownPolicy"/> reporting the requested value while the
+    /// platform is still free to end the process on last-window-close — the
+    /// original bug, now silent. The catch exists only to attach a diagnostic
+    /// explaining that consequence before rethrowing, because the bare WinRT
+    /// exception would not say it. And the caught types are not benign here:
+    /// this runs synchronously in <c>OnLaunched</c>, on the UI thread, against an
+    /// <see cref="Application"/> constructed moments earlier, so a disposed
+    /// object, an invalid operation, or a COM fault all mean the XAML runtime is
+    /// already broken. Failing at the point it is detectable beats limping into a
+    /// lifetime the app did not ask for.</para>
+    /// <para>An app can still override that by returning <c>true</c> from
+    /// <see cref="ReactorApplication.OnUnhandledException"/>, which marks the
+    /// rethrow handled. Reactor does not escalate to
+    /// <see cref="Environment.FailFast(string)"/> to prevent it: an app that
+    /// force-handles every exception has asked to keep running, and the
+    /// resulting state is the pre-fix one — the platform still ends the process
+    /// on last-window-close, so the policy is ignored rather than the process
+    /// hanging. The <see cref="AppLogger"/> error above is what makes that
+    /// visible.</para>
+    /// </remarks>
+    internal static void TakeOwnershipOfDispatcherLifetime()
+    {
+        if (Application.Current is not ReactorApplication app) return;
+        try
+        {
+            app.DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or COMException)
+        {
+            const string message =
+                "Reactor could not take ownership of the dispatcher shutdown mode, so WinUI would end the " +
+                "process when the last window closes regardless of ReactorApp.ShutdownPolicy. (issue #1204)";
+            AppLogger?.LogError(ex, message);
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] {message} {ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>Fires on the UI thread when a <see cref="ReactorWindow"/> opens.</summary>
@@ -227,7 +330,7 @@ public static partial class ReactorApp
     /// XAML loader for this process. Required when a third-party control library
     /// is referenced from a Reactor app that has no XAML files of its own (and
     /// therefore no compiler-generated provider that would auto-chain to the
-    /// library). Call before <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?)"/>.
+    /// library). Call before <see cref="Run{TRoot}(string, double?, double?, bool, WindowIcon?, Action{ReactorHost}?)"/>.
     /// Idempotent (same instance is added at most once) and thread-safe.
     /// See https://github.com/microsoft/microsoft-ui-reactor/issues/142.
     /// </summary>
@@ -321,7 +424,20 @@ public static partial class ReactorApp
     public static bool DevtoolsEnabled
     {
         get => Volatile.Read(ref _devtoolsEnabled) != 0;
-        internal set => Volatile.Write(ref _devtoolsEnabled, value ? 1 : 0);
+        internal set
+        {
+            Volatile.Write(ref _devtoolsEnabled, value ? 1 : 0);
+            // Spec 010 — source mapping is a devtools-session capability, so it
+            // one-way-follows this flag: turning devtools off turns it off too.
+            //
+            // It does NOT change how controls are tagged. Reconciler.NeedsTag has no
+            // arm for this flag, deliberately: a stamped element carries its CallSite
+            // in the Extensions bucket, which already satisfies NeedsTag's existing
+            // `Extensions is not null` test. An arm here would only tag UNstamped
+            // elements — which have no location to hand back — while re-introducing
+            // the per-leaf ReactorState allocation PR #468 removed.
+            Diagnostics.ReactorSourceMap.Enabled = value;
+        }
     }
 
     // Unpackaged WinUI apps (WindowsPackageType=None) don't inherit DPI awareness from an
@@ -342,35 +458,77 @@ public static partial class ReactorApp
     /// <c>--devtools</c> surface: component switching via VS Code, MCP agent tools,
     /// and component listing.
     /// </summary>
+    /// <param name="title">Window caption text.</param>
+    /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
+    /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
+    /// <param name="fullScreen">Open with the full-screen presenter.</param>
+    /// <param name="icon">
+    /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the window's
+    /// caption and the Alt-Tab switcher. Use an <c>.ico</c>: build it with
+    /// <see cref="WindowIcon.FromPath"/> for a file beside the app, or
+    /// <see cref="WindowIcon.FromResource"/> for a packaged <c>ms-appx:///</c> asset.
+    /// When omitted, Reactor falls back to <c>Assets\AppIcon.ico</c> and then to the
+    /// executable's embedded icon. Distinct from <c>TitleBar(...).Icon(...)</c>, which
+    /// sets the app mark drawn inside the window. Note that in a <b>packaged</b> app this
+    /// does not change the taskbar button or Task Manager — the shell draws those from
+    /// package identity and the manifest's <c>Square44x44Logo</c>; see
+    /// <see cref="WindowSpec.Icon"/>.
+    /// </param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread before the root mounts.
+    /// </param>
     public static void Run<TRoot>(
         string title = "Reactor App",
         double? width = null,
         double? height = null,
         bool fullScreen = false,
+        WindowIcon? icon = null,
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
 
-        RunOnSta(() =>
-        {
-            InitProcess();
-            Options = new ReactorAppOptions(
-                RootFactory: () => new TRoot(),
-                Configure: configure,
-                WindowTitle: title,
-                WindowWidth: width,
-                WindowHeight: height,
-                FullScreen: fullScreen);
+        StartApplication(() => new ReactorAppOptions(
+            RootFactory: () => new TRoot(),
+            Configure: configure,
+            WindowTitle: title,
+            WindowWidth: width,
+            WindowHeight: height,
+            FullScreen: fullScreen,
+            WindowIcon: icon));
+    }
 
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
+    /// <summary>
+    /// Launches the app with a full <see cref="WindowSpec"/> for the primary window, so it
+    /// gets the same declarative surface as a secondary window opened via
+    /// <see cref="OpenWindow(WindowSpec, Func{Component}, Action{ReactorHost})"/> —
+    /// icon, min/max size, backdrop, corner style, start position, and placement
+    /// persistence.
+    /// </summary>
+    /// <remarks>
+    /// Under <c>--devtools run</c> the preview host substitutes its own window; it reads
+    /// title and size from the spec and ignores the remaining fields, exactly as it does
+    /// for the flat overloads.
+    /// </remarks>
+    public static void Run<TRoot>(
+        WindowSpec spec,
+        Action<ReactorHost>? configure = null)
+        where TRoot : Component, new()
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        spec.Validate();
+        EmitDipBehaviorChangeNoticeOnce();
+        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
+
+        StartApplication(() => new ReactorAppOptions(
+            RootFactory: () => new TRoot(),
+            Configure: configure,
+            WindowTitle: spec.Title,
+            WindowWidth: spec.Width,
+            WindowHeight: spec.Height,
+            FullScreen: IsFullScreen(spec),
+            InitialWindowSpec: spec));
     }
 
     /// <summary>
@@ -379,36 +537,92 @@ public static partial class ReactorApp
     /// <c>null</c> to let the OS pick the initial window size.
     /// See the generic overload for devtools activation semantics.
     /// </summary>
+    /// <param name="title">Window caption text.</param>
+    /// <param name="rootRender">Render function for the window's root content.</param>
+    /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
+    /// <param name="height">Initial DIP height; <c>null</c> defers to the OS.</param>
+    /// <param name="fullScreen">Open with the full-screen presenter.</param>
+    /// <param name="icon">
+    /// Optional window icon. See
+    /// <see cref="Run{TRoot}(string, double?, double?, bool, WindowIcon, Action{ReactorHost})"/>.
+    /// </param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread before the root mounts.
+    /// </param>
     public static void Run(
         string title,
         Func<RenderContext, Element> rootRender,
         double? width = null,
         double? height = null,
         bool fullScreen = false,
+        WindowIcon? icon = null,
         Action<ReactorHost>? configure = null)
     {
         EmitDipBehaviorChangeNoticeOnce();
         if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
 
-        RunOnSta(() =>
-        {
-            InitProcess();
-            Options = new ReactorAppOptions(
-                RootRenderFunc: rootRender,
-                Configure: configure,
-                WindowTitle: title,
-                WindowWidth: width,
-                WindowHeight: height,
-                FullScreen: fullScreen);
-
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
+        StartApplication(() => new ReactorAppOptions(
+            RootRenderFunc: rootRender,
+            Configure: configure,
+            WindowTitle: title,
+            WindowWidth: width,
+            WindowHeight: height,
+            FullScreen: fullScreen,
+            WindowIcon: icon));
     }
+
+    /// <summary>
+    /// Launches the app with a render function and a full <see cref="WindowSpec"/> for the
+    /// primary window. See
+    /// <see cref="Run{TRoot}(WindowSpec, Action{ReactorHost})"/> for the spec semantics.
+    /// </summary>
+    public static void Run(
+        WindowSpec spec,
+        Func<RenderContext, Element> rootRender,
+        Action<ReactorHost>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(rootRender);
+        spec.Validate();
+        EmitDipBehaviorChangeNoticeOnce();
+        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, rootRenderFunc: rootRender)) return;
+
+        StartApplication(() => new ReactorAppOptions(
+            RootRenderFunc: rootRender,
+            Configure: configure,
+            WindowTitle: spec.Title,
+            WindowWidth: spec.Width,
+            WindowHeight: spec.Height,
+            FullScreen: IsFullScreen(spec),
+            InitialWindowSpec: spec));
+    }
+
+    /// <summary>
+    /// Flattens a spec's presenter choice onto the boolean the devtools probe and the
+    /// legacy option record carry.
+    /// </summary>
+    private static bool IsFullScreen(WindowSpec spec) => spec.Presenter == PresenterKind.FullScreen;
+
+    /// <summary>
+    /// Resolves the <see cref="WindowSpec"/> the primary window opens with: an explicitly
+    /// supplied spec wins outright, otherwise one is synthesized from the flat
+    /// title / size / fullscreen / icon options the legacy <c>Run</c> overloads carry.
+    /// </summary>
+    /// <remarks>
+    /// Split out of <c>ReactorApplication.OnLaunched</c> so the mapping is reachable from
+    /// headless tests — it touches no WinUI types. <c>DevtoolsHost</c> depends on the
+    /// synthesis branch: it passes <c>InitialWindowSpec: null</c> for the non-embed preview
+    /// and expects the flat options to be honoured.
+    /// </remarks>
+    internal static WindowSpec BuildInitialWindowSpec(ReactorAppOptions opts)
+        => opts.InitialWindowSpec ?? new WindowSpec
+        {
+            Title = opts.WindowTitle,
+            Width = opts.WindowWidth,
+            Height = opts.WindowHeight,
+            Presenter = opts.FullScreen ? PresenterKind.FullScreen : PresenterKind.Overlapped,
+            Icon = opts.WindowIcon,
+        };
 
     /// <summary>
     /// Multi-window startup entry. The <paramref name="startup"/> callback runs
@@ -420,10 +634,25 @@ public static partial class ReactorApp
     {
         ArgumentNullException.ThrowIfNull(startup);
         EmitDipBehaviorChangeNoticeOnce();
+        StartApplication(() => new ReactorAppOptions(Startup: startup));
+    }
+
+    /// <summary>
+    /// Shared startup tail for every <c>Run</c> overload: enter an STA, initialize the
+    /// process, publish the options <see cref="ReactorApplication"/> reads on launch, and
+    /// hand control to WinUI. Blocks until the app exits.
+    /// </summary>
+    /// <param name="options">
+    /// Invoked on the STA thread after <c>InitProcess</c>, preserving the original
+    /// construction order of every overload.
+    /// </param>
+    private static void StartApplication(Func<ReactorAppOptions> options)
+    {
         RunOnSta(() =>
         {
             InitProcess();
-            Options = new ReactorAppOptions(Startup: startup);
+            Options = options();
+
             Application.Start(_ =>
             {
                 var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
@@ -446,7 +675,7 @@ public static partial class ReactorApp
     /// Use it for pre-mount setup that needs the live <see cref="ReactorHost"/>
     /// (logger wiring, custom reconciler registrations, host-level event
     /// hooks). Mirror of the <c>configure</c> parameter on the legacy
-    /// <see cref="Run{TRoot}(string, double?, double?, bool, Action{ReactorHost}?)"/>
+    /// <see cref="Run{TRoot}(string, double?, double?, bool, WindowIcon?, Action{ReactorHost}?)"/>
     /// entry — secondary windows now have the same escape hatch as the
     /// primary.
     /// </param>
@@ -491,16 +720,34 @@ public static partial class ReactorApp
     {
         ReactorWindow window = new ReactorWindow(spec);
         window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
-        configure?.Invoke(window.Host);
-        RegisterWindow(window);
         try
         {
+            // configure runs inside the cleanup region, not before it: the
+            // ReactorWindow ctor has already created the native Window and
+            // AppWindow, so a throwing pre-mount callback would otherwise leak
+            // one that is neither registered nor disposed — invisible to
+            // ReactorApp.Windows and therefore to PrepareOpenWindowsForExit.
+            configure?.Invoke(window.Host);
+            RegisterWindow(window);
             window.MountAndActivate(rootFactory, renderFunc);
         }
         catch (Exception)
         {
-            UnregisterWindow(window);
-            try { window.Dispose(); } catch { /* best effort */ }
+            // evaluateShutdownPolicy: false — a failed open is not a surface
+            // close. MountAndActivate can throw after RegisterWindow, and if the
+            // failed window was the elected primary, evaluating here would call
+            // SafeExit while the caller is still unwinding: the app would die
+            // over an OpenWindow failure it may well handle, even with other
+            // windows still open. The launch paths' zero-surface decision owns
+            // the lifetime call instead.
+            UnregisterWindow(window, evaluateShutdownPolicy: false);
+            // Dispose alone is not enough: it unsubscribes handlers and tears
+            // down the host, but never closes the native Window the
+            // ReactorWindow ctor already created. Without this, a failed open
+            // leaves a live untracked window on screen — most visibly under
+            // ShutdownPolicy.Explicit, where the process keeps running.
+            try { window.Close(); } catch (Exception ex) when (ex is not OutOfMemoryException) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] failed-open Close threw: {ex.Message}"); }
+            try { window.Dispose(); } catch (Exception ex) when (ex is not OutOfMemoryException) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] failed-open Dispose threw: {ex.Message}"); }
             throw;
         }
         return window;
@@ -571,8 +818,7 @@ public static partial class ReactorApp
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Exit));
         PrepareOpenWindowsForExit();
-        try { Application.Current?.Exit(); }
-        catch { /* best effort */ }
+        RequestEventLoopExit();
         if (exitCode != 0)
             Environment.Exit(exitCode);
     }
@@ -610,7 +856,19 @@ public static partial class ReactorApp
     // Copy-on-write remove. Idempotent — removing an already-removed window
     // (Phase 1 path runs Dispose → close cascade twice in some failure modes)
     // is a no-op.
-    internal static void UnregisterWindow(ReactorWindow window)
+    internal static void UnregisterWindow(ReactorWindow window) =>
+        UnregisterWindow(window, evaluateShutdownPolicy: true);
+
+    /// <param name="window">The window to remove from the process-wide registry.</param>
+    /// <param name="evaluateShutdownPolicy">
+    /// <c>false</c> for a window that never successfully opened. A failed open is
+    /// not a surface close, so it must not decide process lifetime: the window
+    /// could have been the elected primary, and running the evaluator here would
+    /// call <see cref="SafeExit"/> while the caller is still unwinding — killing
+    /// the app over an <c>OpenWindow</c> failure the caller may well handle, and
+    /// even when other windows remain.
+    /// </param>
+    internal static void UnregisterWindow(ReactorWindow window, bool evaluateShutdownPolicy)
     {
         var current = Volatile.Read(ref _windows);
         int idx = Array.IndexOf(current, window);
@@ -638,12 +896,21 @@ public static partial class ReactorApp
         try { WindowClosed?.Invoke(null, window); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowClosed threw: {ex.Message}"); }
 
-        EvaluateShutdownPolicy(closedWasPrimary: wasPrimary);
+        if (evaluateShutdownPolicy)
+            EvaluateShutdownPolicy(closedWasPrimary: wasPrimary);
     }
 
     // OnPrimaryWindowClosed: exit when the just-closed window was the primary.
     // OnLastSurfaceClosed: exit when both windows and tray icons are gone.
     // Explicit: never exit from a surface-close event — the app drives Exit().
+    //
+    // This is the sole authority on process lifetime for every policy:
+    // TakeOwnershipOfDispatcherLifetime puts the platform into
+    // OnExplicitShutdown at launch, so nothing else will quit the event loop.
+    // That is what lets the OnPrimaryWindowClosed arm honour issue #647 — a
+    // window that opted out via ExcludeFromShutdownPolicy is never elected
+    // primary, so closing it leaves closedWasPrimary false and the app alive
+    // even when it was the last window on screen.
     internal static void EvaluateShutdownPolicy(bool closedWasPrimary)
     {
         var policy = ShutdownPolicy;
@@ -695,21 +962,104 @@ public static partial class ReactorApp
         try { TrayIconClosed?.Invoke(null, icon); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] TrayIconClosed threw: {ex.Message}"); }
 
-        // OnLastSurfaceClosed: closing the final tray icon when no windows
-        // remain should exit just like closing the final window.
-        if (ShutdownPolicy == ShutdownPolicy.OnLastSurfaceClosed
-            && Windows.Count == 0
-            && TrayIconCount == 0)
+        // Closing the final tray icon when no windows remain should exit just
+        // like closing the final window, so it goes through the same evaluator
+        // rather than re-deriving the condition here. A tray icon is never the
+        // elected primary, hence closedWasPrimary: false — which makes the
+        // OnPrimaryWindowClosed and Explicit arms no-ops and leaves the
+        // OnLastSurfaceClosed arm, whose "no windows and no tray icons left"
+        // test is exactly what this used to spell out inline. Keeping one
+        // decision point is what lets §6.2 claim every surface-close exit is
+        // EvaluateShutdownPolicy's.
+        EvaluateShutdownPolicy(closedWasPrimary: false);
+    }
+
+    /// <summary>
+    /// Applies the zero-surface startup decision (spec 036 §6.2): a launch that
+    /// produced no window and no tray icon must not leave the process running
+    /// under a policy that does not permit it. UI-thread only.
+    /// </summary>
+    /// <remarks>
+    /// <para>With the default <see cref="ShutdownPolicy.OnPrimaryWindowClosed"/>
+    /// this is the "I forgot to OpenWindow" guard. Apps that intend a
+    /// zero-surface startup pick <see cref="ShutdownPolicy.Explicit"/> or
+    /// <see cref="ShutdownPolicy.OnLastSurfaceClosed"/>; the latter still exits
+    /// here when no tray icon was opened either, because then nothing is left.</para>
+    /// <para>This is evaluated the moment the launch path finishes, so it reads
+    /// whatever <see cref="ShutdownPolicy"/> holds at that instant — a policy
+    /// written asynchronously from another thread during startup may not have
+    /// landed yet. Set the policy before <c>Run</c>, or on the UI thread before
+    /// the startup callback returns.</para>
+    /// <para>Called from a <c>finally</c> on both launch paths: once dispatcher
+    /// ownership has been taken, a startup that throws and is then marked handled
+    /// by the app's <c>OnUnhandledException</c> would otherwise leave the event
+    /// loop pumping with nothing on screen.</para>
+    /// </remarks>
+    internal static void ExitIfStartupOpenedNoSurface()
+    {
+        if (Windows.Count != 0) return;
+
+        var policy = ShutdownPolicy;
+        if (policy == ShutdownPolicy.Explicit) return;
+        if (policy == ShutdownPolicy.OnLastSurfaceClosed && TrayIconCount != 0) return;
+
+        // RequestEventLoopExit handles and logs its own failures, so there is
+        // nothing left to guard here.
+        RequestEventLoopExit();
+    }
+
+    /// <summary>
+    /// Ends this thread's event loop. UI-thread only.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Application.Exit"/> is the primary path.
+    /// <c>DispatcherQueue.EnqueueEventLoopExit</c> is the documented alternative
+    /// for a thread running under
+    /// <see cref="DispatcherShutdownMode.OnExplicitShutdown"/>, and it is the
+    /// reason this fallback exists at all: taking ownership of the loop removed
+    /// WinUI's automatic last-window shutdown, so a suppressed
+    /// <see cref="Application.Exit"/> failure would otherwise leave the process
+    /// pumping forever with no remaining way out. Both attempts are logged
+    /// through <see cref="AppLogger"/>; if both fail there is nothing further
+    /// Reactor can do from managed code, and the error is at least visible.
+    /// </remarks>
+    private static void RequestEventLoopExit()
+    {
+        // Deliberately broad, on both attempts — filtered only to let a genuinely
+        // catastrophic OutOfMemoryException through rather than mask it.
+        // Application.Exit() tears open windows down synchronously, and
+        // ReactorWindow.OnNativeClosed invokes user Closed callbacks without
+        // catching them, so an arbitrary app exception can surface here.
+        // Narrowing to the usual WinRT teardown set would let one escape before
+        // the fallback runs and leave an OnExplicitShutdown loop pumping with no
+        // remaining way out — the exact failure this method exists to prevent.
+        // Do not narrow these further.
+        try
         {
-            SafeExit();
+            Application.Current?.Exit();
+            return;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLogger?.LogError(ex, "ReactorApp: Application.Exit() failed; falling back to EnqueueEventLoopExit.");
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        try
+        {
+            UIDispatcher?.EnqueueEventLoopExit();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLogger?.LogError(ex, "ReactorApp: EnqueueEventLoopExit() also failed; the event loop may not terminate.");
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] EnqueueEventLoopExit threw: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
     private static void SafeExit()
     {
         PrepareOpenWindowsForExit();
-        try { Application.Current?.Exit(); }
-        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.Message}"); }
+        RequestEventLoopExit();
     }
 
     // Issue #537 — Application.Exit() tears down every open window's native
@@ -843,6 +1193,9 @@ public static partial class ReactorApp
     internal static void ResetDevtoolsEnabledForTests()
     {
         Interlocked.Exchange(ref _devtoolsEnabled, 0);
+        // Spec 010 — keep the derived source-map flag in lockstep; the field
+        // write above bypasses the property setter that normally mirrors it.
+        Diagnostics.ReactorSourceMap.Enabled = false;
     }
 
     internal static void ResetDipBehaviorChangeNoticeForTests()
@@ -1011,24 +1364,21 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // ── Path 1: explicit Run(Action<ReactorAppContext>) startup callback.
         if (opts.Startup is not null)
         {
-            opts.Startup(ctx);
+            // Before the callback, so windows it opens are already governed.
+            ReactorApp.TakeOwnershipOfDispatcherLifetime();
 
-            // Spec 036 §6.2: with the default OnPrimaryWindowClosed policy, a
-            // startup that opens zero windows must exit immediately — that's
-            // the only sane default for "I forgot to OpenWindow." Apps that
-            // want zero-window startup pick Explicit or OnLastSurfaceClosed
-            // before returning from the callback. OnLastSurfaceClosed exits
-            // here only if NO tray icon was opened either; otherwise the tray
-            // keeps the process alive.
-            var noWindows = ReactorApp.Windows.Count == 0;
-            var policy = ReactorApp.ShutdownPolicy;
-            if (noWindows && policy == ShutdownPolicy.OnPrimaryWindowClosed)
+            try
             {
-                try { Application.Current?.Exit(); } catch { /* best effort */ }
+                opts.Startup(ctx);
             }
-            else if (noWindows && policy == ShutdownPolicy.OnLastSurfaceClosed && ReactorApp.TrayIconCount == 0)
+            finally
             {
-                try { Application.Current?.Exit(); } catch { /* best effort */ }
+                // In a finally because ownership has already been taken: if the
+                // callback throws and the app's OnUnhandledException marks it
+                // handled, nothing else would end a process that never opened a
+                // surface. Before ownership, the platform's OnLastWindowClose
+                // rescued that case.
+                ReactorApp.ExitIfStartupOpenedNoSurface();
             }
             return;
         }
@@ -1045,18 +1395,32 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // creation. Skip the bridge so we don't try to open a window with
         // nothing to mount (which would otherwise cascade into shutdown
         // during OnLaunched). (spec 036 §4.3)
+        //
+        // Dispatcher ownership is skipped for the same reason it is skipped for
+        // a non-ReactorApplication host: this launch shape has no Reactor
+        // surfaces and never reaches the zero-surface check above, so Reactor is
+        // not the thing deciding when the process ends. Forcing
+        // OnExplicitShutdown here would leave such a host pumping forever once
+        // its own windows closed.
         if (opts.RootFactory is null && opts.RootRenderFunc is null) return;
 
-        var spec = opts.InitialWindowSpec ?? new WindowSpec
-        {
-            Title = opts.WindowTitle,
-            Width = opts.WindowWidth,
-            Height = opts.WindowHeight,
-            Presenter = opts.FullScreen ? PresenterKind.FullScreen : PresenterKind.Overlapped,
-        };
+        ReactorApp.TakeOwnershipOfDispatcherLifetime();
 
-        ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
+        var spec = ReactorApp.BuildInitialWindowSpec(opts);
+
+        try
+        {
+            ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
+        }
+        finally
+        {
+            // Same reasoning as the startup path: OpenWindowCore unregisters and
+            // disposes the window before rethrowing, so a handled failure here
+            // leaves zero surfaces under an owned dispatcher.
+            ReactorApp.ExitIfStartupOpenedNoSurface();
+        }
     }
+
 
     /// <summary>
     /// Maps the WinUI <see cref="LaunchActivatedEventArgs"/> + the richer

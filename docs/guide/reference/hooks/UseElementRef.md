@@ -5,14 +5,33 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(M
 
 > **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
 
-## Summary
+## Overloads
 
-Component-extension overload of [UseElementRef](UseElementRef.md) ([guide](../../hooks.md)).
+- [`UseElementRef<T>(Component)`](#useelementreftcomponent)
+- [`UseElementRef<T>(RenderContext)`](#useelementreftrendercontext)
+
+## `UseElementRef<T>(Component)`
+
+`method`  
+_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.Component)`
+
+### Summary
+
+Component-extension overload of [UseElementRef](UseElementRef.md#useelementreftrendercontext) ([guide](../../hooks.md)).
 Equivalent to calling the `RenderContext`-extension form against
-<c>component.Context</c>.
+`component.Context`.
 
-## Parameters
+### Parameters
 
 - **component** — The component whose render context owns the hook slot.
+
+## `UseElementRef<T>(RenderContext)`
+
+`method`  
+_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.RenderContext)`
+
+### Summary
+
+Returns a stable `ElementRef` for the current component scope.
 
 

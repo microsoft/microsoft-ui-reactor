@@ -295,41 +295,73 @@ them.
 
 ### Trapping focus in a modal
 
-A modal dialog is the canonical use of `UseFocusTrap` and
-[`UseAnnounce`](accessibility.md) together. The trap keeps Tab
-inside the dialog; the announcement tells the screen reader the
-dialog opened.
+`ContentDialog` is already modal: WinUI side-mounts its content into a
+XamlRoot popup and manages focus containment itself. **Do not add
+`UseFocusTrap` to it.** The trap cancels any focus move whose target is
+not a visual descendant of its container, and the dialog's content is
+not in that subtree — so the trap fights the dialog instead of helping
+it. That containment is asserted by the
+`FocusTrapContentDialog_ContainmentProbe` selftest.
+
+What a dialog *does* need is the announcement, so the screen reader is
+told it opened:
 
 ```csharp
 public override Element Render()
 {
     var (open, setOpen) = UseState(false);
-    var trap = UseFocusTrap(isActive: open);
     var announce = UseAnnounce();
 
-    return Layer(
+    return VStack(
         announce.Region,
-        MainContent(),
-        open
-            ? Dialog(
-                Text("Are you sure?"),
-                HStack(
-                    Button("Cancel", () => setOpen(false)),
-                    Button("Delete", () => { Delete(); setOpen(false); })
-                )
-              )
-              .FocusTrap(trap)
-              .OnMount(() => announce.Announce("Confirm delete dialog opened", assertive: true))
-            : null
+        Button("Delete…", () => setOpen(true)),
+        ContentDialog(
+            "Confirm delete",
+            TextBlock("Are you sure?"),
+            primaryButtonText: "Delete")
+        with
+        {
+            IsOpen = open,
+            CloseButtonText = "Cancel",
+            OnOpened = () => announce.Announce("Confirm delete dialog opened", assertive: true),
+            OnClosed = result =>
+            {
+                if (result == ContentDialogResult.Primary) Delete();
+                setOpen(false);
+            },
+        }
     );
 }
 ```
 
+Note that the dialog is *controlled*: `IsOpen` is a field on the element
+record, not an imperative `ShowAsync` call, which is what
+[`REACTOR_DIALOG_001`](rules-of-reactor.md) enforces. The
+[reconciliation](reconciliation.md) page describes the mount /
+unmount machinery behind the element lifecycle.
+
+`UseFocusTrap` is for modals you build **in-tree** — an overlay `Grid`
+or `Border` layered over the page rather than hosted in a popup:
+
+```csharp
+var (open, setOpen) = UseState(false);
+var trap = this.UseFocusTrap(isActive: open);
+
+return VStack(
+    Button("Edit…", () => setOpen(true)),
+    open
+        ? Border(VStack(
+              TextBlock("Inline editor"),
+              Button("Close", () => setOpen(false))))
+            .Background(Theme.CardBackground)
+            .FocusTrap(trap)
+        : Empty()
+);
+```
+
 The `UseFocusTrap(open)` call evaluates the active flag on every
 render — flip `open` to false and the trap deactivates on the next
-reconcile pass; flip it back to true and the trap reattaches. The
-[reconciliation](reconciliation.md) page describes the mount /
-unmount machinery that drives the `OnMount` callback.
+reconcile pass; flip it back to true and the trap reattaches.
 
 ## Common Mistakes
 
@@ -403,5 +435,5 @@ when a user backgrounds the app mid-drag.
 - **[Input and Gestures](input-and-gestures.md)** — Surface-level event API.
 - **[Accessibility](accessibility.md)** — User-facing accessibility hooks and conventions.
 - **[Forms](forms.md)** — How `UseFocus` plugs into the form authoring story.
-- **[Reconciliation](reconciliation.md)** — Mount / update lifecycle that drives `OnMount` callbacks.
+- **[Reconciliation](reconciliation.md)** — Mount / update lifecycle behind the element records used here.
 - **[Animation Pipeline](animation-pipeline.md)** — Previous under-the-hood page.

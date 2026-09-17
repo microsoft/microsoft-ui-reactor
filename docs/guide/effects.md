@@ -98,14 +98,14 @@ class DependencyEffectExample : Component
         }, query);
 
         return VStack(12,
-            TextBox(query, setQuery, placeholderText: "Search...").Width(300),
+            TextBox(query, setQuery, placeholderText: "Search...", header: "Search query").Width(300),
             TextBlock(results).Foreground(Theme.SecondaryText)
         ).Padding(24);
     }
 }
 ```
 
-![Search with debounced query](images/effects/dependency-effect.png)
+![Search reacting to query changes](images/effects/dependency-effect.png)
 
 Every time `query` changes, the effect runs again. Reactor compares the current
 dependencies to the previous ones using structural equality. If nothing
@@ -130,10 +130,15 @@ class TimerCleanupExample : Component
             if (!isRunning) return () => { };
             var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             var cts = new CancellationTokenSource();
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
             _ = Task.Run(async () =>
             {
-                while (await timer.WaitForNextTickAsync(cts.Token))
-                    updateSeconds(s => s + 1);
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateSeconds(s => s + 1);
+                }
+                catch (OperationCanceledException) { /* expected on cleanup */ }
             });
             return () => { cts.Cancel(); timer.Dispose(); };
         }, isRunning);
@@ -141,7 +146,8 @@ class TimerCleanupExample : Component
         return VStack(12,
             TextBlock($"Elapsed: {seconds}s").FontSize(24).Bold(),
             HStack(8,
-                Button(isRunning ? "Stop" : "Start", () => setIsRunning(!isRunning)),
+                Button(isRunning ? "Stop" : "Start", () => setIsRunning(!isRunning))
+                    .AutomationName(isRunning ? "Stop timer" : "Start timer"),
                 Button("Reset", () => updateSeconds(_ => 0))
             )
         ).Padding(24);
@@ -193,7 +199,7 @@ class AsyncLoadingExample : Component
 
         return VStack(8,
             Heading("Loaded Users"),
-            VStack(4, items.Select(name => TextBlock(name)).ToArray())
+            VStack(4, items.Select(name => TextBlock(name).WithKey(name)).ToArray())
         ).Padding(24);
     }
 }
@@ -243,8 +249,9 @@ changing value from the dependency array.
 > The same ordering applies on unmount: cleanup runs once, the effect body
 > never runs again. The concrete failure mode this prevents: a `PeriodicTimer`
 > that captures `cts` in the cleanup closure stops correctly when the dep
-> changes, but only if you return `() => { cts.Cancel(); timer.Dispose(); }`
-> from the body. Forget the cleanup and the old timer keeps firing alongside
+> changes, but only if you return
+> `() => { cts.Cancel(); timer.Dispose(); }` from the body.
+> Forget the cleanup and the old timer keeps firing alongside
 > the new one. The scheduling internals — when each phase runs relative to
 > the reconciler — are documented in
 > [effects-scheduling](effects-scheduling.md).
@@ -259,20 +266,37 @@ overwriting state on the next component instance (or worse, throwing on a
 disposed setter):
 
 ```csharp
-UseEffect(() =>
+class FetchCancellationExample : Component
 {
-    var cts = new CancellationTokenSource();
-    _ = Task.Run(async () =>
+    static Task<string[]> FetchAsync(string q, CancellationToken ct) =>
+        Task.FromResult(new[] { $"{q} result" });
+
+    public override Element Render()
     {
-        try
+        var (query, setQuery) = UseState("reactor");
+        var (items, setItems) = UseState(Array.Empty<string>());
+
+        UseEffect(() =>
         {
-            var data = await FetchAsync(query, cts.Token);
-            setItems(data);
-        }
-        catch (OperationCanceledException) { /* expected */ }
-    });
-    return () => cts.Cancel();
-}, query);
+            var cts = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var data = await FetchAsync(query, cts.Token);
+                    setItems(data);
+                }
+                catch (OperationCanceledException) { /* expected */ }
+            });
+            return () => { cts.Cancel(); };
+        }, query);
+
+        return VStack(8,
+            TextBox(query, setQuery, header: "Search query").Width(250),
+            ForEach(items, item => TextBlock(item).WithKey(item))
+        ).Padding(24);
+    }
+}
 ```
 
 When `query` changes, cleanup cancels the in-flight fetch before the new
@@ -288,14 +312,33 @@ WinUI control's `RoutedEventHandler`. Subscribe in the body, return an
 unsubscribe in the cleanup:
 
 ```csharp
-var (tick, updateTick) = UseReducer(0);
-
-UseEffect(() =>
+class EventSource
 {
-    void Handler(object? s, EventArgs e) => updateTick(t => t + 1);
-    Source.Changed += Handler;
-    return () => Source.Changed -= Handler;
-}, Source); // re-attach if Source identity changes
+    public event EventHandler? Changed;
+    public void Fire() => Changed?.Invoke(this, EventArgs.Empty);
+}
+
+class SubscriptionCleanupExample : Component
+{
+    static readonly EventSource Source = new();
+
+    public override Element Render()
+    {
+        var (tick, updateTick) = UseReducer(0);
+
+        UseEffect(() =>
+        {
+            void Handler(object? s, EventArgs e) => updateTick(t => t + 1);
+            Source.Changed += Handler;
+            return () => Source.Changed -= Handler;
+        }, Source); // re-attach if Source identity changes
+
+        return VStack(8,
+            TextBlock($"Ticks: {tick}"),
+            Button("Fire", Source.Fire)
+        ).Padding(24);
+    }
+}
 ```
 
 If you only need to react to property changes on an `INotifyPropertyChanged`
@@ -319,9 +362,22 @@ re-implementing `UseResource`.
 ### Object or array literals in the deps array
 
 ```csharp
-// Don't:
-var options = new { Url = url, Limit = 10 };
-UseEffect(() => FetchAsync(options), options); // new instance every render
+class DepsLiteralDontExample : Component
+{
+    static Task FetchAsync(object options) => Task.CompletedTask;
+
+    public override Element Render()
+    {
+        var (url, setUrl) = UseState("https://example.test");
+
+        // Don't — `options` is a fresh anonymous object on every render, so the
+        // effect re-runs every commit and the fetch fires in a loop.
+        var options = new { Url = url, Limit = 10 };
+        UseEffect(() => FetchAsync(options), options);
+
+        return TextBox(url, setUrl, header: "Request URL").Width(250).Padding(24);
+    }
+}
 ```
 
 `options` is a fresh anonymous object on every render — its reference
@@ -331,7 +387,20 @@ when a hook's deps argument is a freshly-allocated object, array, or
 lambda. Pass the *primitives* instead:
 
 ```csharp
-UseEffect(() => FetchAsync(url, 10), url);
+class DepsLiteralDoExample : Component
+{
+    static Task FetchAsync(string url, int limit) => Task.CompletedTask;
+
+    public override Element Render()
+    {
+        var (url, setUrl) = UseState("https://example.test");
+
+        // Do — pass the primitives, which compare by value.
+        UseEffect(() => FetchAsync(url, 10), url);
+
+        return TextBox(url, setUrl, header: "Request URL").Width(250).Padding(24);
+    }
+}
 ```
 
 Or memoize the container with [`UseMemo`](hooks.md) so its identity is
@@ -340,47 +409,89 @@ stable across renders.
 ### Missing cleanup
 
 ```csharp
-// Don't:
-var (tick, updateTick) = UseReducer(0);
-
-UseEffect(() =>
+class MissingCleanupDontExample : Component
 {
-    var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-    _ = Task.Run(async () =>
+    public override Element Render()
     {
-        while (await timer.WaitForNextTickAsync())
-            updateTick(t => t + 1);
-    });
-}, Array.Empty<object>()); // no cleanup → timer fires forever after unmount
+        var (tick, updateTick) = UseReducer(0);
+
+        // Don't — no cleanup, so the timer fires forever after unmount.
+        // UseEffect(() =>
+        // {
+        //     var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        //     _ = Task.Run(async () =>
+        //     {
+        //         while (await timer.WaitForNextTickAsync())
+        //             updateTick(t => t + 1);
+        //     });
+        // }, Array.Empty<object>());
+
+        return TextBlock($"Ticks: {tick}").Padding(24);
+    }
+}
 ```
 
-The component unmounts, the timer keeps firing, the setter is called on a
-dead [`RenderContext`](hooks-internals.md), and the setter throws (or worse,
-silently leaks the closure tree the timer captured). Always return a
-cleanup that cancels the producer:
+If you leave the commented effect active, the component unmounts, the timer
+keeps firing, the setter is called on a dead [`RenderContext`](hooks-internals.md),
+and the setter throws (or worse, silently leaks the closure tree the timer
+captured). Always return a cleanup that cancels the producer:
 
 ```csharp
-var (tick, updateTick) = UseReducer(0);
-
-UseEffect(() =>
+class MissingCleanupDoExample : Component
 {
-    var cts = new CancellationTokenSource();
-    var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-    _ = Task.Run(async () =>
+    public override Element Render()
     {
-        while (await timer.WaitForNextTickAsync(cts.Token))
-            updateTick(t => t + 1);
-    });
-    return () => { cts.Cancel(); timer.Dispose(); };
-}, Array.Empty<object>());
+        var (tick, updateTick) = UseReducer(0);
+
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            var token = cts.Token;   // capture once — the loop must not re-read cts.Token
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    while (await timer.WaitForNextTickAsync(token))
+                        updateTick(t => t + 1);
+                }
+                catch (OperationCanceledException) { /* expected on unmount */ }
+            });
+            // Cancel the source and dispose the timer; do NOT dispose the
+            // source. The fire-and-forget worker shares ownership of it, and
+            // CancellationTokenSource.Dispose is not safe alongside concurrent
+            // member access — a call still registering against the token would
+            // see ObjectDisposedException. A CTS with no timer holds no
+            // unmanaged resource, so dropping the reference is enough.
+            return () => { cts.Cancel(); timer.Dispose(); };
+        }, Array.Empty<object>());
+
+        return TextBlock($"Ticks: {tick}").Padding(24);
+    }
+}
 ```
 
 ### Running an effect that should be a memo
 
 ```csharp
-// Don't:
-var (full, setFull) = UseState("");
-UseEffect(() => setFull($"{first} {last}"), first, last);
+class EffectVsMemoDontExample : Component
+{
+    public override Element Render()
+    {
+        var (first, setFirst) = UseState("Ada");
+        var (last, setLast) = UseState("Lovelace");
+
+        // Don't — this pays for two extra renders just to derive a string.
+        var (full, setFull) = UseState("");
+        UseEffect(() => setFull($"{first} {last}"), first, last);
+
+        return VStack(8,
+            TextBox(first, setFirst, header: "First name").Width(150),
+            TextBox(last, setLast, header: "Last name").Width(150),
+            TextBlock(full)
+        ).Padding(24);
+    }
+}
 ```
 
 This pays for two extra renders (initial mount with empty `full`, then
@@ -389,8 +500,26 @@ should happen **in render**, either inline or via
 [`UseMemo`](hooks.md) for an expensive computation:
 
 ```csharp
-var full = $"{first} {last}";                  // inline
-var stats = UseMemo(() => Compute(input), input); // memoized when expensive
+class EffectVsMemoDoExample : Component
+{
+    static string Compute(string input) => input.ToUpperInvariant();
+
+    public override Element Render()
+    {
+        var (first, setFirst) = UseState("Ada");
+        var (last, setLast) = UseState("Lovelace");
+
+        var full = $"{first} {last}";                        // inline
+        var stats = UseMemo(() => Compute(full), full);      // memoized when expensive
+
+        return VStack(8,
+            TextBox(first, setFirst, header: "First name").Width(150),
+            TextBox(last, setLast, header: "Last name").Width(150),
+            TextBlock(full),
+            TextBlock(stats)
+        ).Padding(24);
+    }
+}
 ```
 
 Effects are for *side effects* — work that reaches outside the component.

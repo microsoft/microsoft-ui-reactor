@@ -1,0 +1,40 @@
+---
+title: "Migration: Windowing evolution (spec 054)"
+order: 90.7
+audience: app-authors
+goal: |
+  App-author guide for the spec 054 windowing migration: which legacy
+  WindowSpec fields were removed, what replaced them, and how to move
+  placement persistence onto the explicit WithPersistence shape.
+tier: stub
+---
+
+# Migration: Windowing evolution
+
+Spec 054 intentionally removes a few legacy windowing fields in favor of more
+explicit shapes. The new APIs are additive except for the breaking changes below.
+
+| Removed / changed API | Replacement | Migration |
+| --- | --- | --- |
+| `IsResizable` (bool) | `ResizeMode` (`WindowResizeMode`) | `IsResizable = false` → `ResizeMode = WindowResizeMode.NoResize`. The old default `true` is the new default `CanResize`. |
+| `IsShownInSwitchers` (bool) | `ShowInTaskbar` + `ShowInSwitcher` | `IsShownInSwitchers = false` → `ShowInTaskbar = false, ShowInSwitcher = false`. |
+| `IsAlwaysOnTop` (bool) | `Level` (`WindowLevel`) | `IsAlwaysOnTop = true` → `Level = WindowLevel.AlwaysOnTop`. |
+| `WindowStartPosition.RestoreFromPersistence` | `.WithPersistence(id)` or `PersistPlacement = true` | Old: `StartPosition = WindowStartPosition.RestoreFromPersistence, PersistenceId = "main"`. New: `new WindowSpec { Title = "Main" }.WithPersistence("main")`. |
+| `ExtendsContentIntoTitleBar` (`bool`) | `ExtendsContentIntoTitleBar` (`bool?`) plus `TitleBar(...)` inference | If a `TitleBar(...)` element is present, drop `ExtendsContentIntoTitleBar = true` and let Reactor infer it. Keep explicit `true` only for content-extension without a `TitleBar(...)`; keep explicit `false` to force system chrome. |
+
+## Examples
+
+```csharp snippet="windows/migration-054-flags"
+```
+
+```csharp snippet="windows/migration-054-persistence"
+```
+
+`WindowPlacementCodec` stores only monitor fingerprints and `WINDOWPLACEMENT`,
+not `WindowStartPosition`, so no on-disk placement migration is required.
+
+## Next Steps
+
+- **[Windows](../windows.md)** — The post-054 windowing surface in full: sizing, placement, z-order, chrome, taskbar, displays.
+- **[Advanced Windowing](../windowing-advanced.md)** — Interop-heavy recipes that deliberately sit outside the `WindowSpec` contract.
+- **[Persistence](../persistence.md)** — Persisted scopes beyond window placement.

@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 using WinXC = Microsoft.UI.Xaml.Controls;
+using System.Data;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -81,11 +82,28 @@ internal static class LayoutFixtures
         {
             var host = H.CreateHost();
             host.Mount(ctx =>
-                Grid([GridSize.Px(200), GridSize.Star()], [GridSize.Auto, GridSize.Star()],
+                Grid(
+                columns: [
+                GridSize.Star().MinSize(250).MaxSize(600),
+                GridSize.Star().MinSize(50).MaxSize(100),
+                GridSize.Star().MinSize(200).MaxSize(150)
+                ],
+                rows: [
+                new GridSize(1, GridUnitType.Star, 150, 400),
+                new GridSize(1, GridUnitType.Star, 50, 100),
+                new GridSize(1, GridUnitType.Star, 200, 100)
+                ],
+                children: [
                     TextBlock("TopLeft").Grid(row: 0, column: 0),
-                    TextBlock("TopRight").Grid(row: 0, column: 1),
-                    TextBlock("BottomLeft").Grid(row: 1, column: 0),
-                    TextBlock("BottomRight").Grid(row: 1, column: 1)
+                    TextBlock("TopCenter").Grid(row: 0, column: 1),
+                    TextBlock("TopRight").Grid(row: 0, column: 2),
+                    TextBlock("MiddleLeft").Grid(row: 1, column: 0),
+                    TextBlock("MiddleCenter").Grid(row: 1, column: 1),
+                    TextBlock("MiddleRight").Grid(row: 1, column: 2),
+                    TextBlock("BottomLeft").Grid(row: 2, column: 0),
+                    TextBlock("BottomCenter").Grid(row: 2, column: 1),
+                    TextBlock("BottomRight").Grid(row: 2, column: 2)
+                ]
                 ).Width(600).Height(400)
             );
 
@@ -93,21 +111,38 @@ internal static class LayoutFixtures
 
             H.Check("Grid_RowColumnLayout_AllCellsPresent",
                 H.FindText("TopLeft") is not null &&
+                H.FindText("TopCenter") is not null &&
                 H.FindText("TopRight") is not null &&
+                H.FindText("MiddleLeft") is not null &&
+                H.FindText("MiddleCenter") is not null &&
+                H.FindText("MiddleRight") is not null &&
                 H.FindText("BottomLeft") is not null &&
+                H.FindText("BottomCenter") is not null &&
                 H.FindText("BottomRight") is not null);
 
-            var grid = H.FindControl<WinXC.Grid>(g => g.ColumnDefinitions.Count == 2);
+            var grid = H.FindControl<WinXC.Grid>(g => g.ColumnDefinitions.Count == 3);
             H.Check("Grid_RowColumnLayout_GridCreated",
                 grid is not null);
 
-            H.Check("Grid_RowColumnLayout_HasTwoRows",
-                grid?.RowDefinitions.Count == 2);
+            H.Check("Grid_RowColumnLayout_HasThreeRows",
+                grid?.RowDefinitions.Count == 3);
 
-            H.Check("Grid_RowColumnLayout_HasTwoColumns",
-                grid?.ColumnDefinitions.Count == 2);
+            H.Check("Grid_RowColumnLayout_HasThreeColumns",
+                grid?.ColumnDefinitions.Count == 3);
+
+            // Verify that the actual widths and heights respect the min/max constraints
+            H.Check("Grid_RowColumnLayout_ColumnsWithinConstraints",
+                grid?.ColumnDefinitions[0].ActualWidth >= 250 && grid.ColumnDefinitions[0].ActualWidth <= 600 &&
+                grid?.ColumnDefinitions[1].ActualWidth >= 50 && grid.ColumnDefinitions[1].ActualWidth <= 100 &&
+                grid?.ColumnDefinitions[2].ActualWidth >= 200);
+
+            H.Check("Grid_RowColumnLayout_RowsWithinConstraints",
+                grid?.RowDefinitions[0].ActualHeight >= 150 && grid.RowDefinitions[0].ActualHeight <= 400 &&
+                grid?.RowDefinitions[1].ActualHeight >= 50 && grid.RowDefinitions[1].ActualHeight <= 100 &&
+                grid?.RowDefinitions[2].ActualHeight >= 200);
         }
     }
+
 
     /// <summary>
     /// Compares Grid star column sizing vs FlexPanel grow distribution.

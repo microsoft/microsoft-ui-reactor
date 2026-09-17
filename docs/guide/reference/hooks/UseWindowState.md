@@ -7,8 +7,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowState`
 
 ## Summary
 
-Subscribes to the host window's <c>StateChanged</c> event and re-renders
-on change. Returns `Normal`
+Subscribes to the host window's `StateChanged` event and re-renders
+on change. Returns `WindowState.Normal`
 outside a window. (spec 036 §7)
 
 

@@ -13,8 +13,12 @@ using WinShapes = Microsoft.UI.Xaml.Shapes;
 namespace Microsoft.UI.Reactor.Core;
 
 // AI-HINT: Reconciler.Mount.cs — creates real WinUI controls from Element descriptions.
-// Mount() is a big switch over all Element subtypes → MountXxx() methods.
-// Each MountXxx allocates (or rents from pool) a WinUI control, sets properties,
+// Mount() dispatches through the V1 protocol: each element type resolves to a
+// registered ControlDescriptor/IElementHandler (see ControlRegistry), which owns
+// creation and property application. There is no longer a switch over Element
+// subtypes and no MountXxx() methods — spec 048 removed that dispatch path; what
+// remains here is the dispatch entry point plus the composition-primitive handlers.
+// A handler allocates (or rents from pool) a WinUI control, sets properties, and
 // wires event handlers that look up the current Element via the ReactorAttached
 // DP (see Reconciler.SetElementTag), so handlers are wired once and survive
 // element recycling — the trampoline re-reads the current Element on each fire.
@@ -136,6 +140,12 @@ public sealed partial class Reconciler
         if (global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.AlwaysOnInDebug || ReactorFeatureFlags.WarnLayoutFootguns)
             global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.Inspect(element);
 
+        if (control is WinUI.TitleBar preModCtl)
+        {
+            global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
+                .ObserveAfterSetters(preModCtl);
+        }
+
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)
             ApplyModifiers(fe, modifiers, requestRerender);
@@ -145,8 +155,22 @@ public sealed partial class Reconciler
         // Re-apply the TitleBar's caption-derived height after modifiers so a
         // .Tall() without an explicit .Height(...) still sizes the control.
         // (issue #917)
-        if (element is TitleBarElement tbEl && control is WinUI.TitleBar tbCtl)
-            TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+        // Height sync is element-specific; the icon observation is not. A transparent
+        // Component/Memo wrapper whose native control is a TitleBar still has its own
+        // modifiers applied to that control, so gating the observer on the element would
+        // leave a wrapper-level .OnMount(...) icon write unrecorded — and therefore
+        // clobberable — while the pre-modifier observation above (gated on the control)
+        // already saw it.
+        if (control is WinUI.TitleBar tbCtl)
+        {
+            if (element is TitleBarElement tbEl)
+                TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+
+            // Anything that changed since the pre-modifier observation came from a
+            // modifier; whether it recurs depends on the phase.
+            global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
+                .ObserveAfterModifiers(tbCtl, isMount: true);
+        }
 
         // After modifiers + setters have had a chance to set an explicit
         // AutomationName, fall back to the control's visible caption so UIA
@@ -741,6 +765,13 @@ public sealed partial class Reconciler
             Fallback = eb.Fallback,
         };
 
+        // Spec 010 — composition wrappers carry the DSL call site too. Without this
+        // an intercepted ErrorBoundary(...) has a non-null Element.CallSite that
+        // ReactorSourceMap.GetSource can never reach, because the Border it mounts
+        // is the realized control an inspector actually hits. Costs nothing when
+        // unstamped: NeedsTag is false for a callback-free, key-free, extras-free
+        // element, so no ReactorState is allocated.
+        SetElementTagIfNeeded(wrapper, eb);
         return wrapper;
     }
 
@@ -781,6 +812,9 @@ public sealed partial class Reconciler
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
+        // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
+        // inspector hits, so it has to carry the call site. Free when unstamped.
+        SetElementTagIfNeeded(wrapper, compElement);
         return wrapper;
     }
 
@@ -814,6 +848,9 @@ public sealed partial class Reconciler
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
+        // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
+        // inspector hits, so it has to carry the call site. Free when unstamped.
+        SetElementTagIfNeeded(wrapper, funcElement);
         return wrapper;
     }
 
@@ -848,6 +885,9 @@ public sealed partial class Reconciler
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
+        // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
+        // inspector hits, so it has to carry the call site. Free when unstamped.
+        SetElementTagIfNeeded(wrapper, memoElement);
         return wrapper;
     }
 

@@ -7,20 +7,20 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseTrayIcon(Microsoft.UI.Reac
 
 ## Summary
 
-Open (or reuse-by-`Key`) a
+Open (or reuse-by-`TrayIconSpec.Key`) a
 system-tray icon scoped to the calling component. The icon closes
 automatically on unmount — that's the only difference from
-`OpenTrayIcon`, which is
+`ReactorApp.OpenTrayIcon`, which is
 app-scoped and keeps the icon alive until explicit
-`Close`.
+`ReactorTrayIcon.Close`.
 
 ## Discussion
 
-Returns <c>null</c> when no UI dispatcher has been captured (test
+Returns `null` when no UI dispatcher has been captured (test
 contexts) or when the spec change cannot be reconciled — callers
 should null-check before subscribing to events. Identity-stable across
 re-renders so the same handle wires through subsequent
-<c>UseEffect</c> dependencies.
+`UseEffect` dependencies.
 (spec 036 §11.4)
 
 

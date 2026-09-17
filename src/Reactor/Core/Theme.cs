@@ -91,7 +91,7 @@ public readonly record struct ThemeRef(string ResourceKey)
             return brush;
 
         // Fallback: non-themed resource lookup (including MergedDictionaries)
-        if (TryResolveNonThemed(resources, resourceKey, out var fb))
+        if (ResourceLookup.TryFind<Brush>(resources, resourceKey, out var fb))
             return fb;
 
         return null;
@@ -143,24 +143,6 @@ public readonly record struct ThemeRef(string ResourceKey)
         foreach (var merged in resources.MergedDictionaries)
         {
             if (TryResolveFromThemeDictionaries(merged, key, themeName, out brush))
-                return true;
-        }
-
-        brush = null;
-        return false;
-    }
-
-    private static bool TryResolveNonThemed(ResourceDictionary resources, string key, out Brush? brush)
-    {
-        if (resources.TryGetValue(key, out var value) && value is Brush b)
-        {
-            brush = b;
-            return true;
-        }
-
-        foreach (var merged in resources.MergedDictionaries)
-        {
-            if (TryResolveNonThemed(merged, key, out brush))
                 return true;
         }
 

@@ -79,17 +79,30 @@ public static class TemplatesCommand
 
     static int Status()
     {
-        var installed = WinAppSdkTemplates.IsInstalled();
-        if (installed is null)
+        // Report the question that matters — "can I scaffold?" — not merely
+        // whether the package id appears in the installed list.
+        var available = WinAppSdkTemplates.AreTemplatesAvailable();
+        if (available is null)
         {
-            Console.Error.WriteLine("mur templates status: could not enumerate installed `dotnet new` template packages.");
+            Console.Error.WriteLine("mur templates status: could not enumerate `dotnet new` templates.");
             return 1;
         }
 
-        if (installed.Value)
+        var version = WinAppSdkTemplates.GetInstalledVersion();
+        if (available.Value)
         {
-            Console.WriteLine($"{WinAppSdkTemplates.PackageId} is installed (`dotnet new {WinAppSdkTemplates.BlankShortName}`).");
+            Console.WriteLine(version is null
+                ? $"`dotnet new {WinAppSdkTemplates.BlankShortName}` is available."
+                : $"`dotnet new {WinAppSdkTemplates.BlankShortName}` is available ({WinAppSdkTemplates.PackageId} {version}).");
             return 0;
+        }
+
+        if (WinAppSdkTemplates.IsPackageInstalled() == true)
+        {
+            Console.WriteLine(
+                $"{WinAppSdkTemplates.PackageId} {version ?? "(unknown)"} is installed, but it does not provide " +
+                $"`dotnet new {WinAppSdkTemplates.BlankShortName}`. Update it with `mur templates install`.");
+            return 1;
         }
 
         Console.WriteLine($"{WinAppSdkTemplates.PackageId} is NOT installed. Run `mur templates install`.");

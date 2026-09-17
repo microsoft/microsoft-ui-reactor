@@ -12,7 +12,8 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// <summary>
 /// Code fix for <see cref="MissingWithKeyAnalyzer"/> (<c>REACTOR_DSL_001</c>) —
 /// appends <c>.WithKey(...)</c> to the lambda body of a <c>.Select(item => …)</c>
-/// projection whose result is consumed by a layout factory.
+/// or Reactor <c>ForEach(items, item => …)</c> projection whose result is
+/// consumed by a layout factory.
 ///
 /// Three offers, in order of preference:
 /// <list type="number">
@@ -50,14 +51,12 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
 
         foreach (var diagnostic in context.Diagnostics)
         {
-            var selectInv = root.FindNode(diagnostic.Location.SourceSpan) as InvocationExpressionSyntax;
-            if (selectInv is null) continue;
+            var reported = root.FindNode(
+                diagnostic.Location.SourceSpan,
+                getInnermostNodeForTie: true);
+            if (reported is not InvocationExpressionSyntax selectInv) continue;
 
-            // The analyzer only fires when:
-            //   .Select(lambda) — single argument, lambda body is an Invocation
-            // so we can re-derive the same shape without re-running the heuristic.
-            if (selectInv.ArgumentList.Arguments.Count != 1) continue;
-            if (selectInv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) continue;
+            if (!TryGetProjectionLambda(selectInv, out var lambda)) continue;
 
             var body = lambda.Body;
             ExpressionSyntax? targetExpr = null;
@@ -122,7 +121,7 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
     static string? ExtractParameterName(LambdaExpressionSyntax lambda) => lambda switch
     {
         SimpleLambdaExpressionSyntax simple => simple.Parameter.Identifier.ValueText,
-        ParenthesizedLambdaExpressionSyntax paren when paren.ParameterList.Parameters.Count == 1
+        ParenthesizedLambdaExpressionSyntax paren when paren.ParameterList.Parameters.Count >= 1
             => paren.ParameterList.Parameters[0].Identifier.ValueText,
         _ => null,
     };
@@ -154,18 +153,40 @@ public sealed class MissingWithKeyCodeFix : CodeFixProvider
         return null;
     }
 
-    static bool ImplementsIReactorKeyed(ITypeSymbol type)
+    static bool TryGetProjectionLambda(InvocationExpressionSyntax inv, out LambdaExpressionSyntax lambda)
     {
-        foreach (var iface in type.AllInterfaces)
+        lambda = null!;
+
+        // Same receiver test the analyzer applies, called rather than copied:
+        // a second private copy here is exactly the drift that let DSL_001 and
+        // DSL_002 disagree about `ForEach` in the first place (#1156). The
+        // symbol half isn't needed — this only runs on a diagnostic the
+        // analyzer already gated.
+        var methodName = MissingWithKeyAnalyzer.SimpleName(inv.Expression);
+        if (methodName is null) return false;
+
+        var lambdaIndex = methodName switch
         {
-            // Match by name + containing namespace to avoid pulling a hard
-            // reference to Reactor.Core into the analyzer assembly.
-            if (iface.Name == "IReactorKeyed"
-                && iface.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Reactor.Core")
-                return true;
-        }
-        return false;
+            "Select" => 0,
+            "ForEach" when MissingWithKeyAnalyzer.IsReactorForEachReceiver(inv.Expression) => 1,
+            _ => -1,
+        };
+        if (lambdaIndex < 0) return false;
+        if (inv.ArgumentList.Arguments.Count <= lambdaIndex) return false;
+        if (inv.ArgumentList.Arguments[lambdaIndex].Expression is not LambdaExpressionSyntax found) return false;
+
+        lambda = found;
+        return true;
     }
+
+    // Delegates to the analyzer's copy rather than keeping a second one. This
+    // file previously had its own AllInterfaces loop, which missed the case
+    // where the type IS IReactorKeyed (AllInterfaces excludes the type itself)
+    // — so a `Select` over an `IReadOnlyList<IReactorKeyed>` never got the
+    // `.WithKey(item)` offer. Same drift, one more copy: the reason #1156
+    // existed in the first place.
+    static bool ImplementsIReactorKeyed(ITypeSymbol type) =>
+        MissingWithKeyAnalyzer.ImplementsReactorKeyed(type);
 
     static bool HasPublicProperty(ITypeSymbol type, string name)
     {

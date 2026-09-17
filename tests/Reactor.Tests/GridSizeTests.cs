@@ -38,7 +38,10 @@ public class GridSizeTests
     public void Star_Throws_For_NonPositive_Weight()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(0, GridUnitType.Star));
         Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(-1, GridUnitType.Star));
+
     }
 
     [Fact]
@@ -55,6 +58,7 @@ public class GridSizeTests
         var zero = GridSize.Px(0);
         Assert.Equal(0, zero.Value);
         Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Px(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(-1, GridUnitType.Pixel));
     }
 
     [Fact]
@@ -202,8 +206,8 @@ public class GridSizeTests
             columns: new[] { GridSize.Star(1) },
             rows: new[] { GridSize.Star(1) });
 
-        Assert.Equal(new[] { "*" }, typed.Definition.Columns);
-        Assert.Equal(new[] { "*" }, typed.Definition.Rows);
+        Assert.Equal(new[] { "*" }, typed.Definition.Columns.Select(cs => cs.ToString()));
+        Assert.Equal(new[] { "*" }, typed.Definition.Rows.Select(rs => rs.ToString()));
     }
 
     /// <summary>
@@ -228,7 +232,105 @@ public class GridSizeTests
             },
             rows: new[] { GridSize.Auto, GridSize.Star(1.5), GridSize.Px(48) });
 
-        Assert.Equal(new[] { "Auto", "*", "2*", "0.33*", "0", "120.5" }, typed.Definition.Columns);
-        Assert.Equal(new[] { "Auto", "1.5*", "48" }, typed.Definition.Rows);
+        Assert.Equal(new[] { "Auto", "*", "2*", "0.33*", "0", "120.5" }, typed.Definition.Columns.Select(cs => cs.ToString()));
+        Assert.Equal(new[] { "Auto", "1.5*", "48" }, typed.Definition.Rows.Select(rs => rs.ToString()));
+    }
+
+    [Fact]
+    public void GridSize_Fluent_MinSize()
+    {
+        var grid = Factories.Grid(
+            columns: new[]
+            {
+                GridSize.Star().MinSize(100),
+                GridSize.Auto.MinSize(100),
+                GridSize.Px(200).MinSize(100)
+            },
+            rows: new[]
+            {
+                GridSize.Star().MinSize(100),
+                GridSize.Auto.MinSize(100),
+                GridSize.Px(200).MinSize(100)
+            }
+        );
+
+        Assert.Equal(new double?[] { 100, 100, 100 }, grid.Definition.Columns.Select(cs => cs.Min));
+        Assert.Equal(new double?[] { 100, 100, 100 }, grid.Definition.Rows.Select(rs => rs.Min));
+    }
+
+    [Fact]
+    public void GridSize_Fluent_MaxSize()
+    {
+        var grid = Factories.Grid(
+            columns: new[]
+            {
+                GridSize.Star().MaxSize(500),
+                GridSize.Auto.MaxSize(500),
+                GridSize.Px(200).MaxSize(500)
+            },
+            rows: new[]
+            {
+                GridSize.Star().MaxSize(500),
+                GridSize.Auto.MaxSize(500),
+                GridSize.Px(200).MaxSize(500)
+            }
+        );
+
+        Assert.Equal(new double?[] { 500, 500, 500 }, grid.Definition.Columns.Select(cs => cs.Max));
+        Assert.Equal(new double?[] { 500, 500, 500 }, grid.Definition.Rows.Select(rs => rs.Max));
+    }
+
+    [Fact]
+    public void GridSize_SetMinMax_In_Constructor()
+    {
+        var grid = Factories.Grid(
+            columns: new[]
+            {
+                new GridSize(1, GridUnitType.Star, 100, 500),
+                new GridSize(0, GridUnitType.Auto, 100, 500),
+                new GridSize(200, GridUnitType.Pixel, 100, 500)
+            },
+            rows: new[]
+            {
+                new GridSize(1, GridUnitType.Star, 100, 500),
+                new GridSize(0, GridUnitType.Auto, 100, 500),
+                new GridSize(200, GridUnitType.Pixel, 100, 500)
+            }
+        );
+
+        Assert.Equal(new double?[] { 100, 100, 100 }, grid.Definition.Columns.Select(cs => cs.Min));
+        Assert.Equal(new double?[] { 100, 100, 100 }, grid.Definition.Rows.Select(rs => rs.Min));
+        Assert.Equal(new double?[] { 500, 500, 500 }, grid.Definition.Columns.Select(cs => cs.Max));
+        Assert.Equal(new double?[] { 500, 500, 500 }, grid.Definition.Rows.Select(rs => rs.Max));
+    }
+
+    [Fact]
+    public void GridSize_Default_Values_Are_Set_Correctly()
+    {
+        var gs1 = GridSize.Star();
+        var gs2 = default(GridSize);
+
+        Assert.Null(gs1.Min);
+        Assert.Null(gs2.Min);
+        Assert.Null(gs1.Max);
+        Assert.Null(gs2.Max);
+
+        Assert.Equal(new GridSize(0, GridUnitType.Auto), gs2);
+    }
+
+    [Fact]
+    public void GridSize_Exceptions_Are_Thrown_For_Invalid_Values()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, -1, 500));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, 100, -500));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, double.NaN, 500));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, 100, double.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GridSize(1, GridUnitType.Star, double.PositiveInfinity, 500));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MinSize(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MaxSize(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MinSize(double.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MaxSize(double.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GridSize.Star(1).MinSize(double.PositiveInfinity));
     }
 }

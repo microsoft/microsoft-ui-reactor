@@ -36,6 +36,7 @@ ref-based focus and access keys — that round out the commanding story.
 |---|---|
 | `.OnPointerPressed` / `.OnPointerReleased` / `.OnPointerEntered` / `.OnPointerExited` / `.OnPointerMoved` | Raw pointer events. Bubble by default. |
 | `.OnTapped` / `.OnDoubleTapped` / `.OnRightTapped` / `.OnHolding` | High-level tap recognizers. Auto-enable the matching `IsXEnabled` flag. |
+| `.OnDoubleTap(Action)` / `.OnDoubleTap(Action<Point>)` | Argument-free convenience overloads of `.OnDoubleTapped` for when you don't need the routed args. |
 | `.OnPan` / `.OnPinch` / `.OnRotate` / `.OnLongPress` | Continuous-gesture recognizers. Take `onBegan` / `onChanged` / `onEnded`. |
 | `.OnKeyDown` / `.OnKeyUp` / `.OnPreviewKeyDown` / `.OnPreviewKeyUp` / `.OnCharacterReceived` | Keyboard events. Preview-pair tunnels; the unprefixed pair bubbles. |
 | `.OnGotFocus` / `.OnLostFocus` | Focus events; bubble by default. |
@@ -63,11 +64,17 @@ class PointerModifiersExample : Component
             Border(TextBlock(hover ? "hovered" : "hover me")
                 .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                 .Width(240).Height(120)
-                .Background(hover ? "#BFE3FF" : "#E5F1FB")
+                .Background(hover ? Theme.AccentTertiary : Theme.ControlFillSecondary)
                 .CornerRadius(8)
+                .IsTabStop(true)
                 .OnPointerEntered((_, _) => setHover(true))
                 .OnPointerExited((_, _) => setHover(false))
                 .OnTapped((_, _) => setTapCount(tapCount + 1))
+                .OnKeyDown((_, e) =>
+                {
+                    if (e.Key is VirtualKey.Enter or VirtualKey.Space)
+                        setTapCount(tapCount + 1);
+                })
                 .OnDoubleTap(() => setTapCount(0)),
 
             TextBlock($"Tapped {tapCount} time(s) — double-tap to reset")
@@ -88,10 +95,30 @@ was set — otherwise hit-testing would miss the unfilled shape entirely.
 ### Keyboard events
 
 ```csharp
-TextBox(value, setValue)
-    .OnKeyDown((_, e) => { if (e.Key == VirtualKey.Enter) Submit(); })
-    .OnPreviewKeyDown((_, e) => Trace("preview"))
-    .OnCharacterReceived((_, e) => Validate(e.Character));
+class KeyboardEventsExample : Component
+{
+    public override Element Render()
+    {
+        var (value, setValue) = UseState("");
+        var (log, setLog) = UseState("press Enter to submit");
+
+        return VStack(12,
+            TextBox(value, setValue, placeholderText: "type here").Width(280)
+                .AutomationName("Text to submit")
+                // Tunnels first — the right spot to intercept before bubbling.
+                .OnPreviewKeyDown((_, _) => setLog("preview"))
+                // Bubbles — fires after the preview pair.
+                .OnKeyDown((_, e) =>
+                {
+                    if (e.Key == VirtualKey.Enter)
+                        setLog($"submitted: {value}");
+                })
+                .OnCharacterReceived((_, e) => setLog($"typed '{e.Character}'")),
+
+            TextBlock(log)
+        ).Padding(24);
+    }
+}
 ```
 
 `OnPreviewKeyDown` / `OnPreviewKeyUp` map to the WinUI tunneling events and fire
@@ -101,9 +128,23 @@ shortcut interception that needs to suppress further routing.
 ### Focus events
 
 ```csharp
-TextBox(value, setValue)
-    .OnGotFocus((_, _) => ShowValidationHint())
-    .OnLostFocus((_, _) => HideValidationHint());
+class FocusEventsExample : Component
+{
+    public override Element Render()
+    {
+        var (value, setValue) = UseState("");
+        var (hint, setHint) = UseState("");
+
+        return VStack(12,
+            TextBox(value, setValue, placeholderText: "email").Width(280)
+                .AutomationName("Email")
+                .OnGotFocus((_, _) => setHint("We never share your address."))
+                .OnLostFocus((_, _) => setHint("")),
+
+            TextBlock(hint).Foreground(Theme.SecondaryText)
+        ).Padding(24);
+    }
+}
 ```
 
 Focus events flow through the same trampoline pattern as pointer events, so the
@@ -180,10 +221,10 @@ class PanGestureExample : Component
         return VStack(8,
             Border(
                 Border(TextBlock("drag me")
-                    .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                    .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
+                    .Foreground(Theme.AccentText))
                     .Width(120).Height(120)
-                    .Background("#3A7BD5")
-                    .Foreground("#ffffff")
+                    .Background(Theme.Accent)
                     .CornerRadius(8)
                     .Translation(offset.X, offset.Y, 0)
                     .OnMount(fe => cardRef.Current = fe)
@@ -201,7 +242,7 @@ class PanGestureExample : Component
                             setOffset(committedRef.Current);
                         },
                         withInertia: true)
-            ).Height(260).Background("#f3f3f3").CornerRadius(8).Padding(16),
+            ).Height(260).Background(Theme.CardBackground).CornerRadius(8).Padding(16),
 
             Button("Reset position", Reset)
         );
@@ -232,7 +273,8 @@ lifts.
 ### Pinch and rotate
 
 ```csharp
-Image(uri)
+Image(imageUrl)
+    .AutomationName("Photo preview")
     .OnPinch(
         onChanged: g => Scale(g.Scale),
         withInertia: true)
@@ -257,7 +299,7 @@ class LongPressExample : Component
         return VStack(12,
             Border(TextBlock("Hold me")
                 .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
-                .Height(80).Background("#FFF4CE").CornerRadius(6).Padding(12)
+                .Height(80).Background(Theme.SystemCautionBackground).CornerRadius(6).Padding(12)
                 .OnLongPress(
                     g => setLog($"long-press after {g.Duration.TotalMilliseconds:F0}ms"),
                     enableMouseEmulation: true),
@@ -285,26 +327,39 @@ listItem.OnLongPress(() => ShowContextMenu(), enableMouseEmulation: true);
 ### Declarative focus modifiers
 
 ```csharp
-Button("Submit", onClick)
-    .TabIndex(3)
-    .AccessKey("S")
-    .IsTabStop();   // default-true overload
+class FocusModifiersExample : Component
+{
+    public override Element Render() => VStack(12,
+        // Declarative focus order + an access key (Alt+S) on the primary action.
+        Button("Submit", () => { })
+            .TabIndex(3)
+            .AccessKey("S")
+            .IsTabStop(),   // default-true overload
+
+        // Advanced focus knobs are first-class too.
+        VStack(8,
+            Button("One", () => { }),
+            Button("Two", () => { }))
+            .TabNavigation(KeyboardNavigationMode.Once)
+            .XYFocusKeyboardNavigation(XYFocusKeyboardNavigationMode.Enabled)
+    ).Padding(24);
+}
 ```
 
 `AccessKey` bound on a `.Command(...)` can be overridden per-site: a later
 `.AccessKey(...)` wins via the normal modifier-after-command ordering.
 
 ```csharp
-var save = new Command { Label = "Save", Execute = OnSave, AccessKey = "S" };
-Button(save).AccessKey("F");   // "F" wins on this site
-```
+class CommandAccessKeyExample : Component
+{
+    public override Element Render()
+    {
+        var save = new Command { Label = "Save", Execute = () => { }, AccessKey = "S" };
 
-Advanced focus knobs are first-class too:
-
-```csharp
-container
-    .TabNavigation(KeyboardNavigationMode.Once)
-    .XYFocusKeyboardNavigation(XYFocusKeyboardNavigationMode.Enabled);
+        // A later .AccessKey(...) wins over the one carried by the Command.
+        return Button(save).AccessKey("F").Padding(24);
+    }
+}
 ```
 
 ### Imperative focus with refs
@@ -325,7 +380,9 @@ class UseElementFocusExample : Component
 
         return VStack(12,
             TextBlock("The field below auto-focuses on mount via UseElementFocus()."),
-            TextBox(name, setName, placeholderText: "name").Width(280).Ref(inputRef)
+            TextBox(name, setName, placeholderText: "name").Width(280)
+                .AutomationName("Name")
+                .Ref(inputRef)
         ).Padding(24);
     }
 }
@@ -344,18 +401,27 @@ async API with a success result.
 When you actually need to call methods on the underlying control (e.g.
 `SelectAll()` on a `TextBox`, `Focus(FocusState.Programmatic)` on a `Button`),
 use `UseElementRef<T>()` instead. It gives you an `ElementRef<T>` whose
-`.Current` is already typed as `T` — no `as TextBox` cast at the call site:
+`.Current` is already typed as `T` — no `as TextBox` cast at the call site.
+It is an extension method on `Component` (and on `RenderContext`), so call it
+as `this.UseElementRef<T>()` from inside `Render()`:
 
 ```csharp
-public class SearchBox : Component
+class SearchBoxExample : Component
 {
     public override Element Render()
     {
-        var inputRef = Context.UseElementRef<TextBox>();
+        var (query, setQuery) = UseState("");
 
-        Context.UseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());
+        // ElementRef<T>.Current is already typed — no `as TextBox` at the call site.
+        var inputRef = this.UseElementRef<TextBox>();
+        UseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());
 
-        return TextBox(query, setQuery).Ref(inputRef);
+        return VStack(12,
+            TextBlock("Text is pre-selected on mount via UseElementRef<TextBox>()."),
+            TextBox(query, setQuery).Width(280)
+                .AutomationName("Search query")
+                .Ref(inputRef)
+        ).Padding(24);
     }
 }
 ```
@@ -428,11 +494,12 @@ class KanbanDndExample : Component
 {
     public override Element Render()
     {
-        var (todo, setTodo) = UseState<IReadOnlyList<KanbanCard>>(new KanbanCard[]
+        var initialTodo = UseMemo(() => new KanbanCard[]
         {
             new("k1", "Write docs"),
             new("k2", "Ship feature"),
-        });
+        }, Array.Empty<object>());
+        var (todo, setTodo) = UseState<IReadOnlyList<KanbanCard>>(initialTodo);
         var (done, setDone) = UseState<IReadOnlyList<KanbanCard>>(Array.Empty<KanbanCard>());
 
         Element Column(string label,
@@ -444,8 +511,8 @@ class KanbanDndExample : Component
             {
                 var captured = card;
                 children.Add(
-                    Border(TextBlock(captured.Title).Foreground("#ffffff"))
-                        .Background("#4B7BEC").CornerRadius(6).Padding(10)
+                    Border(TextBlock(captured.Title).Foreground(Theme.AccentText))
+                        .Background(Theme.Accent).CornerRadius(6).Padding(10)
                         .OnDragStart<BorderElement, KanbanCard>(
                             getPayload: () => captured,
                             allowedOperations: DragOperations.Move,
@@ -467,9 +534,9 @@ class KanbanDndExample : Component
 
         return HStack(12,
             Border(Column("Todo", todo, setTodo))
-                .Width(240).Background("#F7F7F7").CornerRadius(6).Padding(10),
+                .Width(240).Background(Theme.CardBackground).CornerRadius(6).Padding(10),
             Border(Column("Done", done, setDone))
-                .Width(240).Background("#F1FFF4").CornerRadius(6).Padding(10)
+                .Width(240).Background(Theme.SystemSuccessBackground).CornerRadius(6).Padding(10)
         ).Padding(24);
     }
 }
@@ -486,7 +553,7 @@ Notepad / Word / File Explorer pick the drop up natively. On the target side,
 whether the drag originated from the same process or a different one.
 
 ```csharp
-Border(Text("Drag me to Notepad"))
+Border(TextBlock("Drag me to Notepad"))
     .OnDragStart<BorderElement>(() => new DragData().WithText("hello world"));
 
 Rectangle()
@@ -509,7 +576,7 @@ published when the target requests that format. A target that only reads text
 never pays the HTML cost.
 
 ```csharp
-Border(Text("Rich content"))
+Border(TextBlock("Rich content"))
     .OnDragStart<BorderElement>(() => new DragData()
         .WithText("plain fallback")
         .WithHtml(ct => RenderExpensiveHtmlAsync(ct)));
@@ -522,15 +589,39 @@ visibility via `DragTargetArgs.UIOverride` — Reactor writes the changes back
 onto WinUI's `DragUIOverride` after your callback returns.
 
 ```csharp
-VStack(children)
+VStack(children.ToArray())
     .OnDragOver(args =>
     {
         args.UIOverride.Caption = "Move to Inbox";
         args.UIOverride.IsGlyphVisible = false;
         args.AcceptedOperation = DragOperations.Move;
     })
-    .OnDrop<VStackElement, Card>(card => inbox.Add(card));
+    .OnDrop<StackElement, Card>(card => inbox.Add(card));
 ```
+
+`VStack(...)` and `HStack(...)` both produce a `StackElement`, so that is
+the element type argument to use on the typed `.OnDrop<TEl, T>` overload.
+
+### Dropped files: prefer `TryGetSafeLocalFiles`
+
+A cross-process file drop is attacker-influenced input. `TryGetFiles` hands
+back whatever the source offered — including UNC paths, reparse points, and
+virtual (non-filesystem) shell items that can redirect a later read off the
+local machine. `TryGetSafeLocalFiles` applies that filter for you and returns
+only real local-filesystem items.
+
+```csharp
+Border(TextBlock("Drop files here"))
+    .OnDrop<BorderElement>(args =>
+    {
+        if (args.Data.TryGetSafeLocalFiles(out var files))
+            Import(files);
+        args.AcceptedOperation = DragOperations.Copy;
+    });
+```
+
+The `REACTOR_INPUT_002` analyzer flags `TryGetFiles` inside an `.OnDrop`
+handler and suggests the safe variant.
 
 ### The move-on-confirmation pattern
 
@@ -541,7 +632,7 @@ land outside any target, or a Ctrl-drag might downgrade Move to Copy. Wait for
 `onEnd` and branch on `CompletedOperation`:
 
 ```csharp
-Border(Text(card.Title))
+Border(TextBlock(card.Title))
     .OnDragStart<BorderElement, Card>(
         getPayload: () => card,
         allowedOperations: DragOperations.Move | DragOperations.Copy,
@@ -563,16 +654,17 @@ target (ESC, dropped on empty space, system abort).
 > **Caveat:** `.OnPointerPressed` on a parent fires **after** its children when using the
 > default bubbling phase — Reactor mirrors WinUI's routed-event model, where
 > events start at the deepest hit-tested element and propagate up.
-> If a parent needs to capture the press *before* children see it, you have two
-> options: (1) set the matching `.On<Event>Handled(true)` on the parent (the
-> handled-too overload) so the parent runs even if a child marked the event
-> handled, and bubble order still applies (parent runs last); (2) attach to
-> the preview/tunnel pair (`.OnPreviewKeyDown` for keys; for pointer events
-> there is no preview pair — you must drop down to the manual
+> There is no `.On<Event>Handled(...)` "handled-too" overload on the modifier
+> surface: every `.On*` modifier subscribes through the normal bubbling path
+> and stops once a child marks the event handled. If a parent must see the
+> press regardless, you have two options: (1) attach to the preview/tunnel
+> pair (`.OnPreviewKeyDown` / `.OnPreviewKeyUp` for keys — for pointer events
+> there is no preview pair); (2) drop down to the manual
 > `AddHandler(PointerPressedEvent, handler, handledEventsToo: true)` via
-> `.Set(c => ...)`). The trap: relying on tunneling for pointer capture
-> silently does the wrong thing in 80% of cases because the tunnel pair
-> doesn't exist for pointer events. The
+> `.Set(c => ...)`, which is what the reconciler itself uses internally for
+> gestures and drag-and-drop. The trap: relying on tunneling for pointer
+> capture silently does the wrong thing in 80% of cases because the tunnel
+> pair doesn't exist for pointer events. The
 > [focus-and-input-internals](focus-and-input-internals.md) page walks the
 > routed-event phases end-to-end.
 
@@ -588,9 +680,8 @@ see [recipes/drag-reorder](recipes/drag-reorder.md).
 
 ### Pinch-to-zoom on an image
 
-Combine `.OnPinch` with a `Translation` scale modifier driven from
-state. Scale is cumulative since `Began` — apply it directly to the
-element's `Scale` compositor property in `onChanged` for 60 Hz
+Combine `.OnPinch` with the element's `Scale` compositor property driven from
+state. Scale is cumulative since `Began` — apply it directly in `onChanged` for 60 Hz
 behavior (same pattern as pan above), then commit to `UseState` in
 `onEnded`. The reconciler unions `ManipulationModes` so adding
 `.OnRotate` on the same element is free.
@@ -614,9 +705,10 @@ Reactor exposes pointer events through the bubbling phase only —
 there is no `.OnPreviewPointerPressed` / `.OnPreviewPointerReleased`
 modifier because WinUI's routed-event surface for pointer events
 doesn't expose a tunneling pair the same way it does for keyboard.
-If a parent needs to see the press before children consume it, use
-`.OnPointerPressed` with the handled-too overload (or
-`.Set(c => c.AddHandler(...))` for the manual case). The
+If a parent needs to see the press before children consume it, drop
+down to `.Set(c => c.AddHandler(PointerPressedEvent, handler,
+handledEventsToo: true))` — there is no handled-too overload on the
+`.On*` modifiers themselves. The
 [caveat above](#ai:caveat) goes into the routing detail.
 
 ### Using `.OnKeyDown` for accelerator chords
@@ -631,7 +723,7 @@ through the window's `AccessKeyManager` regardless of focus. The
 analyzer `REACTOR_INPUT_001` flags Ctrl/Alt key combinations attached
 via `.OnKeyDown` and suggests the `Command` rewrite.
 
-### Forgetting `Focusable(true)` on a clickable Border
+### Forgetting `.IsTabStop(true)` on a clickable Border
 
 A `Border` with `.OnTapped(...)` is hit-testable for pointer events
 but is not in the keyboard tab order by default — pressing Tab skips
@@ -641,9 +733,11 @@ to put the Border in the tab order — a plain `.TabIndex(n)` is not
 enough, because the reconciler applies `TabIndex` only to focusable
 `Control`s, not to a `Border` — and pair it with `.OnKeyDown` for
 Enter/Space activation. The Roslyn analyzer
-[`REACTOR_A11Y_004`](accessibility.md) flags this at build time, and the
-[`AccessibilityScanner`](accessibility.md) catches it at runtime as
-`A11Y_KEYBOARD_001`.
+[`REACTOR_A11Y_004`](accessibility.md) flags this at build time.
+Note that the runtime [`AccessibilityScanner`](accessibility.md) does
+*not* have a matching keyboard-reachability rule (its rules are
+`A11Y_001`–`A11Y_008`), so the build-time analyzer is the only
+automated guard for this one.
 
 ## Tips
 
@@ -666,9 +760,10 @@ explicitly. Touch and pen work without it.
 
 **Bridge to `Command` for anything keyboard-shortcut-shaped.**
 Per-element `.OnKeyDown` handlers are right for "Enter submits this
-form"; app-wide chords belong on a `Command` with
-`AccessKey` + `AccessKeyModifiers`. See
-[commanding](commanding.md) for the full surface.
+form"; app-wide chords belong on a `Command` with an
+`Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control)`.
+`Command.AccessKey` is the separate Alt-key mnemonic, not the chord.
+See [commanding](commanding.md) for the full surface.
 
 **Run the a11y scanner.** A keyboard-focusable interactive control
 without `AutomationName` or a focus-visible affordance is a bug.

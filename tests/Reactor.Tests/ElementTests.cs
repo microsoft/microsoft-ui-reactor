@@ -489,6 +489,50 @@ public class ElementTests
             TextBlock("x").Margin(horizontal: 8, vertical: 4).Modifiers!.Margin);
         Assert.Equal(new Thickness(1, 2, 3, 4),
             TextBlock("x").Margin(1, 2, 3, 4).Modifiers!.Margin);
+
+        // The struct overload must not perturb any of the above. A double still
+        // picks a double overload, and picks the *uniform* one specifically —
+        // if the struct overload ever started winning, or shifted resolution to
+        // the per-side overload, these values would change.
+        Assert.Equal(new Thickness(10), TextBlock("x").Margin(10.0).Modifiers!.Margin);
+        Assert.Equal(new Thickness(16), TextBlock("x").Padding(16).Modifiers!.Padding);
+        Assert.Equal(new Microsoft.UI.Xaml.CornerRadius(6),
+            TextBlock("x").CornerRadius(6).Modifiers!.CornerRadius);
+    }
+
+    [Fact]
+    public void Struct_Overloads_Store_The_Value_Verbatim()
+    {
+        // The struct overloads exist so a `.Set(fe => fe.Margin = someThickness)`
+        // lifts straight across instead of being decomposed into four doubles.
+        // An asymmetric value is used deliberately: a uniform one would agree with
+        // the uniform double overload, so it could not tell them apart.
+        var margin = new Thickness(68, 4, 40, 4);
+        Assert.Equal(margin, TextBlock("x").Margin(margin).Modifiers!.Margin);
+
+        var padding = new Thickness(1, 2, 3, 4);
+        Assert.Equal(padding, TextBlock("x").Padding(padding).Modifiers!.Padding);
+
+        var radius = new Microsoft.UI.Xaml.CornerRadius(1, 2, 3, 4);
+        Assert.Equal(radius, TextBlock("x").CornerRadius(radius).Modifiers!.CornerRadius);
+    }
+
+    [Fact]
+    public void Struct_Overloads_Preserve_The_Concrete_Element_Type()
+    {
+        // Modifiers are generic (<T> where T : Element) so the chain keeps the
+        // concrete type. The struct overloads must behave identically, otherwise
+        // a `.Margin(thickness).Bold()` chain would stop compiling.
+        var el = TextBlock("x")
+            .Margin(new Thickness(8))
+            .Padding(new Thickness(4))
+            .CornerRadius(new Microsoft.UI.Xaml.CornerRadius(2))
+            .Bold();
+
+        Assert.IsType<TextBlockElement>(el);
+        Assert.Equal(new Thickness(8), el.Modifiers!.Margin);
+        Assert.Equal(new Thickness(4), el.Modifiers.Padding);
+        Assert.Equal(new Microsoft.UI.Xaml.CornerRadius(2), el.Modifiers.CornerRadius);
     }
 
     [Fact]
@@ -656,6 +700,125 @@ public class ElementTests
         var group = (GroupElement)el;
         Assert.Equal(2, group.Children.Length);
         Assert.Equal("0:A", ((TextBlockElement)group.Children[0]).Content);
+    }
+
+    // ── ForEach identity-on-data (spec 042 §5) ──────────────────────────
+
+    private sealed record KeyedRow(string Id, string Text) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+
+    [Fact]
+    public void ForEach_Keys_Elements_From_IReactorKeyed_Items()
+    {
+        var rows = new[] { new KeyedRow("a", "Alpha"), new KeyedRow("b", "Bravo") };
+
+        var group = (GroupElement)ForEach(rows, r => TextBlock(r.Text));
+
+        // The whole point: without this the children are unkeyed and
+        // ChildReconciler.Reconcile takes the positional arm.
+        Assert.Equal(["a", "b"], group.Children.Select(c => c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Keys_From_IReactorKeyed_On_The_Indexed_Overload_Too()
+    {
+        var rows = new[] { new KeyedRow("a", "Alpha"), new KeyedRow("b", "Bravo") };
+
+        var group = (GroupElement)ForEach(rows, (r, i) => TextBlock($"{i}:{r.Text}"));
+
+        Assert.Equal(["a", "b"], group.Children.Select(c => c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Does_Not_Override_An_Explicit_Key()
+    {
+        // A deliberate override must survive — the auto-key only fills a null.
+        var rows = new[] { new KeyedRow("a", "Alpha"), new KeyedRow("b", "Bravo") };
+
+        var group = (GroupElement)ForEach(rows, r => TextBlock(r.Text).WithKey($"row-{r.Id}"));
+
+        Assert.Equal(["row-a", "row-b"], group.Children.Select(c => c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Leaves_NonKeyed_Items_Unkeyed()
+    {
+        // No identity on the data, so nothing to key from — and an index key
+        // would be a positional key wearing a disguise.
+        var group = (GroupElement)ForEach(new[] { "A", "B" }, item => TextBlock(item));
+
+        Assert.All(group.Children, c => Assert.Null(c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Keys_From_IReactorKeyed_On_The_Enumerable_Path()
+    {
+        // The non-IReadOnlyList arm is a separate Select(...) branch (#170's
+        // fast path only covers lists), so it needs its own coverage.
+        IEnumerable<KeyedRow> rows = new[] { new KeyedRow("a", "Alpha"), new KeyedRow("b", "Bravo") }.Where(_ => true);
+
+        var group = (GroupElement)ForEach(rows, r => TextBlock(r.Text));
+
+        Assert.Equal(["a", "b"], group.Children.Select(c => c.Key));
+    }
+
+    [Fact]
+    public void ForEach_Keys_From_A_Struct_IReactorKeyed_Item()
+    {
+        // The per-T static cache exists so the interface probe doesn't box a
+        // struct on every row; this pins that the struct path still keys.
+        var rows = new[] { new KeyedStructRow("a"), new KeyedStructRow("b") };
+
+        var group = (GroupElement)ForEach(rows, r => TextBlock(r.Id));
+
+        Assert.Equal(["a", "b"], group.Children.Select(c => c.Key));
+    }
+
+    private readonly record struct KeyedStructRow(string Id) : IReactorKeyed
+    {
+        public string Key => Id;
+    }
+
+    [Fact]
+    public void ForEach_Handles_A_Source_Whose_Count_Disagrees_With_Its_Enumeration()
+    {
+        // TryGetNonEnumeratedCount is a snapshot. If the walk yields fewer items
+        // the array would keep trailing nulls; more, and it would throw. Both
+        // directions are pinned here because neither shows up on a well-behaved
+        // collection.
+        var shorter = new LyingCount<string>(["a", "b"], reportedCount: 5);
+        var longer = new LyingCount<string>(["a", "b", "c"], reportedCount: 1);
+        // Reports zero, so the buffer starts zero-length — doubling that would
+        // never grow, which is why the grow step uses Math.Max.
+        var zeroClaimed = new LyingCount<string>(["a", "b"], reportedCount: 0);
+
+        var shortGroup = (GroupElement)ForEach(shorter, s => TextBlock(s));
+        var longGroup = (GroupElement)ForEach(longer, (s, i) => TextBlock(s));
+        var zeroGroup = (GroupElement)ForEach(zeroClaimed, s => TextBlock(s));
+
+        Assert.Equal(2, shortGroup.Children.Length);
+        Assert.All(shortGroup.Children, Assert.NotNull);
+        Assert.Equal(3, longGroup.Children.Length);
+        Assert.All(longGroup.Children, Assert.NotNull);
+        Assert.Equal(2, zeroGroup.Children.Length);
+        Assert.All(zeroGroup.Children, Assert.NotNull);
+    }
+
+    // Reports one count and enumerates a different number of items. ICollection
+    // is what TryGetNonEnumeratedCount reads, so Count is the lie.
+    private sealed class LyingCount<T>(IReadOnlyList<T> actual, int reportedCount) : ICollection<T>
+    {
+        public int Count => reportedCount;
+        public bool IsReadOnly => true;
+        public IEnumerator<T> GetEnumerator() => actual.GetEnumerator();
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public void Add(T item) => throw new NotSupportedException();
+        public void Clear() => throw new NotSupportedException();
+        public bool Contains(T item) => throw new NotSupportedException();
+        public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+        public bool Remove(T item) => throw new NotSupportedException();
     }
 
     [Fact]

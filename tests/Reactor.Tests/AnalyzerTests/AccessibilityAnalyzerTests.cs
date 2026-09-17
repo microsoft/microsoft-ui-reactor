@@ -246,4 +246,54 @@ class C
         };
         await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    /// <summary>
+    /// A fluent <c>.Header(...)</c> renders a visible label and satisfies the rule. Before this,
+    /// the analyzer only recognised a named <c>header:</c> argument, so a field written in the
+    /// fluent style was told to add <c>.AutomationName(...)</c> on top of a label it already had —
+    /// and the guides were changed to teach that redundancy.
+    /// </summary>
+    [Fact]
+    public async Task PasswordBox_With_Fluent_Header_No_Diagnostic()
+    {
+        var test = @"
+class C
+{
+    static dynamic PasswordBox(dynamic value, string header = null) => null;
+
+    void M(dynamic value)
+    {
+        PasswordBox(value).Header(""Password"");
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The match is on the exact identifier, so a container's header property does not launder an
+    /// unlabeled field sitting inside the same chain.
+    /// </summary>
+    [Fact]
+    public async Task TextBox_With_Only_A_PaneHeader_Still_Produces_Diagnostic()
+    {
+        var test = @"
+class C
+{
+    static dynamic TextBox(dynamic value, string header = null) => null;
+
+    void M(dynamic value)
+    {
+        {|REACTOR_A11Y_003:TextBox(value)|}.PaneHeader(""Not a field label"");
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
 }

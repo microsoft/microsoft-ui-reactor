@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reporting shim for the packaged tier — the app under test is Reactor.PackagedTests.Host.
+    Mirrors Reactor.SelfTests, differing only in how the host is started: register the MSIX
+    layout, then launch its execution-alias stub. Windows TFM because the deployment seam
+    uses the Windows.Management.Deployment projection.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <RootNamespace>Microsoft.UI.Reactor.PackagedTests</RootNamespace>
+    <AssemblyName>Reactor.PackagedTests</AssemblyName>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit.v3 v4 is MTP-only, so global.json pins the repo-wide runner to MTP; MSTest
+         speaks MTP natively behind this switch. -->
+    <EnableMSTestRunner>true</EnableMSTestRunner>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="MSTest.TestAdapter" />
+    <PackageReference Include="MSTest.TestFramework" />
+  </ItemGroup>
+
+  <!-- The host's output path carries the configuration and TFM. Stamping in the values
+       MSBuild used lets the shim find it under any configuration; hardcoding "Debug"
+       broke `dotnet test -c Release`. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ReactorPackagedTestsConfiguration</_Parameter1>
+      <_Parameter2>$(Configuration)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ReactorPackagedTestsTargetFramework</_Parameter1>
+      <_Parameter2>$(TargetFramework)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Build dependency only; the host runs as a separate process. Mirrors
+         Reactor.SelfTests' relationship to Reactor.AppTests.Host. -->
+    <ProjectReference Include="..\Reactor.PackagedTests.Host\Reactor.PackagedTests.Host.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+</Project>

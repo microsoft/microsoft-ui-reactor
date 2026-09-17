@@ -52,6 +52,7 @@ class Greeting : Component
         return VStack(12,
             TextBlock($"Hello, {name}!").FontSize(20).Bold(),
             TextBox(name, setName, placeholderText: "Your name")
+                .AutomationName("Name")
                 .Width(200)
         ).Padding(16);
     }
@@ -80,9 +81,9 @@ class Alert : Component<AlertProps>
     {
         var bg = Props.Severity switch
         {
-            "error" => "#FDE7E9",
-            "warning" => "#FFF4CE",
-            _ => "#DFF6DD"
+            "error" => Theme.SystemCriticalBackground,
+            "warning" => Theme.SystemCautionBackground,
+            _ => Theme.SystemSuccessBackground
         };
 
         return Border(
@@ -182,8 +183,10 @@ inline `Action` field compares unequal *every* render and re-renders even
 when no observable data changed:
 
 ```csharp
+record StepModel(int Id, string Name);
+
 // Re-renders on every parent render — OnChanged is a fresh delegate each time.
-record StepProps(StepModel Step, Action<string> OnChanged);
+record StepPropsNaive(StepModel Step, Action<string> OnChanged);
 ```
 
 Wrap the callbacks in `Callbacks<T>` so their identity is excluded from the
@@ -198,8 +201,22 @@ record StepCallbacks(Action<string> OnChanged, Action OnRun);
 // Only Step drives re-render now; the callbacks slot is ignored by memo.
 record StepProps(StepModel Step, Callbacks<StepCallbacks> Cb);
 
-// Construct it — the payload converts implicitly:
-new StepProps(step, new StepCallbacks(onChanged, onRun));
+class StepRow : Component<StepProps>
+{
+    public override Element Render() =>
+        HStack(8,
+            TextBlock(Props.Step.Name),
+            // Read the callback off Props at event time — never capture it
+            // into a local at render time.
+            Button("Run", () => Props.Cb.Value.OnRun()));
+}
+
+static class StepPropsFactory
+{
+    public static StepProps Create(StepModel step, Action<string> onChanged, Action onRun) =>
+        // Construct it — the payload converts implicitly:
+        new StepProps(step, new StepCallbacks(onChanged, onRun));
+}
 ```
 
 This replaces the old workaround of hand-writing `Equals`/`GetHashCode` on
@@ -266,14 +283,14 @@ class FunctionComponentDemo : Component
 
 You can also use a function component as the app root:
 
-<!-- ai:lock -->
 ```csharp
-ReactorApp.Run("Title", ctx => {
+ReactorApp.Run("Title", ctx =>
+{
     var (n, setN) = ctx.UseState(0);
-    return Text($"{n}");
+    return Button($"Count: {n}", () => setN(n + 1))
+        .AutomationName("Increment count");
 }, width: 400, height: 300);
 ```
-<!-- /ai:lock -->
 
 ## Composition
 
@@ -336,6 +353,8 @@ Component nesting is the primary way Reactor composes UI — there's no
 returns child element trees:
 
 ```csharp
+record CardProps(string Title, Element Body);
+
 class Card : Component<CardProps>
 {
     public override Element Render() =>
@@ -344,7 +363,7 @@ class Card : Component<CardProps>
                 TextBlock(Props.Title).Bold(),
                 Props.Body                 // any Element, including child components
             ).Padding(12)
-        ).CornerRadius(8).WithBorder(Theme.Stroke);
+        ).CornerRadius(8).WithBorder(Theme.CardStroke);
 }
 ```
 
@@ -361,18 +380,24 @@ component's `Render()` and its return value is spliced in — same as
 React's render props or the `DataTemplate` selector pattern:
 
 ```csharp
-record ListProps<T>(IReadOnlyList<T> Items, Func<T, Element> Render);
+record ItemsListProps<T>(
+    IReadOnlyList<T> Items,
+    Func<T, Element> Render,
+    Func<T, string> Key);
 
-class List<T> : Component<ListProps<T>>
+class ItemsList<T> : Component<ItemsListProps<T>>
 {
     public override Element Render() =>
-        VStack(4, ForEach(Props.Items, item => Props.Render(item).WithKey(item)));
+        VStack(4, ForEach(Props.Items,
+            item => Props.Render(item).WithKey(Props.Key(item))));
 }
 ```
 
 The caller picks the row shape — `item => TextBlock(item.Name)` or a full
-nested component — without the list component knowing anything about the
-item type beyond the key.
+nested component — and supplies a key selector, so the list component knows
+nothing about the item type beyond how to render it and how to identify it.
+(`.WithKey` takes either a `string` key or an item implementing
+`IReactorKeyed`; an unconstrained generic `T` needs the selector.)
 
 ### Lifted state
 
@@ -391,10 +416,20 @@ instead of letting the exception bubble up to the host, which would
 unmount the whole tree:
 
 ```csharp
-ErrorBoundary(
-    fallback: ex => TextBlock($"Crash: {ex.Message}").Foreground(Theme.Error),
-    child: Component<RiskyView>()
-)
+class RiskyView : Component
+{
+    public override Element Render() => TextBlock("Risky content");
+}
+
+class ErrorBoundaryComposition : Component
+{
+    public override Element Render() =>
+        ErrorBoundary(
+            fallback: ex => TextBlock($"Crash: {ex.Message}")
+                .Foreground(Theme.SystemCritical),
+            child: Component<RiskyView>()
+        );
+}
 ```
 
 The [Advanced Patterns](advanced.md) page covers the lifecycle and
@@ -407,12 +442,17 @@ want isolation.
 ### Side effects in render
 
 ```csharp
-// Don't:
-public override Element Render()
+static class Globals { public static int RenderCount; }
+
+class SideEffectsInRenderDont : Component
 {
-    File.AppendAllText("log.txt", "rendered\n");  // I/O during render
-    Globals.RenderCount++;                          // mutation during render
-    return TextBlock("hi");
+    public override Element Render()
+    {
+        // Don't — Render() may be called any number of times per user action.
+        File.AppendAllText("log.txt", "rendered\n");  // I/O during render
+        Globals.RenderCount++;                        // mutation during render
+        return TextBlock("hi");
+    }
 }
 ```
 
@@ -425,11 +465,17 @@ run exactly once per commit. Diagnostic counters belong in
 ### Mutating props
 
 ```csharp
-// Don't:
-public override Element Render()
+record ItemsProps(List<string> Items);
+
+class MutatingPropsDont : Component<ItemsProps>
 {
-    Props.Items.Add(newItem); // mutates the parent's collection
-    return ListView(...);
+    public override Element Render()
+    {
+        // Don't — this mutates the parent's collection, so the parent never
+        // sees the change and doesn't re-render.
+        Props.Items.Add("new item");
+        return VStack(4, ForEach(Props.Items, (item, i) => TextBlock(item).WithKey($"{i}-{item}")));
+    }
 }
 ```
 

@@ -172,11 +172,19 @@ property to control how pages animate in and out:
 
 | Transition | Effect |
 |-----------|--------|
-| `NavigationTransition.Slide()` | Slide + fade (default) |
+| `NavigationTransition.Entrance()` | Slide up + fade in (**default**) |
+| `NavigationTransition.Slide()` | Slide + fade — vertical unless you pass a direction |
 | `NavigationTransition.Fade()` | Crossfade |
 | `NavigationTransition.DrillIn()` | Scale + fade from center |
 | `NavigationTransition.Spring()` | Spring-physics slide |
 | `NavigationTransition.None` | Instant swap |
+
+The default is the entrance motion because that is what WinUI itself does: a `Frame`
+navigated without a `NavigationTransitionInfo` plays `EntranceNavigationTransitionInfo`,
+the "page refresh" animation. A Reactor app therefore animates like an equivalent WinUI
+XAML app out of the box. `NavigationTransition.Default` is an alias for that motion —
+reach for `Entrance()` directly when you mean the animation rather than "whatever the
+framework default is".
 
 Transitions run on the compositor thread — no managed-code involvement during
 playback. GoBack automatically reverses the direction. See
@@ -211,9 +219,9 @@ even after deep-linked entry.
 ```csharp snippet="navigation/deep-link-query"
 ```
 
-This example shows query parameters and optional path segments. The resolver
-parses `/users/42/posts?sort=date&page=2` into typed values you can use
-directly in route constructors.
+This example shows typed path parameters and query values. The resolver
+parses `/users/42/posts/7?sort=date` into typed values you can use directly
+in route constructors.
 
 ## Page Caching
 
@@ -263,17 +271,12 @@ A tab child with a background paints only a band behind its own text.
 Reactor keeps that WinUI default. Opt in to a full-height tab body with
 `FillContentArea`:
 
-```csharp
-TabView([
-    Tab("Editor", Border(TextBlock("Editor")).Background(Theme.CardBackground)),
-    Tab("Preview", TextBlock("Preview")),
-]).FillContentArea()
+```csharp snippet="navigation/tab-fill-content-area"
 ```
 
 The init property is available for record-construction syntax too:
 
-```csharp
-TabView([...]) with { FillContentArea = true }
+```csharp snippet="navigation/tab-fill-content-area-init"
 ```
 
 An explicit `.VAlign(...)` on the `TabView` element always wins over the opt-in,
@@ -333,9 +336,7 @@ violation rather than throwing, which no `try`/`catch` and no
 
 Reactor checks first and refuses, reporting through `.NavigationFailed(...)`:
 
-```csharp
-Frame(typeof(MyCodeOnlyPage))          // no .xaml → refused, not fatal
-    .NavigationFailed((t, ex) => Log(ex.Message));
+```csharp snippet="navigation/frame-code-only-page"
 ```
 
 **This is a deliberate boundary, not a gap.** Reactor's navigation system is

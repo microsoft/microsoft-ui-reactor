@@ -26,6 +26,8 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 | `Body(content)` | WinUI `BodyTextBlockStyle` (14px Regular) | `string → TextBlockElement` |
 | `BodyStrong(content)` | WinUI `BodyStrongTextBlockStyle` (14px Semibold) | `string → TextBlockElement` |
 | `BodyLarge(content)` | WinUI `BodyLargeTextBlockStyle` (18px Regular) | `string → TextBlockElement` |
+| `TitleLarge(content)` | WinUI `TitleLargeTextBlockStyle` (40px Semibold) | `string → TextBlockElement` |
+| `Display(content)` | WinUI `DisplayTextBlockStyle` (68px Semibold) | `string → TextBlockElement` |
 | `RichTextBlock(text)` | Rich text block | `string → RichTextBlockElement` |
 
 **Implicit conversion:** `string` implicitly converts to `TextBlockElement`, so
@@ -230,7 +232,7 @@ Required: `using Microsoft.UI.Reactor.Layout;`
 | `RefreshContainer(content, onRefreshRequested?)` | `(Element, Action?)` |
 | `CommandBarFlyout(target, primaryCommands?, secondaryCommands?)` | See type |
 
-Reference props: create `var target = UseElementRef<FrameworkElement>()`,
+Reference props: create `var target = this.UseElementRef<FrameworkElement>()`,
 attach it with `.Ref(target)`, then pass it to `TeachingTip(...,
 target: target)` or `.Target(target)`. The same pattern powers
 `.LabeledBy`, `.DescribedBy`, `.FlowsTo`, `.FlowsFrom`, and
@@ -343,8 +345,8 @@ and `.Margin(16).Bold()` both compile on a `TextBlockElement`.
 ### Layout (any Element)
 
 ```csharp
-.Margin(16) / .Margin(h, v) / .Margin(l, t, r, b)
-.Padding(...)
+.Margin(16) / .Margin(h, v) / .Margin(l, t, r, b) / .Margin(thickness)
+.Padding(16) / .Padding(h, v) / .Padding(l, t, r, b) / .Padding(thickness)
 .Width(300) / .Height(200) / .Size(w, h)
 .MinWidth(...) / .MinHeight(...) / .MaxWidth(...) / .MaxHeight(...)
 .HAlign(HorizontalAlignment.Center) / .VAlign(VerticalAlignment.Top)

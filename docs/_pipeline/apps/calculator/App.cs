@@ -68,10 +68,19 @@ class CalculatorApp : Component
 
         Element NumButton(string digit) =>
             Button(digit, () => PressDigit(digit))
+                .AutomationName($"Digit {digit}")
                 .Width(60).Height(48);
 
         Element OpButton(string label, string opCode) =>
             Button(label, () => PressOp(opCode))
+                .AutomationName(opCode switch
+                {
+                    "+" => "Add",
+                    "-" => "Subtract",
+                    "*" => "Multiply",
+                    "/" => "Divide",
+                    _ => $"Operator {label}"
+                })
                 .Width(60).Height(48);
 
         return VStack(4,
@@ -90,7 +99,9 @@ class CalculatorApp : Component
                        NumButton("1"), NumButton("2"), NumButton("3")),
             HStack(4, OpButton("-", "-"),
                        NumButton("0"), OpButton("+", "+"),
-                       Button("=", PressEquals).Width(60).Height(48))
+                       Button("=", PressEquals)
+                          .AutomationName("Equals")
+                          .Width(60).Height(48))
         ).Padding(16);
     }
 

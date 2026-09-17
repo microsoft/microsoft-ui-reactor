@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{#-
+  Shown by Material for MkDocs on every deployed version that does not carry the
+  alias named by `extra.version.default` in mkdocs.yml. That covers two different
+  cases — an older release, and the unreleased `main` build, which is newer than
+  the latest release rather than older — so the wording has to fit both.
+
+  The link deliberately targets the site root rather than the `latest` alias
+  directly, so that already published versions keep working if the alias is ever
+  renamed.
+-#}
+{% block outdated %}
+  You are not viewing the latest release of Microsoft.UI.Reactor.
+  <a href="{{ '../' ~ base_url }}">
+    <strong>Go to the latest release.</strong>
+  </a>
+{% endblock %}

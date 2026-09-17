@@ -1,0 +1,91 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MSIX-packaged flavour of Reactor.AppTests.Host, so identity-dependent behaviour can be
+    asserted. It owns no source: every fixture, the harness and Program.cs are linked from
+    the unpackaged host, leaving only the MSIX properties below and Package.appxmanifest.
+    See TESTING.md "Packaged selftest".
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <!-- <Platforms> excludes AnyCPU, which VS and an initial .slnx evaluation default to;
+         coerce so the Reactor ProjectReference doesn't resolve to an unbuilt AnyCPU path
+         (CS0006). Same coercion BlankReactorMsix uses. -->
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <Configurations>Debug;Release</Configurations>
+    <RootNamespace>Microsoft.UI.Reactor.AppTests.Host</RootNamespace>
+    <AssemblyName>Reactor.PackagedTests.Host</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <!-- Mirrors the unpackaged host: CsWinRT's generated marshalling needs unsafe blocks. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- MSIX. Directory.Build.targets keys off WindowsPackageType=MSIX to inject the
+         full Microsoft.WindowsAppSDK metapackage instead of the lean .WinUI slice. -->
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxBundle>Never</AppxBundle>
+    <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+    <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
+    <GenerateTestArtifacts>false</GenerateTestArtifacts>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+
+    <!-- Bundle the Windows App Runtime, as the unpackaged host does, so the registered
+         package needs no machine-wide runtime and no framework PackageDependency. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
+  </ItemGroup>
+
+  <!-- obj/bin must be excluded, or the glob pulls in the sibling's generated AssemblyInfo
+       and XamlTypeInfo and fails on duplicate assembly attributes. -->
+  <ItemGroup>
+    <Compile Include="..\Reactor.AppTests.Host\**\*.cs"
+             Exclude="..\Reactor.AppTests.Host\obj\**\*.cs;..\Reactor.AppTests.Host\bin\**\*.cs"
+             Link="Host\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+    <Page Include="..\Reactor.AppTests.Host\Themes\Generic.xaml" Link="Themes\Generic.xaml" />
+    <!-- Not named AppIcon.ico: ReactorWindow's no-icon fallback probes Assets\AppIcon.ico,
+         which would give every window an icon and make the fixtures' zero-icon control
+         vacuous. -->
+    <Content Include="..\Reactor.AppTests.Host\Assets\SelfTestWindowIcon.ico"
+             Link="Assets\SelfTestWindowIcon.ico"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+    <!-- CopyToOutputDirectory is required: the tier registers the build output as a loose
+         layout, so assets the generated AppxManifest.xml references must sit beside it. -->
+    <Content Include="Images\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Mirrors the unpackaged host's graph. SetPlatform keeps a design-time GetTargetPath
+         query from resolving these at AnyCPU. -->
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj">
+      <SetPlatform Condition="'$(Platform)' != ''">Platform=$(Platform)</SetPlatform>
+    </ProjectReference>
+    <ProjectReference Include="..\Reactor.Markdown.TestRenderer\Reactor.Markdown.TestRenderer.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Devtools\Reactor.Devtools.csproj" />
+    <ProjectReference Include="..\Reactor.AppTests.ThirdPartyControls\Reactor.AppTests.ThirdPartyControls.csproj" />
+    <ProjectReference Include="..\external_proof\Reactor.External.TestControl\Reactor.External.TestControl.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Wrappers.Generator\Reactor.Wrappers.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Reactor.Wrappers.Abstractions\Reactor.Wrappers.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

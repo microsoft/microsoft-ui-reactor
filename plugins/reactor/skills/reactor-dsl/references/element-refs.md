@@ -11,7 +11,7 @@ after late mount, clears on source unmount, and re-resolves when either
 side is recreated.
 
 ```csharp
-var target = UseElementRef<FrameworkElement>();
+var target = this.UseElementRef<FrameworkElement>();
 
 return HStack(
     Button("Show tip", () => setOpen(true)).Ref(target),

@@ -28,6 +28,7 @@ overlay, layered over the page the same way the
 | Open / query / selection state | `UseState<bool>` / `UseState<string>` / `UseState<int>` |
 | Command catalog | [`Command`](../commanding.md) records — same shape used by `Button`, `MenuItem`, `AppBarButton` |
 | Filter | LINQ `Where(...Contains(query, OrdinalIgnoreCase))` |
+| Open focus | `UseElementFocus()` + `UseEffect` when `open` changes |
 | Open accelerator | [`.OnKeyDown`](../input-and-gestures.md) on the root surface |
 | List navigation | [`.OnPreviewKeyDown`](../input-and-gestures.md) on the palette container |
 | Overlay composition | `Group(page, palette)` — same shape as [Recipe: Modal dialog](modal-dialog.md) |
@@ -48,10 +49,12 @@ same record with a toolbar button or a context menu entry.
 ```csharp snippet="recipe-command-palette/state"
 ```
 
-Three hooks own the palette: `open` toggles the overlay, `query`
+Three state hooks own the palette: `open` toggles the overlay, `query`
 drives the filter, and `index` is the highlighted row. A fourth
 `last` hook just echoes the most recently executed command for the
-demo — it's not part of the palette pattern.
+demo — it's not part of the palette pattern. The focus helper is
+separate from palette state; it moves focus into the query box when
+the overlay opens.
 
 ### Filter
 
@@ -88,7 +91,7 @@ covers the preview-vs-bubble pairing in detail.
 
 The page renders normally; the palette is a `Border` wrapping a
 `VStack` returned alongside it in a `Group(page, palette)`. The
-scrim background `#80000000` dims the page underneath. The root
+theme smoke-fill scrim dims the page underneath. The root
 surface's `.OnKeyDown` watches for Ctrl+K and toggles `open`, which
 is the cheapest "global accelerator" that works from any focus state
 on the page.

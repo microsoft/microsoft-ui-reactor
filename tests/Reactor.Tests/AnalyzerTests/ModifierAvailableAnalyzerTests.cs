@@ -132,6 +132,7 @@ namespace Microsoft.UI.Reactor
         public static T Padding<T>(this T el, double uniform) => el;
         public static T Padding<T>(this T el, double l, double t, double r, double b) => el;
         public static T CornerRadius<T>(this T el, double radius) => el;
+        public static T CornerRadius<T>(this T el, Microsoft.UI.Xaml.CornerRadius radius) => el;
         public static T BorderThickness<T>(this T el, double thickness) => el;
         public static T Background<T>(this T el, Microsoft.UI.Xaml.Media.Brush brush) => el;
         public static T HorizontalContentAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment a) => el;
@@ -860,20 +861,27 @@ class C
     }
 
     [Fact]
-    public async Task CodeFix_Declines_A_CornerRadius_Value_It_Cannot_Unpack()
+    public async Task CodeFix_Rewrites_A_CornerRadius_Value_It_Cannot_Unpack()
     {
-        // Only the 1-arg and 4-arg constructor forms map onto modifier overloads. A variable
-        // (or any other shape) has no safe translation, so the diagnostic stands unfixed
-        // rather than the fix guessing at a conversion.
-        var source = Stubs + @"
+        // A variable has no constructor arguments to unpack, so the 1-arg/4-arg
+        // decomposition cannot apply. It no longer needs to: `.CornerRadius(...)`
+        // also accepts the struct itself, so the value rides across verbatim.
+        // This is the CornerRadius half of the pass-through arm — it exercises the
+        // `structName` selection that a Thickness-typed property cannot.
+        var before = Stubs + @"
 class C
 {
     ButtonElement M(ButtonElement b, CornerRadius radius) => {|REACTOR_POOL_001:b.Set(c => c.CornerRadius = radius)|};
 }";
+        var after = Stubs + @"
+class C
+{
+    ButtonElement M(ButtonElement b, CornerRadius radius) => b.CornerRadius(radius);
+}";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
-            TestCode = source,
-            FixedCode = source,
+            TestCode = before,
+            FixedCode = after,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 

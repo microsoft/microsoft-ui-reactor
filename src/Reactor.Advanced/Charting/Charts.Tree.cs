@@ -195,7 +195,7 @@ public sealed class TreeChartHandle
 /// Interaction (drag, animation) is the caller's responsibility.
 ///
 /// Note: ForceGraph intentionally uses XamlHostElement for 60fps direct manipulation
-/// via SyncPositions(). See ductd3-native-chart-migration.md §5, Option A.
+/// via SyncPositions(). See docs/specs/016-native-chart-migration.md §5, Option A.
 /// </summary>
 public sealed class ForceGraphElement : IChartAccessibilityData
 {

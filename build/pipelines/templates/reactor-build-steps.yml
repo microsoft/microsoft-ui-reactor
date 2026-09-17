@@ -140,6 +140,10 @@ steps:
             throw "minver not found at $minver"
           }
           # Keep parity with the GitHub workflow / ob-release.yml MinVer settings.
+          # `-p experimental.0` supplies MinVer's default prerelease identifiers, applied
+          # when it must invent a label: no reachable tag, or a STABLE latest tag (patch
+          # bumped → `0.1.1-experimental.0.N`). Dormant on the current
+          # `v0.1.0-preview.N` lineage, which MinVer carries forward with height instead.
           $version = (& $minver -t v -p experimental.0 -m 0.1).Trim()
 
           # Per-PR builds: append a unique, monotonic suffix so repeated iterations /
@@ -308,6 +312,10 @@ steps:
     #   analyzers/dotnet/cs/Reactor.Analyzers.dll
     #   analyzers/dotnet/cs/Reactor.Localization.Generator.dll
     #   analyzers/dotnet/cs/Reactor.Wrappers.Generator.dll
+    #   buildTransitive/sourcemap/Reactor.SourceMap.Generator.dll
+    #     (packed outside analyzers/ so it is loaded only when ReactorSourceMap
+    #      is true; the sign glob below is by project bin\, not package path,
+    #      so it is unaffected by where the DLL lands in the nupkg)
     # And inside Microsoft.UI.Reactor.Advanced.nupkg:
     #   lib/<tfm>/Reactor.Advanced.dll
     # And inside Microsoft.UI.Reactor.Devtools.nupkg:
@@ -319,7 +327,7 @@ steps:
         inputs:
           command: 'sign'
           signing_profile: external_distribution
-          files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor\bin\**\Reactor.Wrappers.Abstractions.dll;Reactor.Advanced\bin\**\Reactor.Advanced.dll;Reactor.Devtools\bin\**\Microsoft.UI.Reactor.Devtools.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll;Reactor.Wrappers.Generator\bin\**\Reactor.Wrappers.Generator.dll'
+          files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor\bin\**\Reactor.Wrappers.Abstractions.dll;Reactor.Advanced\bin\**\Reactor.Advanced.dll;Reactor.Devtools\bin\**\Microsoft.UI.Reactor.Devtools.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll;Reactor.Wrappers.Generator\bin\**\Reactor.Wrappers.Generator.dll;Reactor.SourceMap.Generator\bin\**\Reactor.SourceMap.Generator.dll'
           search_root: '$(Build.SourcesDirectory)\src'
 
     - pwsh: |

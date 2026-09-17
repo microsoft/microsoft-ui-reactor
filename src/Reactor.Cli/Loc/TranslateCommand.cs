@@ -3,7 +3,7 @@ using System.Xml.Linq;
 namespace Microsoft.UI.Reactor.Cli.Loc;
 
 /// <summary>
-/// Implements `duct loc translate`: AI-translates .resw files to target locales
+/// Implements `mur loc translate`: AI-translates .resw files to target locales
 /// using GitHub Copilot SDK.
 /// </summary>
 internal static class TranslateCommand
@@ -282,14 +282,15 @@ internal static class TranslateCommand
 
     private static void ShowHelp()
     {
-        Console.WriteLine("duct loc translate — AI-translate .resw files to target locales");
+        Console.WriteLine("mur loc translate — AI-translate .resw files to target locales");
         Console.WriteLine();
-        Console.WriteLine("Usage: duct loc translate [options]");
+        Console.WriteLine("Usage: mur loc translate [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --source <dir>     Source locale directory (default: Strings/en-US/)");
         Console.WriteLine("  --target <locales>  Comma-separated target locales (e.g., fr-FR,ar-SA)");
-        Console.WriteLine("  --missing-only     Only translate missing or AI-draft keys");
+        Console.WriteLine("  --missing-only     Only translate keys with no existing translation");
+        Console.WriteLine("                     (default: also re-translate AI drafts awaiting review)");
         Console.WriteLine("  --model <name>     Model to use (default: gpt-5.4-mini, or COPILOT_MODEL env var)");
         Console.WriteLine();
         Console.WriteLine("Requires GitHub CLI (gh) to be installed and authenticated with a");

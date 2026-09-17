@@ -48,6 +48,15 @@ internal interface IV1HandlerEntry
 }
 
 /// <summary>
+/// Optional diagnostic surface for decorator handlers whose returned
+/// <see cref="UIElement"/> was created by a wrapped target element.
+/// </summary>
+internal interface IV1SourceTargetResolver
+{
+    Element? GetSourceTarget(Element element);
+}
+
+/// <summary>
 /// Spec 047 §14 Phase 1 (1.1) — v1 handler registry. Exact-type keyed
 /// dictionary; throws on duplicate (matches §13 Q17 and the 1.9 rules).
 /// External <c>RegisterType</c> callers continue to populate

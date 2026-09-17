@@ -33,6 +33,47 @@ internal static class Phase5WindowingFixtures
         }
     }
 
+    /// <summary>
+    /// Alternates the root control *type* on demand, so the reconciler hands
+    /// <c>OnHostContentRendered</c> a different <c>FrameworkElement</c> instance
+    /// and <c>AttachSizeToContentRoot</c> takes its root-replacement path.
+    /// </summary>
+    private sealed class SwappableRootContent : Component
+    {
+        public Action? Swap { get; private set; }
+
+        public override Element Render()
+        {
+            var (alt, setAlt) = UseState(false);
+            Swap = () => setAlt(!alt);
+            return alt
+                ? VStack(TextBlock("content")).Width(300).Height(200)
+                : Border(TextBlock("content")).Width(300).Height(200);
+        }
+    }
+
+    /// <summary>
+    /// Alternates the root between a real control and <c>Empty()</c>. The
+    /// reconciler returns <c>null</c> for an <c>EmptyElement</c> root
+    /// (Reconciler.cs — "if (newElement is null or EmptyElement) ... return null"),
+    /// so <c>OnHostContentRendered</c> receives <c>null</c> and
+    /// <c>AttachSizeToContentRoot</c> takes its null-root path while
+    /// size-to-content is still enabled.
+    /// </summary>
+    private sealed class VanishingRootContent : Component
+    {
+        public Action? Toggle { get; private set; }
+
+        public override Element Render()
+        {
+            var (gone, setGone) = UseState(false);
+            Toggle = () => setGone(!gone);
+            return gone
+                ? Empty()
+                : Border(TextBlock("content")).Width(300).Height(200);
+        }
+    }
+
     private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
     {
         var win = ReactorApp.OpenWindow(spec, root);
@@ -198,8 +239,315 @@ internal static class Phase5WindowingFixtures
                 win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
                 await Harness.Render(120);
                 H.Check("SizeToContent_NoOpWhenMaximized_State", Native.IsZoomed(Hwnd(win)));
-                H.Check("SizeToContent_NoOpWhenMaximized_Warning", ReactorWindow.SizeToContentMaximizedWarningCountForTests > 0);
+                // Exactly once, not once per layout pass: ApplySizeToContent runs
+                // off LayoutUpdated, and DiagnosticLog.Warning is release-visible,
+                // so a regression to per-pass warning is an unbounded ETW stream.
+                // `> 0` would pass either way.
+                H.Check("SizeToContent_NoOpWhenMaximized_Warning", ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
                 H.Check("SizeToContent_NoOpWhenMaximized_NoResize", win.SizeToContentApplyCountForTests == 0);
+            }
+            finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// The title-bar-height warning must fire on entering the invalid
+    /// combination, not on every chrome re-apply. <c>ApplyChrome</c> runs on any
+    /// unequal spec, so an app that keeps <c>TitleBarHeight</c> set while
+    /// <c>ExtendsContentIntoTitleBar</c> stays false would otherwise emit one
+    /// release-visible warning per unrelated field change.
+    /// </summary>
+    internal class TitleBarHeightWarningIsEdgeTriggered(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests = 0;
+            // TitleBarHeight set while content-extension is explicitly false is
+            // the invalid combination the warning exists for.
+            var spec = new WindowSpec
+            {
+                Title = "TBH 0",
+                Width = 320,
+                Height = 240,
+                TitleBarHeight = WindowTitleBarHeight.Tall,
+                ExtendsContentIntoTitleBar = false,
+            };
+            var win = await OpenAndSettle(spec, () => new FixedContent(200, 120));
+            try
+            {
+                var afterOpen = ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests;
+                H.Check("TitleBarHeight_WarnedOnEntry", afterOpen >= 1);
+
+                // Change only an unrelated field, repeatedly. The invalid
+                // combination persists unchanged, so it must not re-warn.
+                for (var i = 1; i <= 4; i++)
+                {
+                    win.Update(spec with { Title = $"TBH {i}" });
+                    await Harness.Render(30);
+                }
+                H.Check("TitleBarHeight_NoRewarnPerUnrelatedUpdate",
+                    ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests == afterOpen);
+
+                // Removing the height clears the invalid combination. It was
+                // never applied (invalid), so this takes ApplyTitleBarHeight's
+                // "never declared" early return — the path that used to leave
+                // the latch set.
+                win.Update(spec with { Title = "TBH none", TitleBarHeight = null });
+                await Harness.Render(30);
+                H.Check("TitleBarHeight_RemovalDoesNotWarn",
+                    ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests == afterOpen);
+
+                // Re-declaring it is a new invalid state and must warn again.
+                win.Update(spec with { Title = "TBH again" });
+                await Harness.Render(30);
+                H.Check("TitleBarHeight_RedeclareWarnsAgain",
+                    ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests == afterOpen + 1);
+            }
+            finally { ReactorWindow.TitleBarHeightNotExtendedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// The no-drag-affordance warning must fire on entering the condition, not on
+    /// every <c>Update</c>. <c>Update</c> validates ahead of its own equality
+    /// check, so an app holding a chromeless, non-draggable window while changing
+    /// any unrelated field would otherwise emit one release-visible warning per
+    /// update for the life of the window.
+    /// </summary>
+    internal class NoDragAffordanceWarningIsEdgeTriggered(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            WindowSpec.NoDragAffordanceWarningCountForTests = 0;
+            var spec = new WindowSpec
+            {
+                Title = "No drag 0",
+                Width = 320,
+                Height = 240,
+                Style = WindowStyle.None,
+                IsMovableByBackground = false,
+            };
+            var win = await OpenAndSettle(spec, () => new FixedContent(200, 120));
+            try
+            {
+                // Construction validates once, which is the entering edge.
+                H.Check("NoDrag_WarnedOnConstruction",
+                    WindowSpec.NoDragAffordanceWarningCountForTests == 1);
+
+                // Change only an unrelated field, repeatedly. The suspicious
+                // combination persists, so it must not re-warn.
+                for (var i = 1; i <= 4; i++)
+                {
+                    win.Update(spec with { Title = $"No drag {i}" });
+                    await Harness.Render(30);
+                }
+                H.Check("NoDrag_NoRewarnPerUpdate",
+                    WindowSpec.NoDragAffordanceWarningCountForTests == 1);
+
+                // Clearing the condition re-arms it...
+                win.Update(spec with { Title = "movable", IsMovableByBackground = true });
+                await Harness.Render(30);
+                H.Check("NoDrag_ClearedWithoutWarning",
+                    WindowSpec.NoDragAffordanceWarningCountForTests == 1);
+
+                // ...so entering it again is a new edge and warns once more.
+                win.Update(spec with { Title = "no drag again", IsMovableByBackground = false });
+                await Harness.Render(30);
+                H.Check("NoDrag_ReentryWarnsAgain",
+                    WindowSpec.NoDragAffordanceWarningCountForTests == 2);
+            }
+            finally { WindowSpec.NoDragAffordanceWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+    /// <summary>
+    /// Turning size-to-content off and on again while maximized must warn for
+    /// each ignored spell.
+    ///
+    /// <para>
+    /// The re-arm lives in <c>AttachSizeToContentRoot</c>'s Manual branch, and
+    /// <c>Update</c> reaches it deterministically: switching to Manual makes the
+    /// spec unequal, so <c>ApplyChrome</c> runs and calls
+    /// <c>OnHostContentRendered</c> (<c>ReactorWindow.cs</c> ~line 641), which
+    /// re-attaches. No render is required. This pins that chain — if the Manual
+    /// branch stops re-arming, the second spell goes unreported.
+    /// </para>
+    /// </summary>
+    internal class SizeToContentMaximizedWarningRearmsAfterManual(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0;
+            var spec = new WindowSpec { Title = "STC Manual", Width = 360, Height = 240 };
+            var win = await OpenAndSettle(spec, () => new FixedContent(500, 400));
+            try
+            {
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+
+                var enabled = spec with { SizeToContent = WindowSizeToContent.WidthAndHeight };
+                win.Update(enabled);
+                await Harness.Render(120);
+                H.Check("STCManual_WarnedOnFirstSpell",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+
+                // Off, then on again — a second ignored spell.
+                win.Update(spec with { Title = "STC Manual off", SizeToContent = WindowSizeToContent.Manual });
+                win.Update(enabled with { Title = "STC Manual on again" });
+                win.ApplySizeToContentForTests();
+
+                H.Check("STCManual_StillMaximized", Native.IsZoomed(Hwnd(win)));
+                H.Check("STCManual_RearmedAfterManual",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 2);
+            }
+            finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// The maximized warning must stay latched across a root replacement.
+    /// <c>OnHostContentRendered</c> runs per render and
+    /// <c>AttachSizeToContentRoot</c> detaches whenever the root instance
+    /// differs, then re-applies immediately — so re-arming the edge on detach
+    /// would emit one release-visible warning per render for an app that
+    /// alternates root controls while maximized, which is the unbounded ETW
+    /// stream the edge-trigger exists to prevent.
+    /// </summary>
+    internal class SizeToContentMaximizedWarningSurvivesRootSwap(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0;
+            var spec = new WindowSpec { Title = "STC Max Swap", Width = 360, Height = 240 };
+            SwappableRootContent? content = null;
+            var win = await OpenAndSettle(spec, () => content = new SwappableRootContent());
+            try
+            {
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+                win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
+                await Harness.Render(120);
+
+                H.Check("SizeToContent_RootSwap_Maximized", Native.IsZoomed(Hwnd(win)));
+                var afterEnable = ReactorWindow.SizeToContentMaximizedWarningCountForTests;
+                H.Check("SizeToContent_RootSwap_WarnedOnce", afterEnable == 1);
+
+                // Swap the root control type several times while still maximized.
+                for (var i = 0; i < 3; i++)
+                {
+                    content!.Swap!();
+                    await Harness.Render(120);
+                }
+
+                H.Check("SizeToContent_RootSwap_StillMaximized", Native.IsZoomed(Hwnd(win)));
+                // Still exactly one: the spell never ended, so no re-arm.
+                H.Check("SizeToContent_RootSwap_NoRewarnPerRender",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+            }
+            finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// The maximized-warning edge must also survive the root rendering to
+    /// *nothing*. <c>Empty()</c> reconciles to a null control, which reaches
+    /// <c>AttachSizeToContentRoot</c> with <c>root is null</c> while
+    /// <c>SizeToContent</c> is still enabled — that is a detach, not the end of
+    /// the ignored-while-maximized spell, so it must not re-arm. Re-arming there
+    /// lets an app that alternates <c>Empty()</c> with a real root emit one
+    /// release-visible warning per render for a single maximized spell.
+    /// </summary>
+    internal class SizeToContentMaximizedWarningSurvivesEmptyRoot(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0;
+            var spec = new WindowSpec { Title = "STC Max Empty", Width = 360, Height = 240 };
+            VanishingRootContent? content = null;
+            var win = await OpenAndSettle(spec, () => content = new VanishingRootContent());
+            try
+            {
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+                win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
+                await Harness.Render(120);
+
+                H.Check("SizeToContent_EmptyRoot_Maximized", Native.IsZoomed(Hwnd(win)));
+                H.Check("SizeToContent_EmptyRoot_WarnedOnce",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+
+                // Vanish and restore the root repeatedly, still maximized and
+                // still size-to-content. Each restore re-enters the attach path
+                // with a real root; each vanish enters it with null.
+                for (var i = 0; i < 3; i++)
+                {
+                    content!.Toggle!();   // -> Empty(), null root
+                    await Harness.Render(120);
+                    content!.Toggle!();   // -> real root again
+                    await Harness.Render(120);
+                }
+
+                H.Check("SizeToContent_EmptyRoot_StillMaximized", Native.IsZoomed(Hwnd(win)));
+                // The spell never ended, so the latch must still be held.
+                H.Check("SizeToContent_EmptyRoot_NoRewarnPerRender",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+            }
+            finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// The mirror of <see cref="SizeToContentMaximizedWarningSurvivesEmptyRoot"/>:
+    /// preserving the latch across a null root must not let it survive a genuine
+    /// *new* maximized spell. With no root attached, the SizeChanged/LayoutUpdated
+    /// handlers are gone and <c>ApplySizeToContent</c> returns at its null-root
+    /// guard, so nothing on the content path can observe a restore. The window-state
+    /// observer (<c>OnAppWindowChanged</c>) is root-independent and must re-arm, or
+    /// the next maximized spell is silently suppressed — a false negative.
+    /// </summary>
+    internal class SizeToContentMaximizedWarningRearmsAfterRestoreWithNullRoot(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0;
+            var spec = new WindowSpec { Title = "STC Max NullRoot Restore", Width = 360, Height = 240 };
+            VanishingRootContent? content = null;
+            var win = await OpenAndSettle(spec, () => content = new VanishingRootContent());
+            try
+            {
+                // Spell 1: maximized with a real root -> warns once.
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+                win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
+                await Harness.Render(120);
+                H.Check("SizeToContent_NullRootRestore_WarnedFirstSpell",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 1);
+
+                // Drop the root, so no content-path observer remains.
+                content!.Toggle!();
+                await Harness.Render(120);
+
+                // Restore and re-maximize entirely while the root is null. This is
+                // the transition only OnAppWindowChanged can see.
+                Native.ShowWindow(Hwnd(win), Native.SW_RESTORE);
+                await Harness.WaitFor(() => !Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+                H.Check("SizeToContent_NullRootRestore_Restored", !Native.IsZoomed(Hwnd(win)));
+
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
+
+                // Bring a real root back: spell 2 must report.
+                content!.Toggle!();
+                await Harness.Render(120);
+
+                H.Check("SizeToContent_NullRootRestore_StillMaximized", Native.IsZoomed(Hwnd(win)));
+                H.Check("SizeToContent_NullRootRestore_WarnedSecondSpell",
+                    ReactorWindow.SizeToContentMaximizedWarningCountForTests == 2);
             }
             finally { ReactorWindow.SizeToContentMaximizedWarningCountForTests = 0; await CloseAndSettle(win); }
         }
@@ -288,6 +636,7 @@ internal static class Phase5WindowingFixtures
         public const int GWL_STYLE = -16;
         public const int GWL_EXSTYLE = -20;
         public const int SW_MAXIMIZE = 3;
+        public const int SW_RESTORE = 9;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT { public int Left, Top, Right, Bottom; }

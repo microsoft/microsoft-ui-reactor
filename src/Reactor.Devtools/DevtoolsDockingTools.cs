@@ -34,6 +34,7 @@ internal static class DevtoolsDockingTools
 
     private static void RegisterList(DevtoolsMcpServer server)
     {
+        // <snippet:mcp-tool-registration>
         server.Tools.Register(
             new McpToolDescriptor(
                 Name: "docking.list",
@@ -44,6 +45,7 @@ internal static class DevtoolsDockingTools
                     "agents pass them to docking.snapshot / docking.dock.",
                 InputSchema: Schema.Root()),
             _ => server.OnDispatcher<object>(() => BuildListPayload()));
+        // </snippet:mcp-tool-registration>
     }
 
     private static void RegisterSnapshot(DevtoolsMcpServer server)

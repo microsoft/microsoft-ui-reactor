@@ -23,9 +23,36 @@ public class TransitionEngineTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void Default_Transition_Is_SlideTransition()
+    public void Default_Transition_Is_WinUI_EntranceTransition()
     {
-        Assert.IsType<SlideTransition>(NavigationTransition.Default);
+        Assert.IsType<EntranceTransition>(NavigationTransition.Default);
+    }
+
+    [Fact]
+    public void Entrance_Factory_Creates_EntranceTransition()
+    {
+        Assert.IsType<EntranceTransition>(NavigationTransition.Entrance());
+    }
+
+    [Fact]
+    public void Default_Resolves_To_The_Same_Motion_As_Entrance()
+    {
+        // Default is a policy alias for the entrance motion. Entrance() allocates, so the two
+        // are not reference-equal; what matters is that they are value-equal, because
+        // TransitionEngine dispatches on the record type and both land on RunEntrance.
+        Assert.Equal(NavigationTransition.Entrance(), NavigationTransition.Default);
+    }
+
+    [Fact]
+    public void Entrance_Is_Distinct_From_Every_Other_Built_In_Transition()
+    {
+        var entrance = NavigationTransition.Entrance();
+
+        Assert.NotEqual(entrance, NavigationTransition.None);
+        Assert.NotEqual(entrance, NavigationTransition.Slide());
+        Assert.NotEqual(entrance, NavigationTransition.Fade());
+        Assert.NotEqual(entrance, NavigationTransition.DrillIn());
+        Assert.NotEqual(entrance, NavigationTransition.Spring());
     }
 
     [Fact]
@@ -39,9 +66,10 @@ public class TransitionEngineTests
     {
         var transition = NavigationTransition.Slide();
         var slide = Assert.IsType<SlideTransition>(transition);
-        Assert.Equal(SlideDirection.FromRight, slide.Direction);
+        Assert.Equal(SlideDirection.FromBottom, slide.Direction);
         Assert.Null(slide.Duration);
         Assert.Null(slide.Easing);
+        Assert.Null(slide.Distance);
     }
 
     [Fact]
@@ -67,6 +95,15 @@ public class TransitionEngineTests
         var transition = NavigationTransition.DrillIn(TimeSpan.FromMilliseconds(400));
         var drill = Assert.IsType<DrillInTransition>(transition);
         Assert.Equal(TimeSpan.FromMilliseconds(400), drill.Duration);
+    }
+
+    [Fact]
+    public void DrillIn_Factory_Uses_WinUI_Specification_By_Default()
+    {
+        var drill = Assert.IsType<DrillInTransition>(NavigationTransition.DrillIn());
+
+        Assert.Null(drill.Duration);
+        Assert.True(TransitionEngine.UsesWinUIDrillInSpecification(drill));
     }
 
     [Fact]

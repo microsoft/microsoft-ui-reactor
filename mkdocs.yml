@@ -18,6 +18,9 @@ exclude_docs: |
 
 theme:
   name: material
+  # Supplies the `outdated` block that warns readers when they are viewing a
+  # released version older than `latest`. Must stay outside docs_dir.
+  custom_dir: docs/_overrides
   features:
     - navigation.instant
     - navigation.tracking
@@ -46,6 +49,16 @@ theme:
         name: Switch to light mode
   icon:
     repo: fontawesome/brands/github
+
+# Renders the version selector in the header. Versions themselves live in the
+# gh-pages branch and are published by .github/workflows/docs.yml; `default`
+# names the alias the site root redirects to, and every version not carrying
+# that alias shows the outdated-version warning.
+extra:
+  version:
+    provider: mike
+    default: latest
+    alias: true
 
 markdown_extensions:
   - admonition

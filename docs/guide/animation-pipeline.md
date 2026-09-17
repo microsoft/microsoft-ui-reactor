@@ -182,9 +182,10 @@ public override Element Render()
 {
     var (show, setShow) = UseState(false);
     return VStack(
-        Button(show ? "Hide" : "Show", () => setShow(!show)),
+        Button(show ? "Hide" : "Show", () => setShow(!show))
+            .AutomationName(show ? "Hide conditional transition" : "Show conditional transition"),
         show
-            ? Card(Text("Hello")).Transition(Transition.Fade + Transition.Slide(Edge.Top))
+            ? Card(TextBlock("Hello")).Transition(Transition.Fade + Transition.Slide(Edge.Top))
             : null
     );
 }
@@ -238,7 +239,7 @@ between an authoring shape, prefer one that targets the cheap set
 (a scaled button instead of a resized button, a translated panel
 instead of a margined panel).
 
-**`Curve.Spring` is the Reactor default.** A spring curve has no
+**`Curve.Spring(...)` is the expressive default.** A spring curve has no
 explicit duration — it settles when the physics says it does, which
 tends to feel more responsive than a fixed-duration ease. Reach for
 `Curve.Ease(durationMs)` only when the duration is part of the

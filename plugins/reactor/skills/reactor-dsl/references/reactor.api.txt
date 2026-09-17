@@ -53,6 +53,7 @@ ContentDialog(string title, Element content, string primaryButtonText = "OK") �
 ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) → ContentFlyoutElement
 DatePicker(Optional<DateTimeOffset> date = default, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
 DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
+Display(string content) → TextBlockElement
 DropDownButton(string label, Element flyout = null) → DropDownButtonElement
 Ellipse() → EllipseElement
 Empty() → Element
@@ -194,6 +195,7 @@ ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?> on
 TimePicker(Optional<TimeSpan> time = default, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
 Title(string content) → TextBlockElement
 TitleBar(string title) → TitleBarElement
+TitleLarge(string content) → TextBlockElement
 ToggleButton(Command command, bool isChecked = false) → ToggleButtonElement
 ToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null) → ToggleButtonElement
 ToggleMenuItem(string text, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → ToggleMenuFlyoutItemData
@@ -584,6 +586,7 @@ T.Center<T>() → T
 T.CenterAt<T>(double x, double y) → T
 T.CenterPoint<T>(Vector3 center) → T
 T.ConnectedAnimation<T>(string key) → T
+T.CornerRadius<T>(CornerRadius radius) → T
 T.CornerRadius<T>(double radius) → T
 T.CornerRadius<T>(double topLeft, double topRight, double bottomRight, double bottomLeft) → T
 T.DescribedBy<T>(ElementRef[] targets) → T
@@ -629,6 +632,7 @@ T.LayoutAnimation<T>() → T
 T.LayoutAnimation<T>(LayoutAnimationConfig config) → T
 T.LayoutAnimation<T>(TimeSpan duration) → T
 T.LiveRegion<T>(AutomationLiveSetting mode = AutomationLiveSetting.Polite) → T
+T.Margin<T>(Thickness thickness) → T
 T.Margin<T>(double horizontal, double vertical) → T
 T.Margin<T>(double left = 0, double top = 0, double right = 0, double bottom = 0) → T
 T.Margin<T>(double uniform) → T
@@ -682,6 +686,7 @@ T.OnUnmountAdd<T>(Action<FrameworkElement> action) → T
 T.OnWarning<T>(Func<T, T> configure) → T
 T.Opacity<T>(double opacity) → T
 T.OpacityTransition<T>(TimeSpan? duration = null) → T
+T.Padding<T>(Thickness thickness) → T
 T.Padding<T>(double horizontal, double vertical) → T
 T.Padding<T>(double left = 0, double top = 0, double right = 0, double bottom = 0) → T
 T.Padding<T>(double uniform) → T
@@ -822,6 +827,7 @@ TitleBarElement.Content(Element content) → TitleBarElement
 TitleBarElement.HeightOption(WindowTitleBarHeight height) → TitleBarElement
 TitleBarElement.Icon(IconData icon) → TitleBarElement
 TitleBarElement.Icon(string imageUri) → TitleBarElement
+TitleBarElement.NoIcon() → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
 TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
@@ -1039,6 +1045,7 @@ TaskbarProgressState { None, Indeterminate, Normal, Paused, Error }
 WindowCloseReason { UserClosed, AppClosed, OwnerClosed }
 WindowCornerStyle { Default, Square, Rounded, RoundedSmall }
 WindowEmbedStyle { Child, Owner }
+WindowIconKind { Path, Resource, Binary }
 WindowLevel { Normal, Floating, AlwaysOnTop }
 WindowResizeMode { CanResize, NoResize, CanMinimize }
 WindowSizeToContent { Manual, Width, Height, WidthAndHeight }
@@ -2149,6 +2156,7 @@ KeyframeEntry[] KeyframeAnimations { get; init; }
 LayoutAnimationConfig LayoutAnimation { get; init; }
 ResourceOverrides ResourceOverrides { get; init; }
 ScrollAnimationConfig ScrollAnimation { get; init; }
+SourceLocation? CallSite { get; init; }
 StaggerConfig StaggerConfig { get; init; }
 ThemeTransitions ThemeTransitions { get; init; }
 Thickness? Margin { get; init; }
@@ -2221,6 +2229,7 @@ KeyframeEntry[] KeyframeAnimations { get; init; }
 LayoutAnimationConfig LayoutAnimation { get; init; }
 ResourceOverrides ResourceOverrides { get; init; }
 ScrollAnimationConfig ScrollAnimation { get; init; }
+SourceLocation? CallSite { get; init; }
 StaggerConfig StaggerConfig { get; init; }
 ThemeTransitions ThemeTransitions { get; init; }
 string ConnectedAnimationKey { get; init; }
@@ -2384,6 +2393,14 @@ ToString() → string
 new()
 Equals(Element other) → bool
 Equals(EmptyElement other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record EntranceTransition
+new()
+Equals(EntranceTransition other) → bool
+Equals(NavigationTransition other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
@@ -2744,11 +2761,11 @@ GetHashCode() → int
 ToString() → string
 
 ### record GridDefinition
-new(GridSize[] columns, GridSize[] rows)
-new(string[] Columns, string[] Rows)
-string[] Columns { get; init; }
-string[] Rows { get; init; }
-Deconstruct(ref string[] Columns, ref string[] Rows) → void
+new(GridSize[] Columns, GridSize[] Rows)
+new(string[] columns, string[] rows)
+GridSize[] Columns { get; init; }
+GridSize[] Rows { get; init; }
+Deconstruct(ref GridSize[] Columns, ref GridSize[] Rows) → void
 Equals(GridDefinition other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -2768,11 +2785,14 @@ GetHashCode() → int
 ToString() → string
 
 ### struct GridSize
-new(double Value, GridUnitType Type)
+new(double value, GridUnitType type, double? min = null, double? max = null)
 GridSize Auto { get; }
-GridUnitType Type { get; init; }
-double Value { get; init; }
-Deconstruct(ref double Value, ref GridUnitType Type) → void
+GridUnitType Type { get; }
+double Value { get; }
+double? Max { get; }
+double? Min { get; }
+Deconstruct(ref double value, ref GridUnitType type) → void
+Deconstruct(ref double value, ref GridUnitType type, ref double? min, ref double? max) → void
 Equals(GridSize other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -2780,6 +2800,10 @@ Parse(string s) → GridSize
 Px(double pixels) → GridSize
 Star(double weight = 1) → GridSize
 ToString() → string
+
+### static class GridSizeExtensions
+GridSize.MaxSize(double max) → GridSize
+GridSize.MinSize(double min) → GridSize
 
 ### record GridViewElement
 new(Element[] Items)
@@ -2834,6 +2858,7 @@ GetPageAsync(DataRequest request, CancellationToken cancellationToken = default)
 GetRowKey(T item) → RowKey
 
 ### interface IDecoratorElementHandler<TElement>
+GetSourceTarget(TElement element) → Element
 Mount(MountContext ctx, TElement element) → UIElement
 Unmount(UnmountContext ctx, TElement element, UIElement control) → V1UnmountDisposition
 Update(UpdateContext ctx, TElement oldEl, TElement newEl, UIElement control) → UIElement
@@ -3860,11 +3885,12 @@ ToString() → string
 ### record NavigationTransition
 Connected(string animationKey) → NavigationTransition
 DrillIn(TimeSpan? duration = null) → NavigationTransition
+Entrance() → NavigationTransition
 Equals(NavigationTransition other) → bool
 Equals(object obj) → bool
 Fade(TimeSpan? duration = null) → NavigationTransition
 GetHashCode() → int
-Slide(SlideDirection direction = SlideDirection.FromRight, TimeSpan? duration = null, CompositionEasingFunction easing = null, float? distance = null) → NavigationTransition
+Slide(SlideDirection direction = SlideDirection.FromBottom, TimeSpan? duration = null, CompositionEasingFunction easing = null, float? distance = null) → NavigationTransition
 Spring(float dampingRatio = 0.6f, float period = 0.08f, SlideDirection direction = SlideDirection.FromRight) → NavigationTransition
 ToString() → string
 
@@ -4448,8 +4474,10 @@ RegisterAllBuiltIns() → void
 RegisterControlAssembly(Assembly assembly) → void
 RegisterControlAssembly(IXamlMetadataProvider provider) → void
 Run(Action<ReactorAppContext> startup) → void
-Run(string title, Func<RenderContext, Element> rootRender, double? width = null, double? height = null, bool fullScreen = false, Action<ReactorHost> configure = null) → void
-Run<TRoot>(string title = "Reactor App", double? width = null, double? height = null, bool fullScreen = false, Action<ReactorHost> configure = null) → void
+Run(WindowSpec spec, Func<RenderContext, Element> rootRender, Action<ReactorHost> configure = null) → void
+Run(string title, Func<RenderContext, Element> rootRender, double? width = null, double? height = null, bool fullScreen = false, WindowIcon icon = null, Action<ReactorHost> configure = null) → void
+Run<TRoot>(WindowSpec spec, Action<ReactorHost> configure = null) → void
+Run<TRoot>(string title = "Reactor App", double? width = null, double? height = null, bool fullScreen = false, WindowIcon icon = null, Action<ReactorHost> configure = null) → void
 TryRegisterControlAssembly(Assembly assembly) → bool
 event EventHandler<ReactorTrayIcon> TrayIconClosed
 event EventHandler<ReactorTrayIcon> TrayIconOpened
@@ -4572,6 +4600,13 @@ ref RenderStats Stats { get; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
+
+### static class ReactorSourceMap
+bool Enabled { get; set; }
+GetSource(UIElement control) → SourceLocation?
+
+### class ReactorSourceTransparentAttribute
+new()
 
 ### static class ReactorTrace
 Subscribe(Action<ReactorEvent> onEvent, EventLevel level = EventLevel.Verbose, EventKeywords keywords = EventKeywords.All) → IDisposable
@@ -5276,6 +5311,17 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### struct SourceLocation
+new(string FilePath, int LineNumber)
+int LineNumber { get; init; }
+string FilePath { get; init; }
+Deconstruct(ref string FilePath, ref int LineNumber) → void
+Equals(SourceLocation other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToShortString() → string
+ToString() → string
+
 ### record SplitButtonElement
 new(string Label, Action OnClick = null, Element Flyout = null)
 Action OnClick { get; init; }
@@ -5835,6 +5881,7 @@ bool AutoRefreshDragRegions { get; init; }
 bool IsBackButtonEnabled { get; init; }
 bool IsBackButtonVisible { get; init; }
 bool IsPaneToggleButtonVisible { get; init; }
+bool SuppressIcon { get; init; }
 string Subtitle { get; init; }
 string Title { get; init; }
 Deconstruct(ref string Title) → void
@@ -6211,10 +6258,14 @@ ValueTuple<double, double> Size { get; }
 WindowSizeChangedEventArgs Raw { get; }
 
 ### class WindowIcon
+WindowIconKind Kind { get; }
+bool IsBinary { get; }
 bool IsResource { get; }
 string Source { get; }
+FromBytes(ReadOnlySpan<byte> data) → WindowIcon
 FromPath(string path) → WindowIcon
 FromResource(string uri) → WindowIcon
+FromRgba(ReadOnlySpan<byte> pixels, int width, int height) → WindowIcon
 
 ### struct WindowKey
 new(string Name)

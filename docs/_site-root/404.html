@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Redirecting — Microsoft.UI.Reactor</title>
+    <!--
+      Served by GitHub Pages for any unmatched path under the project site.
+
+      The docs site used to be unversioned, so pages lived at paths like
+      /microsoft-ui-reactor/getting-started/. Versioning moved every page under a
+      version directory, which would turn every previously published link — the
+      ones in README.md, in search results, and in other people's bookmarks —
+      into a hard 404. This forwards those legacy paths to the same page in the
+      `latest` release.
+
+      Copied to the published site root by .github/workflows/docs.yml; it is not
+      part of the MkDocs build, so it must not rely on the theme.
+    -->
+    <script>
+      (function () {
+        // The published version directories are named after release versions
+        // ("0.1.0-preview.14"), plus the "main" and "latest" aliases. A path that
+        // already starts with one of those is a genuine 404 inside a published
+        // version, so forwarding it would only produce a nonsense path such as
+        // /latest/main/foo/ — and forwarding a /latest/ path would loop.
+        function isPublishedVersion(segment) {
+          return segment === "latest" || segment === "main" || /^\d/.test(segment);
+        }
+
+        var projectPrefix = "/microsoft-ui-reactor/";
+        var path = window.location.pathname;
+        // Falls back to "/" so this keeps working if the site ever moves to a
+        // custom domain, where there is no repository-name prefix.
+        var base = path.indexOf(projectPrefix) === 0 ? projectPrefix : "/";
+        var rest = path.slice(base.length).replace(/^\/+/, "");
+        var firstSegment = rest.split("/")[0];
+
+        if (rest !== "" && !isPublishedVersion(firstSegment)) {
+          // location.hash survives the failed request, so a deep link such as
+          // /getting-started/#manual-setup keeps its anchor.
+          window.location.replace(
+            base + "latest/" + rest + window.location.search + window.location.hash
+          );
+          return;
+        }
+
+        // Not redirecting, so the body below is what the reader sees. Point its
+        // link at the same base the redirect would have used, rather than a
+        // hardcoded project path that would be wrong on a custom domain.
+        document.addEventListener("DOMContentLoaded", function () {
+          var link = document.getElementById("latest-link");
+          if (link) {
+            link.setAttribute("href", base + "latest/");
+          }
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <h1>Page not found</h1>
+    <p>
+      This page may have moved. The documentation is now published per release —
+      try the
+      <a id="latest-link" href="/microsoft-ui-reactor/latest/">latest release documentation</a>.
+    </p>
+  </body>
+</html>

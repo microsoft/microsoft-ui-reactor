@@ -69,7 +69,15 @@ internal static class HotReloadComponentMigrationFixtures
             var reconciler = new Reconciler();
             Action noop = () => { };
 
-            var el0 = Component<CounterComponent>();
+            // Spec 010 — capture the two call sites so the migration's effect on the
+            // reported location is observable. Mapping must be on BEFORE the elements
+            // are built: the interceptor checks the flag at creation time.
+            var previousMapping = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+            try
+            {
+
+            var el0 = Component<CounterComponent>(); var line0 = Line();
             var wrapper = (Border)reconciler.Mount(el0, noop)!;
             var instanceA = CounterComponent.Last!;
 
@@ -83,7 +91,7 @@ internal static class HotReloadComponentMigrationFixtures
 
             // Migrate. Fresh same-type element ⇒ FullName self-matches the guard,
             // exercising construct + field-copy + context-transfer + re-render.
-            var el1 = Component<CounterComponent>();
+            var el1 = Component<CounterComponent>(); var line1 = Line();
             bool migrated = reconciler.TryHotReloadMigrateComponent(el0, el1, wrapper, noop);
 
             H.Check("HRMig_Returned_True", migrated);
@@ -105,10 +113,36 @@ internal static class HotReloadComponentMigrationFixtures
             bool guard = reconciler.TryHotReloadMigrateComponent(el1, elOther, wrapper, noop);
             H.Check("HRMig_DifferentType_NoMigrate", !guard);
 
+#if REACTOR_SOURCEMAP
+            // Spec 010 — hot reload is the scenario where a call site MOVES, so a
+            // preserved wrapper reporting the pre-edit line is the exact staleness this
+            // route claims to avoid. The two elements differ only in where they were
+            // built, so this cannot pass by coincidence.
+            H.Check("HRMig_CallSitesDiffer", line0 != line1 && line0 != 0);
+            var reported = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(wrapper)?.LineNumber;
+            H.Check("HRMig_LocationFollowsTheMigratedElement", reported == line1);
+            H.Check("HRMig_LocationIsNotStale", reported != line0);
+#else
+            _ = line0; _ = line1;
+            H.Skip("HRMig_CallSitesDiffer", SourceMapSkipReason);
+            H.Skip("HRMig_LocationFollowsTheMigratedElement", SourceMapSkipReason);
+            H.Skip("HRMig_LocationIsNotStale", SourceMapSkipReason);
+#endif
+
             CounterComponent.Constructed = 0;
             CounterComponent.Last = null;
             CounterComponent.Setter = null;
             return Task.CompletedTask;
+            }
+            finally
+            {
+                Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = previousMapping;
+            }
         }
+
+        private const string SourceMapSkipReason =
+            "built without REACTOR_SOURCEMAP, so no interceptors exist to stamp a location";
+
+        private static int Line([global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => line;
     }
 }

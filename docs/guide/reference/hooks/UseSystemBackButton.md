@@ -8,6 +8,6 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseSystemBackButton``1(Micros
 ## Summary
 
 Subscribes to Alt+Left and VirtualKey.GoBack keyboard events on the given window's content
-to call `GoBack`. Unsubscribes on unmount.
+to call `NavigationHandle.GoBack`. Unsubscribes on unmount.
 
 

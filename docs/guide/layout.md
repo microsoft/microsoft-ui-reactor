@@ -14,8 +14,8 @@ would do — forces every nested measure-and-arrange pass through
 multiple panels' code paths, which both costs more and reads worse.
 Start with `VStack` for a screen's top-level scaffold; switch to `Grid`
 the moment you have row-and-column alignment; switch to
-[`FlexPanel`](flex-layout.md) when you need ratio-based sizing or
-multi-line wrapping with gaps.
+[`FlexRow`/`FlexColumn`](flex-layout.md) when you need ratio-based
+sizing or multi-line wrapping with gaps.
 
 # Layout
 
@@ -29,7 +29,7 @@ screen structure. Every layout element accepts children and optional spacing.
 | Items in one direction | `VStack(spacing, children)` / `HStack(spacing, children)` | Single-axis stacking with built-in spacing. |
 | Items in rows × columns | `Grid(columns, rows, children)` | Two-axis with explicit track sizing (`Auto`, `Star`, `Px`). |
 | Items that should wrap | `WrapGrid(maxRowsOrColumns, children)` | Auto-flow after a row fills. |
-| Items that need ratio sizing or multi-line wrap with gaps | `FlexPanel(...)` (see [flex-layout](flex-layout.md)) | CSS-Flexbox semantics: grow/shrink/basis. |
+| Items that need ratio sizing or multi-line wrap with gaps | `FlexRow(...)` / `FlexColumn(...)` (see [flex-layout](flex-layout.md)) | CSS-Flexbox semantics: grow/shrink/basis. |
 | Absolute positioning | `Canvas(children)` | Free-form `Canvas.SetLeft` / `SetTop`. |
 | Visual container | `Border(child)` / `Card(child)` | Background, corner radius, padding around a single child. |
 | Overflow handling | `ScrollView(child)` | Wraps anything that may exceed its allotted space. |
@@ -88,10 +88,11 @@ class GridDemo : Component
                 rows: [GridSize.Auto, GridSize.Auto],
                 TextBlock("Label").Bold().Grid(row: 0, column: 0),
                 TextBox("", _ => { }, placeholderText: "Input...")
+                    .AutomationName("Input")
                     .Grid(row: 0, column: 1),
                 Button("Go").Grid(row: 0, column: 2),
                 TextBlock("Status").Grid(row: 1, column: 0),
-                TextBlock("Ready").Foreground("#0078D4")
+                TextBlock("Ready").Foreground(Theme.Accent)
                     .Grid(row: 1, column: 1, columnSpan: 2)
             ).Height(80)
         );
@@ -173,11 +174,17 @@ class TypeRampDemo : Component
 
 | Factory | WinUI style |
 |---------|-------------|
+| `Display(text)` | `DisplayTextBlockStyle` — 68px Semibold |
+| `TitleLarge(text)` | `TitleLargeTextBlockStyle` — 40px Semibold |
 | `Title(text)` | `TitleTextBlockStyle` — 28px Semibold |
 | `Subtitle(text)` | `SubtitleTextBlockStyle` — 20px Semibold |
 | `BodyLarge(text)` | `BodyLargeTextBlockStyle` — 18px regular |
 | `BodyStrong(text)` | `BodyStrongTextBlockStyle` — 14px Semibold |
 | `Body(text)` | `BodyTextBlockStyle` — 14px regular |
+
+`Display` and `TitleLarge` sit above the range the screenshot shows; reserve
+`Display` for a hero banner (at most one per page) and `TitleLarge` for a
+primary title on a feature or landing page.
 
 These are factories (not fluents) by design — see
 [spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §17.6. Layer
@@ -201,10 +208,10 @@ class ScrollBorderDemo : Component
                     VStack(4,
                         ForEach(
                             Enumerable.Range(1, 20),
-                            i => TextBlock($"Scrollable item {i}"))
+                            i => TextBlock($"Scrollable item {i}").WithKey(i.ToString()))
                     ).Padding(8)
                 ).Height(120)
-            ).CornerRadius(4).Background("#F5F5F5")
+            ).CornerRadius(4).Background(Theme.CardBackground)
         );
     }
 }
@@ -250,7 +257,7 @@ class ExpanderCanvasDemo : Component
                         Microsoft.UI.Xaml.Controls.Canvas.SetTop((UIElement)c, 40);
                     })
                 ).Height(90).Width(300)
-            ).Background("#F5F5F5").CornerRadius(4)
+            ).Background(Theme.CardBackground).CornerRadius(4)
         );
     }
 }
@@ -281,11 +288,11 @@ class ResponsiveDemo : Component
         var content = new Element[]
         {
             Border(TextBlock("Panel A").Padding(16))
-                .Background("#E3F2FD").CornerRadius(4),
+                .Background(Theme.SystemNeutralBackground).CornerRadius(4),
             Border(TextBlock("Panel B").Padding(16))
-                .Background("#FFF3E0").CornerRadius(4),
+                .Background(Theme.SystemCautionBackground).CornerRadius(4),
             Border(TextBlock("Panel C").Padding(16))
-                .Background("#E8F5E9").CornerRadius(4),
+                .Background(Theme.SystemSuccessBackground).CornerRadius(4),
         };
 
         return VStack(8,
@@ -305,12 +312,12 @@ class ResponsiveDemo : Component
 ![Responsive layout](images/layout/responsive.png)
 
 For real responsive layouts, use [`UseBreakpoint`](hooks.md)
-`(window, minWidth)` which returns `true` when the window is at least
+`(minWidth)` (or `(window, minWidth)` for an explicit host window), which returns `true` when the window is at least
 `minWidth` pixels wide. Pair it with `If()` to swap layouts:
 
 <!-- ai:lock -->
 ```csharp
-var wide = UseBreakpoint(window, 800);
+var wide = UseBreakpoint(800);
 return If(wide,
     () => HStack(12, panelA, panelB),
     () => VStack(8, panelA, panelB));
@@ -326,9 +333,22 @@ Every element supports sizing and alignment modifiers:
 
 <!-- ai:lock -->
 ```csharp
-Text("Centered").HAlign(HorizontalAlignment.Center)
-Text("Fixed width").Width(200).Height(40)
-VStack(8, items).Margin(24).Padding(16)
+class AlignmentSizingDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Alignment and sizing"),
+
+        TextBlock("Centered").HAlign(HorizontalAlignment.Center),
+        Border(TextBlock("Fixed width"))
+            .Width(200).Height(40)
+            .Background(Theme.ControlFillSecondary),
+
+        VStack(8,
+            TextBlock("Item A"),
+            TextBlock("Item B")
+        ).Margin(24).Padding(16).Background(Theme.ControlFillSecondary)
+    );
+}
 ```
 <!-- /ai:lock -->
 
@@ -336,8 +356,8 @@ VStack(8, items).Margin(24).Padding(16)
 |----------|--------|
 | `.Width(n)` | Fixed width in pixels |
 | `.Height(n)` | Fixed height in pixels |
-| `.Margin(n)` | Outer spacing (all sides) |
-| `.Padding(n)` | Inner spacing (all sides) |
+| `.Margin(n)` / `.Margin(thickness)` | Outer spacing — uniform `n`, or per-side via `Thickness` |
+| `.Padding(n)` / `.Padding(thickness)` | Inner spacing — uniform `n`, or per-side via `Thickness` |
 | `.HAlign(alignment)` | Horizontal alignment (Left, Center, Right, Stretch) |
 | `.VAlign(alignment)` | Vertical alignment (Top, Center, Bottom, Stretch) |
 | `.HorizontalContentAlignment(alignment)` | Horizontal child/content alignment inside a Control |
@@ -349,9 +369,20 @@ case is a full-width button whose inner row should also stretch:
 
 <!-- ai:lock -->
 ```csharp
-Button(Text("Open"), onClick)
-  .HAlign(HorizontalAlignment.Stretch)
-  .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+class ContentAlignmentDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Content alignment"),
+
+        // The Button stretches to fill the row, and its inner content
+        // stretches too — without HorizontalContentAlignment the label
+        // would stay centered in an otherwise full-width button.
+        Button(TextBlock("Open"), () => { })
+            .AutomationName("Open")
+            .HAlign(HorizontalAlignment.Stretch)
+            .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+    ).Width(320);
+}
 ```
 <!-- /ai:lock -->
 
@@ -441,7 +472,7 @@ class AutoGridExample : Component
                         .Width(110).Height(60))
                 .Cast<Element?>()
                 .ToArray()
-        ).Padding(24);
+        );
     }
 }
 ```
@@ -450,8 +481,8 @@ class AutoGridExample : Component
 
 `maxRowsOrColumns` caps the major axis; the panel wraps once that
 count is reached. For content that should wrap by available pixel
-width (rather than item count), use [`FlexPanel`](flex-layout.md) with
-`FlexWrap.Wrap`.
+width (rather than item count), use [`FlexRow(...)`](flex-layout.md)
+with `Wrap = FlexWrap.Wrap`.
 
 ### Responsive switcher
 
@@ -569,23 +600,23 @@ intrinsic size and the surrounding empty cell appears. The
 analyzer's `REACTOR_GRID_001` (when enabled) flags the common
 "unused column" symptom.
 
-### Mixing FlexPanel and Stack on the same axis
+### Mixing Flex and Stack on the same axis
 
 ```csharp
 // Don't:
-FlexPanel(
+FlexRow(
     HStack(8, leftA, leftB),    // Stack inside Flex on the same axis
     HStack(8, rightA, rightB)
-).FlexDirection(FlexDirection.Row)
+)
 ```
 
-`FlexPanel` and `Stack` both lay out along an axis, but `FlexPanel`
-applies CSS-Flexbox semantics (`flex-grow`, `flex-shrink`, `flex-basis`)
-and `Stack` applies a simpler "give every child its natural size with
-fixed gaps" rule. Mixing them on the same axis means the outer
-`FlexPanel`'s grow/shrink calculations operate on opaque `Stack`
-measurements — predictable enough for trivial cases, surprising for
-anything dynamic. Pick one per axis. See
+`FlexRow`/`FlexColumn` (backed by `FlexPanel`) and `Stack` both lay out
+along an axis, but the flex panel applies CSS-Flexbox semantics
+(`flex-grow`, `flex-shrink`, `flex-basis`) and `Stack` applies a simpler
+"give every child its natural size with fixed gaps" rule. Mixing them on
+the same axis means the outer flex panel's grow/shrink calculations
+operate on opaque `Stack` measurements — predictable enough for trivial
+cases, surprising for anything dynamic. Pick one per axis. See
 [flex-layout](flex-layout.md) for when each shape is right.
 
 ### `HStack`/`VStack` in a `Grid` `Auto` track collapses to nothing
@@ -620,7 +651,7 @@ to its `0`-sized child. The real fixes are:
 Grid(
     columns: [GridSize.Star(), GridSize.Star()],   // Star, not Auto
     rows: [GridSize.Star()],
-    HStack(SaveButton(), CancelButton()).Grid(column: 0))
+    HStack(SaveButton(), CancelButton()).Grid(column: 0, columnSpan: 2));
 ```
 
 Reactor surfaces this footgun at debug time: when
@@ -657,7 +688,7 @@ non-standard radius).
 ## Next Steps
 
 - **[Hooks](hooks.md)** — Previous: `UseState`, `UseMemo`, and the rest of the hook surface
-- **[Flex Layout](flex-layout.md)** — Next: `FlexPanel` for grow/shrink/basis and multi-line wrap with gaps
+- **[Flex Layout](flex-layout.md)** — Next: `FlexRow`/`FlexColumn` for grow/shrink/basis and multi-line wrap with gaps
 - **[Styling and Theming](styling.md)** — Apply colors, typography, and themes to your layouts
 - **[Collections](collections.md)** — `VirtualList` for large data sets that overflow `ScrollView`
 - **[Forms and Input](forms.md)** — Build data entry forms with text fields, checkboxes, and validation

@@ -29,7 +29,8 @@ class StateVignette : Component
     public override Element Render()
     {
         var (count, setCount) = UseState(0);
-        return Button($"clicked {count}×", () => setCount(count + 1));
+        return Button($"clicked {count}×", () => setCount(count + 1))
+            .AutomationName($"Increment counter; clicked {count} times");
     }
 }
 // </snippet:state-vignette>
@@ -39,14 +40,14 @@ class EffectVignette : Component
 {
     public override Element Render()
     {
-        var (tick, setTick) = UseState(0);
+        var (tick, incrementTick) = UseReducer(0, threadSafe: true);
         UseEffect(() =>
         {
             var timer = new System.Timers.Timer(1000);
-            timer.Elapsed += (_, _) => setTick(tick + 1);
+            timer.Elapsed += (_, _) => incrementTick(t => t + 1);
             timer.Start();
             return () => timer.Dispose();
-        });
+        }, []);
         return TextBlock($"Tick: {tick}");
     }
 }

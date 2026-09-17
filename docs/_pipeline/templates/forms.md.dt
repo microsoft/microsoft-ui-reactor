@@ -385,7 +385,7 @@ per page.
 For a single-field form (search box, comment input), wire submission
 to Enter rather than a Submit button. `AutoSuggestBox` does this
 automatically via `onQuerySubmitted`. For `TextBox`, route through
-`.KeyDown` or wrap the field in an `[ai:lock]` form panel; see
+`.OnKeyDown` and check for `VirtualKey.Enter`; see
 [input-and-gestures](input-and-gestures.md) for the routed-events
 surface.
 
@@ -394,7 +394,7 @@ surface.
 `Validate.MustAsync<T>(...)` runs a predicate that returns
 `Task<bool>`. The `ValidationContext` tracks the in-flight async work
 and reports `IsValidating` per field, so the Submit button can disable
-while async validation runs. Pair with `DisabledFocusable()` so the
+while async validation runs. Pair with `.IsDisabledFocusable()` so the
 button stays in tab order while validating — same accessibility
 concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 
@@ -403,17 +403,31 @@ concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 ### Letting the control hold its own state
 
 ```csharp
-// Don't:
-TextBox(initial: "default value")
+// Don't — there is no `initial:` parameter. The bare string binds a value
+// with no `onChanged`, so it seeds the box and then nothing reads it back:
+// the user's typing lives only in the native control:
+TextBox("default value")
 ```
 
 ```csharp snippet="forms/controlled-input"
 ```
 
-Uncontrolled inputs work in trivial demos but break the moment the
-parent component needs to read, reset, or pre-fill the value. Reactor
-inputs all take `(value, onChanged)` — the control is always a passive
-view of state.
+The distinction that matters is not "controlled vs. uncontrolled" but
+whether the binding is *complete*. Omit the value entirely and the
+control owns its own state, which the parent cannot read, reset, or
+pre-fill. Pass a value without `onChanged` — as above — and you get a
+*half* binding: the value is pre-filled and the parent can still replace
+it by passing a different one, but nothing flows back. The user's edits
+stay in the native control and never reach application state, so a later
+read of your state returns the original string as if nothing was typed.
+
+Note this does **not** fight the user keystroke-by-keystroke: the element
+is unchanged between renders, so the reconciler's shallow-equality skip
+fires and never re-writes the box. That is what makes the bug quiet — the
+text looks accepted and is simply never collected. If the text really is
+fixed, say so with `.IsReadOnly(true)`; otherwise supply both halves.
+Reactor inputs take `(value, onChanged)` together; supply
+both and the control is a passive view of state.
 
 ### Validating in the click handler
 

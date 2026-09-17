@@ -5,9 +5,9 @@ is slot 1, then `UseMemo` is slot 2 — and stores whatever each hook
 needs in a `List<HookState>` on the owning `RenderContext`. The next
 render starts from `_hookIndex = 0` again and walks the same list in
 the same order. The slot at position 0 had better still be the one
-`UseState` expects to find there, because the setter closure
-`UseState` returned on the first render captured the literal index
-`0` and writes back to that slot when you call it. This is the entire
+`UseState` expects to find there, because the setter delegate
+`UseState` returned on the first render is cached on that slot cell
+and writes back to the same cell when you call it. This is the entire
 mechanical foundation of every hook rule you've ever read: "same hooks
 in the same order every render" is the runtime invariant the slot
 table enforces. Get it wrong — a conditional `UseState` inside an
@@ -31,12 +31,13 @@ correct.
 
 | Slot type | Holds | Created by |
 |---|---|---|
-| `ValueHookState<T>` | Value, optional lock | `UseState`, `UseReducer` |
+| `ValueHookState<T>` | Value, optional lock, cached setter delegate | `UseState`, `UseReducer` |
+| `ValueHookState<Ref<T>>` | A `Ref<T>` cell in the value slot | `UseRef` |
 | `EffectHookState` | Deps, body, cleanup, pending flag | `UseEffect` |
 | `MemoHookState<T>` | Deps, cached value | `UseMemo`, `UseCallback`, `UseElementRef` |
-| `RefHookState<T>` | Mutable cell | `UseRef` |
-| `ResourceHookState<T>` | Cache key, state, cleanup | `UseResource`, `UseInfiniteResource` |
-| `ContextHookState` | Subscribed context keys | `UseContext` |
+| `ContextHookState` | The `ContextBase` read, plus the last value observed | `UseContext` |
+| `ResourceHookState<T>` | Cache, cache key, last deps, in-flight CTS, last `AsyncValue<T>` | `UseResource` |
+| `PersistedHookState<T>` | Value, persist key, resolved storage scope | `UsePersisted` |
 
 Each subsection below covers one row of that table and the contract
 its hook surface depends on.
@@ -74,8 +75,20 @@ element).
 The slot-type check at the top of each hook is the runtime guard:
 
 ```csharp
-if (_hooks[currentIndex] is not ValueHookState<T> hook)
-    throw new HookOrderException(...);
+public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = false)
+{
+    if (_hookIndex >= _hooks.Count)
+    {
+        _hooks.Add(new ValueHookState<T>(initialValue, threadSafe));
+    }
+
+    var currentIndex = _hookIndex;
+    _hookIndex++;
+
+    if (_hooks[currentIndex] is not ValueHookState<T> hook)
+        throw new HookOrderException(
+            $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected ValueHookState<{typeof(T).Name}> (UseState). " +
+            "Hooks must be called in the same order every render.");
 ```
 
 That check is the reason hook rules exist. A conditional hook
@@ -107,11 +120,14 @@ public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = fa
 
 `UseState` allocates a `ValueHookState<T>` on first render (`_hookIndex
 >= _hooks.Count` means "this slot doesn't exist yet"), captures
-`currentIndex = _hookIndex`, increments, and reads the value. The
-returned setter is a local function `Setter` closed over
-`currentIndex` and the context's `_hooks` field — the index never
-changes for the lifetime of the component, which is why setter
-identity is stable across renders.
+`currentIndex = _hookIndex`, increments, and type-checks the slot. The
+returned setter is *not* rebuilt per render: `MakeStateSetter(hook)`
+runs once and the delegate is cached on the slot itself
+(`ValueHookState<T>.Setter`, tagged with a `SetterKind` discriminator so
+`UseState` and `UseReducer` can't reuse each other's coincidentally
+same-typed delegate). That cache is why setter identity is stable across
+renders — the closure is allocated once, not because an index happens to
+stay constant.
 
 ```csharp
 private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
@@ -149,23 +165,28 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 ```
 
 The setter is also where the auto-marshal, the equality check, and
-the rerender request live. Calling it on a background thread takes
-the `MarshalIfOffUIThread` branch and re-enqueues the setter on the
-UI dispatcher; calling it from the UI thread runs the body inline.
-Either way, the slot is written with the new value, an ETW
+the rerender request live. Note what the local function closes over: the
+`ValueHookState<T>` *cell*, not the hook index. Once built, the setter
+reaches its storage directly and never consults `_hooks` again. Calling
+it on a background thread takes the `MarshalIfOffUIThread` branch and
+re-enqueues the setter on the UI dispatcher; calling it from the UI
+thread runs the body inline. (The `threadSafe: true` flavour skips the
+marshal entirely and takes the slot's lock instead.) Either way, the
+slot is written with the new value, an ETW
 `StateChange` event fires if state-keyword tracing is enabled, and
 `_requestRerender` triggers the host to render again on the next
 dispatcher tick. The reactivity contract — equality short-circuit,
 single signal — is described end-to-end on the [Reactivity
 Model](reactivity-model.md) page; the implementation lives here.
 
-> **Caveat:** The setter's closure captures the `currentIndex` *value*, not the
-> `hookIndex` *variable*. That means it points at slot N forever, even
-> if a future render adds hooks before it — adding a hook before this
-> one shifts every subsequent slot's intended type, and the next render
-> will throw `HookOrderException` from the type cast. There's no
-> recovery path; the component has to be unmounted (or the source fixed
-> and hot-reload triggered, which remounts).
+> **Caveat:** Because the setter holds the hook cell directly, it keeps writing the
+> *same* cell forever — but the slot table still has to hand back that
+> cell at the same index on every render. Insert a hook *before* this one
+> and every subsequent slot shifts: the next render's type check reads a
+> slot holding a different `HookState` subclass and throws
+> `HookOrderException`. There's no recovery path; the component has to be
+> unmounted (or the source fixed and hot-reload triggered, which migrates
+> the surviving cells and remounts).
 
 ## UseEffect — the slot that runs later
 
@@ -245,9 +266,10 @@ helper called by `Render()`, as long as call order is stable.
 
 ## UseRef — the mutable cell
 
-`UseRef<T>(initial)` allocates a `RefHookState<T>` holding a `Ref<T>`
-wrapper. The wrapper exposes `Value` as a get/set property; mutating
-it does *not* schedule a re-render — that's the entire point.
+`UseRef<T>(initial)` stores a `Ref<T>` wrapper in an ordinary
+`ValueHookState<Ref<T>>` slot — there is no dedicated ref slot type; the
+wrapper *is* the mutable cell. It exposes `Current` as a get/set property;
+mutating it does *not* schedule a re-render — that's the entire point.
 Reach for `UseRef` when you need a value that persists across renders
 but the UI doesn't depend on it: a counter you log, a debounce
 timer ID, the previous value of a state cell, a stable target for an
@@ -255,10 +277,10 @@ external library that wants a long-lived reference.
 
 ```csharp
 var renderCount = UseRef(0);
-renderCount.Value++;  // does NOT re-render
+renderCount.Current++;              // does NOT re-render
 
 var prev = UseRef("");
-UseEffect(() => { prev.Value = name; }, name);
+UseEffect(() => { prev.Current = name; }, name);
 ```
 
 If you find yourself wanting `UseRef` to trigger re-renders, you
@@ -287,10 +309,13 @@ public sealed class PendingScope
     }
 ```
 
-`UseObservable<T>` subscribes the current component to an
-`INotifyPropertyChanged` source. Internally it builds an effect that
-attaches `PropertyChanged += ...` and stores the latest value in a
-local `UseState`. Cleanup unsubscribes.
+`UseObservable<T>(T source)` subscribes the current component to an
+`INotifyPropertyChanged` source and returns *that same instance* back.
+It consumes two slots, not one: a `UseReducer(false)` toggle plus a
+`UseEffect` keyed on `source` that attaches `PropertyChanged` and flips
+the toggle on every notification. Flipping the toggle is what schedules
+the re-render; the component then reads the source's properties
+directly. Cleanup unsubscribes.
 
 `UseExternalStore<TSnapshot>` follows the same ownership model for non-INPC
 stores that expose `subscribe` plus `getSnapshot`. The hook reads the snapshot
@@ -299,19 +324,24 @@ and installs one effect-owned subscription. Each change notification re-reads
 the snapshot and only schedules a re-render when the comparer reports a real
 change.
 
-`UseResource<T>` (and `UseInfiniteResource`, `UseMutation`) walks a
-fuller slot shape — a `ResourceHookState<T>` carrying the cache key,
-the latest value, the in-flight cancellation token, and a registration
-with the nearest [`PendingScope`](async-resources.md)
-ancestor. The async-resource hooks are documented end-to-end in the
-[async-system reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/async-system.md); the slot is
-the same shape category — a thing the component renders against, with
-cleanup that releases external state on unmount.
+`UseResource<T>` walks a fuller slot shape — a `ResourceHookState<T>`
+carrying the [`QueryCache`](async-resources.md) it reads from, the cache
+key, the deps it was resolved against, the in-flight
+`CancellationTokenSource`, the latest `AsyncValue<T>`, and a
+registration with the nearest [`PendingScope`](async-resources.md)
+ancestor. `UseInfiniteResource` and `UseMutation` have their own
+slot types (`InfiniteHookState<TItem, TCursor>`,
+`MutationHookState<TInput, TResult>`) in the same category — a thing the
+component renders against, with cleanup that releases external state on
+unmount. All three are documented end-to-end in the
+[async-system reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/async-system.md).
 
-`UseContext<T>` reads from the [Context](context.md) value the
-nearest ancestor pushed via a `.With(...)` modifier. The slot holds
-the subscription so a change to the context value (via the publishing
-parent's re-render) marks the consuming component dirty.
+`UseContext<T>(Context<T> context)` reads the [Context](context.md)
+value the nearest ancestor pushed via a `.Provide(context, value)`
+modifier, falling back to the context's `DefaultValue` when no ancestor
+provides one. The slot (`ContextHookState`) records which context was
+read and the last value it saw, so a change to the context value (via
+the providing parent's re-render) marks the consuming component dirty.
 
 ## Function components
 
@@ -362,20 +392,34 @@ the `Use` prefix so the analyzer can apply hook-rules at the call
 site:
 
 ```csharp
-public static (string Value, Action<string> Set) UseDebouncedText(
-    this RenderContext ctx, string initial, TimeSpan delay)
+static class DebouncedTextHook
 {
-    var (value, setValue) = ctx.UseState(initial);
-    var (debounced, setDebounced) = ctx.UseState(initial);
-    ctx.UseEffect(() =>
+    public static (string Value, Action<string> Set) UseDebouncedText(
+        this RenderContext ctx, string initial, int ms)
     {
-        var cts = new CancellationTokenSource();
-        _ = Task.Delay(delay, cts.Token).ContinueWith(
-            _ => setDebounced(value),
-            TaskContinuationOptions.OnlyOnRanToCompletion);
-        return () => cts.Cancel();
-    }, value);
-    return (debounced, setValue);
+        var (value, setValue) = ctx.UseState(initial);
+        var (debounced, setDebounced) = ctx.UseState(initial);
+
+        ctx.UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                try { await Task.Delay(ms, cts.Token); setDebounced(value); }
+                // Expected: the cleanup below cancels this delay whenever `value`
+                // changes again inside the debounce window. Cancelling is how the
+                // stale result is discarded, so there is nothing to report.
+                catch (OperationCanceledException) { return; }
+            });
+            return () => { cts.Cancel(); };
+            // Both captured values are dependencies. `ms` is easy to leave out —
+            // it usually comes from a constant at the call site — but omitting it
+            // means a caller that changes the delay keeps the already-armed timer
+            // running on the old interval until `value` happens to change.
+        }, value, ms);
+
+        return (debounced, setValue);
+    }
 }
 ```
 
@@ -406,8 +450,8 @@ breaks the same way an inline conditional `UseState` would.
 ```csharp
 var (count, setCount) = UseState(0);
 var prevCount = UseRef(0);
-var previous = prevCount.Value;
-UseEffect(() => { prevCount.Value = count; }, count);
+var previous = prevCount.Current;
+UseEffect(() => { prevCount.Current = count; }, count);
 ```
 
 `previous` carries the value `count` had before the most recent
@@ -427,7 +471,7 @@ public override Element Render()
         var (count, setCount) = UseState(0);   // slot count varies per render
         return Button($"{count}", () => setCount(count + 1));
     }
-    return Text("hidden");
+    return TextBlock("hidden");
 }
 ```
 
@@ -458,7 +502,7 @@ matches. Hoist the `UseState` to unconditional, branch on the value
 
 ```csharp
 var (count, setCount) = UseState(0);
-return showCounter ? Button($"{count}", () => setCount(count + 1)) : Text("hidden");
+return showCounter ? Button($"{count}", () => setCount(count + 1)) : TextBlock("hidden");
 ```
 
 ## Tips

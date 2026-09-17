@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
@@ -78,8 +79,7 @@ class DialogGatedPrimaryDemo : Component
             ContentDialog(
                 "Rename file",
                 VStack(8,
-                    TextBlock("New filename:"),
-                    TextBox(name, setName, placeholderText: "untitled.txt")
+                    TextBox(name, setName, placeholderText: "untitled.txt", header: "New filename")
                         .Width(280)),
                 primaryButtonText: "Rename") with
             {
@@ -165,12 +165,13 @@ class PopupDemo : Component
                 TextBlock("This is a Popup.").Bold(),
                 TextBlock("Click outside to dismiss.")
             ).Padding(12)
-        ).Background("#FFFFFF").WithBorder("#888888").CornerRadius(6);
+        ).Background(Theme.SolidBackground).WithBorder(Theme.ControlStroke).CornerRadius(6);
 
         return VStack(8,
             SubHeading("Popup"),
             Button(open ? "Hide popup" : "Show popup",
-                () => setOpen(!open)),
+                () => setOpen(!open))
+                .AutomationName(open ? "Hide popup" : "Show popup"),
             Popup(popupContent, isOpen: open,
                 onClosed: () => setOpen(false))
                 .IsLightDismissEnabled()
@@ -214,6 +215,159 @@ class CommandingIntegrationDemo : Component
 }
 // </snippet:commanding-integration>
 
+// <snippet:teaching-tip-target>
+class TeachingTipTargetDemo : Component
+{
+    public override Element Render()
+    {
+        var (show, setShow) = UseState(false);
+
+        // ElementRef<T> converts implicitly to the non-generic ElementRef the
+        // TeachingTip target: parameter takes. UseElementRef is an extension on
+        // Component, so call it through `this.`.
+        var target = this.UseElementRef<FrameworkElement>();
+
+        return HStack(16,
+            Border(
+                Button("Show anchored tip", () => setShow(true))
+                    .Ref(target)),
+            Border(
+                TeachingTip(
+                    "Cross-container target",
+                    "This TeachingTip is declared in a different subtree.",
+                    target: target) with
+                {
+                    IsOpen = show,
+                    OnClosed = () => setShow(false),
+                })
+        ).Padding(24);
+    }
+}
+// </snippet:teaching-tip-target>
+
+// <snippet:popup-focus-trap>
+class ModalPopupDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+
+        // UseFocusTrap is an extension on Component (hence `this.`) and takes the
+        // active flag; attach the handle with .FocusTrap(...).
+        var trap = this.UseFocusTrap(open);
+
+        return VStack(8,
+            SubHeading("Popup that behaves modally"),
+            Button("Open modal popup", () => setOpen(true)),
+            Popup(
+                Border(
+                    VStack(8,
+                        TextBlock("Focus stays inside this popup."),
+                        Button("Close", () => setOpen(false))
+                    ).Padding(16)
+                ).FocusTrap(trap)
+                 .Semantics(role: "dialog"),
+                isOpen: open,
+                onClosed: () => setOpen(false))
+        ).Padding(24);
+    }
+}
+// </snippet:popup-focus-trap>
+
+// <snippet:dialog-async-command>
+class DialogAsyncCommandDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+        var (deleted, setDeleted) = UseState(false);
+
+        // UseCommand wraps ExecuteAsync into Execute and tracks IsExecuting,
+        // so IsEnabled goes false for the duration of the async action.
+        var delete = UseCommand(new Command
+        {
+            Label = "Delete",
+            ExecuteAsync = async () =>
+            {
+                await Task.Delay(400);
+                setDeleted(true);
+                setOpen(false);
+            },
+            CanExecute = !deleted,
+        });
+
+        return VStack(8,
+            SubHeading("Dialog-driven async command"),
+            Button("Delete item…", () => setOpen(true)),
+            TextBlock(deleted ? "Deleted." : "Not deleted.").Opacity(0.6),
+            ContentDialog(
+                "Delete this item?",
+                TextBlock("This action cannot be undone."),
+                primaryButtonText: "Delete") with
+            {
+                IsOpen = open,
+                SecondaryButtonText = "Cancel",
+                IsPrimaryButtonEnabled = delete.IsEnabled,
+                OnClosed = r =>
+                {
+                    if (r == ContentDialogResult.Primary && delete.IsEnabled)
+                        delete.Execute?.Invoke();
+                    else
+                        setOpen(false);
+                },
+            }
+        ).Padding(24);
+    }
+}
+// </snippet:dialog-async-command>
+
+record ContextMenuRow(int Id, string Name);
+
+class RowContextMenuDemo : Component
+{
+    private static readonly ContextMenuRow[] Items =
+    [
+        new(1, "Quarterly plan"),
+        new(2, "Launch checklist"),
+        new(3, "Budget review")
+    ];
+
+    public override Element Render()
+    {
+        var items = Items;
+        var deleteCommand = new Command<ContextMenuRow>
+        {
+            Label = "Delete",
+            Execute = _ => { },
+        };
+        var renameCommand = new Command<ContextMenuRow>
+        {
+            Label = "Rename",
+            Execute = _ => { },
+        };
+        var propertiesCommand = new Command<ContextMenuRow>
+        {
+            Label = "Properties",
+            Execute = _ => { },
+        };
+
+        Element RowContent(ContextMenuRow item) =>
+            HStack(8, TextBlock(item.Name));
+
+        return
+            // <snippet:right-click-list-row>
+            ListView(items, item => item.Id.ToString(), (item, _) =>
+                MenuFlyout(
+                    RowContent(item),
+                    MenuItem(deleteCommand, item),
+                    MenuItem(renameCommand, item),
+                    MenuSeparator(),
+                    MenuItem(propertiesCommand, item)))
+            // </snippet:right-click-list-row>
+            ;
+    }
+}
+
 class DialogsAndFlyoutsApp : Component
 {
     public override Element Render() => ScrollView(
@@ -225,7 +379,11 @@ class DialogsAndFlyoutsApp : Component
             Component<MenuFlyoutDemo>(),
             Component<CommandBarFlyoutDemo>(),
             Component<PopupDemo>(),
-            Component<CommandingIntegrationDemo>()
+            Component<CommandingIntegrationDemo>(),
+            Component<TeachingTipTargetDemo>(),
+            Component<ModalPopupDemo>(),
+            Component<DialogAsyncCommandDemo>(),
+            Component<RowContextMenuDemo>()
         ).Padding(24)
     );
 }

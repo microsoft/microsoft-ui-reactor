@@ -42,7 +42,7 @@ type AppProps = {
 
 // ── Row renderer ────────────────────────────────────────────────────────────
 
-const Row = React.memo(function Row({ item, index }: { item: ListItem; index: number }) {
+function RowImpl({ item, index }: { item: ListItem; index: number }) {
   const bg = (index & 1) === 0 ? '#FFFFFF' : '#F5F5F5';
   const avatarBg = useMemo(() => hslToHex(item.avatarHue, 0.55, 0.45), [item.avatarHue]);
   return (
@@ -66,7 +66,9 @@ const Row = React.memo(function Row({ item, index }: { item: ListItem; index: nu
       </View>
     </View>
   );
-});
+}
+
+const Row = React.memo(RowImpl);
 
 // ── App ─────────────────────────────────────────────────────────────────────
 
@@ -114,6 +116,12 @@ export default function App(props: AppProps) {
       }
     });
     return stop;
+    // The frame loop must be installed exactly once for the component's
+    // lifetime — re-running it would restart the tween mid-benchmark and
+    // corrupt the measurements. `finishBenchmark` is also declared below this
+    // effect, so listing it here would throw on first render (TDZ); it is
+    // reached through the always-current closure instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const finishBenchmark = useCallback(() => {

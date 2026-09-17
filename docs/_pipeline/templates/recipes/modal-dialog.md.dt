@@ -5,7 +5,7 @@ order: 22.5
 audience: intermediate
 goal: |
   Confirmation-modal recipe: a scrim panel rendered conditionally,
-  a focus-trapped Border, and two button branches that flip the
+  a modal Border, and two button branches that flip the
   underlying state. Idiomatic conditional render — the modal is just
   another element in the tree.
 tier: solid

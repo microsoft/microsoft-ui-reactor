@@ -1,0 +1,88 @@
+<Window
+    x:Class="TransitionComparison.Xaml.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Transitions — WinUI XAML">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="268" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Padding="18" Spacing="4">
+            <TextBlock Text="WinUI XAML" FontSize="26" FontWeight="Bold" />
+            <TextBlock Text="NavigationTransitionInfo" FontSize="12" Opacity="0.65" Margin="0,0,0,14" />
+
+            <!--
+                One button per transition, in the same order as the Reactor twin so the two
+                side panels line up row for row.
+            -->
+            <Button Click="OnDefault" Width="232" HorizontalContentAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="Default" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="= Entrance" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+            <Button Click="OnEntrance" Width="232" HorizontalContentAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="Entrance" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="slide up + fade" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+            <Button Click="OnSlideFromRight" Width="232" HorizontalContentAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="Slide — FromRight" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="horizontal" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+            <Button Click="OnSlideFromLeft" Width="232" HorizontalContentAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="Slide — FromLeft" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="horizontal" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+            <Button Click="OnSlideFromBottom" Width="232" HorizontalContentAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="Slide — FromBottom" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="the Slide() default" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+            <Button Click="OnDrillIn" Width="232" HorizontalContentAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="DrillIn" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="scale + fade" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+            <Button Click="OnSuppress" Width="232" HorizontalContentAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="None" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="instant swap" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+
+            <!-- Reactor extensions with no WinUI counterpart. Kept as disabled rows so the
+                 two side panels stay aligned and the gap is visible rather than implicit. -->
+            <Button Width="232" HorizontalContentAlignment="Left" IsEnabled="False">
+                <StackPanel>
+                    <TextBlock Text="Fade" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="no WinUI equivalent" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+            <Button Width="232" HorizontalContentAlignment="Left" IsEnabled="False">
+                <StackPanel>
+                    <TextBlock Text="Spring" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="no WinUI equivalent" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+            </Button>
+
+            <TextBlock x:Name="PlayingLabel" Text="Playing: Default"
+                       FontSize="12" Opacity="0.75" Margin="0,16,0,6" />
+
+            <Button x:Name="BackButton" Click="OnBack" Width="232"
+                    Content="Go Back  (reverse motion)" IsEnabled="False" />
+        </StackPanel>
+
+        <Frame x:Name="Stage" Grid.Column="1" />
+    </Grid>
+</Window>

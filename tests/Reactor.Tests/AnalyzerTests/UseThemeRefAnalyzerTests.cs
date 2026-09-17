@@ -678,4 +678,97 @@ namespace TestApp
             FixedCode = code,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    /// <summary>
+    /// A selected/unselected colour pair is still two hard-coded colours. The rule used to require
+    /// the argument itself to be a literal, so wrapping it in a conditional hid it completely —
+    /// which is how `docs/_pipeline/apps/recipe-master-detail` shipped a hex pair through a gate
+    /// built to stop exactly that.
+    /// </summary>
+    [Fact]
+    public async Task Detects_Both_Branches_Of_A_Conditional()
+    {
+        var test = @"
+class C
+{
+    void M(dynamic el, bool selected)
+    {
+        el.Background(selected ? {|REACTOR_THEME_001:""#E5F1FB""|} : {|REACTOR_THEME_001:""#FFFFFF""|});
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<UseThemeRefAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Detects_Colors_In_A_Switch_Expression()
+    {
+        var test = @"
+class C
+{
+    void M(dynamic el, int state)
+    {
+        el.Foreground(state switch
+        {
+            0 => {|REACTOR_THEME_001:""#FF0000""|},
+            _ => {|REACTOR_THEME_001:""#00FF00""|},
+        });
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<UseThemeRefAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// A conditional that already selects between theme tokens is correct code and must stay quiet.
+    /// </summary>
+    [Fact]
+    public async Task Conditional_Between_Theme_Tokens_Is_Not_Reported()
+    {
+        var test = @"
+class C
+{
+    static class Theme { public static object SubtleFill => null; public static object SolidBackground => null; }
+
+    void M(dynamic el, bool selected)
+    {
+        el.Background(selected ? Theme.SubtleFill : Theme.SolidBackground);
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<UseThemeRefAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// Only value-selecting shapes are walked. A string handed to a nested call is not a colour
+    /// this rule can reason about, and reporting it would be a false positive.
+    /// </summary>
+    [Fact]
+    public async Task String_Inside_A_Nested_Call_Is_Not_Reported()
+    {
+        var test = @"
+class C
+{
+    static object LookUpBrush(string key) => null;
+
+    void M(dynamic el)
+    {
+        el.Background(LookUpBrush(""accent-ish""));
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<UseThemeRefAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
 }

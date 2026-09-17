@@ -48,6 +48,7 @@ namespace Microsoft.UI.Reactor.Analyzers;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class StringForElementArgumentAnalyzer : DiagnosticAnalyzer
 {
+    // <snippet:diagnostic-descriptor>
     public const string DiagnosticId = "REACTOR_DYM_005";
 
     private static readonly LocalizableString Title =
@@ -65,6 +66,7 @@ public sealed class StringForElementArgumentAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: Description);
+    // </snippet:diagnostic-descriptor>
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Rule);

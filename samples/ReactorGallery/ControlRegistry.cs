@@ -95,7 +95,7 @@ public static class ControlRegistry
         new("AutoSuggestBox", "A text input that shows suggestions as the user types.", "Text", "\uE8D2", "auto-suggest-box", "AutoSuggestBox.png"),
         new("RichEditBox", "A rich text editing control with formatting support.", "Text", "\uE8D2", "rich-edit-box", "RichEditBox.png"),
         new("RichTextBlock", "A control that displays formatted read-only rich text.", "Text", "\uE8D2", "rich-text-block", "RichTextBlock.png"),
-        new("Type ramp", "WinUI 3 type ramp factories \u2014 Title, Subtitle, Body, BodyStrong, BodyLarge.", "Text", "\uE8D2", "type-ramp", "TextBlock.png"),
+        new("Type ramp", "WinUI 3 type ramp factories \u2014 Title, Subtitle, Body, BodyStrong, BodyLarge, TitleLarge, Display.", "Text", "\uE8D2", "type-ramp", "TextBlock.png"),
 
         // Styles
         new("Acrylic", "A translucent material brush that creates a frosted glass effect.", "Styles", "\uE790", "acrylic", "Acrylic.png"),
@@ -139,6 +139,10 @@ public static class ControlRegistry
         new("PropertyGrid", "A reflection-driven editor for an object's properties.", "Data", "\uE7C3", "property-grid"),
 
         new("Commands", "Declarative Command binding with async IsExecuting tracking and debounce.", "Patterns", "\uE943", "commands"),
+
+        // Motion
+        new("Connected Animation", "Carries an element's visual from one view into another across a state change.", "Motion", "\uE945", "connected-animation"),
+        new("Transitions", "Implicit opacity, scale, and translation transitions that run on value change, plus layout animation for layout-driven position changes.", "Motion", "\uE945", "transitions"),
     }
     .OrderBy(c => c.Title, StringComparer.OrdinalIgnoreCase)
     .ToArray();
@@ -153,6 +157,7 @@ public static class ControlRegistry
         "Layout",
         "Media",
         "Menus and Toolbars",
+        "Motion",
         "Navigation",
         "Status and Info",
         "Text",

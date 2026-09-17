@@ -412,6 +412,8 @@ VStack(spacing, children...)    HStack(spacing, children...)
 TextBlock("hi")  Heading("Title")    SubHeading("Section")  Caption("note")
 // WinUI 3 type-ramp factories — map 1:1 to TitleTextBlockStyle etc.
 Title("Page")    Subtitle("Group")   Body("paragraph")      BodyStrong("bold")  BodyLarge("intro")
+TitleLarge("Feature")                // 40px — primary title on a feature/landing page
+Display("Hero")                      // 68px — hero banner, at most one per page
 // Card(child) factory bakes in CardBackground + 1px CardStroke + 8 radius + 16 padding.
 Card(child)
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)
@@ -510,7 +512,7 @@ class App : Component
 
 ## Testing
 
-Reactor has three test suites. Run the one that matches what you changed.
+Run the suite that matches what you changed.
 
 ```bash
 # Unit tests — fast, no UI window (~3s)
@@ -519,10 +521,15 @@ dotnet test tests/Reactor.Tests
 # Selfhost tests — real WinUI controls, in-process (~2 min)
 dotnet test tests/Reactor.SelfTests
 
+# Packaged selfhost tests — the same fixtures under MSIX package identity (~5 min).
+# Needed for anything that reads ms-appx:, Package.Current, MRT, or package identity.
+# Requires Developer Mode; fails rather than skips without it.
+dotnet test tests/Reactor.PackagedTests -p:Platform=x64
+
 # E2E — cross-process UI Automation via winapp ui (~30s, needs the winapp CLI)
 dotnet test tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InteractiveTests"
 
-# Everything
+# Everything (includes the packaged tier, so Developer Mode is required)
 dotnet test Reactor.slnx
 ```
 

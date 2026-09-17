@@ -38,16 +38,10 @@ ReactorApp.Run<DemoScriptShell>(
     "Demo Script Tool",
     width: 1280,
     height: 860,
+    icon: WindowIcon.FromPath("Assets/demo-script-tool.ico"),
     configure: host =>
     {
         // Spec §High Contrast — opt out of OS HC color injection so theme
         // tokens stay authoritative.
         Application.Current.HighContrastAdjustment = ApplicationHighContrastAdjustment.None;
-
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(host.Window);
-        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
-        var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-        var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "demo-script-tool.ico");
-        if (System.IO.File.Exists(iconPath))
-            appWindow.SetIcon(iconPath);
     });

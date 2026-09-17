@@ -91,3 +91,288 @@ updates:
     labels:
       - "dependencies"
       - "vscode-extension"
+    # Routine minor/patch bumps arrive as one PR; a major still gets its own so
+    # the breaking change is reviewed on its own merits. See the npm entry below
+    # for why grouping was introduced.
+    #
+    # No per-family major groups here, unlike that entry: this is a single
+    # directory, so an ungrouped major is already one PR per breaking change.
+    # The fragmentation those groups exist to prevent only happens when one
+    # package is bumped across several directories at once.
+    groups:
+      vscode-extension-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The remaining npm projects — the HeadTrax sample service, the React Native
+  # perf harnesses, and the Figma plugin. They were unmonitored until now, so
+  # transitive advisories piled up in Component Governance (qs, body-parser and
+  # js-yaml were all several patches behind) with nothing raising a PR. Grouped
+  # into one entry via `directories` because they share a single reviewer and
+  # none of them ships to users; `/src/vscode-reactor` stays separate above so
+  # its PRs keep the vscode-specific prefix and label.
+  - package-ecosystem: "npm"
+    directories:
+      - "/samples/apps/headtrax/service"
+      - "/tests/startup_perf/BlankRNW"
+      - "/tests/stress_perf_rn/StocksGrid"
+      - "/tests/stress_perf_rn/VirtualList"
+      - "/tools/figma-plugin"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps(npm)"
+    labels:
+      - "dependencies"
+      - "npm"
+    open-pull-requests-limit: 10
+    # Ungrouped, the first run of this entry opened 24 PRs in four minutes —
+    # one per package per directory (#1219-#1242; the /src/vscode-reactor entry
+    # above accounted for a 25th, #1218) — which is unreviewable and was the
+    # whole complaint. Routine minor/patch bumps are batched into a single PR;
+    # a major still gets a dedicated PR, because a major is exactly where a
+    # breaking change hides and where a focused diff is worth reading.
+    #
+    # Majors are grouped *by package family* rather than left ungrouped. The
+    # five directories here are near-identical harnesses, so an ungrouped major
+    # arrives as one PR per package per directory: adopting TypeScript 7 showed
+    # up as four separate PRs (#1246, #1247, #1250, #1251) for what is a single
+    # decision, and jest 30 as two more (#1248, #1249). Grouping by family
+    # keeps one PR per breaking change while still never mixing two unrelated
+    # breaking changes into one diff.
+    #
+    # The families below are the ones that genuinely move together — same
+    # reasoning as the `roslyn` / `roslyn-testing` groups in the nuget entry
+    # above, where the rule is "group what upstream forces to move together,
+    # not what merely shares a prefix". A major in some package with no family
+    # here still gets its own per-directory PR; add a group when that turns out
+    # to be noisy rather than pre-registering every package in npm.
+    groups:
+      # Placed before npm-minor-patch deliberately: first match wins, and this
+      # package's breaking axis is semver-MINOR, not major. @rnx-kit/jest-preset
+      # is 0.x, so 0.3 -> 0.4 is a breaking change that the catch-all
+      # minor/patch group would otherwise sweep into the routine batch -- which
+      # is exactly how the incompatible 0.1 -> 0.3 bump reached #1245. It is
+      # fully suppressed by the ignore entry below today; this group is what
+      # keeps it sorted correctly once the react-native upgrade lifts that.
+      rnx-kit-jest-preset-breaking:
+        patterns:
+          - "@rnx-kit/jest-preset"
+        update-types:
+          - "minor"
+          - "major"
+
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+      # tsc and its consumers: a TypeScript major can change type-checking
+      # results everywhere at once, so it is reviewed as one change. (Currently
+      # inert -- typescript majors are suppressed by the ignore entry below,
+      # which takes precedence over any group. The group is what sorts them
+      # once that lifts.)
+      typescript-major:
+        patterns:
+          - "typescript"
+        update-types:
+          - "major"
+
+      # jest, its types and its presets share a major line: @types/jest 30
+      # describes jest 30's API, and a preset built for 29 does not configure
+      # 30. Splitting them lets a preset land without the runtime it targets.
+      # (@rnx-kit/jest-preset is not listed here: it is 0.x, so its breaking
+      # axis is semver-minor and a `major`-only group would never catch it.
+      # It has its own group above.)
+      jest-major:
+        patterns:
+          - "jest"
+          - "jest-*"
+          - "@types/jest"
+          - "babel-jest"
+        update-types:
+          - "major"
+
+      # react, its renderers and their @types are version-locked in practice —
+      # react-test-renderer is published in lockstep with react, and
+      # @types/react must match the runtime it describes.
+      react-major:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "react-test-renderer"
+          - "@types/react"
+          - "@types/react-dom"
+          - "@types/react-test-renderer"
+        update-types:
+          - "major"
+
+      # The CLI ships as one version-locked set of @react-native-community/cli*
+      # packages; they are meaningless to bump individually.
+      react-native-cli-major:
+        patterns:
+          - "@react-native-community/cli"
+          - "@react-native-community/cli-*"
+        update-types:
+          - "major"
+
+      # Single package, but it spans all three harnesses, so without a group a
+      # prettier major is three identical PRs.
+      prettier-major:
+        patterns:
+          - "prettier"
+        update-types:
+          - "major"
+    ignore:
+      # The three React Native harnesses pin `react-native` at 0.82.0 on
+      # purpose, and that pin transitively fixes the toolchain around it. Each
+      # entry below was measured against that pin, not assumed:
+      #
+      #   eslint            @react-native/eslint-config@0.87.1 declares
+      #                     `peer eslint@"^8.0.0 || ^9.0.0"`, so eslint 10 fails
+      #                     `npm install` outright with ERESOLVE. The harnesses
+      #                     also configure lint through `.eslintrc.js`, the
+      #                     format eslint 10 removed. Blocking major keeps both
+      #                     the peer range and the config format valid.
+      #
+      #   @babel/preset-env @babel/preset-env@8.0.5 declares
+      #   @babel/core       `peer @babel/core@"^8.0.0"`, but
+      #                     @react-native/babel-preset@0.82.0 *depends* on
+      #                     `@babel/core@^7.25.2`. Taking preset-env 8 puts two
+      #                     major Babel cores in one tree and breaks the Metro
+      #                     transform, so core is pinned to 7 with it.
+      #
+      #   @babel/runtime    Declares no peer dependencies at all -- it is held
+      #                     for a different reason. It is the helper package
+      #                     that transform-runtime's emitted
+      #                     `@babel/runtime/helpers/*` imports resolve against,
+      #                     so its major must match the Babel core doing the
+      #                     emitting. With core pinned to 7 above, the runtime
+      #                     stays on 7.
+      #
+      # This is a rule about the *runtime/build* toolchain, not about every
+      # package with a react-native-adjacent name. @react-native/eslint-config
+      # and @react-native/typescript-config are deliberately NOT listed here:
+      # they are lint/tsconfig presets with no dependency or peer edge on
+      # react-native (typescript-config declares none at all), so they are
+      # allowed to move ahead of the 0.82.0 pin.
+      #
+      # Drop the relevant entry when react-native itself is upgraded.
+      #
+      # react-native and its two runtime/build satellites are pinned to exact
+      # versions in every harness, and every hold above is justified by that
+      # pin -- so the pin itself has to be enforced here. Semver treats 0.82.0
+      # -> 0.83.0 as a *minor*, which means the `npm-minor-patch` group above
+      # (`patterns: ["*"]`) would otherwise sweep a whole React Native
+      # generation in as a routine grouped update and silently invalidate the
+      # eslint and Babel rationales. Minor is blocked alongside major; 0.82.x
+      # patches still flow, and a real upgrade stays a deliberate, coordinated
+      # PR that moves react-native, babel-preset, metro-config, the Babel
+      # packages and eslint together.
+      - dependency-name: "react-native"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@react-native/babel-preset"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@react-native/metro-config"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
+      # Same pin, reached through a third-party package rather than a
+      # @react-native/* name. @rnx-kit/jest-preset is required directly by both
+      # harnesses' jest.config.windows.js, and 0.3.3 added
+      # `peer @react-native/jest-preset: ">=0.85"` -- a react-native 0.85
+      # generation package -- where 0.1.x declared no such peer. react-native
+      # here is pinned at 0.82.x and blocked above from moving, so that peer
+      # cannot be satisfied. It is a 0.x package, so semver-minor is its
+      # breaking axis and npm does not error on the unsatisfied peer: measured,
+      # `npm install` resolves 0.3.3 and simply omits @react-native/jest-preset
+      # from the tree. That silence is why it is ignored here rather than left
+      # to be caught downstream. Revisit with the react-native upgrade.
+      - dependency-name: "@rnx-kit/jest-preset"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/preset-env"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/runtime"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/core"
+        update-types: ["version-update:semver-major"]
+      # better-sqlite3 13 cannot currently be installed on Windows with the
+      # node-gyp npm bundles, and this was proven by CI rather than argued.
+      # v11 declares `install: prebuild-install || node-gyp rebuild`, so it
+      # downloads a prebuilt binary and never invokes node-gyp. v13 declares no
+      # install script, so npm falls back to its implicit `node-gyp rebuild`
+      # for the package's binding.gyp. v13 *does* ship prebuilds and its
+      # binding.gyp sets every target to `type: none` when one matches the
+      # host -- but node-gyp evaluates binding.gyp only after its `configure`
+      # step, and configure has to resolve a Visual Studio toolset first.
+      #
+      # Visual Studio is present on the windows-latest runner; node-gyp 11.5.0
+      # (bundled with npm 10.9.x) just cannot identify it, reporting
+      # `unknown version "undefined" found at
+      # "C:\Program Files\Microsoft Visual Studio\18\Enterprise"` and then
+      # `could not find a version of Visual Studio 2017 or newer to use`. That
+      # is the same VS 18.x detection gap tests/stress_perf_rn/README.md
+      # already documents for the react-native-windows CLI, not a missing
+      # toolchain. node-gyp 13 does detect VS 2026, so this unblocks itself
+      # once npm ships a newer bundled node-gyp.
+      #
+      # Measured on this PR: the
+      # `samples/apps/headtrax/service (windows-latest)` job failed exactly
+      # that way with v13 and passes with v11. Security patches on 11.x still
+      # flow through.
+      - dependency-name: "better-sqlite3"
+        update-types: ["version-update:semver-major"]
+      # No TypeScript major is currently adoptable across this entry, which is
+      # why this blocks `semver-major` rather than a narrower `versions:` range.
+      # Measured per major line, not assumed:
+      #
+      #   7.x    The three React Native harnesses cannot lint with it.
+      #          @typescript-eslint declares `peer typescript: ">=4.8.4
+      #          <6.1.0"` -- that is the range on 8.70.0, its *latest* release,
+      #          so no published typescript-eslint supports 7.x -- and
+      #          @react-native/eslint-config@0.87.1 depends on
+      #          @typescript-eslint/{eslint-plugin,parser} ^8.59.2.
+      #
+      #          npm does not refuse the install. It satisfies the peer by
+      #          nesting a second @typescript-eslint tree (with its own
+      #          typescript 6.0.3) under
+      #          node_modules/@react-native/eslint-config/, dragging
+      #          eslint-plugin-jest down with it, and eslint 8 can then no
+      #          longer resolve that plugin from the project root. Measured on
+      #          #1255: all six harness jobs failed with `Environment key
+      #          "jest/globals" is unknown` -- naming neither typescript nor
+      #          the peer conflict -- before `tsc` ever ran.
+      #
+      #   6.1.x  Same peer conflict: the range stops below 6.1.
+      #
+      #   6.0.x  Inside the peer range, so the harnesses are not the blocker
+      #          here -- but tools/figma-plugin is. Its tsconfig.json sets
+      #          `"module": "none"` to guarantee bundler-free single-script
+      #          output for Figma, and 6.0 deprecates that: measured against
+      #          typescript 6.0.3, `tsc` exits 2 with `error TS5107: Option
+      #          'module=None' is deprecated and will stop functioning in
+      #          TypeScript 7.0`. 7.x then removes it outright (`error TS6046`,
+      #          which is how figma-plugin failed in #1255). Clearing that
+      #          means either adopting `"ignoreDeprecations": "6.0"` or picking
+      #          a real replacement module mode -- a decision about the
+      #          plugin's output format, not part of a dependency bump.
+      #
+      # So every major on offer breaks at least one directory in this entry,
+      # and the entry is all-or-nothing. Minor and patch updates on the 5.x
+      # line are unaffected. Revisit when typescript-eslint ships 7.x support
+      # and figma-plugin's module mode has been migrated.
+      #
+      # src/vscode-reactor is a separate ecosystem entry above, already runs
+      # typescript ^7.0.2, and passes -- it does not use @typescript-eslint and
+      # is not covered by this ignore.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]

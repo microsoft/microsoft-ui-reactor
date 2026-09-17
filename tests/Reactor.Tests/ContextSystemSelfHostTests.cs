@@ -23,6 +23,7 @@ public class ContextSystemSelfHostTests
     /// Simulates the reconciler mounting a component in a context scope.
     /// Pushes context values, calls BeginRender, Render, FlushEffects, then pops.
     /// </summary>
+    // <snippet:component-mount-helper>
     private static Element MountComponent(
         Component component, ContextScope scope,
         Dictionary<ContextBase, object?>? contextValues = null)
@@ -43,6 +44,7 @@ public class ContextSystemSelfHostTests
                 scope.Pop(contextValues.Count);
         }
     }
+    // </snippet:component-mount-helper>
 
     /// <summary>
     /// Simulates re-rendering a component (update path) with optional new context.

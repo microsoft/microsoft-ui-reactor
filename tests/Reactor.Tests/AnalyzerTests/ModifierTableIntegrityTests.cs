@@ -860,27 +860,11 @@ public class ModifierTableIntegrityTests
     public void Every_Element_Set_Overload_Names_The_Control_Its_Descriptor_Mounts()
     {
         var elementType = typeof(Microsoft.UI.Reactor.Core.Element);
-        var elementExtensions = elementType.Assembly.GetType("Microsoft.UI.Reactor.ElementExtensions");
-        Assert.NotNull(elementExtensions);
 
-        var setControls = new Dictionary<Type, HashSet<Type>>();
-        var setOverloads = elementExtensions!.GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .Where(m => m.Name == "Set")
-            .Select(m => m.GetParameters())
-            .Where(parameters => parameters.Length == 2
-                                 && parameters[1].ParameterType.IsGenericType
-                                 && parameters[1].ParameterType.GetGenericTypeDefinition() == typeof(Action<>));
-
-        foreach (var parameters in setOverloads)
-        {
-            var receiver = parameters[0].ParameterType;
-            if (receiver.IsGenericType)
-                receiver = receiver.GetGenericTypeDefinition();
-
-            if (!setControls.TryGetValue(receiver, out var controls))
-                setControls[receiver] = controls = new HashSet<Type>();
-            controls.Add(parameters[1].ParameterType.GetGenericArguments()[0]);
-        }
+        // The Set-overload map and the generator-attribute lookup both live on ReactorSurface, so
+        // this fact and the agent-kit doc gate resolve an element's mounted control through exactly
+        // one implementation. Two copies is how the pairing they pin would drift apart unnoticed.
+        Assert.NotNull(ReactorSurface.Instance.ElementExtensionsType);
 
         var checkedElements = 0;
         var problems = new List<string>();
@@ -889,14 +873,14 @@ public class ModifierTableIntegrityTests
         // resolving the declared control twice.
         var attributed = elementType.Assembly.GetTypes()
             .Where(t => elementType.IsAssignableFrom(t) && !t.IsAbstract)
-            .Select(element => (Element: element, Declared: DeclaredControl(element)))
+            .Select(element => (Element: element, Declared: ReactorSurface.DeclaredControl(element)))
             .Where(pair => pair.Declared is not null)
             .OrderBy(pair => pair.Element.Name, StringComparer.Ordinal);
 
         foreach (var (element, declared) in attributed)
         {
-            var key = element.IsGenericType ? element.GetGenericTypeDefinition() : element;
-            if (!setControls.TryGetValue(key, out var fromSet))
+            var fromSet = ReactorSurface.Instance.SetControls(element);
+            if (fromSet.Count == 0)
                 continue;   // no Set overload; the analyzer skips these elements entirely.
 
             checkedElements++;
@@ -921,28 +905,6 @@ public class ModifierTableIntegrityTests
             checkedElements >= 40,
             $"Only {checkedElements} elements were cross-checked; expected 40+. The Set/attribute " +
             "reflection has probably stopped resolving.");
-    }
-
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(
-        "Trimming", "IL2075",
-        Justification = "Test-only contract guard: reads the generator attribute off a type enumerated by the surrounding Assembly.GetTypes scan. Behaviour-neutral.")]
-    private static Type? DeclaredControl(Type element)
-    {
-        for (var current = element; current is not null; current = current.BaseType)
-        {
-            foreach (var attribute in current.GetCustomAttributesData())
-            {
-                var name = attribute.AttributeType.Name;
-                if (name is not ("GenerateReactorWrapperAttribute" or "GenerateReactorDescriptorAttribute")
-                    || attribute.ConstructorArguments.Count < 1)
-                    continue;
-
-                if (attribute.ConstructorArguments[0].Value is Type control)
-                    return control;
-            }
-        }
-
-        return null;
     }
 
     /// <summary>

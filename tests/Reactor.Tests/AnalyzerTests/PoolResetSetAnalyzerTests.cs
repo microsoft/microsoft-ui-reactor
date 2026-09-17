@@ -28,8 +28,15 @@ namespace Microsoft.UI.Xaml
     public enum VerticalAlignment { Top, Center, Bottom, Stretch }
     public struct Thickness
     {
-        public Thickness(double u) {}
-        public Thickness(double l, double t, double r, double b) {}
+        public double Left;
+        public double Top;
+        public double Right;
+        public double Bottom;
+        public Thickness(double uniformLength) { Left = Top = Right = Bottom = uniformLength; }
+        public Thickness(double left, double top, double right, double bottom)
+        {
+            Left = left; Top = top; Right = right; Bottom = bottom;
+        }
     }
 }
 
@@ -81,8 +88,9 @@ public static class FakeElementExtensions
     public static FakeElement Height(this FakeElement el, double v) => el;
     public static FakeElement Opacity(this FakeElement el, double v) => el;
     public static FakeElement AccessKey(this FakeElement el, string v) => el;
-    public static FakeElement Margin(this FakeElement el, double u) => el;
-    public static FakeElement Margin(this FakeElement el, double l, double t, double r, double b) => el;
+    public static FakeElement Margin(this FakeElement el, double uniform) => el;
+    public static FakeElement Margin(this FakeElement el, double left, double top, double right, double bottom) => el;
+    public static FakeElement Margin(this FakeElement el, Thickness thickness) => el;
     public static FakeElement HorizontalAlignment(this FakeElement el, HorizontalAlignment a) => el;
     public static FakeElement VerticalAlignment(this FakeElement el, VerticalAlignment a) => el;
 }
@@ -444,19 +452,206 @@ class C
     }
 
     [Fact]
-    public async Task Analyzer_Fires_But_CodeFix_Suppressed_For_Opaque_Margin_RHS()
+    public async Task CodeFix_Rewrites_Opaque_Margin_RHS_Through_The_Struct_Overload()
     {
-        // RHS is a variable reference, not a Thickness constructor literal —
-        // we can't safely translate, so the analyzer fires (the trap is real)
-        // but no codefix is offered. The verifier confirms this by leaving
-        // TestCode == FixedCode: the warning persists, and no rewrite occurs.
-        var code = Stubs + @"
+        // The RHS is an opaque variable, so it cannot be decomposed into the four
+        // doubles the per-side overload wants. It does not need to be: the modifier
+        // also accepts a bare Thickness, so the value lifts across untouched. This
+        // is the case that used to be diagnostic-only and had to be fixed by hand.
+        var before = Stubs + @"
 class C
 {
     void M(Thickness margin)
     {
         var el = new FakeElement();
         {|REACTOR_POOL_001:el.Set(fe => fe.Margin = margin)|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void M(Thickness margin)
+    {
+        var el = new FakeElement();
+        el.Margin(margin);
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Decomposes_A_Target_Typed_New_Margin_RHS()
+    {
+        // `new(8)` names no type, but the property being assigned fixes it, so it
+        // decomposes exactly like the explicitly-spelled `new Thickness(8)` does.
+        // The four-argument form rides the same arity gate.
+        var before = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(8))|};
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(1, 2, 3, 4))|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        el.Margin(8);
+        el.Margin(1, 2, 3, 4);
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Keeps_An_Object_Initializer_By_Not_Decomposing()
+    {
+        // `new Thickness(8) { Left = 5 }` is Thickness(5,8,8,8). Decomposing to the
+        // constructor arguments alone would emit `.Margin(8)` and silently drop the
+        // initializer, changing the value written — the exact silent behaviour change
+        // REACTOR_POOL_001 exists to prevent. The struct overload takes the whole
+        // expression instead, so the value survives intact.
+        var before = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new Thickness(8) { Left = 5 })|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        el.Margin(new Thickness(8) { Left = 5 });
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Suppressed_For_A_Target_Typed_New_With_An_Initializer()
+    {
+        // Same initializer reasoning as above, but the target-typed spelling has no
+        // escape: it cannot be decomposed without dropping the initializer, and it
+        // cannot ride the struct overload either because `new(...)` is ambiguous
+        // between the double and Thickness overloads. Diagnostic-only.
+        var code = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(8) { Left = 5 })|};
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = code,
+            FixedCode = code,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Suppressed_For_A_Target_Typed_New_With_No_Arguments()
+    {
+        // The 0-arg form has nothing to decompose, and it cannot fall through to the
+        // struct overload either: `new()` carries no type of its own, so it converts to
+        // `double` as readily as to Thickness and `.Margin(new())` would be ambiguous.
+        // The analyzer still fires; no fix is offered. The verifier confirms that by
+        // leaving TestCode == FixedCode.
+        var code = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new())|};
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = code,
+            FixedCode = code,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Keeps_A_Named_Constructor_Argument_By_Not_Decomposing()
+    {
+        // The struct's parameter names are not the modifier's — WinUI spells the uniform
+        // Thickness constructor `uniformLength` while the modifier spells it `uniform`, and
+        // CornerRadius spells it `uniformRadius` against the modifier's `radius`. Copying a
+        // named argument across verbatim would emit `.Margin(uniformLength: 8)`, which is
+        // CS1739. Riding the struct overload keeps the call exactly as written.
+        var before = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new Thickness(uniformLength: 8))|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        el.Margin(new Thickness(uniformLength: 8));
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Suppressed_For_A_Target_Typed_New_With_A_Named_Argument()
+    {
+        // Same naming mismatch as above, and the target-typed spelling cannot fall back to
+        // the struct overload because `new(...)` is ambiguous between it and the double
+        // overload. Diagnostic-only.
+        var code = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+        {|REACTOR_POOL_001:el.Set(fe => fe.Margin = new(uniformLength: 8))|};
     }
 }";
 

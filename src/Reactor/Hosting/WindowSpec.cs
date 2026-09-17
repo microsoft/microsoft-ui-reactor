@@ -193,7 +193,30 @@ public sealed record WindowSpec
     /// <summary>Optional declarative backdrop. Seeds the per-host modifier.</summary>
     public BackdropChoice? Backdrop { get; init; }
 
-    /// <summary>Optional window icon.</summary>
+    /// <summary>
+    /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the window's
+    /// caption and the Alt-Tab switcher. Build it with <see cref="WindowIcon.FromPath"/>
+    /// for a file beside the app or <see cref="WindowIcon.FromResource"/> for a packaged
+    /// <c>ms-appx:///</c> asset.
+    /// </summary>
+    /// <remarks>
+    /// <para>Distinct from <c>TitleBar(...).Icon(...)</c>, which draws an app mark inside
+    /// the window's client area. A window may set both, and they may legitimately differ.
+    /// When this is <c>null</c>, Reactor falls back to <c>Assets\AppIcon.ico</c> beside
+    /// the app and then to the executable's embedded icon.</para>
+    /// <para>In an <b>unpackaged</b> app this also drives the taskbar button and Task
+    /// Manager, because there is no package identity to take precedence. In a
+    /// <b>packaged</b> app it does not: the shell resolves those two surfaces through
+    /// package identity and the manifest's <c>Square44x44Logo</c>, never looking at the
+    /// window handle. A packaged app that wants a consistent icon everywhere must ship a
+    /// matching manifest logo in addition to setting this.</para>
+    /// <para>A binary source (<see cref="WindowIcon.FromBytes"/> /
+    /// <see cref="WindowIcon.FromRgba"/>) is <b>not</b> accepted here — this surface needs
+    /// a filesystem path, because that is what <c>AppWindow.SetIcon</c> takes. Declaring
+    /// one falls through to the same convention/PE fallback as declaring no icon at all,
+    /// so the window is never left barer than it would otherwise have been. Binary sources
+    /// are for the tray icon, the taskbar overlay, and thumbnail-toolbar buttons.</para>
+    /// </remarks>
     public WindowIcon? Icon { get; init; }
 
     /// <summary>Optional persistence id for placement and future per-window persistence subsystems.</summary>
@@ -282,6 +305,19 @@ public sealed record WindowSpec
     /// </summary>
     public void Validate()
     {
+        ValidateThrowing();
+        WarnOnSuspiciousCombinations();
+    }
+
+    /// <summary>
+    /// The throwing half of <see cref="Validate"/>. <see cref="ReactorWindow.Update"/>
+    /// calls this on every update — the invariants must hold every time — and drives
+    /// <see cref="WarnOnSuspiciousCombinations"/> on the edge instead, because
+    /// <c>Update</c> runs validation ahead of its own equality check and would
+    /// otherwise emit one warning per update for as long as the condition persists.
+    /// </summary>
+    internal void ValidateThrowing()
+    {
         // Every DIP size below reaches DipToPhysicalScalar / DipToPxScalar,
         // where a non-finite double casts to a garbage int — +Infinity on
         // MaxWidth, for instance, lands in ptMaxTrackSize as int.MinValue and
@@ -339,12 +375,6 @@ public sealed record WindowSpec
                 throw new ArgumentException("WindowSpec.PersistPlacement must be false when Embed is set.", nameof(PersistPlacement));
         }
 
-        if (Style == WindowStyle.None && !IsMovableByBackground)
-            Core.Diagnostics.DiagnosticLog.Warning(
-                Core.Diagnostics.LogCategory.Hosting,
-                "WindowSpec.Validate",
-                "WindowStyle.None without IsMovableByBackground can leave the window without a drag affordance.");
-
         if (!(Opacity >= 0.0 && Opacity <= 1.0) || double.IsNaN(Opacity))
             throw new ArgumentException(
                 $"WindowSpec.Opacity ({Opacity}) must be in [0, 1].", nameof(Opacity));
@@ -357,5 +387,30 @@ public sealed record WindowSpec
             throw new ArgumentException(
                 "WindowSpec.IgnorePointerInput requires Opacity < 1.0 (click-through is only effective on layered windows).",
                 nameof(IgnorePointerInput));
+    }
+
+    /// <summary>
+    /// True when this spec asks for a chromeless window that also cannot be
+    /// dragged by its background — a combination that leaves the user no way to
+    /// move it. Exposed so the host can edge-trigger the warning below.
+    /// </summary>
+    internal bool HasNoDragAffordance => Style == WindowStyle.None && !IsMovableByBackground;
+
+    internal static int NoDragAffordanceWarningCountForTests;
+
+    /// <summary>
+    /// The warning half of <see cref="Validate"/>. Reports recoverable
+    /// combinations that are legal but probably unintended; never throws.
+    /// </summary>
+    internal void WarnOnSuspiciousCombinations()
+    {
+        if (HasNoDragAffordance)
+        {
+            global::System.Threading.Interlocked.Increment(ref NoDragAffordanceWarningCountForTests);
+            Core.Diagnostics.DiagnosticLog.Warning(
+                Core.Diagnostics.LogCategory.Hosting,
+                "WindowSpec.Validate",
+                "WindowStyle.None without IsMovableByBackground can leave the window without a drag affordance.");
+        }
     }
 }

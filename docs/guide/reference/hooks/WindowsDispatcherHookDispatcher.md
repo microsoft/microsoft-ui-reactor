@@ -7,7 +7,7 @@ _cref_: `T:Microsoft.UI.Reactor.Hooks.WindowsDispatcherHookDispatcher`
 
 ## Summary
 
-Default [IHookDispatcher](IHookDispatcher.md) ([guide](../../hooks.md)) backed by <c>DispatcherQueue.GetForCurrentThread()</c>.
+Default [IHookDispatcher](IHookDispatcher.md) ([guide](../../hooks.md)) backed by `DispatcherQueue.GetForCurrentThread()`.
 Falls back to inline invocation when called outside a WinUI dispatcher (unit tests).
 
 

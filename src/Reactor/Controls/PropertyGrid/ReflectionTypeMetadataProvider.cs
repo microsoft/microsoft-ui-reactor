@@ -264,11 +264,11 @@ public static class ReflectionTypeMetadataProvider
     private static PropertyAttributeData ComputeAttributeData(PropertyInfo property, int defaultOrder)
     {
         // Reactor-specific attributes (take precedence)
-        var ductCategory = property.GetCustomAttribute<PropertyCategoryAttribute>();
-        var ductDescription = property.GetCustomAttribute<PropertyDescriptionAttribute>();
-        var ductDisplayName = property.GetCustomAttribute<PropertyDisplayNameAttribute>();
-        var ductReadOnly = property.GetCustomAttribute<PropertyReadOnlyAttribute>();
-        var ductOrder = property.GetCustomAttribute<PropertyOrderAttribute>();
+        var reactorCategory = property.GetCustomAttribute<PropertyCategoryAttribute>();
+        var reactorDescription = property.GetCustomAttribute<PropertyDescriptionAttribute>();
+        var reactorDisplayName = property.GetCustomAttribute<PropertyDisplayNameAttribute>();
+        var reactorReadOnly = property.GetCustomAttribute<PropertyReadOnlyAttribute>();
+        var reactorOrder = property.GetCustomAttribute<PropertyOrderAttribute>();
 
         // Grid-specific attributes
         var colWidth = property.GetCustomAttribute<ColumnWidthAttribute>();
@@ -282,13 +282,13 @@ public static class ReflectionTypeMetadataProvider
         var scDisplayName = property.GetCustomAttribute<DisplayNameAttribute>();
         var scReadOnly = property.GetCustomAttribute<ReadOnlyAttribute>();
 
-        string? category = ductCategory?.Name ?? scCategory?.Category;
-        string? description = ductDescription?.Text ?? scDescription?.Description;
-        string? displayName = ductDisplayName?.Name ?? scDisplayName?.DisplayName;
-        int order = ductOrder?.Order ?? defaultOrder;
+        string? category = reactorCategory?.Name ?? scCategory?.Category;
+        string? description = reactorDescription?.Text ?? scDescription?.Description;
+        string? displayName = reactorDisplayName?.Name ?? scDisplayName?.DisplayName;
+        int order = reactorOrder?.Order ?? defaultOrder;
 
         bool isMutable = PropertyIsMutable(property);
-        bool isReadOnly = ductReadOnly is not null
+        bool isReadOnly = reactorReadOnly is not null
             || scReadOnly?.IsReadOnly == true
             || (!isMutable && !property.CanWrite);
 

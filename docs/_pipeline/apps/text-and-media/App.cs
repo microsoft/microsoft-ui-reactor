@@ -11,9 +11,13 @@ ReactorApp.Run<TextAndMediaApp>("Text and Media", width: 720, height: 1200
 class TextVariantsDemo : Component
 {
     public override Element Render() => VStack(8,
+        Title("Title — the largest variant"),
         Heading("Heading — page or section title"),
         SubHeading("SubHeading — region header"),
+        Subtitle("Subtitle — supporting line under a heading"),
+        BodyLarge("BodyLarge — lead paragraph."),
         TextBlock("Body text. The default size and weight for prose."),
+        BodyStrong("BodyStrong — emphasis within body copy."),
         Caption("Caption — secondary metadata, dates, labels.")
     ).Padding(24);
 }
@@ -107,6 +111,8 @@ class ImageDemo : Component
         // Resource Uri — ms-appx:// for packaged assets, file:// for disk,
         // https:// for remote.
         Image("ms-appx:///Assets/StoreLogo.png")
+            .AutomationName("Reactor app logo")
+            .Set(img => img.Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill)
             .Width(96).Height(96),
         TextBlock("Stretch.UniformToFill for cover art; " +
                   "ImageFailed to detect missing assets.").Opacity(0.6)
@@ -120,8 +126,7 @@ class MediaPlayerDemo : Component
     public override Element Render() => VStack(8,
         SubHeading("MediaPlayerElement"),
         MediaPlayerElement(
-            "https://learn.microsoft.com/en-us/windows/apps/design/" +
-            "controls/images/ic_fluent_play_24_regular.svg")
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4")
             .Width(420).Height(240)
             .Set(m =>
             {
@@ -164,6 +169,48 @@ class MapControlDemo : Component
     ).Padding(24);
 }
 // </snippet:map-control>
+
+// <snippet:markdown-memo>
+class LongFormProseDemo : Component
+{
+    const string Source = "# Release notes\n\nShipped **today**.\n";
+
+    public override Element Render()
+    {
+        // The parser is cheap but allocates; memoize on the source string so a
+        // frequently-rendered parent doesn't re-parse unchanged prose.
+        var rendered = UseMemo(() => Markdown(Source), Source);
+        return Border(rendered).Padding(20).Width(640);
+    }
+}
+// </snippet:markdown-memo>
+
+record Message(string Id, string Body);
+
+// <snippet:markdown-row-memo>
+class MarkdownRowsDemo : Component
+{
+    public override Element Render()
+    {
+        var messages = new List<Message>
+        {
+            new("m1", "**First** message."),
+            new("m2", "Second message with `code`."),
+        };
+
+        // Memo(key, factory) — the cross-recycle row cache. A scroll recycle
+        // re-asks for the key and gets the same element instance back, so the
+        // parser never runs again for an unchanged row.
+        //
+        // Key on the row identity *and* the body, not the body alone: this is a
+        // per-row cache, and two messages that happen to share text would
+        // otherwise collide on one entry. Including Id also reparses correctly
+        // when a single message's body is edited.
+        return LazyVStack<Message>(messages, m => m.Id, (m, i) =>
+            Memo((m.Id, m.Body), () => Markdown(m.Body))).Height(200);
+    }
+}
+// </snippet:markdown-row-memo>
 
 class TextAndMediaApp : Component
 {

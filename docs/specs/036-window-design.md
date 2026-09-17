@@ -186,6 +186,7 @@ ReactorWindow               owns one OS Window + one ReactorHost
 WindowSpec                  immutable record — full surface description
 WindowKey                   value type for stable identity (string + props)
 WindowIcon                  abstraction over AppWindow.SetIcon paths/IconId
+WindowIconKind              Path | Resource | Binary — see §4.1
 PresenterKind               Overlapped | FullScreen | CompactOverlay
 WindowState                 Normal | Minimized | Maximized | FullScreen | CompactOverlay
 WindowStartPosition         Default | CenterOnPrimary | CenterOnOwner |
@@ -276,6 +277,33 @@ fields, in the same spirit as the reconciler.
 > `Windows.Foundation.Rect` is the outlier (`Single`). Mixing the two
 > would force callers to cast at every property access; we pay the
 > 4-bytes-per-field cost for consistency.
+
+> **On `WindowIcon` source kinds** *(amended for issue #1185)*. `WindowIcon` has
+> four factories across three kinds, and `WindowIcon.Kind` reports which kind
+> produced an instance:
+>
+> ```csharp
+> public enum WindowIconKind { Path, Resource, Binary }
+>
+> WindowIcon.FromPath(string path);                             // Kind.Path
+> WindowIcon.FromResource(string uri);                          // Kind.Resource
+> WindowIcon.FromBytes(ReadOnlySpan<byte> data);                // Kind.Binary
+> WindowIcon.FromRgba(ReadOnlySpan<byte> px, int w, int h);     // Kind.Binary
+> ```
+>
+> Which surface accepts which kind follows from the primitive each one needs,
+> not from a policy choice. The shell surfaces — the tray icon (§11.4), the
+> taskbar overlay (§11.2) and thumbnail-toolbar buttons (§11.5) — need a raw
+> `HICON`, which comes from `LoadImageW` on a file or `CreateIconFromResourceEx`
+> on in-memory data; neither reads an `ms-appx:` URI, so `Kind.Resource` is
+> skipped there. Jump lists (§11.3) need a `Uri`, so only `Kind.Resource` works
+> on the packaged path. This field needs a filesystem path, because that is what
+> `AppWindow.SetIcon` takes — so `Kind.Binary` is reported as *not applied* and
+> the window falls through to the `Assets\AppIcon.ico` convention or its PE
+> icon, exactly as a missing file does. Supporting it here would mean
+> `SetIcon(IconId)` over a handle the window would then have to own and free,
+> which is `ReactorWindow`'s concern rather than the icon's; deferred rather
+> than designed away.
 
 ### 4.2 `ReactorWindow`
 
@@ -497,6 +525,52 @@ toward shutdown decisions.
 The startup callback is allowed to open zero surfaces. `ReactorApp.Run`
 does not require at least one `OpenWindow` or `OpenTrayIcon` call —
 only that the selected `ShutdownPolicy` permits the resulting state.
+
+**Platform ownership (issue #1204).** WinUI quits the thread's
+`DispatcherQueue` event loop when the last XAML window closes unless
+`Application.DispatcherShutdownMode` is `OnExplicitShutdown`, and
+`Application.Start` resets that property to `OnLastWindowClose`. Leaving
+it there makes the platform a second, uncoordinated decision-maker: it
+cannot see `Explicit`, a surviving tray icon, or a window that opted out
+via `ExcludeFromShutdownPolicy`, so it ends processes that this section
+says should keep running.
+
+`OnLaunched` therefore switches the mode to `OnExplicitShutdown` once,
+before any window exists, for **every** policy — not only the two that
+obviously need it. It does so on the launch shapes Reactor drives (the
+`Run(startup)` callback and the legacy `Run<TRoot>` bridge) and
+deliberately not when `ReactorApplication` is constructed directly
+without `ReactorApp.Run`: that host owns its own windows, never reaches
+the zero-surface check, and would be left pumping forever once its
+windows closed.
+
+That unconditional-per-policy ownership is what makes §6.2
+exhaustive, and in particular what makes §6.4's auxiliary-window
+guarantee real: closing a docking tear-off that was never elected primary
+leaves `closedWasPrimary` false, and now nothing else unwinds the loop
+behind Reactor's back. Every exit flows through one of three places —
+`EvaluateShutdownPolicy` on a surface close, the zero-surface check in
+`OnLaunched`, or an explicit `ReactorApp.Exit`. `ReactorWindow`
+subscribes to the native `Window.Closed`, so a user-initiated close is
+observed exactly like an app-initiated one.
+
+Because the mode no longer depends on the policy, `ShutdownPolicy` stays
+a plain store: settable from any thread, with no window in which the
+policy and the platform can disagree. Two moments consult it. A surface
+close reaches `EvaluateShutdownPolicy`, which reads it then, so any
+earlier change counts. Startup is the exception — the zero-surface
+decision runs the instant the launch path finishes, so it sees whatever
+the policy holds at that instant and a write posted from another thread
+during startup can land too late. Both launch paths run that decision
+from a `finally`: once ownership is taken, a startup that throws and is
+marked handled by the app's `OnUnhandledException` would otherwise leave
+the loop pumping with nothing on screen.
+
+Reactor only takes ownership when it owns the `Application` — when
+`Application.Current` is a `ReactorApplication`. A WinUI app that embeds
+`ReactorHostControl` runs its own `Application` and manages its own
+windows, so Reactor does not decide when that process ends and leaves its
+`DispatcherShutdownMode` at whatever the app chose or inherited.
 
 ### 6.3 Per-window teardown
 
@@ -1193,7 +1267,7 @@ ReactorApp.Run(ctx =>
 {
     var tray = ctx.OpenTrayIcon(new TrayIconSpec(
         Key: "main",
-        Icon: WindowIcon.FromResource("Assets/tray.ico"),
+        Icon: WindowIcon.FromPath("Assets/tray.ico"),   // or FromBytes / FromRgba
         Tooltip: "Sync Agent — idle"));
 
     // Single-instance window keyed by "main". Opening it twice from

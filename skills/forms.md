@@ -81,7 +81,7 @@ Tracks per-field validation messages, touched/dirty state, and overall
 form validity:
 
 ```csharp
-var validation = UseValidationContext();
+var validation = this.UseValidationContext();
 var (name, setName) = UseState("");
 var (email, setEmail) = UseState("");
 
@@ -139,7 +139,7 @@ The `.Validate()` modifier accepts an array of validators:
 text, and error display:
 
 ```csharp
-var validation = UseValidationContext();
+var validation = this.UseValidationContext();
 var (name, setName) = UseState("");
 
 return FormField("Full Name",

@@ -11,7 +11,7 @@ public class StatusCommandTests : IDisposable
 
     public StatusCommandTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"duct-status-{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"reactor-status-{Guid.NewGuid():N}");
         _stringsDir = Path.Combine(_tempDir, "Strings");
         Directory.CreateDirectory(_stringsDir);
     }
@@ -56,6 +56,23 @@ public class StatusCommandTests : IDisposable
 
         Assert.Contains("en-US", output);
         Assert.Contains("100.0%", output);
+    }
+
+    [CulturedFact(new[] { "nl-NL" })]
+    public void Status_Percentage_Is_Invariant_Under_Comma_Decimal_Culture()
+    {
+        // `mur loc status` prints a dev-tool table that should read the same
+        // on every machine, but the coverage column was formatted with the current
+        // culture and rendered "100,0%" on any comma-decimal locale.
+        WriteResw("en-US", "Common", Resw(
+            ("Save", "Save", null),
+            ("Cancel", "Cancel", null)));
+
+        var output = CaptureStdout(() =>
+            StatusCommand.Run(["--resources", _stringsDir]));
+
+        Assert.Contains("100.0%", output);
+        Assert.DoesNotContain("100,0%", output);
     }
 
     [Fact]

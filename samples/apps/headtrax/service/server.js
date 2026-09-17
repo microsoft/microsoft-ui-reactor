@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // HeadTrax GraphQL Service
-// Serves employee data from SQLite via Apollo Server 4 + Express.
+// Serves employee data from SQLite via Apollo Server 5 + Express.
 //
 // Usage:
 //   npm start              # default port 4000, db = ./headtrax.db
@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import { ApolloServer } from "@apollo/server";
-import { expressMiddleware } from "@apollo/server/express4";
+import { expressMiddleware } from "@as-integrations/express4";
 import Database from "better-sqlite3";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

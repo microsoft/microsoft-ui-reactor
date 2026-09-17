@@ -18,7 +18,7 @@ Docking ships in the optional `Microsoft.UI.Reactor.Advanced` package
 (spec 062 §7). Add its package reference:
 
 ```xml
-<PackageReference Include="Microsoft.UI.Reactor.Advanced" />
+<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.15" />
 ```
 
 Docking is an opt-in element type — register it at host construction
@@ -75,7 +75,7 @@ class TwoPaneDemo : Component
                                 TextBlock(""),
                                 TextBlock("class MainView : Component"),
                                 TextBlock("{"),
-                                TextBlock("    public override Element Render() => Text(\"Hello\");"),
+                                TextBlock("    public override Element Render() => TextBlock(\"Hello\");"),
                                 TextBlock("}")
                             ).Padding(16)
                         }
@@ -100,7 +100,8 @@ matches panes by `Key` and preserves the element subtree (and its
 `UseState` slots) across tree rebuilds. There is no implicit
 `Title`-as-key fallback; always supply one.
 
-The `DockNode` algebra has three node kinds (all immutable records):
+The `DockNode` algebra has three core node families (all immutable
+records), plus the document/tool leaf specializations:
 
 | Type | Purpose |
 |------|---------|
@@ -146,7 +147,7 @@ class TabGroupDemo : Component
                         TextBlock("public sealed class App : Component"),
                         TextBlock("{"),
                         TextBlock("    public override Element Render() =>"),
-                        TextBlock("        Text(\"hello, world\");"),
+                        TextBlock("        TextBlock(\"hello, world\");"),
                         TextBlock("}")
                     ).Padding(16)
                 },
@@ -194,7 +195,10 @@ the middle, tool strip on the right. `model.Dock(doc, DockTarget.Center)`
 lands in the middle group regardless of where it sits in tree order:
 
 ```csharp
-new DockSplit(Orientation.Horizontal, new DockNode[]
+var galleryItemsToolWindow = new ToolWindow { Title = "Gallery", Key = "tool:gallery" };
+var configurationToolWindow = new ToolWindow { Title = "Configuration", Key = "tool:configuration" };
+
+return new DockSplit(Orientation.Horizontal, new DockNode[]
 {
     new DockTabGroup(
         new[] { galleryItemsToolWindow },
@@ -202,12 +206,12 @@ new DockSplit(Orientation.Horizontal, new DockNode[]
         Role: DockGroupRole.ToolWindowStrip),
     new DockTabGroup(
         Array.Empty<DockableContent>(),
-        Role: DockGroupRole.DocumentArea), // implies ShowWhenEmpty
+        Role: DockGroupRole.DocumentArea),
     new DockTabGroup(
         new[] { configurationToolWindow },
         Width: 320,
         Role: DockGroupRole.ToolWindowStrip),
-})
+});
 ```
 
 > Programmatic `Dock(content, DockTarget.Center)` routes to the first
@@ -233,7 +237,8 @@ tool window may dock to (Qt's `setAllowedAreas` shape). Default
 `DockSides.Bottom` to lock an Errors pane to the bottom strip:
 
 ```csharp
-var errors = new ToolWindow {
+var errors = new ToolWindow
+{
     Title = "Errors",
     Key = "tool:errors",
     AllowedSides = DockSides.Bottom,

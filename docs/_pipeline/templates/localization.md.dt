@@ -70,6 +70,11 @@ shape supported by the tuple-params overload:
 file name (e.g., `"App"` for `App.resw`). The accessor also exposes the
 current `Locale`, `Direction`, and `IsRtl` flag.
 
+In `.resw`-backed apps, `Reactor.Localization.Generator` reads the default
+locale's files at build time and emits the same keys as generated fields
+(for example, `Loc.App.Title`). These self-contained snippets spell out
+`new MessageKey(...)` so the in-memory provider remains visible.
+
 ## Formatting Numbers and Dates
 
 `IntlAccessor` provides locale-aware formatting for numbers, dates, and

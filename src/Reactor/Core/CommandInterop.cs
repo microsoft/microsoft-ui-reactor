@@ -5,7 +5,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// <summary>
 /// Bridges ICommand (MVVM/CommunityToolkit) to Command, enabling migration from
 /// ViewModel-based patterns to Reactor's declarative commanding.
-///   var ductCmd = CommandInterop.FromCommand(viewModel.SaveCommand, "Save",
+///   var reactorCmd = CommandInterop.FromCommand(viewModel.SaveCommand, "Save",
 ///       icon: new SymbolIconData("Save"), accelerator: Accelerator(VirtualKey.S, Control));
 /// </summary>
 public static class CommandInterop

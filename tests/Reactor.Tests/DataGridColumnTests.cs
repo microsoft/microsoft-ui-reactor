@@ -78,13 +78,30 @@ public class DataGridColumnTests
         Assert.Equal(typeof(double), col.FieldType);
     }
 
-    [Fact]
+    [CulturedFact(new[] { "en-US" })]
     public void Column_Format_Creates_FormatValue()
     {
+        // Pinned: "C2" is currency, so the separators and symbol follow the host locale
+        // — nl-NL renders "€ 42,50".
         FieldDescriptor col = Column<TestProduct>("Price", p => p.Price, format: "C2");
         Assert.NotNull(col.FormatValue);
         var formatted = col.FormatValue!(42.5);
         Assert.Contains("42.50", formatted);
+    }
+
+    [CulturedFact(new[] { "nl-NL" })]
+    public void Column_Format_Honors_CurrentCulture()
+    {
+        // Companion to the en-US test above, which cannot detect the contract
+        // changing: ColumnHelpers.FormatWithSpec passes a null IFormatProvider — i.e. the
+        // current culture — and invariant would also render "42.50", so the en-US
+        // assertion holds either way. A grid cell is user-facing, so a Dutch user should
+        // read "42,50". Asserted without the currency symbol, whose glyph and spacing are
+        // not the point here.
+        FieldDescriptor col = Column<TestProduct>("Price", p => p.Price, format: "C2");
+        var formatted = col.FormatValue!(42.5);
+        Assert.Contains("42,50", formatted);
+        Assert.DoesNotContain("42.50", formatted);
     }
 
     [Fact]
@@ -240,9 +257,11 @@ public class DataGridColumnTests
         Assert.Equal(80, idCol.Width);
     }
 
-    [Fact]
+    [CulturedFact(new[] { "en-US" })]
     public void AutoColumns_Uses_Registry_Formatter()
     {
+        // Pinned: the "N2" in this test's own formatter is culture-sensitive, so the
+        // expectation is host-dependent without the pin.
         var registry = new TypeRegistry();
         registry.RegisterFormatter<double>(val => val is null ? "" : $"${(double)val:N2}");
 

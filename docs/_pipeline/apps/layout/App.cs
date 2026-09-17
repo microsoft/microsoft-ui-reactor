@@ -38,10 +38,11 @@ class GridDemo : Component
                 rows: [GridSize.Auto, GridSize.Auto],
                 TextBlock("Label").Bold().Grid(row: 0, column: 0),
                 TextBox("", _ => { }, placeholderText: "Input...")
+                    .AutomationName("Input")
                     .Grid(row: 0, column: 1),
                 Button("Go").Grid(row: 0, column: 2),
                 TextBlock("Status").Grid(row: 1, column: 0),
-                TextBlock("Ready").Foreground("#0078D4")
+                TextBlock("Ready").Foreground(Theme.Accent)
                     .Grid(row: 1, column: 1, columnSpan: 2)
             ).Height(80)
         );
@@ -96,10 +97,10 @@ class ScrollBorderDemo : Component
                     VStack(4,
                         ForEach(
                             Enumerable.Range(1, 20),
-                            i => TextBlock($"Scrollable item {i}"))
+                            i => TextBlock($"Scrollable item {i}").WithKey(i.ToString()))
                     ).Padding(8)
                 ).Height(120)
-            ).CornerRadius(4).Background("#F5F5F5")
+            ).CornerRadius(4).Background(Theme.CardBackground)
         );
     }
 }
@@ -128,7 +129,7 @@ class ExpanderCanvasDemo : Component
                         Microsoft.UI.Xaml.Controls.Canvas.SetTop((UIElement)c, 40);
                     })
                 ).Height(90).Width(300)
-            ).Background("#F5F5F5").CornerRadius(4)
+            ).Background(Theme.CardBackground).CornerRadius(4)
         );
     }
 }
@@ -144,11 +145,11 @@ class ResponsiveDemo : Component
         var content = new Element[]
         {
             Border(TextBlock("Panel A").Padding(16))
-                .Background("#E3F2FD").CornerRadius(4),
+                .Background(Theme.SystemNeutralBackground).CornerRadius(4),
             Border(TextBlock("Panel B").Padding(16))
-                .Background("#FFF3E0").CornerRadius(4),
+                .Background(Theme.SystemCautionBackground).CornerRadius(4),
             Border(TextBlock("Panel C").Padding(16))
-                .Background("#E8F5E9").CornerRadius(4),
+                .Background(Theme.SystemSuccessBackground).CornerRadius(4),
         };
 
         return VStack(8,
@@ -164,6 +165,27 @@ class ResponsiveDemo : Component
     }
 }
 // </snippet:responsive>
+
+class UseBreakpointSwitchDemo : Component
+{
+    public override Element Render()
+    {
+        var panelA = BreakpointPanel("Panel A", Theme.SystemNeutralBackground);
+        var panelB = BreakpointPanel("Panel B", Theme.SystemSuccessBackground);
+
+        // <snippet:use-breakpoint-switch>
+        var wide = UseBreakpoint(800);
+        return If(wide,
+            () => HStack(12, panelA, panelB),
+            () => VStack(8, panelA, panelB));
+        // </snippet:use-breakpoint-switch>
+    }
+
+    private static Element BreakpointPanel(string label, ThemeRef background) =>
+        Border(TextBlock(label).Padding(16))
+            .Background(background)
+            .CornerRadius(4);
+}
 
 // <snippet:app-shell>
 // App shell scaffold: title bar + sidebar + content using a single Grid
@@ -219,7 +241,7 @@ class AutoGridExample : Component
                         .Width(110).Height(60))
                 .Cast<Element?>()
                 .ToArray()
-        ).Padding(24);
+        );
     }
 }
 // </snippet:auto-grid>
@@ -297,6 +319,60 @@ class DoGridForForms : Component
 }
 // </snippet:do-grid-for-forms>
 
+class GridStarStackDemo : Component
+{
+    public override Element Render() =>
+        // <snippet:grid-star-stack>
+        // Do:
+        Grid(
+            columns: [GridSize.Star(), GridSize.Star()],   // Star, not Auto
+            rows: [GridSize.Star()],
+            HStack(SaveButton(), CancelButton()).Grid(column: 0, columnSpan: 2));
+        // </snippet:grid-star-stack>
+
+    private static Element SaveButton() =>
+        Button("Save", () => { }).AutomationName("Save");
+
+    private static Element CancelButton() =>
+        Button("Cancel", () => { }).AutomationName("Cancel");
+}
+
+// <snippet:alignment-sizing>
+class AlignmentSizingDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Alignment and sizing"),
+
+        TextBlock("Centered").HAlign(HorizontalAlignment.Center),
+        Border(TextBlock("Fixed width"))
+            .Width(200).Height(40)
+            .Background(Theme.ControlFillSecondary),
+
+        VStack(8,
+            TextBlock("Item A"),
+            TextBlock("Item B")
+        ).Margin(24).Padding(16).Background(Theme.ControlFillSecondary)
+    );
+}
+// </snippet:alignment-sizing>
+
+// <snippet:content-alignment>
+class ContentAlignmentDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Content alignment"),
+
+        // The Button stretches to fill the row, and its inner content
+        // stretches too — without HorizontalContentAlignment the label
+        // would stay centered in an otherwise full-width button.
+        Button(TextBlock("Open"), () => { })
+            .AutomationName("Open")
+            .HAlign(HorizontalAlignment.Stretch)
+            .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+    ).Width(320);
+}
+// </snippet:content-alignment>
+
 class LayoutApp : Component
 {
     public override Element Render()
@@ -314,7 +390,9 @@ class LayoutApp : Component
                 Component<AppShellExample>(),
                 Component<AutoGridExample>(),
                 Component<ResponsiveSwitcherExample>(),
-                Component<DoGridForForms>()
+                Component<DoGridForForms>(),
+                Component<AlignmentSizingDemo>(),
+                Component<ContentAlignmentDemo>()
             ).Padding(24)
         );
     }

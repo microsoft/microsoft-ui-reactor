@@ -128,7 +128,7 @@ Reference: [docs/specs/005-localization-design.md](../005-localization-design.md
 ### 3.1 CLI Project Setup
 - [x] Create new project `Reactor.Cli` (console app, `dotnet tool` packaging)
 - [x] Add Roslyn (`Microsoft.CodeAnalysis.CSharp`) dependency for AST parsing
-- [x] Set up `duct-loc` command structure with subcommands: `extract`, `translate`, `validate`, `status`, `prune`
+- [x] Set up `mur loc` command structure with subcommands: `extract`, `translate`, `validate`, `status`, `prune`
 
 ### 3.2 AST Scanner
 - [x] Implement Roslyn-based scanner that parses `.cs` files and walks the syntax tree
@@ -237,25 +237,25 @@ Reference: [docs/specs/005-localization-design.md](../005-localization-design.md
 - [x] Batch translation: group keys, send in batches to reduce API calls
 - [x] Mark AI translations with `<comment>ai-translated: pending-review</comment>`
 
-### 5.2 `duct-loc translate` Command
+### 5.2 `mur loc translate` Command
 - [x] `--source` flag for source locale directory
 - [x] `--target` flag for comma-separated target locales
 - [x] `--missing-only` flag to only translate missing/draft keys
 - [x] `--model` flag to select model (via Copilot SDK)
 - [x] Progress output showing keys translated per locale
 
-### 5.3 `duct-loc validate` Command
+### 5.3 `mur loc validate` Command
 - [x] Parse all `.resw` files and validate ICU syntax (catch unmatched braces, bad syntax)
 - [x] Check parameter consistency: all locales should use the same `{param}` names as the source
 - [x] Report missing keys per locale
 - [x] Report encoding issues
 - [x] Exit code: non-zero if any errors found
 
-### 5.4 `duct-loc status` Command
+### 5.4 `mur loc status` Command
 - [x] Read all locale folders and count: total keys, translated, AI-draft (pending-review), missing
 - [x] Output table: Locale / Keys / Translated / AI-Draft / Missing / Coverage %
 
-### 5.5 `duct-loc prune` Command
+### 5.5 `mur loc prune` Command
 - [x] Scan all `.cs` files for `Loc.{Namespace}.{Key}` references
 - [x] Compare against all keys in `.resw` files
 - [x] Report (or remove with `--dry-run` / default) keys with zero references
@@ -292,9 +292,9 @@ Reference: [docs/specs/005-localization-design.md](../005-localization-design.md
 
 After all phases are complete, the human will manually:
 - [ ] Localize a sample app end-to-end using the implemented system
-- [ ] Run `duct-loc extract --rewrite` on a real app
+- [ ] Run `mur loc extract --rewrite` on a real app
 - [ ] Add ICU plural/select messages to .resw files
-- [ ] Run `duct-loc translate` to generate translations
+- [ ] Run `mur loc translate` to generate translations
 - [ ] Test runtime locale switching (LTR and RTL)
 - [ ] Test pseudolocalization mode to find missed strings
-- [ ] Run `duct-loc validate` and `duct-loc status`
+- [ ] Run `mur loc validate` and `mur loc status`

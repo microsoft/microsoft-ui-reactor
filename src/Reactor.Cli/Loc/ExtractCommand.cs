@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor.Cli.Loc;
 
 /// <summary>
-/// Implements `duct loc extract`: scans C# source files for localizable strings,
+/// Implements `mur loc extract`: scans C# source files for localizable strings,
 /// generates .resw entries, and optionally rewrites source to use t.Message().
 /// </summary>
 internal static class ExtractCommand
@@ -151,9 +151,9 @@ internal static class ExtractCommand
 
     private static void ShowHelp()
     {
-        Console.WriteLine("duct loc extract — Extract localizable strings from source files");
+        Console.WriteLine("mur loc extract — Extract localizable strings from source files");
         Console.WriteLine();
-        Console.WriteLine("Usage: duct loc extract [options]");
+        Console.WriteLine("Usage: mur loc extract [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --source <dir>   Source directory to scan (default: .)");

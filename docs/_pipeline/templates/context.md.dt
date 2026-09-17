@@ -210,10 +210,7 @@ shape; the flag record is the payload.
 
 ### Inline literals as the provided value
 
-```csharp
-// Don't:
-return VStack(child)
-    .Provide(ctx, new ThemeConfig(mode, scale, "#0078D4"));
+```csharp snippet="context/inline-literal-provide"
 ```
 
 Every render constructs a fresh `ThemeConfig`, which compares unequal
@@ -224,31 +221,20 @@ to the previous render's value, which re-renders every
 
 ### Reading context from outside any provider
 
-```csharp
-// Static field default of `null`.
-public static Context<CurrentUser?> User = new(null);
-
-// In a component that's somehow rendered before the root provides:
-var user = UseContext(AppContexts.User);
-var name = user.DisplayName;  // NullReferenceException
+```csharp snippet="context/context-without-provider"
 ```
 
 When no ancestor has called `.Provide`, `UseContext` silently returns
-`ctx.DefaultValue` — there's no warning, no exception. The component
+`Context<T>.DefaultValue` — there's no warning, no exception. The component
 runs against the default, which is rarely what the developer expected.
 Either pick a non-null default that's safe to render against, or treat
-the default as an "uninitialized" sentinel and branch explicitly. The
-[init pattern](recipes/login.md) uses the latter — anonymous user is
+the default as an "uninitialized" sentinel and branch explicitly (as above).
+The [init pattern](recipes/login.md) uses the latter — anonymous user is
 the sentinel, the authentication flow swaps it out at the provider.
 
 ### Using context for state that should be props
 
-```csharp
-// Don't:
-public static Context<int> SelectedIndex = new(0);
-
-// In a list component:
-var index = UseContext(SelectedIndex);
+```csharp snippet="context/context-for-props"
 ```
 
 If the value flows from one parent to one child, it's a prop. Context

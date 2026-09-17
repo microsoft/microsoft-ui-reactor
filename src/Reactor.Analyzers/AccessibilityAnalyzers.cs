@@ -231,8 +231,15 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
             }
         }
 
-        // Check the fluent chain for .AutomationName() or .LabeledBy()
-        if (HasModifierInChain(invocation, "AutomationName", "LabeledBy"))
+        // Check the fluent chain for a label-bearing modifier.
+        //
+        // `.Header(...)` counts: TextBox/ComboBox/Slider/ToggleSwitch/PasswordBox/AutoSuggestBox
+        // all expose it (ElementExtensions.cs), and it renders a *visible* label that WinUI already
+        // projects to the field's automation name. Omitting it here made the rule demand a
+        // redundant `.AutomationName("Password")` next to a `.Header("Password")` that was doing
+        // the job, which is worse guidance than the rule was written to give. The match is on the
+        // exact identifier, so `PaneHeader` / `TabStripHeader` / `RightHeader` do not satisfy it.
+        if (HasModifierInChain(invocation, "Header", "AutomationName", "LabeledBy"))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(

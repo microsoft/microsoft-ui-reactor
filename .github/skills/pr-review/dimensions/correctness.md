@@ -43,11 +43,27 @@ Yoga/Flex layout math.
     matching decrement, or a write path that bypasses the scope);
   - using the suppressor directly instead of `WriteSuppressed` / a descriptor
     declaration (this is an alternative-solution finding too).
-- **Element pooling.** `ElementPool` recycles controls; poolable types wire
-  events once via `ConditionalWeakTable<FrameworkElement, PoolableWireFlags>`.
-  Flag:
-  - new event wiring on a poolable control that isn't guarded by the
-    one-time-wire flag (double subscription across rent/return);
+- **Element pooling.** `ElementPool` recycles controls, **including interactive
+  ones** — `PoolableTypes` lists `Button`, `TextBox`, and `ToggleSwitch`. They are
+  safe only because their event trampolines subscribe once for the control's
+  lifetime and read the current element from attached state at invocation time,
+  and because `Reconciler.ReturnControl<T>` preserves `ReactorState.ControlEventState`
+  across rent/return (issue #114). It also keeps a
+  `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements
+  that have had `GetElementVisual()` called — those permanently lose the XAML
+  implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …) and are
+  therefore excluded from pooling. Flag:
+  - new event wiring on a poolable control that bypasses the one-time
+    `ControlEventStateBox` trampoline, or a handler that captures the element
+    it was wired for instead of reading current state (stale callbacks after
+    reuse, or double subscription across rent/return);
+  - a control added to `PoolableTypes` whose state `CleanElement` does not reset,
+    or without updating the `netstandard2.0` analyzer mirror (both are gated by
+    tests — `Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement` and
+    `Analyzer_Poolable_Type_Mirror_Matches_ElementPool`);
+  - code that touches an element's composition Visual without calling
+    `ElementPool.MarkCompositorTainted`, so a tainted element can still be
+    pooled and handed to a renter that needs implicit transitions;
   - state left on a control when it's returned to the pool (next renter sees
     stale value/selection/handlers);
   - per-element state read from `FrameworkElement.Tag` or a CWT instead of

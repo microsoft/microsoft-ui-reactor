@@ -48,7 +48,7 @@ public sealed partial class Reconciler : IDisposable
     // doesn't run (and stays JIT-cold) for default apps.
     // Internal so V1-owned lifecycle classes can pass it into shared keyed-diff helpers.
     internal readonly ILogger? _logger;
-    private readonly List<(ConnectedAnimation Animation, UIElement Target)> _pendingConnectedAnimationStarts = new();
+    private readonly List<(string Key, UIElement Target)> _pendingConnectedAnimationStarts = new();
     private readonly ContextScope _contextScope = new();
     // Ancestor-aware effective theme for the subtree currently being mounted/updated,
     // threaded top-down through Mount/Update (an element's own RequestedTheme wins,
@@ -604,11 +604,66 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="GetElementTag(FrameworkElement)"/> — see the helper's
     /// summary for the three categories.
     /// </summary>
+    /// <remarks>
+    /// Spec 010 deliberately adds NO arm here. A source-mapped element carries
+    /// its <see cref="Element.CallSite"/> in the <see cref="Element.Extensions"/>
+    /// bucket, so it already satisfies the <c>Extensions is not null</c> test
+    /// above and is tagged without further help. An arm keyed on the source-map
+    /// flag would only ever tag <em>unstamped</em> elements — which by
+    /// definition have no location to read back — while re-introducing exactly
+    /// the per-leaf <c>ReactorState</c> allocation PR #468 removed.
+    /// </remarks>
     private static bool NeedsTag(Element element) =>
         element.HasCallbacks
         || element.Key is not null
         || element.Extensions is not null
         || HasReferenceModifiers(element);
+
+    /// <summary>
+    /// Spec 010 — did the source location change across a shallow skip?
+    ///
+    /// <para><see cref="Element.ShallowEquals"/> deliberately ignores
+    /// <see cref="Element.CallSite"/>, so two structurally identical
+    /// callback-free leaves rendered from DIFFERENT lines (the two arms of a
+    /// conditional, say) compare equal and take the skip path. That is the right
+    /// call for rendering — nothing about the control needs to change — but the
+    /// control's back-pointer would keep naming the branch that is no longer
+    /// live, and <c>ReactorSourceMap.GetSource</c> would confidently report the
+    /// wrong line. Same class of problem as the #721 gesture/drag slots, and
+    /// handled the same way: refresh on skip.</para>
+    ///
+    /// <para>Compares the EFFECTIVE call site — the one <c>GetSource</c> would report —
+    /// which for a target-wrapping decorator is its innermost target's, not its own. A
+    /// stable <c>Flyout(...)</c> whose target switches between two otherwise-equal
+    /// elements built on different lines has an unchanged <c>CallSite</c> of its own, so
+    /// comparing only the outer element would take the skip and leave the control
+    /// reporting the target line that is no longer live.</para>
+    ///
+    /// <para>Costs one nullable-struct compare when source mapping is off, where
+    /// both sides are null and this is always false — so no control fetch and no
+    /// DependencyProperty write on the flag-off path. The decorator unwrap runs only
+    /// when one side actually is a decorator.</para>
+    /// </summary>
+    internal static bool CallSiteChangedOnSkip(Element oldEl, Element newEl)
+    {
+        if (oldEl.CallSite != newEl.CallSite) return true;
+
+        var oldTarget = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(oldEl);
+        var newTarget = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(newEl);
+        if (oldTarget is null && newTarget is null) return false;
+
+        return EffectiveCallSite(oldTarget ?? oldEl) != EffectiveCallSite(newTarget ?? newEl);
+    }
+
+    /// <summary>The call site <c>ReactorSourceMap.GetSource</c> would report for an element.</summary>
+    /// <remarks>
+    /// Shares <c>ReactorSourceMap.UnwrapDecorators</c> with <c>GetSource</c> so the two
+    /// cannot disagree, and so this path is cycle-safe: a third-party
+    /// <c>GetSourceTarget</c> that returns its own element would otherwise hang
+    /// reconciliation here, not merely the inspector.
+    /// </remarks>
+    private static SourceLocation? EffectiveCallSite(Element element)
+        => global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(element)?.CallSite;
 
     /// <summary>
     /// True when the element carries any reactive reference modifier — the imperative
@@ -1430,21 +1485,35 @@ public sealed partial class Reconciler : IDisposable
         // the provider with per-subtree entries; nested Reconcile() calls during
         // the same pass don't emit their own start/stop. Gate the depth counter
         // and Start emit on IsEnabled so the disabled path pays nothing extra.
-        bool emitTrace = Diagnostics.ReactorEventSource.Log.IsEnabled(
+        // `traceEnabled` and `emitTrace` are tracked separately: every enabled
+        // call must decrement the depth it incremented, but only the outermost
+        // one emits. Decrementing on `emitTrace` alone would leak the counter
+        // once a pass contained a nested reconcile, permanently suppressing
+        // every later top-level trace.
+        // <snippet:reconcile-trace-start>
+        bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
             global::System.Diagnostics.Tracing.EventLevel.Informational,
-            Diagnostics.ReactorEventSource.Keywords.Reconcile)
-            && _reconcileTraceDepth++ == 0;
+            Diagnostics.ReactorEventSource.Keywords.Reconcile);
+        bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
         if (emitTrace)
         {
             Diagnostics.ReactorEventSource.Log.ReconcileStart(
                 newElement?.GetType().Name ?? "null");
         }
+        // </snippet:reconcile-trace-start>
         if (_debugReconcileDepth++ == 0)
         {
             DebugElementsDiffed = 0;
             DebugElementsSkipped = 0;
             DebugUIElementsCreated = 0;
             DebugUIElementsModified = 0;
+            // Drop destination references a previous pass queued but never flushed. Every
+            // shipped host flushes at the end of each render, but a pass that threw
+            // mid-reconcile — or a Reconcile() caller that never flushes (tests,
+            // embedders) — must not accumulate strong UIElement refs. A list clear, so
+            // nothing here can throw and strand the depth counter incremented just above.
+            _pendingConnectedAnimationStarts.Clear();
+            _preparedConnectedAnimationKeys.Clear();
             if (ReactorFeatureFlags.HighlightReconcileChanges)
             {
                 (_highlightMounted ??= new()).Clear();
@@ -1481,13 +1550,18 @@ public sealed partial class Reconciler : IDisposable
         }
         finally
         {
-            if (emitTrace)
+            // <snippet:reconcile-trace-stop>
+            if (traceEnabled)
             {
                 _reconcileTraceDepth--;
-                Diagnostics.ReactorEventSource.Log.ReconcileStop(
-                    DebugElementsDiffed, DebugElementsSkipped,
-                    DebugUIElementsCreated, DebugUIElementsModified);
+                if (emitTrace)
+                {
+                    Diagnostics.ReactorEventSource.Log.ReconcileStop(
+                        DebugElementsDiffed, DebugElementsSkipped,
+                        DebugUIElementsCreated, DebugUIElementsModified);
+                }
             }
+        // </snippet:reconcile-trace-stop>
         }
         } finally
         {
@@ -1531,6 +1605,12 @@ public sealed partial class Reconciler : IDisposable
     // Tracks top-level Reconcile() entries so trace start/stop only fires once
     // per pass. Only mutated when the Reconcile keyword is enabled.
     private int _reconcileTraceDepth;
+
+    // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host).
+    // The invariant is that this returns to 0 after every top-level pass; a
+    // non-zero value between passes means a nested Reconcile incremented
+    // without a matching decrement, which silently suppresses all later spans.
+    internal int ReconcileTraceDepthForTests => _reconcileTraceDepth;
 
     private static void FlushEffectsTraced(RenderContext ctx, string? componentName)
     {
@@ -2061,12 +2141,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
         {
-            try
-            {
-                var service = ConnectedAnimationService.GetForCurrentView();
-                service.PrepareToAnimate(caEl.ConnectedAnimationKey, control);
-            }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            PrepareConnectedAnimationSource(caEl.ConnectedAnimationKey, control);
         }
 
         // Clean up animation state (mirrors UnmountAndCollect)
@@ -2098,9 +2173,9 @@ public sealed partial class Reconciler : IDisposable
         // ExtendsContentIntoTitleBar inference and its caption-height
         // contribution from the owning window, so a window that merely used to
         // host one is not left content-extended and tall for its lifetime.
-        if (control is WinUI.TitleBar
+        if (control is WinUI.TitleBar unmountingBar
             && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } titleBarWindow)
-            titleBarWindow.ClearTitleBarControl();
+            titleBarWindow.ClearTitleBarControl(unmountingBar);
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
@@ -2381,6 +2456,19 @@ public sealed partial class Reconciler : IDisposable
 
         if (transition?.GetExitTransition() is not null)
         {
+            // KNOWN LIMITATION — connected animation does not compose with an exit
+            // transition on the SAME element. UnmountAndPool (and therefore
+            // PrepareToAnimate) is deferred into the completion callback below, which
+            // runs long after both hosts have called FlushConnectedAnimations, so the
+            // destination's lookup finds nothing and the connected animation silently
+            // no-ops. Preparing the source eagerly here looks like the obvious fix and
+            // is not: PrepareToAnimate on a control mid-replace throws a non-teardown
+            // exception that escapes this method and aborts the entire reconcile, losing
+            // the whole UI update — strictly worse than the animation not playing.
+            // Fixing it properly needs a way to hand the snapshot over without preparing
+            // against a control the exit transition still owns. Until then, put the
+            // connected-animation key and the exit transition on different elements.
+            //
             // Replace immediately with the new control so the UI updates.
             children.Replace(index, newControl);
             // Re-insert the old control after the new one for exit animation.
@@ -2424,12 +2512,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
         {
-            try
-            {
-                var service = ConnectedAnimationService.GetForCurrentView();
-                service.PrepareToAnimate(caEl.ConnectedAnimationKey, control);
-            }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            PrepareConnectedAnimationSource(caEl.ConnectedAnimationKey, control);
         }
 
         // Clean up animation state
@@ -2456,9 +2539,9 @@ public sealed partial class Reconciler : IDisposable
         // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
         // pooling traversal (nested in a poolable container) must also withdraw
         // its inference and caption-height contribution.
-        if (control is WinUI.TitleBar
+        if (control is WinUI.TitleBar pooledUnmountingBar
             && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } pooledTitleBarWindow)
-            pooledTitleBarWindow.ClearTitleBarControl();
+            pooledTitleBarWindow.ClearTitleBarControl(pooledUnmountingBar);
 
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))
@@ -2657,6 +2740,15 @@ public sealed partial class Reconciler : IDisposable
         node.Component = newComponent;
         node.SelfTriggered = true;
         ReconcileComponent(oldEl, newEl, existingControl, requestRerender);
+
+        // Spec 010 — the wrapper is PRESERVED across the migration (that is the whole
+        // point), so its back-pointer still names the pre-edit element. Refresh it, or
+        // the reported location survives an edit that moved the call site — which is
+        // exactly the staleness this route exists to avoid. ReconcileComponent is called
+        // directly here rather than through UpdateComponent, so it does not inherit that
+        // path's refresh.
+        if (existingControl is FrameworkElement migratedFe)
+            SetElementTagIfNeeded(migratedFe, newEl);
 
         Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(newType.FullName ?? newType.Name);
         return true;
@@ -3649,37 +3741,132 @@ public sealed partial class Reconciler : IDisposable
     //  Connected animations (cross-container transitions)
     // ════════════════════════════════════════════════════════════════
 
+    // Test-only seam (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host): counts
+    // connected animations that actually STARTED (ConnectedAnimation.TryStart returned
+    // true). A selftest asserts this increments across a source→destination transition;
+    // the settled visual tree looks identical whether or not the animation ran, so the
+    // start count is the only non-vacuous oracle available to an automated test.
+    internal int ConnectedAnimationStartCount;
+
+    // Keys this reconcile pass actually published a snapshot for. The flush resolves
+    // queued destinations only against these, because ConnectedAnimationService is
+    // view-wide and unclaimed preparations are deliberately left to expire on their own
+    // (~1s): in principle a LATER render mounting the same key could consume one of those
+    // and animate unrelated UI from wherever the old source sat.
+    //
+    // Carried as defence-in-depth, and honestly so: I could not build a NON-VACUOUS
+    // regression test for it. A fixture that unmounts a keyed source in one pass and
+    // mounts the same key in a later pass reads green with this guard disabled, i.e. WinUI
+    // did not hand the stale snapshot over anyway — so the hazard may be theoretical in
+    // this WinUI build. The guard is a strict narrowing (it can only prevent starts, never
+    // cause one) and costs a hash lookup, so it stays; but it is NOT test-proven, and a
+    // future change here should not assume a test would catch a regression.
+    //
+    // Bookkeeping only. Nothing is invoked on the service, which is what made the
+    // withdrawn Cancel()-based cleanup crash.
+    private readonly HashSet<string> _preparedConnectedAnimationKeys = new(StringComparer.Ordinal);
+
     /// <summary>
-    /// Queues a connected animation start for an element that was just mounted.
-    /// Called from Mount() when the element has a ConnectedAnimationKey and a
-    /// prepared animation exists with that key.
+    /// Publishes the source snapshot for an unmounting element, so a destination mounting
+    /// under the same key in this pass can travel from it.
     /// </summary>
-    internal void QueueConnectedAnimationStart(UIElement target, string key)
+    /// <remarks>
+    /// Preparation is speculative: every unmounting element carrying a key gets a
+    /// snapshot, because the reconciler cannot know which sibling the user's interaction
+    /// designated as the source. Collapsing a list of N keyed rows to one detail element
+    /// therefore leaves N-1 preparations that nothing claims, and WinUI keeps each of
+    /// those composited at its source's old position until it times out — roughly a
+    /// second of the old list ghosting over the new view.
+    ///
+    /// <para>That is a known cosmetic wart, deliberately left alone. Withdrawing an
+    /// unclaimed preparation with <c>ConnectedAnimation.Cancel()</c> faults WinUI natively
+    /// (0xC0000005 in Microsoft.UI.Xaml.dll 3.2.3.0): by flush time the source has been
+    /// unmounted and returned to <see cref="ElementPool"/>, so the animation is holding a
+    /// visual that <c>CleanElement</c> has already reset. A crash is strictly worse than a
+    /// ghost, so the ghosts stay until there is a safe way to withdraw a preparation.
+    /// <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c> pins the no-crash behaviour.</para>
+    /// </remarks>
+    private void PrepareConnectedAnimationSource(string key, UIElement control)
     {
         try
         {
-            var service = ConnectedAnimationService.GetForCurrentView();
-            var anim = service.GetAnimation(key);
-            if (anim is not null)
-                _pendingConnectedAnimationStarts.Add((anim, target));
+            ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
+            _preparedConnectedAnimationKeys.Add(key);
         }
-        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+        {
+            Diagnostics.DiagnosticLog.SwallowedError(
+                Diagnostics.LogCategory.Reactor, "Reconciler.PrepareConnectedAnimationSource", ex);
+        }
     }
 
     /// <summary>
-    /// Starts all queued connected animations. Call AFTER the new tree has been
-    /// attached to the visual tree (e.g., after Window.Content = newControl).
+    /// Queues a connected animation start for an element that was just mounted.
+    /// Called from Mount() whenever the element carries a ConnectedAnimationKey.
     /// </summary>
+    /// <remarks>
+    /// The key is resolved to a <see cref="ConnectedAnimation"/> in
+    /// <see cref="FlushConnectedAnimations"/>, NOT here. Mount runs before the unmount
+    /// that publishes the source snapshot: the child-reconciler's type-mismatch arm
+    /// mounts the replacement first and only then calls
+    /// <see cref="ReplaceChildWithExitTransition"/>, which unmounts the old control (and
+    /// the keyed/LIS arms mount inserts before removing leftovers). Looking the key up
+    /// at mount time therefore observed the service *before*
+    /// <c>PrepareToAnimate</c> had run for it, returned null, and silently dropped the
+    /// animation — the destination simply appeared at its final position. Deferring the
+    /// lookup to the flush, which runs after the whole reconcile pass has completed,
+    /// makes the source snapshot visible to the destination regardless of the order the
+    /// reconciler happened to visit the two subtrees in.
+    /// </remarks>
+    internal void QueueConnectedAnimationStart(UIElement target, string key)
+        => _pendingConnectedAnimationStarts.Add((key, target));
+
+    /// <summary>
+    /// Starts all queued connected animations. Call AFTER the new tree has been attached
+    /// to the visual tree (e.g., after Window.Content = newControl).
+    /// </summary>
+    /// <remarks>
+    /// Source and destination must appear in the SAME reconcile pass — that is the shape
+    /// Reactor's model produces, since a single state change swaps both subtrees.
+    /// </remarks>
     public void FlushConnectedAnimations()
     {
-        if (_pendingConnectedAnimationStarts.Count == 0) return;
+        if (_pendingConnectedAnimationStarts.Count == 0)
+            return;
 
-        foreach (var (anim, target) in _pendingConnectedAnimationStarts)
+        try
         {
-            try { anim.TryStart(target); }
-            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
+            var service = ConnectedAnimationService.GetForCurrentView();
+
+            foreach (var (key, target) in _pendingConnectedAnimationStarts)
+            {
+                try
+                {
+                    // Scoped to this pass on purpose: the service is view-wide and holds
+                    // unclaimed snapshots for ~1s, so an unscoped lookup could let a
+                    // later render travel from a stale one. Defence-in-depth — see the
+                    // note on _preparedConnectedAnimationKeys about the missing test.
+                    if (!_preparedConnectedAnimationKeys.Contains(key))
+                        continue;
+
+                    if (service.GetAnimation(key) is { } anim && anim.TryStart(target))
+                        ConnectedAnimationStartCount++;
+                }
+                catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+                {
+                    Diagnostics.DiagnosticLog.SwallowedError(
+                        Diagnostics.LogCategory.Reactor, "Reconciler.FlushConnectedAnimations.start", ex);
+                }
+            }
         }
+        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
+        {
+            Diagnostics.DiagnosticLog.SwallowedError(
+                Diagnostics.LogCategory.Reactor, "Reconciler.FlushConnectedAnimations", ex);
+        }
+
         _pendingConnectedAnimationStarts.Clear();
+        _preparedConnectedAnimationKeys.Clear();
     }
 
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers m, Action requestRerender)
@@ -5576,3 +5763,4 @@ public sealed partial class Reconciler : IDisposable
         _pool.Clear();
     }
 }
+

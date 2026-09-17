@@ -1,0 +1,15 @@
+<Page
+    x:Class="TransitionComparison.Xaml.PageA"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Full-bleed slab, same colours as the Reactor twin's Page A. -->
+    <Grid Background="#0F766E">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+            <TextBlock Text="PAGE  A" FontSize="64" FontWeight="Bold" Foreground="#FFFFFF"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="teal" FontSize="18" Foreground="#FFFFFF" Opacity="0.85"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</Page>

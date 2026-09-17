@@ -38,20 +38,21 @@ permissions:
 # ─── Version strategy ───────────────────────────────────────────────────────
 # Versions come from MinVer (commit-height past the latest `v*` tag). Pattern:
 #
-#   - Past tag `v0.1.0-experimental.1` by N commits → `0.1.0-experimental.1.N+<sha7>`
+#   - Past tag `v0.1.0-preview.1` by N commits → `0.1.0-preview.1.N+<sha7>`
 #   - Exactly at a tag → that tag's version
+#   - Past a stable tag (e.g. `v0.1.0`) → patch bumped plus the `-p` identifiers,
+#     e.g. `0.1.1-experimental.0.N+<sha7>`
 #   - No tags yet → `0.1.0-experimental.0.<height>+<sha7>` (defaults below)
 #
-# Bootstrap once: `git tag v0.1.0-experimental.0 && git push --tags`. After
-# that, every commit gets a unique, ordered version with zero coordination —
-# height strictly increases as commits land. Bump to a new milestone by
-# tagging (e.g. `v0.1.0-experimental.1`); MinVer takes it from there.
+# Every commit gets a unique, ordered version with zero coordination — height
+# strictly increases as commits land. Bump to a new milestone by tagging the
+# next `v0.1.0-preview.N`; MinVer takes it from there.
 #
 # Tag pushes (`v*`) produce a clean version and create a GitHub Release.
 # Pushes to main and PR builds get the same MinVer-computed version (they
 # differ by sha → unique workflow artifacts; the .nupkg filename may collide
-# across PR pushes from the same merge base, which is acceptable for the
-# experimental channel).
+# across PR pushes from the same merge base, which is acceptable for
+# pre-release CI builds).
 
 jobs:
   package:
@@ -94,7 +95,15 @@ jobs:
           } else {
             # MinVer flags:
             #   -t v                          tag prefix
-            #   -p experimental.0             default prerelease identifiers — flags pre-P1 builds as experimental
+            #   -p experimental.0             default prerelease identifiers. MinVer applies these
+            #                                 whenever it must invent a label: when no `v*` tag is
+            #                                 reachable, and also after a STABLE tag, where it bumps
+            #                                 the patch and adds them (`v0.1.0` → `0.1.1-experimental.0.N`).
+            #                                 Dormant on the current history — every tag so far is
+            #                                 itself a prerelease (`v0.1.0-preview.N`), which MinVer
+            #                                 carries forward with height instead, so no `experimental`
+            #                                 version has ever been published. It would activate after
+            #                                 the first stable tag.
             #   -m 0.1                        minimum major.minor when no tag (so untagged → 0.1.x)
             $version = (& minver -t v -p experimental.0 -m 0.1).Trim()
           }
@@ -323,7 +332,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.version.outputs.is_tag == 'true'
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: Reactor ${{ steps.version.outputs.version }}
           tag_name: ${{ github.ref_name }}

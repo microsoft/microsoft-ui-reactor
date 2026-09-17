@@ -32,9 +32,9 @@ var (volume, setVolume) = UsePersisted("prefs/volume", 60.0,
     PersistedScope.Window);
 ```
 
-Three preferences, three keys. Each pref renders + persists
-independently, so adding a fourth is one line in `Render()` + one
-matching control. The `PersistedScope.Window` scope keeps the values
+Three preferences, three keys. Each pref persists independently, so
+adding a fourth is one line in `Render()` + one matching control. The
+`PersistedScope.Window` scope keeps the values
 inside the host window — flip to `PersistedScope.Application` for
 process-wide preferences (auth, locale, theme) per the
 [persistence](../persistence.md) page.
@@ -55,9 +55,10 @@ return VStack(16,
 
 ![Settings page](../images/recipe-settings-page/settings.png)
 
-A `VStack` of `SettingsRow`s; each row is a label + control. Reactor
-re-renders only the row whose state changed — the slider doesn't
-re-mount when you toggle notifications.
+A `VStack` of `SettingsRow`s; each row is a label + control. The page
+re-renders from the changed hook state, and the reconciler patches the
+existing controls in place — the slider doesn't re-mount when you toggle
+notifications.
 
 ### Row helper
 
@@ -67,13 +68,14 @@ re-mount when you toggle notifications.
 private static Element SettingsRow(string label, Element control) =>
     HStack(16,
         TextBlock(label).Width(120),
-        control
+        control.AutomationName(label)
     );
 ```
 
-A fixed-width label keeps the controls aligned across rows. The helper
-is a private static method, not a `Component` — it has no state, so a
-function returning an `Element` is the right shape.
+A fixed-width label keeps the controls aligned across rows, and the
+control receives the same text as its automation name. The helper is a
+private static method, not a `Component` — it has no state, so a function
+returning an `Element` is the right shape.
 
 ## Tips
 

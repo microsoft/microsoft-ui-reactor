@@ -1,4 +1,5 @@
-# Migration: 054 Windowing Evolution
+
+# Migration: Windowing evolution
 
 Spec 054 intentionally removes a few legacy windowing fields in favor of more
 explicit shapes. The new APIs are additive except for the breaking changes below.
@@ -15,16 +16,16 @@ explicit shapes. The new APIs are additive except for the breaking changes below
 
 ```csharp
 // Before
-new WindowSpec
-{
-    Title = "Tools",
-    IsResizable = false,
-    IsShownInSwitchers = false,
-    IsAlwaysOnTop = true,
-};
+// new WindowSpec
+// {
+//     Title = "Tools",
+//     IsResizable = false,
+//     IsShownInSwitchers = false,
+//     IsAlwaysOnTop = true,
+// };
 
 // After
-new WindowSpec
+public static WindowSpec Tools { get; } = new()
 {
     Title = "Tools",
     ResizeMode = WindowResizeMode.NoResize,
@@ -36,16 +37,23 @@ new WindowSpec
 
 ```csharp
 // Before
-new WindowSpec
-{
-    Title = "Main",
-    PersistenceId = "main",
-    StartPosition = WindowStartPosition.RestoreFromPersistence,
-};
+// new WindowSpec
+// {
+//     Title = "Main",
+//     PersistenceId = "main",
+//     StartPosition = WindowStartPosition.RestoreFromPersistence,
+// };
 
 // After
-new WindowSpec { Title = "Main" }.WithPersistence("main");
+public static WindowSpec Main { get; } =
+    new WindowSpec { Title = "Main" }.WithPersistence("main");
 ```
 
 `WindowPlacementCodec` stores only monitor fingerprints and `WINDOWPLACEMENT`,
 not `WindowStartPosition`, so no on-disk placement migration is required.
+
+## Next Steps
+
+- **[Windows](../windows.md)** — The post-054 windowing surface in full: sizing, placement, z-order, chrome, taskbar, displays.
+- **[Advanced Windowing](../windowing-advanced.md)** — Interop-heavy recipes that deliberately sit outside the `WindowSpec` contract.
+- **[Persistence](../persistence.md)** — Persisted scopes beyond window placement.

@@ -48,10 +48,10 @@ class ErrorBoundaryDemo : Component
                 Component<BuggyComponent>(),
                 (Exception ex) => VStack(8,
                     TextBlock("Something went wrong").Bold()
-                        .Foreground("#d13438"),
+                        .Foreground(Theme.SystemCritical),
                     TextBlock(ex.Message).FontSize(12).Opacity(0.7)
                 ).Padding(12)
-                 .Background("#fde7e9")
+                 .Background(Theme.SystemCriticalBackground)
                  .CornerRadius(8)
             )
         ).Padding(24);
@@ -97,12 +97,12 @@ class ErrorBoundaryRetryDemo : Component
             ErrorBoundary(
                 Component<FlakyComponent>().WithKey($"flaky-{resetKey}"),
                 ex => VStack(8,
-                    TextBlock("Couldn't load.").Bold().Foreground("#d13438"),
+                    TextBlock("Couldn't load.").Bold().Foreground(Theme.SystemCritical),
                     TextBlock(ex.Message).FontSize(12).Opacity(0.7),
                     // Bumping resetKey reassigns identity to the child, so the
                     // ErrorBoundary mounts a fresh subtree on the next render.
                     Button("Retry", () => setResetKey(resetKey + 1))
-                ).Padding(12).Background("#fde7e9").CornerRadius(8)
+                ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8)
             )
         ).Padding(24);
     }
@@ -114,7 +114,7 @@ class FlakyComponent : Component
     {
         var (attempt, _) = UseState(Random.Shared.Next(0, 3));
         if (attempt == 0) throw new InvalidOperationException("Service unavailable");
-        return TextBlock("Loaded.").Foreground("#107c10");
+        return TextBlock("Loaded.").Foreground(Theme.SystemSuccess);
     }
 }
 ```
@@ -154,7 +154,7 @@ class MemoSubtreeDemo : Component
                         TextBlock("Skips re-render when deps unchanged")
                             .FontSize(12).Opacity(0.6)
                     ).Padding(12)
-                ).Background("#f0f0f0").CornerRadius(8);
+                ).Background(Theme.CardBackground).CornerRadius(8);
             }, label)
         ).Padding(24);
     }
@@ -192,7 +192,9 @@ class ElementRefFocusDemo : Component
 
         return VStack(12,
             SubHeading("Imperative focus via ElementRef<T>"),
-            TextBox(name, setName, placeholderText: "Name").Ref(fieldRef),
+            TextBox(name, setName, placeholderText: "Name")
+                .AutomationName("Name")
+                .Ref(fieldRef),
             Button("Focus the field", () =>
                 fieldRef.Current?.Focus(FocusState.Programmatic))
         ).Padding(24);
@@ -278,10 +280,15 @@ manage it.
 
 `Optional<T>` is Reactor's authority marker for controlled props. A
 controlled element property such as `SliderElement.Value` is not just a
-`double`; it is either `Optional.Of(value)` (Reactor is asserting the
-value) or `Optional<double>.Unset` (the WinUI control owns the value).
+`double`; it is either `Optional<double>.Of(value)` (Reactor is asserting
+the value) or `Optional<double>.Unset` (the WinUI control owns the value).
 This distinction exists because C# records cannot tell "property
 omitted" from "property set to the default" the way JSX can.
+
+<!-- phantom:skip "Optional.Of" -->
+`Of` is a static member **on the generic struct**, so the type argument
+goes on `Optional<T>`, never on `Of` — `Optional<double>.Of(5.0)`, not
+`Optional.Of(5.0)` and not `Optional.Of<double>(5.0)`.
 
 ### Snap-back recipe
 
@@ -290,21 +297,24 @@ to a fixed value. Keep the element value `HasValue` and force a
 re-render from the change callback:
 
 ```csharp
-public override Element Render()
+class SnapBackDemo : Component
 {
-    // RenderContext.UseReducer<T>(T initialValue) returns
-    // (T Value, Action<Func<T, T>> Update). Toggling the bool guarantees
-    // a changed reducer result and therefore a re-render.
-    var (_, bump) = UseReducer(false);
+    public override Element Render()
+    {
+        // RenderContext.UseReducer<T>(T initialValue) returns
+        // (T Value, Action<Func<T, T>> Update). Toggling the bool guarantees
+        // a changed reducer result and therefore a re-render.
+        var (_, bump) = UseReducer(false);
 
-    return Slider(
-        value: Optional<double>.Of(5.0),
-        onValueChanged: _ => bump(b => !b));
+        return Slider(
+            value: Optional<double>.Of(5.0),
+            onValueChanged: _ => bump(b => !b));
+    }
 }
 ```
 
 Flow: the user drags the slider away from 5, the callback toggles the
-reducer state, the next render produces `Optional.Of(5.0)`, and the
+reducer state, the next render produces `Optional<double>.Of(5.0)`, and the
 controlled Update gate sees `HasValue` plus drift and writes 5 back
 with echo suppression. Use this only when the snap-back is intentional;
 ordinary inputs should bind to state (`Slider(value, setValue)`) or use
@@ -321,19 +331,22 @@ public sealed record CardElement : Element
     public Optional<Brush?> Background { get; init; } = Optional<Brush?>.Unset;
 }
 
-static readonly ControlDescriptor<CardElement, Border> Descriptor =
-    new ControlDescriptor<CardElement, Border>()
-        .OneWay(
-            get: static e => e.Background,
-            set: static (c, v) => c.Background = v,
-            dp: Border.BackgroundProperty);
+static class CardDescriptorHost
+{
+    public static readonly ControlDescriptor<CardElement, Microsoft.UI.Xaml.Controls.Border> Descriptor =
+        new ControlDescriptor<CardElement, Microsoft.UI.Xaml.Controls.Border>()
+            .OneWay(
+                get: static e => e.Background,
+                set: static (c, v) => c.Background = v,
+                dp: Microsoft.UI.Xaml.Controls.Border.BackgroundProperty);
+}
 ```
 
-`Background = Optional.Of<Brush?>(brush)` writes a local brush;
+`Background = Optional<Brush?>.Of(brush)` writes a local brush;
 `Background = Optional<Brush?>.Unset` calls `ClearValue` so WinUI's
 style, template, inherited value, or registered default can show
 through. Be explicit with nulls: `with { Background = null }` uses the
-implicit conversion and means `Optional.Of(null)`, not `Unset`.
+implicit conversion and means `Optional<Brush?>.Of(null)`, not `Unset`.
 
 ## Custom hooks
 
@@ -362,9 +375,10 @@ class CustomHookDemo : Component
         var (isOn, toggle) = ctx.UseToggler();
         return VStack(8,
             SubHeading("Custom hook: UseToggler"),
-            Button(isOn ? "On" : "Off", toggle),
+            Button(isOn ? "On" : "Off", toggle)
+                .AutomationName("Toggle state"),
             TextBlock(isOn ? "State is on." : "State is off.")
-                .Foreground(isOn ? "#107c10" : "#666666")
+                .Foreground(isOn ? Theme.SystemSuccess : Theme.SecondaryText)
         ).Padding(24);
     });
 }
@@ -431,7 +445,8 @@ class ObservableTreeDemo : Component
                 header: "User Name"),
             ToggleSwitch(vm.DarkMode, v => vm.DarkMode = v,
                 header: "Dark Mode"),
-            Slider(vm.FontSize, 10, 32, v => vm.FontSize = (int)v),
+            Slider(vm.FontSize, 10, 32, v => vm.FontSize = (int)v)
+                .AutomationName("Font size"),
             TextBlock($"Preview: {vm.UserName}")
                 .FontSize(vm.FontSize).Bold()
         ).Padding(24);
@@ -459,8 +474,11 @@ component when items are added, removed, or the collection resets:
 ```csharp
 class ObservableCollectionDemo : Component
 {
-    private static readonly ObservableCollection<string> _tasks = new()
-        { "Review pull request", "Update documentation" };
+    private record TaskItem(int Id, string Title);
+
+    private static int _nextId = 3;
+    private static readonly ObservableCollection<TaskItem> _tasks = new()
+        { new TaskItem(1, "Review pull request"), new TaskItem(2, "Update documentation") };
 
     public override Element Render()
     {
@@ -471,18 +489,21 @@ class ObservableCollectionDemo : Component
             SubHeading("UseCollection"),
             HStack(8,
                 TextBox(input, setInput, placeholderText: "New task")
+                    .AutomationName("New task")
                     .Width(200),
                 Button("Add", () => {
                     if (!string.IsNullOrWhiteSpace(input))
-                    { _tasks.Add(input.Trim()); setInput(""); }
+                    { _tasks.Add(new TaskItem(_nextId++, input.Trim())); setInput(""); }
                 })
             ),
             TextBlock($"{tasks.Count} tasks:").SemiBold(),
             VStack(4, tasks.Select((task, i) =>
                 HStack(8,
-                    TextBlock($"{i + 1}. {task}"),
-                    Button("Remove", () => _tasks.RemoveAt(i))
-                ).WithKey($"task-{i}-{task}")
+                    // The index is fine for display; it must not become the key.
+                    TextBlock($"{i + 1}. {task.Title}"),
+                    Button("Remove", () => _tasks.Remove(task))
+                        .AutomationName($"Remove {task.Title}")
+                ).WithKey(task.Id.ToString())   // stable identity survives removal
             ).ToArray())
         ).Padding(24);
     }
@@ -514,29 +535,44 @@ so perf-critical code can build them once instead of having the fluent
 chain rebuild them step-by-step.
 
 ```csharp
-// Fluent — five clones per cell. Right tool for ordinary UI.
-var cell = TextBlock(label)
-    .FontSize(8)
-    .Foreground(item.IsUp ? GreenBrush : RedBrush)
-    .Padding(2, 1, 2, 1)
-    .Grid(row: r, column: c);
-
-// Direct record initializer — one TextBlockElement, one ElementModifiers,
-// two bucket sub-records, one Attached dictionary. Use only when the
-// allocation cost shows up in profiles.
-var cell = new TextBlockElement(label)
+static class HotLoopCells
 {
-    FontSize = 8,
-    Modifiers = new ElementModifiers
+    record Quote(bool IsUp);
+
+    static readonly Brush GreenBrush = new SolidColorBrush(Colors.Green);
+    static readonly Brush RedBrush = new SolidColorBrush(Colors.Red);
+
+    public static void Build(string label, int r, int c)
     {
-        Layout = new LayoutModifiers { Padding = new Thickness(2, 1, 2, 1) },
-        Visual = new VisualModifiers { Foreground = item.IsUp ? GreenBrush : RedBrush },
-    },
-    Attached = new Dictionary<Type, object>(1)
-    {
-        [typeof(GridAttached)] = new GridAttached(r, c, 1, 1),
-    },
-};
+        var item = new Quote(IsUp: true);
+
+        // Fluent — five clones per cell. Right tool for ordinary UI.
+        var fluentCell = TextBlock(label)
+            .FontSize(8)
+            .Foreground(item.IsUp ? GreenBrush : RedBrush)
+            .Padding(2, 1, 2, 1)
+            .Grid(row: r, column: c);
+
+        // Direct record initializer — one TextBlockElement, one ElementModifiers,
+        // two bucket sub-records, one Attached dictionary. Use only when the
+        // allocation cost shows up in profiles.
+        var directCell = new TextBlockElement(label)
+        {
+            FontSize = 8,
+            Modifiers = new ElementModifiers
+            {
+                Layout = new LayoutModifiers { Padding = new Thickness(2, 1, 2, 1) },
+                Visual = new VisualModifiers { Foreground = item.IsUp ? GreenBrush : RedBrush },
+            },
+            Attached = new Dictionary<Type, object>(1)
+            {
+                [typeof(GridAttached)] = new GridAttached(r, c, 1, 1),
+            },
+        };
+
+        _ = (fluentCell, directCell);
+    }
+}
 ```
 
 **Registration contract.** Factory methods (`TextBlock(...)`, `Button(...)`,
@@ -588,11 +624,27 @@ reconciler's `ReferenceEquals` shortcut means a reused cell allocates
 nothing and skips diffing entirely.
 
 ```csharp
-var theme = ctx.UseTheme();
-var children = ctx.UseMemoCells(
-    stocks,
-    (item, i) => Cell(item, theme),
-    theme);   // ← deps; framework invalidates on change
+class MemoCellsDemo : Component
+{
+    record Stock(string Symbol, double Price);
+
+    static Element Cell(Stock item, ColorScheme scheme) =>
+        TextBlock($"{item.Symbol} {item.Price:F2}")
+            .Foreground(scheme == ColorScheme.Dark ? Theme.PrimaryText : Theme.SecondaryText);
+
+    public override Element Render() => Memo(ctx =>
+    {
+        var stocks = new[] { new Stock("MSFT", 431.2), new Stock("GOOG", 176.5) };
+
+        var scheme = ctx.UseColorScheme();
+        var children = ctx.UseMemoCells(
+            stocks,
+            (item, i) => Cell(item, scheme),
+            scheme);   // ← deps; framework invalidates on change
+
+        return VStack(4, children);
+    });
+}
 ```
 
 **When it's the right hammer.** Tickers, log tables, file lists, large
@@ -713,24 +765,38 @@ longer matters. Put state resets in the effect body or in an event
 handler that explicitly transitions the parent. See
 [effects-scheduling](effects-scheduling.md) for cleanup ordering.
 
-### Subscribing to events from a parent that captures the wrong `this`
+### Subscribing to control events from a parent that captures the wrong `this`
 
 ```csharp
-// Don't — captures the parent's `this` inside the child component.
-class Parent : Component
+// Don't — `.Set` runs on every mount AND update, so each render adds another
+// subscription, and the lambda captures the parent component instance that was
+// current when the closure was created.
+class WrongThisCaptureDemo : Component
 {
-    public override Element Render() =>
-        Component<Child>().Set(c => c.Loaded += (s, e) => this.OnChildLoaded());
+    public override Element Render()
+    {
+        // Don't do this:
+        // return Button("Load").Set(b => b.Loaded += (s, e) => this.OnChildLoaded());
+        return Button("Load");
+    }
+
+    void OnChildLoaded() { }
 }
 ```
 
-`.Set(control => ...)` runs on every mount and update — every event
-subscription accumulates. The `this` inside the lambda is the parent
-component, captured at the lambda's closure site, which keeps a strong
-reference to a stale render's component instance after the parent has
-re-rendered. Two fixes: lift the handler to a stable `UseCallback`
-in the parent and pass it via [props](components.md), or use
-`.OnMount(...)` for a one-shot subscription with explicit cleanup.
+The commented `.Set(control => ...)` line is the bug: `.Set` runs on
+every mount and update, so every render would add another event
+subscription. The `this` inside the lambda is the parent component,
+captured at the lambda's closure site, which keeps a strong reference
+to a stale render's component instance after the parent has re-rendered.
+Two fixes: lift the handler to a stable `UseCallback` in the parent and
+pass it via [props](components.md), or use `.OnMount(...)` for a one-shot
+subscription with explicit cleanup.
+
+(`.Set` is generated per control-backed element — `ButtonElement.Set(Action<Button>)`,
+`TextBoxElement.Set(Action<TextBox>)`, and so on. Component elements returned by
+`Component<T>()` have no `.Set`; to reach a child's control, put the `.Set` on the
+control-backed element inside that child's own `Render`.)
 
 ### Reaching for `.Set` when a modifier exists
 

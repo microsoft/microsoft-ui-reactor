@@ -1,0 +1,23 @@
+<Project>
+  <!--
+    Forwarder. Packed as build\Microsoft.UI.Reactor.targets; the real body lives at
+    buildTransitive\Microsoft.UI.Reactor.targets.
+
+    NuGet flows build\ to a DIRECT PackageReference only. A project that picks
+    Reactor up through an intermediate library never sees build\, so the body has to
+    live in buildTransitive\ or that project compiles against the DSL with no
+    source-map generator and no REACTOR_SOURCEMAP — silently null locations rather
+    than an error.
+
+    Forwarding rather than shipping the body twice, because two copies cannot be made
+    idempotent with a property guard: MSBuild evaluates every PropertyGroup in a file
+    before any ItemGroup, so a sentinel set by the second import is already visible
+    when the first import's items are evaluated. Measured — the guard suppressed the
+    wiring entirely instead of just the duplicate. An <Import Condition>, by contrast,
+    IS evaluated in file order, so this one correctly skips when NuGet has already
+    imported the body directly.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)..\buildTransitive\Microsoft.UI.Reactor.targets"
+          Condition="'$(_MicrosoftUIReactorTargetsLoaded)' != 'true'
+                     and Exists('$(MSBuildThisFileDirectory)..\buildTransitive\Microsoft.UI.Reactor.targets')" />
+</Project>

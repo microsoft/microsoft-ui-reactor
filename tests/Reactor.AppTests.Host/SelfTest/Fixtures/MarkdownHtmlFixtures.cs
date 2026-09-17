@@ -51,7 +51,7 @@ internal static class MarkdownHtmlFixtures
 
         ---
 
-        For questions, contact [the team](mailto:duct@example.com).
+        For questions, contact [the team](mailto:reactor@example.com).
         """;
 
     internal class HtmlGeneration(Harness h) : SelfTestFixtureBase(h)

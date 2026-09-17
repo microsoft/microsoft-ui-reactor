@@ -7,7 +7,8 @@ using Microsoft.UI.Xaml.Controls;         // Orientation, InfoBarSeverity, etc.
 using static Microsoft.UI.Reactor.Factories;
 
 #if (csharpFeature_TopLevelProgram)
-ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600);
+ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600,
+    icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
 
 #else
 namespace Company.ReactorApp1;
@@ -16,7 +17,8 @@ class Program
 {
     static void Main(string[] args)
     {
-        ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600);
+        ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600,
+            icon: WindowIcon.FromPath("Assets/AppIcon.ico"));
     }
 }
 
@@ -27,11 +29,10 @@ class App : Component
     {
         var (name, setName) = UseState("World");
 
-        // App-mark icon in the title bar: a placeholder Segoe Fluent Icons glyph
-        // (U+EA3A). Swap it for a bundled asset once you add one, e.g.
-        // .Icon("ms-appx:///Assets/AppIcon.ico").
+        // The title bar's app mark is inherited from the window icon set via
+        // ReactorApp.Run(icon:) above -- no need to restate it here. Call
+        // .Icon(...) only to show something different, or .NoIcon() for none.
         var titleBar = TitleBar("Company.ReactorApp1")
-            .Icon(FontIcon("\uEA3A", "Segoe Fluent Icons"))
             .Flex(shrink: 0);
 
         var body = Border(

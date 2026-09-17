@@ -10,13 +10,15 @@ class TodoApp : Component
 {
     public override Element Render()
     {
-        var (items, updateItems) = UseReducer(new List<TodoItem>
+        var initialItems = UseMemo(() => new List<TodoItem>
         {
-            new("Learn Reactor basics", true),
-            new("Build a todo app", false),
-            new("Explore hooks", false),
+            new("todo-1", "Learn Reactor basics", true),
+            new("todo-2", "Build a todo app", false),
+            new("todo-3", "Explore hooks", false),
         });
+        var (items, updateItems) = UseReducer(initialItems);
         var (newText, setNewText) = UseState("");
+        var (nextId, setNextId) = UseState(4);
 
         var doneCount = items.Count(i => i.Done);
 
@@ -27,12 +29,15 @@ class TodoApp : Component
             // Input row
             HStack(8,
                 TextBox(newText, setNewText, placeholderText: "What needs to be done?")
+                    .AutomationName("New todo")
                     .Width(300),
                 Button("Add", () =>
                 {
                     if (!string.IsNullOrWhiteSpace(newText))
                     {
-                        updateItems(list => [.. list, new TodoItem(newText.Trim(), false)]);
+                        var text = newText.Trim();
+                        updateItems(list => [.. list, new TodoItem($"todo-{nextId}", text, false)]);
+                        setNextId(nextId + 1);
                         setNewText("");
                     }
                 }).IsEnabled(!(string.IsNullOrWhiteSpace(newText)))
@@ -40,13 +45,15 @@ class TodoApp : Component
 
             // Item list
             VStack(4,
-                items.Select((item, index) =>
+                items.Select((item, _) =>
                     HStack(8,
                         CheckBox(item.Done, done =>
                             updateItems(list =>
                             {
                                 var copy = new List<TodoItem>(list);
-                                copy[index] = item with { Done = done };
+                                var itemIndex = copy.FindIndex(i => i.Id == item.Id);
+                                if (itemIndex >= 0)
+                                    copy[itemIndex] = item with { Done = done };
                                 return copy;
                             }),
                             label: item.Text
@@ -55,11 +62,11 @@ class TodoApp : Component
                             updateItems(list =>
                             {
                                 var copy = new List<TodoItem>(list);
-                                copy.RemoveAt(index);
+                                copy.RemoveAll(i => i.Id == item.Id);
                                 return copy;
                             })
-                        )
-                    ).WithKey($"todo-{index}")
+                        ).AutomationName($"Remove {item.Text}")
+                    ).WithKey(item.Id)
                 ).ToArray()
             ),
 
@@ -67,7 +74,7 @@ class TodoApp : Component
             When(doneCount > 0, () =>
                 Button($"Clear completed ({doneCount})", () =>
                     updateItems(list => list.Where(i => !i.Done).ToList())
-                )
+                ).AutomationName("Clear completed todos")
             )
         ).Padding(24);
     }
@@ -75,5 +82,5 @@ class TodoApp : Component
 // </snippet:todo-app>
 
 // <snippet:todo-record>
-record TodoItem(string Text, bool Done);
+record TodoItem(string Id, string Text, bool Done);
 // </snippet:todo-record>

@@ -40,7 +40,8 @@ class ControlledInputDemo : Component
 
         return VStack(12,
             SubHeading("Controlled Input"),
-            TextBox(name, setName, placeholderText: "Type your name"),
+            TextBox(name, setName, placeholderText: "Type your name",
+                header: "Name"),
             TextBlock($"You typed: {name}").Opacity(0.6)
         ).Padding(24);
     }
@@ -76,16 +77,17 @@ class InputTypesDemo : Component
             TextBox(text, setText, placeholderText: "Email",
                 header: "Email"),
             PasswordBox(password, setPassword,
-                placeholderText: "Enter password"),
-            Slider(volume, 0, 100, setVolume),
+                placeholderText: "Enter password")
+                .Header("Password"),
+            Slider(volume, 0, 100, setVolume).Header("Volume"),
             NumberBox(count, setCount, header: "Quantity"),
             CheckBox(agree, setAgree, label: "I agree to the terms"),
             ToggleSwitch(notify, setNotify,
                 header: "Notifications"),
             ComboBox(["Admin", "Editor", "Viewer"],
                 role, setRole).Header("Role"),
-            RadioButtons(["Low", "Medium", "High"],
-                priority, setPriority)
+            (RadioButtons(["Low", "Medium", "High"],
+                priority, setPriority) with { Header = "Priority" })
         ).Padding(24);
     }
 }
@@ -134,7 +136,8 @@ class TextBoxConfigDemo : Component
                 .UrlInput(),
             TextBox(phone, setPhone, header: "Phone")
                 .PhoneInput(),
-            TextBox(search, setSearch, placeholderText: "Search…")
+            TextBox(search, setSearch, placeholderText: "Search…",
+                header: "Search")
                 .SearchInput(),
             TextBox(note, setNote, header: "Reference code")
                 .MaxLength(8)
@@ -314,6 +317,7 @@ class ValidationContextDemo : Component
                     .Foreground(Theme.SystemCritical).FontSize(12)),
             PasswordBox(password, v => { setPassword(v); ctx.NotifyValueChanged("password", v); },
                 placeholderText: "Min 8 characters")
+                .Header("Password")
                 .Validate("password", password,
                     Validate.Required(),
                     Validate.MinLength(8)),
@@ -361,12 +365,14 @@ class FormFieldDemo : Component
             SubHeading("FormField Helper"),
             FormField(
                 TextBox(name, v => { setName(v); ctx.NotifyValueChanged("name", v); })
+                    .AutomationName("Full Name")
                     .Validate("name", name, Validate.Required()),
                 label: "Full Name",
                 required: true,
                 description: "As it appears on your ID"),
             FormField(
                 TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); })
+                    .AutomationName("Email Address")
                     .Validate("email", email,
                         Validate.Required(), Validate.Email()),
                 label: "Email Address",
@@ -518,8 +524,8 @@ class AutoSuggestDemo : Component
             When(matches.Length > 0, () =>
                 VStack(2,
                     ForEach(matches, m =>
-                        TextBlock(m).Padding(8, 4))
-                ).Background("#F5F5F5").Width(280))
+                        TextBlock(m).Padding(8, 4).WithKey(m))
+                ).Background(Theme.CardBackground).Width(280))
         ).Padding(24);
     }
 }
@@ -660,12 +666,9 @@ class ColorPickerDemo : Component
                 .HexInputVisible(true)
                 .ColorSpectrumShape(
                     Microsoft.UI.Xaml.Controls.ColorSpectrumShape.Ring),
-            // Preview swatch driven by the picker.
-            Border(Empty())
-                .Background(
-                    new Microsoft.UI.Xaml.Media.SolidColorBrush(color))
-                .Width(80).Height(40)
-                .WithBorder("#888888")
+            TextBlock($"Selected: #{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}")
+                .FontSize(12)
+                .Foreground(Theme.SecondaryText)
         ).Padding(24);
     }
 }
@@ -723,7 +726,7 @@ per page.
 For a single-field form (search box, comment input), wire submission
 to Enter rather than a Submit button. `AutoSuggestBox` does this
 automatically via `onQuerySubmitted`. For `TextBox`, route through
-`.KeyDown` or wrap the field in an `[ai:lock]` form panel; see
+`.OnKeyDown` and check for `VirtualKey.Enter`; see
 [input-and-gestures](input-and-gestures.md) for the routed-events
 surface.
 
@@ -732,7 +735,7 @@ surface.
 `Validate.MustAsync<T>(...)` runs a predicate that returns
 `Task<bool>`. The `ValidationContext` tracks the in-flight async work
 and reports `IsValidating` per field, so the Submit button can disable
-while async validation runs. Pair with `DisabledFocusable()` so the
+while async validation runs. Pair with `.IsDisabledFocusable()` so the
 button stays in tab order while validating — same accessibility
 concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 
@@ -741,8 +744,10 @@ concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 ### Letting the control hold its own state
 
 ```csharp
-// Don't:
-TextBox(initial: "default value")
+// Don't — there is no `initial:` parameter. The bare string binds a value
+// with no `onChanged`, so it seeds the box and then nothing reads it back:
+// the user's typing lives only in the native control:
+TextBox("default value")
 ```
 
 ```csharp
@@ -754,17 +759,30 @@ class ControlledInputDemo : Component
 
         return VStack(12,
             SubHeading("Controlled Input"),
-            TextBox(name, setName, placeholderText: "Type your name"),
+            TextBox(name, setName, placeholderText: "Type your name",
+                header: "Name"),
             TextBlock($"You typed: {name}").Opacity(0.6)
         ).Padding(24);
     }
 }
 ```
 
-Uncontrolled inputs work in trivial demos but break the moment the
-parent component needs to read, reset, or pre-fill the value. Reactor
-inputs all take `(value, onChanged)` — the control is always a passive
-view of state.
+The distinction that matters is not "controlled vs. uncontrolled" but
+whether the binding is *complete*. Omit the value entirely and the
+control owns its own state, which the parent cannot read, reset, or
+pre-fill. Pass a value without `onChanged` — as above — and you get a
+*half* binding: the value is pre-filled and the parent can still replace
+it by passing a different one, but nothing flows back. The user's edits
+stay in the native control and never reach application state, so a later
+read of your state returns the original string as if nothing was typed.
+
+Note this does **not** fight the user keystroke-by-keystroke: the element
+is unchanged between renders, so the reconciler's shallow-equality skip
+fires and never re-writes the box. That is what makes the bug quiet — the
+text looks accepted and is simply never collected. If the text really is
+fixed, say so with `.IsReadOnly(true)`; otherwise supply both halves.
+Reactor inputs take `(value, onChanged)` together; supply
+both and the control is a passive view of state.
 
 ### Validating in the click handler
 

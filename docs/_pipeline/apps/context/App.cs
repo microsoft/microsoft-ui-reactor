@@ -145,9 +145,11 @@ static class AppContexts
 
 class UserContextExample : Component
 {
+    private static readonly CurrentUser InitialUser = new("u1", "Alice", IsAdmin: true);
+
     public override Element Render()
     {
-        var (user, setUser) = UseState(new CurrentUser("u1", "Alice", IsAdmin: true));
+        var (user, setUser) = UseState(InitialUser);
 
         return VStack(12,
             HStack(8,
@@ -188,10 +190,17 @@ class AdminPanel : Component
 
 // <snippet:memoize-context-value>
 // The value identity matters. Wrapping in UseMemo with explicit deps
-// stops every consumer from re-rendering on every provider render —
-// the inline-literal version below would create a fresh tuple every
-// frame even when nothing changed.
-record ThemeConfig(string Mode, int FontScale, string Accent);
+// stops every consumer from re-rendering on every provider render.
+// ThemeConfig is a *class*, so it compares by reference — context
+// invalidation uses Equals, and a record with unchanged fields would
+// compare equal and re-render nothing, hiding the very cost this
+// snippet is about.
+sealed class ThemeConfig(string mode, int fontScale, string accent)
+{
+    public string Mode { get; } = mode;
+    public int FontScale { get; } = fontScale;
+    public string Accent { get; } = accent;
+}
 
 static class ThemeContexts
 {
@@ -209,7 +218,8 @@ class MemoizeContextValueExample : Component
         // re-render when mode or scale actually change.
         var theme = UseMemo(() => new ThemeConfig(mode, scale, "#0078D4"), mode, scale);
 
-        // BAD — every render creates a fresh ThemeConfig.
+        // BAD — a fresh reference every render, so every consumer re-renders
+        // even when mode and scale are unchanged.
         // var theme = new ThemeConfig(mode, scale, "#0078D4");
 
         return VStack(12,
@@ -268,6 +278,60 @@ class MockProviderExample : Component
     }
 }
 // </snippet:mock-provider-test>
+
+// <snippet:inline-literal-provide>
+class InlineLiteralProvideDont : Component
+{
+    public override Element Render()
+    {
+        var (mode, setMode) = UseState("light");
+        var (scale, setScale) = UseState(14);
+
+        // Don't — a fresh ThemeConfig every render re-renders every consumer
+        // in the subtree even when mode and scale are unchanged.
+        return VStack(8, Component<ThemedHeading>())
+            .Provide(ThemeContexts.Theme, new ThemeConfig(mode, scale, "#0078D4"));
+    }
+}
+// </snippet:inline-literal-provide>
+
+// <snippet:context-without-provider>
+static class NullableUserContexts
+{
+    // Static field default of `null`.
+    public static readonly Context<CurrentUser?> User = new(null);
+}
+
+class ReadsContextWithoutProvider : Component
+{
+    public override Element Render()
+    {
+        // In a component that's somehow rendered before the root provides,
+        // UseContext returns the context's DefaultValue — here, null.
+        var user = UseContext(NullableUserContexts.User);
+
+        // So branch on the sentinel instead of dereferencing blind:
+        return TextBlock(user?.DisplayName ?? "(not signed in)");
+    }
+}
+// </snippet:context-without-provider>
+
+// <snippet:context-for-props>
+static class SelectionContexts
+{
+    // Don't — a single-source-single-sink value belongs in a prop.
+    public static readonly Context<int> SelectedIndex = new(0);
+}
+
+class ContextForPropsDont : Component
+{
+    public override Element Render()
+    {
+        var index = UseContext(SelectionContexts.SelectedIndex);
+        return TextBlock($"Selected: {index}");
+    }
+}
+// </snippet:context-for-props>
 
 // Main app
 class ContextApp : Component

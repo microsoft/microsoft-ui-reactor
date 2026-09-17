@@ -27,16 +27,16 @@ class DemoResourceProvider : IStringResourceProvider
     private readonly Dictionary<string, Dictionary<string, string>> _strings = new()
     {
         ["en-US"] = new() {
-            ["App.title"] = "My Application",
-            ["App.greeting"] = "Hello, {name}!",
+            ["App.Title"] = "My Application",
+            ["App.Greeting"] = "Hello, {name}!",
         },
         ["fr-FR"] = new() {
-            ["App.title"] = "Mon Application",
-            ["App.greeting"] = "Bonjour, {name} !",
+            ["App.Title"] = "Mon Application",
+            ["App.Greeting"] = "Bonjour, {name} !",
         },
         ["ar-SA"] = new() {
-            ["App.title"] = "\u062a\u0637\u0628\u064a\u0642\u064a",
-            ["App.greeting"] = "\u0645\u0631\u062d\u0628\u0627\u060c {name}!",
+            ["App.Title"] = "\u062a\u0637\u0628\u064a\u0642\u064a",
+            ["App.Greeting"] = "\u0645\u0631\u062d\u0628\u0627\u060c {name}!",
         }
     };
 
@@ -70,7 +70,8 @@ class LocaleSwitcher : Component
 
         return VStack(16,
             ComboBox(["English (US)", "Fran\u00e7ais", "\u0627\u0644\u0639\u0631\u0628\u064a\u0629"],
-                localeIndex, setLocaleIndex),
+                localeIndex, setLocaleIndex)
+                .Header("Locale"),
             LocaleProvider(locale,
                 Component<LocalizedContent>(),
                 resourceProvider: provider,
@@ -101,9 +102,9 @@ class LocalizedContent : Component
     public override Element Render()
     {
         var intl = UseIntl();
-        var title = intl.Message(new MessageKey("App", "title"));
+        var title = intl.Message(new MessageKey("App", "Title"));
         var greeting = intl.Message(
-            new MessageKey("App", "greeting"),
+            new MessageKey("App", "Greeting"),
             ("name", "Alice"));
 
         return VStack(12,
@@ -121,6 +122,11 @@ class LocalizedContent : Component
 `MessageKey` takes a namespace and key. The namespace maps to your `.resw`
 file name (e.g., `"App"` for `App.resw`). The accessor also exposes the
 current `Locale`, `Direction`, and `IsRtl` flag.
+
+In `.resw`-backed apps, `Reactor.Localization.Generator` reads the default
+locale's files at build time and emits the same keys as generated fields
+(for example, `Loc.App.Title`). These self-contained snippets spell out
+`new MessageKey(...)` so the in-memory provider remains visible.
 
 ## Formatting Numbers and Dates
 
@@ -188,13 +194,14 @@ class RtlDemo : Component
                         TextBlock(RtlHelper.IsRtlLocale(loc) ? "RTL" : "LTR")
                             .Bold()
                             .Foreground(RtlHelper.IsRtlLocale(loc)
-                                ? "#d13438" : "#107c10")
+                                ? Theme.SystemCritical : Theme.SystemSuccess)
                     )
+                    .WithKey(loc)
                 ).ToArray()
             ),
             When(intl.IsRtl, () =>
                 TextBlock("Current layout is right-to-left")
-                    .Foreground("#d13438").SemiBold())
+                    .Foreground(Theme.SystemCritical).SemiBold())
         ).Padding(24);
     }
 }
@@ -228,9 +235,9 @@ class PseudoLocDemo : Component
                 RenderEachTime(ctx =>
                 {
                     var intl = ctx.UseIntl();
-                    var title = intl.Message(new MessageKey("App", "title"));
+                    var title = intl.Message(new MessageKey("App", "Title"));
                     var greeting = intl.Message(
-                        new MessageKey("App", "greeting"),
+                        new MessageKey("App", "Greeting"),
                         ("name", "World"));
                     return VStack(4,
                         TextBlock(title).FontSize(18).Bold(),

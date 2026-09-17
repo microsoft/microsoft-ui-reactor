@@ -25,7 +25,7 @@ internal static class TierLintOrchestrator
         string? topic = null,
         DocTier? tierFilter = null)
     {
-        var apps = CompileCommand.DiscoverApps(appsDir, topic);
+        var apps = CompileCommand.DiscoverApps(appsDir, appIds: null);
         List<(string topicId, DocTemplate template)> templates;
         try
         {
@@ -42,6 +42,17 @@ internal static class TierLintOrchestrator
                     1,
                     TierLintSeverity.Error)
             });
+        }
+
+        // Restrict app discovery to the apps the selected templates bind to.
+        // Keyed off `app:` front-matter, not the topic id: for 13 shipping
+        // topics those names differ, and filtering by topic id discovered no
+        // app at all — so every `snippet=` failed to resolve and tier-lint
+        // reported a REACTOR_DOC_TIER_003 against a page that was fine.
+        if (topic is not null)
+        {
+            var appIds = CompileCommand.ResolveAppIds(templates);
+            apps = apps.Where(app => appIds.Contains(app.topicId)).ToList();
         }
 
         if (tierFilter is { } filter)

@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor.Cli.Loc;
 
 /// <summary>
-/// Implements `duct loc validate`: checks ICU syntax validity and parameter consistency
+/// Implements `mur loc validate`: checks ICU syntax validity and parameter consistency
 /// across all locale .resw files.
 /// </summary>
 internal static class ValidateCommand
@@ -167,9 +167,9 @@ internal static class ValidateCommand
 
     private static void ShowHelp()
     {
-        Console.WriteLine("duct loc validate — Check ICU syntax and parameter consistency");
+        Console.WriteLine("mur loc validate — Check ICU syntax and parameter consistency");
         Console.WriteLine();
-        Console.WriteLine("Usage: duct loc validate [options]");
+        Console.WriteLine("Usage: mur loc validate [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --resources <dir>      Strings directory (default: Strings/)");

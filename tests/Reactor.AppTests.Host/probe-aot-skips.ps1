@@ -40,8 +40,10 @@ $patterns = [regex]::Matches($skipBlockMatch.Groups[1].Value, '"([^"]+)"') | For
 $exactPatterns = $patterns | Where-Object { -not $_.EndsWith('*') }
 $wildcardPatterns = $patterns | Where-Object { $_.EndsWith('*') }
 
-# Get full fixture list once.
-$allFixtures = & $exe --list-fixtures | Where-Object { $_ -match '\S' }
+# Get this tier's fixture list once. TAP comments are dropped: --list-fixtures ends with the
+# tier-exclusion trailer (issue #1154), and a '#' line reaching the wildcard expansion below
+# would be probed as though it were a fixture name.
+$allFixtures = & $exe --list-fixtures | Where-Object { $_ -match '\S' -and $_ -notmatch '^\s*#' }
 
 # Expand wildcards against the fixture registry.
 $fixturesToTest = New-Object System.Collections.Generic.HashSet[string]

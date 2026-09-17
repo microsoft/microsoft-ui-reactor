@@ -100,7 +100,18 @@ internal static partial class SnippetExtractor
             }
 
             if (startLine >= 0)
+            {
+                // A marker for a *different* region nested inside this one is pipeline
+                // bookkeeping, not code. Copying it verbatim printed lines like
+                // `// <snippet:reconcile-trace-start>` into reconciliation.md,
+                // architecture-overview.md, and control-reconciler-protocol.md, where readers
+                // saw them as if they were framework source. Overlapping regions are legitimate
+                // — a wide region often contains a narrower one — so the extractor drops the
+                // marker lines rather than forbidding the overlap.
+                if (AnyMarkerPattern.IsMatch(lines[i])) continue;
+
                 content.Add(lines[i]);
+            }
         }
 
         if (nestedOpen)
@@ -129,6 +140,24 @@ internal static partial class SnippetExtractor
     //   ' <snippet:region>
     // We accept the marker token bracketed or unbracketed inside HTML-style
     // comments because hand-authored markdown / xml templates use both.
+    /// <summary>
+    /// Any snippet marker, open or close, for any region. Used to strip nested bookkeeping
+    /// lines out of an extracted region so they never reach the rendered page.
+    /// </summary>
+    private static readonly Regex AnyMarkerPattern =
+        new(@"(?ix)
+              ^\s*
+              (?:
+                  //              # C# line comment
+                | <!--            # HTML comment open
+                | '               # VB-style line comment
+              )
+              \s*
+              <? \s* /? \s* snippet : [A-Za-z0-9_\-\.]+ \s* >?
+              \s* (?:-->)?
+              \s*$",
+            RegexOptions.Compiled);
+
     private static Regex OpenMarkerPattern(string region) =>
         new(@"(?ix)
               ^\s*

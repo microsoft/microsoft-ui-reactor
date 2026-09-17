@@ -170,11 +170,15 @@ NavigationHost(nav, route => ...) with
 
 | Transition | Effect |
 |-----------|--------|
-| `NavigationTransition.Slide()` | Slide + fade (default) |
+| `NavigationTransition.Entrance()` | Slide up + fade in — the default, and what WinUI's `Frame` plays with no transition info |
+| `NavigationTransition.Slide()` | Slide + fade — vertical unless you pass a direction |
 | `NavigationTransition.Fade()` | Crossfade |
 | `NavigationTransition.DrillIn()` | Scale + fade — use for list→detail |
 | `NavigationTransition.Spring()` | Spring-physics slide |
 | `NavigationTransition.None` | Instant swap |
+
+`NavigationTransition.Default` is an alias for `Entrance()`. Use `Entrance()` when you
+mean the motion; use `Default` only when you mean "whatever the framework default is".
 
 GoBack automatically reverses direction. Transitions run on the compositor
 thread.

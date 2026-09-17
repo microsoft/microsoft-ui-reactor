@@ -8,7 +8,7 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseIsActive`
 ## Summary
 
 Subscribes to the host window's activation events and re-renders on
-change. Returns <c>true</c> outside a window (the surface is "active"
+change. Returns `true` outside a window (the surface is "active"
 while shown). (spec 036 §7)
 
 

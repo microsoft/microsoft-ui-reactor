@@ -166,17 +166,19 @@ class ProgressRingDemo : Component
     public override Element Render() => VStack(12,
         SubHeading("ProgressRing"),
         // Determinate ring at 60%.
-        ProgressRing(0.6).Width(48).Height(48),
+        ProgressRing(60).Width(48).Height(48),
         // Indeterminate spinner.
         ProgressRing().IsActive().Width(48).Height(48)
     ).Padding(24);
 }
 ```
 
-The `value` argument is 0–100 for `Progress(double)` and 0–1 for
-`ProgressRing(double)` — same convention as the underlying WinUI
-controls. The `ProgressBar` factory is the deprecated legacy name; use
-`Progress` and `ProgressIndeterminate` for new code (spec 039 §5).
+<!-- phantom:skip "ProgressBar" -->
+The `value` argument is 0–100 for both `Progress(double)` and
+`ProgressRing(double)` — the same convention as the underlying WinUI
+controls. There is no `ProgressBar(...)` factory: the linear bar is
+reached through `Progress` / `ProgressIndeterminate`, which is what the
+element record `ProgressElement` binds to (spec 039 §5).
 
 WinUI design pages: [Progress controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/progress-controls).
 
@@ -192,12 +194,14 @@ class TeachingTipDemo : Component
     public override Element Render()
     {
         var (show, setShow) = UseState(false);
+        var target = this.UseElementRef<FrameworkElement>();
 
         return VStack(12,
             SubHeading("TeachingTip"),
-            Button("Show tip", () => setShow(true)),
+            Button("Show tip", () => setShow(true)).Ref(target),
             TeachingTip("Try the new sort menu",
-                "Sort across multiple columns by holding Shift.") with
+                "Sort across multiple columns by holding Shift.",
+                target: target) with
             {
                 IsOpen = show,
                 OnClosed = () => setShow(false),
