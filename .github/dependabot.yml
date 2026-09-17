@@ -173,7 +173,10 @@ updates:
           - "patch"
 
       # tsc and its consumers: a TypeScript major can change type-checking
-      # results everywhere at once, so it is reviewed as one change.
+      # results everywhere at once, so it is reviewed as one change. (Currently
+      # inert -- typescript majors are suppressed by the ignore entry below,
+      # which takes precedence over any group. The group is what sorts them
+      # once that lifts.)
       typescript-major:
         patterns:
           - "typescript"
@@ -327,4 +330,32 @@ updates:
       # that way with v13 and passes with v11. Security patches on 11.x still
       # flow through.
       - dependency-name: "better-sqlite3"
+        update-types: ["version-update:semver-major"]
+      # TypeScript 7 (the native port) cannot be linted by these projects.
+      # @typescript-eslint declares `peer typescript: ">=4.8.4 <6.1.0"`, and
+      # that is the range on 8.70.0, its *latest* release -- no published
+      # typescript-eslint supports 7.x yet. @react-native/eslint-config@0.87.1
+      # depends on @typescript-eslint/{eslint-plugin,parser} ^8.59.2, so all
+      # three harnesses inherit that cap.
+      #
+      # npm does not refuse the install; it satisfies the peer by nesting a
+      # second copy of the whole @typescript-eslint tree (with its own
+      # typescript 6.0.3) under node_modules/@react-native/eslint-config/, and
+      # eslint-plugin-jest gets nested along with it. eslint 8 then cannot
+      # resolve that plugin from the project root, so `eslint .` aborts with
+      # `Environment key "jest/globals" is unknown` -- an error that names
+      # neither typescript nor the peer conflict. Measured on #1255: all six
+      # harness jobs failed that way, before `tsc` ever ran.
+      #
+      # tools/figma-plugin is blocked independently and is not collateral from
+      # sharing this entry: TypeScript 7 removed `"module": "none"`, which its
+      # tsconfig.json uses to guarantee a bundler-free single-script output, so
+      # it fails with `error TS6046: Argument for '--module' option must be:
+      # 'commonjs', 'es6', ... 'preserve'`. Choosing a replacement is a real
+      # decision about that plugin's output, not part of a dependency bump.
+      #
+      # src/vscode-reactor is a separate ecosystem entry above and already runs
+      # typescript ^7.0.2 successfully -- it does not use @typescript-eslint.
+      # Revisit when typescript-eslint ships 7.x support.
+      - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
