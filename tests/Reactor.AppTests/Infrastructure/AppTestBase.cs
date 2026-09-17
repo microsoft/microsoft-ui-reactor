@@ -55,6 +55,15 @@ public class AppTestBase
         var name = TestContext?.TestName ?? GetType().Name;
         TestContext?.WriteLine($"winapp-invocations={spawned}");
         WinAppMetrics.Record(name, spawned, seconds);
+
+        // Hand the desktop back between tests. Naming the workflow (see WinAppUi.WorkflowId) makes
+        // our turn survive the gaps *inside* a test, which is the whole point — but it would also
+        // survive the much longer gaps between tests, needlessly blocking a concurrent agent for
+        // the idle grace after every single test. Yield collapses that to the moment we stop
+        // driving. Skipped when the test never touched winapp, so a headless unit test in this
+        // assembly doesn't pay a process spawn to release a turn it never took.
+        if (spawned > 0)
+            WinAppUi.ReleaseUiTurn();
     }
 
     private static string? _currentFixture;

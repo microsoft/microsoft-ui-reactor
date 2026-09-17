@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- E2E tests now run as one named winapp workflow: `WinAppUi` stamps `WINAPP_UI_WORKFLOW_ID` onto
+  every `winapp ui` child and `AppTestBase` yields the UI turn after any test that used winapp.
+  This keeps a concurrent agent from interleaving between a click and the assertion that reads its
+  result, which anonymous one-shot commands allow. An ambient `WINAPP_UI_WORKFLOW_ID` is inherited
+  so a harness can group the run with its own calls. See `TESTING.md` §4.
 - The packaged selftest tier registers its host under an identity derived from the layout
   directory (`<name>.w<hash>`, with a matching execution alias) instead of the literal name in
   `Package.appxmanifest`, so concurrent checkouts can run it without evicting each other's

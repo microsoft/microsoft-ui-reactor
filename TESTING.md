@@ -745,6 +745,31 @@ or `1`) for that environment and tool version. If the defect is *when* state is 
 *whether* input arrived, prove the detector with a mutation before counting repeated green E2E
 runs as evidence.
 
+### The suite runs as one named winapp workflow
+
+Every `winapp ui` mutation takes a turn on the interactive desktop, so two agents driving UI at
+once are serialized rather than interleaved. That arbitration is unconditional and cannot be
+switched off. What *is* opt-in is **continuity**: an anonymous `winapp ui` command drops the
+desktop the instant it exits, so a concurrent run can slip in between our click and the assertion
+that reads its result. A command that names its workflow keeps a short post-command idle grace
+instead, which closes that window.
+
+`WinAppUi` therefore stamps `WINAPP_UI_WORKFLOW_ID` onto every child it spawns
+(`WinAppUi.CreateStartInfo` is the single site, so no verb can miss it), and `AppTestBase` yields
+the turn in `[TestCleanup]` once a test has actually used winapp — holding it across the much
+longer gaps *between* tests would block a waiting agent for the idle grace after every test.
+
+An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
+own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp
+rejects an empty or over-long id on every single command, so one of those would fail the entire
+suite rather than merely lose continuity, and the harness synthesizes an id instead.
+
+> **This does not stop a non-winapp window stealing the foreground.** Turn arbitration only
+> coordinates winapp callers. On a busy desktop, clicks still fail with
+> `{"error":{"code":"foreground_not_target"}}` when an unrelated app takes the foreground
+> mid-test — a real and reproducible source of local flake that is *not* a product regression.
+> Running the tier on a desktop you are not also using is the only fix for that.
+
 ### Don't co-locate the E2E and selftest tiers
 
 CI runs them as separate jobs on separate runners today, and that isolation is load-bearing

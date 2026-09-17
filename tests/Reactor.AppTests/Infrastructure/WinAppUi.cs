@@ -102,7 +102,113 @@ public sealed class WinAppUi
     /// </summary>
     public static long InvocationCount;
 
+    // ─── UI turn continuity ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// winapp's logical-UI-workflow variable. Every <c>winapp ui</c> mutation takes a turn on the
+    /// interactive desktop whether or not this is set — collision arbitration is unconditional.
+    /// What the variable buys is <em>continuity</em>: a workflow that names itself keeps a
+    /// post-command idle grace, so a second agent driving the same desktop cannot interleave
+    /// between our click and the assertion that reads the result. An anonymous command releases
+    /// the desktop the instant it exits, which is exactly the window a concurrent run slips into.
+    /// </summary>
+    internal const string WorkflowIdEnvVar = "WINAPP_UI_WORKFLOW_ID";
+
+    /// <summary>Mirrors winapp's own cap; a longer value is rejected with InvalidWorkflowId.</summary>
+    internal const int MaxWorkflowIdLength = 256;
+
+    /// <summary>
+    /// The workflow id stamped onto every <c>winapp ui</c> child process, resolved once per test
+    /// process. Public so a failure report can name the workflow that held the desktop.
+    /// </summary>
+    public static string WorkflowId { get; } = ResolveWorkflowId(
+        Environment.GetEnvironmentVariable(WorkflowIdEnvVar),
+        Environment.ProcessId,
+        Guid.NewGuid());
+
+    /// <summary>
+    /// Picks the workflow id for this test process. An ambient value wins, so an agent harness (or
+    /// a developer) can group a whole test run with surrounding manual <c>winapp ui</c> calls into
+    /// one workflow. Only a *usable* ambient value wins: winapp hard-fails an empty or over-long id
+    /// on every single command, so inheriting one would break the entire suite rather than degrade
+    /// it — falling back to a synthesized id is strictly better than propagating a guaranteed error.
+    /// </summary>
+    internal static string ResolveWorkflowId(string? ambient, int pid, Guid unique)
+    {
+        if (!string.IsNullOrWhiteSpace(ambient) && ambient.Length <= MaxWorkflowIdLength)
+            return ambient;
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"reactor-apptests-{pid}-{unique:N}");
+    }
+
+    /// <summary>
+    /// Releases this workflow's UI turn instead of waiting out the idle grace. Best-effort by
+    /// construction: yielding is an optimization that hands the desktop to a waiting agent sooner,
+    /// so a failure here must never redden a test that already passed. The turn is released by the
+    /// idle grace regardless, making the worst case a short delay rather than a stranded desktop.
+    /// </summary>
+    /// <returns>
+    /// winapp's exit code, or <see langword="null"/> if the process could not be run at all.
+    /// Surfaced rather than discarded because it is the one externally observable proof that a
+    /// workflow id reached the child: <c>winapp ui yield</c> exits non-zero when the variable is
+    /// absent and zero when it is present.
+    /// </returns>
+    internal static int? ReleaseUiTurn()
+    {
+        try
+        {
+            RecordInvocation();
+
+            var psi = CreateStartInfo("yield", "--json");
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return null;
+
+            if (!proc.WaitForExit(YieldTimeoutMs))
+            {
+                try { proc.Kill(true); } catch { }
+                return null;
+            }
+
+            return proc.ExitCode;
+        }
+        catch
+        {
+            // Swallowed deliberately — see the summary.
+            return null;
+        }
+    }
+
+    private const int YieldTimeoutMs = 10_000;
+
     // ─── Process plumbing ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds the <see cref="ProcessStartInfo"/> for one <c>winapp ui</c> child. The single place
+    /// the workflow id is stamped: every spawn in this harness routes through here, so the turn
+    /// continuity cannot be wired on one path and silently missing on another.
+    /// </summary>
+    internal static ProcessStartInfo CreateStartInfo(params string[] args)
+    {
+        var psi = new ProcessStartInfo(WinAppExe)
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+        };
+        psi.ArgumentList.Add("ui");
+        foreach (var a in args) psi.ArgumentList.Add(a);
+
+        // Stamp every child with this run's workflow id so the whole suite reads as one logical
+        // UI workflow to winapp's turn arbitration, rather than a few thousand anonymous one-shots
+        // that each drop the desktop the moment they exit.
+        psi.Environment[WorkflowIdEnvVar] = WorkflowId;
+
+        return psi;
+    }
 
     private readonly record struct RunResult(int ExitCode, string StdOut, string StdErr);
 
@@ -114,16 +220,7 @@ public sealed class WinAppUi
     {
         RecordInvocation();
 
-        var psi = new ProcessStartInfo(WinAppExe)
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-        };
-        psi.ArgumentList.Add("ui");
-        foreach (var a in args) psi.ArgumentList.Add(a);
+        var psi = CreateStartInfo(args);
 
         using var proc = new Process { StartInfo = psi };
         var sbOut = new StringBuilder();
