@@ -94,6 +94,11 @@ updates:
     # Routine minor/patch bumps arrive as one PR; a major still gets its own so
     # the breaking change is reviewed on its own merits. See the npm entry below
     # for why grouping was introduced.
+    #
+    # No per-family major groups here, unlike that entry: this is a single
+    # directory, so an ungrouped major is already one PR per breaking change.
+    # The fragmentation those groups exist to prevent only happens when one
+    # package is bumped across several directories at once.
     groups:
       vscode-extension-minor-patch:
         patterns:
@@ -127,11 +132,24 @@ updates:
     # Ungrouped, the first run of this entry opened 24 PRs in four minutes —
     # one per package per directory (#1219-#1242; the /src/vscode-reactor entry
     # above accounted for a 25th, #1218) — which is unreviewable and was the
-    # whole complaint. Grouping is scoped to minor/patch, the bumps that are
-    # routine and safe to read as a batch; a major still gets a dedicated PR,
-    # because a major is exactly where a breaking change hides and where a
-    # per-package diff is worth reading. Dependabot raises one grouped PR per
-    # directory, so each harness stays independently revertable.
+    # whole complaint. Routine minor/patch bumps are batched into a single PR;
+    # a major still gets a dedicated PR, because a major is exactly where a
+    # breaking change hides and where a focused diff is worth reading.
+    #
+    # Majors are grouped *by package family* rather than left ungrouped. The
+    # five directories here are near-identical harnesses, so an ungrouped major
+    # arrives as one PR per package per directory: adopting TypeScript 7 showed
+    # up as four separate PRs (#1246, #1247, #1250, #1251) for what is a single
+    # decision, and jest 30 as two more (#1248, #1249). Grouping by family
+    # keeps one PR per breaking change while still never mixing two unrelated
+    # breaking changes into one diff.
+    #
+    # The families below are the ones that genuinely move together — same
+    # reasoning as the `roslyn` / `roslyn-testing` groups in the nuget entry
+    # above, where the rule is "group what upstream forces to move together,
+    # not what merely shares a prefix". A major in some package with no family
+    # here still gets its own per-directory PR; add a group when that turns out
+    # to be noisy rather than pre-registering every package in npm.
     groups:
       npm-minor-patch:
         patterns:
@@ -139,6 +157,61 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+      # tsc and its consumers: a TypeScript major can change type-checking
+      # results everywhere at once, so it is reviewed as one change.
+      typescript-major:
+        patterns:
+          - "typescript"
+        update-types:
+          - "major"
+
+      # jest, its types and its presets share a major line: @types/jest 30
+      # describes jest 30's API, and a preset built for 29 does not configure
+      # 30. Splitting them lets a preset land without the runtime it targets.
+      # (@rnx-kit/jest-preset is listed for when it becomes eligible again --
+      # it is currently suppressed outright by the ignore entry below, which
+      # takes precedence over any group.)
+      jest-major:
+        patterns:
+          - "jest"
+          - "jest-*"
+          - "@types/jest"
+          - "babel-jest"
+          - "@rnx-kit/jest-preset"
+        update-types:
+          - "major"
+
+      # react, its renderers and their @types are version-locked in practice —
+      # react-test-renderer is published in lockstep with react, and
+      # @types/react must match the runtime it describes.
+      react-major:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "react-test-renderer"
+          - "@types/react"
+          - "@types/react-dom"
+          - "@types/react-test-renderer"
+        update-types:
+          - "major"
+
+      # The CLI ships as one version-locked set of @react-native-community/cli*
+      # packages; they are meaningless to bump individually.
+      react-native-cli-major:
+        patterns:
+          - "@react-native-community/cli"
+          - "@react-native-community/cli-*"
+        update-types:
+          - "major"
+
+      # Single package, but it spans all three harnesses, so without a group a
+      # prettier major is three identical PRs.
+      prettier-major:
+        patterns:
+          - "prettier"
+        update-types:
+          - "major"
     ignore:
       # The three React Native harnesses pin `react-native` at 0.82.0 on
       # purpose, and that pin transitively fixes the toolchain around it. Each
@@ -192,6 +265,20 @@ updates:
         update-types:
           ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "@react-native/metro-config"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
+      # Same pin, reached through a third-party package rather than a
+      # @react-native/* name. @rnx-kit/jest-preset is required directly by both
+      # harnesses' jest.config.windows.js, and 0.3.3 added
+      # `peer @react-native/jest-preset: ">=0.85"` -- a react-native 0.85
+      # generation package -- where 0.1.x declared no such peer. react-native
+      # here is pinned at 0.82.x and blocked above from moving, so that peer
+      # cannot be satisfied. It is a 0.x package, so semver-minor is its
+      # breaking axis and npm does not error on the unsatisfied peer: measured,
+      # `npm install` resolves 0.3.3 and simply omits @react-native/jest-preset
+      # from the tree. That silence is why it is ignored here rather than left
+      # to be caught downstream. Revisit with the react-native upgrade.
+      - dependency-name: "@rnx-kit/jest-preset"
         update-types:
           ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "eslint"
