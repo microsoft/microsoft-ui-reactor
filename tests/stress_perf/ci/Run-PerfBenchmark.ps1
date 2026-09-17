@@ -451,7 +451,7 @@ function Stage-RustRuntime {
         #    the shared windows-reactor-setup cache (e.g. local experimentation) fall back to
         #    the highest *version* — never the largest file, which is arbitrary and could stage
         #    a mismatched runtime and reintroduce 0xC0000135. Else download the pinned version.
-        $pkg = 'Microsoft.WindowsAppSDK.Runtime'; $ver = '2.1.3'
+        $pkg = 'Microsoft.WindowsAppSDK.Runtime'; $ver = '2.2.0'
         $nupkg = $null
         $pinned = Join-Path $cache "$pkg.$ver.nupkg"
         if (Test-Path $pinned) {
@@ -492,7 +492,7 @@ function Stage-RustRuntime {
         $extract = Join-Path $cache ("perfci-runtime-extract-" + [IO.Path]::GetFileNameWithoutExtension($nupkg))
         $msixDir = Join-Path $extract "MSIX\win10-$arch"
         # Resolve the per-arch framework MSIX. 2.x ships Microsoft.WindowsAppRuntime.2.msix
-        # (the '2' is the stable WinAppSDK API-contract major, identical across 2.1.3/2.10/…),
+        # (the '2' is the stable WinAppSDK API-contract major, identical across 2.2.0/2.10/…),
         # so that exact name is the fast path. Only if it is absent — e.g. the non-pinned
         # fallback above selected a cached package from a future major whose framework MSIX is
         # numbered differently (…\Microsoft.WindowsAppRuntime.N.msix) — glob for the framework

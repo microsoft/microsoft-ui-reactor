@@ -124,7 +124,7 @@ public class WinAppSDKReferenceGuardTests
     /// <c>WindowsAppSDK-VersionInfo.json</c>), serviced 2.0 → 2.1 → 2.3 in place, and the
     /// major-only winget id tracks that servicing. The major.minor ids are *separate*
     /// winget packages pinned to a single servicing line: <c>…WindowsAppRuntime.2.0</c>
-    /// still installs 2.0.1, which cannot satisfy an app built against 2.1.3. Hardcoding
+    /// still installs 2.0.1, which cannot satisfy an app built against 2.2.0. Hardcoding
     /// one let the id drift a whole minor behind <c>WindowsAppSDKVersion</c>, so the rule
     /// now lives in <c>tools/WindowsAppRuntimeId.ps1</c> — and this test is what keeps it
     /// honest, because the PowerShell script suites do not run when only
@@ -208,7 +208,7 @@ public class WinAppSDKReferenceGuardTests
     /// place — without needing any of them to be restorable.
     /// </summary>
     [Theory]
-    [InlineData("2.1.3", "Microsoft.WindowsAppRuntime.2")]   // what this repo pins today
+    [InlineData("2.2.0", "Microsoft.WindowsAppRuntime.2")]   // what this repo pins today
     [InlineData("2.0.1", "Microsoft.WindowsAppRuntime.2")]   // older 2.x -> same framework package
     [InlineData("2.3.1", "Microsoft.WindowsAppRuntime.2")]   // newer 2.x -> same framework package
     [InlineData("3.0.0", "Microsoft.WindowsAppRuntime.3")]   // next major -> follows automatically
@@ -484,6 +484,172 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
             }
 
             yield return path;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Literal-pin sweep (spec 063 §3.0)
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Extensions worth scanning for a hand-written SDK version pin. Deliberately
+    /// broad: pins have historically hidden in markdown snippets and in a plain-text
+    /// LLM system prompt, not only in project files.
+    /// </summary>
+    private static readonly string[] PinScanExtensions =
+        [".cs", ".csproj", ".props", ".targets", ".md", ".ps1", ".txt", ".json", ".yml", ".yaml"];
+
+    /// <summary>
+    /// The two pin shapes that carry a literal version and do NOT inherit
+    /// <c>$(WindowsAppSDKVersion)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The second shape is the reason this test exists. Spec 059 §3 prescribed
+    /// grepping <c>Microsoft.WindowsAppSDK" Version=</c>, which structurally cannot
+    /// match a file-based-app <c>#:package</c> header — so 21 shipped agent-kit
+    /// recipes sat a full major-minor below the framework's own floor for an entire
+    /// release cycle, advertising an NU1605 downgrade to anyone who ran them. An
+    /// enumeration that lives in a prose instruction is only ever as good as the last
+    /// person's regex; this makes it a gate.
+    /// <para>Note this doc comment deliberately does not spell out a stale example
+    /// version: the sweep below reads every file including this one, and a literal in
+    /// prose here would either fail the guard or force an exclusion that would blind
+    /// it to the very file defining it.</para>
+    /// </remarks>
+    private static readonly (string Label, Regex Pattern)[] PinShapes =
+    [
+        ("PackageReference Version=",
+            new Regex("Include\\s*=\\s*\"Microsoft\\.WindowsAppSDK(?:\\.\\w+)?\"[^>]*?Version\\s*=\\s*\"([^\"$]+)\"",
+                RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+        ("#:package @version",
+            new Regex(@"#:package\s+Microsoft\.WindowsAppSDK(?:\.\w+)?@([^\s""'`]+)",
+                RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    ];
+
+    /// <summary>
+    /// No literal Windows App SDK pin anywhere in the tree may name a version BELOW
+    /// the central <c>WindowsAppSDKVersion</c>. A stale pin is an <c>NU1605</c>
+    /// downgrade against the floor the framework itself advertises, and the shipped
+    /// agent-kit recipes make it a user-facing defect rather than an internal one.
+    /// </summary>
+    /// <remarks>
+    /// Pins ABOVE the central version are allowed: docs legitimately state a
+    /// feature's minimum SDK (e.g. "TitleBar drag regions need ≥ 2.1.3"), and a
+    /// forward pin is not a downgrade. Only backward drift is an error.
+    /// </remarks>
+    [Fact]
+    public void No_literal_SDK_pin_sits_below_the_central_pinned_version()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+
+        var propsDoc = XDocument.Load(Path.Join(root!, "Directory.Build.props"));
+        var central = propsDoc.Descendants()
+            .Where(e => e.Name.LocalName == "WindowsAppSDKVersion")
+            .Where(e => e.AncestorsAndSelf().All(a => a.Attribute("Condition") is null))
+            .Select(e => e.Value.Trim())
+            .Single();
+
+        var centralVersion = ParsePin(central);
+        Assert.True(centralVersion is not null, $"Unparseable central WindowsAppSDKVersion '{central}'");
+
+        var found = new List<(string Rel, int Line, string Label, string Version)>();
+        foreach (var file in EnumerateScannableFiles(root!))
+        {
+            var rel = Path.GetRelativePath(root!, file).Replace('\\', '/');
+
+            // CHANGELOG entries quote historical stale pins on purpose, and the spec
+            // that records this defect necessarily names the old version too.
+            if (rel.Equals("CHANGELOG.md", StringComparison.OrdinalIgnoreCase)
+                || rel.StartsWith("docs/specs/", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                foreach (var (label, pattern) in PinShapes)
+                {
+                    foreach (Match m in pattern.Matches(lines[i]))
+                    {
+                        found.Add((rel, i + 1, label, m.Groups[1].Value));
+                    }
+                }
+            }
+        }
+
+        // Positive control. A scanner whose patterns silently stopped matching would
+        // report zero offenders and pass just as green as a clean tree — the exact
+        // failure this test is meant to prevent. Require BOTH shapes to be observed,
+        // so a regex that decays reddens instead of blessing everything.
+        foreach (var (label, _) in PinShapes)
+        {
+            Assert.True(
+                found.Any(f => f.Label == label),
+                $"Pin scanner found no '{label}' pins anywhere in the tree. Either the repo "
+                    + "genuinely stopped using that shape (then drop it from PinShapes), or the "
+                    + "pattern has decayed and this guard is now blessing every file it cannot "
+                    + "parse. A zero result from an unvalidated scanner is not a measurement.");
+        }
+
+        var stale = found
+            .Where(f => ParsePin(f.Version) is { } v && v < centralVersion)
+            .Select(f => $"{f.Rel}:{f.Line}  [{f.Label}]  {f.Version}  <  {central}")
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            stale.Count == 0,
+            $"These literal Microsoft.WindowsAppSDK pins are BELOW the central "
+                + $"WindowsAppSDKVersion ({central}), which is an NU1605 downgrade against the "
+                + "floor the framework advertises. Bump them in lockstep with "
+                + "Directory.Build.props:\n  " + string.Join("\n  ", stale));
+    }
+
+    /// <summary>
+    /// Parse a pin into a comparable <see cref="Version"/>. Returns null for
+    /// floating/variable pins (<c>$(WindowsAppSDKVersion)</c>, <c>2.1.*</c>), which
+    /// track the central value and cannot drift.
+    /// </summary>
+    private static Version? ParsePin(string raw)
+    {
+        var text = raw.Trim();
+        if (text.Length == 0 || text.Contains('$') || text.Contains('*')) return null;
+
+        // Strip any prerelease/build suffix; only the numeric core is comparable.
+        var core = Regex.Match(text, @"^\d+(?:\.\d+){1,3}");
+        if (!core.Success) return null;
+
+        // Normalize part counts: [Version]'2.2' has Build -1 and would sort below
+        // '2.2.0', reporting a perfectly current pin as stale.
+        var parts = core.Value.Split('.').Select(int.Parse).ToArray();
+        return new Version(
+            parts.Length > 0 ? parts[0] : 0,
+            parts.Length > 1 ? parts[1] : 0,
+            parts.Length > 2 ? parts[2] : 0,
+            parts.Length > 3 ? parts[3] : 0);
+    }
+
+    private static IEnumerable<string> EnumerateScannableFiles(string root)
+    {
+        foreach (var path in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories))
+        {
+            var norm = path.Replace('\\', '/');
+            if (norm.Contains("/bin/", StringComparison.Ordinal)
+                || norm.Contains("/obj/", StringComparison.Ordinal)
+                || norm.Contains("/node_modules/", StringComparison.Ordinal)
+                || norm.Contains("/.git/", StringComparison.Ordinal)
+                || norm.Contains("/local-nupkgs/", StringComparison.Ordinal)
+                || norm.Contains("/artifacts/", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (PinScanExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+            {
+                yield return path;
+            }
         }
     }
 }

@@ -33,8 +33,12 @@ public sealed class JsonFileStore : IWindowPersistenceStore
     public const long MaxFileSizeBytes = 1L * 1024 * 1024;
 
     // Stable, developer-authored label for the spec 044 Phase B Persistence
-    // events. NEVER a file path — paths are PII per §6.2.1.
-    private const string StoreKind = "json-file";
+    // events. NEVER a file path — paths are PII per §6.2.1. Instance rather
+    // than const because UnpackagedAppDataStore composes this type over a
+    // different root and must stay distinguishable on the trace (spec 063 §4).
+    private const string DefaultStoreKind = "json-file";
+
+    private readonly string _storeKind;
 
     private static int ClampSize(long bytes) => bytes > int.MaxValue ? int.MaxValue : (int)bytes;
 
@@ -51,11 +55,21 @@ public sealed class JsonFileStore : IWindowPersistenceStore
     public JsonFileStore() : this(DefaultPath()) { }
 
     /// <summary>Construct with an explicit file path. Used by unit tests.</summary>
-    public JsonFileStore(string path)
+    public JsonFileStore(string path) : this(path, DefaultStoreKind) { }
+
+    /// <summary>
+    /// Construct with an explicit file path and trace label. Internal because the
+    /// label is a stable diagnostic contract, not something callers should invent:
+    /// <see cref="UnpackagedAppDataStore"/> composes this type over the Windows App
+    /// SDK app-data root and needs to stay distinguishable on the spec 044
+    /// Persistence trace. (spec 063 §4)
+    /// </summary>
+    internal JsonFileStore(string path, string storeKind)
     {
         if (string.IsNullOrEmpty(path))
             throw new ArgumentException("Path must be non-empty.", nameof(path));
         _path = path;
+        _storeKind = storeKind;
     }
 
     /// <summary>
@@ -100,7 +114,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 if (info.Length > MaxFileSizeBytes)
                 {
                     if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
-                        ReactorEventSource.Log.PersistenceRejected(StoreKind, "oversize-read");
+                        ReactorEventSource.Log.PersistenceRejected(_storeKind, "oversize-read");
                     return false;
                 }
 
@@ -114,7 +128,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 data = Convert.FromBase64String(b64);
                 if (data is not null
                     && ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
-                    ReactorEventSource.Log.PersistenceRead(StoreKind, ClampSize(info.Length));
+                    ReactorEventSource.Log.PersistenceRead(_storeKind, ClampSize(info.Length));
                 return data is not null;
             }
         }
@@ -168,7 +182,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 if (bytes.Length > MaxFileSizeBytes)
                 {
                     if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
-                        ReactorEventSource.Log.PersistenceRejected(StoreKind, "oversize-write");
+                        ReactorEventSource.Log.PersistenceRejected(_storeKind, "oversize-write");
                     return;
                 }
 
@@ -180,7 +194,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 File.Move(tmp, _path, overwrite: true);
 
                 if (ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
-                    ReactorEventSource.Log.PersistenceWrite(StoreKind, ClampSize(bytes.Length));
+                    ReactorEventSource.Log.PersistenceWrite(_storeKind, ClampSize(bytes.Length));
             }
         }
         catch (IOException ex)

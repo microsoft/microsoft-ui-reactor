@@ -28,8 +28,43 @@ Conventions for contributors:
 
 ### Added
 
+- **`UnpackagedAppDataStore` — window/dock layouts now survive renaming your executable
+  (spec 063 §4).** The unpackaged persistence store keys saved window placement and dock layout on
+  the entry **process name**, so shipping the same app under a renamed `.exe` silently stranded
+  every user's saved layout — it was still on disk, under the old name, and never read again. Two
+  unrelated apps sharing an exe name collided the same way.
+
+  The new store keys on an explicit publisher/product pair instead, via the Windows App SDK's
+  first-class unpackaged app-data root
+  (`Microsoft.Windows.Storage.ApplicationData.GetForUnpackaged(publisher, product)`), persisting to
+  `<LocalPath>/reactor-windows.json`. Opt in by assigning it to
+  `ReactorApp.WindowPersistenceStore` before the first `OpenWindow`:
+
+  ```csharp
+  ReactorApp.WindowPersistenceStore = new UnpackagedAppDataStore("Contoso", "TimeTracker");
+  ```
+
+  It is opt-in rather than the new default because the two stores key their data differently, so
+  switching automatically would strand exactly the layouts it is meant to protect. `JsonFileStore`
+  remains the auto-detected default (spec 063 §6, D2).
+
+  It uses the SDK's `LocalPath` surface and deliberately **not** `LocalSettings`. On Windows App SDK
+  2.2.0, `GetForUnpackaged().LocalSettings` opens `HKCU\SOFTWARE\<publisher>\<product>` — a
+  *roaming* hive — instead of the machine-local
+  `HKCU\SOFTWARE\Classes\Local Settings\Software\…` it is contracted to use
+  ([WindowsAppSDK#6559](https://github.com/microsoft/WindowsAppSDK/issues/6559), fixed in 2.5.1).
+  Window placement is monitor-topology and DPI dependent, so roaming it would restore windows onto
+  monitors that do not exist on the current machine. `LocalPath` resolves under `%LOCALAPPDATA%`,
+  which does not roam, and is verified correct on 2.2.0 (spec 063 §3.1).
+
 ### Changed
 
+- **Windows App SDK bumped 2.1.3 → 2.2.0 (spec 063 §3).** `WindowsAppSDKWinUIVersion` moves
+  2.1.0 → **2.2.1** — the WinUI sub-package version is neither equal to nor a fixed offset from the
+  metapackage version, and must be read from the metapackage's own nuspec rather than inferred.
+  This remains an in-place servicing bump within the same side-by-side runtime family
+  (`Microsoft.WindowsAppRuntime.2`), so consumers do not need a new runtime generation, but the
+  transitive floor for `Microsoft.UI.Reactor` consumers rises to `Microsoft.WindowsAppSDK >= 2.2.0`.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected
@@ -40,6 +75,18 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- **Stale `Microsoft.WindowsAppSDK` version pins in shipped agent-kit recipes and docs
+  (spec 063 §3.0).** 21 files used a `#:package Microsoft.WindowsAppSDK@2.0.1` file-based-app
+  header, which the 2.1.3 bump (spec 059) missed entirely because that shape does not match the
+  `Microsoft.WindowsAppSDK" Version=` grep that spec prescribed. They had been advertising a
+  version *below* the framework's own floor — an `NU1605` downgrade for anyone running them — and
+  the `skills/recipes/` and `plugins/reactor/skills/reactor-recipes/references/` copies are packed
+  into the shipped NuGet agent kit, so this was user-facing rather than internal-only. All now
+  track the pinned version, and a new guard
+  (`WinAppSDKReferenceGuardTests.No_literal_SDK_pin_sits_below_the_central_pinned_version`) sweeps
+  the tree for both pin shapes so the class cannot recur.
+
 
 - **Content-collapse parking for recycled ItemsView rows (issue #1213).**
   Parking collapses template content instead of the outer container and restores

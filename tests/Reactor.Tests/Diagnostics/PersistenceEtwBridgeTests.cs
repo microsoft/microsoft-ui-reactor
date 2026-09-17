@@ -134,6 +134,51 @@ public class PersistenceEtwBridgeTests : IDisposable
             "json-file");
     }
 
+    // ── UnpackagedAppDataStore is distinguishable on the trace ──────────
+
+    /// <summary>
+    /// Spec 063 §4 — <see cref="UnpackagedAppDataStore"/> composes
+    /// <see cref="JsonFileStore"/> over a different root and writes the identical
+    /// document shape, so the <c>storeKind</c> label is the *only* thing that tells
+    /// the two apart on a trace. Distinguishability was the stated justification for
+    /// turning <c>JsonFileStore</c>'s <c>StoreKind</c> const into an instance field,
+    /// so it needs an assertion: without one, the composed store could silently report
+    /// as <c>"json-file"</c> and the refactor would be paying for nothing.
+    /// </summary>
+    [Fact]
+    public void UnpackagedAppDataStore_Write_emits_its_own_storeKind_not_json_file()
+    {
+        var publisher = "ReactorEtwTest" + Guid.NewGuid().ToString("N").Substring(0, 12);
+        var store = new UnpackagedAppDataStore(publisher, "ReactorPersistence");
+        try
+        {
+            store.Write("main", new byte[] { 1, 2, 3 });
+
+            var evt = AssertEvent(
+                _listener.Events,
+                nameof(ReactorEventSource.PersistenceWrite),
+                0,
+                "unpackaged-appdata");
+            Assert.True((int)(evt.Payload?[1] ?? 0) > 0);
+
+            // PII (§6.2.1): the SDK-derived app-data path must not reach the payload.
+            Assert.DoesNotContain(_listener.Events, e =>
+                e.Payload?.Any(p => p is string s
+                    && s.Contains(store.Path, StringComparison.OrdinalIgnoreCase)) == true);
+        }
+        finally
+        {
+            try
+            {
+                var dir = global::System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), publisher);
+                if (global::System.IO.Directory.Exists(dir))
+                    global::System.IO.Directory.Delete(dir, recursive: true);
+            }
+            catch { }
+        }
+    }
+
     // ── JsonFileStore explicit rejects → PersistenceRejected ────────────
 
     [Fact]
