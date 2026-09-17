@@ -25,6 +25,13 @@
     <PackageReference Include="MSTest.TestFramework" />
   </ItemGroup>
 
+  <!-- Shared with the hosts, not duplicated: the deployment derives the effective identity
+       here, and PackagedIdentityFixtures.IdentityGuard re-derives it inside the running host
+       to assert an exact match. Two copies could disagree; one cannot. -->
+  <ItemGroup>
+    <Compile Include="..\_shared\WorktreeIdentity.cs" Link="WorktreeIdentity.cs" />
+  </ItemGroup>
+
   <!-- The host's output path carries the configuration and TFM. Stamping in the values
        MSBuild used lets the shim find it under any configuration; hardcoding "Debug"
        broke `dotnet test -c Release`. -->

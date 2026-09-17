@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
+using Reactor.Tests.Shared;
 using Windows.Management.Deployment;
 
 namespace Microsoft.UI.Reactor.PackagedTests;
@@ -49,8 +50,37 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
     private readonly string _layoutDir;
     private string? _registeredFullName;
+    private string? _effectivePackageName;
+    private string? _effectiveAliasExeName;
 
     internal AppxLooseLayoutDeployment(string layoutDir) => _layoutDir = layoutDir;
+
+    /// <summary>
+    /// The package name this deployment actually registers: <see cref="PackageName"/> made
+    /// unique to the layout directory.
+    /// </summary>
+    /// <remarks>
+    /// <para>The manifest's identity is a machine-global name, and so is the execution alias.
+    /// Registering under the literal constant means two checkouts of this repo cannot run the
+    /// packaged tier concurrently — registration is name-scoped, not path-scoped, so the
+    /// second run evicts the first one's package and repoints the alias at its own build
+    /// output. Deriving from the layout directory makes concurrent checkouts disjoint while
+    /// keeping a single checkout's identity stable across reruns.</para>
+    /// <para>Computed lazily rather than in the constructor so that constructing a deployment
+    /// is never the thing that throws for a malformed path.</para>
+    /// </remarks>
+    internal string EffectivePackageName =>
+        _effectivePackageName ??= WorktreeIdentity.DerivePackageName(PackageName, _layoutDir);
+
+    /// <summary>The execution-alias file name this deployment expects to be created.</summary>
+    /// <remarks>
+    /// Derived for the same reason as <see cref="EffectivePackageName"/>, and necessarily so:
+    /// aliases land at one fixed path under <c>%LOCALAPPDATA%\Microsoft\WindowsApps</c>, so
+    /// uniquifying only the package name would still leave two registrations fighting over a
+    /// single stub with Windows deciding which binary the tier launches.
+    /// </remarks>
+    internal string EffectiveAliasExeName =>
+        _effectiveAliasExeName ??= WorktreeIdentity.DeriveAliasExeName(AliasExeName, _layoutDir);
 
     /// <summary>
     /// The build hint shared by every "host not built" diagnostic, so the message is the same
@@ -175,29 +205,47 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
         var manager = new PackageManager();
 
-        // Drift guard, deliberately *before* registering. PackageName/PackagePublisher must
-        // match the manifest's Identity element, and nothing at compile time links them.
-        // Checking afterwards would be too late: the package would already be registered
-        // under the manifest's identity while every lookup here — including cleanup —
-        // searched for the stale constants, leaking the registration and leaving the alias
-        // owned by a layout no later run could remove.
+        // Drift guard, deliberately *before* registering. The constants must match the
+        // manifest's Identity element, and nothing at compile time links them. Checking
+        // afterwards would be too late: the package would already be registered under the
+        // manifest's identity while every lookup here — including cleanup — searched for the
+        // stale constants, leaking the registration and leaving the alias owned by a layout
+        // no later run could remove.
+        //
+        // The name is checked against both spellings because this method rewrites the
+        // generated manifest in place: a freshly built layout carries the base name, and a
+        // layout registered earlier without an intervening rebuild already carries the
+        // derived one. Any *third* value is real drift.
         var (manifestName, manifestPublisher) = ReadManifestIdentity(manifest);
-        if (!string.Equals(manifestName, PackageName, StringComparison.Ordinal) ||
+        var nameIsExpected =
+            string.Equals(manifestName, PackageName, StringComparison.Ordinal) ||
+            string.Equals(manifestName, EffectivePackageName, StringComparison.Ordinal);
+
+        if (!nameIsExpected ||
             !string.Equals(manifestPublisher, PackagePublisher, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"The constants in {nameof(AppxLooseLayoutDeployment)} have drifted from the " +
                 $"manifest's Identity element, so cleanup could not remove what registration " +
                 $"would create.\nManifest: {manifest}\n" +
-                $"  Name:      manifest '{manifestName}' vs constant '{PackageName}'\n" +
+                $"  Name:      manifest '{manifestName}' vs constant '{PackageName}' " +
+                $"(or derived '{EffectivePackageName}')\n" +
                 $"  Publisher: manifest '{manifestPublisher}' vs constant '{PackagePublisher}'");
         }
 
-        // Remove any registration left behind by an earlier run before registering this
-        // one. Without this a stale layout — pointing at a different build directory —
-        // keeps owning the alias, and the tier would silently exercise the wrong binary.
-        // Packaged_IdentityGuard also checks the install location for exactly this
-        // reason, but failing fast here gives a far clearer diagnostic.
+        // Rewrite the *generated* manifest in the build output, not the source
+        // Package.appxmanifest. The tier registers this layout in place, so the build output
+        // is already the thing being deployed; rewriting here is idempotent and self-healing
+        // (a rebuild regenerates the base name and this simply derives it again), and it
+        // leaves the source manifest as the readable statement of the base identity that the
+        // drift tests check against.
+        ApplyDerivedIdentity(manifest);
+
+        // Remove any registration left behind by an earlier run *of this layout* before
+        // registering. Without this a stale registration — pointing at a since-rebuilt or
+        // relocated directory — keeps owning the alias, and the tier would silently exercise
+        // the wrong binary. Packaged_IdentityGuard also checks the install location for
+        // exactly this reason, but failing fast here gives a far clearer diagnostic.
         RemoveExistingRegistrations(manager);
 
         var result = manager
@@ -221,13 +269,13 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         if (_registeredFullName is null)
         {
             throw new InvalidOperationException(
-                $"Registered '{manifest}' but no package named '{PackageName}' with publisher " +
-                $"'{PackagePublisher}' was found afterwards.");
+                $"Registered '{manifest}' but no package named '{EffectivePackageName}' with " +
+                $"publisher '{PackagePublisher}' was found afterwards.");
         }
 
         var alias = Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Microsoft", "WindowsApps", AliasExeName);
+            "Microsoft", "WindowsApps", EffectiveAliasExeName);
 
         if (!File.Exists(alias))
         {
@@ -240,15 +288,76 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         return alias;
     }
 
+    /// <summary>
+    /// Rewrites the generated manifest's <c>Identity/@Name</c> and every
+    /// <c>uap5:ExecutionAlias/@Alias</c> to this layout's derived values.
+    /// </summary>
+    /// <remarks>
+    /// Writes only when something actually changed, so a rerun against an already-rewritten
+    /// layout leaves the file — and its timestamp — alone. Elements are matched by local name
+    /// so a revision of the manifest's namespace URIs does not silently turn this into a
+    /// no-op; an alias that stopped being rewritten would reintroduce exactly the collision
+    /// this is here to remove.
+    /// </remarks>
+    private void ApplyDerivedIdentity(string manifestPath)
+    {
+        var document = XDocument.Load(manifestPath);
+        var changed = false;
+
+        var identity = document.Root?
+            .Elements()
+            .FirstOrDefault(e => e.Name.LocalName == "Identity");
+
+        var nameAttribute = identity?.Attribute("Name");
+        if (nameAttribute is null)
+        {
+            throw new InvalidOperationException(
+                $"Generated manifest has no Identity/@Name to uniquify: {manifestPath}");
+        }
+
+        if (!string.Equals(nameAttribute.Value, EffectivePackageName, StringComparison.Ordinal))
+        {
+            nameAttribute.Value = EffectivePackageName;
+            changed = true;
+        }
+
+        var aliases = document.Descendants()
+            .Where(e => e.Name.LocalName == "ExecutionAlias")
+            .Select(e => e.Attribute("Alias"))
+            .Where(a => a is not null)
+            .ToList();
+
+        if (aliases.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Generated manifest declares no windows.appExecutionAlias. The packaged tier " +
+                "launches the host through its alias stub because that is the only way to keep " +
+                "package identity while inheriting stdout for the TAP stream.\n" +
+                $"Manifest: {manifestPath}");
+        }
+
+        foreach (var alias in aliases)
+        {
+            if (string.Equals(alias!.Value, EffectiveAliasExeName, StringComparison.Ordinal))
+                continue;
+
+            alias.Value = EffectiveAliasExeName;
+            changed = true;
+        }
+
+        if (changed) document.Save(manifestPath);
+    }
+
     public void Unregister()
     {
         var manager = new PackageManager();
         try
         {
-            // Remove exactly what was registered first, then sweep by identity. The
-            // captured full name is what registration actually produced, so it stays
-            // correct even if the constants below are edited mid-run; the sweep still
-            // catches anything a previous run left behind.
+            // Remove exactly what was registered first, then sweep this layout's derived
+            // identity. The captured full name is what registration actually produced, so it
+            // stays correct even if the constants below are edited mid-run; the sweep still
+            // catches anything a previous run of *this* layout left behind. Neither can reach
+            // another checkout's registration.
             if (_registeredFullName is not null) RemovePackage(manager, _registeredFullName);
             RemoveExistingRegistrations(manager);
         }
@@ -280,13 +389,112 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         return (identity?.Attribute("Name")?.Value, identity?.Attribute("Publisher")?.Value);
     }
 
-    private static Windows.ApplicationModel.Package? FindRegistration(PackageManager manager) =>
-        manager.FindPackagesForUser(string.Empty, PackageName, PackagePublisher).FirstOrDefault();
+    private Windows.ApplicationModel.Package? FindRegistration(PackageManager manager) =>
+        manager.FindPackagesForUser(string.Empty, EffectivePackageName, PackagePublisher)
+            .FirstOrDefault();
 
-    private static void RemoveExistingRegistrations(PackageManager manager)
+    /// <summary>
+    /// Removes every registration that would contend with the one about to be created.
+    /// </summary>
+    /// <remarks>
+    /// <para>Three rules, one enumeration, all of them narrowed to this repo's own publisher
+    /// first so nothing unrelated is ever a candidate:</para>
+    /// <list type="number">
+    /// <item><description>This layout's <see cref="EffectivePackageName"/> — a registration
+    /// left by an earlier run of this same checkout.</description></item>
+    /// <item><description>Any package installed from this exact layout directory, whatever it
+    /// is called. This is what catches a registration made under the base name before
+    /// identities were derived: registering a second package over a directory another package
+    /// already claims is not a clean state, and leaving it behind was observed to kill the
+    /// host mid-run.</description></item>
+    /// <item><description>Any derived-shaped package whose install directory is simply gone —
+    /// a deleted worktree. Per-checkout identities trade one shared registration for one per
+    /// layout directory, so without this they accumulate for exactly the audience this change
+    /// is for: agents that create and destroy worktrees constantly.</description></item>
+    /// </list>
+    /// <para><b>None of the three can reach a concurrently running checkout.</b> Rule 1 is
+    /// keyed to this directory's hash, rule 2 to this directory itself, and rule 3 only fires
+    /// when a directory does not exist — which a live checkout's does by definition. That is
+    /// the whole point: the previous sweep matched the shared base name and evicted whatever
+    /// another checkout had just registered.</para>
+    /// </remarks>
+    private void RemoveExistingRegistrations(PackageManager manager)
     {
-        foreach (var pkg in manager.FindPackagesForUser(string.Empty, PackageName, PackagePublisher).ToList())
-            RemovePackage(manager, pkg.Id.FullName);
+        var layout = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_layoutDir));
+
+        List<Windows.ApplicationModel.Package> ours;
+        try
+        {
+            ours = manager.FindPackagesForUser(string.Empty)
+                .Where(p => string.Equals(p.Id.Publisher, PackagePublisher, StringComparison.Ordinal))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException)
+        {
+            // Enumeration is the optional half of this. A registration under the derived name
+            // still has to go, so fall back to the targeted lookup rather than silently
+            // registering on top of a stale package.
+            ours = manager
+                .FindPackagesForUser(string.Empty, EffectivePackageName, PackagePublisher)
+                .ToList();
+        }
+
+        foreach (var pkg in ours)
+        {
+            var installedPath = TryGetInstalledPath(pkg);
+
+            var isThisLayoutsName =
+                string.Equals(pkg.Id.Name, EffectivePackageName, StringComparison.Ordinal);
+
+            var ownsThisLayout =
+                installedPath is not null &&
+                string.Equals(
+                    Path.TrimEndingDirectorySeparator(installedPath), layout,
+                    StringComparison.OrdinalIgnoreCase);
+
+            var isAbandoned =
+                WorktreeIdentity.IsDerivedFrom(pkg.Id.Name, PackageName) &&
+                installedPath is not null &&
+                !Directory.Exists(installedPath);
+
+            if (!isThisLayoutsName && !ownsThisLayout && !isAbandoned) continue;
+
+            // Contention with this layout (rules 1 and 2) must fail loudly — registering on
+            // top of it is the silent-wrong-binary bug this guards. Reclaiming an unrelated
+            // dead worktree (rule 3) is housekeeping and must never fail a test run.
+            if (isThisLayoutsName || ownsThisLayout)
+            {
+                RemovePackage(manager, pkg.Id.FullName);
+                continue;
+            }
+
+            try
+            {
+                RemovePackage(manager, pkg.Id.FullName);
+            }
+            catch (Exception ex) when (
+                ex is COMException or InvalidOperationException or UnauthorizedAccessException or IOException)
+            {
+                Console.WriteLine(
+                    $"[Reactor.PackagedTests] Could not reclaim abandoned registration " +
+                    $"'{pkg.Id.FullName}': {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>Install location of a package, or <c>null</c> when it cannot be read.</summary>
+    private static string? TryGetInstalledPath(Windows.ApplicationModel.Package package)
+    {
+        try
+        {
+            var path = package.InstalledPath;
+            return string.IsNullOrEmpty(path) ? null : path;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or IOException)
+        {
+            // A package whose own location cannot be read is not one to reason about.
+            return null;
+        }
     }
 
     private static void RemovePackage(PackageManager manager, string fullName)

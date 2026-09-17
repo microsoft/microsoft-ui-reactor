@@ -30,6 +30,13 @@ Conventions for contributors:
 
 ### Changed
 
+- The packaged selftest tier registers its host under an identity derived from the layout
+  directory (`<name>.w<hash>`, with a matching execution alias) instead of the literal name in
+  `Package.appxmanifest`, so concurrent checkouts can run it without evicting each other's
+  registration or contending for one alias stub. Cleanup is scoped to the derived name, to
+  packages installed from the same directory, and to derived packages whose directory is gone.
+  Sweeps by hand or in CI must now match `Microsoft.UI.Reactor.PackagedTests.Host*`. See
+  `TESTING.md` §3 and [microsoft/winappCli#763](https://github.com/microsoft/winappCli/issues/763).
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

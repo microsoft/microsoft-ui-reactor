@@ -586,6 +586,44 @@ adds only MSIX properties and a `Package.appxmanifest`, so the two hosts cannot 
 registers that layout and launches its `uap5:AppExecutionAlias` stub, which keeps package identity
 while still inheriting stdout — so the TAP contract and flags from tier 2 are reused unchanged.
 
+### The registered identity is per-checkout, not the one in the manifest
+
+An MSIX `Identity/@Name` is machine-global, and so is an execution alias. Registered literally,
+this tier could only ever run in one checkout at a time: registration is name-scoped rather than
+path-scoped, so a second checkout starting its packaged run would evict the first one's package and
+repoint `%LOCALAPPDATA%\Microsoft\WindowsApps\reactor-packaged-test-host.exe` at its own build
+output — leaving the first run either dead or, worse, silently exercising the wrong binary.
+
+So `AppxLooseLayoutDeployment` derives both from the layout directory before registering, rewriting
+the **generated** `AppxManifest.xml` in the build output:
+
+```text
+Microsoft.UI.Reactor.PackagedTests.Host   ->  Microsoft.UI.Reactor.PackagedTests.Host.w53j3givo
+reactor-packaged-test-host.exe            ->  reactor-packaged-test-host-w53j3givo.exe
+```
+
+The suffix is a hash of the canonicalised layout path (`tests/_shared/WorktreeIdentity.cs`), so it
+is stable for a checkout and different between checkouts. Two worktrees — or two agents — can run
+the packaged tier concurrently without seeing each other.
+
+Consequences worth knowing:
+
+- **`Package.appxmanifest` still holds the base identity**, and that is what
+  `Deployment_Constants_Match_The_Manifest` checks. The rewrite only ever touches build output, so
+  it is idempotent and self-healing: a rebuild regenerates the base name and the next run derives
+  again.
+- **Cleanup is scoped to this layout.** `Register()` removes registrations under this layout's
+  derived name, plus any package installed *from this exact directory* (which is what reclaims a
+  registration made under the base name before identities were derived), plus derived-shaped
+  packages whose directory no longer exists (a deleted worktree). None of those rules can match a
+  live checkout other than this one.
+- **Match with a wildcard, never the bare name.** Anything sweeping up leftovers by hand — or in
+  CI — must use `Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*'`; an exact-name
+  match silently stops finding anything.
+- **`Packaged_IdentityGuard` stays an exact equality check.** It re-derives the expected name from
+  `AppContext.BaseDirectory` rather than being told it, which works because the tier already
+  requires the install location and the running directory to be the same path.
+
 ### Writing a packaged fixture
 
 Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Two steps,

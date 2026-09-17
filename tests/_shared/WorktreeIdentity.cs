@@ -1,0 +1,260 @@
+// Per-worktree MSIX identity derivation for the packaged test tier.
+//
+// Why this exists
+// ---------------
+// `tests/Reactor.PackagedTests` registers the packaged host's loose layout under the
+// identity spelled in `Package.appxmanifest`. That identity is a *machine-global* name, and
+// so is the `uap5:AppExecutionAlias` the tier launches through. With a fixed identity, two
+// checkouts of this repo cannot run the packaged tier at the same time: whichever starts
+// second removes the first one's live registration (registration is name-scoped, not
+// path-scoped) and repoints the alias at its own build output, so the first run either dies
+// or — worse — silently keeps testing the second checkout's binary.
+//
+// Deriving the identity from the layout directory makes the two runs disjoint: different
+// checkouts produce different package names and different alias stubs, so neither can see
+// or evict the other. Same checkout, same identity, stable across reruns.
+//
+// This mirrors the algorithm sketched in microsoft/winappCli#763 (`winapp run
+// --unique-identity`). That feature would otherwise be the natural home for this, but its v1
+// explicitly *refuses* manifests declaring `uap5:AppExecutionAlias` — which ours does, and
+// which is load-bearing here because launching the alias stub is the only way to keep
+// package identity while still inheriting stdout for the TAP stream.
+//
+// Linked (not duplicated) into every project that needs it, so the deployment side and the
+// in-host guard can never disagree about what the effective identity is.
+
+using System;
+using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace Reactor.Tests.Shared;
+
+/// <summary>
+/// Derives a deterministic, per-checkout MSIX package name and execution-alias file name
+/// from the directory a loose layout is registered from.
+/// </summary>
+/// <remarks>
+/// <para>The derivation is a pure function of the canonicalised layout directory, so the
+/// deployment (which knows the directory it is about to register) and the host process
+/// (which knows the directory it is running from) compute the same answer with no channel
+/// between them. That is what lets the in-host identity guard stay an exact equality check
+/// rather than degrading to a prefix match.</para>
+/// <para><b>The algorithm is versioned.</b> Changing <see cref="AlgorithmVersion"/> — or the
+/// hash, alphabet, or suffix length — changes every derived package family, which orphans
+/// existing registrations and moves package-scoped app data. Registrations left by the old
+/// algorithm are reclaimed by the stale-layout sweep in the deployment, but only once their
+/// layout directory is gone.</para>
+/// </remarks>
+internal static class WorktreeIdentity
+{
+    /// <summary>
+    /// Version tag mixed into the hash input. Bump only with intent: it invalidates every
+    /// previously derived identity.
+    /// </summary>
+    internal const string AlgorithmVersion = "1";
+
+    /// <summary>Marker separating the base name from the derived suffix.</summary>
+    /// <remarks>
+    /// A literal <c>'w'</c> (for "worktree") keeps the suffix from starting with a digit and
+    /// makes a derived name obvious at a glance in <c>Get-AppxPackage</c> output.
+    /// </remarks>
+    internal const char SuffixMarker = 'w';
+
+    /// <summary>Number of encoded hash characters in the suffix.</summary>
+    /// <remarks>
+    /// 8 base32 characters is 40 bits. Collisions only matter between checkouts on one
+    /// machine, so this is comfortably beyond what is needed while still leaving the derived
+    /// name inside the MSIX length limit without truncating the base name.
+    /// </remarks>
+    internal const int SuffixHashLength = 8;
+
+    /// <summary>Maximum length of MSIX <c>Identity/@Name</c>.</summary>
+    internal const int MaxPackageNameLength = 50;
+
+    /// <summary>Minimum length of MSIX <c>Identity/@Name</c>.</summary>
+    internal const int MinPackageNameLength = 3;
+
+    /// <summary>
+    /// Lowercase RFC 4648 base32 alphabet. Every character is an ASCII letter or digit, which
+    /// MSIX <c>Identity/@Name</c> permits and which is also safe in a file name.
+    /// </summary>
+    private const string Base32Alphabet = "abcdefghijklmnopqrstuvwxyz234567";
+
+    /// <summary>
+    /// Normalises a directory path so that spellings which reach the same directory hash the
+    /// same way.
+    /// </summary>
+    /// <remarks>
+    /// Absolutises, resolves a symlink/junction to its final target where the platform
+    /// reports one, strips any trailing separator (<c>AppContext.BaseDirectory</c> has one,
+    /// a joined layout path typically does not), and lowercases — Windows paths are
+    /// case-insensitive, so two spellings differing only in case are the same directory and
+    /// must not derive two identities.
+    /// </remarks>
+    internal static string Canonicalize(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Path must be a non-empty directory path.", nameof(path));
+
+        var full = Path.GetFullPath(path);
+
+        // Junctions and symlinks are the realistic way one directory acquires two spellings
+        // on a dev box. Best-effort: an unreadable or non-existent path is not an error here,
+        // it just canonicalises to itself.
+        try
+        {
+            var resolved = Directory.ResolveLinkTarget(full, returnFinalTarget: true);
+            if (resolved is not null) full = Path.GetFullPath(resolved.FullName);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Keep `full` as-is.
+        }
+
+        return Path.TrimEndingDirectorySeparator(full).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// The derived suffix for a layout directory, without any separator — e.g. <c>w3ok5qta2</c>.
+    /// </summary>
+    internal static string DeriveSuffix(string layoutDirectory)
+    {
+        var seed = AlgorithmVersion + "\n" + Canonicalize(layoutDirectory);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
+        return SuffixMarker + Base32(hash, SuffixHashLength);
+    }
+
+    /// <summary>
+    /// The effective MSIX <c>Identity/@Name</c> for a layout directory, as
+    /// <c>&lt;base&gt;.&lt;suffix&gt;</c> with the base truncated only if the limit requires it.
+    /// </summary>
+    internal static string DerivePackageName(string basePackageName, string layoutDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(basePackageName))
+            throw new ArgumentException("Base package name must be non-empty.", nameof(basePackageName));
+
+        var suffix = DeriveSuffix(layoutDirectory);
+
+        // ".": the separator between base and suffix. MSIX treats the name as dot-delimited
+        // segments, so this keeps the derived name a well-formed sibling of the original
+        // rather than a new top-level name.
+        var budget = MaxPackageNameLength - (suffix.Length + 1);
+        if (budget < MinPackageNameLength)
+        {
+            throw new ArgumentException(
+                $"Suffix '{suffix}' leaves no room for a base name within the {MaxPackageNameLength}-" +
+                $"character MSIX Identity/@Name limit.", nameof(basePackageName));
+        }
+
+        var head = basePackageName.Length <= budget ? basePackageName : basePackageName[..budget];
+
+        // Truncation can land on a '.', which would produce ".." or a segment-less name.
+        head = head.TrimEnd('.');
+        if (head.Length < MinPackageNameLength)
+        {
+            throw new ArgumentException(
+                $"Base package name '{basePackageName}' cannot be truncated to a valid MSIX name " +
+                $"alongside suffix '{suffix}'.", nameof(basePackageName));
+        }
+
+        return head + "." + suffix;
+    }
+
+    /// <summary>
+    /// The effective execution-alias file name for a layout directory, e.g.
+    /// <c>reactor-packaged-test-host-w3ok5qta2.exe</c>.
+    /// </summary>
+    /// <remarks>
+    /// The alias is created at a single fixed path under
+    /// <c>%LOCALAPPDATA%\Microsoft\WindowsApps</c>, so it must vary per checkout for the same
+    /// reason the package name does — otherwise two registrations fight over one stub and
+    /// Windows' duplicate-alias resolution decides which binary the tier actually launches.
+    /// Hyphen-separated rather than dot-separated so the result keeps exactly one extension.
+    /// </remarks>
+    internal static string DeriveAliasExeName(string baseAliasExeName, string layoutDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(baseAliasExeName))
+            throw new ArgumentException("Base alias name must be non-empty.", nameof(baseAliasExeName));
+
+        var suffix = DeriveSuffix(layoutDirectory);
+        var stem = Path.GetFileNameWithoutExtension(baseAliasExeName);
+        var extension = Path.GetExtension(baseAliasExeName);
+
+        if (string.IsNullOrEmpty(stem))
+        {
+            throw new ArgumentException(
+                $"Base alias name '{baseAliasExeName}' has no file-name stem.", nameof(baseAliasExeName));
+        }
+
+        return stem + "-" + suffix + extension;
+    }
+
+    /// <summary>
+    /// True when <paramref name="candidate"/> is <paramref name="basePackageName"/> itself or
+    /// any name this type could derive from it.
+    /// </summary>
+    /// <remarks>
+    /// Used to scope cleanup to registrations belonging to this repo without ever matching an
+    /// unrelated package, and to let the deployment recognise an already-rewritten manifest.
+    /// Shape-checked rather than merely prefix-checked, so a genuinely different package that
+    /// happens to start with the same text is not mistaken for one of ours.
+    /// </remarks>
+    internal static bool IsDerivedFrom(string candidate, string basePackageName)
+    {
+        if (string.IsNullOrEmpty(candidate) || string.IsNullOrEmpty(basePackageName))
+            return false;
+        if (string.Equals(candidate, basePackageName, StringComparison.Ordinal))
+            return true;
+
+        // Accept a truncated base, as DerivePackageName would produce for a long base name.
+        var dot = candidate.LastIndexOf('.');
+        if (dot <= 0) return false;
+
+        var head = candidate[..dot];
+        var suffix = candidate[(dot + 1)..];
+
+        if (!basePackageName.StartsWith(head, StringComparison.Ordinal)) return false;
+        if (suffix.Length != SuffixHashLength + 1) return false;
+        if (suffix[0] != SuffixMarker) return false;
+
+        for (var i = 1; i < suffix.Length; i++)
+        {
+            if (Base32Alphabet.IndexOf(suffix[i]) < 0) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Encodes the leading bits of <paramref name="data"/> as <paramref name="length"/>
+    /// lowercase base32 characters.
+    /// </summary>
+    private static string Base32(byte[] data, int length)
+    {
+        var sb = new StringBuilder(length);
+        int buffer = 0, bits = 0, index = 0;
+
+        while (sb.Length < length)
+        {
+            if (bits < 5)
+            {
+                if (index >= data.Length)
+                    throw new InvalidOperationException(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "Hash of {0} bytes cannot supply {1} base32 characters.",
+                            data.Length, length));
+
+                buffer = (buffer << 8) | data[index++];
+                bits += 8;
+            }
+
+            bits -= 5;
+            sb.Append(Base32Alphabet[(buffer >> bits) & 0x1F]);
+        }
+
+        return sb.ToString();
+    }
+}

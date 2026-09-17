@@ -257,11 +257,15 @@ jobs:
       # ClassCleanup removes the registration, but a hard failure (or a killed job) can
       # leave it behind, and a stale registration owning the execution alias would make the
       # next run on a self-hosted runner exercise the wrong binary.
+      #
+      # Wildcard, not the bare name: the deployment registers under a per-layout-directory
+      # identity ("<name>.w<hash>") so concurrent checkouts cannot evict each other, and an
+      # exact-name match would silently stop cleaning anything up.
       - name: Unregister packaged host
         if: always()
         shell: pwsh
         run: |
-          Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host' |
+          Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' |
             Remove-AppxPackage -ErrorAction SilentlyContinue
           exit 0
 

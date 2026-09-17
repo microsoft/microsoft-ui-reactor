@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Hosting.Persistence;
 using Microsoft.UI.Reactor.Hosting.Shell;
+using Reactor.Tests.Shared;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -44,8 +45,31 @@ internal static class PackagedIdentityFixtures
     /// </summary>
     internal const string PackagedHostAssemblyName = "Reactor.PackagedTests.Host";
 
-    /// <summary>Expected <c>Identity/@Name</c> from the packaged host's manifest.</summary>
+    /// <summary>
+    /// Base <c>Identity/@Name</c> as declared in the packaged host's source manifest.
+    /// </summary>
+    /// <remarks>
+    /// Not what the package is actually registered as. The deployment uniquifies this per
+    /// layout directory so that concurrent checkouts of this repo cannot evict each other's
+    /// registration or fight over one execution alias; use
+    /// <see cref="ExpectedPackageIdentityName"/> for anything that compares against a live
+    /// package.
+    /// </remarks>
     internal const string PackageIdentityName = "Microsoft.UI.Reactor.PackagedTests.Host";
+
+    /// <summary>
+    /// The identity this process must be running under: <see cref="PackageIdentityName"/>
+    /// derived for the directory this build was deployed from.
+    /// </summary>
+    /// <remarks>
+    /// Re-derived here rather than passed in. The deployment derives from the layout directory
+    /// it registers, this derives from the directory the process is running out of, and the
+    /// tier's own install-location invariant says those are the same directory — so the two
+    /// sides agree with no channel between them, and the checks below stay exact equality
+    /// rather than degrading to a prefix match that a stale registration could satisfy.
+    /// </remarks>
+    internal static string ExpectedPackageIdentityName =>
+        WorktreeIdentity.DerivePackageName(PackageIdentityName, AppContext.BaseDirectory);
 
     /// <summary>
     /// True when this process is the packaged host, i.e. when package identity is a
@@ -138,10 +162,24 @@ internal static class PackagedIdentityFixtures
                 Console.WriteLine($"# Package.Current threw: {ex.GetType().Name}: {ex.Message}");
             }
 
-            H.Check("PackagedIdentity_Package_Name_Matches", name == PackageIdentityName);
+            var expectedName = ExpectedPackageIdentityName;
+
+            // Log the inputs, not just the verdict. Both sides of this comparison are derived
+            // from a path, so a mismatch is only diagnosable with the path and the name that
+            // came out of it — otherwise the failure says the identity is wrong without saying
+            // which half disagreed.
+            if (name != expectedName)
+            {
+                Console.WriteLine($"# expected package name: {expectedName}");
+                Console.WriteLine($"# actual package name:   {name ?? "<null>"}");
+                Console.WriteLine($"# derived from BaseDirectory: {AppContext.BaseDirectory}");
+                Console.WriteLine($"# InstalledLocation:          {installPath ?? "<null>"}");
+            }
+
+            H.Check("PackagedIdentity_Package_Name_Matches", name == expectedName);
             H.Check("PackagedIdentity_FamilyName_Derived_From_Name",
                 familyName is not null &&
-                familyName.StartsWith(PackageIdentityName + "_", StringComparison.Ordinal));
+                familyName.StartsWith(expectedName + "_", StringComparison.Ordinal));
 
             // The registration must point at the build output this process is running
             // from. A stale registration of an older layout would otherwise let the tier
