@@ -134,14 +134,16 @@ jobs:
         with:
           persist-credentials: false
 
-      # Node 22.13.0 exactly, not '22': that is the floor every npm project
-      # here declares, and pinning the floor is what makes the declaration
-      # meaningful. `node-version: '22'` resolves to the newest 22.x, which
-      # would happily run code relying on APIs added after the supported
-      # minimum. The React Native harnesses require `^22.13.0 || ^24.3.0 ||
-      # >= 26.0.0` via @react-native/eslint-config, and the HeadTrax service
-      # requires `^20.19.0 || ^22.13.0 || ^23.5.0`; 22.13.0 is the lowest
-      # version satisfying both.
+      # Node 22.13.0 exactly, not '22'. Four of the six projects here declare a
+      # Node engine -- the three React Native harnesses require
+      # `^22.13.0 || ^24.3.0 || >= 26.0.0` via @react-native/eslint-config, and
+      # the HeadTrax service requires `^20.19.0 || ^22.13.0 || ^23.5.0`.
+      # 22.13.0 is the lowest version satisfying both, so pinning it exercises
+      # the floor those projects actually claim to support; `node-version: '22'`
+      # resolves to the newest 22.x and would happily run code relying on APIs
+      # added well after that floor. (src/vscode-reactor declares only
+      # engines.vscode and tools/figma-plugin declares no engine at all, so
+      # neither constrains this pin; they just run on whatever it selects.)
       #
       # (This previously read "better-sqlite3 ^11.7.0 cannot build on Node 26".
       # The real constraint is narrower: v11 declares
