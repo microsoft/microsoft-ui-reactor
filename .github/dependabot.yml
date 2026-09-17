@@ -151,6 +151,20 @@ updates:
     # here still gets its own per-directory PR; add a group when that turns out
     # to be noisy rather than pre-registering every package in npm.
     groups:
+      # Placed before npm-minor-patch deliberately: first match wins, and this
+      # package's breaking axis is semver-MINOR, not major. @rnx-kit/jest-preset
+      # is 0.x, so 0.3 -> 0.4 is a breaking change that the catch-all
+      # minor/patch group would otherwise sweep into the routine batch -- which
+      # is exactly how the incompatible 0.1 -> 0.3 bump reached #1245. It is
+      # fully suppressed by the ignore entry below today; this group is what
+      # keeps it sorted correctly once the react-native upgrade lifts that.
+      rnx-kit-jest-preset-breaking:
+        patterns:
+          - "@rnx-kit/jest-preset"
+        update-types:
+          - "minor"
+          - "major"
+
       npm-minor-patch:
         patterns:
           - "*"
@@ -169,16 +183,15 @@ updates:
       # jest, its types and its presets share a major line: @types/jest 30
       # describes jest 30's API, and a preset built for 29 does not configure
       # 30. Splitting them lets a preset land without the runtime it targets.
-      # (@rnx-kit/jest-preset is listed for when it becomes eligible again --
-      # it is currently suppressed outright by the ignore entry below, which
-      # takes precedence over any group.)
+      # (@rnx-kit/jest-preset is not listed here: it is 0.x, so its breaking
+      # axis is semver-minor and a `major`-only group would never catch it.
+      # It has its own group above.)
       jest-major:
         patterns:
           - "jest"
           - "jest-*"
           - "@types/jest"
           - "babel-jest"
-          - "@rnx-kit/jest-preset"
         update-types:
           - "major"
 
