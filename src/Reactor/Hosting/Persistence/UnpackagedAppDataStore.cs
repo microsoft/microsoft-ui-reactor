@@ -95,7 +95,11 @@ public sealed class UnpackagedAppDataStore : IWindowPersistenceStore
         // GetForUnpackaged resolves the path but does NOT create the directory
         // (measured on 2.2.0 — spec 063 §3.1). JsonFileStore.Write creates it on
         // first write, so nothing to do here.
-        _inner = new JsonFileStore(global::System.IO.Path.Combine(root, FileName), StoreKind);
+        //
+        // Path.Join rather than Path.Combine: Combine discards everything before a
+        // rooted segment. FileName is a non-rooted const today, so the two agree —
+        // but Join keeps that true if the file name ever becomes a parameter.
+        _inner = new JsonFileStore(global::System.IO.Path.Join(root, FileName), StoreKind);
     }
 
     /// <inheritdoc />

@@ -30,17 +30,37 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
         // The store writes under %LOCALAPPDATA%; the LocalSettings positive control in
         // Does_Not_Route_Window_Placement_Through_The_Roaming_Registry_Hive additionally
         // creates an HKCU key. Remove both so a test run leaves no residue.
+        //
+        // Both catches are narrowed to the failures cleanup can legitimately hit — a
+        // transient lock or an ACL denial. A bare catch here would also swallow a real
+        // defect (say, a malformed key path), and cleanup failures are reported rather
+        // than discarded so a leaking test run is diagnosable instead of silent.
         try
         {
-            var dir = global::System.IO.Path.Combine(
+            var dir = global::System.IO.Path.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), _publisher);
             if (global::System.IO.Directory.Exists(dir))
                 global::System.IO.Directory.Delete(dir, recursive: true);
         }
-        catch { }
+        catch (global::System.Exception ex) when (ex is global::System.IO.IOException
+                                                    or UnauthorizedAccessException)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[test cleanup] app-data dir for '{_publisher}': {ex.GetType().Name}: {ex.Message}");
+        }
 
-        try { global::Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(@"SOFTWARE\" + _publisher, throwOnMissingSubKey: false); }
-        catch { }
+        try
+        {
+            global::Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(
+                @"SOFTWARE\" + _publisher, throwOnMissingSubKey: false);
+        }
+        catch (global::System.Exception ex) when (ex is global::System.IO.IOException
+                                                    or UnauthorizedAccessException
+                                                    or global::System.Security.SecurityException)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[test cleanup] registry key for '{_publisher}': {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private static string SdkLocalPath(string publisher, string product) =>
@@ -85,7 +105,7 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
         // Resolve the expected location independently of the store rather than trusting
         // store.Path: a store that reported one path and wrote to another would satisfy
         // a self-consistent File.Exists(store.Path) check.
-        var expected = global::System.IO.Path.Combine(
+        var expected = global::System.IO.Path.Join(
             SdkLocalPath(_publisher, Product), "reactor-windows.json");
 
         // Assert on the filesystem, not just the store's own read-back: a store that
@@ -237,7 +257,7 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
     [InlineData(@"C:\Rooted")]
     public void Rejects_A_Product_The_Sdk_Considers_Invalid(string product)
     {
-        // The `product` segment reaches Path.Combine exactly as `publisher` does, so
+        // The `product` segment reaches the path join exactly as `publisher` does, so
         // it needs the same pin — the publisher-only version of this test left the
         // second half of the documented validation claim unverified.
         Assert.Throws<ArgumentException>(() => new UnpackagedAppDataStore(_publisher, product));

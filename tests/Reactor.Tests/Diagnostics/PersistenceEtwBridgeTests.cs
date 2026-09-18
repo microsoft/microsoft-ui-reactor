@@ -168,14 +168,23 @@ public class PersistenceEtwBridgeTests : IDisposable
         }
         finally
         {
+            // Best-effort cleanup of the %LOCALAPPDATA% tree this test created. Narrowed
+            // to the failures a delete can legitimately raise (file locked by a scanner,
+            // ACL denies it) — anything else is a real defect and should surface rather
+            // than be swallowed by a bare catch.
             try
             {
-                var dir = global::System.IO.Path.Combine(
+                var dir = global::System.IO.Path.Join(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), publisher);
                 if (global::System.IO.Directory.Exists(dir))
                     global::System.IO.Directory.Delete(dir, recursive: true);
             }
-            catch { }
+            catch (global::System.Exception ex) when (ex is global::System.IO.IOException
+                                                        or UnauthorizedAccessException)
+            {
+                global::System.Diagnostics.Debug.WriteLine(
+                    $"[test cleanup] could not remove app-data dir for '{publisher}': {ex.GetType().Name}: {ex.Message}");
+            }
         }
     }
 
