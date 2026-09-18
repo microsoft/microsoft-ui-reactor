@@ -118,6 +118,12 @@ public sealed class WinAppUi
     internal const int MaxWorkflowIdLength = 256;
 
     /// <summary>
+    /// UTF-8 that refuses to encode ill-formed UTF-16 instead of substituting U+FFFD — the same
+    /// encoder configuration winapp hashes the workflow id with.
+    /// </summary>
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>
     /// The workflow id stamped onto every <c>winapp ui</c> child process, resolved once per test
     /// process. Public so a failure report can name the workflow that held the desktop.
     /// </summary>
@@ -129,17 +135,48 @@ public sealed class WinAppUi
     /// <summary>
     /// Picks the workflow id for this test process. An ambient value wins, so an agent harness (or
     /// a developer) can group a whole test run with surrounding manual <c>winapp ui</c> calls into
-    /// one workflow. Only a *usable* ambient value wins: winapp hard-fails an empty or over-long id
-    /// on every single command, so inheriting one would break the entire suite rather than degrade
-    /// it — falling back to a synthesized id is strictly better than propagating a guaranteed error.
+    /// one workflow. Only a *usable* ambient value wins: winapp hard-fails an unusable id on every
+    /// single command, so inheriting one would break the entire suite rather than degrade it —
+    /// falling back to a synthesized id is strictly better than propagating a guaranteed error.
     /// </summary>
+    /// <remarks>
+    /// The three rejection cases are winapp's, not ours: empty/whitespace, longer than
+    /// <see cref="MaxWorkflowIdLength"/>, and text that is not well-formed UTF-16. The last one is
+    /// easy to miss — winapp hashes the id with a strict UTF-8 encoder specifically so that
+    /// distinct ill-formed ids cannot collide onto one owner key, which makes an unpaired
+    /// surrogate a hard error rather than a mangled-but-accepted value.
+    /// </remarks>
     internal static string ResolveWorkflowId(string? ambient, int pid, Guid unique)
     {
-        if (!string.IsNullOrWhiteSpace(ambient) && ambient.Length <= MaxWorkflowIdLength)
+        if (!string.IsNullOrWhiteSpace(ambient)
+            && ambient.Length <= MaxWorkflowIdLength
+            && IsWellFormedUtf16(ambient))
+        {
             return ambient;
+        }
 
         return string.Create(CultureInfo.InvariantCulture,
             $"reactor-apptests-{pid}-{unique:N}");
+    }
+
+    /// <summary>
+    /// Whether a string survives strict UTF-8 encoding — i.e. contains no unpaired surrogate.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately asks the same encoder winapp uses rather than scanning for surrogate code
+    /// units by hand, so this cannot drift from the rule it is predicting.
+    /// </remarks>
+    private static bool IsWellFormedUtf16(string value)
+    {
+        try
+        {
+            StrictUtf8.GetByteCount(value);
+            return true;
+        }
+        catch (EncoderFallbackException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -167,17 +204,50 @@ public sealed class WinAppUi
 
             if (!proc.WaitForExit(YieldTimeoutMs))
             {
-                try { proc.Kill(true); } catch { }
+                TryKill(proc);
                 return null;
             }
 
             return proc.ExitCode;
         }
-        catch
+        // Narrow rather than bare: the contract is that yielding cannot redden a passing test, and
+        // these are the failures that actually mean "winapp could not be run here" (missing or
+        // unlaunchable executable, a process that died between calls, an unresolvable winapp.exe
+        // surfacing through the static initializer). Something outside this set is not a yield
+        // problem and should surface rather than be silently turned into a null.
+        catch (System.ComponentModel.Win32Exception ex) { return YieldUnavailable(ex); }
+        catch (InvalidOperationException ex) { return YieldUnavailable(ex); }
+        catch (NotSupportedException ex) { return YieldUnavailable(ex); }
+        catch (TypeInitializationException ex) { return YieldUnavailable(ex); }
+    }
+
+    private static int? YieldUnavailable(Exception ex)
+    {
+        Console.WriteLine($"Could not release the winapp UI turn ({ex.GetType().Name}: {ex.Message}). " +
+                          "Falling back to the idle grace.");
+        return null;
+    }
+
+    /// <summary>
+    /// Best-effort termination of a winapp child that overran its timeout. The caller is already
+    /// failing or returning null, so a kill failure changes no outcome — but it is reported rather
+    /// than swallowed, because repeated failures leave orphaned winapp processes holding the UI
+    /// turn, which looks like an unrelated hang in the *next* test.
+    /// </summary>
+    internal static void TryKill(Process proc)
+    {
+        try
         {
-            // Swallowed deliberately — see the summary.
-            return null;
+            proc.Kill(entireProcessTree: true);
         }
+        catch (InvalidOperationException ex) { WarnKillFailed(ex); }
+        catch (NotSupportedException ex) { WarnKillFailed(ex); }
+        catch (System.ComponentModel.Win32Exception ex) { WarnKillFailed(ex); }
+        catch (AggregateException ex) { WarnKillFailed(ex); }
+
+        static void WarnKillFailed(Exception ex) =>
+            Console.WriteLine($"Could not terminate the timed-out winapp child " +
+                              $"({ex.GetType().Name}: {ex.Message}).");
     }
 
     private const int YieldTimeoutMs = 10_000;
@@ -243,7 +313,7 @@ public sealed class WinAppUi
 
         if (!proc.WaitForExit(processTimeoutMs))
         {
-            try { proc.Kill(true); } catch { }
+            TryKill(proc);
             throw new WinAppTimeoutException(
                 $"winapp ui {string.Join(' ', args)} did not exit within {processTimeoutMs}ms.");
         }

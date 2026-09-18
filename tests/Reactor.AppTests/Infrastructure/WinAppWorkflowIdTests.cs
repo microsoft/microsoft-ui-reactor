@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
@@ -60,6 +61,71 @@ public class WinAppWorkflowIdTests
         var atCap = new string('x', WinAppUi.MaxWorkflowIdLength);
 
         Assert.AreEqual(atCap, WinAppUi.ResolveWorkflowId(atCap, pid: 1234, unique: Guid.NewGuid()));
+    }
+
+    /// <summary>
+    /// An ambient id containing an unpaired UTF-16 surrogate must be replaced, not inherited.
+    /// </summary>
+    /// <remarks>
+    /// <para>winapp hashes the workflow id with a UTF-8 encoder configured to throw rather than
+    /// substitute U+FFFD — deliberately, so that distinct ill-formed ids cannot collapse onto one
+    /// owner key. The consequence is that an unpaired surrogate is a hard <c>InvalidWorkflowId</c>
+    /// on <em>every</em> command, so inheriting one would fail the entire E2E suite rather than
+    /// merely lose the idle grace. Length and emptiness are the obvious rejection cases; this is
+    /// the one that is easy to miss.</para>
+    /// <para>The inputs are built here rather than passed as <c>[DataRow]</c> arguments on
+    /// purpose. Custom attribute blobs store strings as UTF-8 (ECMA-335 <c>SerString</c>), which
+    /// cannot represent an unpaired surrogate, so a <c>[DataRow]</c> silently delivers U+FFFD and
+    /// the test ends up asserting against perfectly valid text. The precondition below is what
+    /// makes that failure mode loud instead of invisible.</para>
+    /// </remarks>
+    [TestMethod]
+    public void ResolveWorkflowId_ReplacesAnAmbientValueWinAppCannotEncode()
+    {
+        const char High = '\uD800';
+        const char Low = '\uDC00';
+
+        (string Ambient, string Why)[] cases =
+        [
+            (High.ToString(), "lone high surrogate"),
+            (Low.ToString(), "lone low surrogate"),
+            ("run-" + High + "-id", "high surrogate embedded in otherwise valid text"),
+            ("run-" + Low + "-id", "low surrogate embedded in otherwise valid text"),
+            (new string([High, High]), "two high surrogates, which never form a pair"),
+            (new string([Low, High]), "a reversed pair, which is two unpaired surrogates"),
+        ];
+
+        var strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+        foreach (var (ambient, why) in cases)
+        {
+            Assert.ThrowsExactly<EncoderFallbackException>(
+                () => strict.GetByteCount(ambient),
+                $"Precondition: '{why}' must really be an id winapp cannot encode.");
+
+            var resolved = WinAppUi.ResolveWorkflowId(ambient, pid: 1234, unique: Guid.NewGuid());
+
+            Assert.AreNotEqual(ambient, resolved, $"Inherited an id winapp rejects ({why}).");
+
+            // The replacement must itself be encodable, or the fallback just moves the failure.
+            strict.GetByteCount(resolved);
+        }
+    }
+
+    /// <summary>
+    /// Positive control for the surrogate rejection: a well-formed astral character is ordinary
+    /// text and must still be inherited.
+    /// </summary>
+    /// <remarks>
+    /// Without this, narrowing the check to "contains any surrogate code unit" would leave the
+    /// rejection tests green while silently discarding valid ids.
+    /// </remarks>
+    [TestMethod]
+    public void ResolveWorkflowId_KeepsAnAmbientValueWithAPairedSurrogate()
+    {
+        const string paired = "run-\uD83D\uDE80-id"; // U+1F680, a correctly paired surrogate.
+
+        Assert.AreEqual(paired, WinAppUi.ResolveWorkflowId(paired, pid: 1234, unique: Guid.NewGuid()));
     }
 
     [TestMethod]
@@ -161,15 +227,18 @@ public class WinAppWorkflowIdTests
 
             if (!proc.WaitForExit(10_000))
             {
-                try { proc.Kill(true); } catch { }
+                WinAppUi.TryKill(proc);
                 return null;
             }
 
             return proc.ExitCode;
         }
-        catch
-        {
-            return null;
-        }
+        // Same narrow set as ReleaseUiTurn, for the same reason: null here means "winapp could not
+        // be run", which makes the test inconclusive rather than failing it. A failure outside this
+        // set is not winapp being unavailable and should not be disguised as it.
+        catch (System.ComponentModel.Win32Exception) { return null; }
+        catch (InvalidOperationException) { return null; }
+        catch (NotSupportedException) { return null; }
+        catch (TypeInitializationException) { return null; }
     }
 }

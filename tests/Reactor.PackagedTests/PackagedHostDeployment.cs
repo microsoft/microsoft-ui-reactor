@@ -324,7 +324,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         var aliases = document.Descendants()
             .Where(e => e.Name.LocalName == "ExecutionAlias")
             .Select(e => e.Attribute("Alias"))
-            .Where(a => a is not null)
+            .OfType<XAttribute>()
             .ToList();
 
         if (aliases.Count == 0)
@@ -336,11 +336,13 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                 $"Manifest: {manifestPath}");
         }
 
-        foreach (var alias in aliases)
+        // Filter on the sequence rather than in the loop body. Note this is deliberately not
+        // applied to `aliases` above: that list backs the count check, which asserts the manifest
+        // declares an alias at all. Narrowing it to aliases *needing* a change would make an
+        // already-derived manifest look like one declaring no alias, and throw on a re-deploy.
+        foreach (var alias in aliases.Where(
+            a => !string.Equals(a.Value, EffectiveAliasExeName, StringComparison.Ordinal)))
         {
-            if (string.Equals(alias!.Value, EffectiveAliasExeName, StringComparison.Ordinal))
-                continue;
-
             alias.Value = EffectiveAliasExeName;
             changed = true;
         }

@@ -70,6 +70,9 @@ internal static class WorktreeIdentity
     /// </remarks>
     internal const int SuffixHashLength = 8;
 
+    /// <summary>Total length of a derived suffix, including <see cref="SuffixMarker"/>.</summary>
+    internal const int SuffixLength = SuffixHashLength + 1;
+
     /// <summary>Maximum length of MSIX <c>Identity/@Name</c>.</summary>
     internal const int MaxPackageNameLength = 50;
 
@@ -87,33 +90,63 @@ internal static class WorktreeIdentity
     /// same way.
     /// </summary>
     /// <remarks>
-    /// Absolutises, resolves a symlink/junction to its final target where the platform
-    /// reports one, strips any trailing separator (<c>AppContext.BaseDirectory</c> has one,
-    /// a joined layout path typically does not), and lowercases — Windows paths are
-    /// case-insensitive, so two spellings differing only in case are the same directory and
-    /// must not derive two identities.
+    /// <para>Absolutises, resolves symlinks and junctions in <em>every</em> path component (not
+    /// just the final one — a junction high up, such as a linked <c>C:\src</c>, is the realistic
+    /// way a worktree acquires two spellings), strips any trailing separator
+    /// (<c>AppContext.BaseDirectory</c> has one, a joined layout path typically does not), and
+    /// lowercases — Windows paths are case-insensitive, so two spellings differing only in case
+    /// are the same directory and must not derive two identities.</para>
+    /// <para>It deliberately does <em>not</em> claim to defeat every alternate spelling Windows
+    /// admits: 8.3 short names and <c>subst</c>'d drives still hash differently from their long
+    /// or physical form. Those are not how a build produces a layout path twice, and the
+    /// consequence of a miss is a loud, fail-closed identity-guard mismatch rather than silent
+    /// cross-checkout interference.</para>
     /// </remarks>
     internal static string Canonicalize(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Path must be a non-empty directory path.", nameof(path));
 
-        var full = Path.GetFullPath(path);
-
-        // Junctions and symlinks are the realistic way one directory acquires two spellings
-        // on a dev box. Best-effort: an unreadable or non-existent path is not an error here,
-        // it just canonicalises to itself.
-        try
-        {
-            var resolved = Directory.ResolveLinkTarget(full, returnFinalTarget: true);
-            if (resolved is not null) full = Path.GetFullPath(resolved.FullName);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Keep `full` as-is.
-        }
-
+        var full = ResolveLinksInEveryComponent(Path.GetFullPath(path));
         return Path.TrimEndingDirectorySeparator(full).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Walks a rooted path from the root down, replacing each component that is a symlink or
+    /// junction with its final target.
+    /// </summary>
+    /// <remarks>
+    /// <c>Directory.ResolveLinkTarget</c> only reports a target when the path handed to it is
+    /// itself a link, so calling it once on a full path leaves any linked parent unresolved.
+    /// Resolving component by component is what makes the linked and physical spellings of one
+    /// directory converge. Best-effort throughout: a component that cannot be inspected is kept
+    /// verbatim, because an unreadable or not-yet-created path is not an error here.
+    /// </remarks>
+    private static string ResolveLinksInEveryComponent(string full)
+    {
+        var root = Path.GetPathRoot(full);
+        if (string.IsNullOrEmpty(root)) return full;
+
+        var components = full[root.Length..].Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+
+        var current = root;
+        foreach (var component in components)
+        {
+            var candidate = Path.Combine(current, component);
+            try
+            {
+                var resolved = Directory.ResolveLinkTarget(candidate, returnFinalTarget: true);
+                current = resolved is null ? candidate : Path.GetFullPath(resolved.FullName);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                current = candidate;
+            }
+        }
+
+        return current;
     }
 
     /// <summary>
@@ -135,31 +168,36 @@ internal static class WorktreeIdentity
         if (string.IsNullOrWhiteSpace(basePackageName))
             throw new ArgumentException("Base package name must be non-empty.", nameof(basePackageName));
 
-        var suffix = DeriveSuffix(layoutDirectory);
+        var head = TryDeriveHead(basePackageName)
+            ?? throw new ArgumentException(
+                $"Base package name '{basePackageName}' cannot be truncated to a valid MSIX name " +
+                $"alongside a {SuffixLength}-character derived suffix.", nameof(basePackageName));
 
         // ".": the separator between base and suffix. MSIX treats the name as dot-delimited
         // segments, so this keeps the derived name a well-formed sibling of the original
         // rather than a new top-level name.
-        var budget = MaxPackageNameLength - (suffix.Length + 1);
-        if (budget < MinPackageNameLength)
-        {
-            throw new ArgumentException(
-                $"Suffix '{suffix}' leaves no room for a base name within the {MaxPackageNameLength}-" +
-                $"character MSIX Identity/@Name limit.", nameof(basePackageName));
-        }
+        return head + "." + DeriveSuffix(layoutDirectory);
+    }
+
+    /// <summary>
+    /// The exact leading segment <see cref="DerivePackageName"/> emits for a base name, or
+    /// <see langword="null"/> when no valid one exists.
+    /// </summary>
+    /// <remarks>
+    /// Single source of truth for the truncation rules, shared with <see cref="IsDerivedFrom"/>
+    /// so recognition cannot drift from derivation. The budget is constant — the suffix is always
+    /// <see cref="SuffixLength"/> characters — so this needs no layout directory.
+    /// </remarks>
+    private static string? TryDeriveHead(string basePackageName)
+    {
+        var budget = MaxPackageNameLength - (SuffixLength + 1);
+        if (budget < MinPackageNameLength) return null;
 
         var head = basePackageName.Length <= budget ? basePackageName : basePackageName[..budget];
 
         // Truncation can land on a '.', which would produce ".." or a segment-less name.
         head = head.TrimEnd('.');
-        if (head.Length < MinPackageNameLength)
-        {
-            throw new ArgumentException(
-                $"Base package name '{basePackageName}' cannot be truncated to a valid MSIX name " +
-                $"alongside suffix '{suffix}'.", nameof(basePackageName));
-        }
-
-        return head + "." + suffix;
+        return head.Length < MinPackageNameLength ? null : head;
     }
 
     /// <summary>
@@ -199,7 +237,11 @@ internal static class WorktreeIdentity
     /// Used to scope cleanup to registrations belonging to this repo without ever matching an
     /// unrelated package, and to let the deployment recognise an already-rewritten manifest.
     /// Shape-checked rather than merely prefix-checked, so a genuinely different package that
-    /// happens to start with the same text is not mistaken for one of ours.
+    /// happens to start with the same text is not mistaken for one of ours. The head is compared
+    /// for <em>exact</em> equality against what <see cref="DerivePackageName"/> would emit: a
+    /// shortened prefix such as <c>M.wabcdefgh</c> is not something this type can produce, and
+    /// treating it as ours would let the abandoned-package sweep remove an unrelated package that
+    /// merely shares a publisher.
     /// </remarks>
     internal static bool IsDerivedFrom(string candidate, string basePackageName)
     {
@@ -208,15 +250,15 @@ internal static class WorktreeIdentity
         if (string.Equals(candidate, basePackageName, StringComparison.Ordinal))
             return true;
 
-        // Accept a truncated base, as DerivePackageName would produce for a long base name.
         var dot = candidate.LastIndexOf('.');
         if (dot <= 0) return false;
 
         var head = candidate[..dot];
         var suffix = candidate[(dot + 1)..];
 
-        if (!basePackageName.StartsWith(head, StringComparison.Ordinal)) return false;
-        if (suffix.Length != SuffixHashLength + 1) return false;
+        // Exactly the head DerivePackageName emits — including its truncation, if the base is long.
+        if (!string.Equals(head, TryDeriveHead(basePackageName), StringComparison.Ordinal)) return false;
+        if (suffix.Length != SuffixLength) return false;
         if (suffix[0] != SuffixMarker) return false;
 
         for (var i = 1; i < suffix.Length; i++)

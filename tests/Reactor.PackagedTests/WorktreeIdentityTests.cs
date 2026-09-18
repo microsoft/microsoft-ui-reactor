@@ -84,6 +84,74 @@ public class WorktreeIdentityTests
         Assert.AreEqual(expected, WorktreeIdentity.DerivePackageName(Base, Path.Join(PathA, "..", "x64")));
     }
 
+    /// <summary>
+    /// A junction anywhere in the path — not just on the final component — must normalise away.
+    /// </summary>
+    /// <remarks>
+    /// This is the realistic shape of the problem: nobody junctions the <c>AppX</c> folder, but a
+    /// linked <c>C:\src</c> or a redirected profile is ordinary. The deployment canonicalises the
+    /// layout directory it was handed while the in-host guard canonicalises
+    /// <c>AppContext.BaseDirectory</c>; if those two arrive by different spellings of the same
+    /// directory and only the final component is resolved, they derive different names and the
+    /// guard fails against a package that is correct.
+    /// </remarks>
+    [TestMethod]
+    public void A_Junction_In_A_Parent_Component_Derives_The_Same_Identity()
+    {
+        var root = Path.Join(Path.GetTempPath(), "reactor-wt-link-" + Guid.NewGuid().ToString("N"));
+        var physical = Path.Join(root, "physical");
+        var leaf = Path.Join(physical, "bin", "x64");
+        var junction = Path.Join(root, "linked");
+
+        Directory.CreateDirectory(leaf);
+        try
+        {
+            if (!TryCreateJunction(junction, physical))
+                Assert.Inconclusive("Could not create a directory junction in TEMP.");
+
+            // Positive control: the junction really does reach the same directory. Without this a
+            // broken link would make both spellings canonicalise to themselves and still compare
+            // equal for the wrong reason.
+            var probe = Guid.NewGuid().ToString("N");
+            File.WriteAllText(Path.Join(leaf, probe), "");
+            Assert.IsTrue(File.Exists(Path.Join(junction, "bin", "x64", probe)),
+                "Precondition: the junction must resolve to the physical directory.");
+
+            Assert.AreEqual(
+                WorktreeIdentity.DerivePackageName(Base, leaf),
+                WorktreeIdentity.DerivePackageName(Base, Path.Join(junction, "bin", "x64")),
+                "A linked and a physical spelling of one directory must derive one identity.");
+        }
+        finally
+        {
+            // Delete the junction itself (non-recursive) before the tree, so removing it cannot
+            // reach through into the physical directory.
+            try { Directory.Delete(junction, recursive: false); } catch (DirectoryNotFoundException) { }
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Creates a directory junction, which needs no privilege — unlike a directory symlink, which
+    /// requires Developer Mode or elevation and would make this test environment-dependent.
+    /// </summary>
+    private static bool TryCreateJunction(string link, string target)
+    {
+        using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe",
+            Arguments = $"/c mklink /J \"{link}\" \"{target}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        });
+
+        if (proc is null) return false;
+        proc.WaitForExit(10_000);
+        return proc.HasExited && proc.ExitCode == 0 && Directory.Exists(link);
+    }
+
     // ── MSIX validity ──────────────────────────────────────────────────
 
     /// <summary>
@@ -163,8 +231,7 @@ public class WorktreeIdentityTests
     /// extension would produce a stub Windows does not treat as an executable.
     /// </summary>
     [TestMethod]
-    public void Derived_Alias_Keeps_A_Single_Exe_Extension()
-    {
+    public void Derived_Alias_Keeps_A_Single_Exe_Extension()    {
         var alias = WorktreeIdentity.DeriveAliasExeName(BaseAlias, PathA);
 
         Assert.AreEqual(".exe", Path.GetExtension(alias));
@@ -198,6 +265,33 @@ public class WorktreeIdentityTests
         Assert.IsFalse(WorktreeIdentity.IsDerivedFrom(Base + ".w", Base),
             "A suffix without a hash is not a derived identity.");
         Assert.IsFalse(WorktreeIdentity.IsDerivedFrom(string.Empty, Base));
+    }
+
+    /// <summary>
+    /// The head must match what <c>DerivePackageName</c> actually emits, not merely be some
+    /// prefix of the base name.
+    /// </summary>
+    /// <remarks>
+    /// A prefix test looks harmless but widens the match to names this type could never produce,
+    /// and <c>IsDerivedFrom</c> gates the sweep that removes derived-shaped packages whose
+    /// directory is gone. Under a prefix test, <c>M.w…</c> reads as ours and an unrelated
+    /// same-publisher package gets unregistered — the exact class of collateral damage the whole
+    /// per-checkout identity change exists to stop.
+    /// </remarks>
+    [TestMethod]
+    public void IsDerivedFrom_Rejects_A_Shortened_Head()
+    {
+        Assert.IsTrue(Base.Length > 1, "Precondition: the base name must have a proper prefix.");
+
+        Assert.IsFalse(WorktreeIdentity.IsDerivedFrom(Base[..1] + ".wabcdefgh", Base),
+            "A one-character head is a prefix of the base but is not a name we emit.");
+        Assert.IsFalse(WorktreeIdentity.IsDerivedFrom(Base[..^1] + ".wabcdefgh", Base),
+            "A head one character short of the base is still not a name we emit.");
+
+        // Positive control: the same assertion shape passes for the head we do emit, so the two
+        // rejections above are the rule firing rather than the suffix being malformed.
+        var real = WorktreeIdentity.DerivePackageName(Base, PathA);
+        Assert.IsTrue(WorktreeIdentity.IsDerivedFrom(real, Base));
     }
 
     // ── The deployment actually uses it ────────────────────────────────

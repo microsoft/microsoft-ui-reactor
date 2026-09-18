@@ -602,9 +602,12 @@ Microsoft.UI.Reactor.PackagedTests.Host   ->  Microsoft.UI.Reactor.PackagedTests
 reactor-packaged-test-host.exe            ->  reactor-packaged-test-host-w53j3givo.exe
 ```
 
-The suffix is a hash of the canonicalised layout path (`tests/_shared/WorktreeIdentity.cs`), so it
-is stable for a checkout and different between checkouts. Two worktrees — or two agents — can run
-the packaged tier concurrently without seeing each other.
+The suffix is a hash of the canonicalised layout directory — the build output the package is
+registered from, e.g. `tests\Reactor.PackagedTests.Host\bin\x64\Debug\net10.0-windows…\AppX`. That
+path is stable for a checkout and different between checkouts, so the derived identity is too. Two
+worktrees — or two agents — can run the packaged tier concurrently without seeing each other. The
+derivation itself lives in `tests/_shared/WorktreeIdentity.cs`, linked into both the deployment and
+the host so the two sides cannot disagree about it.
 
 Consequences worth knowing:
 
@@ -617,9 +620,15 @@ Consequences worth knowing:
   registration made under the base name before identities were derived), plus derived-shaped
   packages whose directory no longer exists (a deleted worktree). None of those rules can match a
   live checkout other than this one.
-- **Match with a wildcard, never the bare name.** Anything sweeping up leftovers by hand — or in
-  CI — must use `Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*'`; an exact-name
-  match silently stops finding anything.
+- **Sweeping by hand is machine-wide — and destructive while anything is running.**
+  `Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*'` matches *every* checkout's
+  derived package, not just yours, so unregistering what it returns will evict a packaged run
+  happening in another worktree. Use it only as a deliberate clean-slate sweep once all packaged
+  runs have stopped (this is why CI can: the runner has exactly one checkout). Routine per-run
+  cleanup needs no manual step at all — `Register()` already scopes itself to this layout. If you
+  do need to remove one checkout's package while others live, match the exact derived name or the
+  install location rather than the wildcard. Note the bare base name matches nothing once
+  identities are derived.
 - **`Packaged_IdentityGuard` stays an exact equality check.** It re-derives the expected name from
   `AppContext.BaseDirectory` rather than being told it, which works because the tier already
   requires the install location and the running directory to be the same path.
