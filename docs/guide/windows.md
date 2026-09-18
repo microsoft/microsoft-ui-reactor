@@ -182,10 +182,11 @@ Unpackaged apps can opt into a stable identity instead — assign the store befo
 the first `OpenWindow`:
 
 ```csharp
-using Microsoft.UI.Reactor.Hosting.Persistence;
-
-ReactorApp.WindowPersistenceStore =
-    new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
+public static void UseStableIdentity()
+{
+    ReactorApp.WindowPersistenceStore =
+        new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
+}
 ```
 
 `UnpackagedAppDataStore` keys on the publisher/product pair you supply rather than
