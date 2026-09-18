@@ -44,35 +44,55 @@ public sealed class JsonFileStoreConcurrencyTests : IDisposable
     {
         const int writers = 8;
 
-        // Separate instances, so the per-instance _ioLock cannot help — only the named
-        // cross-process guard can. That is the same mutual-exclusion gap two processes
-        // hit, exercised without the fragility of spawning child processes from an MTP
-        // test host: distinct instances are exactly as blind to each other as distinct
-        // processes are.
-        using var start = new Barrier(writers);
-        var threads = new Thread[writers];
-        for (var i = 0; i < writers; i++)
+        // Raise the acquisition bound for this test only. Production keeps a short
+        // bound because it is paid on the UI thread at window close; with 8 contenders
+        // on a saturated CI runner some writers legitimately exhaust it and skip, so
+        // asserting "all land" against the production bound would flake for a reason
+        // that has nothing to do with the mutual exclusion under test. The
+        // skip-on-timeout behaviour has its own test below.
+        CrossProcessWriteGuard.AcquireTimeoutOverrideMs = 30_000;
+        try
         {
-            var id = $"window-{i}";
-            threads[i] = new Thread(() =>
+            // Separate instances, so the per-instance _ioLock cannot help — only the
+            // cross-process guard can. That is the same mutual-exclusion gap two
+            // processes hit, exercised without spawning them: distinct instances are
+            // exactly as blind to each other as distinct processes are.
+            using var start = new Barrier(writers);
+            var threads = new Thread[writers];
+            for (var i = 0; i < writers; i++)
             {
-                var store = new JsonFileStore(_path);
-                start.SignalAndWait();
-                store.Write(id, new byte[] { (byte)id.Length, 7, 7 });
-            });
-            threads[i].Start();
+                var id = $"window-{i}";
+                threads[i] = new Thread(() =>
+                {
+                    var store = new JsonFileStore(_path);
+                    start.SignalAndWait();
+                    store.Write(id, new byte[] { (byte)id.Length, 7, 7 });
+                });
+                threads[i].Start();
+            }
+
+            foreach (var t in threads)
+            {
+                Assert.True(
+                    t.Join(TimeSpan.FromSeconds(60)),
+                    "A writer thread did not finish. The survivor count below would be measured "
+                        + "against an incomplete document, and a live thread would leak into later tests.");
+            }
+
+            var reader = new JsonFileStore(_path);
+            var survived = Enumerable.Range(0, writers)
+                .Count(i => reader.TryRead($"window-{i}", out var d) && d is not null);
+
+            Assert.True(
+                survived == writers,
+                $"Expected all {writers} ids to survive concurrent writes, but {survived} did. "
+                    + "Read-merge-write lost entries — the cross-process write guard is not "
+                    + "serializing separate JsonFileStore instances.");
         }
-        foreach (var t in threads) t.Join(TimeSpan.FromSeconds(30));
-
-        var reader = new JsonFileStore(_path);
-        var survived = Enumerable.Range(0, writers)
-            .Count(i => reader.TryRead($"window-{i}", out var d) && d is not null);
-
-        Assert.True(
-            survived == writers,
-            $"Expected all {writers} ids to survive concurrent writes, but {survived} did. "
-                + "Read-merge-write lost entries — the cross-process write guard is not "
-                + "serializing separate JsonFileStore instances.");
+        finally
+        {
+            CrossProcessWriteGuard.AcquireTimeoutOverrideMs = null;
+        }
     }
 
     [Fact]
@@ -94,15 +114,12 @@ public sealed class JsonFileStoreConcurrencyTests : IDisposable
                 // unheld guard. This is the assertion that distinguishes them.
                 Assert.True(g1.IsHeld, "First acquisition should own the lock.");
 
-                var sw = global::System.Diagnostics.Stopwatch.StartNew();
+                // Ownership is the oracle, not elapsed time: a loaded CI runner can
+                // take a while to open any file, so a timing bound here would be a
+                // flake generator rather than a lock test. If the two paths DID
+                // collide, g2 would exhaust the timeout and report IsHeld == false.
                 using var g2 = CrossProcessWriteGuard.Acquire(b);
-                sw.Stop();
-
                 Assert.True(g2.IsHeld, "A different path must map to a different lock.");
-                Assert.True(
-                    sw.ElapsedMilliseconds < 1_000,
-                    $"Acquiring a different path took {sw.ElapsedMilliseconds} ms, which suggests "
-                        + "it waited on the same object as the first path.");
             }
 
             // Same path, sequentially: proves the first acquisition was released.

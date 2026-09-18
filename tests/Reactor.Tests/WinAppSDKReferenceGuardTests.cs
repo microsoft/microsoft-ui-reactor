@@ -500,7 +500,8 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// bypassing this sweep entirely.
     /// </summary>
     private static readonly string[] PinScanExtensions =
-        [".cs", ".csproj", ".props", ".targets", ".md", ".dt", ".ps1", ".txt", ".json", ".yml", ".yaml"];
+        [".cs", ".csproj", ".proj", ".props", ".targets", ".vcxproj", ".wapproj", ".vbproj",
+         ".fsproj", ".md", ".dt", ".ps1", ".txt", ".json", ".yml", ".yaml"];
 
     /// <summary>
     /// The two pin shapes that carry a literal version and do NOT inherit
@@ -731,13 +732,20 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
             if (lowest > centralVersion) return 1;
 
             // Same numeric core as the floor. A prerelease float sits below a stable
-            // floor; against a prerelease floor, compare the labels' common prefix.
+            // floor. Against a prerelease floor, the wildcard is a RANGE, not a
+            // concrete version: 2.2.0-preview.* can resolve 2.2.0-preview.1, so a
+            // floor whose label extends the wildcard's prefix is reachable and the pin
+            // is not a downgrade. Only a prefix that sorts strictly after the floor is.
             var floorPre = PrereleaseLabel(centralRaw);
             if (preLabelPrefix is not null)
             {
                 if (floorPre is null) return -1;
-                var cmp = ComparePrerelease(preLabelPrefix, floorPre);
-                return cmp < 0 ? -1 : 0;
+                if (floorPre.Equals(preLabelPrefix, StringComparison.Ordinal)
+                    || floorPre.StartsWith(preLabelPrefix + ".", StringComparison.Ordinal))
+                {
+                    return 0; // the range can reach the floor
+                }
+                return ComparePrerelease(preLabelPrefix, floorPre) < 0 ? -1 : 0;
             }
             return floorPre is null ? 0 : 1;
         }
@@ -861,6 +869,10 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     [InlineData("2.2.0-*", "2.2.0", -1)]
     [InlineData("2.2.0-preview.*", "2.2.0", -1)]
     [InlineData("2.1.0-preview.*", "2.2.0", -1)]
+    // Against a PRERELEASE floor a wildcard is a range: it is not stale if it can
+    // reach the floor. 2.2.0-preview.* can resolve 2.2.0-preview.1.
+    [InlineData("2.2.0-preview.*", "2.2.0-preview.1", 0)]
+    [InlineData("2.2.0-alpha.*", "2.2.0-preview.1", -1)]
     // Prerelease vs stable at the same core.
     [InlineData("2.2.0-preview.1", "2.2.0", -1)]
     [InlineData("2.2.0", "2.2.0-preview.1", 1)]
@@ -880,24 +892,48 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
             $"ComparePin('{pin}', floor '{floor}') returned {actual}, expected sign {expected}.");
     }
 
+    /// <summary>
+    /// Directories never worth scanning. Pruned during recursion rather than filtered
+    /// afterwards: <c>EnumerateFiles(AllDirectories)</c> would walk every object under
+    /// <c>.git</c>, <c>bin</c>, <c>obj</c> and <c>node_modules</c> before discarding
+    /// them, turning a source scan into a full-checkout traversal on every run.
+    /// </summary>
+    private static readonly HashSet<string> PrunedDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", "bin", "obj", "node_modules", "local-nupkgs", "artifacts", ".vs",
+    };
+
     private static IEnumerable<string> EnumerateScannableFiles(string root)
     {
-        foreach (var path in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories))
+        var stack = new Stack<string>();
+        stack.Push(root);
+
+        while (stack.Count > 0)
         {
-            var norm = path.Replace('\\', '/');
-            if (norm.Contains("/bin/", StringComparison.Ordinal)
-                || norm.Contains("/obj/", StringComparison.Ordinal)
-                || norm.Contains("/node_modules/", StringComparison.Ordinal)
-                || norm.Contains("/.git/", StringComparison.Ordinal)
-                || norm.Contains("/local-nupkgs/", StringComparison.Ordinal)
-                || norm.Contains("/artifacts/", StringComparison.Ordinal))
+            var dir = stack.Pop();
+
+            string[] subdirs;
+            string[] files;
+            try
+            {
+                subdirs = Directory.GetDirectories(dir);
+                files = Directory.GetFiles(dir);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException)
             {
                 continue;
             }
 
-            if (PinScanExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+            foreach (var sub in subdirs)
             {
-                yield return path;
+                if (!PrunedDirectories.Contains(Path.GetFileName(sub)))
+                    stack.Push(sub);
+            }
+
+            foreach (var path in files)
+            {
+                if (PinScanExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+                    yield return path;
             }
         }
     }

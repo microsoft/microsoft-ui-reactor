@@ -17,6 +17,11 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <para>The xUnit host is unpackaged, which is precisely the condition
 /// <c>GetForUnpackaged</c> targets — no packaged tier needed.</para>
 /// </remarks>
+/// <para><b>Collection isolation.</b> Shares the <c>PersistenceEtw</c> collection with
+/// <c>PersistenceEtwBridgeTests</c>: that suite listens for process-global ETW events
+/// and discriminates on <c>storeKind</c>, which this suite also emits, so running the
+/// two concurrently could let one satisfy the other's assertions.</para>
+[Collection("PersistenceEtw")]
 public sealed class UnpackagedAppDataStoreTests : IDisposable
 {
     private readonly string _publisher;

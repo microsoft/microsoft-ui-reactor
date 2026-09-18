@@ -18,6 +18,14 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 /// (<c>"json-file"</c>, <c>"packaged-settings"</c>, <c>"placement"</c>);
 /// rejection <c>reason</c> labels are similarly bounded.
 /// </summary>
+/// <para><b>Collection isolation.</b> An <see cref="EventListener"/> receives
+/// process-global events, and these assertions discriminate on <c>storeKind</c> — a
+/// value other suites also emit. A concurrently running
+/// <c>UnpackagedAppDataStoreTests</c> writing through the same store kind could
+/// satisfy an assertion this test's own operation failed to produce, making a
+/// mutation silently survive. Both suites therefore share a collection so xUnit runs
+/// them serially.</para>
+[Collection("PersistenceEtw")]
 public class PersistenceEtwBridgeTests : IDisposable
 {
     private sealed class CapturingListener : EventListener
