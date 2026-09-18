@@ -26,9 +26,17 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 /// the pre-merge document and the second rename would silently discard the first's
 /// entry — even when the two wrote <i>different</i> persistence ids. Each write stages
 /// through a temp file named for the writing process and thread, so a crash mid-write
-/// cannot leave a shared temp that another process renames over the real file. Reads
-/// need no guard: the commit is an atomic rename, so a reader sees either the previous
-/// document or the next one, never a torn one.</para>
+/// cannot leave a shared temp that another process renames over the real file.</para>
+/// <para>Readers take no guard, but they do open with
+/// <see cref="FileShare.Delete"/> in addition to <see cref="FileShare.Read"/>, and the
+/// commit uses <c>File.Replace</c> rather than <c>File.Move(overwrite: true)</c>.
+/// Measured on Windows: <c>Move</c> cannot replace a destination any process still
+/// holds open — it fails even when that reader granted delete sharing — whereas
+/// <c>Replace</c> succeeds precisely when the reader does grant it. Both halves are
+/// required; with only one, a concurrent reader in a second app instance silently
+/// kills the write, because write failures are swallowed by contract. The reader then
+/// continues against the file it opened, seeing either the previous document or the
+/// next one, never a torn one.</para>
 /// </remarks>
 public sealed class JsonFileStore : IWindowPersistenceStore
 {
@@ -125,7 +133,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                     return false;
                 }
 
-                using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
                 var doc = JsonDocument.Parse(stream);
                 if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
                 if (!doc.RootElement.TryGetProperty(id, out var entry)) return false;
@@ -200,21 +208,29 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                     return;
                 }
 
-                // Atomic-ish: write to temp then rename. WinAPI MoveFileEx with
-                // MOVEFILE_REPLACE_EXISTING is what File.Move(_, _, true) maps
-                // to on Windows. The temp name carries the process and thread id
-                // so a writer that crashes mid-write cannot leave a shared
-                // ".tmp" that another process then renames over the real file.
+                // Commit. File.Move(overwrite:true) cannot replace a destination that
+                // any process still has open — measured: it fails with
+                // UnauthorizedAccessException even when the reader granted
+                // FileShare.Delete. File.Replace (ReplaceFileW) can, provided readers
+                // share delete, which TryRead/ReadDocumentOrEmpty do. Without this a
+                // concurrent reader in another app instance would silently kill the
+                // write, since write failures are swallowed by contract.
+                //
+                // Replace requires an existing destination, so the first write of a
+                // fresh store still goes through Move.
                 var tmp = $"{_path}.{Environment.ProcessId:x}.{Environment.CurrentManagedThreadId:x}.tmp";
                 try
                 {
                     File.WriteAllBytes(tmp, bytes);
-                    File.Move(tmp, _path, overwrite: true);
+                    if (File.Exists(_path))
+                        File.Replace(tmp, _path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                    else
+                        File.Move(tmp, _path, overwrite: true);
                 }
                 finally
                 {
-                    // Move consumed it on success; this only fires if the write or
-                    // the move threw, and must not mask that exception.
+                    // Consumed on success; this only fires if the write or the commit
+                    // threw, and must not mask that exception.
                     try { if (File.Exists(tmp)) File.Delete(tmp); }
                     catch (IOException) { /* best effort */ }
                     catch (UnauthorizedAccessException) { /* best effort */ }
@@ -241,7 +257,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
             if (!File.Exists(_path)) return new(StringComparer.Ordinal);
             var info = new FileInfo(_path);
             if (info.Length > MaxFileSizeBytes) return new(StringComparer.Ordinal);
-            using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             return ParseStringMap(stream);
         }
         catch (IOException ex)

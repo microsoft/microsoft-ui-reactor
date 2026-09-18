@@ -96,8 +96,8 @@ ReactorApp.WindowPersistenceStore =
 ```
 
 Opt-in rather than default: the two stores key data differently, so switching
-does not migrate existing layouts. One instance per publisher/product — the
-backing file is shared and concurrent writers can drop each other's entries.
+does not migrate existing layouts. Multiple instances sharing one
+publisher/product are safe — writes are serialized across processes.
 
 ## Z-order, taskbar, and chrome
 

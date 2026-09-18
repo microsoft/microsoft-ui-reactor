@@ -136,8 +136,9 @@ ReactorApp.WindowPersistenceStore =
 `UnpackagedAppDataStore` keys on the publisher/product pair you supply rather than
 the process name, so saved layouts survive a rename. It is opt-in, not the default,
 because the two stores key their data differently and switching does not migrate
-existing layouts. Use one instance per publisher/product: the underlying file is
-shared, and concurrent writers can drop each other's entries.
+existing layouts. Multiple app instances sharing one publisher/product are safe:
+writes are serialized across processes, so concurrent saves do not overwrite each
+other's windows.
 
 ## Z-order & visibility
 

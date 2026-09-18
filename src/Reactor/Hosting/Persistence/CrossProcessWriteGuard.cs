@@ -38,6 +38,14 @@ internal sealed class CrossProcessWriteGuard : IDisposable
     private readonly Mutex? _mutex;
     private readonly bool _held;
 
+    /// <summary>
+    /// Whether the named mutex was actually acquired. False means the wait timed out
+    /// (or the object could not be created) and the caller is proceeding unguarded.
+    /// Exposed so tests can prove an acquisition really happened rather than inferring
+    /// it from a non-null guard, which <see cref="Acquire"/> returns either way.
+    /// </summary>
+    internal bool IsHeld => _held;
+
     private CrossProcessWriteGuard(Mutex? mutex, bool held)
     {
         _mutex = mutex;

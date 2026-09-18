@@ -533,16 +533,22 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// <c>Include</c>-before-<c>Version</c> silently skips the legal reverse ordering.
     /// </summary>
     private static readonly Regex PackageElement = new(
-        @"<(?:PackageReference|PackageVersion)\b[^>]*?/?>",
+        @"<(?:PackageReference|PackageVersion)\b(?:[^>]*?/>|[^>]*?>.*?</(?:PackageReference|PackageVersion)>)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
 
     private static readonly Regex PackageNameAttr = new(
         @"(?:Include|Update)\s*=\s*[""']([^""']+)[""']",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    /// <summary>Covers <c>VersionOverride</c>, which CPM explicitly permits.</summary>
+    /// <summary>
+    /// Covers <c>VersionOverride</c>, which CPM explicitly permits, and the child
+    /// <c>&lt;Version&gt;</c> metadata form — MSBuild accepts item metadata as either
+    /// an attribute or a child element, and an attribute-only reader silently ignores
+    /// the latter.
+    /// </summary>
     private static readonly Regex PackageVersionAttr = new(
-        @"(?:VersionOverride|Version)\s*=\s*[""']([^""']+)[""']",
+        @"(?:VersionOverride|Version)\s*=\s*[""']([^""']+)[""']"
+        + @"|<(?:VersionOverride|Version)>\s*([^<\s]+)\s*</(?:VersionOverride|Version)>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex FileBasedPin = new(
@@ -625,8 +631,10 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
                 var name = PackageNameAttr.Match(el.Value);
                 var ver = PackageVersionAttr.Match(el.Value);
                 if (!name.Success || !ver.Success) continue;
+                // Group 1 = attribute form, group 2 = child-element form.
+                var version = ver.Groups[1].Success ? ver.Groups[1].Value : ver.Groups[2].Value;
                 if (!PackageFloorProperty.ContainsKey(name.Groups[1].Value)) continue;
-                found.Add((rel, LineOf(el.Index), "PackageReference", name.Groups[1].Value, ver.Groups[1].Value));
+                found.Add((rel, LineOf(el.Index), "PackageReference", name.Groups[1].Value, version));
             }
 
             foreach (Match m in FileBasedPin.Matches(text))
@@ -695,8 +703,11 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
 
         if (text.Contains('*'))
         {
-            // Compare the literal prefix before the wildcard, component-wise.
-            var prefix = text[..text.IndexOf('*')].TrimEnd('.', '-');
+            // A prerelease float (2.2.1-*) resolves only prereleases, which NuGet
+            // orders BELOW the stable release of the same version — so it is a
+            // downgrade against a stable floor even though its numeric prefix matches.
+            var isPrereleaseFloat = text.Contains('-');
+            var prefix = text[..text.IndexOf('*')].TrimEnd('-', '.');
             if (prefix.Length == 0) return 0; // a bare "*" floats to anything, incl. the floor
 
             var pinParts = prefix.Split('.');
@@ -709,6 +720,9 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
                 var c = int.Parse(centralNumeric.Value);
                 if (p != c) return p < c ? -1 : 1;
             }
+
+            // Numeric prefix matches. A prerelease float is below a stable floor.
+            if (isPrereleaseFloat && !HasPrerelease(centralRaw)) return -1;
             return 0;
         }
 
@@ -721,23 +735,66 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         // the same version, so 2.2.0-preview.1 is a real downgrade against a stable
         // 2.2.0 — stripping the suffix (as ParsePin does for comparability) would
         // otherwise report them equal and let it through.
-        var pinPre = HasPrerelease(text);
-        var centralPre = HasPrerelease(centralRaw);
-        if (pinPre && !centralPre) return -1;
-        if (!pinPre && centralPre) return 1;
-        return 0;
+        var pinPre = PrereleaseLabel(text);
+        var centralPre = PrereleaseLabel(centralRaw);
+        if (pinPre is not null && centralPre is null) return -1;
+        if (pinPre is null && centralPre is not null) return 1;
+        if (pinPre is null) return 0;
+
+        // Both prerelease: compare identifier sequences per SemVer §11, so a
+        // prerelease floor (2.2.0-preview.2) still catches an older prerelease pin.
+        return ComparePrerelease(pinPre, centralPre!);
     }
 
     /// <summary>
-    /// True when a version carries a SemVer prerelease label (<c>-preview.1</c>).
-    /// Build metadata (<c>+sha</c>) does not affect ordering and is ignored.
+    /// The SemVer prerelease label of a version (<c>preview.1</c>), or null when the
+    /// version is stable. Build metadata (<c>+sha</c>) does not affect ordering.
     /// </summary>
-    private static bool HasPrerelease(string version)
+    private static string? PrereleaseLabel(string version)
     {
-        var core = Regex.Match(version.Trim(), @"^\d+(?:\.\d+){0,3}");
-        if (!core.Success) return false;
-        var rest = version.Trim()[core.Length..];
-        return rest.StartsWith('-');
+        var text = version.Trim();
+        var core = Regex.Match(text, @"^\d+(?:\.\d+){0,3}");
+        if (!core.Success) return null;
+        var rest = text[core.Length..];
+        if (!rest.StartsWith('-')) return null;
+        var label = rest[1..];
+        var plus = label.IndexOf('+');
+        return plus >= 0 ? label[..plus] : label;
+    }
+
+    private static bool HasPrerelease(string version) => PrereleaseLabel(version) is not null;
+
+    /// <summary>
+    /// SemVer §11 precedence for prerelease labels: dot-separated identifiers compared
+    /// left to right; numeric identifiers compare numerically and rank below
+    /// alphanumeric ones; a shorter prefix ranks below its longer extension.
+    /// </summary>
+    private static int ComparePrerelease(string left, string right)
+    {
+        var l = left.Split('.');
+        var r = right.Split('.');
+        for (var i = 0; i < Math.Max(l.Length, r.Length); i++)
+        {
+            if (i >= l.Length) return -1;
+            if (i >= r.Length) return 1;
+
+            var lNum = int.TryParse(l[i], out var li);
+            var rNum = int.TryParse(r[i], out var ri);
+            if (lNum && rNum)
+            {
+                if (li != ri) return li < ri ? -1 : 1;
+            }
+            else if (lNum != rNum)
+            {
+                return lNum ? -1 : 1; // numeric identifiers rank below alphanumeric
+            }
+            else
+            {
+                var cmp = string.CompareOrdinal(l[i], r[i]);
+                if (cmp != 0) return cmp < 0 ? -1 : 1;
+            }
+        }
+        return 0;
     }
 
     /// <summary>
@@ -761,6 +818,47 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
             parts.Length > 1 ? parts[1] : 0,
             parts.Length > 2 ? parts[2] : 0,
             parts.Length > 3 ? parts[3] : 0);
+    }
+
+    /// <summary>
+    /// Direct coverage of the ordering rules, because the current tree exercises only
+    /// stable and variable pins: the wildcard and prerelease branches would otherwise
+    /// be dead code that the sweep above never reaches, so a regression in them would
+    /// pass while the guard still claimed to enforce the pin policy.
+    /// </summary>
+    [Theory]
+    // Stable, the ordinary case.
+    [InlineData("2.2.0", "2.2.0", 0)]
+    [InlineData("2.1.3", "2.2.0", -1)]
+    [InlineData("2.3.1", "2.2.0", 1)]
+    // Part-count normalization: '2.2' must not sort below '2.2.0'.
+    [InlineData("2.2", "2.2.0", 0)]
+    // Variable pins track the centre by construction.
+    [InlineData("$(WindowsAppSDKVersion)", "2.2.0", 0)]
+    // Wildcards: compare the literal prefix, do NOT exempt.
+    [InlineData("2.1.*", "2.2.0", -1)]
+    [InlineData("2.2.*", "2.2.0", 0)]
+    [InlineData("2.3.*", "2.2.0", 1)]
+    [InlineData("*", "2.2.0", 0)]
+    // A prerelease float resolves only prereleases, which sit below the stable floor.
+    [InlineData("2.2.0-*", "2.2.0", -1)]
+    // Prerelease vs stable at the same core.
+    [InlineData("2.2.0-preview.1", "2.2.0", -1)]
+    [InlineData("2.2.0", "2.2.0-preview.1", 1)]
+    // Prerelease vs prerelease (a prerelease central floor).
+    [InlineData("2.2.0-preview.1", "2.2.0-preview.2", -1)]
+    [InlineData("2.2.0-preview.2", "2.2.0-preview.1", 1)]
+    [InlineData("2.2.0-preview.1", "2.2.0-preview.1", 0)]
+    // SemVer §11: numeric identifiers rank below alphanumeric; shorter prefix is lower.
+    [InlineData("2.2.0-1", "2.2.0-alpha", -1)]
+    [InlineData("2.2.0-alpha", "2.2.0-alpha.1", -1)]
+    public void Pin_ordering_follows_NuGet_precedence(string pin, string floor, int expected)
+    {
+        var floorVersion = ParsePin(floor) ?? new Version(0, 0, 0, 0);
+        var actual = ComparePin(pin, floor, floorVersion);
+        Assert.True(
+            Math.Sign(actual) == expected,
+            $"ComparePin('{pin}', floor '{floor}') returned {actual}, expected sign {expected}.");
     }
 
     private static IEnumerable<string> EnumerateScannableFiles(string root)

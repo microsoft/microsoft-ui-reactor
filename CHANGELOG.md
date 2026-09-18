@@ -79,6 +79,21 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Window and dock layouts no longer vanish when two app instances save at once
+  (spec 063 §5).** `JsonFileStore` — the default unpackaged persistence store — merged
+  its document under a per-*instance* lock and committed through a shared temp file, so
+  two instances or processes saving placement concurrently each wrote a document missing
+  the other's entries and the last writer won. Layouts disappeared even when the two
+  windows had *different* `PersistenceId`s. Measured: with 8 concurrent writers, 1 entry
+  survived.
+
+  Writes now take a named cross-process guard, stage through a per-process temp file, and
+  commit with `File.Replace`; reads grant delete sharing. Both halves matter — on Windows
+  a plain `File.Move(overwrite: true)` cannot replace a file another process has open even
+  when that reader grants delete sharing, so a concurrent reader could previously kill a
+  write outright (silently, since writes are best-effort). This affects every existing
+  unpackaged app, not only users of the new opt-in store.
+
 - **Stale `Microsoft.WindowsAppSDK` version pins in shipped agent-kit recipes and docs
   (spec 063 §3.0).** **22 literal occurrences across 20 files** used a
   `#:package Microsoft.WindowsAppSDK@2.0.1` file-based-app header, which the 2.1.3 bump
