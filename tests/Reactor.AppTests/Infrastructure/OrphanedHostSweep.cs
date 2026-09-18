@@ -22,12 +22,41 @@ namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 /// </remarks>
 internal static class OrphanedHostSweep
 {
+    /// <summary>How long a run waits for the startup gate before giving up.</summary>
+    /// <remarks>
+    /// A sweep is sub-second, so any real wait here is another run's startup, not this one's.
+    /// Generous enough that ordinary contention resolves, short enough that a gate left held by
+    /// something unkillable surfaces as a failure rather than an indefinite hang.
+    /// </remarks>
+    private static readonly TimeSpan StartupGateTimeout = TimeSpan.FromMinutes(2);
+
     /// <summary>A process considered for the sweep: its id and its executable path, if known.</summary>
     /// <param name="Pid">Process id, used only for diagnostics.</param>
     /// <param name="ExecutablePath">
     /// Full path to the running image, or <see langword="null"/> when it could not be read.
     /// </param>
     internal readonly record struct Candidate(int Pid, string? ExecutablePath);
+
+    /// <summary>Whether a run may sweep, must skip, or could not be admitted at all.</summary>
+    /// <remarks>
+    /// Three outcomes rather than two because "a sibling is live" and "the lease could not be
+    /// written" call for opposite actions, and a boolean forced them to share one. Reporting an
+    /// I/O failure as "a sibling is live" reads as the safe direction but is not: it skips the
+    /// sweep — which is safe — while also leaving the run with no lease, so it is invisible to
+    /// every later run, and the first one to start after the fault clears sees no sibling and
+    /// kills this run's live host.
+    /// </remarks>
+    internal enum SweepAdmission
+    {
+        /// <summary>Lease held, no other run live. This run may sweep.</summary>
+        Admitted,
+
+        /// <summary>Lease held, another run of this image is live. Skip the sweep.</summary>
+        Deferred,
+
+        /// <summary>The lease could not be recorded. This run cannot safely continue.</summary>
+        Unavailable,
+    }
 
     /// <summary>
     /// Selects the candidates that belong to the build at <paramref name="ourExePath"/>.
@@ -53,25 +82,99 @@ internal static class OrphanedHostSweep
     }
 
     /// <summary>
+    /// Takes the per-image startup gate, or returns <see langword="null"/> when it cannot be
+    /// taken within <paramref name="timeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Admission and sweeping have to be one indivisible step, and leases alone do not
+    /// make them one. Run A registers, sees no sibling and starts sweeping; run B registers,
+    /// sees A, correctly declines to sweep, and launches its host — all before A takes its
+    /// snapshot of running processes. A then finds B's freshly launched host running A's own
+    /// image and kills it as an orphan. Both runs followed the rules; the interleaving is the
+    /// defect.</para>
+    /// <para>Holding this gate across <i>register, query and snapshot</i> closes it. Every run
+    /// registers under the gate before it may launch a host, so for a host to appear in a
+    /// sweeper's snapshot its run must have registered first — and registration is either
+    /// before the sweeper's query, in which case the sweeper sees the sibling and stands down,
+    /// or after the sweeper released, in which case the host did not yet exist when the
+    /// snapshot was taken. There is no third ordering.</para>
+    /// <para>Separate from the lease file: a lease is held for the whole run and read by
+    /// siblings, whereas this is exclusive and held for milliseconds. One file cannot be both
+    /// without a run's own lease blocking every later run's admission.</para>
+    /// </remarks>
+    internal static IDisposable? TryEnterStartupGate(string ourExePath, TimeSpan timeout)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ourExePath);
+
+        string path;
+        try
+        {
+            var dir = ClaimDirectory();
+            Directory.CreateDirectory(dir);
+            path = Path.Join(dir, KeyFor(ourExePath) + ".gate");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        var deadline = DateTime.UtcNow + timeout;
+        while (true)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (DateTime.UtcNow >= deadline) return null;
+                Thread.Sleep(100);
+            }
+        }
+    }
+
+    /// <summary>
     /// Kills every process named <paramref name="processName"/> that runs the image at
     /// <paramref name="ourExePath"/>, and leaves the rest alone.
     /// </summary>
     internal static void KillOrphansOf(string processName, string ourExePath, string label)
     {
+        // Held across admission *and* the process snapshot below, which is what makes the two
+        // one step. See TryEnterStartupGate for why they cannot be separated.
+        using var gate = TryEnterStartupGate(ourExePath, StartupGateTimeout);
+
+        if (gate is null)
+        {
+            throw new InvalidOperationException(
+                $"Could not take the startup gate for this checkout's {label} within " +
+                $"{StartupGateTimeout.TotalMinutes:0} minutes, so this run cannot register " +
+                "itself as live. Continuing would let a later run mistake this run's host for " +
+                "an orphan and kill it mid-test. Check for a stuck test process holding " +
+                $"'{KeyFor(ourExePath)}.gate' under %LOCALAPPDATA%\\Microsoft.UI.Reactor\\AppTests.");
+        }
+
         // Path scoping alone separates checkouts, but not two runs of the *same* checkout:
         // their hosts share this exact image path, so without a liveness signal the second
         // run would classify the first run's live host as an orphan and kill it — the very
         // eviction this sweep was narrowed to prevent, reintroduced one scope down.
         //
-        // The claim supplies that signal. Acquiring it means no other run of this layout is
+        // The lease supplies that signal. Being admitted means no other run of this layout is
         // in flight, so anything still running this image is genuinely left over from a run
-        // that died. Failing to acquire means one is, and its hosts are not orphans.
-        if (!LayoutRunClaim.TryAcquireFor(ourExePath))
+        // that died. Being deferred means one is, and its hosts are not orphans.
+        switch (LayoutRunClaim.TryAcquireFor(ourExePath))
         {
-            Console.WriteLine(
-                $"Skipping the orphaned-{label} sweep: another run of this checkout is in " +
-                "flight, so its hosts are live rather than orphaned.");
-            return;
+            case SweepAdmission.Unavailable:
+                throw new InvalidOperationException(
+                    $"Could not record this run's lease for the {label} at '{ourExePath}'. " +
+                    "Without it this run is invisible to concurrent runs, and the next one to " +
+                    "start would see no live sibling and kill this run's host as an orphan. " +
+                    "Check that %LOCALAPPDATA%\\Microsoft.UI.Reactor\\AppTests is writable.");
+
+            case SweepAdmission.Deferred:
+                Console.WriteLine(
+                    $"Skipping the orphaned-{label} sweep: another run of this checkout is in " +
+                    "flight, so its hosts are live rather than orphaned.");
+                return;
         }
 
         var processes = Process.GetProcessesByName(processName);
@@ -294,7 +397,7 @@ internal static class OrphanedHostSweep
 
         private static readonly Dictionary<string, IDisposable> Held = new(StringComparer.Ordinal);
 
-        internal static bool TryAcquireFor(string ourExePath)
+        internal static SweepAdmission TryAcquireFor(string ourExePath)
         {
             // Keyed by the same digest the lease file is named for, so two spellings of one
             // path cannot disagree about whether this run already registered.
@@ -305,7 +408,11 @@ internal static class OrphanedHostSweep
                 if (!Held.ContainsKey(key))
                 {
                     var lease = TryClaimRun(ourExePath);
-                    if (lease is null) return false;
+
+                    // Not "a sibling is live" — nothing was learned about siblings. The run has
+                    // no lease, which is a different and worse problem, and it is reported as
+                    // itself so the caller can refuse to continue rather than proceed unseen.
+                    if (lease is null) return SweepAdmission.Unavailable;
 
                     Held[key] = lease;
                 }
@@ -313,7 +420,9 @@ internal static class OrphanedHostSweep
                 // Registered before the question is asked, so a sibling starting concurrently
                 // sees this run and declines in turn. Asking first would let both conclude they
                 // were alone and both sweep.
-                return !AnyLiveSiblingOf(ourExePath);
+                return AnyLiveSiblingOf(ourExePath)
+                    ? SweepAdmission.Deferred
+                    : SweepAdmission.Admitted;
             }
         }
     }

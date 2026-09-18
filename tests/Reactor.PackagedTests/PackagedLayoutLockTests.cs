@@ -142,4 +142,208 @@ public class PackagedLayoutLockTests
         Assert.IsNotNull(acquired,
             "The wait never picked up a lock that was released well inside its deadline.");
     }
+
+    /// <summary>A synthetic layout path, unique per test, for the whole-set acquisitions.</summary>
+    private static string SyntheticLayout() =>
+        Path.Join(Path.GetTempPath(), "reactor-layout-" + Guid.NewGuid().ToString("n"));
+
+    /// <summary>
+    /// Two algorithm versions that are both non-live, so the multi-version property is measured
+    /// rather than coinciding with the single version that exists today.
+    /// </summary>
+    private static readonly string[] TwoVersions = ["8", "9"];
+
+    private static readonly TimeSpan Instant = TimeSpan.Zero;
+
+    /// <summary>
+    /// The lock has to cover every supported algorithm version, not just the current one.
+    /// Cleanup already recognizes locks and registrations from all of them, so a run holding
+    /// only its own version's file does not exclude a run of an earlier revision over the same
+    /// directory: both proceed, and rule 2 unregisters the other's live package.
+    /// </summary>
+    /// <remarks>
+    /// The held lock is the <em>second</em> version deliberately. An implementation that locked
+    /// only the current version — the first entry — would take a different file, see it free,
+    /// and pass. Only acquiring the whole set fails here.
+    /// </remarks>
+    [TestMethod]
+    public void A_Lock_Held_Under_Any_Supported_Version_Refuses_The_Whole_Set()
+    {
+        var layout = SyntheticLayout();
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(layout, TwoVersions);
+
+        Assert.AreEqual(2, paths.Count,
+            "Precondition: the two versions must map to two distinct lock files, or this test " +
+            "cannot tell the whole set apart from a single file.");
+
+        foreach (var other in paths)
+        {
+            using var held = AppxLooseLayoutDeployment.TryOpenLockFile(other, "pid=1");
+            Assert.IsNotNull(held, $"Precondition: {other} must be free before the test.");
+
+            var acquired = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+                layout, "pid=2", Instant, Instant, out var blockedOn, TwoVersions);
+
+            Assert.IsNull(acquired,
+                $"A run acquired this layout while version lock '{Path.GetFileName(other)}' was " +
+                "still held, so two revisions of the tier can run on one directory and each " +
+                "will unregister the other's live package.");
+
+            Assert.AreEqual(other, blockedOn,
+                "The diagnostic names the wrong lock, so a blocked run cannot report who holds it.");
+        }
+    }
+
+    /// <summary>
+    /// A refused acquisition must leave nothing behind. Keeping a partial set would wedge the
+    /// very run this one just deferred to out of taking its own locks.
+    /// </summary>
+    [TestMethod]
+    public void A_Refused_Acquisition_Releases_The_Locks_It_Already_Took()
+    {
+        var layout = SyntheticLayout();
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(layout, TwoVersions);
+
+        // Hold the last one, so the attempt below has certainly taken the earlier one first.
+        using (var blocker = AppxLooseLayoutDeployment.TryOpenLockFile(paths[^1], "pid=1"))
+        {
+            Assert.IsNotNull(blocker, "Precondition: the blocking lock must be acquirable.");
+
+            Assert.IsNull(
+                AppxLooseLayoutDeployment.TryAcquireAllLocks(
+                    layout, "pid=2", Instant, Instant, out _, TwoVersions),
+                "Precondition: the acquisition must be refused.");
+        }
+
+        using var first = AppxLooseLayoutDeployment.TryOpenLockFile(paths[0], "pid=3");
+        Assert.IsNotNull(first,
+            "The refused run kept the lock it had already taken, so the run it deferred to can " +
+            "never acquire the full set and both are stuck.");
+    }
+
+    /// <summary>
+    /// Reclaiming an abandoned registration must hold the layout's locks across the removal,
+    /// not merely sample them beforehand.
+    /// </summary>
+    /// <remarks>
+    /// Sampling answers a question about the past: between "nobody holds this" and the
+    /// <c>RemovePackage</c> call, a run can recreate the worktree, take the lock and register,
+    /// and the removal then evicts a live package. Holding the handles through the removal
+    /// makes that interleaving unrepresentable.
+    /// </remarks>
+    [TestMethod]
+    public void A_Held_Reclamation_Lease_Blocks_A_Concurrent_Layout_Acquisition()
+    {
+        var layout = SyntheticLayout();
+
+        using var lease = AppxLooseLayoutDeployment.TryAcquireReclamationLease(layout);
+        Assert.IsNotNull(lease,
+            "Precondition: an unclaimed layout must be leasable, or nothing could ever be " +
+            "reclaimed.");
+
+        foreach (var path in AppxLooseLayoutDeployment.LockPathsFor(layout))
+        {
+            Assert.IsNull(AppxLooseLayoutDeployment.TryOpenLockFile(path, "pid=2"),
+                $"A run took '{Path.GetFileName(path)}' while a reclamation was in flight, so " +
+                "it can register this layout before the reclaiming run removes the package it " +
+                "already captured.");
+        }
+    }
+
+    /// <summary>
+    /// The mirror: a layout some run still holds must not be reclaimable at all. This is the
+    /// deleted-worktree case — the directory is gone but the run that registered it is alive.
+    /// </summary>
+    [TestMethod]
+    public void A_Locked_Layout_Cannot_Be_Leased_For_Reclamation()
+    {
+        var layout = SyntheticLayout();
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(layout);
+
+        Assert.IsFalse(AppxLooseLayoutDeployment.IsLayoutLocked(layout),
+            "Control: an unheld layout must read as unlocked, or the assertion below passes " +
+            "for the wrong reason.");
+
+        using var held = AppxLooseLayoutDeployment.TryOpenLockFile(paths[0], "pid=1");
+        Assert.IsNotNull(held, "Precondition: the lock must be acquirable.");
+
+        Assert.IsNull(AppxLooseLayoutDeployment.TryAcquireReclamationLease(layout),
+            "A live run's layout was leased for reclamation, so its registration would be " +
+            "removed underneath it.");
+
+        Assert.IsTrue(AppxLooseLayoutDeployment.IsLayoutLocked(layout),
+            "The liveness check disagreed with the lease it is derived from.");
+    }
+
+    /// <summary>
+    /// Releasing the lease must free the locks, or one reclamation would block every later run
+    /// on that layout for the lifetime of the process.
+    /// </summary>
+    [TestMethod]
+    public void Releasing_A_Reclamation_Lease_Frees_The_Locks()
+    {
+        var layout = SyntheticLayout();
+
+        var lease = AppxLooseLayoutDeployment.TryAcquireReclamationLease(layout);
+        Assert.IsNotNull(lease, "Precondition: the lease must be acquirable.");
+        lease.Dispose();
+
+        using var after = AppxLooseLayoutDeployment.TryAcquireReclamationLease(layout);
+        Assert.IsNotNull(after,
+            "The locks stayed held after the lease was released, so a single reclamation " +
+            "permanently wedges that layout.");
+    }
+
+    /// <summary>
+    /// Absence must be established by naming the component that failed to resolve, not by
+    /// enumerating whatever ancestor happens to be readable.
+    /// </summary>
+    /// <remarks>
+    /// <para>Staged with a <em>file</em> where a directory was recorded, which reproduces the
+    /// defect's shape without needing an ACL: <c>Directory.Exists</c> answers
+    /// <see langword="false"/> for it exactly as it does for an unreadable directory, and the
+    /// parent is perfectly readable. A probe that enumerates the parent and stops reports
+    /// <c>Absent</c> — and rule 3 then unregisters a package whose path was never gone.</para>
+    /// <para>The <c>Absent</c> and <c>Present</c> controls sit in the same test so a staging
+    /// mistake cannot leave the interesting assertion passing vacuously.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Path_That_Resolves_To_Something_Unreadable_Is_Not_Reported_Absent()
+    {
+        var missing = Path.Join(_root, "never-created");
+        Assert.AreEqual(LayoutPresence.Absent, AppxLooseLayoutDeployment.ProbeLayout(missing),
+            "Control: a genuinely missing directory under a readable parent must be Absent, " +
+            "or rule 3 stops reclaiming deleted worktrees entirely.");
+
+        var present = Path.Join(_root, "real");
+        Directory.CreateDirectory(present);
+        Assert.AreEqual(LayoutPresence.Present, AppxLooseLayoutDeployment.ProbeLayout(present),
+            "Control: an existing directory must be Present.");
+
+        var occupied = Path.Join(_root, "occupied");
+        File.WriteAllText(occupied, "not a directory");
+
+        Assert.AreEqual(LayoutPresence.Unknown, AppxLooseLayoutDeployment.ProbeLayout(occupied),
+            "A path whose final component exists but does not resolve as a readable directory " +
+            "was reported gone. Anything Directory.Exists hides — an ACL, an offline share — " +
+            "reads the same way, and the action taken on 'gone' is to unregister the package.");
+    }
+
+    /// <summary>
+    /// The same defect one level up: an unresolvable intermediate component must not be walked
+    /// past to a readable grandparent.
+    /// </summary>
+    [TestMethod]
+    public void An_Unresolvable_Intermediate_Component_Is_Not_Walked_Past()
+    {
+        var intermediate = Path.Join(_root, "middle");
+        File.WriteAllText(intermediate, "not a directory");
+
+        var target = Path.Join(intermediate, "layout");
+
+        Assert.AreEqual(LayoutPresence.Unknown, AppxLooseLayoutDeployment.ProbeLayout(target),
+            "The probe climbed past a component it could not resolve, enumerated a readable " +
+            "ancestor, and called the target gone — so a live layout under an unreadable " +
+            "parent directory would have its registration reclaimed.");
+    }
 }

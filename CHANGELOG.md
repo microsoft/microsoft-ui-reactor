@@ -57,7 +57,20 @@ Conventions for contributors:
   sweeps both the WinUI and WinForms hosts.
 - The packaged tier serializes runs that share one checkout behind a per-user lock on the derived
   identity, since registration and the alias stub are per-user rather than per-session. Runs in
-  different checkouts still proceed in parallel.
+  different checkouts still proceed in parallel. The lock is taken over every supported identity
+  algorithm version rather than just the current one, so a run on a revision that derives a
+  different name still blocks — locking only the current version would let two runs holding
+  different names both register over one layout.
+- Reclaiming an abandoned packaged registration now holds the layout lock across the removal
+  instead of sampling it first. Sampling only reports whether a run held the lock at that
+  instant, which leaves a window for a run to start and register between the check and the
+  `RemovePackage` that then unregisters it.
+- The E2E suite's start-up sweep admits one run at a time per host executable, holding a gate
+  across registering its own lease, querying for live siblings, and snapshotting processes.
+  Those three steps were separately correct but interleaved: two runs starting together could
+  each register after the other's query and both conclude they were alone. A run that cannot
+  record its lease at all now aborts rather than continuing unregistered, since an unregistered
+  run is invisible to the next one to start and its host would be killed as an orphan.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

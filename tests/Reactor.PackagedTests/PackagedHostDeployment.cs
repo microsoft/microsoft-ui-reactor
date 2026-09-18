@@ -405,7 +405,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         // still keeps the deployment and calls Unregister() from class cleanup. Sweeping there
         // would remove the live package belonging to the run we just refused to disturb, which
         // would turn a diagnostic timeout into the exact eviction the lock exists to prevent.
-        if (_layoutLock is null)
+        if (_layoutLocks is null)
         {
             if (_registeredFullName is not null)
             {
@@ -474,7 +474,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// <para>The file records the owning pid and layout so a contender can say who it is
     /// waiting on; it is opened <c>FileShare.Read</c> for that reason.</para>
     /// </remarks>
-    private FileStream? _layoutLock;
+    private List<FileStream>? _layoutLocks;
 
     /// <summary>How long to wait for a sibling run to finish before giving up.</summary>
     /// <remarks>
@@ -534,8 +534,11 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         {
             return null;
         }
-        catch (UnauthorizedAccessException)
+        catch (Exception ex) when (
+            ex is UnauthorizedAccessException or System.Security.SecurityException)
         {
+            // Refused, and indistinguishable here from "held". Both callers want the same
+            // answer for both: the waiter retries, and the reclamation lease declines to act.
             return null;
         }
     }
@@ -562,26 +565,124 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         }
     }
 
+    /// <summary>Path of the lock file for one layout under one algorithm version.</summary>
+    /// <remarks>
+    /// The derived suffix already encodes the canonical layout path; reusing it keeps the name
+    /// short, legal, and impossible to drift from the identity it protects.
+    /// </remarks>
+    internal static string LockPathFor(string layoutPath, string version) =>
+        Path.Join(LockDirectory, WorktreeIdentity.DeriveSuffix(layoutPath, version) + ".lock");
+
+    /// <summary>
+    /// Every algorithm version's lock file for a layout, in a fixed order.
+    /// </summary>
+    /// <remarks>
+    /// Ordered so that two runs acquiring the whole set do so in the same sequence and cannot
+    /// deadlock by taking them in opposite orders. Sorted explicitly rather than relying on the
+    /// declaration order of <see cref="WorktreeIdentity.SupportedAlgorithmVersions"/>, so that
+    /// prepending a new version later cannot silently introduce a lock-ordering inversion
+    /// against a run still executing the previous revision's order.
+    /// </remarks>
+    internal static IReadOnlyList<string> LockPathsFor(
+        string layoutPath, IReadOnlyList<string>? versions = null) =>
+        (versions ?? WorktreeIdentity.SupportedAlgorithmVersions)
+            .Select(v => LockPathFor(layoutPath, v))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// Takes every supported version's lock for one layout, all or nothing.
+    /// </summary>
+    /// <param name="versions">
+    /// Algorithm versions to lock, defaulting to
+    /// <see cref="WorktreeIdentity.SupportedAlgorithmVersions"/>. Injected for the same reason
+    /// <c>RegistrationSelection.Classify</c> takes them: only one version exists today, so a
+    /// test that did not supply a second could not distinguish locking the whole set from
+    /// locking just the current version, and the cross-version guarantee would go unmeasured
+    /// until the first version bump.
+    /// </param>
+    /// <param name="blockedOn">The first lock that could not be taken, for diagnostics.</param>
+    /// <remarks>
+    /// <para>The whole set, not just the current version. Cleanup deliberately recognizes
+    /// registrations and locks from every supported version, so a run holding only the current
+    /// version's lock does not exclude a run of an earlier revision over the same directory:
+    /// each would take a differently named file, both would proceed, and rule 2 would unregister
+    /// the other's live package. A single version-independent name would not fix that either,
+    /// because the earlier revision does not know to take it — the set has to be acquired, so
+    /// that whichever name the other run uses, it is already held.</para>
+    /// <para>All-or-nothing: a partial acquisition is released before returning, or a refused
+    /// run would keep part of the set and wedge the run it just deferred to.</para>
+    /// </remarks>
+    internal static List<FileStream>? TryAcquireAllLocks(
+        string layoutPath,
+        string ownerRecord,
+        TimeSpan timeout,
+        TimeSpan pollInterval,
+        out string? blockedOn,
+        IReadOnlyList<string>? versions = null)
+    {
+        blockedOn = null;
+
+        IReadOnlyList<string> paths;
+        try
+        {
+            Directory.CreateDirectory(LockDirectory);
+            paths = LockPathsFor(layoutPath, versions);
+        }
+        catch (Exception ex) when (
+            ex is ArgumentException or IOException or UnauthorizedAccessException
+                or System.Security.SecurityException)
+        {
+            // A path that cannot even be turned into a lock name cannot be shown to be free.
+            return null;
+        }
+
+        var acquired = new List<FileStream>();
+        foreach (var path in paths)
+        {
+            var stream = WaitForLockFile(path, ownerRecord, timeout, pollInterval);
+            if (stream is null)
+            {
+                blockedOn = path;
+                Release(acquired);
+                return null;
+            }
+
+            acquired.Add(stream);
+        }
+
+        return acquired;
+    }
+
+    private static void Release(List<FileStream> streams)
+    {
+        foreach (var stream in streams)
+        {
+            try { stream.Dispose(); }
+            catch (IOException)
+            {
+                // Closing is best-effort; process exit closes the handle regardless. Swallowed
+                // per handle so one failure does not strand the rest of the set.
+            }
+        }
+    }
+
     private void AcquireLayoutLock()
     {
-        // The derived suffix already encodes the canonical layout path; reusing it keeps the
-        // name short, legal, and impossible to drift from the identity it protects.
-        Directory.CreateDirectory(LockDirectory);
-        var path = Path.Join(LockDirectory, WorktreeIdentity.DeriveSuffix(_layoutDir) + ".lock");
-
         var owner = $"pid={Environment.ProcessId} layout={_layoutDir} acquired={DateTime.UtcNow:O}";
 
-        _layoutLock = WaitForLockFile(
-            path, owner, LayoutLockTimeout, TimeSpan.FromSeconds(2));
+        _layoutLocks = TryAcquireAllLocks(
+            _layoutDir, owner, LayoutLockTimeout, TimeSpan.FromSeconds(2), out var blockedOn);
 
-        if (_layoutLock is not null) return;
+        if (_layoutLocks is not null) return;
 
         throw new InvalidOperationException(
             $"Another packaged test run is already using this layout ({_layoutDir}) and did not " +
             $"finish within {LayoutLockTimeout.TotalMinutes:0} minutes. Both runs derive the same " +
             "package identity, so continuing would unregister the other run's live host mid-test. " +
-            $"Owner: {ReadOwner(path)}. Run the tier once per checkout, or wait for the other run " +
-            "to finish.");
+            $"Owner: {(blockedOn is null ? "<unknown>" : ReadOwner(blockedOn))}. Run the tier once " +
+            "per checkout, or wait for the other run to finish.");
     }
 
     /// <summary>Best-effort read of the owner record a holder wrote, for diagnostics only.</summary>
@@ -610,18 +711,10 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
     private void ReleaseLayoutLock()
     {
-        if (_layoutLock is null) return;
+        if (_layoutLocks is null) return;
 
-        try { _layoutLock.Dispose(); }
-        catch (IOException)
-        {
-            // Releasing a claim must never mask the run's real outcome. The handle is closed
-            // by process exit regardless, which is the same lifetime the deployment has anyway.
-        }
-        finally
-        {
-            _layoutLock = null;
-        }
+        try { Release(_layoutLocks); }
+        finally { _layoutLocks = null; }
     }
 
     /// <summary>Reads <c>Identity/@Name</c> and <c>Identity/@Publisher</c> from a manifest.</summary>
@@ -719,6 +812,21 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
             try
             {
+                // The lease is held across the removal, not merely consulted before it. The
+                // classification above established that this layout was gone and unlocked at
+                // that moment; without holding it, a run that recreates the worktree could
+                // acquire the lock and register between that verdict and this removal, and the
+                // removal would then take out a live package. A refusal here means exactly that
+                // happened, and the registration is left alone.
+                using var lease = TryAcquireReclamationLease(record.InstalledPath!);
+                if (lease is null)
+                {
+                    Console.WriteLine(
+                        $"[Reactor.PackagedTests] Leaving '{pkg.Id.FullName}' alone: its layout " +
+                        "was claimed by another run between classification and reclamation.");
+                    continue;
+                }
+
                 RemovePackage(manager, pkg.Id.FullName);
             }
             catch (Exception ex) when (
@@ -739,9 +847,15 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             var path = package.InstalledPath;
             return string.IsNullOrEmpty(path) ? null : path;
         }
-        catch (Exception ex) when (ex is COMException or InvalidOperationException or IOException)
+        catch (Exception ex) when (
+            ex is COMException or InvalidOperationException or IOException
+                or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            // A package whose own location cannot be read is not one to reason about.
+            // A package whose own location cannot be read is not one to reason about. Access
+            // failures are converted here rather than allowed to escape: the selection rules
+            // fail closed on a null path and leave the package alone, whereas an exception
+            // escaping this adapter aborts registration entirely over an opaque third-party
+            // package that was never a candidate for removal.
             return null;
         }
     }
@@ -751,31 +865,51 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// <para><c>Directory.Exists</c> swallows every failure into <see langword="false"/>, which
     /// here would read an offline share, a dismounted volume, or a directory this account cannot
     /// traverse as a deleted worktree — and the action taken on a deleted worktree is to
-    /// unregister the package. Absence is therefore only reported once an ancestor has been
-    /// successfully enumerated, which proves the path could have been seen had it been there.</para>
-    /// <para>Walking up to the nearest live ancestor rather than checking the immediate parent
-    /// keeps a deleted worktree (whose parent chain is often removed with it) classifiable,
-    /// while a path whose entire volume is unreachable runs out of ancestors and stays
-    /// <see cref="LayoutPresence.Unknown"/>.</para>
+    /// unregister the package.</para>
+    /// <para>Absence is therefore established one way only: by listing the deepest readable
+    /// ancestor and finding that the very next component of the path is <b>not in it</b>.
+    /// Enumerating some ancestor and stopping there is not enough — if an intermediate directory
+    /// exists but is unreadable, <c>Directory.Exists</c> reports <see langword="false"/> for it
+    /// too, the walk climbs past it to a readable grandparent, and a perfectly live layout
+    /// sitting under the unreadable level gets reported as gone. Naming the component that
+    /// failed to resolve and looking for exactly that entry is what distinguishes the two: a
+    /// missing directory is absent from its parent's listing, an unreadable one is present in
+    /// it.</para>
+    /// <para>A component that <i>is</i> listed but did not resolve as a readable directory is
+    /// <see cref="LayoutPresence.Unknown"/>, not <see cref="LayoutPresence.Absent"/>: it exists
+    /// in some form this probe cannot see through, which is the opposite of gone.</para>
     /// </remarks>
     internal static LayoutPresence ProbeLayout(string path)
     {
         try
         {
-            if (Directory.Exists(path)) return LayoutPresence.Present;
+            var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            if (Directory.Exists(full)) return LayoutPresence.Present;
 
-            var ancestor = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path));
+            // Climb until an ancestor resolves, remembering the child that did not. Walking up
+            // rather than checking only the immediate parent keeps a deleted worktree — whose
+            // parent chain is often removed with it — classifiable, while a path whose whole
+            // volume is unreachable runs out of ancestors and stays Unknown.
+            var unresolved = full;
+            var ancestor = Path.GetDirectoryName(unresolved);
             while (!string.IsNullOrEmpty(ancestor) && !Directory.Exists(ancestor))
             {
+                unresolved = ancestor;
                 ancestor = Path.GetDirectoryName(ancestor);
             }
 
             if (string.IsNullOrEmpty(ancestor)) return LayoutPresence.Unknown;
 
-            // Enumerating is the probe: it throws where Directory.Exists would have returned a
-            // silent false. One entry is enough to prove the directory is readable.
-            _ = Directory.EnumerateFileSystemEntries(ancestor).Take(1).Count();
-            return LayoutPresence.Absent;
+            var name = Path.GetFileName(unresolved);
+            if (string.IsNullOrEmpty(name)) return LayoutPresence.Unknown;
+
+            // Enumerating is the probe: it throws where Directory.Exists returned a silent
+            // false, so an unreadable ancestor lands in the catch instead of reporting Absent.
+            var listed = Directory
+                .EnumerateFileSystemEntries(ancestor, name, SearchOption.TopDirectoryOnly)
+                .Any();
+
+            return listed ? LayoutPresence.Unknown : LayoutPresence.Absent;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
@@ -783,49 +917,57 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         }
     }
 
+    /// <summary>
+    /// Takes an exclusive lease on every lock file for <paramref name="layoutPath"/>, or returns
+    /// <see langword="null"/> when any of them cannot be shown to be free.
+    /// </summary>
+    /// <remarks>
+    /// <para>The lock lives under <c>%LOCALAPPDATA%</c>, not inside the worktree, so it survives
+    /// the worktree's deletion. That is what makes it the right liveness signal: a run whose
+    /// directory was deleted out from under it is still running, still registered, and must not
+    /// have its registration reclaimed. Taken across every supported algorithm version, since a
+    /// registration made by an earlier revision locked under that revision's suffix.</para>
+    /// <para><b>Held, not sampled.</b> Asking whether a lock is free and then releasing it
+    /// answers a question about the past: the layout can be recreated and registered by a new
+    /// run in the interval before the caller removes the package it captured, and that removal
+    /// would then evict a live registration. Keeping the handles open through the removal means
+    /// the only run that can be registering this layout is this one.</para>
+    /// <para><b>Fails closed on every uncertainty.</b> Absence is concluded only from an
+    /// explicit not-found, never from <c>File.Exists</c>, which reports <see langword="false"/>
+    /// for a path this account cannot traverse just as it does for one that is not there.</para>
+    /// </remarks>
+    internal static IDisposable? TryAcquireReclamationLease(string layoutPath)
+    {
+        var owner =
+            $"pid={Environment.ProcessId} reclaiming={layoutPath} at={DateTime.UtcNow:O}";
+
+        // No wait: a held lock means a live run, and the correct response is to leave its
+        // registration alone immediately, not to queue behind it.
+        var held = TryAcquireAllLocks(
+            layoutPath, owner, TimeSpan.Zero, TimeSpan.Zero, out _);
+
+        return held is null ? null : new ReclamationLease(held);
+    }
+
+    /// <summary>The held lock set that makes a reclamation safe, released on dispose.</summary>
+    private sealed class ReclamationLease(List<FileStream> held) : IDisposable
+    {
+        public void Dispose() => Release(held);
+    }
+
     /// <summary>Reports whether a run still holds the layout lock for <paramref name="layoutPath"/>.</summary>
     /// <remarks>
-    /// The lock lives under <c>%LOCALAPPDATA%</c>, not inside the worktree, so it survives the
-    /// worktree's deletion. That is what makes it the right liveness signal: a run whose
-    /// directory was deleted out from under it is still running, still registered, and must not
-    /// have its registration reclaimed. Probed across every supported algorithm version, since a
-    /// registration made by an earlier revision locked under that revision's suffix.
+    /// The sampling form of <see cref="TryAcquireReclamationLease"/>, for the classification
+    /// step, which only decides. The action that follows a <c>ReclaimAbandoned</c> verdict takes
+    /// and holds the lease itself, so the window between deciding and acting is closed there
+    /// rather than here.
     /// </remarks>
     internal static bool IsLayoutLocked(string layoutPath)
     {
-        foreach (var version in WorktreeIdentity.SupportedAlgorithmVersions)
-        {
-            string lockPath;
-            try
-            {
-                lockPath = Path.Join(
-                    LockDirectory, WorktreeIdentity.DeriveSuffix(layoutPath, version) + ".lock");
-            }
-            catch (ArgumentException)
-            {
-                // An unusable path cannot be shown to be free, so it is treated as held.
-                return true;
-            }
+        var lease = TryAcquireReclamationLease(layoutPath);
+        if (lease is null) return true;
 
-            if (!File.Exists(lockPath)) continue;
-
-            try
-            {
-                using (new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-                {
-                    // Succeeding is the answer: nobody holds it.
-                }
-            }
-            catch (FileNotFoundException)
-            {
-                // Released and cleaned up between the two calls.
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return true;
-            }
-        }
-
+        lease.Dispose();
         return false;
     }
 

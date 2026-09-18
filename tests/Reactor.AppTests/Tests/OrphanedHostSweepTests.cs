@@ -119,17 +119,17 @@ public class OrphanedHostSweepTests
     {
         var exe = Probe("one");
 
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
             "Control: with no sibling live, this run must be allowed to sweep.");
 
         using (StageForeignLease(exe))
         {
-            Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+            Assert.AreEqual(Deferred, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
                 "A run swept while a sibling run of the same build output was still live, " +
                 "which kills that run's host mid-suite.");
         }
 
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
             "Once the sibling is gone the sweep must resume, or one crashed run would wedge " +
             "every later run out of cleaning up.");
     }
@@ -146,10 +146,10 @@ public class OrphanedHostSweepTests
 
         using var foreign = StageForeignLease(mine);
 
-        Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(mine),
+        Assert.AreEqual(Deferred, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(mine),
             "Precondition: the staged lease must block its own build output.");
 
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(theirs),
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(theirs),
             "A different build output is a different lease; blocking it would stop other " +
             "checkouts from ever cleaning up after themselves.");
     }
@@ -165,13 +165,13 @@ public class OrphanedHostSweepTests
         var stale = OrphanedHostSweep.LeasePathFor(exe, ForeignPid);
 
         var lease = StageForeignLease(exe);
-        Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+        Assert.AreEqual(Deferred, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
             "Precondition: a held lease must block.");
 
         // A process exit closes the handle exactly this way, leaving the file behind.
         lease.Dispose();
 
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
             "A lease left behind by a dead run kept blocking the sweep.");
 
         Assert.IsFalse(File.Exists(stale),
@@ -201,10 +201,10 @@ public class OrphanedHostSweepTests
 
         using var foreign = StageForeignLease(winFormsHost);
 
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(appHost),
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(appHost),
             "Precondition: the first host has no live sibling and must be sweepable.");
 
-        Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(winFormsHost),
+        Assert.AreEqual(Deferred, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(winFormsHost),
             "The second host was reported sweepable on the strength of the first host's " +
             "lease, so a concurrent run's WinForms host stays exposed.");
     }
@@ -218,8 +218,8 @@ public class OrphanedHostSweepTests
     {
         var exe = Probe("reentrant");
 
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe));
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe));
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
             "A process must not lock itself out of its own lease.");
     }
 
@@ -242,10 +242,110 @@ public class OrphanedHostSweepTests
 
         using var foreign = StageForeignLease(plain);
 
-        Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(viaDot),
+        Assert.AreEqual(Deferred, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(viaDot),
             "The two spellings took different lease files, so both runs would conclude no " +
             "sibling was live and each would sweep the other's host.");
     }
+
+    /// <summary>
+    /// Admission and sweeping have to be indivisible. Without a gate, run A can be admitted,
+    /// run B can register, see A, stand down and launch its host, and A can then snapshot
+    /// processes and kill that brand-new host as an orphan — every step individually correct.
+    /// </summary>
+    /// <remarks>
+    /// Tested on the gate itself rather than through <c>KillOrphansOf</c>, which would have to
+    /// launch real host processes to observe the race. Windows applies share modes per handle
+    /// even within one process, so a second open here is refused exactly as another run's would
+    /// be, and mutual exclusion is the whole property being asserted.
+    /// </remarks>
+    [TestMethod]
+    public void The_Startup_Gate_Admits_One_Run_At_A_Time()
+    {
+        var exe = Probe("gate");
+        var instant = TimeSpan.Zero;
+
+        using (var first = OrphanedHostSweep.TryEnterStartupGate(exe, instant))
+        {
+            Assert.IsNotNull(first, "Control: an uncontended gate must be enterable.");
+
+            Assert.IsNull(
+                OrphanedHostSweep.TryEnterStartupGate(exe, instant),
+                "A second run entered the gate while the first still held it, so its lease " +
+                "registration and sweep can interleave with the first run's.");
+        }
+
+        using var reentered = OrphanedHostSweep.TryEnterStartupGate(exe, instant);
+        Assert.IsNotNull(reentered,
+            "The gate stayed held after release, which would wedge every later run.");
+    }
+
+    /// <summary>
+    /// The gate is per build output. A machine-wide gate would serialize unrelated checkouts,
+    /// and worse, a run that crashed holding it would stall every other checkout's startup.
+    /// </summary>
+    [TestMethod]
+    public void The_Startup_Gate_Is_Scoped_To_One_Build_Output()
+    {
+        var mine = Probe("gate-a");
+        var theirs = Probe("gate-b");
+        var instant = TimeSpan.Zero;
+
+        using var held = OrphanedHostSweep.TryEnterStartupGate(mine, instant);
+        Assert.IsNotNull(held, "Precondition: the first gate must be enterable.");
+
+        using var other = OrphanedHostSweep.TryEnterStartupGate(theirs, instant);
+        Assert.IsNotNull(other,
+            "A different build output was blocked by this one's gate, which serializes " +
+            "checkouts that share nothing.");
+    }
+
+    /// <summary>
+    /// A run that cannot record its lease must be told so, not told that a sibling is live.
+    /// The two call for opposite actions and a boolean forced them to share one answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>Reporting an I/O failure as "a sibling is live" looks like the safe direction: it
+    /// skips the sweep, and skipping never kills anything. But it also leaves the run with no
+    /// lease, so it is invisible to every later run — and the first one to start once the fault
+    /// clears sees no sibling, is admitted, and kills this run's live host.</para>
+    /// <para>Staged by putting a <em>directory</em> where the lease file goes, which is what
+    /// <c>FileStream</c> refuses with <c>UnauthorizedAccessException</c>. The mechanism does not
+    /// matter to the caller; being able to distinguish the outcome does.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Lease_That_Cannot_Be_Recorded_Is_Not_Reported_As_A_Live_Sibling()
+    {
+        var exe = Probe("unwritable");
+        var lease = OrphanedHostSweep.LeasePathFor(exe, Environment.ProcessId);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(lease)!);
+        Directory.CreateDirectory(lease);
+
+        try
+        {
+            var admission = OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe);
+
+            Assert.AreNotEqual(Deferred, admission,
+                "An unrecordable lease was reported as a live sibling. The run then continues " +
+                "with no lease of its own, and the next run to start sees nothing and kills " +
+                "this run's host as an orphan.");
+
+            Assert.AreEqual(OrphanedHostSweep.SweepAdmission.Unavailable, admission,
+                "A run that could not record its lease must be able to refuse to continue.");
+        }
+        finally
+        {
+            Directory.Delete(lease, recursive: true);
+        }
+    }
+
+    /// <summary>Admitted, for readability at the assertion sites.</summary>
+    private const OrphanedHostSweep.SweepAdmission Admitted =
+        OrphanedHostSweep.SweepAdmission.Admitted;
+
+    /// <summary>Deferred, for readability at the assertion sites.</summary>
+    private const OrphanedHostSweep.SweepAdmission Deferred =
+        OrphanedHostSweep.SweepAdmission.Deferred;
 
     /// <summary>Process id used for staged leases; outside the range Windows assigns.</summary>
     private const int ForeignPid = 999999;
