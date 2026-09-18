@@ -370,7 +370,31 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             changed = true;
         }
 
-        if (changed) document.Save(manifestPath);
+        if (!changed) return;
+
+        // Write beside the target and swap, rather than truncating the only copy in place. A
+        // kill during the write would otherwise leave a half-written manifest, and the layout
+        // lock does not help: process exit releases it, so the next run acquires cleanly and
+        // then fails loading the damaged file before it can register or clean up.
+        var staging = manifestPath + ".tmp";
+        try
+        {
+            document.Save(staging);
+            File.Move(staging, manifestPath, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                if (File.Exists(staging)) File.Delete(staging);
+            }
+            catch (IOException)
+            {
+                // Leaving a stray .tmp is strictly better than masking the original failure.
+            }
+
+            throw;
+        }
     }
 
     public void Unregister()
@@ -608,48 +632,37 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         }
         catch (Exception ex) when (ex is COMException or UnauthorizedAccessException)
         {
-            // Enumeration is the optional half of this. A registration under the derived name
-            // still has to go, so fall back to the targeted lookup rather than silently
-            // registering on top of a stale package.
-            ours = manager
-                .FindPackagesForUser(string.Empty, EffectivePackageName, PackagePublisher)
+            // Enumeration is the optional half of this. Without it, rules 1 and 2 collapse to
+            // whatever can be looked up by name: this layout's derived name, plus the base name
+            // that a pre-derivation run of this same checkout would have registered under —
+            // reclaiming that migration case is one of this sweep's stated guarantees, and the
+            // targeted lookup is the only way left to reach it.
+            //
+            // Rule 2's general form (any *other* name installed from this layout) and rule 3
+            // both need the enumeration and are simply unavailable here. That is acceptable in
+            // opposite directions: rule 3 is housekeeping, and anything rule 2 still misses is
+            // caught downstream, because registering over a directory another package claims
+            // fails the registration loudly rather than silently running the wrong binary.
+            ours = new[] { EffectivePackageName, PackageName }
+                .Distinct(StringComparer.Ordinal)
+                .SelectMany(name => manager.FindPackagesForUser(string.Empty, name, PackagePublisher))
+                .DistinctBy(p => p.Id.FullName, StringComparer.Ordinal)
                 .ToList();
         }
 
         foreach (var pkg in ours)
         {
-            var installedPath = TryGetInstalledPath(pkg);
+            var record = new RegistrationRecord(pkg.Id.Name, TryGetInstalledPath(pkg));
 
-            var isThisLayoutsName =
-                string.Equals(pkg.Id.Name, EffectivePackageName, StringComparison.Ordinal);
+            var disposition = RegistrationSelection.Classify(
+                record, layout, EffectivePackageName, PackageName, Directory.Exists);
 
-            var ownsThisLayout = WorktreeIdentity.IsSameDirectory(installedPath, layout);
-
-            // Rule 3 requires *exact* ownership, not a name that merely has the derived shape.
-            // Matching the shape alone would let this remove any same-publisher package called
-            // <base>.w<suffix> whose directory happens to be gone, including one this
-            // derivation never produced. Re-deriving from the package's own recorded install
-            // path settles it: only a name this algorithm would have generated for that exact
-            // path qualifies. Derivation is pure string work over a canonical path, so a
-            // missing directory is no obstacle — a path that cannot be resolved is left
-            // verbatim, which is the same property the pinned golden vectors rely on. If a
-            // link in the path resolved at registration time and has since disappeared, the
-            // re-derivation differs and the package is left alone: fail-closed, and a leaked
-            // registration is recoverable where someone else's live one is not.
-            var isAbandoned =
-                installedPath is not null &&
-                !Directory.Exists(installedPath) &&
-                string.Equals(
-                    pkg.Id.Name,
-                    WorktreeIdentity.DerivePackageName(PackageName, installedPath),
-                    StringComparison.Ordinal);
-
-            if (!isThisLayoutsName && !ownsThisLayout && !isAbandoned) continue;
+            if (disposition == RegistrationDisposition.Leave) continue;
 
             // Contention with this layout (rules 1 and 2) must fail loudly — registering on
             // top of it is the silent-wrong-binary bug this guards. Reclaiming an unrelated
             // dead worktree (rule 3) is housekeeping and must never fail a test run.
-            if (isThisLayoutsName || ownsThisLayout)
+            if (disposition == RegistrationDisposition.RemoveContending)
             {
                 RemovePackage(manager, pkg.Id.FullName);
                 continue;

@@ -48,7 +48,8 @@ Conventions for contributors:
   candidate whose image path cannot be read is left alone rather than killed. Two runs of the
   *same* checkout share an executable path, so the sweep is additionally gated on claiming that
   build output: a run that finds the claim already held skips the sweep instead of killing the
-  live sibling.
+  live sibling. Claims are tracked per host executable, since the suite sweeps both the WinUI
+  and WinForms hosts.
 - The packaged tier serializes runs that share one checkout behind a per-user lock on the derived
   identity, since registration and the alias stub are per-user rather than per-session. Runs in
   different checkouts still proceed in parallel.

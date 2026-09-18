@@ -43,11 +43,7 @@ public class PackagedStringResourceTripwireTests
             $"Precondition: expected the selftest host sources at {hostSources}. " +
             "If the layout moved, retarget this test rather than deleting it.");
 
-        var resw = new[] { hostSources, packagedSources }
-            .Where(Directory.Exists)
-            .SelectMany(d => Directory.EnumerateFiles(d, "*.resw", SearchOption.AllDirectories))
-            .Where(IsSourceFile)
-            .ToList();
+        var resw = ScanForResw(hostSources, packagedSources);
 
         Assert.AreEqual(0, resw.Count,
             "The packaged host now ships .resw string resources, which are indexed into " +
@@ -55,6 +51,62 @@ public class PackagedStringResourceTripwireTests
             "Packaged_ResourceResolution fixture. See the remarks on this test.\n" +
             string.Join("\n", resw));
     }
+
+    /// <summary>
+    /// Positive control for the scan above.
+    /// </summary>
+    /// <remarks>
+    /// The repository check can only ever report "none found", and a broken glob or an
+    /// <see cref="IsSourceFile"/> that rejects everything reports exactly the same thing as a
+    /// clean tree. This runs the same helper over a tree that is known to contain a
+    /// <c>.resw</c>, so the tripwire has to demonstrate it can still see one — and that it
+    /// discriminates, by ignoring build output rather than everything.
+    /// </remarks>
+    [TestMethod]
+    public void The_Scan_Finds_A_Source_Resw_And_Ignores_Build_Output()
+    {
+        var root = Path.Join(Path.GetTempPath(), "reactor-resw-" + Guid.NewGuid().ToString("n"));
+        try
+        {
+            var wanted = Path.Join(root, "Strings", "en-us", "Resources.resw");
+            Directory.CreateDirectory(Path.GetDirectoryName(wanted)!);
+            File.WriteAllText(wanted, "<root />");
+
+            foreach (var ignored in new[]
+                     {
+                         Path.Join(root, "bin", "x64", "Debug", "Resources.resw"),
+                         Path.Join(root, "obj", "x64", "Resources.resw"),
+                     })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(ignored)!);
+                File.WriteAllText(ignored, "<root />");
+            }
+
+            var found = ScanForResw(root);
+
+            CollectionAssert.AreEquivalent(
+                new[] { wanted },
+                found,
+                "The scan must find a source .resw and must exclude bin/obj, otherwise the " +
+                "zero it reports against the repository means nothing.\n" +
+                string.Join("\n", found));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// The one scan both the repository check and its positive control go through, so the
+    /// control cannot pass while the real check is broken.
+    /// </summary>
+    private static List<string> ScanForResw(params string[] roots) =>
+        roots
+            .Where(Directory.Exists)
+            .SelectMany(d => Directory.EnumerateFiles(d, "*.resw", SearchOption.AllDirectories))
+            .Where(IsSourceFile)
+            .ToList();
 
     private static bool IsSourceFile(string path) =>
         !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&

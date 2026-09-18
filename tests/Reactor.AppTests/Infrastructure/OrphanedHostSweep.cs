@@ -180,19 +180,36 @@ internal static class OrphanedHostSweep
     /// claim. Acquisition is non-blocking: a sibling run is a reason to skip the sweep, not a
     /// reason to wait — the two runs are then arbitrated by winapp UI turns, which is a
     /// different layer and already handles them.</para>
+    /// <para>Claims are tracked per executable, not as a single flag. This assembly sweeps two
+    /// different hosts (<c>Reactor.AppTests.Host</c> and <c>Reactor.WinFormsTests.Host</c>), so
+    /// a single flag would let the first claim vouch for the second host's path without ever
+    /// opening its file, leaving that host sweepable by a concurrent run of this same
+    /// checkout.</para>
     /// <para>Deliberately never released explicitly. The claim must outlive the sweep and cover
     /// the whole run, and the process exiting is exactly that lifetime.</para>
     /// </remarks>
-    private static class LayoutRunClaim
+    internal static class LayoutRunClaim
     {
-        private static IDisposable? _held;
+        private static readonly object Gate = new();
+
+        private static readonly Dictionary<string, IDisposable> Held = new(StringComparer.Ordinal);
 
         internal static bool TryAcquireFor(string ourExePath)
         {
-            if (_held is not null) return true;
+            // Keyed by the same digest the claim file is named for, so two spellings of one
+            // path cannot disagree about whether it is already held.
+            var key = KeyFor(ourExePath);
 
-            _held = TryClaimRun(ourExePath);
-            return _held is not null;
+            lock (Gate)
+            {
+                if (Held.ContainsKey(key)) return true;
+
+                var claim = TryClaimRun(ourExePath);
+                if (claim is null) return false;
+
+                Held[key] = claim;
+                return true;
+            }
         }
     }
 

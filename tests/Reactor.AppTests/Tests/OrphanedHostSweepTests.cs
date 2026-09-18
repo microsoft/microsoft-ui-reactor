@@ -21,6 +21,21 @@ public class OrphanedHostSweepTests
     private static string Ours => Path.Join(Path.GetTempPath(), "checkout-a", "Reactor.AppTests.Host.exe");
     private static string Theirs => Path.Join(Path.GetTempPath(), "checkout-b", "Reactor.AppTests.Host.exe");
 
+    /// <summary>
+    /// Root for synthetic executable paths used by the claim tests, unique to this run.
+    /// </summary>
+    /// <remarks>
+    /// Claims are backed by per-user files keyed from the executable path, so a fixed path
+    /// would make two concurrent copies of this suite contend for one claim and fail each
+    /// other — the exact cross-checkout interference this class exists to prevent. Tests that
+    /// want contention create it deliberately by reusing one path within the test.
+    /// </remarks>
+    private static readonly string ClaimRoot =
+        Path.Join(Path.GetTempPath(), "reactor-claim-" + Guid.NewGuid().ToString("n"));
+
+    private static string Probe(string name) =>
+        Path.Join(ClaimRoot, name, "Reactor.AppTests.Host.exe");
+
     private static OrphanedHostSweep.Candidate At(int pid, string? path) => new(pid, path);
 
     /// <summary>
@@ -96,7 +111,7 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void A_Second_Run_Of_The_Same_Build_Output_Cannot_Claim_It()
     {
-        var exe = Path.Join(Path.GetTempPath(), "claim-probe", "Reactor.AppTests.Host.exe");
+        var exe = Probe("one");
 
         using var first = OrphanedHostSweep.TryClaimRun(exe);
         Assert.IsNotNull(first, "The first run of a build output must be able to claim it.");
@@ -116,8 +131,8 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void A_Run_Of_A_Different_Build_Output_Claims_Independently()
     {
-        var mine = Path.Join(Path.GetTempPath(), "claim-probe-a", "Reactor.AppTests.Host.exe");
-        var theirs = Path.Join(Path.GetTempPath(), "claim-probe-b", "Reactor.AppTests.Host.exe");
+        var mine = Probe("a");
+        var theirs = Probe("b");
 
         using var held = OrphanedHostSweep.TryClaimRun(mine);
         Assert.IsNotNull(held);
@@ -135,7 +150,7 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void Releasing_A_Claim_Lets_The_Next_Run_Take_It()
     {
-        var exe = Path.Join(Path.GetTempPath(), "claim-probe-release", "Reactor.AppTests.Host.exe");
+        var exe = Probe("release");
 
         var first = OrphanedHostSweep.TryClaimRun(exe);
         Assert.IsNotNull(first);
@@ -151,5 +166,40 @@ public class OrphanedHostSweepTests
     public void Claiming_Without_An_Executable_Path_Throws()
     {
         Assert.ThrowsExactly<ArgumentException>(() => OrphanedHostSweep.TryClaimRun("  "));
+    }
+
+    /// <summary>
+    /// This assembly sweeps two different hosts, so the claim must be tracked per executable.
+    /// A single "already claimed something" flag makes the first claim vouch for the second
+    /// host's path without ever opening its file, and the tell is not the return value — it is
+    /// that an outside contender can still take the path that was supposedly claimed.
+    /// </summary>
+    [TestMethod]
+    public void Claiming_One_Host_Does_Not_Vouch_For_Another()
+    {
+        var appHost = Probe("multi-app");
+        var winFormsHost = Path.Join(ClaimRoot, "multi-winforms", "Reactor.WinFormsTests.Host.exe");
+
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(appHost));
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(winFormsHost));
+
+        using var contender = OrphanedHostSweep.TryClaimRun(winFormsHost);
+        Assert.IsNull(contender,
+            "The second host reported as claimed, but another process could still take it, so " +
+            "its claim was never actually acquired and its live host stays sweepable.");
+    }
+
+    /// <summary>
+    /// Re-acquiring a path this process already holds must succeed. Both sweeps run per
+    /// session, and a self-refusal would silently disable the second one.
+    /// </summary>
+    [TestMethod]
+    public void Re_Acquiring_Our_Own_Claim_Succeeds()
+    {
+        var exe = Probe("reentrant");
+
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe));
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+            "A process must not lock itself out of its own claim.");
     }
 }
