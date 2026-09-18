@@ -743,8 +743,7 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
             .Where(f => !f.Version.Contains('$')
                         && !f.Version.Contains('{')
                         && !f.Version.Contains('*')
-                        && !f.Version.StartsWith('[')
-                        && !f.Version.StartsWith('(')
+                        && !IsWellFormedRange(f.Version)
                         && ParsePin(f.Version) is null)
             .Select(f => $"{f.Rel}:{f.Line}  [{f.Label}]  {f.Package} '{f.Version}'")
             .OrderBy(x => x, StringComparer.Ordinal)
@@ -787,6 +786,36 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// corresponding leading components of the central version. An MSBuild-variable
     /// pin (<c>$(WindowsAppSDKVersion)</c>) genuinely tracks the centre and is exempt.
     /// </remarks>
+    /// <summary>
+    /// Whether a value is a well-formed NuGet interval: bracketed on both ends, and
+    /// every bound it specifies parseable. Used to decide both how
+    /// <see cref="ComparePin"/> reads it and whether the malformed-pin check should
+    /// exempt it — without this, "[2.2.0" (unterminated) and "[not-a-version]" were
+    /// exempted as ranges and then compared as 0, so an invalid literal passed.
+    /// </summary>
+    private static bool IsWellFormedRange(string raw)
+    {
+        var text = raw.Trim();
+        if (text.Length < 3) return false;
+        if (!(text.StartsWith('[') || text.StartsWith('('))) return false;
+        if (!(text.EndsWith(']') || text.EndsWith(')'))) return false;
+
+        var body = text[1..^1];
+        var comma = body.IndexOf(',');
+        if (comma < 0)
+        {
+            // Exact form "[2.1.3]" — must be inclusive on both ends and parseable.
+            return text.StartsWith('[') && text.EndsWith(']') && ParsePin(body.Trim()) is not null;
+        }
+
+        var lower = body[..comma].Trim();
+        var upper = body[(comma + 1)..].Trim();
+        if (lower.Length == 0 && upper.Length == 0) return false;
+        if (lower.Length > 0 && ParsePin(lower) is null) return false;
+        if (upper.Length > 0 && ParsePin(upper) is null) return false;
+        return true;
+    }
+
     private static int ComparePin(string raw, string centralRaw, Version centralVersion)
     {
         var text = raw.Trim();
@@ -802,10 +831,8 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         // is what decides whether the pin can drop below the floor — the opposite of a
         // floating pin below, which takes the highest match. An earlier revision
         // compared the upper bound and so accepted "[2.1.3,)", which restores 2.1.3.
-        if ((text.StartsWith('[') || text.StartsWith('(')) && text.EndsWith(']') || text.EndsWith(')'))
+        if ((text.StartsWith('[') || text.StartsWith('(')) && IsWellFormedRange(text))
         {
-            if (text.Length < 3 || !(text.StartsWith('[') || text.StartsWith('('))) return 0;
-
             var inclusiveLower = text.StartsWith('[');
             var body = text[1..^1];
             var comma = body.IndexOf(',');
@@ -1121,6 +1148,25 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     [InlineData("2.2.0-")]
     public void Malformed_versions_are_rejected(string version) =>
         Assert.Null(ParsePin(version));
+
+    /// <summary>
+    /// A malformed interval must not be exempted as "a range". Both the well-formed
+    /// and malformed sets are asserted, so the predicate cannot pass by rejecting
+    /// everything.
+    /// </summary>
+    [Theory]
+    [InlineData("[2.1.3]", true)]
+    [InlineData("[2.1.3,)", true)]
+    [InlineData("(,2.1.3]", true)]
+    [InlineData("[2.1.3,2.2.0)", true)]
+    [InlineData("[2.2.0-preview.1,)", true)]
+    [InlineData("[2.2.0", false)]            // unterminated
+    [InlineData("[not-a-version]", false)]   // unparseable bound
+    [InlineData("[1.0,bogus]", false)]       // unparseable upper
+    [InlineData("(,)", false)]               // no bound at all
+    [InlineData("(2.1.3)", false)]           // exact form must be inclusive
+    public void Range_syntax_is_validated_before_being_exempted(string pin, bool wellFormed) =>
+        Assert.Equal(wellFormed, IsWellFormedRange(pin));
 
     private static IEnumerable<string> EnumerateScannableFiles(string root)
     {
