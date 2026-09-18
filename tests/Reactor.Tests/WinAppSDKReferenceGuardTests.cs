@@ -914,14 +914,13 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// </summary>
     private static string? PrereleaseLabel(string version)
     {
-        var text = version.Trim();
-        var core = Regex.Match(text, @"^\d+(?:\.\d+){0,3}");
-        if (!core.Success) return null;
-        var rest = text[core.Length..];
-        if (!rest.StartsWith('-')) return null;
-        var label = rest[1..];
-        var plus = label.IndexOf('+');
-        return plus >= 0 ? label[..plus] : label;
+        // Same anchored grammar as ParsePin — a prefix match would read a label off a
+        // malformed literal and let the two disagree about what parsed.
+        var m = Regex.Match(
+            version.Trim(),
+            @"^(?<core>\d+(?:\.\d+){0,3})(?:-(?<pre>[0-9A-Za-z][0-9A-Za-z.-]*))?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$");
+        if (!m.Success || !m.Groups["pre"].Success) return null;
+        return m.Groups["pre"].Value;
     }
 
     private static bool HasPrerelease(string version) => PrereleaseLabel(version) is not null;
@@ -968,15 +967,19 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         var text = raw.Trim();
         if (text.Length == 0 || text.Contains('$') || text.Contains('*')) return null;
 
-        // Strip any prerelease/build suffix; only the numeric core is comparable.
-        // One to four components: NuGet accepts a bare "2", which an earlier revision
-        // rejected as unparseable and therefore silently exempted from the floor.
-        var core = Regex.Match(text, @"^\d+(?:\.\d+){0,3}");
-        if (!core.Success) return null;
+        // Anchored, not a prefix match. A leading-prefix pattern accepts
+        // "2.2.0not-a-version" as 2.2.0, which would both defeat the unparseable
+        // check and compare as current. The grammar is NuGet's: one to four numeric
+        // components, an optional SemVer prerelease label, an optional build metadata
+        // suffix (which does not affect ordering).
+        var m = Regex.Match(
+            text,
+            @"^(?<core>\d+(?:\.\d+){0,3})(?:-(?<pre>[0-9A-Za-z][0-9A-Za-z.-]*))?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$");
+        if (!m.Success) return null;
 
         // Normalize part counts: [Version]'2.2' has Build -1 and would sort below
         // '2.2.0', reporting a perfectly current pin as stale.
-        var parts = core.Value.Split('.').Select(int.Parse).ToArray();
+        var parts = m.Groups["core"].Value.Split('.').Select(int.Parse).ToArray();
         return new Version(
             parts.Length > 0 ? parts[0] : 0,
             parts.Length > 1 ? parts[1] : 0,
@@ -1094,6 +1097,30 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         Assert.Equal("Microsoft.WindowsAppSDK", pkg);
         Assert.Equal(expected, version);
     }
+
+    /// <summary>
+    /// A malformed literal must be rejected outright, not silently truncated to a
+    /// numeric prefix — a prefix match would read "2.2.0not-a-version" as current and
+    /// also hide it from the unparseable check.
+    /// </summary>
+    [Theory]
+    [InlineData("2.2.0")]
+    [InlineData("2.2")]
+    [InlineData("2")]
+    [InlineData("2.2.0.1")]
+    [InlineData("2.2.0-preview.1")]
+    [InlineData("2.2.0-preview.1+sha.abc")]
+    public void Well_formed_versions_parse(string version) =>
+        Assert.NotNull(ParsePin(version));
+
+    [Theory]
+    [InlineData("2.2.0not-a-version")]
+    [InlineData("v2.2.0")]
+    [InlineData("2.2.0.1.2")]
+    [InlineData("latest")]
+    [InlineData("2.2.0-")]
+    public void Malformed_versions_are_rejected(string version) =>
+        Assert.Null(ParsePin(version));
 
     private static IEnumerable<string> EnumerateScannableFiles(string root)
     {
