@@ -713,24 +713,48 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         // otherwise satisfy it while every real pin had vanished or changed syntax.
         foreach (var label in new[] { "PackageReference", "#:package", "script $ver" })
         {
-            // The script shape must be observed in the harness script itself, not
-            // merely somewhere in the tree: this test file is swept too, so a match
-            // from a doc comment here would let the control pass while the real pin
-            // went unscanned.
-            var ok = label == "script $ver"
-                ? found.Any(f => f.Label == label
-                                 && ParsePin(f.Version) is not null
-                                 && f.Rel.EndsWith("Run-PerfBenchmark.ps1", StringComparison.OrdinalIgnoreCase))
-                : found.Any(f => f.Label == label && ParsePin(f.Version) is not null);
+            // The control must be satisfied from a PRODUCTION file. This test file is
+            // swept too, and it contains fixture strings in both the PackageReference
+            // and (historically) the script shapes — so a scanner that stopped
+            // recognising real project/docs content while still matching its own
+            // fixtures would leave `found` non-empty and pass. Same defect already
+            // fixed once for the script shape; this closes it for the others.
+            var ok = found.Any(f =>
+                f.Label == label
+                && ParsePin(f.Version) is not null
+                && !f.Rel.EndsWith("WinAppSDKReferenceGuardTests.cs", StringComparison.OrdinalIgnoreCase)
+                && (label != "script $ver"
+                    || f.Rel.EndsWith("Run-PerfBenchmark.ps1", StringComparison.OrdinalIgnoreCase)));
 
             Assert.True(
                 ok,
-                $"Pin scanner found no '{label}' pin with a parseable numeric version in the "
-                    + "expected location. Either the repo genuinely stopped using that shape "
-                    + "(then drop it from the scan), or the pattern has decayed and this guard is "
-                    + "now blessing every file it cannot parse. A zero result from an unvalidated "
+                $"Pin scanner found no '{label}' pin with a parseable numeric version in a "
+                    + "production file. Either the repo genuinely stopped using that shape (then "
+                    + "drop it from the scan), or the pattern has decayed and this guard is now "
+                    + "blessing every file it cannot parse. A zero result from an unvalidated "
                     + "scanner is not a measurement.");
         }
+
+        // A discovered pin whose version cannot be parsed is not "fine" — restore
+        // cannot use it either. Variable ($(...)) and floating (*) forms are handled
+        // by ComparePin and are legitimately non-numeric; anything else is malformed
+        // and must fail loudly rather than slip through as non-stale.
+        var unparseable = found
+            .Where(f => !f.Version.Contains('$')
+                        && !f.Version.Contains('{')
+                        && !f.Version.Contains('*')
+                        && !f.Version.StartsWith('[')
+                        && !f.Version.StartsWith('(')
+                        && ParsePin(f.Version) is null)
+            .Select(f => $"{f.Rel}:{f.Line}  [{f.Label}]  {f.Package} '{f.Version}'")
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            unparseable.Count == 0,
+            "These Microsoft.WindowsAppSDK pins have a version this guard cannot parse, so it "
+                + "cannot tell whether they sit below the floor. Fix the literal (or teach "
+                + "ParsePin the form):\n  " + string.Join("\n  ", unparseable));
 
         var stale = found
             .Select(f =>
@@ -767,8 +791,11 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     {
         var text = raw.Trim();
 
-        // Variable pins track the central value by construction.
-        if (text.Contains('$')) return 0;
+        // Variable pins track the central value by construction: MSBuild
+        // $(WindowsAppSDKVersion), or a C# interpolation hole in a scaffold template
+        // (samples/apps/widget-creator generates WidgetSdkVersions from the same
+        // property). Neither is a literal, so neither can drift.
+        if (text.Contains('$') || text.Contains('{')) return 0;
 
         // NuGet interval notation: [1.0,2.0) / (,2.1.3] / [2.2.0,) / [2.1.3] (exact).
         // Restore resolves a range to its LOWEST satisfying version, so the lower bound
@@ -972,6 +999,7 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     [InlineData("2.2", "2.2.0", 0)]
     // Variable pins track the centre by construction.
     [InlineData("$(WindowsAppSDKVersion)", "2.2.0", 0)]
+    [InlineData("{WidgetSdkVersions.WindowsAppSdk}", "2.2.0", 0)]
     // Floating pins resolve to the HIGHEST matching version, so a prefix that can
     // reach the floor is fine; only one that cannot is a downgrade.
     [InlineData("2.1.*", "2.2.0", -1)]
