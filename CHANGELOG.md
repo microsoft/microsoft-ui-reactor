@@ -39,7 +39,9 @@ Conventions for contributors:
   directory (`<name>.w<hash>`, with a matching execution alias) instead of the literal name in
   `Package.appxmanifest`, so concurrent checkouts can run it without evicting each other's
   registration or contending for one alias stub. Cleanup is scoped to the derived name, to
-  packages installed from the same directory, and to derived packages whose directory is gone.
+  packages installed from the same directory, and to derived packages whose directory is gone —
+  including those registered by a superseded revision of the derivation, so bumping it does not
+  strand the identities the previous one created.
   Sweeps by hand or in CI must now match `Microsoft.UI.Reactor.PackagedTests.Host*`. See
   `TESTING.md` §3 and [microsoft/winappCli#763](https://github.com/microsoft/winappCli/issues/763).
 - The E2E suite's start-up sweep of orphaned test hosts is now scoped to the host executable in

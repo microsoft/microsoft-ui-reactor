@@ -55,6 +55,21 @@ internal static class WorktreeIdentity
     /// </summary>
     internal const string AlgorithmVersion = "1";
 
+    /// <summary>
+    /// Every algorithm version whose registrations this code still recognizes as its own,
+    /// newest first.
+    /// </summary>
+    /// <remarks>
+    /// <para>The cleanup sweep re-derives a package's expected name from its own recorded
+    /// install path to decide whether it is one of ours. Re-deriving with only the current
+    /// version would make that check fail for everything a previous version registered, so a
+    /// version bump would strand those registrations permanently — exactly what the reclamation
+    /// promise above says does not happen.</para>
+    /// <para>When bumping <see cref="AlgorithmVersion"/>, prepend the new value and keep the old
+    /// ones. Dropping a version is a deliberate decision to stop reclaiming its leftovers.</para>
+    /// </remarks>
+    internal static readonly string[] SupportedAlgorithmVersions = [AlgorithmVersion];
+
     /// <summary>Marker separating the base name from the derived suffix.</summary>
     /// <remarks>
     /// A literal <c>'w'</c> (for "worktree") keeps the suffix from starting with a digit and
@@ -195,9 +210,23 @@ internal static class WorktreeIdentity
     /// <summary>
     /// The derived suffix for a layout directory, without any separator — e.g. <c>w3ok5qta2</c>.
     /// </summary>
-    internal static string DeriveSuffix(string layoutDirectory)
+    internal static string DeriveSuffix(string layoutDirectory) =>
+        DeriveSuffix(layoutDirectory, AlgorithmVersion);
+
+    /// <summary>
+    /// The derived suffix a given algorithm version produces for a layout directory.
+    /// </summary>
+    /// <remarks>
+    /// The version is a parameter so the cleanup sweep can re-derive names produced by earlier
+    /// versions. That is what makes the reclamation promise in the type remarks true: without
+    /// it, bumping <see cref="AlgorithmVersion"/> would strand every registration the previous
+    /// version made, because none of them could ever equal a current-version derivation.
+    /// </remarks>
+    internal static string DeriveSuffix(string layoutDirectory, string algorithmVersion)
     {
-        var seed = AlgorithmVersion + "\n" + Canonicalize(layoutDirectory);
+        ArgumentException.ThrowIfNullOrEmpty(algorithmVersion);
+
+        var seed = algorithmVersion + "\n" + Canonicalize(layoutDirectory);
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
         return SuffixMarker + Base32(hash, SuffixHashLength);
     }
@@ -206,7 +235,14 @@ internal static class WorktreeIdentity
     /// The effective MSIX <c>Identity/@Name</c> for a layout directory, as
     /// <c>&lt;base&gt;.&lt;suffix&gt;</c> with the base truncated only if the limit requires it.
     /// </summary>
-    internal static string DerivePackageName(string basePackageName, string layoutDirectory)
+    internal static string DerivePackageName(string basePackageName, string layoutDirectory) =>
+        DerivePackageName(basePackageName, layoutDirectory, AlgorithmVersion);
+
+    /// <summary>
+    /// The effective MSIX <c>Identity/@Name</c> a given algorithm version produces.
+    /// </summary>
+    internal static string DerivePackageName(
+        string basePackageName, string layoutDirectory, string algorithmVersion)
     {
         if (string.IsNullOrWhiteSpace(basePackageName))
             throw new ArgumentException("Base package name must be non-empty.", nameof(basePackageName));
@@ -219,7 +255,7 @@ internal static class WorktreeIdentity
         // ".": the separator between base and suffix. MSIX treats the name as dot-delimited
         // segments, so this keeps the derived name a well-formed sibling of the original
         // rather than a new top-level name.
-        return head + "." + DeriveSuffix(layoutDirectory);
+        return head + "." + DeriveSuffix(layoutDirectory, algorithmVersion);
     }
 
     /// <summary>

@@ -169,4 +169,104 @@ public class RegistrationSelectionTests
 
         Assert.AreEqual(RegistrationDisposition.RemoveContending, Classify(confused));
     }
+
+    /// <summary>
+    /// A registration made by a <i>previous</i> algorithm version must still be reclaimed once
+    /// its worktree is gone. Only version "1" exists today, so this drives the seam with an
+    /// explicit two-version list: delete the loop and this goes red, where a test written
+    /// against the live list could not.
+    /// </summary>
+    /// <remarks>
+    /// Both versions are deliberately <b>not</b> the live <c>AlgorithmVersion</c>. Using "1" as
+    /// the superseded version made the test pass against a loop collapsed to the current version
+    /// only — the two branches coincided, and the oracle measured nothing.
+    /// </remarks>
+    [TestMethod]
+    public void A_Previous_Algorithm_Versions_Registration_Is_Reclaimed()
+    {
+        // Non-const locals on purpose. As `const string` both sides fold at compile time and
+        // MSTEST0032 rightly rejects the guard as always-true — which would also mean it could
+        // never catch an AlgorithmVersion bump onto one of these values, the one job it has.
+        var current = "3";
+        var superseded = "2";
+
+        Assert.IsFalse(
+            current == WorktreeIdentity.AlgorithmVersion ||
+            superseded == WorktreeIdentity.AlgorithmVersion,
+            "Precondition: neither probe version may be the live one, or a loop collapsed to " +
+            "the current version would satisfy this test by coincidence.");
+
+        var gone = Path.Join(Path.GetTempPath(), "deleted-worktree", "layout");
+        string[] versions = [current, superseded];
+
+        var legacy = new RegistrationRecord(
+            WorktreeIdentity.DerivePackageName(Base, gone, superseded), gone);
+
+        Assert.AreNotEqual(
+            WorktreeIdentity.DerivePackageName(Base, gone, superseded),
+            WorktreeIdentity.DerivePackageName(Base, gone, current),
+            "Precondition: the version must actually change the derived name, otherwise this " +
+            "test would pass without any migration handling at all.");
+
+        Assert.AreEqual(
+            RegistrationDisposition.ReclaimAbandoned,
+            RegistrationSelection.Classify(
+                legacy,
+                Layout,
+                WorktreeIdentity.DerivePackageName(Base, Layout, current),
+                Base,
+                Live(Layout, SiblingLayout),
+                versions),
+            "A registration from a superseded algorithm version was left behind after its " +
+            "worktree disappeared, so a version bump strands every identity the old one made.");
+    }
+
+    /// <summary>
+    /// Every supported algorithm version must be reclaimable once its worktree is gone.
+    /// <c>WorktreeIdentity</c> promises exactly that, and re-deriving with only the current
+    /// version would strand everything an earlier version registered.
+    /// </summary>
+    [TestMethod]
+    public void Every_Supported_Algorithm_Version_Is_Reclaimed()
+    {
+        var gone = Path.Join(Path.GetTempPath(), "deleted-worktree", "layout");
+
+        Assert.IsTrue(WorktreeIdentity.SupportedAlgorithmVersions.Contains(
+            WorktreeIdentity.AlgorithmVersion, StringComparer.Ordinal),
+            "The current algorithm version must be listed as supported.");
+
+        foreach (var version in WorktreeIdentity.SupportedAlgorithmVersions)
+        {
+            var abandoned = new RegistrationRecord(
+                WorktreeIdentity.DerivePackageName(Base, gone, version), gone);
+
+            Assert.AreEqual(
+                RegistrationDisposition.ReclaimAbandoned,
+                Classify(abandoned),
+                $"A registration derived by supported algorithm version '{version}' was left " +
+                "behind after its worktree disappeared, so bumping the version strands every " +
+                "identity the old one produced.");
+        }
+    }
+
+    /// <summary>
+    /// A version deliberately not in the supported list is not ours to reclaim. Fail-closed:
+    /// dropping a version means abandoning its leftovers, not guessing at them.
+    /// </summary>
+    [TestMethod]
+    public void An_Unsupported_Algorithm_Version_Is_Left_Alone()
+    {
+        var gone = Path.Join(Path.GetTempPath(), "deleted-worktree", "layout");
+        const string unsupported = "this-version-does-not-exist";
+
+        Assert.IsFalse(WorktreeIdentity.SupportedAlgorithmVersions.Contains(
+            unsupported, StringComparer.Ordinal),
+            "Precondition: the probe version must be outside the supported set.");
+
+        var foreign = new RegistrationRecord(
+            WorktreeIdentity.DerivePackageName(Base, gone, unsupported), gone);
+
+        Assert.AreEqual(RegistrationDisposition.Leave, Classify(foreign));
+    }
 }
+

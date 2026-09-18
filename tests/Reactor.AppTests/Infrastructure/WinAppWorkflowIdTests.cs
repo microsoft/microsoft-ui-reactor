@@ -183,10 +183,63 @@ public class WinAppWorkflowIdTests
     // WINAPP_UI_WORKFLOW_ID reached the process: it refuses (non-zero) for an anonymous caller and
     // succeeds (zero) for a named workflow. That asymmetry is the differential oracle below — the
     // negative control proves the positive result is not simply "winapp always exits 0".
+    //
+    // Both are gated on the verb existing. Cooperative UI turns landed in winappCli#767, merged
+    // 2026-09-09, and the newest public release (v0.6.0, 2026-08-12) predates it. CI installs
+    // whatever `setup-WinAppCli` resolves as latest, so on CI `winapp ui yield` is an unknown
+    // verb today. Without the gate the positive case fails outright and the negative case passes
+    // for the wrong reason — an unknown verb also exits non-zero — which is worse, because it
+    // reads as a working differential while measuring nothing. `ReleaseUiTurn` itself is
+    // best-effort in production and is unaffected either way.
+
+    /// <summary>
+    /// Whether the resolved winapp understands <c>ui yield</c> at all, as opposed to
+    /// understanding it and refusing this caller.
+    /// </summary>
+    private static bool YieldVerbExists()
+    {
+        try
+        {
+            var psi = WinAppUi.CreateStartInfo("yield", "--help");
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return false;
+
+            if (!proc.WaitForExit(10_000))
+            {
+                WinAppUi.TryKill(proc);
+                return false;
+            }
+
+            // `--help` for a verb that exists succeeds and never consults the environment, so
+            // this separates "no such verb" from "verb present, caller refused".
+            return proc.ExitCode == 0;
+        }
+        catch (System.ComponentModel.Win32Exception) { return false; }
+        catch (InvalidOperationException) { return false; }
+        catch (NotSupportedException) { return false; }
+        catch (TypeInitializationException) { return false; }
+    }
+
+    private static void RequireYieldVerb()
+    {
+        if (!YieldVerbExists())
+        {
+            Assert.Inconclusive(
+                "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
+                "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767, " +
+                "after the newest public release. Re-enable by installing a winapp that " +
+                "contains it.");
+        }
+    }
 
     [TestMethod]
     public void ReleaseUiTurn_IsAcceptedBecauseTheWorkflowIdReachesWinApp()
     {
+        RequireYieldVerb();
+
         var exit = WinAppUi.ReleaseUiTurn();
 
         if (exit is null)
@@ -198,6 +251,8 @@ public class WinAppWorkflowIdTests
     [TestMethod]
     public void WinAppRejectsAYieldWithNoWorkflowId()
     {
+        RequireYieldVerb();
+
         // Negative control for the test above. Without it, a winapp build that ignored the variable
         // (or exited 0 unconditionally) would let the positive case pass while continuity was in
         // fact never established. Built from the same helper and stripped of exactly one variable,

@@ -419,9 +419,13 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             return;
         }
 
-        var manager = new PackageManager();
         try
         {
+            // Constructed inside the protected block: WinRT activation can throw, and doing it
+            // before the try would exit without releasing the lock, leaving another run of this
+            // layout to wait out the full timeout for a holder that is already gone.
+            var manager = new PackageManager();
+
             // Remove exactly what was registered first, then sweep this layout's derived
             // identity. The captured full name is what registration actually produced, so it
             // stays correct even if the constants below are edited mid-run; the sweep still
@@ -431,7 +435,8 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             RemoveExistingRegistrations(manager);
         }
         catch (Exception ex) when (
-            ex is COMException or InvalidOperationException or UnauthorizedAccessException or IOException)
+            ex is COMException or InvalidOperationException or UnauthorizedAccessException or IOException
+                or TypeInitializationException)
         {
             // Cleanup is best-effort: a failure here must not mask the real test outcome.
             // It is still reported, because a leaked registration makes the *next* run
@@ -489,6 +494,74 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         "Microsoft.UI.Reactor",
         "PackagedTests");
 
+    /// <summary>
+    /// Opens the lock file exclusively and stamps <paramref name="ownerRecord"/> into it, or
+    /// returns <see langword="null"/> when another run holds it.
+    /// </summary>
+    /// <remarks>
+    /// Separated from the waiting loop so exclusion and release can be tested directly. Without
+    /// that, a broken sharing mode or a premature release would reintroduce live-package
+    /// eviction while every derivation and selection test stayed green.
+    /// </remarks>
+    internal static FileStream? TryOpenLockFile(string path, string ownerRecord)
+    {
+        try
+        {
+            // FileShare.Read lets a contender read the owner record while still denying a
+            // second writer, which is what makes this the lock.
+            var stream = new FileStream(
+                path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+
+            // Ownership transfers to the caller only on success. Returning without disposing
+            // here would leave this process holding the writer lock while reporting failure, so
+            // its own retries would collide with it until the deadline and bury the real error.
+            try
+            {
+                stream.SetLength(0);
+                var bytes = System.Text.Encoding.UTF8.GetBytes(ownerRecord);
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(flushToDisk: true);
+            }
+            catch
+            {
+                stream.Dispose();
+                throw;
+            }
+
+            return stream;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Polls <see cref="TryOpenLockFile"/> until it succeeds or <paramref name="timeout"/>
+    /// elapses.
+    /// </summary>
+    /// <remarks>
+    /// Polls rather than blocking on a handle so the deadline stays honest even if the holder
+    /// exits without touching the file.
+    /// </remarks>
+    internal static FileStream? WaitForLockFile(
+        string path, string ownerRecord, TimeSpan timeout, TimeSpan pollInterval)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (true)
+        {
+            var stream = TryOpenLockFile(path, ownerRecord);
+            if (stream is not null) return stream;
+
+            if (DateTime.UtcNow >= deadline) return null;
+            Thread.Sleep(pollInterval);
+        }
+    }
+
     private void AcquireLayoutLock()
     {
         // The derived suffix already encodes the canonical layout path; reusing it keeps the
@@ -496,44 +569,12 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         Directory.CreateDirectory(LockDirectory);
         var path = Path.Join(LockDirectory, WorktreeIdentity.DeriveSuffix(_layoutDir) + ".lock");
 
-        var deadline = DateTime.UtcNow + LayoutLockTimeout;
-        while (true)
-        {
-            try
-            {
-                // FileShare.Read lets a contender read the owner record below while still
-                // denying a second writer, which is what makes this the lock.
-                var stream = new FileStream(
-                    path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+        var owner = $"pid={Environment.ProcessId} layout={_layoutDir} acquired={DateTime.UtcNow:O}";
 
-                stream.SetLength(0);
-                var owner = $"pid={Environment.ProcessId} layout={_layoutDir} acquired={DateTime.UtcNow:O}";
-                var bytes = System.Text.Encoding.UTF8.GetBytes(owner);
-                stream.Write(bytes, 0, bytes.Length);
-                stream.Flush(flushToDisk: true);
+        _layoutLock = WaitForLockFile(
+            path, owner, LayoutLockTimeout, TimeSpan.FromSeconds(2));
 
-                _layoutLock = stream;
-                return;
-            }
-            catch (IOException) when (DateTime.UtcNow < deadline)
-            {
-                // Held by another run of this layout. Poll rather than block on a handle so the
-                // deadline stays honest even if the holder exits without touching the file.
-                Thread.Sleep(TimeSpan.FromSeconds(2));
-            }
-            catch (UnauthorizedAccessException) when (DateTime.UtcNow < deadline)
-            {
-                Thread.Sleep(TimeSpan.FromSeconds(2));
-            }
-            catch (IOException)
-            {
-                break;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                break;
-            }
-        }
+        if (_layoutLock is not null) return;
 
         throw new InvalidOperationException(
             $"Another packaged test run is already using this layout ({_layoutDir}) and did not " +
@@ -544,7 +585,14 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     }
 
     /// <summary>Best-effort read of the owner record a holder wrote, for diagnostics only.</summary>
-    private static string ReadOwner(string path)
+    /// <remarks>
+    /// <c>FileShare.ReadWrite</c> is required, not merely permissive: Windows checks share
+    /// compatibility in both directions, so a reader that shares only <c>Read</c> is refused
+    /// while the holder's handle has <c>ReadWrite</c> access. <c>File.ReadAllText</c> does
+    /// exactly that and fails here, which would turn the one diagnostic a blocked run has into
+    /// an <c>IOException</c>.
+    /// </remarks>
+    internal static string ReadOwner(string path)
     {
         try
         {

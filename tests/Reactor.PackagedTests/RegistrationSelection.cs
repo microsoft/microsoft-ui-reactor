@@ -66,14 +66,24 @@ internal static class RegistrationSelection
     /// Existence probe for the package's recorded install path. Injected so the abandoned-worktree
     /// rule is testable without creating and deleting directories.
     /// </param>
+    /// <param name="supportedVersions">
+    /// Algorithm versions to re-derive against, defaulting to
+    /// <see cref="WorktreeIdentity.SupportedAlgorithmVersions"/>. Injected because only one
+    /// version exists today: without it, a test for multi-version reclamation could not fail
+    /// even if the loop were deleted, and the guarantee would go unmeasured until the first
+    /// version bump — exactly when it is least convenient to discover it was never implemented.
+    /// </param>
     internal static RegistrationDisposition Classify(
         RegistrationRecord package,
         string layoutDir,
         string effectivePackageName,
         string basePackageName,
-        Func<string, bool> directoryExists)
+        Func<string, bool> directoryExists,
+        IReadOnlyList<string>? supportedVersions = null)
     {
         ArgumentNullException.ThrowIfNull(directoryExists);
+
+        var versions = supportedVersions ?? WorktreeIdentity.SupportedAlgorithmVersions;
 
         if (string.Equals(package.Name, effectivePackageName, StringComparison.Ordinal))
             return RegistrationDisposition.RemoveContending;
@@ -91,12 +101,18 @@ internal static class RegistrationSelection
         // on. If a link in the path resolved at registration time and has since disappeared, the
         // re-derivation differs and the package is left alone: fail-closed, and a leaked
         // registration is recoverable where someone else's live one is not.
+        //
+        // Re-derived across every supported algorithm version, not just the current one. A
+        // version bump changes every derived name, so checking only the current version would
+        // strand everything the previous version registered and quietly break the reclamation
+        // guarantee WorktreeIdentity documents.
         if (package.InstalledPath is not null &&
             !directoryExists(package.InstalledPath) &&
-            string.Equals(
-                package.Name,
-                WorktreeIdentity.DerivePackageName(basePackageName, package.InstalledPath),
-                StringComparison.Ordinal))
+            versions.Any(version =>
+                string.Equals(
+                    package.Name,
+                    WorktreeIdentity.DerivePackageName(basePackageName, package.InstalledPath, version),
+                    StringComparison.Ordinal)))
         {
             return RegistrationDisposition.ReclaimAbandoned;
         }

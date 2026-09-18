@@ -164,22 +164,23 @@ internal static class PackagedIdentityFixtures
 
             var expectedName = ExpectedPackageIdentityName;
 
-            // Log the inputs, not just the verdict. Both sides of this comparison are derived
-            // from a path, so a mismatch is only diagnosable with the path and the name that
-            // came out of it — otherwise the failure says the identity is wrong without saying
-            // which half disagreed.
-            if (name != expectedName)
-            {
-                Console.WriteLine($"# expected package name: {expectedName}");
-                Console.WriteLine($"# actual package name:   {name ?? "<null>"}");
-                Console.WriteLine($"# derived from BaseDirectory: {AppContext.BaseDirectory}");
-                Console.WriteLine($"# InstalledLocation:          {installPath ?? "<null>"}");
-            }
+            // Both halves of the comparison travel with the verdict, not through `#` lines.
+            // The TAP reader keeps only `ok`/`not ok`, so a `Console.WriteLine("# ...")`
+            // diagnostic is dropped before it reaches the MSTest failure detail — the exact
+            // failure would be visible in raw TAP and invisible in CI. Every side of the
+            // comparison is derived from a path, so a mismatch is only diagnosable with the
+            // path and the name that came out of it.
+            var identityDetail =
+                $"expected={expectedName}; actual={name ?? "<null>"}; " +
+                $"family={familyName ?? "<null>"}; " +
+                $"baseDirectory={AppContext.BaseDirectory}; " +
+                $"installLocation={installPath ?? "<null>"}";
 
-            H.Check("PackagedIdentity_Package_Name_Matches", name == expectedName);
+            H.Check("PackagedIdentity_Package_Name_Matches", name == expectedName, identityDetail);
             H.Check("PackagedIdentity_FamilyName_Derived_From_Name",
                 familyName is not null &&
-                familyName.StartsWith(expectedName + "_", StringComparison.Ordinal));
+                familyName.StartsWith(expectedName + "_", StringComparison.Ordinal),
+                identityDetail);
 
             // The registration must point at the build output this process is running
             // from. A stale registration of an older layout would otherwise let the tier
@@ -188,7 +189,8 @@ internal static class PackagedIdentityFixtures
             // package whenever the recorded and running spellings of one directory differ,
             // which is exactly what a junctioned parent produces.
             H.Check("PackagedIdentity_InstallLocation_Is_This_Build",
-                WorktreeIdentity.IsSameDirectory(installPath, AppContext.BaseDirectory));
+                WorktreeIdentity.IsSameDirectory(installPath, AppContext.BaseDirectory),
+                identityDetail);
 
             return Task.CompletedTask;
         }
@@ -246,7 +248,12 @@ internal static class PackagedIdentityFixtures
                 storageResolved = !string.IsNullOrEmpty(file?.Path);
                 storageDetail = file?.Path ?? "<null>";
             }
-            catch (Exception ex)
+            // Narrowed deliberately. A resolution failure arrives as one of these — a missing
+            // asset, a malformed URI, or an MRT/WinRT HRESULT — and each is a real answer worth
+            // recording. Anything else is a defect in this fixture, and swallowing it would
+            // report "resolution broke" for a fault that has nothing to do with resolution.
+            catch (Exception ex) when (ex is FileNotFoundException or ArgumentException
+                or COMException or UnauthorizedAccessException)
             {
                 storageDetail = $"{ex.GetType().Name}: {ex.Message}";
             }
@@ -271,7 +278,10 @@ internal static class PackagedIdentityFixtures
                 mrtResolved = candidate is not null;
                 mrtDetail = candidate?.ValueAsString ?? "<null>";
             }
-            catch (Exception ex)
+            // Same narrowing as above: a genuine MRT miss surfaces as one of these, and
+            // everything else is this fixture being wrong rather than resolution being wrong.
+            catch (Exception ex) when (ex is ArgumentException or COMException
+                or InvalidOperationException)
             {
                 mrtDetail = $"{ex.GetType().Name}: {ex.Message}";
             }

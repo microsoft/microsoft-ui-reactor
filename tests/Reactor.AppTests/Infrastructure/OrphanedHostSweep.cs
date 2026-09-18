@@ -75,15 +75,16 @@ internal static class OrphanedHostSweep
         }
 
         var processes = Process.GetProcessesByName(processName);
-        try
+
+        var candidates = processes
+            .Select(p => new Candidate(SafePid(p), TryGetExecutablePath(p)))
+            .ToList();
+
+        var doomed = SelectOurs(candidates, ourExePath).Select(c => c.Pid).ToHashSet();
+
+        foreach (var proc in processes)
         {
-            var candidates = processes
-                .Select(p => new Candidate(SafePid(p), TryGetExecutablePath(p)))
-                .ToList();
-
-            var doomed = SelectOurs(candidates, ourExePath).Select(c => c.Pid).ToHashSet();
-
-            foreach (var proc in processes)
+            using (proc)
             {
                 var pid = SafePid(proc);
                 if (!doomed.Contains(pid))
@@ -95,17 +96,6 @@ internal static class OrphanedHostSweep
 
                 Console.WriteLine($"Killing orphaned {label} (PID {pid}).");
                 TryKill(proc, label, pid);
-            }
-        }
-        finally
-        {
-            foreach (var proc in processes)
-            {
-                try { proc.Dispose(); }
-                catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
-                {
-                    // Disposing an already-reaped handle is not worth failing a bootstrap over.
-                }
             }
         }
     }
@@ -140,11 +130,24 @@ internal static class OrphanedHostSweep
             var stream = new FileStream(
                 path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
 
-            var owner = $"pid={Environment.ProcessId} exe={ourExePath} started={DateTime.UtcNow:O}";
-            var bytes = Encoding.UTF8.GetBytes(owner);
-            stream.SetLength(0);
-            stream.Write(bytes, 0, bytes.Length);
-            stream.Flush(flushToDisk: true);
+            // Ownership transfers to the caller only on the success path. If stamping the owner
+            // record throws, this process would otherwise hold the writer lock without ever
+            // returning a claim, and every later acquisition would read that as a live sibling
+            // and silently skip the sweep for the rest of the run.
+            try
+            {
+                var owner = $"pid={Environment.ProcessId} exe={ourExePath} started={DateTime.UtcNow:O}";
+                var bytes = Encoding.UTF8.GetBytes(owner);
+                stream.SetLength(0);
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(flushToDisk: true);
+            }
+            catch
+            {
+                stream.Dispose();
+                throw;
+            }
+
             return stream;
         }
         catch (IOException)
@@ -160,9 +163,15 @@ internal static class OrphanedHostSweep
     }
 
     /// <summary>Stable, filename-safe key for one build output.</summary>
+    /// <remarks>
+    /// Normalized through the same <see cref="NormalizePath"/> the kill predicate uses. The two
+    /// must agree: <see cref="SelectOurs"/> treats <c>bin\.\Host.exe</c> and <c>bin\Host.exe</c>
+    /// as one image, so if the claim keyed off the raw spelling those two runs would take
+    /// different claim files, each conclude no sibling was live, and sweep the other's host.
+    /// </remarks>
     private static string KeyFor(string ourExePath)
     {
-        var canonical = ourExePath.Trim().ToUpperInvariant();
+        var canonical = NormalizePath(ourExePath.Trim()).ToUpperInvariant();
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         return Convert.ToHexString(hash, 0, 8).ToLowerInvariant();
     }

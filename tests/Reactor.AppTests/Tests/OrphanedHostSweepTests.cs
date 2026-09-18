@@ -202,4 +202,30 @@ public class OrphanedHostSweepTests
         Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
             "A process must not lock itself out of its own claim.");
     }
+
+    /// <summary>
+    /// The claim key must agree with the kill predicate about what counts as one image, or two
+    /// spellings of one path become two claims and each run sweeps the other's live host.
+    /// </summary>
+    [TestMethod]
+    public void Two_Spellings_Of_One_Path_Claim_The_Same_Build_Output()
+    {
+        var plain = Probe("spelling");
+        var viaDot = Path.Join(ClaimRoot, "spelling", ".", "Reactor.AppTests.Host.exe");
+
+        // Precondition: the kill predicate already treats these as the same image, which is
+        // what makes disagreeing about them a defect rather than a preference.
+        Assert.AreEqual(
+            1,
+            OrphanedHostSweep.SelectOurs([new OrphanedHostSweep.Candidate(1, viaDot)], plain).Count(),
+            "Precondition: the sweep must already consider these one image.");
+
+        using var first = OrphanedHostSweep.TryClaimRun(plain);
+        Assert.IsNotNull(first);
+
+        using var second = OrphanedHostSweep.TryClaimRun(viaDot);
+        Assert.IsNull(second,
+            "The two spellings took different claim files, so both runs would conclude no " +
+            "sibling was live and each would sweep the other's host.");
+    }
 }
