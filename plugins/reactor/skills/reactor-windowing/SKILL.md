@@ -89,6 +89,8 @@ layouts. Unpackaged apps can opt into a stable publisher/product identity
 before the first `OpenWindow`:
 
 ```csharp
+using Microsoft.UI.Reactor.Hosting.Persistence;
+
 ReactorApp.WindowPersistenceStore =
     new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
 ```

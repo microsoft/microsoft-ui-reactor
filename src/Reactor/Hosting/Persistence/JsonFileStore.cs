@@ -19,18 +19,16 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 /// the spec calls for "warn-and-default" semantics on corruption.</para>
 /// <para>Writes are best-effort and survive disk-full / permission denied
 /// without throwing.</para>
-/// <para><b>Single-process only.</b> Writes are read-merge-write under a
-/// per-<i>instance</i> <c>_ioLock</c>, staged through a shared
-/// <c>&lt;path&gt;.tmp</c> and committed with <c>File.Move(overwrite: true)</c>.
-/// That serializes writers sharing one instance; it does <b>not</b> serialize
-/// separate instances or separate processes, which can interleave
-/// read-merge-write and drop each other's entries even when writing different
-/// persistence ids. Reads open with <see cref="FileShare.Read"/>.</para>
-/// <para>For <see cref="JsonFileStore"/> itself the exposure is narrow, because
-/// the default path is keyed on the entry process's name. It is wider for
-/// <see cref="UnpackagedAppDataStore"/>, which composes this type over a
-/// publisher/product root that two distinct executables can share. Tracked as a
-/// known limitation (spec 063 §5).</para>
+/// <para><b>Concurrency.</b> Read-merge-write is serialized two ways: an in-process
+/// lock orders threads sharing an instance, and a named
+/// <see cref="CrossProcessWriteGuard"/> extends that ordering across separate
+/// instances and separate processes. Without the latter, two writers could each read
+/// the pre-merge document and the second rename would silently discard the first's
+/// entry — even when the two wrote <i>different</i> persistence ids. Each write stages
+/// through a temp file named for the writing process and thread, so a crash mid-write
+/// cannot leave a shared temp that another process renames over the real file. Reads
+/// need no guard: the commit is an atomic rename, so a reader sees either the previous
+/// document or the next one, never a torn one.</para>
 /// </remarks>
 public sealed class JsonFileStore : IWindowPersistenceStore
 {
@@ -174,7 +172,14 @@ public sealed class JsonFileStore : IWindowPersistenceStore
 
         try
         {
+            // Two locks, two scopes. The in-process lock keeps threads sharing this
+            // instance ordered; the named mutex extends that ordering across
+            // instances AND processes, which is what the IWindowPersistenceStore
+            // contract promises and what read-merge-write actually requires — two
+            // writers can otherwise both read the old document and the second rename
+            // silently discards the first's id.
             lock (_ioLock)
+            using (var guard = CrossProcessWriteGuard.Acquire(_path))
             {
                 var dir = global::System.IO.Path.GetDirectoryName(_path);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
@@ -197,10 +202,23 @@ public sealed class JsonFileStore : IWindowPersistenceStore
 
                 // Atomic-ish: write to temp then rename. WinAPI MoveFileEx with
                 // MOVEFILE_REPLACE_EXISTING is what File.Move(_, _, true) maps
-                // to on Windows.
-                var tmp = _path + ".tmp";
-                File.WriteAllBytes(tmp, bytes);
-                File.Move(tmp, _path, overwrite: true);
+                // to on Windows. The temp name carries the process and thread id
+                // so a writer that crashes mid-write cannot leave a shared
+                // ".tmp" that another process then renames over the real file.
+                var tmp = $"{_path}.{Environment.ProcessId:x}.{Environment.CurrentManagedThreadId:x}.tmp";
+                try
+                {
+                    File.WriteAllBytes(tmp, bytes);
+                    File.Move(tmp, _path, overwrite: true);
+                }
+                finally
+                {
+                    // Move consumed it on success; this only fires if the write or
+                    // the move threw, and must not mask that exception.
+                    try { if (File.Exists(tmp)) File.Delete(tmp); }
+                    catch (IOException) { /* best effort */ }
+                    catch (UnauthorizedAccessException) { /* best effort */ }
+                }
 
                 if (ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
                     ReactorEventSource.Log.PersistenceWrite(_storeKind, ClampSize(bytes.Length));

@@ -525,15 +525,43 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// very file defining it. The positive control below additionally requires a
     /// *parseable numeric* version, so a prose placeholder cannot satisfy it.</para>
     /// </remarks>
-    private static readonly (string Label, Regex Pattern)[] PinShapes =
-    [
-        ("PackageReference Version=",
-            new Regex("Include\\s*=\\s*\"Microsoft\\.WindowsAppSDK(?:\\.\\w+)?\"(?:\\s|[^>])*?Version\\s*=\\s*\"([^\"$]+)\"",
-                RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline)),
-        ("#:package @version",
-            new Regex(@"#:package\s+Microsoft\.WindowsAppSDK(?:\.\w+)?@([^\s""'`]+)",
-                RegexOptions.IgnoreCase | RegexOptions.Compiled)),
-    ];
+    /// <summary>
+    /// Locates a <c>PackageReference</c> / <c>PackageVersion</c> element, in XML files
+    /// and in markdown/prose snippets alike. Attributes are pulled out of the matched
+    /// element separately so that attribute <i>order</i>, quote style, and
+    /// <c>VersionOverride</c> are all handled — a regex that hard-codes
+    /// <c>Include</c>-before-<c>Version</c> silently skips the legal reverse ordering.
+    /// </summary>
+    private static readonly Regex PackageElement = new(
+        @"<(?:PackageReference|PackageVersion)\b[^>]*?/?>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
+
+    private static readonly Regex PackageNameAttr = new(
+        @"(?:Include|Update)\s*=\s*[""']([^""']+)[""']",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>Covers <c>VersionOverride</c>, which CPM explicitly permits.</summary>
+    private static readonly Regex PackageVersionAttr = new(
+        @"(?:VersionOverride|Version)\s*=\s*[""']([^""']+)[""']",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex FileBasedPin = new(
+        @"#:package\s+(Microsoft\.WindowsAppSDK(?:\.\w+)?)@([^\s""'`]+)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Which central property each package's floor comes from. The repo deliberately
+    /// versions the WinUI sub-package independently of the metapackage (2.2.1 vs
+    /// 2.2.0), so comparing a WinUI pin against <c>WindowsAppSDKVersion</c> would
+    /// report a current pin as stale and let a genuinely stale one pass. Packages
+    /// absent from this map have no central floor and are not compared.
+    /// </summary>
+    private static readonly Dictionary<string, string> PackageFloorProperty = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Microsoft.WindowsAppSDK"] = "WindowsAppSDKVersion",
+        ["Microsoft.WindowsAppSDK.Runtime"] = "WindowsAppSDKVersion",
+        ["Microsoft.WindowsAppSDK.WinUI"] = "WindowsAppSDKWinUIVersion",
+    };
 
     /// <summary>
     /// No literal Windows App SDK pin anywhere in the tree may name a version BELOW
@@ -552,17 +580,22 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
 
+        // Each package compares against ITS OWN central floor (§3 — the WinUI
+        // sub-package is versioned independently of the metapackage).
         var propsDoc = XDocument.Load(Path.Join(root!, "Directory.Build.props"));
-        var central = propsDoc.Descendants()
-            .Where(e => e.Name.LocalName == "WindowsAppSDKVersion")
+        string ReadCentral(string property) => propsDoc.Descendants()
+            .Where(e => e.Name.LocalName == property)
             .Where(e => e.AncestorsAndSelf().All(a => a.Attribute("Condition") is null))
             .Select(e => e.Value.Trim())
             .Single();
 
-        var centralVersion = ParsePin(central);
-        Assert.True(centralVersion is not null, $"Unparseable central WindowsAppSDKVersion '{central}'");
+        var floors = PackageFloorProperty.Values.Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(p => p, ReadCentral, StringComparer.OrdinalIgnoreCase);
 
-        var found = new List<(string Rel, int Line, string Label, string Version)>();
+        foreach (var (property, value) in floors)
+            Assert.True(ParsePin(value) is not null, $"Unparseable central {property} '{value}'");
+
+        var found = new List<(string Rel, int Line, string Label, string Package, string Version)>();
         foreach (var file in EnumerateScannableFiles(root!))
         {
             var rel = Path.GetRelativePath(root!, file).Replace('\\', '/');
@@ -581,19 +614,25 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
                 continue;
             }
 
-            // Match against whole file text, not per line: a PackageReference may
-            // legally split Include and Version across lines, and a per-line scan
-            // would miss it while one-line examples kept the positive control green.
+            // Whole file text, not per line: a PackageReference may legally split its
+            // attributes across lines, and a per-line scan would miss it while the
+            // one-line examples elsewhere kept the positive control green.
             var text = File.ReadAllText(file);
-            foreach (var (label, pattern) in PinShapes)
+            int LineOf(int index) => text.Take(index).Count(c => c == '\n') + 1;
+
+            foreach (Match el in PackageElement.Matches(text))
             {
-                foreach (Match m in pattern.Matches(text))
-                {
-                    // Line number from the match offset, so the failure message still
-                    // points at the offending line.
-                    var line = text.Take(m.Index).Count(c => c == '\n') + 1;
-                    found.Add((rel, line, label, m.Groups[1].Value));
-                }
+                var name = PackageNameAttr.Match(el.Value);
+                var ver = PackageVersionAttr.Match(el.Value);
+                if (!name.Success || !ver.Success) continue;
+                if (!PackageFloorProperty.ContainsKey(name.Groups[1].Value)) continue;
+                found.Add((rel, LineOf(el.Index), "PackageReference", name.Groups[1].Value, ver.Groups[1].Value));
+            }
+
+            foreach (Match m in FileBasedPin.Matches(text))
+            {
+                if (!PackageFloorProperty.ContainsKey(m.Groups[1].Value)) continue;
+                found.Add((rel, LineOf(m.Index), "#:package", m.Groups[1].Value, m.Groups[2].Value));
             }
         }
 
@@ -605,30 +644,34 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         // The control demands a *parseable numeric* version, not merely a match: a
         // prose placeholder in a doc comment (this file's own remarks, say) would
         // otherwise satisfy it while every real pin had vanished or changed syntax.
-        foreach (var (label, _) in PinShapes)
+        foreach (var label in new[] { "PackageReference", "#:package" })
         {
             Assert.True(
                 found.Any(f => f.Label == label && ParsePin(f.Version) is not null),
                 $"Pin scanner found no '{label}' pin with a parseable numeric version anywhere "
                     + "in the tree. Either the repo genuinely stopped using that shape (then drop "
-                    + "it from PinShapes), or the pattern has decayed and this guard is now "
+                    + "it from the scan), or the pattern has decayed and this guard is now "
                     + "blessing every file it cannot parse. A zero result from an unvalidated "
                     + "scanner is not a measurement.");
         }
 
         var stale = found
-            .Select(f => (f.Rel, f.Line, f.Label, f.Version, Cmp: ComparePin(f.Version, central, centralVersion!)))
+            .Select(f =>
+            {
+                var floor = floors[PackageFloorProperty[f.Package]];
+                return (f.Rel, f.Line, f.Label, f.Package, f.Version, Floor: floor,
+                        Cmp: ComparePin(f.Version, floor, ParsePin(floor)!));
+            })
             .Where(f => f.Cmp < 0)
-            .Select(f => $"{f.Rel}:{f.Line}  [{f.Label}]  {f.Version}  <  {central}")
+            .Select(f => $"{f.Rel}:{f.Line}  [{f.Label}]  {f.Package} {f.Version}  <  {f.Floor}")
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();
 
         Assert.True(
             stale.Count == 0,
-            $"These literal Microsoft.WindowsAppSDK pins are BELOW the central "
-                + $"WindowsAppSDKVersion ({central}), which is an NU1605 downgrade against the "
-                + "floor the framework advertises. Bump them in lockstep with "
-                + "Directory.Build.props:\n  " + string.Join("\n  ", stale));
+            $"These literal Microsoft.WindowsAppSDK pins are BELOW their central floor, "
+                + "which is an NU1605 downgrade against what the framework advertises. Bump "
+                + "them in lockstep with Directory.Build.props:\n  " + string.Join("\n  ", stale));
     }
 
     /// <summary>
@@ -671,7 +714,30 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
 
         var parsed = ParsePin(text);
         if (parsed is null) return 0;
-        return parsed < centralVersion ? -1 : (parsed > centralVersion ? 1 : 0);
+        if (parsed < centralVersion) return -1;
+        if (parsed > centralVersion) return 1;
+
+        // Equal numeric cores. NuGet orders a prerelease BELOW the stable release of
+        // the same version, so 2.2.0-preview.1 is a real downgrade against a stable
+        // 2.2.0 — stripping the suffix (as ParsePin does for comparability) would
+        // otherwise report them equal and let it through.
+        var pinPre = HasPrerelease(text);
+        var centralPre = HasPrerelease(centralRaw);
+        if (pinPre && !centralPre) return -1;
+        if (!pinPre && centralPre) return 1;
+        return 0;
+    }
+
+    /// <summary>
+    /// True when a version carries a SemVer prerelease label (<c>-preview.1</c>).
+    /// Build metadata (<c>+sha</c>) does not affect ordering and is ignored.
+    /// </summary>
+    private static bool HasPrerelease(string version)
+    {
+        var core = Regex.Match(version.Trim(), @"^\d+(?:\.\d+){0,3}");
+        if (!core.Success) return false;
+        var rest = version.Trim()[core.Length..];
+        return rest.StartsWith('-');
     }
 
     /// <summary>

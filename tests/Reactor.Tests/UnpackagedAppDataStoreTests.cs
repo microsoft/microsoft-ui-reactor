@@ -51,8 +51,15 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
 
         try
         {
+            // Both roots: the store writes under the roaming key today, but the
+            // positive control in Does_Not_Route_Window_Placement_Through_The_Roaming_
+            // Registry_Hive is designed to trip onto the machine-local key once the
+            // runtime carries the #6559 fix. Deleting only the roaming root would then
+            // leak a key on every run of the very test that detects the fix.
             global::Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(
                 @"SOFTWARE\" + _publisher, throwOnMissingSubKey: false);
+            global::Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(
+                @"SOFTWARE\Classes\Local Settings\Software\" + _publisher, throwOnMissingSubKey: false);
         }
         catch (global::System.Exception ex) when (ex is global::System.IO.IOException
                                                     or UnauthorizedAccessException

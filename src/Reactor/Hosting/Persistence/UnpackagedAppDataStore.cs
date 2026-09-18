@@ -31,19 +31,13 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 /// services in place, rather than of the SDK version an app pins — so it can differ
 /// machine to machine for the same build. <c>LocalPath</c> has no such variance, which
 /// is a second reason this store is built on it. (spec 063 §3.2)</para>
-/// <para><b>Single-process only — known limitation.</b> This store inherits
-/// <see cref="JsonFileStore"/>'s read-merge-write, which is guarded by a
-/// per-<i>instance</i> lock and staged through a shared <c>.tmp</c> file. Two
-/// processes, or two instances in one process, can interleave and drop each other's
-/// entries <i>even when writing different ids</i>. Note this identity makes the
-/// collision more reachable than it is for <see cref="JsonFileStore"/>: that type's
-/// default path is keyed on the entry process's name, so two differently-named
-/// executables never share a file, whereas two executables sharing one
-/// publisher/product <i>do</i> share this one. Use a single instance per
-/// publisher/product per machine. The <see cref="IWindowPersistenceStore"/> contract
-/// anticipates cross-process sharing, so this gap is tracked for a fix in the shared
-/// <see cref="JsonFileStore"/> machinery, where it also benefits the default path.
-/// (spec 063 §5)</para>
+/// <para><b>Concurrency.</b> Safe to share across instances and processes: the
+/// underlying <see cref="JsonFileStore"/> serializes read-merge-write with a named
+/// cross-process guard. That matters more for this store than for
+/// <see cref="JsonFileStore"/>'s own default path, because this identity is
+/// deliberately <i>shared</i> — two differently-named executables from one
+/// publisher/product resolve the same file, where the process-name-keyed default
+/// would have given them separate ones. (spec 063 §5)</para>
 /// <para>Read/write failures follow the <see cref="IWindowPersistenceStore"/>
 /// "warn-and-default" contract — they never throw into the caller. The
 /// <i>constructor</i> may throw, matching <see cref="JsonFileStore"/>: an invalid
