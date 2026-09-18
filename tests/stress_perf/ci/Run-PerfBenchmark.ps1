@@ -502,10 +502,11 @@ function Stage-RustRuntime {
         $msixDir = Join-Path $extract "MSIX\win10-$arch"
         # Resolve the per-arch framework MSIX. 2.x ships Microsoft.WindowsAppRuntime.2.msix
         # (the '2' is the stable WinAppSDK API-contract major, identical across 2.2.0/2.10/…),
-        # so that exact name is the fast path. Only if it is absent — e.g. the non-pinned
-        # fallback above selected a cached package from a future major whose framework MSIX is
-        # numbered differently (…\Microsoft.WindowsAppRuntime.N.msix) — glob for the framework
-        # MSIX by its stable stem so a valid runtime still stages instead of failing outright.
+        # so that exact name is the fast path. The glob below is a safety net for a payload
+        # whose framework MSIX is numbered differently (…\Microsoft.WindowsAppRuntime.N.msix);
+        # the cache fallback above is now constrained to the SAME major at or above $ver, so a
+        # cross-major payload should no longer reach here — the glob exists so an unexpected
+        # layout still stages a valid runtime instead of failing outright.
         # The glob is scoped to the 'Microsoft.WindowsAppRuntime.<major>.msix' shape (no embedded
         # dot after the stem) so it can't pick an unrelated package (DDLM/Singleton) that lacks
         # the runtime DLLs.
