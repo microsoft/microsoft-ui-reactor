@@ -21,6 +21,26 @@ internal enum RegistrationDisposition
     ReclaimAbandoned,
 }
 
+/// <summary>What is known about a registration's recorded install path.</summary>
+/// <remarks>
+/// Tri-state because <c>Directory.Exists</c> is not: it answers <see langword="false"/> both for
+/// a worktree that was deleted and for one that merely cannot be read right now — an offline
+/// network share, a dismounted volume, a directory whose ACL excludes this account. Collapsing
+/// those two into one boolean makes an unreadable path indistinguishable from an abandoned one,
+/// and the action taken on "abandoned" is to unregister someone else's package.
+/// </remarks>
+internal enum LayoutPresence
+{
+    /// <summary>The directory is there.</summary>
+    Present,
+
+    /// <summary>The directory is provably gone: an ancestor was readable and did not contain it.</summary>
+    Absent,
+
+    /// <summary>Could not be established. Treated as <see cref="Present"/> by every rule.</summary>
+    Unknown,
+}
+
 /// <summary>One existing registration, reduced to the fields the decision depends on.</summary>
 /// <param name="Name">The package's <c>Id.Name</c>.</param>
 /// <param name="InstalledPath">
@@ -48,12 +68,15 @@ internal readonly record struct RegistrationRecord(string Name, string? Installe
 /// registering a second package over a directory another package already claims was observed
 /// to kill the host mid-run.</description></item>
 /// <item><description>Any package whose name this algorithm would have derived for its own
-/// recorded install path, when that path no longer exists — a deleted worktree.</description>
+/// recorded install path, when that path is provably gone and no live run still holds that
+/// layout's lock — a deleted worktree.</description>
 /// </item>
 /// </list>
 /// <para><b>None of the three can reach a concurrently running checkout.</b> Rule 1 is keyed to
-/// this directory's hash, rule 2 to this directory itself, and rule 3 only fires when a
-/// directory does not exist, which a live checkout's does by definition.</para>
+/// this directory's hash, rule 2 to this directory itself, and rule 3 requires both that the
+/// directory be provably absent and that nobody holds its lock. A path that cannot be read is
+/// not absent, and a run whose worktree was deleted underneath it still holds its lock, because
+/// the lock lives under <c>%LOCALAPPDATA%</c> rather than in the worktree.</para>
 /// </remarks>
 internal static class RegistrationSelection
 {
@@ -62,9 +85,16 @@ internal static class RegistrationSelection
     /// <param name="layoutDir">The layout directory about to be registered, canonicalized.</param>
     /// <param name="effectivePackageName">The derived name that layout will register under.</param>
     /// <param name="basePackageName">The undecorated name from <c>Package.appxmanifest</c>.</param>
-    /// <param name="directoryExists">
-    /// Existence probe for the package's recorded install path. Injected so the abandoned-worktree
-    /// rule is testable without creating and deleting directories.
+    /// <param name="probeLayout">
+    /// Presence probe for the package's recorded install path. Injected so the abandoned-worktree
+    /// rule is testable without creating and deleting directories, and so the unreadable case can
+    /// be exercised at all — it cannot be staged on a normal developer machine.
+    /// </param>
+    /// <param name="isLayoutLive">
+    /// Reports whether a run still holds the lock for the package's recorded install path.
+    /// Absence of the directory alone does not mean the run that registered it has finished:
+    /// deleting a worktree out from under a live packaged run leaves the run, its registration,
+    /// and its lock all intact.
     /// </param>
     /// <param name="supportedVersions">
     /// Algorithm versions to re-derive against, defaulting to
@@ -78,10 +108,12 @@ internal static class RegistrationSelection
         string layoutDir,
         string effectivePackageName,
         string basePackageName,
-        Func<string, bool> directoryExists,
+        Func<string, LayoutPresence> probeLayout,
+        Func<string, bool> isLayoutLive,
         IReadOnlyList<string>? supportedVersions = null)
     {
-        ArgumentNullException.ThrowIfNull(directoryExists);
+        ArgumentNullException.ThrowIfNull(probeLayout);
+        ArgumentNullException.ThrowIfNull(isLayoutLive);
 
         var versions = supportedVersions ?? WorktreeIdentity.SupportedAlgorithmVersions;
 
@@ -107,7 +139,8 @@ internal static class RegistrationSelection
         // strand everything the previous version registered and quietly break the reclamation
         // guarantee WorktreeIdentity documents.
         if (package.InstalledPath is not null &&
-            !directoryExists(package.InstalledPath) &&
+            probeLayout(package.InstalledPath) == LayoutPresence.Absent &&
+            !isLayoutLive(package.InstalledPath) &&
             versions.Any(version =>
                 string.Equals(
                     package.Name,

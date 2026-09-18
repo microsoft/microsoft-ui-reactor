@@ -104,24 +104,34 @@ public class OrphanedHostSweepTests
     }
     /// <summary>
     /// Path scoping alone does not separate two runs of the <em>same</em> checkout: their hosts
-    /// share the image path exactly. The run claim is what supplies liveness, and this is the
-    /// differential that proves it — the same path claimed twice must be refused the second
-    /// time, or the second run would classify the first run's live host as an orphan.
+    /// share the image path exactly. Leases supply liveness, and this is the differential that
+    /// proves it — while another run's lease is held, this run must decline to sweep, or it
+    /// would classify that run's live host as an orphan.
     /// </summary>
+    /// <remarks>
+    /// This is the sequence a single-owner claim got wrong. Run A claimed and launched a host;
+    /// run B was refused the claim, skipped the sweep, and launched a host anyway; when A exited
+    /// its claim was freed, so run C acquired it, swept, and killed B's live host. Every run
+    /// being individually visible is what removes that window.
+    /// </remarks>
     [TestMethod]
-    public void A_Second_Run_Of_The_Same_Build_Output_Cannot_Claim_It()
+    public void A_Live_Sibling_Run_Blocks_The_Sweep()
     {
         var exe = Probe("one");
 
-        using var first = OrphanedHostSweep.TryClaimRun(exe);
-        Assert.IsNotNull(first, "The first run of a build output must be able to claim it.");
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+            "Control: with no sibling live, this run must be allowed to sweep.");
 
-        using (var second = OrphanedHostSweep.TryClaimRun(exe))
+        using (StageForeignLease(exe))
         {
-            Assert.IsNull(second,
-                "A second concurrent run of the same build output must be refused, otherwise " +
-                "it would sweep the first run's live host as an orphan.");
+            Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+                "A run swept while a sibling run of the same build output was still live, " +
+                "which kills that run's host mid-suite.");
         }
+
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+            "Once the sibling is gone the sweep must resume, or one crashed run would wedge " +
+            "every later run out of cleaning up.");
     }
 
     /// <summary>
@@ -129,36 +139,44 @@ public class OrphanedHostSweepTests
     /// has to keep sweeping its own leftovers.
     /// </summary>
     [TestMethod]
-    public void A_Run_Of_A_Different_Build_Output_Claims_Independently()
+    public void A_Run_Of_A_Different_Build_Output_Sweeps_Independently()
     {
         var mine = Probe("a");
         var theirs = Probe("b");
 
-        using var held = OrphanedHostSweep.TryClaimRun(mine);
-        Assert.IsNotNull(held);
+        using var foreign = StageForeignLease(mine);
 
-        using var other = OrphanedHostSweep.TryClaimRun(theirs);
-        Assert.IsNotNull(other,
-            "A different build output is a different claim; refusing it would stop other " +
+        Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(mine),
+            "Precondition: the staged lease must block its own build output.");
+
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(theirs),
+            "A different build output is a different lease; blocking it would stop other " +
             "checkouts from ever cleaning up after themselves.");
     }
 
     /// <summary>
-    /// Releasing must actually release, or a crashed run would wedge every later run out of
-    /// sweeping its own leftovers forever.
+    /// A lease whose owner died must stop counting, or a single crashed run would wedge every
+    /// later run of that build output out of sweeping forever.
     /// </summary>
     [TestMethod]
-    public void Releasing_A_Claim_Lets_The_Next_Run_Take_It()
+    public void A_Stale_Lease_Is_Pruned_And_Does_Not_Block()
     {
         var exe = Probe("release");
+        var stale = OrphanedHostSweep.LeasePathFor(exe, ForeignPid);
 
-        var first = OrphanedHostSweep.TryClaimRun(exe);
-        Assert.IsNotNull(first);
-        first.Dispose();
+        var lease = StageForeignLease(exe);
+        Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+            "Precondition: a held lease must block.");
 
-        using var second = OrphanedHostSweep.TryClaimRun(exe);
-        Assert.IsNotNull(second,
-            "A released claim must be reusable; a process exit closes the handle the same way.");
+        // A process exit closes the handle exactly this way, leaving the file behind.
+        lease.Dispose();
+
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
+            "A lease left behind by a dead run kept blocking the sweep.");
+
+        Assert.IsFalse(File.Exists(stale),
+            "The stale lease must be pruned, otherwise every later run pays to re-test it and " +
+            "the directory grows without bound.");
     }
 
     /// <summary>An unnamed build output cannot be arbitrated, so it must not be guessed at.</summary>
@@ -166,13 +184,14 @@ public class OrphanedHostSweepTests
     public void Claiming_Without_An_Executable_Path_Throws()
     {
         Assert.ThrowsExactly<ArgumentException>(() => OrphanedHostSweep.TryClaimRun("  "));
+        Assert.ThrowsExactly<ArgumentException>(() => OrphanedHostSweep.AnyLiveSiblingOf("  "));
     }
 
     /// <summary>
-    /// This assembly sweeps two different hosts, so the claim must be tracked per executable.
-    /// A single "already claimed something" flag makes the first claim vouch for the second
-    /// host's path without ever opening its file, and the tell is not the return value — it is
-    /// that an outside contender can still take the path that was supposedly claimed.
+    /// This assembly sweeps two different hosts, so leases must be tracked per executable. A
+    /// single "already registered something" flag makes the first host vouch for the second
+    /// without ever consulting its lease, leaving that host sweepable while a sibling run is
+    /// still using it.
     /// </summary>
     [TestMethod]
     public void Claiming_One_Host_Does_Not_Vouch_For_Another()
@@ -180,13 +199,14 @@ public class OrphanedHostSweepTests
         var appHost = Probe("multi-app");
         var winFormsHost = Path.Join(ClaimRoot, "multi-winforms", "Reactor.WinFormsTests.Host.exe");
 
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(appHost));
-        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(winFormsHost));
+        using var foreign = StageForeignLease(winFormsHost);
 
-        using var contender = OrphanedHostSweep.TryClaimRun(winFormsHost);
-        Assert.IsNull(contender,
-            "The second host reported as claimed, but another process could still take it, so " +
-            "its claim was never actually acquired and its live host stays sweepable.");
+        Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(appHost),
+            "Precondition: the first host has no live sibling and must be sweepable.");
+
+        Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(winFormsHost),
+            "The second host was reported sweepable on the strength of the first host's " +
+            "lease, so a concurrent run's WinForms host stays exposed.");
     }
 
     /// <summary>
@@ -200,12 +220,12 @@ public class OrphanedHostSweepTests
 
         Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe));
         Assert.IsTrue(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(exe),
-            "A process must not lock itself out of its own claim.");
+            "A process must not lock itself out of its own lease.");
     }
 
     /// <summary>
-    /// The claim key must agree with the kill predicate about what counts as one image, or two
-    /// spellings of one path become two claims and each run sweeps the other's live host.
+    /// The lease key must agree with the kill predicate about what counts as one image, or two
+    /// spellings of one path become two leases and each run sweeps the other's live host.
     /// </summary>
     [TestMethod]
     public void Two_Spellings_Of_One_Path_Claim_The_Same_Build_Output()
@@ -220,12 +240,28 @@ public class OrphanedHostSweepTests
             OrphanedHostSweep.SelectOurs([new OrphanedHostSweep.Candidate(1, viaDot)], plain).Count(),
             "Precondition: the sweep must already consider these one image.");
 
-        using var first = OrphanedHostSweep.TryClaimRun(plain);
-        Assert.IsNotNull(first);
+        using var foreign = StageForeignLease(plain);
 
-        using var second = OrphanedHostSweep.TryClaimRun(viaDot);
-        Assert.IsNull(second,
-            "The two spellings took different claim files, so both runs would conclude no " +
+        Assert.IsFalse(OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(viaDot),
+            "The two spellings took different lease files, so both runs would conclude no " +
             "sibling was live and each would sweep the other's host.");
+    }
+
+    /// <summary>Process id used for staged leases; outside the range Windows assigns.</summary>
+    private const int ForeignPid = 999999;
+
+    /// <summary>
+    /// Stages the lease another live run of <paramref name="exePath"/> would hold.
+    /// </summary>
+    /// <remarks>
+    /// Opened with the same share mode the production path uses, because that share mode is the
+    /// whole signal: liveness is "this handle still refuses an exclusive open", so a stand-in
+    /// that opened it any other way would answer a different question than the sweep asks.
+    /// </remarks>
+    private static FileStream StageForeignLease(string exePath)
+    {
+        var path = OrphanedHostSweep.LeasePathFor(exePath, ForeignPid);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
     }
 }

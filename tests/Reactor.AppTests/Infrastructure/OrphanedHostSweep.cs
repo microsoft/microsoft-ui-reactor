@@ -101,15 +101,22 @@ internal static class OrphanedHostSweep
     }
 
     /// <summary>
-    /// Claims this build output for the current run, or returns <see langword="null"/> when a
-    /// live sibling run already holds it.
+    /// Registers this run as a live participant in <paramref name="ourExePath"/>, or returns
+    /// <see langword="null"/> when the lease cannot be taken.
     /// </summary>
     /// <remarks>
+    /// <para>Every live run holds its own lease, named for its process id. A single-owner claim
+    /// would be unsound here: it only records the process that took it, not every run that is
+    /// live. Run A claims and launches its host, run B is refused and skips the sweep but still
+    /// launches a host of its own, and once A exits and its handle is released, run C acquires
+    /// the freed claim and sweeps — killing B's host, which is live and not an orphan. Leases
+    /// make each run individually visible so that sequence cannot arise.</para>
+    /// <para>Held open for the lifetime of the run so the kernel releases it on exit. A crashed
+    /// run therefore leaves a file that no longer resists an exclusive open, which is exactly
+    /// what marks it as stale to <see cref="AnyLiveSiblingOf"/> — the leftovers of a crash must
+    /// stay sweepable.</para>
     /// <para>Exposed rather than folded into <see cref="LayoutRunClaim"/> so the mechanism can
-    /// be exercised directly: whether a second run is refused is the whole of the guarantee,
-    /// and a static holder would make that unobservable.</para>
-    /// <para>Dispose to release. In the suite nothing does — see
-    /// <see cref="LayoutRunClaim"/>.</para>
+    /// be exercised directly; a static holder would make it unobservable.</para>
     /// </remarks>
     internal static IDisposable? TryClaimRun(string ourExePath)
     {
@@ -117,23 +124,19 @@ internal static class OrphanedHostSweep
 
         try
         {
-            var dir = Path.Join(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Microsoft.UI.Reactor",
-                "AppTests");
+            var dir = ClaimDirectory();
             Directory.CreateDirectory(dir);
 
-            var path = Path.Join(dir, KeyFor(ourExePath) + ".run");
+            var path = Path.Join(dir, LeasePrefix(ourExePath) + Environment.ProcessId + ".run");
 
-            // FileShare.Read lets a refused contender read the owner record while still
-            // denying a second writer, which is what makes this the claim.
+            // FileShare.Read lets a sibling read the owner record, and prove liveness by being
+            // refused write access, while still denying a second writer.
             var stream = new FileStream(
                 path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
 
             // Ownership transfers to the caller only on the success path. If stamping the owner
-            // record throws, this process would otherwise hold the writer lock without ever
-            // returning a claim, and every later acquisition would read that as a live sibling
-            // and silently skip the sweep for the rest of the run.
+            // record throws, this process would otherwise hold the handle without ever returning
+            // a lease, and every sibling would read that as a live run for the rest of the run.
             try
             {
                 var owner = $"pid={Environment.ProcessId} exe={ourExePath} started={DateTime.UtcNow:O}";
@@ -152,7 +155,6 @@ internal static class OrphanedHostSweep
         }
         catch (IOException)
         {
-            // Held by a live sibling run of this same build output.
             return null;
         }
         catch (UnauthorizedAccessException)
@@ -161,6 +163,90 @@ internal static class OrphanedHostSweep
             return null;
         }
     }
+
+    /// <summary>
+    /// Reports whether any run of <paramref name="ourExePath"/> other than this process is live,
+    /// pruning the leases of runs that are not.
+    /// </summary>
+    /// <remarks>
+    /// Liveness is tested by attempting an exclusive open rather than by believing the recorded
+    /// pid: the holder's handle is released by the kernel, so a lease that still resists opening
+    /// has a live owner and one that yields does not. Reading a pid back and probing it would
+    /// reintroduce the reuse hazard the file handle exists to avoid.
+    /// </remarks>
+    internal static bool AnyLiveSiblingOf(string ourExePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ourExePath);
+
+        try
+        {
+            var dir = ClaimDirectory();
+            if (!Directory.Exists(dir)) return false;
+
+            var prefix = LeasePrefix(ourExePath);
+            var mine = prefix + Environment.ProcessId + ".run";
+
+            foreach (var lease in Directory.EnumerateFiles(dir, prefix + "*.run"))
+            {
+                if (string.Equals(Path.GetFileName(lease), mine, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    // Opening denies the holder nothing it still needs, so this is safe to do
+                    // against a lease whose owner died mid-write.
+                    using (new FileStream(lease, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                    {
+                    }
+
+                    File.Delete(lease);
+                }
+                catch (FileNotFoundException)
+                {
+                    // Pruned by another run between enumeration and open.
+                }
+                catch (DirectoryNotFoundException)
+                {
+                }
+                catch (IOException)
+                {
+                    // Still held: a live sibling run.
+                    return true;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Cannot establish that it is stale, so it must be treated as live.
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Cannot arbitrate, so cannot safely conclude that anything is an orphan.
+            return true;
+        }
+    }
+
+    private static string ClaimDirectory() => Path.Join(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Microsoft.UI.Reactor",
+        "AppTests");
+
+    /// <summary>Filename prefix shared by every lease on one build output.</summary>
+    private static string LeasePrefix(string ourExePath) => KeyFor(ourExePath) + ".";
+
+    /// <summary>Full path of the lease one process holds on one build output.</summary>
+    /// <remarks>
+    /// Exposed so a test can stage another run's lease. Liveness here is a held handle, which
+    /// no in-process API can fake, and the sequence worth proving — a later run declining to
+    /// sweep because an earlier one is still going — needs a second participant to exist.
+    /// </remarks>
+    internal static string LeasePathFor(string ourExePath, int pid) =>
+        Path.Join(ClaimDirectory(), LeasePrefix(ourExePath) + pid + ".run");
 
     /// <summary>Stable, filename-safe key for one build output.</summary>
     /// <remarks>
@@ -181,20 +267,23 @@ internal static class OrphanedHostSweep
     /// </summary>
     /// <remarks>
     /// <para>Held for the lifetime of the test process and released by the kernel closing the
-    /// handle, so a run that crashes leaves no stale claim and the next run correctly sees its
+    /// handle, so a run that crashes leaves no live lease and the next run correctly sees its
     /// leftovers as orphans. That self-healing is the whole reason this is a file handle rather
     /// than a marker file whose contents have to be believed.</para>
     /// <para>Kept under <c>%LOCALAPPDATA%</c> because the processes it arbitrates between are
     /// per-user, and keyed by a hash of the image path so two build outputs never share one
-    /// claim. Acquisition is non-blocking: a sibling run is a reason to skip the sweep, not a
+    /// lease. Taking the lease never blocks: a sibling run is a reason to skip the sweep, not a
     /// reason to wait — the two runs are then arbitrated by winapp UI turns, which is a
     /// different layer and already handles them.</para>
-    /// <para>Claims are tracked per executable, not as a single flag. This assembly sweeps two
+    /// <para>Leases are tracked per executable, not as a single flag. This assembly sweeps two
     /// different hosts (<c>Reactor.AppTests.Host</c> and <c>Reactor.WinFormsTests.Host</c>), so
-    /// a single flag would let the first claim vouch for the second host's path without ever
+    /// a single flag would let the first lease vouch for the second host's path without ever
     /// opening its file, leaving that host sweepable by a concurrent run of this same
     /// checkout.</para>
-    /// <para>Deliberately never released explicitly. The claim must outlive the sweep and cover
+    /// <para>Two runs starting at once can both observe the other and both decline to sweep.
+    /// That is the intended direction to fail: neither has launched a host yet, so nothing is
+    /// leaked by waiting, and the next solo run collects whatever they left.</para>
+    /// <para>Deliberately never released explicitly. The lease must outlive the sweep and cover
     /// the whole run, and the process exiting is exactly that lifetime.</para>
     /// </remarks>
     internal static class LayoutRunClaim
@@ -205,19 +294,24 @@ internal static class OrphanedHostSweep
 
         internal static bool TryAcquireFor(string ourExePath)
         {
-            // Keyed by the same digest the claim file is named for, so two spellings of one
-            // path cannot disagree about whether it is already held.
+            // Keyed by the same digest the lease file is named for, so two spellings of one
+            // path cannot disagree about whether this run already registered.
             var key = KeyFor(ourExePath);
 
             lock (Gate)
             {
-                if (Held.ContainsKey(key)) return true;
+                if (!Held.ContainsKey(key))
+                {
+                    var lease = TryClaimRun(ourExePath);
+                    if (lease is null) return false;
 
-                var claim = TryClaimRun(ourExePath);
-                if (claim is null) return false;
+                    Held[key] = lease;
+                }
 
-                Held[key] = claim;
-                return true;
+                // Registered before the question is asked, so a sibling starting concurrently
+                // sees this run and declines in turn. Asking first would let both conclude they
+                // were alone and both sweep.
+                return !AnyLiveSiblingOf(ourExePath);
             }
         }
     }

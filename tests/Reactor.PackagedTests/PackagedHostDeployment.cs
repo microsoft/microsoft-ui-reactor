@@ -662,10 +662,11 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// is for: agents that create and destroy worktrees constantly.</description></item>
     /// </list>
     /// <para><b>None of the three can reach a concurrently running checkout.</b> Rule 1 is
-    /// keyed to this directory's hash, rule 2 to this directory itself, and rule 3 only fires
-    /// when a directory does not exist — which a live checkout's does by definition. That is
-    /// the whole point: the previous sweep matched the shared base name and evicted whatever
-    /// another checkout had just registered.</para>
+    /// keyed to this directory's hash, rule 2 to this directory itself, and rule 3 fires only
+    /// when a directory is provably gone *and* no run still holds its lock — a live checkout's
+    /// directory is there by definition, and one deleted out from under a live run is still
+    /// locked. That is the whole point: the previous sweep matched the shared base name and
+    /// evicted whatever another checkout had just registered.</para>
     /// </remarks>
     private void RemoveExistingRegistrations(PackageManager manager)
     {
@@ -703,7 +704,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             var record = new RegistrationRecord(pkg.Id.Name, TryGetInstalledPath(pkg));
 
             var disposition = RegistrationSelection.Classify(
-                record, layout, EffectivePackageName, PackageName, Directory.Exists);
+                record, layout, EffectivePackageName, PackageName, ProbeLayout, IsLayoutLocked);
 
             if (disposition == RegistrationDisposition.Leave) continue;
 
@@ -743,6 +744,88 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             // A package whose own location cannot be read is not one to reason about.
             return null;
         }
+    }
+
+    /// <summary>Establishes whether a recorded install path is present, gone, or unreadable.</summary>
+    /// <remarks>
+    /// <para><c>Directory.Exists</c> swallows every failure into <see langword="false"/>, which
+    /// here would read an offline share, a dismounted volume, or a directory this account cannot
+    /// traverse as a deleted worktree — and the action taken on a deleted worktree is to
+    /// unregister the package. Absence is therefore only reported once an ancestor has been
+    /// successfully enumerated, which proves the path could have been seen had it been there.</para>
+    /// <para>Walking up to the nearest live ancestor rather than checking the immediate parent
+    /// keeps a deleted worktree (whose parent chain is often removed with it) classifiable,
+    /// while a path whose entire volume is unreachable runs out of ancestors and stays
+    /// <see cref="LayoutPresence.Unknown"/>.</para>
+    /// </remarks>
+    internal static LayoutPresence ProbeLayout(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path)) return LayoutPresence.Present;
+
+            var ancestor = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path));
+            while (!string.IsNullOrEmpty(ancestor) && !Directory.Exists(ancestor))
+            {
+                ancestor = Path.GetDirectoryName(ancestor);
+            }
+
+            if (string.IsNullOrEmpty(ancestor)) return LayoutPresence.Unknown;
+
+            // Enumerating is the probe: it throws where Directory.Exists would have returned a
+            // silent false. One entry is enough to prove the directory is readable.
+            _ = Directory.EnumerateFileSystemEntries(ancestor).Take(1).Count();
+            return LayoutPresence.Absent;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return LayoutPresence.Unknown;
+        }
+    }
+
+    /// <summary>Reports whether a run still holds the layout lock for <paramref name="layoutPath"/>.</summary>
+    /// <remarks>
+    /// The lock lives under <c>%LOCALAPPDATA%</c>, not inside the worktree, so it survives the
+    /// worktree's deletion. That is what makes it the right liveness signal: a run whose
+    /// directory was deleted out from under it is still running, still registered, and must not
+    /// have its registration reclaimed. Probed across every supported algorithm version, since a
+    /// registration made by an earlier revision locked under that revision's suffix.
+    /// </remarks>
+    internal static bool IsLayoutLocked(string layoutPath)
+    {
+        foreach (var version in WorktreeIdentity.SupportedAlgorithmVersions)
+        {
+            string lockPath;
+            try
+            {
+                lockPath = Path.Join(
+                    LockDirectory, WorktreeIdentity.DeriveSuffix(layoutPath, version) + ".lock");
+            }
+            catch (ArgumentException)
+            {
+                // An unusable path cannot be shown to be free, so it is treated as held.
+                return true;
+            }
+
+            if (!File.Exists(lockPath)) continue;
+
+            try
+            {
+                using (new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                // Released and cleaned up between the two calls.
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void RemovePackage(PackageManager manager, string fullName)

@@ -185,12 +185,15 @@ public class WinAppWorkflowIdTests
     // negative control proves the positive result is not simply "winapp always exits 0".
     //
     // Both are gated on the verb existing. Cooperative UI turns landed in winappCli#767, merged
-    // 2026-09-09, and the newest public release (v0.6.0, 2026-08-12) predates it. CI installs
-    // whatever `setup-WinAppCli` resolves as latest, so on CI `winapp ui yield` is an unknown
-    // verb today. Without the gate the positive case fails outright and the negative case passes
-    // for the wrong reason — an unknown verb also exits non-zero — which is worse, because it
-    // reads as a working differential while measuring nothing. `ReleaseUiTurn` itself is
-    // best-effort in production and is unaffected either way.
+    // 2026-09-09, and *every* published winapp predates it — v0.6.0 (2026-08-12) is the newest
+    // stable and v0.6.1 (2026-08-19) the newest prerelease. There is therefore no version to pin
+    // `setup-WinAppCli` to that would make this a hard requirement; that only becomes possible
+    // once a release ships containing #767, at which point `RequireYieldVerb` should become an
+    // assertion. CI installs whatever the action resolves as latest, so on CI `winapp ui yield`
+    // is an unknown verb today. Without the gate the positive case fails outright and the
+    // negative case passes for the wrong reason — an unknown verb also exits non-zero — which is
+    // worse, because it reads as a working differential while measuring nothing. `ReleaseUiTurn`
+    // itself is best-effort in production and is unaffected either way.
 
     /// <summary>
     /// Whether the resolved winapp understands <c>ui yield</c> at all, as opposed to
@@ -229,9 +232,11 @@ public class WinAppWorkflowIdTests
         {
             Assert.Inconclusive(
                 "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
-                "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767, " +
-                "after the newest public release. Re-enable by installing a winapp that " +
-                "contains it.");
+                "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
+                "(merged 2026-09-09) and no published winapp contains it yet — v0.6.0 is the " +
+                "newest stable and v0.6.1 the newest prerelease, both from August 2026 — so " +
+                "there is no version to pin `setup-WinAppCli` to. Once a release ships with it, " +
+                "pin that version and turn this gate into an assertion.");
         }
     }
 

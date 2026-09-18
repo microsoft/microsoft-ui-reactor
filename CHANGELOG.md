@@ -39,9 +39,10 @@ Conventions for contributors:
   directory (`<name>.w<hash>`, with a matching execution alias) instead of the literal name in
   `Package.appxmanifest`, so concurrent checkouts can run it without evicting each other's
   registration or contending for one alias stub. Cleanup is scoped to the derived name, to
-  packages installed from the same directory, and to derived packages whose directory is gone —
-  including those registered by a superseded revision of the derivation, so bumping it does not
-  strand the identities the previous one created.
+  packages installed from the same directory, and to derived packages whose directory is provably
+  gone and whose layout lock no run still holds — including those registered by a superseded
+  revision of the derivation, so bumping it does not strand the identities the previous one
+  created. A path that merely cannot be read is not treated as gone.
   Sweeps by hand or in CI must now match `Microsoft.UI.Reactor.PackagedTests.Host*`. See
   `TESTING.md` §3 and [microsoft/winappCli#763](https://github.com/microsoft/winappCli/issues/763).
 - The E2E suite's start-up sweep of orphaned test hosts is now scoped to the host executable in
@@ -49,9 +50,11 @@ Conventions for contributors:
   machine, so starting the suite in one worktree terminated another worktree's live host. A
   candidate whose image path cannot be read is left alone rather than killed. Two runs of the
   *same* checkout share an executable path, so the sweep is additionally gated on claiming that
-  build output: a run that finds the claim already held skips the sweep instead of killing the
-  live sibling. Claims are tracked per host executable, since the suite sweeps both the WinUI
-  and WinForms hosts.
+  build output: every live run holds its own lease, and a run that finds another run's lease still
+  held skips the sweep instead of killing the live sibling. A single-owner claim was not enough —
+  a refused run still launched a host, and once the owner exited a third run could acquire the
+  freed claim and sweep that host away. Leases are tracked per host executable, since the suite
+  sweeps both the WinUI and WinForms hosts.
 - The packaged tier serializes runs that share one checkout behind a per-user lock on the derived
   identity, since registration and the alias stub are per-user rather than per-session. Runs in
   different checkouts still proceed in parallel.

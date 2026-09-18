@@ -27,18 +27,25 @@ public class RegistrationSelectionTests
 
     private static string SiblingLayout => Path.Join(Path.GetTempPath(), "checkout-b", "layout");
 
-    /// <summary>Existence probe that answers for an explicit set of live directories.</summary>
-    private static Func<string, bool> Live(params string[] dirs) =>
-        p => dirs.Contains(p, StringComparer.OrdinalIgnoreCase);
+    /// <summary>Presence probe that answers <c>Present</c> for an explicit set of directories.</summary>
+    /// <remarks>Anything not listed is <see cref="LayoutPresence.Absent"/>: provably gone,
+    /// which is the only state the reclamation rule may act on.</remarks>
+    private static Func<string, LayoutPresence> Live(params string[] dirs) =>
+        p => dirs.Contains(p, StringComparer.OrdinalIgnoreCase)
+            ? LayoutPresence.Present
+            : LayoutPresence.Absent;
 
     private static RegistrationDisposition Classify(
-        RegistrationRecord record, Func<string, bool>? exists = null) =>
+        RegistrationRecord record,
+        Func<string, LayoutPresence>? presence = null,
+        Func<string, bool>? isLive = null) =>
         RegistrationSelection.Classify(
             record,
             Layout,
             WorktreeIdentity.DerivePackageName(Base, Layout),
             Base,
-            exists ?? Live(Layout, SiblingLayout));
+            presence ?? Live(Layout, SiblingLayout),
+            isLive ?? (_ => false));
 
     /// <summary>
     /// The regression. Another checkout is running, its package is derived and alive, and its
@@ -216,6 +223,7 @@ public class RegistrationSelectionTests
                 WorktreeIdentity.DerivePackageName(Base, Layout, current),
                 Base,
                 Live(Layout, SiblingLayout),
+                _ => false,
                 versions),
             "A registration from a superseded algorithm version was left behind after its " +
             "worktree disappeared, so a version bump strands every identity the old one made.");
@@ -267,6 +275,59 @@ public class RegistrationSelectionTests
             WorktreeIdentity.DerivePackageName(Base, gone, unsupported), gone);
 
         Assert.AreEqual(RegistrationDisposition.Leave, Classify(foreign));
+    }
+
+    /// <summary>
+    /// A path that cannot be read is not a path that is gone. An offline share, a dismounted
+    /// volume, or a directory this account cannot traverse all make <c>Directory.Exists</c>
+    /// answer <see langword="false"/>, and acting on that answer unregisters a package that may
+    /// be perfectly alive on a machine that briefly lost sight of it.
+    /// </summary>
+    [TestMethod]
+    public void An_Unreadable_Path_Is_Not_Treated_As_Abandoned()
+    {
+        var unreachable = Path.Join(Path.GetTempPath(), "offline-share", "layout");
+
+        var abandoned = new RegistrationRecord(
+            WorktreeIdentity.DerivePackageName(Base, unreachable), unreachable);
+
+        Assert.AreEqual(
+            RegistrationDisposition.ReclaimAbandoned,
+            Classify(abandoned, _ => LayoutPresence.Absent),
+            "Control: with the path provably gone this registration is reclaimable, so the " +
+            "Unknown case below differs only in what the probe could establish.");
+
+        Assert.AreEqual(
+            RegistrationDisposition.Leave,
+            Classify(abandoned, _ => LayoutPresence.Unknown),
+            "A path whose state could not be established was reclaimed anyway, so a transient " +
+            "outage is enough to unregister a live package.");
+    }
+
+    /// <summary>
+    /// Deleting a worktree does not stop the run using it. The layout lock lives under
+    /// <c>%LOCALAPPDATA%</c> rather than in the worktree precisely so it survives, and a held
+    /// lock means the registration is still in use no matter what became of the directory.
+    /// </summary>
+    [TestMethod]
+    public void A_Live_Run_Whose_Worktree_Was_Deleted_Is_Left_Alone()
+    {
+        var gone = Path.Join(Path.GetTempPath(), "deleted-worktree", "layout");
+
+        var abandoned = new RegistrationRecord(
+            WorktreeIdentity.DerivePackageName(Base, gone), gone);
+
+        Assert.AreEqual(
+            RegistrationDisposition.ReclaimAbandoned,
+            Classify(abandoned, isLive: _ => false),
+            "Control: with no live owner this registration is reclaimable, so the locked case " +
+            "below differs only in the liveness answer.");
+
+        Assert.AreEqual(
+            RegistrationDisposition.Leave,
+            Classify(abandoned, isLive: _ => true),
+            "A registration still locked by a live run was reclaimed, which evicts a running " +
+            "packaged host mid-suite.");
     }
 }
 
