@@ -132,10 +132,18 @@ internal sealed class CrossProcessWriteGuard : IDisposable
                 }
                 Thread.Sleep(RetryDelayMs);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException
+                                         or UnauthorizedAccessException
+                                         or ArgumentException
+                                         or NotSupportedException)
             {
                 // Non-retryable: a directory at the lock path, a read-only or missing
-                // location, an ACL denial, a path length problem, a disk fault.
+                // location, an ACL denial, a disk fault — or an invalid path shape,
+                // since JsonFileStore(string) accepts any non-empty string and
+                // Path/FileStream reject malformed ones with ArgumentException /
+                // NotSupportedException. Those must not escape: Acquire is called from
+                // Write, which the IWindowPersistenceStore contract forbids from
+                // throwing into the caller.
                 DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.CrossProcessWriteGuard", ex);
                 return new CrossProcessWriteGuard(null);
             }

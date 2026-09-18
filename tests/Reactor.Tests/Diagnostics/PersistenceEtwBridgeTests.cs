@@ -61,7 +61,13 @@ public class PersistenceEtwBridgeTests : IDisposable
     {
         _listener.DisableEvents(ReactorEventSource.Log);
         _listener.Dispose();
-        try { if (global::System.IO.File.Exists(_path)) global::System.IO.File.Delete(_path); } catch { }
+        // The store leaves a .lock sidecar beside the document (spec 063 §5).
+        foreach (var p in new[] { _path, CrossProcessWriteGuard.LockPathFor(_path) })
+        {
+            try { if (global::System.IO.File.Exists(p)) global::System.IO.File.Delete(p); }
+            catch (global::System.IO.IOException) { /* best effort */ }
+            catch (UnauthorizedAccessException) { /* best effort */ }
+        }
     }
 
     /// <summary>

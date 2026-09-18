@@ -724,6 +724,32 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         // Variable pins track the central value by construction.
         if (text.Contains('$')) return 0;
 
+        // NuGet interval notation: [1.0,2.0) / (,2.1.3] / [2.2.0,). Neither the
+        // concrete nor the wildcard path below understands it — an earlier revision
+        // read "(,2.1.3]" as unparseable (exempt, though it can never satisfy a 2.2.0
+        // floor) and "[2.1.3,)" as exact 2.1.3 (reported stale, though it admits
+        // 2.2.0). What matters is the HIGHEST version the range admits: if even that
+        // is below the floor, the range is a downgrade.
+        if ((text.StartsWith('[') || text.StartsWith('(')) && text.Contains(','))
+        {
+            var inclusiveUpper = text.EndsWith(']');
+            var body = text[1..^1];
+            var comma = body.IndexOf(',');
+            var upperRaw = body[(comma + 1)..].Trim();
+
+            // No upper bound (e.g. "[2.1.3,)") — the range admits arbitrarily high
+            // versions, so it can always satisfy the floor.
+            if (upperRaw.Length == 0) return 0;
+
+            var upper = ParsePin(upperRaw);
+            if (upper is null) return 0;
+
+            if (upper < centralVersion) return -1;
+            // An exclusive upper bound equal to the floor excludes it.
+            if (upper == centralVersion && !inclusiveUpper) return -1;
+            return 0;
+        }
+
         if (text.Contains('*'))
         {
             // A floating range resolves to the LOWEST version it permits, so that is
@@ -905,6 +931,12 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     [InlineData("3", "2.2.0", 1)]
     // An unqualified prerelease float reaches any prerelease floor.
     [InlineData("2.2.0-*", "2.2.0-preview.1", 0)]
+    // NuGet interval notation: what matters is the highest version admitted.
+    [InlineData("(,2.1.3]", "2.2.0", -1)]      // capped below the floor
+    [InlineData("[2.1.3,)", "2.2.0", 0)]       // open upper bound admits the floor
+    [InlineData("[2.1.3,2.2.0)", "2.2.0", -1)] // exclusive upper excludes the floor
+    [InlineData("[2.1.3,2.2.0]", "2.2.0", 0)]  // inclusive upper admits it
+    [InlineData("[2.3.0,)", "2.2.0", 0)]       // entirely above the floor
     // Prerelease vs stable at the same core.
     [InlineData("2.2.0-preview.1", "2.2.0", -1)]
     [InlineData("2.2.0", "2.2.0-preview.1", 1)]

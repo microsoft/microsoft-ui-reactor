@@ -203,15 +203,18 @@ public sealed class JsonFileStore : IWindowPersistenceStore
             lock (_ioLock)
             using (var guard = CrossProcessWriteGuard.Acquire(_path))
             {
-                // Not held means a peer held the lock for the whole timeout. Writing
-                // anyway would merge a stale document and drop that peer's entry —
-                // the exact lost update the guard exists to prevent — so this write is
-                // abandoned instead. Best-effort by contract; the diagnostic is emitted
-                // by the guard.
+                // Not held means the lock was unavailable for the whole timeout, or
+                // could not be created at all (read-only directory, ACL denial,
+                // malformed path). Writing anyway would merge a stale document and
+                // drop a peer's entry — the exact lost update the guard exists to
+                // prevent — so this write is abandoned. The reason label is
+                // deliberately generic because the guard does not distinguish a
+                // timeout from a creation failure; the specific cause is on the
+                // swallowed-error diagnostic it emits.
                 if (!guard.IsHeld)
                 {
                     if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
-                        ReactorEventSource.Log.PersistenceRejected(_storeKind, "write-lock-timeout");
+                        ReactorEventSource.Log.PersistenceRejected(_storeKind, "write-lock-unavailable");
                     return;
                 }
 
