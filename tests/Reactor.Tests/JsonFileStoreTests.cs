@@ -8,6 +8,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// handling, and 1 MB cap. Pure-IO tests over a temp directory; no XAML
 /// Application context required.
 /// </summary>
+[Collection("PersistenceEtw")]
 public class JsonFileStoreTests : IDisposable
 {
     private readonly string _path;

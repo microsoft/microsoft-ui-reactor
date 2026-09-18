@@ -195,7 +195,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
         try
         {
             // Two locks, two scopes. The in-process lock keeps threads sharing this
-            // instance ordered; the named mutex extends that ordering across
+            // instance ordered; the lock-file guard extends that ordering across
             // instances AND processes, which is what the IWindowPersistenceStore
             // contract promises and what read-merge-write actually requires — two
             // writers can otherwise both read the old document and the second rename

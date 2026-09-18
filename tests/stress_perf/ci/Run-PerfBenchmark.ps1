@@ -457,12 +457,21 @@ function Stage-RustRuntime {
         if (Test-Path $pinned) {
             $nupkg = $pinned
         } elseif (Test-Path $cache) {
+            # Fall back to a cached copy, but only one that can actually load what this
+            # build produces: 2.x services in place, so a cached version BELOW the pin
+            # (and any other major) cannot satisfy an app built against $ver. Taking
+            # the highest cached version unconditionally would silently stage 2.1.3 for
+            # a 2.2.0 build and fail at runtime with 0xC0000135.
+            $minVer = [version]$ver
             $nupkg = Get-ChildItem $cache -Filter "$pkg.*.nupkg" -File -ErrorAction SilentlyContinue |
-                Sort-Object @{ Expression = {
+                ForEach-Object {
                     $p = [version]'0.0'
-                    try { [void][version]::TryParse($_.BaseName.Substring($pkg.Length + 1), [ref]$p) } catch {}
-                    $p } } -Descending |
-                Select-Object -First 1 -ExpandProperty FullName
+                    $ok = [version]::TryParse($_.BaseName.Substring($pkg.Length + 1), [ref]$p)
+                    if ($ok) { [pscustomobject]@{ File = $_.FullName; Ver = $p } }
+                } |
+                Where-Object { $_.Ver.Major -eq $minVer.Major -and $_.Ver -ge $minVer } |
+                Sort-Object Ver -Descending |
+                Select-Object -First 1 -ExpandProperty File
         }
         if (-not $nupkg) {
             $null = New-Item -ItemType Directory -Force -Path $cache -ErrorAction SilentlyContinue

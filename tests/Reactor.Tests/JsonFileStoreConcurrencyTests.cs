@@ -18,6 +18,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// round-trip passes whenever the last writer wins, which is exactly the broken
 /// behaviour. Removing the guard from <c>JsonFileStore.Write</c> reddens these.</para>
 /// </remarks>
+[Collection("PersistenceEtw")]
 public sealed class JsonFileStoreConcurrencyTests : IDisposable
 {
     private readonly string _path = global::System.IO.Path.Join(

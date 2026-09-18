@@ -235,6 +235,12 @@ public class WinAppSDKReferenceGuardTests
     /// would report a perfectly good runtime as too old).
     /// </summary>
     [Theory]
+    // Current floor. Without these the suite would keep validating only the previous
+    // pin and a regression in the minimum-version check could pass unnoticed.
+    [InlineData("2.2.0.0", "2.2.0", true)]    // exact match at today's pin
+    [InlineData("2.3.1.0", "2.2.0", true)]    // serviced forward past today's pin
+    [InlineData("2.1.3.0", "2.2.0", false)]   // the previous pin no longer suffices
+    // Historical mapping cases, retained so the rule itself stays pinned.
     [InlineData("2.3.1.0", "2.1.3", true)]    // serviced forward
     [InlineData("2.1.3.0", "2.1.3", true)]    // exact match, differing part counts
     [InlineData("2.0.1.0", "2.1.3", false)]   // the defect: present but too old
@@ -557,6 +563,16 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
+    /// The PowerShell shape: <c>$pkg = 'Microsoft.WindowsAppSDK.Runtime'; $ver = '2.2.0'</c>
+    /// in <c>Run-PerfBenchmark.ps1</c>, which stages a runtime for the perf harness.
+    /// Neither of the markup shapes above can see it, so without this a stale pin there
+    /// would stage a runtime too old to load what the harness builds.
+    /// </summary>
+    private static readonly Regex ScriptRuntimePin = new(
+        @"\$pkg\s*=\s*'(Microsoft\.WindowsAppSDK(?:\.\w+)?)'\s*;\s*\$ver\s*=\s*'([^']+)'",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
     /// Which central property each package's floor comes from. The repo deliberately
     /// versions the WinUI sub-package independently of the metapackage (2.2.1 vs
     /// 2.2.0), so comparing a WinUI pin against <c>WindowsAppSDKVersion</c> would
@@ -643,6 +659,12 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
                 if (!PackageFloorProperty.ContainsKey(m.Groups[1].Value)) continue;
                 found.Add((rel, LineOf(m.Index), "#:package", m.Groups[1].Value, m.Groups[2].Value));
             }
+
+            foreach (Match m in ScriptRuntimePin.Matches(text))
+            {
+                if (!PackageFloorProperty.ContainsKey(m.Groups[1].Value)) continue;
+                found.Add((rel, LineOf(m.Index), "script $ver", m.Groups[1].Value, m.Groups[2].Value));
+            }
         }
 
         // Positive control. A scanner whose patterns silently stopped matching would
@@ -653,7 +675,7 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         // The control demands a *parseable numeric* version, not merely a match: a
         // prose placeholder in a doc comment (this file's own remarks, say) would
         // otherwise satisfy it while every real pin had vanished or changed syntax.
-        foreach (var label in new[] { "PackageReference", "#:package" })
+        foreach (var label in new[] { "PackageReference", "#:package", "script $ver" })
         {
             Assert.True(
                 found.Any(f => f.Label == label && ParsePin(f.Version) is not null),
@@ -740,6 +762,9 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
             if (preLabelPrefix is not null)
             {
                 if (floorPre is null) return -1;
+                // An empty prefix ("2.2.0-*") floats across every prerelease label, so
+                // it can reach any prerelease floor.
+                if (preLabelPrefix.Length == 0) return 0;
                 if (floorPre.Equals(preLabelPrefix, StringComparison.Ordinal)
                     || floorPre.StartsWith(preLabelPrefix + ".", StringComparison.Ordinal))
                 {
@@ -831,7 +856,9 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         if (text.Length == 0 || text.Contains('$') || text.Contains('*')) return null;
 
         // Strip any prerelease/build suffix; only the numeric core is comparable.
-        var core = Regex.Match(text, @"^\d+(?:\.\d+){1,3}");
+        // One to four components: NuGet accepts a bare "2", which an earlier revision
+        // rejected as unparseable and therefore silently exempted from the floor.
+        var core = Regex.Match(text, @"^\d+(?:\.\d+){0,3}");
         if (!core.Success) return null;
 
         // Normalize part counts: [Version]'2.2' has Build -1 and would sort below
@@ -873,6 +900,11 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     // reach the floor. 2.2.0-preview.* can resolve 2.2.0-preview.1.
     [InlineData("2.2.0-preview.*", "2.2.0-preview.1", 0)]
     [InlineData("2.2.0-alpha.*", "2.2.0-preview.1", -1)]
+    // A bare-major pin is legal NuGet and must not be exempt.
+    [InlineData("2", "2.2.0", -1)]
+    [InlineData("3", "2.2.0", 1)]
+    // An unqualified prerelease float reaches any prerelease floor.
+    [InlineData("2.2.0-*", "2.2.0-preview.1", 0)]
     // Prerelease vs stable at the same core.
     [InlineData("2.2.0-preview.1", "2.2.0", -1)]
     [InlineData("2.2.0", "2.2.0-preview.1", 1)]

@@ -20,7 +20,9 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 /// lock file inherits the scope of the thing it protects: it sits beside the store, so
 /// any principal that can write the store can take it, across sessions, with no
 /// privilege. A holder that is killed releases it when the OS closes its handle, so a
-/// crash cannot wedge the store.</para>
+/// crash cannot wedge the store. The empty lock file is left on disk; only the handle
+/// is released. See <see cref="Acquire"/> for why <c>DeleteOnClose</c> is deliberately
+/// not used.</para>
 /// <para><b>On timeout the write is abandoned, not forced.</b> Proceeding unguarded
 /// would reintroduce exactly the lost update this type exists to prevent — the blocked
 /// writer would merge a stale document and its commit would drop the peer's entry.
@@ -149,8 +151,9 @@ internal sealed class CrossProcessWriteGuard : IDisposable
         }
         catch (IOException ex)
         {
-            // DeleteOnClose can fail if the file was removed underneath us; releasing
-            // must never throw out of a store write.
+            // Releasing the handle is what frees the lock; the empty lock file itself
+            // is left behind deliberately (see Acquire). Releasing must never throw
+            // out of a store write.
             DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.CrossProcessWriteGuard.release", ex);
         }
     }
