@@ -494,10 +494,13 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// <summary>
     /// Extensions worth scanning for a hand-written SDK version pin. Deliberately
     /// broad: pins have historically hidden in markdown snippets and in a plain-text
-    /// LLM system prompt, not only in project files.
+    /// LLM system prompt, not only in project files. <c>.dt</c> covers the docs
+    /// pipeline's <c>*.md.dt</c> templates, which are the *source* for generated
+    /// guides — a pin there would otherwise reach users via a compiled guide while
+    /// bypassing this sweep entirely.
     /// </summary>
     private static readonly string[] PinScanExtensions =
-        [".cs", ".csproj", ".props", ".targets", ".md", ".ps1", ".txt", ".json", ".yml", ".yaml"];
+        [".cs", ".csproj", ".props", ".targets", ".md", ".dt", ".ps1", ".txt", ".json", ".yml", ".yaml"];
 
     /// <summary>
     /// The two pin shapes that carry a literal version and do NOT inherit
@@ -506,21 +509,27 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// <remarks>
     /// The second shape is the reason this test exists. Spec 059 §3 prescribed
     /// grepping <c>Microsoft.WindowsAppSDK" Version=</c>, which structurally cannot
-    /// match a file-based-app <c>#:package</c> header — so 21 shipped agent-kit
-    /// recipes sat a full major-minor below the framework's own floor for an entire
-    /// release cycle, advertising an NU1605 downgrade to anyone who ran them. An
-    /// enumeration that lives in a prose instruction is only ever as good as the last
-    /// person's regex; this makes it a gate.
-    /// <para>Note this doc comment deliberately does not spell out a stale example
-    /// version: the sweep below reads every file including this one, and a literal in
-    /// prose here would either fail the guard or force an exclusion that would blind
-    /// it to the very file defining it.</para>
+    /// match a file-based-app <c>#:package</c> header — so 22 literal occurrences
+    /// across 20 files (18 of them shipped agent-kit recipes) sat a full major-minor
+    /// below the framework's own floor for an entire release cycle, advertising an
+    /// NU1605 downgrade to anyone who ran them. An enumeration that lives in a prose
+    /// instruction is only ever as good as the last person's regex; this makes it a
+    /// gate.
+    /// <para>Both patterns are matched against whole file text rather than
+    /// line-by-line: a `PackageReference` may legally split `Include` and `Version`
+    /// across lines, and a per-line scan would silently miss it while the one-line
+    /// examples elsewhere kept the positive control green.</para>
+    /// <para>Note this doc comment deliberately spells out no example version or
+    /// placeholder: the sweep reads every file including this one, so a literal here
+    /// would either fail the guard or force an exclusion that would blind it to the
+    /// very file defining it. The positive control below additionally requires a
+    /// *parseable numeric* version, so a prose placeholder cannot satisfy it.</para>
     /// </remarks>
     private static readonly (string Label, Regex Pattern)[] PinShapes =
     [
         ("PackageReference Version=",
-            new Regex("Include\\s*=\\s*\"Microsoft\\.WindowsAppSDK(?:\\.\\w+)?\"[^>]*?Version\\s*=\\s*\"([^\"$]+)\"",
-                RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+            new Regex("Include\\s*=\\s*\"Microsoft\\.WindowsAppSDK(?:\\.\\w+)?\"(?:\\s|[^>])*?Version\\s*=\\s*\"([^\"$]+)\"",
+                RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline)),
         ("#:package @version",
             new Regex(@"#:package\s+Microsoft\.WindowsAppSDK(?:\.\w+)?@([^\s""'`]+)",
                 RegexOptions.IgnoreCase | RegexOptions.Compiled)),
@@ -558,23 +567,32 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         {
             var rel = Path.GetRelativePath(root!, file).Replace('\\', '/');
 
-            // CHANGELOG entries quote historical stale pins on purpose, and the spec
-            // that records this defect necessarily names the old version too.
+            // Historical records deliberately quote the versions of their era and must
+            // not be rewritten: CHANGELOG entries cite the stale pins they fixed, the
+            // specs that document this defect necessarily name the old version, and
+            // docs/research holds dated investigation write-ups (e.g. a 1.7-era
+            // WinForms interop study pinning 1.7.*). Live guidance lives elsewhere —
+            // samples/WinFormsInterop/README.md is the current counterpart of that
+            // study and IS swept.
             if (rel.Equals("CHANGELOG.md", StringComparison.OrdinalIgnoreCase)
-                || rel.StartsWith("docs/specs/", StringComparison.OrdinalIgnoreCase))
+                || rel.StartsWith("docs/specs/", StringComparison.OrdinalIgnoreCase)
+                || rel.StartsWith("docs/research/", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            var lines = File.ReadAllLines(file);
-            for (var i = 0; i < lines.Length; i++)
+            // Match against whole file text, not per line: a PackageReference may
+            // legally split Include and Version across lines, and a per-line scan
+            // would miss it while one-line examples kept the positive control green.
+            var text = File.ReadAllText(file);
+            foreach (var (label, pattern) in PinShapes)
             {
-                foreach (var (label, pattern) in PinShapes)
+                foreach (Match m in pattern.Matches(text))
                 {
-                    foreach (Match m in pattern.Matches(lines[i]))
-                    {
-                        found.Add((rel, i + 1, label, m.Groups[1].Value));
-                    }
+                    // Line number from the match offset, so the failure message still
+                    // points at the offending line.
+                    var line = text.Take(m.Index).Count(c => c == '\n') + 1;
+                    found.Add((rel, line, label, m.Groups[1].Value));
                 }
             }
         }
@@ -583,18 +601,24 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         // report zero offenders and pass just as green as a clean tree — the exact
         // failure this test is meant to prevent. Require BOTH shapes to be observed,
         // so a regex that decays reddens instead of blessing everything.
+        //
+        // The control demands a *parseable numeric* version, not merely a match: a
+        // prose placeholder in a doc comment (this file's own remarks, say) would
+        // otherwise satisfy it while every real pin had vanished or changed syntax.
         foreach (var (label, _) in PinShapes)
         {
             Assert.True(
-                found.Any(f => f.Label == label),
-                $"Pin scanner found no '{label}' pins anywhere in the tree. Either the repo "
-                    + "genuinely stopped using that shape (then drop it from PinShapes), or the "
-                    + "pattern has decayed and this guard is now blessing every file it cannot "
-                    + "parse. A zero result from an unvalidated scanner is not a measurement.");
+                found.Any(f => f.Label == label && ParsePin(f.Version) is not null),
+                $"Pin scanner found no '{label}' pin with a parseable numeric version anywhere "
+                    + "in the tree. Either the repo genuinely stopped using that shape (then drop "
+                    + "it from PinShapes), or the pattern has decayed and this guard is now "
+                    + "blessing every file it cannot parse. A zero result from an unvalidated "
+                    + "scanner is not a measurement.");
         }
 
         var stale = found
-            .Where(f => ParsePin(f.Version) is { } v && v < centralVersion)
+            .Select(f => (f.Rel, f.Line, f.Label, f.Version, Cmp: ComparePin(f.Version, central, centralVersion!)))
+            .Where(f => f.Cmp < 0)
             .Select(f => $"{f.Rel}:{f.Line}  [{f.Label}]  {f.Version}  <  {central}")
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();
@@ -608,9 +632,51 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     }
 
     /// <summary>
-    /// Parse a pin into a comparable <see cref="Version"/>. Returns null for
-    /// floating/variable pins (<c>$(WindowsAppSDKVersion)</c>, <c>2.1.*</c>), which
-    /// track the central value and cannot drift.
+    /// Compare a pin against the central version. Negative means the pin is BELOW the
+    /// floor (an NU1605 downgrade); zero or positive means it is fine.
+    /// </summary>
+    /// <remarks>
+    /// Wildcard pins need their own arm. <c>2.1.*</c> floats only within the prefix it
+    /// names, so it can never resolve to <c>2.2.0</c> — treating it as
+    /// "non-comparable", as an earlier revision did, silently exempted exactly the
+    /// downgrade shape spec 059 §3 called out. The prefix is compared with the
+    /// corresponding leading components of the central version. An MSBuild-variable
+    /// pin (<c>$(WindowsAppSDKVersion)</c>) genuinely tracks the centre and is exempt.
+    /// </remarks>
+    private static int ComparePin(string raw, string centralRaw, Version centralVersion)
+    {
+        var text = raw.Trim();
+
+        // Variable pins track the central value by construction.
+        if (text.Contains('$')) return 0;
+
+        if (text.Contains('*'))
+        {
+            // Compare the literal prefix before the wildcard, component-wise.
+            var prefix = text[..text.IndexOf('*')].TrimEnd('.', '-');
+            if (prefix.Length == 0) return 0; // a bare "*" floats to anything, incl. the floor
+
+            var pinParts = prefix.Split('.');
+            var centralParts = centralRaw.Split('.');
+            for (var i = 0; i < pinParts.Length && i < centralParts.Length; i++)
+            {
+                if (!int.TryParse(pinParts[i], out var p)) return 0;
+                var centralNumeric = Regex.Match(centralParts[i], @"^\d+");
+                if (!centralNumeric.Success) return 0;
+                var c = int.Parse(centralNumeric.Value);
+                if (p != c) return p < c ? -1 : 1;
+            }
+            return 0;
+        }
+
+        var parsed = ParsePin(text);
+        if (parsed is null) return 0;
+        return parsed < centralVersion ? -1 : (parsed > centralVersion ? 1 : 0);
+    }
+
+    /// <summary>
+    /// Parse a concrete pin into a comparable <see cref="Version"/>. Returns null for
+    /// floating/variable pins, which <see cref="ComparePin"/> handles separately.
     /// </summary>
     private static Version? ParsePin(string raw)
     {

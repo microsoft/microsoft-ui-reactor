@@ -116,6 +116,27 @@ Caveats:
 - `PersistenceId` alone is only identity. Placement restore/save requires
   `PersistPlacement = true` or `.WithPersistence(...)`.
 
+### Where placement is stored
+
+Reactor picks a store on the first `OpenWindow`: packaged apps get
+`ApplicationData.Current.LocalSettings`, unpackaged apps get a JSON file under
+`%LOCALAPPDATA%/<ProcessName>/`. Because that default is keyed on the **process
+name**, renaming your executable strands previously saved layouts.
+
+Unpackaged apps can opt into a stable identity instead — assign the store before
+the first `OpenWindow`:
+
+```csharp
+ReactorApp.WindowPersistenceStore =
+    new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
+```
+
+`UnpackagedAppDataStore` keys on the publisher/product pair you supply rather than
+the process name, so saved layouts survive a rename. It is opt-in, not the default,
+because the two stores key their data differently and switching does not migrate
+existing layouts. Use one instance per publisher/product: the underlying file is
+shared, and concurrent writers can drop each other's entries.
+
 ## Z-order & visibility
 
 `WindowLevel` selects a z-order tier. `ShowInTaskbar` and `ShowInSwitcher` are

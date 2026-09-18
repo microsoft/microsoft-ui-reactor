@@ -82,6 +82,21 @@ UseWindow()?.SavePlacement();
 Persistence requires `PersistPlacement`; use `.WithPersistence(...)` for the
 common case. `PersistenceId` alone is only identity for persistence systems.
 
+Placement goes to an auto-picked store: `ApplicationData.Current.LocalSettings`
+when packaged, else a JSON file under `%LOCALAPPDATA%/<ProcessName>/`. That
+default is keyed on the **process name**, so renaming the exe strands saved
+layouts. Unpackaged apps can opt into a stable publisher/product identity
+before the first `OpenWindow`:
+
+```csharp
+ReactorApp.WindowPersistenceStore =
+    new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
+```
+
+Opt-in rather than default: the two stores key data differently, so switching
+does not migrate existing layouts. One instance per publisher/product — the
+backing file is shared and concurrent writers can drop each other's entries.
+
 ## Z-order, taskbar, and chrome
 
 ```csharp

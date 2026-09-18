@@ -145,8 +145,15 @@ public class PersistenceEtwBridgeTests : IDisposable
     /// so it needs an assertion: without one, the composed store could silently report
     /// as <c>"json-file"</c> and the refactor would be paying for nothing.
     /// </summary>
+    /// <remarks>
+    /// Covers write <b>and</b> read. The label reaches three event paths
+    /// (<c>PersistenceWrite</c>, <c>PersistenceRead</c>, <c>PersistenceRejected</c>),
+    /// so asserting only the write path would let a regression that hard-coded
+    /// <c>"json-file"</c> on either of the others through. The rejection path is
+    /// covered by <see cref="UnpackagedAppDataStore_oversize_write_rejects_with_its_own_storeKind"/>.
+    /// </remarks>
     [Fact]
-    public void UnpackagedAppDataStore_Write_emits_its_own_storeKind_not_json_file()
+    public void UnpackagedAppDataStore_Write_and_Read_emit_its_own_storeKind_not_json_file()
     {
         var publisher = "ReactorEtwTest" + Guid.NewGuid().ToString("N").Substring(0, 12);
         var store = new UnpackagedAppDataStore(publisher, "ReactorPersistence");
@@ -161,6 +168,14 @@ public class PersistenceEtwBridgeTests : IDisposable
                 "unpackaged-appdata");
             Assert.True((int)(evt.Payload?[1] ?? 0) > 0);
 
+            // Read path — a separate emit site with its own storeKind argument.
+            Assert.True(store.TryRead("main", out _));
+            AssertEvent(
+                _listener.Events,
+                nameof(ReactorEventSource.PersistenceRead),
+                0,
+                "unpackaged-appdata");
+
             // PII (§6.2.1): the SDK-derived app-data path must not reach the payload.
             Assert.DoesNotContain(_listener.Events, e =>
                 e.Payload?.Any(p => p is string s
@@ -168,23 +183,52 @@ public class PersistenceEtwBridgeTests : IDisposable
         }
         finally
         {
-            // Best-effort cleanup of the %LOCALAPPDATA% tree this test created. Narrowed
-            // to the failures a delete can legitimately raise (file locked by a scanner,
-            // ACL denies it) — anything else is a real defect and should surface rather
-            // than be swallowed by a bare catch.
-            try
-            {
-                var dir = global::System.IO.Path.Join(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), publisher);
-                if (global::System.IO.Directory.Exists(dir))
-                    global::System.IO.Directory.Delete(dir, recursive: true);
-            }
-            catch (global::System.Exception ex) when (ex is global::System.IO.IOException
-                                                        or UnauthorizedAccessException)
-            {
-                global::System.Diagnostics.Debug.WriteLine(
-                    $"[test cleanup] could not remove app-data dir for '{publisher}': {ex.GetType().Name}: {ex.Message}");
-            }
+            CleanupAppData(publisher);
+        }
+    }
+
+    /// <summary>
+    /// The third emit site: <c>PersistenceRejected</c> must also carry the composed
+    /// store's own label rather than <c>"json-file"</c>.
+    /// </summary>
+    [Fact]
+    public void UnpackagedAppDataStore_oversize_write_rejects_with_its_own_storeKind()
+    {
+        var publisher = "ReactorEtwTest" + Guid.NewGuid().ToString("N").Substring(0, 12);
+        var store = new UnpackagedAppDataStore(publisher, "ReactorPersistence");
+        try
+        {
+            // Exceeds JsonFileStore.MaxFileSizeBytes once base64-encoded, so the write
+            // takes the oversize-rejection arm.
+            store.Write("main", new byte[JsonFileStore.MaxFileSizeBytes]);
+
+            AssertEvent(
+                _listener.Events,
+                nameof(ReactorEventSource.PersistenceRejected),
+                0,
+                "unpackaged-appdata");
+        }
+        finally
+        {
+            CleanupAppData(publisher);
+        }
+    }
+
+    private static void CleanupAppData(string publisher)
+    {
+        // Narrowed to what a delete can legitimately hit; see the Dispose rationale.
+        try
+        {
+            var dir = global::System.IO.Path.Join(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), publisher);
+            if (global::System.IO.Directory.Exists(dir))
+                global::System.IO.Directory.Delete(dir, recursive: true);
+        }
+        catch (global::System.Exception ex) when (ex is global::System.IO.IOException
+                                                    or UnauthorizedAccessException)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[test cleanup] could not remove app-data dir for '{publisher}': {ex.GetType().Name}: {ex.Message}");
         }
     }
 

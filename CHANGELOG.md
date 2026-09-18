@@ -80,15 +80,16 @@ Conventions for contributors:
 ### Fixed
 
 - **Stale `Microsoft.WindowsAppSDK` version pins in shipped agent-kit recipes and docs
-  (spec 063 §3.0).** 21 files used a `#:package Microsoft.WindowsAppSDK@2.0.1` file-based-app
-  header, which the 2.1.3 bump (spec 059) missed entirely because that shape does not match the
+  (spec 063 §3.0).** **22 literal occurrences across 20 files** used a
+  `#:package Microsoft.WindowsAppSDK@2.0.1` file-based-app header, which the 2.1.3 bump
+  (spec 059) missed entirely because that shape does not match the
   `Microsoft.WindowsAppSDK" Version=` grep that spec prescribed. They had been advertising a
   version *below* the framework's own floor — an `NU1605` downgrade for anyone running them — and
-  the `skills/recipes/` and `plugins/reactor/skills/reactor-recipes/references/` copies are packed
-  into the shipped NuGet agent kit, so this was user-facing rather than internal-only. All now
-  track the pinned version, and a new guard
-  (`WinAppSDKReferenceGuardTests.No_literal_SDK_pin_sits_below_the_central_pinned_version`) sweeps
-  the tree for both pin shapes so the class cannot recur.
+  the **18 recipe files** under `skills/recipes/` and
+  `plugins/reactor/skills/reactor-recipes/references/` are packed into the shipped NuGet agent
+  kit, so this was user-facing rather than internal-only. All now track the pinned version, and a
+  new guard (`WinAppSDKReferenceGuardTests.No_literal_SDK_pin_sits_below_the_central_pinned_version`)
+  sweeps the tree for both pin shapes so the class cannot recur.
 
 
 - **Content-collapse parking for recycled ItemsView rows (issue #1213).**
