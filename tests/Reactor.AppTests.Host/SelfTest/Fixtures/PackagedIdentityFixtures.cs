@@ -183,14 +183,12 @@ internal static class PackagedIdentityFixtures
 
             // The registration must point at the build output this process is running
             // from. A stale registration of an older layout would otherwise let the tier
-            // silently test a different binary.
-            var baseDir = global::System.IO.Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+            // silently test a different binary. Compared through the same canonicalisation
+            // the identity itself is derived from: a raw comparison would reject a valid
+            // package whenever the recorded and running spellings of one directory differ,
+            // which is exactly what a junctioned parent produces.
             H.Check("PackagedIdentity_InstallLocation_Is_This_Build",
-                installPath is not null &&
-                string.Equals(
-                    global::System.IO.Path.TrimEndingDirectorySeparator(installPath),
-                    baseDir,
-                    StringComparison.OrdinalIgnoreCase));
+                WorktreeIdentity.IsSameDirectory(installPath, AppContext.BaseDirectory));
 
             return Task.CompletedTask;
         }

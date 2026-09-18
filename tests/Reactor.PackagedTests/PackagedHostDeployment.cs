@@ -192,6 +192,13 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
     public string Register()
     {
+        // Claimed before anything is removed or registered. Identity is per-layout, so two
+        // runs of the *same* checkout still derive the same package name and alias — and the
+        // registration sweep below would then tear down a sibling run's live package. The
+        // cross-checkout case is solved by derivation; this is the case derivation cannot
+        // solve, and it fails closed rather than silently destroying the other run.
+        AcquireLayoutLock();
+
         // Absolute: this is handed to RegisterPackageAsync as `new Uri(...)`, which requires
         // an absolute path. ResolveLayoutDirectory already absolutises, and this keeps the
         // guarantee local for a caller that constructed the type with its own layout dir.
@@ -239,6 +246,12 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         // (a rebuild regenerates the base name and this simply derives it again), and it
         // leaves the source manifest as the readable statement of the base identity that the
         // drift tests check against.
+        //
+        // The rewrite lands *after* the build produced any resources.pri, and resource maps
+        // are keyed by package identity. That is safe only while the host ships no indexed
+        // resources — it has none today, and PackagedResourceTripwireTests fails the moment
+        // that stops being true, at which point the derived identity has to be applied before
+        // PRI indexing rather than after it.
         ApplyDerivedIdentity(manifest);
 
         // Remove any registration left behind by an earlier run *of this layout* before
@@ -374,7 +387,88 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             // harness still surfaces instead of being swallowed by teardown.
             Console.WriteLine($"[Reactor.PackagedTests] Unregister failed: {ex.GetType().Name}: {ex.Message}");
         }
+        finally
+        {
+            ReleaseLayoutLock();
+        }
         _registeredFullName = null;
+    }
+
+    /// <summary>
+    /// Cross-process claim on this layout's derived identity, held for the whole
+    /// register/run/unregister lifetime.
+    /// </summary>
+    /// <remarks>
+    /// Named for the derived suffix, so the claim covers exactly the runs that would compute
+    /// the same package name and alias — which, after derivation, means concurrent runs of one
+    /// checkout. Session-scoped (<c>Local\</c>) rather than <c>Global\</c>: registrations are
+    /// per-user, so a different session's run cannot collide with this one and has no reason
+    /// to be blocked by it.
+    /// </remarks>
+    private Mutex? _layoutLock;
+
+    /// <summary>How long to wait for a sibling run to finish before giving up.</summary>
+    /// <remarks>
+    /// Generous, because the expected wait is a full packaged run: blocking is the friendly
+    /// outcome, and a timeout is a diagnosis rather than a policy. Ten minutes comfortably
+    /// exceeds the tier's own runtime while still failing rather than hanging a CI job forever.
+    /// </remarks>
+    private static readonly TimeSpan LayoutLockTimeout = TimeSpan.FromMinutes(10);
+
+    private void AcquireLayoutLock()
+    {
+        // The derived suffix already encodes the canonical layout path; reusing it keeps the
+        // lock name short, legal, and impossible to drift from the identity it protects.
+        var name = @"Local\Reactor.PackagedTests." + WorktreeIdentity.DeriveSuffix(_layoutDir);
+        var mutex = new Mutex(initiallyOwned: false, name);
+
+        bool acquired;
+        try
+        {
+            acquired = mutex.WaitOne(LayoutLockTimeout);
+        }
+        catch (AbandonedMutexException)
+        {
+            // A previous run died holding the claim. The registration it left behind is what
+            // RemoveExistingRegistrations is for, so take ownership and continue.
+            Console.WriteLine(
+                "[Reactor.PackagedTests] Reclaimed the layout lock from a run that exited without releasing it.");
+            acquired = true;
+        }
+
+        if (!acquired)
+        {
+            mutex.Dispose();
+            throw new InvalidOperationException(
+                $"Another packaged test run is already using this layout ({_layoutDir}) and did " +
+                $"not finish within {LayoutLockTimeout.TotalMinutes:0} minutes. Both runs derive the " +
+                "same package identity, so continuing would unregister the other run's live host " +
+                "mid-test. Run the tier once per checkout, or wait for the other run to finish.");
+        }
+
+        _layoutLock = mutex;
+    }
+
+    private void ReleaseLayoutLock()
+    {
+        if (_layoutLock is null) return;
+
+        try { _layoutLock.ReleaseMutex(); }
+        catch (ApplicationException)
+        {
+            // A Mutex has thread affinity and MSTest does not promise that assembly cleanup
+            // runs on the thread that ran assembly init, so this can legitimately be the wrong
+            // thread. Benign: the claim then lasts until this process exits, which is the same
+            // lifetime the deployment has anyway. Mutex is still the right primitive precisely
+            // because of that exit behaviour — Windows marks it abandoned so a crashed run
+            // cannot deadlock the next one, whereas a named semaphore would leak its count
+            // permanently.
+        }
+        finally
+        {
+            _layoutLock.Dispose();
+            _layoutLock = null;
+        }
     }
 
     /// <summary>Reads <c>Identity/@Name</c> and <c>Identity/@Publisher</c> from a manifest.</summary>
@@ -448,11 +542,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             var isThisLayoutsName =
                 string.Equals(pkg.Id.Name, EffectivePackageName, StringComparison.Ordinal);
 
-            var ownsThisLayout =
-                installedPath is not null &&
-                string.Equals(
-                    Path.TrimEndingDirectorySeparator(installedPath), layout,
-                    StringComparison.OrdinalIgnoreCase);
+            var ownsThisLayout = WorktreeIdentity.IsSameDirectory(installedPath, layout);
 
             var isAbandoned =
                 WorktreeIdentity.IsDerivedFrom(pkg.Id.Name, PackageName) &&

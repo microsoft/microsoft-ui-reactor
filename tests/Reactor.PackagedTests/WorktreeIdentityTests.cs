@@ -69,6 +69,49 @@ public class WorktreeIdentityTests
     }
 
     /// <summary>
+    /// Pins the version-1 algorithm to a fixed output.
+    /// </summary>
+    /// <remarks>
+    /// <para>Every other test here asserts a <em>relationship</em> — stable, distinct,
+    /// case-insensitive — and all of them stay green if the seed, hash, alphabet, suffix length,
+    /// or canonicalisation changes, because both sides of each comparison move together. What
+    /// that would silently change is the package family and the package-scoped app-data location
+    /// of every checkout on every machine, orphaning existing registrations.</para>
+    /// <para>This is the one assertion that fails on such a change. If it fails, the fix is not
+    /// to update the constants: it is to decide whether the change was intended, and if it was,
+    /// bump <c>WorktreeIdentity.AlgorithmVersion</c> and update these vectors in the same
+    /// commit. A version bump alone reddens this test, because the version is part of the hash
+    /// seed — so there is no separate assertion on the version itself, which would be a
+    /// compile-time constant compared to its own literal.</para>
+    /// <para>The path is deliberately fictional and absolute. It does not exist, so component
+    /// link resolution leaves it verbatim, which is what keeps the vector machine-independent.</para>
+    /// </remarks>
+    [TestMethod]
+    public void Derivation_Matches_The_Pinned_Version1_Vectors()
+    {
+        const string canonicalPath = @"C:\reactor-golden\layout\bin\x64";
+        var note =
+            " These vectors pin version 1; WorktreeIdentity.AlgorithmVersion is currently '" +
+            WorktreeIdentity.AlgorithmVersion +
+            "'. See the remarks on this test before touching the vector.";
+
+        Assert.AreEqual(
+            "wtk7tlege",
+            WorktreeIdentity.DeriveSuffix(canonicalPath),
+            "Version-1 suffix changed." + note);
+
+        Assert.AreEqual(
+            "Microsoft.UI.Reactor.PackagedTests.Host.wtk7tlege",
+            WorktreeIdentity.DerivePackageName(Base, canonicalPath),
+            "Version-1 package name changed." + note);
+
+        Assert.AreEqual(
+            "reactor-packaged-test-host-wtk7tlege.exe",
+            WorktreeIdentity.DeriveAliasExeName(BaseAlias, canonicalPath),
+            "Version-1 alias name changed." + note);
+    }
+
+    /// <summary>
     /// The deployment derives from the layout directory it registers; the in-host guard derives
     /// from <c>AppContext.BaseDirectory</c>, which carries a trailing separator and whatever
     /// casing the OS reports. Those are the same directory and must derive the same identity,
@@ -121,12 +164,32 @@ public class WorktreeIdentityTests
                 WorktreeIdentity.DerivePackageName(Base, leaf),
                 WorktreeIdentity.DerivePackageName(Base, Path.Join(junction, "bin", "x64")),
                 "A linked and a physical spelling of one directory must derive one identity.");
+
+            // Ownership decisions have to agree with derivation. The deployment's "does this
+            // registration own my layout?" test and the in-host install-location guard both
+            // compare a path Windows recorded at registration time against a path this run
+            // computed, and those two can easily be the linked and physical spellings of one
+            // directory. A raw string comparison answers "no" for a package that is in fact
+            // this run's own.
+            Assert.IsTrue(
+                WorktreeIdentity.IsSameDirectory(leaf, Path.Join(junction, "bin", "x64")),
+                "Ownership comparison must resolve the junction, like the derivation does.");
+
+            Assert.IsFalse(
+                WorktreeIdentity.IsSameDirectory(leaf, Path.Join(physical, "bin")),
+                "A parent directory is not the same directory.");
         }
         finally
         {
             // Delete the junction itself (non-recursive) before the tree, so removing it cannot
-            // reach through into the physical directory.
-            try { Directory.Delete(junction, recursive: false); } catch (DirectoryNotFoundException) { }
+            // reach through into the physical directory. Already-gone is the only tolerated
+            // failure, and it is logged rather than swallowed so a cleanup that silently does
+            // nothing is still visible in the run output.
+            try { Directory.Delete(junction, recursive: false); }
+            catch (DirectoryNotFoundException ex)
+            {
+                Console.WriteLine($"Junction already removed before cleanup: {ex.Message}");
+            }
             Directory.Delete(root, recursive: true);
         }
     }

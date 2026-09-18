@@ -42,6 +42,10 @@ Conventions for contributors:
   packages installed from the same directory, and to derived packages whose directory is gone.
   Sweeps by hand or in CI must now match `Microsoft.UI.Reactor.PackagedTests.Host*`. See
   `TESTING.md` §3 and [microsoft/winappCli#763](https://github.com/microsoft/winappCli/issues/763).
+- The E2E suite's start-up sweep of orphaned test hosts is now scoped to the host executable in
+  the current checkout. It previously killed every process with a matching name anywhere on the
+  machine, so starting the suite in one worktree terminated another worktree's live host. A
+  candidate whose image path cannot be read is left alone rather than killed.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

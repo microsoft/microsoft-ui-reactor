@@ -133,20 +133,63 @@ internal static class WorktreeIdentity
 
         var current = root;
         foreach (var component in components)
-        {
-            var candidate = Path.Combine(current, component);
-            try
-            {
-                var resolved = Directory.ResolveLinkTarget(candidate, returnFinalTarget: true);
-                current = resolved is null ? candidate : Path.GetFullPath(resolved.FullName);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-            {
-                current = candidate;
-            }
-        }
+            current = ResolveOneComponent(current, component);
 
         return current;
+    }
+
+    /// <summary>
+    /// Appends one component to an already-resolved parent, then resolves the result if it is
+    /// itself a link.
+    /// </summary>
+    /// <remarks>
+    /// Uses <c>Path.Join</c> rather than <c>Path.Combine</c>: <c>Combine</c> discards every
+    /// earlier argument as soon as one looks rooted — measured, <c>Combine(@"C:\Users", "C:")</c>
+    /// returns <c>"C:"</c> — which would silently throw away the parent this walk has already
+    /// resolved. <c>Join</c> only ever concatenates.
+    /// </remarks>
+    private static string ResolveOneComponent(string parent, string component)
+    {
+        var candidate = Path.Join(parent, component);
+        try
+        {
+            var resolved = Directory.ResolveLinkTarget(candidate, returnFinalTarget: true);
+            return resolved is null ? candidate : Path.GetFullPath(resolved.FullName);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return candidate;
+        }
+    }
+
+    /// <summary>
+    /// True when two paths name the same directory once both are canonicalised.
+    /// </summary>
+    /// <remarks>
+    /// <para>The single comparison used everywhere a recorded path is matched against a live
+    /// one. Identity derivation hashes the <em>canonical</em> path, so anything that decides
+    /// "is this registration mine?" has to canonicalise too — otherwise the two halves disagree
+    /// for exactly the inputs <see cref="Canonicalize"/> exists to reconcile. A registration
+    /// recorded through a junction and a run that reaches the same directory physically derive
+    /// one identity but would fail a raw string comparison.</para>
+    /// <para>Returns <see langword="false"/> rather than throwing for an empty or unusable
+    /// path, because callers are asking a yes/no ownership question about data that came from
+    /// outside the process.</para>
+    /// </remarks>
+    internal static bool IsSameDirectory(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        try
+        {
+            // Canonicalize lowercases, so an ordinal comparison is already case-insensitive.
+            return string.Equals(Canonicalize(left), Canonicalize(right), StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
