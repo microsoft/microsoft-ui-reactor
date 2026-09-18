@@ -36,7 +36,7 @@ internal interface IItemsRepeaterFactorySource
     void ConfigureLayout(WinUI.ItemsRepeater repeater);
 
     /// <summary>
-    /// Produce a fresh <see cref="IElementFactory"/> closure that knows
+    /// Produce a fresh <see cref="WinUI.IElementFactory"/> closure that knows
     /// how to realize element index N into a UIElement subtree. Called on
     /// first mount AND whenever the existing factory's type no longer
     /// matches (e.g. element re-keyed to a different TItem).

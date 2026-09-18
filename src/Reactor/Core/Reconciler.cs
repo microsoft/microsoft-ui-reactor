@@ -334,27 +334,53 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     /// <summary>
     /// A shared DataTemplate containing a ContentControl shell.
-    /// Parsed once via XamlReader.Load, reused across all items controls (ListView, GridView, FlipView).
+    /// Built once from code via <c>new DataTemplate(factory)</c> and reused across
+    /// all items controls (ListView, GridView, FlipView). The factory overload
+    /// replaces a <c>XamlReader.Load</c> of an equivalent markup string — see the
+    /// PR description for why parsing markup at runtime was a problem here.
     /// </summary>
     internal static readonly Lazy<DataTemplate> SharedContentControlTemplate = new(() =>
-        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
-            "<ContentControl HorizontalContentAlignment='Stretch' VerticalContentAlignment='Stretch'/>" +
-            "</DataTemplate>"));
+        new DataTemplate(() => new Microsoft.UI.Xaml.Controls.ContentControl
+        {
+            HorizontalContentAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+            VerticalContentAlignment = Microsoft.UI.Xaml.VerticalAlignment.Stretch,
+        }));
 
     /// <summary>
     /// Spec 047 §14 Phase 3 finish — text-bound TreeView item template
     /// shared between the legacy <c>MountTreeView</c> arm and the
     /// <see cref="V1Protocol.TreeChildren{TElement,TControl}"/> strategy.
-    /// In node mode the template's DataContext is <c>TreeViewNode</c>, so
-    /// <c>{Binding Content.Content}</c> resolves <c>TreeViewNode.Content</c>
-    /// (a <c>TreeViewNodeData</c>) → its <c>Content</c> (the display string).
+    /// In node mode the template's DataContext is <c>TreeViewNode</c>, so the
+    /// handler reads <c>TreeViewNode.Content</c> (a <c>TreeViewNodeData</c>) →
+    /// its <c>Content</c> (the display string).
     /// </summary>
     internal static readonly Lazy<DataTemplate> TreeViewTextItemTemplate = new(() =>
-        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
-            "<TextBlock Text='{Binding Content.Content}'/>" +
-            "</DataTemplate>"));
+        new DataTemplate(() =>
+        {
+            var tb = new Microsoft.UI.Xaml.Controls.TextBlock();
+
+            // Strongly-typed replacement for {Binding Content.Content}. A classic
+            // Binding resolves that path by string through CsWinRT's
+            // ICustomPropertyProvider, i.e. by reflection — which NativeAOT trims
+            // unless the source type is annotated, and which costs a reflective
+            // lookup per realized row even when it works. Reading the same chain in
+            // a DataContextChanged handler is reflection-free, so it needs no
+            // annotation and does no lookup. The event re-fires when a virtualized
+            // row is recycled onto new data, so reused rows retext correctly.
+            tb.DataContextChanged += static (sender, args) =>
+            {
+                if (sender is not Microsoft.UI.Xaml.Controls.TextBlock text) return;
+                text.Text = args.NewValue switch
+                {
+                    Microsoft.UI.Xaml.Controls.TreeViewNode { Content: TreeViewNodeData d } => d.Content,
+                    Microsoft.UI.Xaml.Controls.TreeViewNode { Content: string s } => s,
+                    TreeViewNodeData d => d.Content,
+                    _ => string.Empty,
+                };
+            };
+
+            return tb;
+        }));
 
     // ════════════════════════════════════════════════════════════════════
     //  ReactorAttached.StateProperty  (ReactorState)
