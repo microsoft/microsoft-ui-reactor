@@ -121,7 +121,7 @@ public class WinAppSDKReferenceGuardTests
     /// The Windows App Runtime that <c>bootstrap.ps1</c> installs must be able to load
     /// what this repo builds. Windows App SDK 2.x ships ONE framework package per major
     /// (<c>Microsoft.WindowsAppRuntime.2</c>, named by the SDK's own
-    /// <c>WindowsAppSDK-VersionInfo.json</c>), serviced 2.0 → 2.1 → 2.3 in place, and the
+    /// <c>WindowsAppSDK-VersionInfo.json</c>), serviced 2.0 → 2.1 → 2.2 → 2.3 in place, and the
     /// major-only winget id tracks that servicing. The major.minor ids are *separate*
     /// winget packages pinned to a single servicing line: <c>…WindowsAppRuntime.2.0</c>
     /// still installs 2.0.1, which cannot satisfy an app built against 2.2.0. Hardcoding
@@ -761,8 +761,20 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
             if (upper is null) return 0;
 
             if (upper < centralVersion) return -1;
-            // An exclusive upper bound equal to the floor excludes it.
-            if (upper == centralVersion && !inclusiveUpper) return -1;
+            if (upper == centralVersion)
+            {
+                // Equal numeric cores. An exclusive bound excludes the floor outright.
+                if (!inclusiveUpper) return -1;
+                // ParsePin strips prerelease labels, so an upper bound like
+                // 2.2.0-preview.1 would otherwise compare equal to a stable 2.2.0
+                // floor — but it sorts BELOW it, making the range's maximum
+                // unreachable.
+                var upperPre = PrereleaseLabel(upperRaw);
+                var floorPreLabel = PrereleaseLabel(centralRaw);
+                if (upperPre is not null && floorPreLabel is null) return -1;
+                if (upperPre is not null && floorPreLabel is not null
+                    && ComparePrerelease(upperPre, floorPreLabel) < 0) return -1;
+            }
             return 0;
         }
 
@@ -960,6 +972,10 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     [InlineData("[2.1.3,2.2.0)", "2.2.0", -1)] // exclusive upper excludes the floor
     [InlineData("[2.1.3,2.2.0]", "2.2.0", 0)]  // inclusive upper admits it
     [InlineData("[2.3.0,)", "2.2.0", 0)]       // entirely above the floor
+    // A prerelease upper bound sorts below the stable floor, so the range's maximum
+    // is unreachable even though the numeric cores match.
+    [InlineData("[1.0,2.2.0-preview.1]", "2.2.0", -1)]
+    [InlineData("[1.0,2.2.0]", "2.2.0", 0)]
     // Prerelease vs stable at the same core.
     [InlineData("2.2.0-preview.1", "2.2.0", -1)]
     [InlineData("2.2.0", "2.2.0-preview.1", 1)]
