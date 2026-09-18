@@ -137,8 +137,10 @@ ReactorApp.WindowPersistenceStore =
 the process name, so saved layouts survive a rename. It is opt-in, not the default,
 because the two stores key their data differently and switching does not migrate
 existing layouts. Multiple app instances sharing one publisher/product are safe:
-writes are serialized across processes, so concurrent saves do not overwrite each
-other's windows.
+writes are serialized across processes, so a save for one window cannot drop another
+window's entry. Two windows that share a `PersistenceId` still overwrite each other
+by design — serialization removes the *lost-update* race, not the deliberate
+last-writer-wins of a single key.
 
 ## Z-order & visibility
 

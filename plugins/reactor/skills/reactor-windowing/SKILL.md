@@ -97,7 +97,9 @@ ReactorApp.WindowPersistenceStore =
 
 Opt-in rather than default: the two stores key data differently, so switching
 does not migrate existing layouts. Multiple instances sharing one
-publisher/product are safe — writes are serialized across processes.
+publisher/product are safe — writes are serialized across processes, so one
+window's save cannot drop another's entry. Two windows sharing a
+`PersistenceId` still overwrite each other, by design.
 
 ## Z-order, taskbar, and chrome
 

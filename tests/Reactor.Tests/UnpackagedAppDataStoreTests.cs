@@ -249,6 +249,7 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
     [InlineData("", "Prod")]
     [InlineData("Pub", "")]
     [InlineData(null, "Prod")]
+    [InlineData("Pub", null)]
     public void Rejects_Empty_Publisher_Or_Product(string? publisher, string? product) =>
         Assert.Throws<ArgumentException>(() => new UnpackagedAppDataStore(publisher!, product!));
 

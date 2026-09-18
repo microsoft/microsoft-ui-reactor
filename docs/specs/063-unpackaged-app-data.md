@@ -34,12 +34,18 @@ release notes (§3.1).
 
 ## §1 Motivation
 
-`PackagedSettingsStore` routes window/dock persistence through
+`PackagedSettingsStore` routes **window-placement** persistence (`WindowSpec.PersistenceId`) through
 `Windows.Storage.ApplicationData.Current.LocalSettings`. That WinRT API requires package identity,
 so in an unpackaged process it throws `InvalidOperationException` / `0x80073D54`. Reactor works
 around this with a `PackagedSettingsStore.IsAvailable()` probe feeding auto-detection, and a
 `JsonFileStore` fallback that writes to
 `%LOCALAPPDATA%/<ProcessName>/reactor-windows.json`.
+
+> **Scope.** `IWindowPersistenceStore` backs window placement only. Dock layouts use a different
+> mechanism — `DockManager.PersistenceId` stores its JSON under
+> `WindowPersistedScope["docking:<id>"]`, an `IPersistedStateScope` — so nothing in this spec
+> changes docking persistence. The §5 row quoted from spec 059 mentions both because that survey
+> predates the distinction being drawn.
 
 That fallback works, but its key — the **entry process's name** — is a weak identity:
 

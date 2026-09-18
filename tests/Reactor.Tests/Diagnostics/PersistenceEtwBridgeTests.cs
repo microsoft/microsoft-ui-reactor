@@ -213,8 +213,10 @@ public class PersistenceEtwBridgeTests : IDisposable
         try
         {
             // Exceeds JsonFileStore.MaxFileSizeBytes once base64-encoded, so the write
-            // takes the oversize-rejection arm.
-            store.Write("main", new byte[JsonFileStore.MaxFileSizeBytes]);
+            // takes the oversize-rejection arm. Cast for consistency with the
+            // oversize-read case below; the constant is a long, which C# accepts as an
+            // array bound either way.
+            store.Write("main", new byte[(int)JsonFileStore.MaxFileSizeBytes]);
 
             AssertEvent(
                 _listener.Events,

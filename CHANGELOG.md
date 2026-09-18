@@ -28,8 +28,8 @@ Conventions for contributors:
 
 ### Added
 
-- **`UnpackagedAppDataStore` — window/dock layouts now survive renaming your executable
-  (spec 063 §4).** The unpackaged persistence store keys saved window placement and dock layout on
+- **`UnpackagedAppDataStore` — window placement now survives renaming your executable
+  (spec 063 §4).** The unpackaged persistence store keys saved window placement on
   the entry **process name**, so shipping the same app under a renamed `.exe` silently stranded
   every user's saved layout — it was still on disk, under the old name, and never read again. Two
   unrelated apps sharing an exe name collided the same way.
