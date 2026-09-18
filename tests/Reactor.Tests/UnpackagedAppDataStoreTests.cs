@@ -181,12 +181,23 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
         // whichever release that turns out to be. A trigger keyed to a version inferred
         // from release notes can rot; a trigger keyed to a measurement cannot.
         const string ControlProduct = "RoamingControl";
+        const string ControlValue = "present";
         global::Microsoft.Windows.Storage.ApplicationData
             .GetForUnpackaged(_publisher, ControlProduct)
-            .LocalSettings.Values["control"] = "present";
+            .LocalSettings.Values["control"] = ControlValue;
 
-        var controlSeen = global::Microsoft.Win32.Registry.CurrentUser
-            .OpenSubKey(roamingKey + @"\" + ControlProduct) is not null;
+        // Read the VALUE back, not merely the key: a runtime that created the key but
+        // dropped the value would otherwise mark the control satisfied and let the
+        // roaming observation below stand on nothing. The key is disposed rather than
+        // discarded, so a live handle cannot block Dispose's DeleteSubKeyTree and
+        // undermine the no-residue guarantee.
+        bool controlSeen;
+        using (var controlKey = global::Microsoft.Win32.Registry.CurrentUser
+                   .OpenSubKey(roamingKey + @"\" + ControlProduct))
+        {
+            controlSeen = controlKey is not null
+                && (controlKey.GetValue("control") as string) == ControlValue;
+        }
 
         Assert.True(
             controlSeen,

@@ -82,7 +82,7 @@ Conventions for contributors:
 
 ### Fixed
 
-- **Window and dock layouts no longer vanish when two app instances save at once
+- **Window placement no longer vanishes when two app instances save at once
   (spec 063 §5).** `JsonFileStore` — the default unpackaged persistence store — merged
   its document under a per-*instance* lock and committed through a shared temp file, so
   two instances or processes saving placement concurrently each wrote a document missing

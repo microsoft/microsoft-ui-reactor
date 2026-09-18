@@ -507,7 +507,7 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// </summary>
     private static readonly string[] PinScanExtensions =
         [".cs", ".csproj", ".proj", ".props", ".targets", ".vcxproj", ".wapproj", ".vbproj",
-         ".fsproj", ".md", ".dt", ".ps1", ".txt", ".json", ".yml", ".yaml"];
+         ".fsproj", ".xml", ".md", ".dt", ".ps1", ".txt", ".json", ".yml", ".yaml"];
 
     /// <summary>
     /// The two pin shapes that carry a literal version and do NOT inherit
@@ -554,9 +554,42 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     /// the latter.
     /// </summary>
     private static readonly Regex PackageVersionAttr = new(
-        @"(?:VersionOverride|Version)\s*=\s*[""']([^""']+)[""']"
-        + @"|<(?:VersionOverride|Version)>\s*([^<\s]+)\s*</(?:VersionOverride|Version)>",
+        @"Version\s*=\s*[""']([^""']+)[""']|<Version>\s*([^<\s]+)\s*</Version>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// <c>VersionOverride</c> is matched separately because it <i>wins</i> over
+    /// <c>Version</c> under central package management. A single alternation would
+    /// return whichever appeared first in the element, so an item carrying a current
+    /// <c>Version</c> followed by a stale <c>VersionOverride</c> would be recorded as
+    /// current while restore used the stale value.
+    /// </summary>
+    private static readonly Regex PackageVersionOverrideAttr = new(
+        @"VersionOverride\s*=\s*[""']([^""']+)[""']|<VersionOverride>\s*([^<\s]+)\s*</VersionOverride>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Extract the package name and the version that actually takes effect from one
+    /// <c>PackageReference</c> / <c>PackageVersion</c> element. Internal so the
+    /// attribute-order, quote-style, <c>VersionOverride</c>-precedence and child-metadata
+    /// branches can be tested directly — the live tree only supplies the ordinary
+    /// attribute form, so those branches are otherwise unreachable from the sweep and a
+    /// regression in them would not redden anything.
+    /// </summary>
+    internal static (string? Package, string? Version) ExtractPin(string elementText)
+    {
+        var name = PackageNameAttr.Match(elementText);
+        if (!name.Success) return (null, null);
+
+        // VersionOverride first: it is the effective value when both are present.
+        var ovr = PackageVersionOverrideAttr.Match(elementText);
+        if (ovr.Success)
+            return (name.Groups[1].Value, ovr.Groups[1].Success ? ovr.Groups[1].Value : ovr.Groups[2].Value);
+
+        var ver = PackageVersionAttr.Match(elementText);
+        if (!ver.Success) return (name.Groups[1].Value, null);
+        return (name.Groups[1].Value, ver.Groups[1].Success ? ver.Groups[1].Value : ver.Groups[2].Value);
+    }
 
     private static readonly Regex FileBasedPin = new(
         @"#:package\s+(Microsoft\.WindowsAppSDK(?:\.\w+)?)@([^\s""'`]+)",
@@ -651,13 +684,10 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
 
             foreach (Match el in PackageElement.Matches(text))
             {
-                var name = PackageNameAttr.Match(el.Value);
-                var ver = PackageVersionAttr.Match(el.Value);
-                if (!name.Success || !ver.Success) continue;
-                // Group 1 = attribute form, group 2 = child-element form.
-                var version = ver.Groups[1].Success ? ver.Groups[1].Value : ver.Groups[2].Value;
-                if (!PackageFloorProperty.ContainsKey(name.Groups[1].Value)) continue;
-                found.Add((rel, LineOf(el.Index), "PackageReference", name.Groups[1].Value, version));
+                var (pkg, version) = ExtractPin(el.Value);
+                if (pkg is null || version is null) continue;
+                if (!PackageFloorProperty.ContainsKey(pkg)) continue;
+                found.Add((rel, LineOf(el.Index), "PackageReference", pkg, version));
             }
 
             foreach (Match m in FileBasedPin.Matches(text))
@@ -1005,6 +1035,37 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     {
         ".git", "bin", "obj", "node_modules", "local-nupkgs", "artifacts", ".vs",
     };
+
+    /// <summary>
+    /// Direct coverage of the element-parsing branches the live tree never exercises.
+    /// The repo only contains ordinary single-line <c>Include</c>+<c>Version</c>
+    /// attributes, so reverse ordering, single quotes, <c>VersionOverride</c>
+    /// precedence and child metadata are all unreachable from the sweep — the
+    /// positive control would stay green from the ordinary references while any of
+    /// those branches silently regressed.
+    /// </summary>
+    [Theory]
+    // Ordinary form, both quote styles.
+    [InlineData(@"<PackageReference Include=""Microsoft.WindowsAppSDK"" Version=""9.9.9"" />", "9.9.9")]
+    [InlineData(@"<PackageReference Include='Microsoft.WindowsAppSDK' Version='9.9.9' />", "9.9.9")]
+    // Attributes are unordered in XML.
+    [InlineData(@"<PackageReference Version=""9.9.9"" Include=""Microsoft.WindowsAppSDK"" />", "9.9.9")]
+    // Split across lines.
+    [InlineData("<PackageReference Include=\"Microsoft.WindowsAppSDK\"\n    Version=\"9.9.9\" />", "9.9.9")]
+    // CPM override, alone and taking precedence over a different Version.
+    [InlineData(@"<PackageReference Include=""Microsoft.WindowsAppSDK"" VersionOverride=""9.9.9"" />", "9.9.9")]
+    [InlineData(@"<PackageReference Include=""Microsoft.WindowsAppSDK"" Version=""9.9.8"" VersionOverride=""9.9.9"" />", "9.9.9")]
+    // Child metadata, including override precedence in element form.
+    [InlineData("<PackageReference Include=\"Microsoft.WindowsAppSDK\"><Version>9.9.9</Version></PackageReference>", "9.9.9")]
+    [InlineData("<PackageReference Include=\"Microsoft.WindowsAppSDK\"><Version>9.9.8</Version><VersionOverride>9.9.9</VersionOverride></PackageReference>", "9.9.9")]
+    // Update= is the CPM sibling of Include=.
+    [InlineData(@"<PackageVersion Update=""Microsoft.WindowsAppSDK"" Version=""9.9.9"" />", "9.9.9")]
+    public void Pin_extraction_reads_the_effective_version(string element, string expected)
+    {
+        var (pkg, version) = ExtractPin(element);
+        Assert.Equal("Microsoft.WindowsAppSDK", pkg);
+        Assert.Equal(expected, version);
+    }
 
     private static IEnumerable<string> EnumerateScannableFiles(string root)
     {
