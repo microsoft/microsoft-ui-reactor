@@ -247,11 +247,21 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         // leaves the source manifest as the readable statement of the base identity that the
         // drift tests check against.
         //
-        // The rewrite lands *after* the build produced any resources.pri, and resource maps
-        // are keyed by package identity. That is safe only while the host ships no indexed
-        // resources — it has none today, and PackagedResourceTripwireTests fails the moment
-        // that stops being true, at which point the derived identity has to be applied before
-        // PRI indexing rather than after it.
+        // The rewrite lands *after* the build produced resources.pri, and a PRI's primary
+        // resource map is named for the package it was indexed against — measured here as
+        // ms-appx://Microsoft.UI.Reactor.PackagedTests.Host/, i.e. the *pre-rewrite* name,
+        // while the package registers under that name plus the derived suffix. The host does
+        // ship indexed file content (Themes/Generic.xaml as a Page, Images\*.png and the
+        // window icon as Content), so the mismatch is real rather than hypothetical.
+        //
+        // It is nonetheless safe, and that is a measurement, not an assumption: the
+        // Packaged_ResourceResolution selftest fixture runs inside the packaged process under
+        // the derived identity and asserts that both ms-appx: and a raw MRT Files subtree
+        // lookup still resolve — so Windows resolves packaged content out of the install
+        // location rather than by the name recorded in the PRI. That fixture is what fails if
+        // a future Windows or Windows App SDK version changes this; string resources, which
+        // it cannot cover, are held at zero by PackagedStringResourceTripwireTests. If either
+        // goes red, apply the derived identity before PRI indexing rather than after it.
         ApplyDerivedIdentity(manifest);
 
         // Remove any registration left behind by an earlier run *of this layout* before
@@ -365,6 +375,26 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
     public void Unregister()
     {
+        // Cleanup is destructive and this layout's identity is shared with any concurrent run
+        // of the same checkout, so it is gated on actually holding the claim. Register() can
+        // fail *before* acquiring it — most obviously when the wait times out — and the batch
+        // still keeps the deployment and calls Unregister() from class cleanup. Sweeping there
+        // would remove the live package belonging to the run we just refused to disturb, which
+        // would turn a diagnostic timeout into the exact eviction the lock exists to prevent.
+        if (_layoutLock is null)
+        {
+            if (_registeredFullName is not null)
+            {
+                Console.WriteLine(
+                    "[Reactor.PackagedTests] Skipping cleanup: this run does not hold the layout " +
+                    $"claim, so '{_registeredFullName}' is left in place rather than risking " +
+                    "another run's registration.");
+            }
+
+            _registeredFullName = null;
+            return;
+        }
+
         var manager = new PackageManager();
         try
         {
@@ -399,74 +429,125 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// register/run/unregister lifetime.
     /// </summary>
     /// <remarks>
-    /// Named for the derived suffix, so the claim covers exactly the runs that would compute
-    /// the same package name and alias — which, after derivation, means concurrent runs of one
-    /// checkout. Session-scoped (<c>Local\</c>) rather than <c>Global\</c>: registrations are
-    /// per-user, so a different session's run cannot collide with this one and has no reason
-    /// to be blocked by it.
+    /// <para>Named for the derived suffix, so the claim covers exactly the runs that would
+    /// compute the same package name and alias — which, after derivation, means concurrent runs
+    /// of one checkout.</para>
+    /// <para><b>A held file rather than a named mutex, because the scope has to match the state
+    /// being protected.</b> That state is per-<i>user</i>: the AppX registration and the
+    /// <c>%LOCALAPPDATA%\Microsoft\WindowsApps</c> alias stub are shared by every logon session
+    /// of one account. A <c>Local\</c> mutex is per-session, so two runs of this layout under
+    /// the same account in different sessions would both acquire and then evict each other; a
+    /// <c>Global\</c> mutex spans sessions but is scoped to the machine rather than the user,
+    /// and creating one needs <c>SeCreateGlobalPrivilege</c>, which an ordinary interactive
+    /// account does not hold. A lock file under <c>%LOCALAPPDATA%</c> is exactly user-scoped by
+    /// construction, needs no privilege, and — unlike an abandoned mutex — is released by the
+    /// kernel closing the handle when a run dies, so a crash cannot wedge the next run.</para>
+    /// <para>The file records the owning pid and layout so a contender can say who it is
+    /// waiting on; it is opened <c>FileShare.Read</c> for that reason.</para>
     /// </remarks>
-    private Mutex? _layoutLock;
+    private FileStream? _layoutLock;
 
     /// <summary>How long to wait for a sibling run to finish before giving up.</summary>
     /// <remarks>
     /// Generous, because the expected wait is a full packaged run: blocking is the friendly
-    /// outcome, and a timeout is a diagnosis rather than a policy. Ten minutes comfortably
-    /// exceeds the tier's own runtime while still failing rather than hanging a CI job forever.
+    /// outcome, and a timeout is a diagnosis rather than a policy. Sized past the host process
+    /// budget — which is itself configurable through <c>REACTOR_PACKAGED_TIMEOUT_SECONDS</c> —
+    /// so an ordinary long run is waited out rather than reported as a collision. Timing out is
+    /// safe regardless: <see cref="Unregister"/> refuses to sweep without the claim, so a run
+    /// that never acquired it cannot evict the run it was waiting on.
     /// </remarks>
-    private static readonly TimeSpan LayoutLockTimeout = TimeSpan.FromMinutes(10);
+    private static TimeSpan LayoutLockTimeout =>
+        TimeSpan.FromMilliseconds(PackagedSelfTestBatch.HostTimeoutMs) + TimeSpan.FromMinutes(5);
+
+    /// <summary>Directory holding the per-layout lock files.</summary>
+    private static string LockDirectory => Path.Join(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Microsoft.UI.Reactor",
+        "PackagedTests");
 
     private void AcquireLayoutLock()
     {
         // The derived suffix already encodes the canonical layout path; reusing it keeps the
-        // lock name short, legal, and impossible to drift from the identity it protects.
-        var name = @"Local\Reactor.PackagedTests." + WorktreeIdentity.DeriveSuffix(_layoutDir);
-        var mutex = new Mutex(initiallyOwned: false, name);
+        // name short, legal, and impossible to drift from the identity it protects.
+        Directory.CreateDirectory(LockDirectory);
+        var path = Path.Join(LockDirectory, WorktreeIdentity.DeriveSuffix(_layoutDir) + ".lock");
 
-        bool acquired;
+        var deadline = DateTime.UtcNow + LayoutLockTimeout;
+        while (true)
+        {
+            try
+            {
+                // FileShare.Read lets a contender read the owner record below while still
+                // denying a second writer, which is what makes this the lock.
+                var stream = new FileStream(
+                    path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+
+                stream.SetLength(0);
+                var owner = $"pid={Environment.ProcessId} layout={_layoutDir} acquired={DateTime.UtcNow:O}";
+                var bytes = System.Text.Encoding.UTF8.GetBytes(owner);
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(flushToDisk: true);
+
+                _layoutLock = stream;
+                return;
+            }
+            catch (IOException) when (DateTime.UtcNow < deadline)
+            {
+                // Held by another run of this layout. Poll rather than block on a handle so the
+                // deadline stays honest even if the holder exits without touching the file.
+                Thread.Sleep(TimeSpan.FromSeconds(2));
+            }
+            catch (UnauthorizedAccessException) when (DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(2));
+            }
+            catch (IOException)
+            {
+                break;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                break;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Another packaged test run is already using this layout ({_layoutDir}) and did not " +
+            $"finish within {LayoutLockTimeout.TotalMinutes:0} minutes. Both runs derive the same " +
+            "package identity, so continuing would unregister the other run's live host mid-test. " +
+            $"Owner: {ReadOwner(path)}. Run the tier once per checkout, or wait for the other run " +
+            "to finish.");
+    }
+
+    /// <summary>Best-effort read of the owner record a holder wrote, for diagnostics only.</summary>
+    private static string ReadOwner(string path)
+    {
         try
         {
-            acquired = mutex.WaitOne(LayoutLockTimeout);
+            using var stream = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            var text = reader.ReadToEnd().Trim();
+            return text.Length == 0 ? "<empty>" : text;
         }
-        catch (AbandonedMutexException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A previous run died holding the claim. The registration it left behind is what
-            // RemoveExistingRegistrations is for, so take ownership and continue.
-            Console.WriteLine(
-                "[Reactor.PackagedTests] Reclaimed the layout lock from a run that exited without releasing it.");
-            acquired = true;
+            return $"<unreadable: {ex.GetType().Name}>";
         }
-
-        if (!acquired)
-        {
-            mutex.Dispose();
-            throw new InvalidOperationException(
-                $"Another packaged test run is already using this layout ({_layoutDir}) and did " +
-                $"not finish within {LayoutLockTimeout.TotalMinutes:0} minutes. Both runs derive the " +
-                "same package identity, so continuing would unregister the other run's live host " +
-                "mid-test. Run the tier once per checkout, or wait for the other run to finish.");
-        }
-
-        _layoutLock = mutex;
     }
 
     private void ReleaseLayoutLock()
     {
         if (_layoutLock is null) return;
 
-        try { _layoutLock.ReleaseMutex(); }
-        catch (ApplicationException)
+        try { _layoutLock.Dispose(); }
+        catch (IOException)
         {
-            // A Mutex has thread affinity and MSTest does not promise that assembly cleanup
-            // runs on the thread that ran assembly init, so this can legitimately be the wrong
-            // thread. Benign: the claim then lasts until this process exits, which is the same
-            // lifetime the deployment has anyway. Mutex is still the right primitive precisely
-            // because of that exit behaviour — Windows marks it abandoned so a crashed run
-            // cannot deadlock the next one, whereas a named semaphore would leak its count
-            // permanently.
+            // Releasing a claim must never mask the run's real outcome. The handle is closed
+            // by process exit regardless, which is the same lifetime the deployment has anyway.
         }
         finally
         {
-            _layoutLock.Dispose();
             _layoutLock = null;
         }
     }
@@ -544,10 +625,24 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
             var ownsThisLayout = WorktreeIdentity.IsSameDirectory(installedPath, layout);
 
+            // Rule 3 requires *exact* ownership, not a name that merely has the derived shape.
+            // Matching the shape alone would let this remove any same-publisher package called
+            // <base>.w<suffix> whose directory happens to be gone, including one this
+            // derivation never produced. Re-deriving from the package's own recorded install
+            // path settles it: only a name this algorithm would have generated for that exact
+            // path qualifies. Derivation is pure string work over a canonical path, so a
+            // missing directory is no obstacle — a path that cannot be resolved is left
+            // verbatim, which is the same property the pinned golden vectors rely on. If a
+            // link in the path resolved at registration time and has since disappeared, the
+            // re-derivation differs and the package is left alone: fail-closed, and a leaked
+            // registration is recoverable where someone else's live one is not.
             var isAbandoned =
-                WorktreeIdentity.IsDerivedFrom(pkg.Id.Name, PackageName) &&
                 installedPath is not null &&
-                !Directory.Exists(installedPath);
+                !Directory.Exists(installedPath) &&
+                string.Equals(
+                    pkg.Id.Name,
+                    WorktreeIdentity.DerivePackageName(PackageName, installedPath),
+                    StringComparison.Ordinal);
 
             if (!isThisLayoutsName && !ownsThisLayout && !isAbandoned) continue;
 

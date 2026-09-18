@@ -428,6 +428,12 @@ public class PackagedSelfTestBatch
         ResolveTimeoutSeconds(Environment.GetEnvironmentVariable("REACTOR_PACKAGED_TIMEOUT_SECONDS")) * 1000;
 
     /// <summary>
+    /// The host process budget, so the layout claim can be waited out past an ordinary long run
+    /// rather than reported as a collision.
+    /// </summary>
+    internal static int HostTimeoutMs => TimeoutMs;
+
+    /// <summary>
     /// Resolves the process budget in seconds, falling back to the default for absent,
     /// unparseable, non-positive, or overflowing input.
     /// </summary>

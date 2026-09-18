@@ -1248,6 +1248,7 @@ internal static class SelfTestFixtureRegistry
         // Packaged (MSIX) tier. Declared SelfTestTier.Packaged in TierRequirements below, so the
         // unpackaged host does not run them at all — see issue #1154.
         "Packaged_IdentityGuard",
+        "Packaged_ResourceResolution",
         "Packaged_SettingsStoreRoundTrip",
         "Packaged_WindowIconFromResource",
         "WindowModel_ClosingEventCancels",
@@ -1857,6 +1858,7 @@ internal static class SelfTestFixtureRegistry
         new(StringComparer.Ordinal)
         {
             ["Packaged_IdentityGuard"] = SelfTestTier.Packaged,
+            ["Packaged_ResourceResolution"] = SelfTestTier.Packaged,
             ["Packaged_SettingsStoreRoundTrip"] = SelfTestTier.Packaged,
             ["Packaged_WindowIconFromResource"] = SelfTestTier.Packaged,
         };
@@ -3154,6 +3156,7 @@ internal static class SelfTestFixtureRegistry
         // Packaged (MSIX) tier; self-skip when the entry assembly is not
         // the packaged host.
         "Packaged_IdentityGuard" => new PackagedIdentityFixtures.IdentityGuard(harness),
+        "Packaged_ResourceResolution" => new PackagedIdentityFixtures.ResourceResolution(harness),
         "Packaged_SettingsStoreRoundTrip" => new PackagedIdentityFixtures.SettingsStoreRoundTrip(harness),
         "Packaged_WindowIconFromResource" => new WindowModelFixtures.PackagedWindowIconFromResource(harness),
         "WindowModel_ClosingEventCancels" => new WindowModelFixtures.WindowClosingEventCancels(harness),

@@ -87,4 +87,69 @@ public class OrphanedHostSweepTests
         Assert.ThrowsExactly<ArgumentException>(
             () => OrphanedHostSweep.SelectOurs([At(100, Ours)], "  ").ToList());
     }
+    /// <summary>
+    /// Path scoping alone does not separate two runs of the <em>same</em> checkout: their hosts
+    /// share the image path exactly. The run claim is what supplies liveness, and this is the
+    /// differential that proves it — the same path claimed twice must be refused the second
+    /// time, or the second run would classify the first run's live host as an orphan.
+    /// </summary>
+    [TestMethod]
+    public void A_Second_Run_Of_The_Same_Build_Output_Cannot_Claim_It()
+    {
+        var exe = Path.Join(Path.GetTempPath(), "claim-probe", "Reactor.AppTests.Host.exe");
+
+        using var first = OrphanedHostSweep.TryClaimRun(exe);
+        Assert.IsNotNull(first, "The first run of a build output must be able to claim it.");
+
+        using (var second = OrphanedHostSweep.TryClaimRun(exe))
+        {
+            Assert.IsNull(second,
+                "A second concurrent run of the same build output must be refused, otherwise " +
+                "it would sweep the first run's live host as an orphan.");
+        }
+    }
+
+    /// <summary>
+    /// The refusal must be scoped to the build output, not global: a run in another checkout
+    /// has to keep sweeping its own leftovers.
+    /// </summary>
+    [TestMethod]
+    public void A_Run_Of_A_Different_Build_Output_Claims_Independently()
+    {
+        var mine = Path.Join(Path.GetTempPath(), "claim-probe-a", "Reactor.AppTests.Host.exe");
+        var theirs = Path.Join(Path.GetTempPath(), "claim-probe-b", "Reactor.AppTests.Host.exe");
+
+        using var held = OrphanedHostSweep.TryClaimRun(mine);
+        Assert.IsNotNull(held);
+
+        using var other = OrphanedHostSweep.TryClaimRun(theirs);
+        Assert.IsNotNull(other,
+            "A different build output is a different claim; refusing it would stop other " +
+            "checkouts from ever cleaning up after themselves.");
+    }
+
+    /// <summary>
+    /// Releasing must actually release, or a crashed run would wedge every later run out of
+    /// sweeping its own leftovers forever.
+    /// </summary>
+    [TestMethod]
+    public void Releasing_A_Claim_Lets_The_Next_Run_Take_It()
+    {
+        var exe = Path.Join(Path.GetTempPath(), "claim-probe-release", "Reactor.AppTests.Host.exe");
+
+        var first = OrphanedHostSweep.TryClaimRun(exe);
+        Assert.IsNotNull(first);
+        first.Dispose();
+
+        using var second = OrphanedHostSweep.TryClaimRun(exe);
+        Assert.IsNotNull(second,
+            "A released claim must be reusable; a process exit closes the handle the same way.");
+    }
+
+    /// <summary>An unnamed build output cannot be arbitrated, so it must not be guessed at.</summary>
+    [TestMethod]
+    public void Claiming_Without_An_Executable_Path_Throws()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() => OrphanedHostSweep.TryClaimRun("  "));
+    }
 }

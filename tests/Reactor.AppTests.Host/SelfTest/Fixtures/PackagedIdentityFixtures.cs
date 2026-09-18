@@ -195,6 +195,110 @@ internal static class PackagedIdentityFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
+    //  MRT / PRI — the identity rewrite happens after PRI indexing
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Resolves packaged content through MRT under the <i>derived</i> identity.
+    /// </summary>
+    /// <remarks>
+    /// <para>This tier rewrites <c>Identity/@Name</c> in the generated manifest after the
+    /// build has already produced <c>resources.pri</c>, and a PRI's primary resource map is
+    /// named for the package it was indexed against. Measured on this build, the map is
+    /// <c>Microsoft.UI.Reactor.PackagedTests.Host</c> with
+    /// <c>uniqueName="ms-appx://Microsoft.UI.Reactor.PackagedTests.Host/"</c>, while the
+    /// package registers as that name plus a per-layout suffix — so the two genuinely
+    /// disagree, and the host genuinely has indexed content: <c>Themes/Generic.xaml</c> is a
+    /// <c>Page</c>, <c>Images\*.png</c> and the window icon are <c>Content</c>, and the
+    /// generated PRI is ~1.3 MB with a populated <c>Files</c> subtree.</para>
+    /// <para>So the question is not whether the mismatch exists — it does — but whether
+    /// Windows resolves packaged content by the running package's install location or by the
+    /// name recorded in the PRI. That is a property of the OS, not of this repo, and it is
+    /// not something to reason about: this fixture measures it. It is the reason the rewrite
+    /// is allowed to stay after PRI generation, and it is what fails if a future Windows or
+    /// Windows App SDK version starts keying resolution on the recorded name.</para>
+    /// <para>Deliberately probes two independent mechanisms. <c>ms-appx:</c> through
+    /// <c>StorageFile</c> is the path XAML uses for packaged content; Reactor's own
+    /// <c>WindowIcon</c> does <b>not</b> exercise it, because it rewrites <c>ms-appx:</c>
+    /// onto a <c>BaseDirectory</c> filesystem path and never reaches MRT. The
+    /// <c>MainResourceMap</c> subtree lookup is the raw MRT path with no file-system
+    /// fallback available to mask a failure.</para>
+    /// </remarks>
+    internal class ResourceResolution(Harness h) : SelfTestFixtureBase(h)
+    {
+        /// <summary>A <c>Content</c> item of the packaged host, present in the PRI's <c>Files</c> subtree.</summary>
+        private const string PackagedImage = "Images/Square44x44Logo.png";
+
+        public override async Task RunAsync()
+        {
+            if (!RequirePackagedTier(H, this)) return;
+
+            var packageName = TryPackageName() ?? "<null>";
+            var mapUri = TryMainResourceMapUri() ?? "<null>";
+
+            // Mechanism 1: ms-appx: through StorageFile — what XAML uses for packaged content.
+            string? storageDetail;
+            var storageResolved = false;
+            try
+            {
+                var file = await global::Windows.Storage.StorageFile.GetFileFromApplicationUriAsync(
+                    new Uri("ms-appx:///" + PackagedImage));
+                storageResolved = !string.IsNullOrEmpty(file?.Path);
+                storageDetail = file?.Path ?? "<null>";
+            }
+            catch (Exception ex)
+            {
+                storageDetail = $"{ex.GetType().Name}: {ex.Message}";
+            }
+
+            // Both halves of the disagreement travel with the verdict. Without them a failure
+            // says resolution broke without saying whether the package, the recorded map, or
+            // the asset itself was the part that moved.
+            H.Check("PackagedResources_MsAppx_Resolves_Under_Derived_Identity", storageResolved,
+                $"ms-appx:///{PackagedImage} -> {storageDetail}; " +
+                $"package={packageName}; mainResourceMap={mapUri}");
+
+            // Mechanism 2: the raw MRT map. No filesystem fallback can mask a failure here,
+            // so this is the check that actually pins resolution to the PRI rather than to
+            // the install directory happening to contain the file.
+            string? mrtDetail;
+            var mrtResolved = false;
+            try
+            {
+                var files = global::Windows.ApplicationModel.Resources.Core.ResourceManager
+                    .Current.MainResourceMap.GetSubtree("Files");
+                var candidate = files?.GetValue(PackagedImage);
+                mrtResolved = candidate is not null;
+                mrtDetail = candidate?.ValueAsString ?? "<null>";
+            }
+            catch (Exception ex)
+            {
+                mrtDetail = $"{ex.GetType().Name}: {ex.Message}";
+            }
+
+            H.Check("PackagedResources_MrtSubtree_Resolves_Under_Derived_Identity", mrtResolved,
+                $"Files/{PackagedImage} -> {mrtDetail}; " +
+                $"package={packageName}; mainResourceMap={mapUri}");
+        }
+
+        private static string? TryPackageName()
+        {
+            try { return global::Windows.ApplicationModel.Package.Current.Id.Name; }
+            catch (Exception ex) when (ex is InvalidOperationException or COMException) { return null; }
+        }
+
+        private static string? TryMainResourceMapUri()
+        {
+            try
+            {
+                return global::Windows.ApplicationModel.Resources.Core.ResourceManager
+                    .Current.MainResourceMap.Uri?.ToString();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or COMException) { return null; }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  PackagedSettingsStore — cannot work at all without identity
     // ════════════════════════════════════════════════════════════════════
 

@@ -45,7 +45,13 @@ Conventions for contributors:
 - The E2E suite's start-up sweep of orphaned test hosts is now scoped to the host executable in
   the current checkout. It previously killed every process with a matching name anywhere on the
   machine, so starting the suite in one worktree terminated another worktree's live host. A
-  candidate whose image path cannot be read is left alone rather than killed.
+  candidate whose image path cannot be read is left alone rather than killed. Two runs of the
+  *same* checkout share an executable path, so the sweep is additionally gated on claiming that
+  build output: a run that finds the claim already held skips the sweep instead of killing the
+  live sibling.
+- The packaged tier serializes runs that share one checkout behind a per-user lock on the derived
+  identity, since registration and the alias stub are per-user rather than per-session. Runs in
+  different checkouts still proceed in parallel.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

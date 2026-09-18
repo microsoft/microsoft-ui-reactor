@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 
@@ -56,6 +58,22 @@ internal static class OrphanedHostSweep
     /// </summary>
     internal static void KillOrphansOf(string processName, string ourExePath, string label)
     {
+        // Path scoping alone separates checkouts, but not two runs of the *same* checkout:
+        // their hosts share this exact image path, so without a liveness signal the second
+        // run would classify the first run's live host as an orphan and kill it — the very
+        // eviction this sweep was narrowed to prevent, reintroduced one scope down.
+        //
+        // The claim supplies that signal. Acquiring it means no other run of this layout is
+        // in flight, so anything still running this image is genuinely left over from a run
+        // that died. Failing to acquire means one is, and its hosts are not orphans.
+        if (!LayoutRunClaim.TryAcquireFor(ourExePath))
+        {
+            Console.WriteLine(
+                $"Skipping the orphaned-{label} sweep: another run of this checkout is in " +
+                "flight, so its hosts are live rather than orphaned.");
+            return;
+        }
+
         var processes = Process.GetProcessesByName(processName);
         try
         {
@@ -89,6 +107,92 @@ internal static class OrphanedHostSweep
                     // Disposing an already-reaped handle is not worth failing a bootstrap over.
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Claims this build output for the current run, or returns <see langword="null"/> when a
+    /// live sibling run already holds it.
+    /// </summary>
+    /// <remarks>
+    /// <para>Exposed rather than folded into <see cref="LayoutRunClaim"/> so the mechanism can
+    /// be exercised directly: whether a second run is refused is the whole of the guarantee,
+    /// and a static holder would make that unobservable.</para>
+    /// <para>Dispose to release. In the suite nothing does — see
+    /// <see cref="LayoutRunClaim"/>.</para>
+    /// </remarks>
+    internal static IDisposable? TryClaimRun(string ourExePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ourExePath);
+
+        try
+        {
+            var dir = Path.Join(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Microsoft.UI.Reactor",
+                "AppTests");
+            Directory.CreateDirectory(dir);
+
+            var path = Path.Join(dir, KeyFor(ourExePath) + ".run");
+
+            // FileShare.Read lets a refused contender read the owner record while still
+            // denying a second writer, which is what makes this the claim.
+            var stream = new FileStream(
+                path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+
+            var owner = $"pid={Environment.ProcessId} exe={ourExePath} started={DateTime.UtcNow:O}";
+            var bytes = Encoding.UTF8.GetBytes(owner);
+            stream.SetLength(0);
+            stream.Write(bytes, 0, bytes.Length);
+            stream.Flush(flushToDisk: true);
+            return stream;
+        }
+        catch (IOException)
+        {
+            // Held by a live sibling run of this same build output.
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Cannot arbitrate, so cannot safely conclude that anything is an orphan.
+            return null;
+        }
+    }
+
+    /// <summary>Stable, filename-safe key for one build output.</summary>
+    private static string KeyFor(string ourExePath)
+    {
+        var canonical = ourExePath.Trim().ToUpperInvariant();
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
+        return Convert.ToHexString(hash, 0, 8).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// A held file marking one E2E run of one build output as in flight.
+    /// </summary>
+    /// <remarks>
+    /// <para>Held for the lifetime of the test process and released by the kernel closing the
+    /// handle, so a run that crashes leaves no stale claim and the next run correctly sees its
+    /// leftovers as orphans. That self-healing is the whole reason this is a file handle rather
+    /// than a marker file whose contents have to be believed.</para>
+    /// <para>Kept under <c>%LOCALAPPDATA%</c> because the processes it arbitrates between are
+    /// per-user, and keyed by a hash of the image path so two build outputs never share one
+    /// claim. Acquisition is non-blocking: a sibling run is a reason to skip the sweep, not a
+    /// reason to wait — the two runs are then arbitrated by winapp UI turns, which is a
+    /// different layer and already handles them.</para>
+    /// <para>Deliberately never released explicitly. The claim must outlive the sweep and cover
+    /// the whole run, and the process exiting is exactly that lifetime.</para>
+    /// </remarks>
+    private static class LayoutRunClaim
+    {
+        private static IDisposable? _held;
+
+        internal static bool TryAcquireFor(string ourExePath)
+        {
+            if (_held is not null) return true;
+
+            _held = TryClaimRun(ourExePath);
+            return _held is not null;
         }
     }
 
