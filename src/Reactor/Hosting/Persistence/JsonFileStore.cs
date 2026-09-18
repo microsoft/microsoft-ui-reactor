@@ -57,6 +57,20 @@ public sealed class JsonFileStore : IWindowPersistenceStore
 
     private static int ClampSize(long bytes) => bytes > int.MaxValue ? int.MaxValue : (int)bytes;
 
+    /// <summary>
+    /// The one place this store opens the document for reading. Both read paths route
+    /// through it so the share mode cannot drift apart, and so a test can hold a stream
+    /// opened by the <i>production</i> code across a write — a test that opened its own
+    /// <see cref="FileStream"/> would keep passing if these flags regressed.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="FileShare.Delete"/> is load-bearing, not defensive: without it the
+    /// <c>File.Replace</c> that commits a write fails while any reader is open, and
+    /// because writes are best-effort that failure is silent.
+    /// </remarks>
+    internal static FileStream OpenForRead(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+
     private readonly string _path;
     private readonly object _ioLock = new();
 
@@ -133,7 +147,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                     return false;
                 }
 
-                using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+                using var stream = OpenForRead(_path);
                 var doc = JsonDocument.Parse(stream);
                 if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
                 if (!doc.RootElement.TryGetProperty(id, out var entry)) return false;
@@ -189,6 +203,18 @@ public sealed class JsonFileStore : IWindowPersistenceStore
             lock (_ioLock)
             using (var guard = CrossProcessWriteGuard.Acquire(_path))
             {
+                // Not held means a peer held the lock for the whole timeout. Writing
+                // anyway would merge a stale document and drop that peer's entry —
+                // the exact lost update the guard exists to prevent — so this write is
+                // abandoned instead. Best-effort by contract; the diagnostic is emitted
+                // by the guard.
+                if (!guard.IsHeld)
+                {
+                    if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
+                        ReactorEventSource.Log.PersistenceRejected(_storeKind, "write-lock-timeout");
+                    return;
+                }
+
                 var dir = global::System.IO.Path.GetDirectoryName(_path);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
@@ -257,7 +283,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
             if (!File.Exists(_path)) return new(StringComparer.Ordinal);
             var info = new FileInfo(_path);
             if (info.Length > MaxFileSizeBytes) return new(StringComparer.Ordinal);
-            using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+            using var stream = OpenForRead(_path);
             return ParseStringMap(stream);
         }
         catch (IOException ex)

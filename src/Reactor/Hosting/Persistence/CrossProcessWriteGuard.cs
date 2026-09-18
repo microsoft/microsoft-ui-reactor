@@ -1,132 +1,124 @@
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Persistence;
 
 /// <summary>
-/// Serializes <see cref="JsonFileStore"/>'s read-merge-write across processes.
-/// (spec 063 §5)
+/// Serializes <see cref="JsonFileStore"/>'s read-merge-write across processes and
+/// logon sessions. (spec 063 §5)
 /// </summary>
 /// <remarks>
-/// <para>The store merges the existing document with the incoming id and renames a
-/// temp file over the original. Two writers that both read before either renames will
-/// each write a document missing the other's id, and the second rename wins — so
-/// entries disappear even though the writers touched <i>different</i> ids. An
-/// in-process lock cannot see the other process, so the mutual exclusion has to be
-/// named and kernel-scoped.</para>
-/// <para>Scoped <c>Local\</c> (per logon session) rather than <c>Global\</c>: the
-/// store lives under a per-user path, so cross-session exclusion buys nothing and
-/// <c>Global\</c> would need a privilege the app may not hold.</para>
-/// <para>Acquisition is bounded. A mutex is only ever held for one merge-and-rename,
-/// so a wait this long means a peer is wedged or died holding it; the write then
-/// proceeds unguarded rather than hanging the UI thread on close, which is the moment
-/// placement is saved. An abandoned mutex (holder crashed mid-write) is reported by
-/// the runtime as <see cref="AbandonedMutexException"/> and is <i>acquired</i>, not
-/// failed — the file it protects is either the pre-rename original or the fully
-/// renamed replacement, never a torn document.</para>
+/// <para>The store merges the existing document with the incoming id and replaces the
+/// original. Two writers that both read before either commits will each write a
+/// document missing the other's id, and the second commit wins — so entries disappear
+/// even though the writers touched <i>different</i> ids. An in-process lock cannot see
+/// the other process, so the exclusion has to be a kernel object.</para>
+/// <para><b>Why a lock file rather than a named mutex.</b> A mutex name carries a
+/// scope: <c>Local\</c> is per logon session, so the same user in two sessions
+/// (concurrent RDP, or a service alongside a desktop logon) would take <i>different</i>
+/// mutexes for one file and race anyway. <c>Global\</c> spans sessions but creating one
+/// needs <c>SeCreateGlobalPrivilege</c>, which a standard-user process may not hold. A
+/// lock file inherits the scope of the thing it protects: it sits beside the store, so
+/// any principal that can write the store can take it, across sessions, with no
+/// privilege.</para>
+/// <para><b>On timeout the write is abandoned, not forced.</b> Proceeding unguarded
+/// would reintroduce exactly the lost update this type exists to prevent — the blocked
+/// writer would merge a stale document and its commit would drop the peer's entry.
+/// Skipping costs at most this window's placement, which the store's best-effort
+/// contract already permits; proceeding would corrupt another window's.</para>
 /// </remarks>
 internal sealed class CrossProcessWriteGuard : IDisposable
 {
     /// <summary>
-    /// How long to wait for a peer's merge-and-rename before giving up and writing
-    /// anyway. Generous relative to the operation (a sub-millisecond merge of a
-    /// ~80-byte-per-window document) and short relative to a user noticing a hang.
+    /// How long to wait for a peer's merge-and-commit. Generous relative to the
+    /// operation (a sub-millisecond merge of a ~80-byte-per-window document) and short
+    /// relative to a user noticing a delay on window close, which is when placement is
+    /// saved.
     /// </summary>
     private const int AcquireTimeoutMs = 5_000;
 
-    private readonly Mutex? _mutex;
-    private readonly bool _held;
+    private const int RetryDelayMs = 15;
+
+    private readonly FileStream? _lockFile;
+
+    private CrossProcessWriteGuard(FileStream? lockFile) => _lockFile = lockFile;
 
     /// <summary>
-    /// Whether the named mutex was actually acquired. False means the wait timed out
-    /// (or the object could not be created) and the caller is proceeding unguarded.
-    /// Exposed so tests can prove an acquisition really happened rather than inferring
-    /// it from a non-null guard, which <see cref="Acquire"/> returns either way.
+    /// Whether exclusive access was actually obtained. When false the caller must
+    /// <b>not</b> write — see the timeout rationale on the type.
     /// </summary>
-    internal bool IsHeld => _held;
+    internal bool IsHeld => _lockFile is not null;
 
-    private CrossProcessWriteGuard(Mutex? mutex, bool held)
-    {
-        _mutex = mutex;
-        _held = held;
-    }
+    /// <summary>The lock-file path used for a given store path. Exposed for tests.</summary>
+    internal static string LockPathFor(string storePath) => storePath + ".lock";
 
     /// <summary>
-    /// Acquire the guard for <paramref name="path"/>. Never throws: a store that
-    /// cannot take the mutex still writes, because losing a saved window position is
-    /// strictly better than failing an app's shutdown path.
+    /// Try to take the write lock for <paramref name="path"/>. Never throws; a caller
+    /// that cannot take it is told so via <see cref="IsHeld"/> rather than by an
+    /// exception, because persistence failures must not surface into app shutdown.
     /// </summary>
     public static CrossProcessWriteGuard Acquire(string path)
     {
-        Mutex? mutex = null;
-        try
+        var lockPath = LockPathFor(path);
+        var deadline = Environment.TickCount64 + AcquireTimeoutMs;
+
+        while (true)
         {
-            mutex = new Mutex(initiallyOwned: false, NameFor(path));
-            bool held;
             try
             {
-                held = mutex.WaitOne(AcquireTimeoutMs, exitContext: false);
+                var dir = global::System.IO.Path.GetDirectoryName(lockPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                // FileShare.None is the exclusion. DeleteOnClose keeps the directory
+                // tidy, and means a lock abandoned by a killed process is released by
+                // the OS when its handle closes — a crash cannot wedge the store.
+                var fs = new FileStream(
+                    lockPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 1,
+                    FileOptions.DeleteOnClose);
+                return new CrossProcessWriteGuard(fs);
             }
-            catch (AbandonedMutexException)
+            catch (IOException)
             {
-                // The previous holder died between rename and release. We now own it,
-                // and the protected file is intact by construction (rename is atomic).
-                held = true;
+                // Held by a peer (sharing violation), or the peer is mid-close, which
+                // on Windows can briefly surface the same way.
+                if (Environment.TickCount64 >= deadline)
+                {
+                    DiagnosticLog.SwallowedError(
+                        LogCategory.Persistence,
+                        "JsonFileStore.CrossProcessWriteGuard.timeout",
+                        new TimeoutException(
+                            $"Timed out after {AcquireTimeoutMs} ms waiting for the persistence "
+                            + "write lock; skipping this write rather than risking a lost update."));
+                    return new CrossProcessWriteGuard(null);
+                }
+                Thread.Sleep(RetryDelayMs);
             }
-
-            if (!held)
+            catch (UnauthorizedAccessException ex)
             {
-                DiagnosticLog.SwallowedError(
-                    LogCategory.Persistence,
-                    "JsonFileStore.CrossProcessWriteGuard.timeout",
-                    new TimeoutException(
-                        $"Timed out after {AcquireTimeoutMs} ms waiting for the persistence write lock; "
-                        + "writing without it. A concurrent writer may lose an entry."));
+                // A directory at the lock path, a read-only location, or an ACL denial.
+                // Not retryable.
+                DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.CrossProcessWriteGuard", ex);
+                return new CrossProcessWriteGuard(null);
             }
-
-            return new CrossProcessWriteGuard(mutex, held);
         }
-        catch (Exception ex) when (ex is IOException
-                                     or UnauthorizedAccessException
-                                     or global::System.Threading.WaitHandleCannotBeOpenedException)
-        {
-            // Named-object creation can fail under an unusual ACL or a name collision
-            // with a non-mutex object. Degrade to in-process locking only.
-            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.CrossProcessWriteGuard", ex);
-            mutex?.Dispose();
-            return new CrossProcessWriteGuard(null, held: false);
-        }
-    }
-
-    /// <summary>
-    /// Kernel object name for a store path. Hashed because mutex names cannot contain
-    /// <c>\</c> (beyond the scope prefix) and are capped at MAX_PATH, while store paths
-    /// contain separators and are arbitrarily long. Upper-cased first so two casings of
-    /// one path on a case-insensitive filesystem map to the same object.
-    /// </summary>
-    private static string NameFor(string path)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(path.ToUpperInvariant()));
-        return "Local\\Reactor.Persistence.JsonFileStore." + Convert.ToHexString(hash, 0, 16);
     }
 
     public void Dispose()
     {
-        if (_mutex is null) return;
+        if (_lockFile is null) return;
         try
         {
-            if (_held) _mutex.ReleaseMutex();
+            _lockFile.Dispose();
         }
-        catch (ApplicationException ex)
+        catch (IOException ex)
         {
-            // Not the owner — cannot happen on the single acquire/release path above,
-            // but releasing must never throw out of a store write.
+            // DeleteOnClose can fail if the file was removed underneath us; releasing
+            // must never throw out of a store write.
             DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.CrossProcessWriteGuard.release", ex);
-        }
-        finally
-        {
-            _mutex.Dispose();
         }
     }
 }

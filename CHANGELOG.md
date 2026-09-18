@@ -66,8 +66,11 @@ Conventions for contributors:
   2.1.0 → **2.2.1** — the WinUI sub-package version is neither equal to nor a fixed offset from the
   metapackage version, and must be read from the metapackage's own nuspec rather than inferred.
   This remains an in-place servicing bump within the same side-by-side runtime family
-  (`Microsoft.WindowsAppRuntime.2`), so consumers do not need a new runtime generation, but the
-  transitive floor for `Microsoft.UI.Reactor` consumers rises to `Microsoft.WindowsAppSDK >= 2.2.0`.
+  (`Microsoft.WindowsAppRuntime.2`), so consumers do not need a new runtime generation.
+  `Microsoft.UI.Reactor` is framework-dependent and flows only the lean
+  `Microsoft.WindowsAppSDK.WinUI` sub-package, so the transitive floor consumers actually
+  inherit is **`Microsoft.WindowsAppSDK.WinUI >= 2.2.1`**; projects that reference the full
+  metapackage themselves (self-contained or MSIX) move to `Microsoft.WindowsAppSDK 2.2.0`.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

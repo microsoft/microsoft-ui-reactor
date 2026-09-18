@@ -44,7 +44,7 @@ the new APIs vs. 2.0.1 are:
 | **`TitleBar` drag regions** — `SetIsDragRegion` / `GetIsDragRegion`, `AutoRefreshDragRegions`, `RecomputeDragRegions()` (2.1.3) | `TitleBarElement` maps **directly** to `Microsoft.UI.Xaml.Controls.TitleBar` and exposes a user `Content` slot. The gallery sample already places an `AutoSuggestBox` + `Button` there — the exact mixed interactive / non-interactive case these APIs fix. | **Adopt** (this spec) |
 | `XamlBindingHelper.SetPropertyFromThickness` / `…CornerRadius` / `…Color` (2.2.0) | Boxing-free value-type DP sets. Reactor sets value props through source-generated strongly-typed CLR setters; no boxing-pool infra exists today. | Defer (§5) |
 | `Setter.ValueProperty` (2.2.0) | Exposes the `Setter.Value` DP; relevant only to programmatic `Style`/`Setter` construction. | Defer (§5) |
-| `ApplicationData.GetForUnpackaged()` (2.2.0) | First-class per-user app data for unpackaged apps — could simplify dock-layout / window-placement persistence. | Defer (§5) |
+| `ApplicationData.GetForUnpackaged()` (2.2.0) | First-class per-user app data for unpackaged apps — could simplify dock-layout / window-placement persistence. | Deferred here; **adopted by [spec 063](063-unpackaged-app-data.md)** (§5) |
 
 The **only** addition that lands squarely on an existing Reactor surface is the title-bar drag-region
 family. It is also self-justifying: 2.1.3 changed the *default* drag-region behavior so the framework

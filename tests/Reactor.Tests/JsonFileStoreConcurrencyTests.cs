@@ -78,60 +78,103 @@ public sealed class JsonFileStoreConcurrencyTests : IDisposable
     [Fact]
     public void Guard_names_are_per_path_so_unrelated_stores_do_not_serialize()
     {
-        // A guard keyed too coarsely (one global name) would be correct but would make
-        // every Reactor app on the machine contend on one mutex. Distinct paths must
-        // therefore produce distinct kernel objects.
-        var a = global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(), "reactor-guard-a.json");
-        var b = global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(), "reactor-guard-b.json");
+        // A guard keyed too coarsely (one lock for the machine) would be correct but
+        // would make every Reactor app contend on one object. Distinct paths must
+        // therefore produce distinct locks.
+        var a = global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(), $"reactor-guard-a-{Guid.NewGuid():N}.json");
+        var b = global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(), $"reactor-guard-b-{Guid.NewGuid():N}.json");
 
-        using (var g1 = CrossProcessWriteGuard.Acquire(a))
+        try
         {
-            // IsHeld, not non-null: Acquire returns a guard even when the wait times
-            // out, so asserting non-null would pass for two paths that collided on one
-            // mutex — the second would simply block for the full timeout and then
-            // return an unheld guard. This is the assertion that distinguishes them.
-            Assert.True(g1.IsHeld, "First acquisition should own the mutex.");
+            using (var g1 = CrossProcessWriteGuard.Acquire(a))
+            {
+                // IsHeld, not non-null: Acquire returns a guard either way, so
+                // asserting non-null would pass for two paths that collided on one
+                // lock — the second would simply block for the timeout and return an
+                // unheld guard. This is the assertion that distinguishes them.
+                Assert.True(g1.IsHeld, "First acquisition should own the lock.");
 
-            var sw = global::System.Diagnostics.Stopwatch.StartNew();
-            using var g2 = CrossProcessWriteGuard.Acquire(b);
-            sw.Stop();
+                var sw = global::System.Diagnostics.Stopwatch.StartNew();
+                using var g2 = CrossProcessWriteGuard.Acquire(b);
+                sw.Stop();
 
-            Assert.True(g2.IsHeld, "A different path must map to a different mutex and be acquirable.");
-            Assert.True(
-                sw.ElapsedMilliseconds < 1_000,
-                $"Acquiring a different path took {sw.ElapsedMilliseconds} ms, which suggests it "
-                    + "waited on the same kernel object as the first path.");
+                Assert.True(g2.IsHeld, "A different path must map to a different lock.");
+                Assert.True(
+                    sw.ElapsedMilliseconds < 1_000,
+                    $"Acquiring a different path took {sw.ElapsedMilliseconds} ms, which suggests "
+                        + "it waited on the same object as the first path.");
+            }
+
+            // Same path, sequentially: proves the first acquisition was released.
+            using (var g3 = CrossProcessWriteGuard.Acquire(a)) Assert.True(g3.IsHeld);
+            using (var g4 = CrossProcessWriteGuard.Acquire(a)) Assert.True(g4.IsHeld);
         }
-
-        // Same path, sequentially: proves the first acquisition was released.
-        using (var g3 = CrossProcessWriteGuard.Acquire(a)) Assert.True(g3.IsHeld);
-        using (var g4 = CrossProcessWriteGuard.Acquire(a)) Assert.True(g4.IsHeld);
+        finally
+        {
+            foreach (var p in new[] { a, b, CrossProcessWriteGuard.LockPathFor(a), CrossProcessWriteGuard.LockPathFor(b) })
+            {
+                try { if (global::System.IO.File.Exists(p)) global::System.IO.File.Delete(p); }
+                catch (global::System.IO.IOException) { /* best effort */ }
+                catch (UnauthorizedAccessException) { /* best effort */ }
+            }
+        }
     }
 
     [Fact]
-    public void An_open_reader_does_not_break_a_concurrent_writer()
+    public void Guard_is_a_real_cross_process_lock_not_a_process_local_one()
     {
-        // Windows blocks a rename over a file held without delete sharing, so a reader
-        // that opened the store with FileShare.Read alone would make the writer's
-        // commit fail with IOException — swallowed, because writes are best-effort, so
-        // the entry would vanish with no error. Reads therefore add FileShare.Delete.
+        // The same-process test above would also pass for a process-local lock (a
+        // static SemaphoreSlim keyed on path, say), so it cannot by itself establish
+        // the cross-process guarantee the IWindowPersistenceStore contract promises.
+        // This does: it takes the guard's underlying kernel object from OUTSIDE the
+        // guard — exactly as a second process would — and shows the guard then cannot
+        // be acquired, and that a write made while it is held is refused rather than
+        // corrupting the document.
+        var store = new JsonFileStore(_path);
+        store.Write("before", new byte[] { 1 });
+
+        var lockPath = CrossProcessWriteGuard.LockPathFor(_path);
+        using (var foreign = new global::System.IO.FileStream(
+                   lockPath,
+                   global::System.IO.FileMode.OpenOrCreate,
+                   global::System.IO.FileAccess.ReadWrite,
+                   global::System.IO.FileShare.None))
+        {
+            using var blocked = CrossProcessWriteGuard.Acquire(_path);
+            Assert.False(blocked.IsHeld,
+                "A peer holds the lock file, so the guard must not report ownership.");
+
+            // And the store must decline to write rather than merge a stale document.
+            store.Write("during", new byte[] { 2 });
+        }
+
+        var verify = new JsonFileStore(_path);
+        Assert.True(verify.TryRead("before", out _), "The pre-existing entry was lost.");
+        Assert.False(verify.TryRead("during", out _),
+            "A write issued while a peer held the lock was applied anyway — on timeout the "
+                + "store must skip the write, since merging a stale document is what drops "
+                + "another writer's entry.");
+    }
+
+    [Fact]
+    public void An_open_reader_from_the_production_read_path_does_not_break_a_writer()
+    {
+        // Holds a stream opened by JsonFileStore's OWN read seam, not one this test
+        // opened with hand-picked flags: a test that picked its own FileShare would
+        // keep passing if the production share mode regressed to FileShare.Read, which
+        // is the regression that silently kills writes.
         var store = new JsonFileStore(_path);
         store.Write("first", new byte[] { 1 });
 
-        // Hold a reader open across a write, the way a second app instance would.
-        using (var reader = new global::System.IO.FileStream(
-                   _path,
-                   global::System.IO.FileMode.Open,
-                   global::System.IO.FileAccess.Read,
-                   global::System.IO.FileShare.Read | global::System.IO.FileShare.Delete))
+        using (var reader = JsonFileStore.OpenForRead(_path))
         {
             store.Write("second", new byte[] { 2 });
         }
 
         var verify = new JsonFileStore(_path);
         Assert.True(verify.TryRead("second", out var second) && second is not null,
-            "The write issued while a reader was open did not land — the reader's share "
-                + "mode blocked the commit rename.");
+            "The write issued while a production reader was open did not land — the read "
+                + "path's share mode blocked the commit.");
         Assert.True(verify.TryRead("first", out _), "The earlier entry was lost.");
     }
 }

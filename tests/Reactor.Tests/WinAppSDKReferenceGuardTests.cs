@@ -703,27 +703,43 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
 
         if (text.Contains('*'))
         {
-            // A prerelease float (2.2.1-*) resolves only prereleases, which NuGet
-            // orders BELOW the stable release of the same version — so it is a
-            // downgrade against a stable floor even though its numeric prefix matches.
-            var isPrereleaseFloat = text.Contains('-');
-            var prefix = text[..text.IndexOf('*')].TrimEnd('-', '.');
-            if (prefix.Length == 0) return 0; // a bare "*" floats to anything, incl. the floor
+            // A floating range resolves to the LOWEST version it permits, so that is
+            // what must be compared. 2.2.* permits 2.2.0, which is below a 2.2.1 floor
+            // even though the specified prefix matches — an earlier revision stopped at
+            // the prefix and blessed exactly that downgrade.
+            var star = text.IndexOf('*');
+            var prefix = text[..star].TrimEnd('.');
+            if (prefix.Length == 0) return 0; // bare "*" floats to anything, incl. the floor
 
-            var pinParts = prefix.Split('.');
-            var centralParts = centralRaw.Split('.');
-            for (var i = 0; i < pinParts.Length && i < centralParts.Length; i++)
+            // Prerelease float (2.2.0-preview.*, or 2.2.1-*): resolves only
+            // prereleases, which NuGet orders below the stable release of that version.
+            var dash = prefix.IndexOf('-');
+            var numericPrefix = dash >= 0 ? prefix[..dash] : prefix;
+            var preLabelPrefix = dash >= 0 ? prefix[(dash + 1)..].TrimEnd('.') : null;
+
+            var pinParts = numericPrefix.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (pinParts.Length == 0 || !pinParts.All(p => int.TryParse(p, out _))) return 0;
+
+            // Lowest permitted version: the specified components, zero-filled.
+            var lowest = new Version(
+                int.Parse(pinParts[0]),
+                pinParts.Length > 1 ? int.Parse(pinParts[1]) : 0,
+                pinParts.Length > 2 ? int.Parse(pinParts[2]) : 0,
+                pinParts.Length > 3 ? int.Parse(pinParts[3]) : 0);
+
+            if (lowest < centralVersion) return -1;
+            if (lowest > centralVersion) return 1;
+
+            // Same numeric core as the floor. A prerelease float sits below a stable
+            // floor; against a prerelease floor, compare the labels' common prefix.
+            var floorPre = PrereleaseLabel(centralRaw);
+            if (preLabelPrefix is not null)
             {
-                if (!int.TryParse(pinParts[i], out var p)) return 0;
-                var centralNumeric = Regex.Match(centralParts[i], @"^\d+");
-                if (!centralNumeric.Success) return 0;
-                var c = int.Parse(centralNumeric.Value);
-                if (p != c) return p < c ? -1 : 1;
+                if (floorPre is null) return -1;
+                var cmp = ComparePrerelease(preLabelPrefix, floorPre);
+                return cmp < 0 ? -1 : 0;
             }
-
-            // Numeric prefix matches. A prerelease float is below a stable floor.
-            if (isPrereleaseFloat && !HasPrerelease(centralRaw)) return -1;
-            return 0;
+            return floorPre is null ? 0 : 1;
         }
 
         var parsed = ParsePin(text);
@@ -835,13 +851,16 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     [InlineData("2.2", "2.2.0", 0)]
     // Variable pins track the centre by construction.
     [InlineData("$(WindowsAppSDKVersion)", "2.2.0", 0)]
-    // Wildcards: compare the literal prefix, do NOT exempt.
+    // Wildcards: compare the LOWEST version the range permits, not just the prefix.
     [InlineData("2.1.*", "2.2.0", -1)]
     [InlineData("2.2.*", "2.2.0", 0)]
+    [InlineData("2.2.*", "2.2.1", -1)]   // 2.2.* can resolve 2.2.0, below a 2.2.1 floor
     [InlineData("2.3.*", "2.2.0", 1)]
     [InlineData("*", "2.2.0", 0)]
-    // A prerelease float resolves only prereleases, which sit below the stable floor.
+    // Prerelease floats resolve only prereleases, which sit below the stable release.
     [InlineData("2.2.0-*", "2.2.0", -1)]
+    [InlineData("2.2.0-preview.*", "2.2.0", -1)]
+    [InlineData("2.1.0-preview.*", "2.2.0", -1)]
     // Prerelease vs stable at the same core.
     [InlineData("2.2.0-preview.1", "2.2.0", -1)]
     [InlineData("2.2.0", "2.2.0-preview.1", 1)]
