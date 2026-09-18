@@ -740,41 +740,39 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
         // Variable pins track the central value by construction.
         if (text.Contains('$')) return 0;
 
-        // NuGet interval notation: [1.0,2.0) / (,2.1.3] / [2.2.0,). Neither the
-        // concrete nor the wildcard path below understands it — an earlier revision
-        // read "(,2.1.3]" as unparseable (exempt, though it can never satisfy a 2.2.0
-        // floor) and "[2.1.3,)" as exact 2.1.3 (reported stale, though it admits
-        // 2.2.0). What matters is the HIGHEST version the range admits: if even that
-        // is below the floor, the range is a downgrade.
-        if ((text.StartsWith('[') || text.StartsWith('(')) && text.Contains(','))
+        // NuGet interval notation: [1.0,2.0) / (,2.1.3] / [2.2.0,) / [2.1.3] (exact).
+        // Restore resolves a range to its LOWEST satisfying version, so the lower bound
+        // is what decides whether the pin can drop below the floor — the opposite of a
+        // floating pin below, which takes the highest match. An earlier revision
+        // compared the upper bound and so accepted "[2.1.3,)", which restores 2.1.3.
+        if ((text.StartsWith('[') || text.StartsWith('(')) && text.EndsWith(']') || text.EndsWith(')'))
         {
-            var inclusiveUpper = text.EndsWith(']');
+            if (text.Length < 3 || !(text.StartsWith('[') || text.StartsWith('('))) return 0;
+
+            var inclusiveLower = text.StartsWith('[');
             var body = text[1..^1];
             var comma = body.IndexOf(',');
-            var upperRaw = body[(comma + 1)..].Trim();
 
-            // No upper bound (e.g. "[2.1.3,)") — the range admits arbitrarily high
-            // versions, so it can always satisfy the floor.
-            if (upperRaw.Length == 0) return 0;
+            // No comma: an exact-version range, "[2.1.3]".
+            var lowerRaw = (comma < 0 ? body : body[..comma]).Trim();
 
-            var upper = ParsePin(upperRaw);
-            if (upper is null) return 0;
+            // No lower bound ("(,2.1.3]") floats down to the earliest published
+            // version, which is necessarily below any floor.
+            if (lowerRaw.Length == 0) return -1;
 
-            if (upper < centralVersion) return -1;
-            if (upper == centralVersion)
-            {
-                // Equal numeric cores. An exclusive bound excludes the floor outright.
-                if (!inclusiveUpper) return -1;
-                // ParsePin strips prerelease labels, so an upper bound like
-                // 2.2.0-preview.1 would otherwise compare equal to a stable 2.2.0
-                // floor — but it sorts BELOW it, making the range's maximum
-                // unreachable.
-                var upperPre = PrereleaseLabel(upperRaw);
-                var floorPreLabel = PrereleaseLabel(centralRaw);
-                if (upperPre is not null && floorPreLabel is null) return -1;
-                if (upperPre is not null && floorPreLabel is not null
-                    && ComparePrerelease(upperPre, floorPreLabel) < 0) return -1;
-            }
+            var lower = ParsePin(lowerRaw);
+            if (lower is null) return 0;
+
+            if (lower < centralVersion) return -1;
+            if (lower > centralVersion) return 0;
+
+            // Equal numeric cores.
+            if (!inclusiveLower) return 0; // exclusive lower starts above the floor
+            var lowerPre = PrereleaseLabel(lowerRaw);
+            var floorLabel = PrereleaseLabel(centralRaw);
+            if (lowerPre is not null && floorLabel is null) return -1;
+            if (lowerPre is not null && floorLabel is not null
+                && ComparePrerelease(lowerPre, floorLabel) < 0) return -1;
             return 0;
         }
 
@@ -966,16 +964,18 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     [InlineData("3", "2.2.0", 1)]
     // An unqualified prerelease float reaches any prerelease floor.
     [InlineData("2.2.0-*", "2.2.0-preview.1", 0)]
-    // NuGet interval notation: what matters is the highest version admitted.
-    [InlineData("(,2.1.3]", "2.2.0", -1)]      // capped below the floor
-    [InlineData("[2.1.3,)", "2.2.0", 0)]       // open upper bound admits the floor
-    [InlineData("[2.1.3,2.2.0)", "2.2.0", -1)] // exclusive upper excludes the floor
-    [InlineData("[2.1.3,2.2.0]", "2.2.0", 0)]  // inclusive upper admits it
-    [InlineData("[2.3.0,)", "2.2.0", 0)]       // entirely above the floor
-    // A prerelease upper bound sorts below the stable floor, so the range's maximum
-    // is unreachable even though the numeric cores match.
-    [InlineData("[1.0,2.2.0-preview.1]", "2.2.0", -1)]
-    [InlineData("[1.0,2.2.0]", "2.2.0", 0)]
+    // NuGet interval notation: restore takes the LOWEST satisfying version, so the
+    // lower bound decides. (Floating pins above take the highest — opposite direction.)
+    [InlineData("(,2.1.3]", "2.2.0", -1)]        // no lower bound at all
+    [InlineData("[2.1.3,)", "2.2.0", -1)]        // can restore 2.1.3
+    [InlineData("[2.1.3,2.2.0)", "2.2.0", -1)]
+    [InlineData("[1.0,2.2.0]", "2.2.0", -1)]     // lower bound 1.0
+    [InlineData("[2.2.0,)", "2.2.0", 0)]         // starts at the floor
+    [InlineData("[2.3.0,)", "2.2.0", 0)]         // starts above the floor
+    [InlineData("[2.1.3]", "2.2.0", -1)]         // exact range, below the floor
+    [InlineData("[2.2.0]", "2.2.0", 0)]          // exact range, at the floor
+    // A prerelease lower bound sorts below the stable floor of the same core.
+    [InlineData("[2.2.0-preview.1,)", "2.2.0", -1)]
     // Prerelease vs stable at the same core.
     [InlineData("2.2.0-preview.1", "2.2.0", -1)]
     [InlineData("2.2.0", "2.2.0-preview.1", 1)]

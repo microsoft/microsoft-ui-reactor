@@ -228,6 +228,46 @@ public class PersistenceEtwBridgeTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The lock-unavailable rejection arm. A write that cannot take the cross-process
+    /// guard is refused (spec 063 §5), and that refusal has its own label — without a
+    /// test, a regression emitting the wrong store kind or reason on this path would
+    /// pass, since the oversize case exercises a different branch.
+    /// </summary>
+    [Fact]
+    public void Write_blocked_on_the_cross_process_lock_rejects_with_its_own_reason()
+    {
+        var store = new JsonFileStore(_path);
+
+        // Hold the lock from outside the store, exactly as a peer process would, and
+        // shorten the wait so the test does not pay the production timeout.
+        CrossProcessWriteGuard.AcquireTimeoutOverrideMs = 50;
+        try
+        {
+            using var peer = new global::System.IO.FileStream(
+                CrossProcessWriteGuard.LockPathFor(_path),
+                global::System.IO.FileMode.OpenOrCreate,
+                global::System.IO.FileAccess.ReadWrite,
+                global::System.IO.FileShare.None);
+
+            store.Write("main", new byte[] { 1, 2, 3 });
+
+            AssertEvent(
+                _listener.Events,
+                nameof(ReactorEventSource.PersistenceRejected),
+                0,
+                "json-file");
+            Assert.Contains(_listener.Events, e =>
+                e.EventName == nameof(ReactorEventSource.PersistenceRejected)
+                && e.Payload is { } p && p.Count > 1
+                && (p[1] as string) == "write-lock-unavailable");
+        }
+        finally
+        {
+            CrossProcessWriteGuard.AcquireTimeoutOverrideMs = null;
+        }
+    }
+
     private static void CleanupAppData(string publisher)
     {
         // Narrowed to what a delete can legitimately hit; see the Dispose rationale.

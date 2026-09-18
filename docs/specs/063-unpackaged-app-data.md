@@ -313,7 +313,8 @@ is bundled rather than machine-wide — enough to exclude the SbS confound — b
 
 ### §4.1 `UnpackagedAppDataStore`
 
-A new public `IWindowPersistenceStore` in `Microsoft.UI.Reactor.Hosting.Persistence`:
+A new public `UnpackagedAppDataStore` — an implementation of the existing
+`IWindowPersistenceStore` — in `Microsoft.UI.Reactor.Hosting.Persistence`:
 
 ```csharp
 var store = new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
