@@ -34,7 +34,7 @@ public class PackagedLayoutLockTests
     {
         try { Directory.Delete(_root, recursive: true); }
         catch (IOException) { /* a leaked handle here must not mask the test's own verdict */ }
-        catch (UnauthorizedAccessException) { }
+        catch (UnauthorizedAccessException) { /* likewise: a read-only leftover is not a failure */ }
     }
 
     private string LockPath => Path.Join(_root, "layout.lock");

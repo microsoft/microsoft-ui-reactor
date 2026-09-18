@@ -199,6 +199,7 @@ internal static class OrphanedHostSweep
                     // against a lease whose owner died mid-write.
                     using (new FileStream(lease, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
                     {
+                        // The open itself is the answer; nothing needs to be read.
                     }
 
                     File.Delete(lease);
@@ -209,6 +210,7 @@ internal static class OrphanedHostSweep
                 }
                 catch (DirectoryNotFoundException)
                 {
+                    // The whole lease directory went away underneath us; nothing left to check.
                 }
                 catch (IOException)
                 {

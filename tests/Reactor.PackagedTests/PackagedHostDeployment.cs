@@ -813,6 +813,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             {
                 using (new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
                 {
+                    // Succeeding is the answer: nobody holds it.
                 }
             }
             catch (FileNotFoundException)
