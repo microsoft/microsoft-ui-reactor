@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Reactor.Tests.Shared;
 
@@ -10,9 +11,11 @@ namespace Microsoft.UI.Reactor.PackagedTests;
 /// <remarks>
 /// <para>The property under test is an absence: two checkouts must not be able to see or evict
 /// each other's registration. That cannot be observed directly without registering two real
-/// packages, so it is pinned here at the one place it is decided — the derivation — and the
+/// packages, so it is pinned at the two places it is decided — the derivation, and the manifest
+/// rewrite that carries the derived values into the file Windows registers — and the
 /// registration path is then scoped entirely to derived values.</para>
-/// <para>Nothing here touches package state, so it runs at unit speed.</para>
+/// <para>Nothing here registers a package or touches per-user package state, so it runs at unit
+/// speed and is safe beside a concurrently running packaged tier.</para>
 /// </remarks>
 [TestClass]
 public class WorktreeIdentityTests
@@ -427,5 +430,97 @@ public class WorktreeIdentityTests
 
         Assert.AreNotEqual(a.EffectivePackageName, b.EffectivePackageName);
         Assert.AreNotEqual(a.EffectiveAliasExeName, b.EffectiveAliasExeName);
+    }
+
+    /// <summary>
+    /// The derived names reach the manifest Windows actually registers. Every other test here
+    /// compares two strings this code produced; none of them would notice if the rewrite that
+    /// carries those strings into <c>AppxManifest.xml</c> stopped running, matched the wrong
+    /// element, or covered the package name but not the alias — and any of those puts two
+    /// layouts back on one identity and one alias stub.
+    /// </summary>
+    /// <remarks>
+    /// <para>Run against a copy of the host's real <c>Package.appxmanifest</c>, so the element
+    /// shapes, namespaces and nesting are the ones that ship rather than a fixture's idea of
+    /// them. A hand-written manifest would keep passing after a schema change that broke the
+    /// real one.</para>
+    /// <para>Stops short of registering two packages at once. That is the only thing left
+    /// unproven, and it is not testable here without a machine-wide side effect: registration
+    /// needs Developer Mode, mutates per-user state outside the repo, and would be racing any
+    /// concurrently running packaged tier on the same machine — the very concurrency this
+    /// change exists to make safe. The packaged tier covers the other half for real, from
+    /// inside a registered process: <c>Packaged_IdentityGuard</c> asserts
+    /// <c>Package.Current.Id.Name</c> equals the derived name and that the registration's
+    /// install location is this build output.</para>
+    /// </remarks>
+    [TestMethod]
+    public void Derived_Identity_Is_Written_Into_The_Registered_Manifest()
+    {
+        var source = Path.Join(
+            RepoRoot(), "tests", "Reactor.PackagedTests.Host", "Package.appxmanifest");
+        Assert.IsTrue(File.Exists(source), $"Manifest not found: {source}");
+
+        var layout = Path.Join(Path.GetTempPath(), "reactor-manifest-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(layout);
+        try
+        {
+            var manifest = Path.Join(layout, "AppxManifest.xml");
+            File.Copy(source, manifest);
+
+            var before = XDocument.Load(manifest);
+            var baseName = LocalValue(before, "Identity", "Name");
+            var baseAlias = LocalValue(before, "ExecutionAlias", "Alias");
+
+            // Control: the copy starts on the undecorated identity, so the values read back
+            // afterwards are the rewrite's work and not something the manifest already said.
+            Assert.AreEqual(AppxLooseLayoutDeployment.PackageName, baseName);
+            Assert.AreEqual(AppxLooseLayoutDeployment.AliasExeName, baseAlias);
+
+            var deployment = new AppxLooseLayoutDeployment(layout);
+            deployment.ApplyDerivedIdentity(manifest);
+
+            var after = XDocument.Load(manifest);
+
+            Assert.AreEqual(
+                deployment.EffectivePackageName, LocalValue(after, "Identity", "Name"),
+                "Identity/@Name was not rewritten, so every layout registers under one name and " +
+                "the second to deploy replaces the first.");
+            Assert.AreEqual(
+                deployment.EffectiveAliasExeName, LocalValue(after, "ExecutionAlias", "Alias"),
+                "uap5:ExecutionAlias/@Alias was not rewritten, so two layouts still fight over " +
+                "one stub in %LOCALAPPDATA%\\Microsoft\\WindowsApps and Windows picks the binary.");
+
+            // A rewritten manifest must still load and register, so the suffix has to be legal
+            // in both positions rather than merely different.
+            Assert.AreNotEqual(baseName, LocalValue(after, "Identity", "Name"));
+            Assert.AreEqual(".exe", Path.GetExtension(LocalValue(after, "ExecutionAlias", "Alias")));
+        }
+        finally
+        {
+            try { Directory.Delete(layout, recursive: true); }
+            catch (IOException) { /* Temp litter is not worth failing a passing test over. */ }
+        }
+    }
+
+    /// <summary>Reads one attribute by local name, ignoring which namespace revision declares it.</summary>
+    private static string LocalValue(XDocument document, string element, string attribute)
+    {
+        var value = document.Descendants()
+            .Where(e => e.Name.LocalName == element)
+            .Select(e => e.Attribute(attribute)?.Value)
+            .FirstOrDefault(v => v is not null);
+
+        Assert.IsNotNull(value, $"Manifest has no {element}/@{attribute}.");
+        return value;
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null && !File.Exists(Path.Join(dir, "Reactor.slnx")))
+            dir = Path.GetDirectoryName(dir);
+
+        Assert.IsNotNull(dir, "Could not find repo root (Reactor.slnx).");
+        return dir;
     }
 }

@@ -123,13 +123,41 @@ internal static class OrphanedHostSweep
         {
             try
             {
-                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                return new GateHandle(
+                    new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None),
+                    path);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 if (DateTime.UtcNow >= deadline) return null;
                 Thread.Sleep(100);
             }
+        }
+    }
+
+    /// <summary>A held startup gate, which removes its file when released.</summary>
+    /// <remarks>
+    /// <para>Without the removal a <c>.gate</c> file accumulates per build output and is never
+    /// revisited once that worktree is deleted, which for the agent-created worktrees this
+    /// change exists to support is unbounded.</para>
+    /// <para>Race-safe because the handle shares nothing, <see cref="FileShare.Delete"/>
+    /// included: a gate another run has already taken in the window after this one closed its
+    /// handle refuses to be unlinked, and the refusal is swallowed. Deleting is safe for the
+    /// gate's meaning too — acquisition is <c>OpenOrCreate</c>, so an absent file is simply
+    /// created, and Windows will not unlink a name while a handle without delete sharing holds
+    /// it, so two runs can never end up gated on different files of the same name.</para>
+    /// </remarks>
+    private sealed class GateHandle(FileStream stream, string path) : IDisposable
+    {
+        public void Dispose()
+        {
+            try { stream.Dispose(); }
+            catch (IOException)
+            {
+                // Process exit closes the handle regardless.
+            }
+
+            TryDelete(path);
         }
     }
 
@@ -152,6 +180,11 @@ internal static class OrphanedHostSweep
                 "an orphan and kill it mid-test. Check for a stuck test process holding " +
                 $"'{KeyFor(ourExePath)}.gate' under %LOCALAPPDATA%\\Microsoft.UI.Reactor\\AppTests.");
         }
+
+        // Under the gate, so exactly one run of this checkout is reclaiming at a time and the
+        // work is bounded. Placed before admission because it must happen even on the deferred
+        // path: a machine that only ever runs concurrent sessions would otherwise never reclaim.
+        PruneAbandonedArtifacts(ClaimDirectory());
 
         // Path scoping alone separates checkouts, but not two runs of the *same* checkout:
         // their hosts share this exact image path, so without a liveness signal the second
@@ -311,35 +344,9 @@ internal static class OrphanedHostSweep
                     continue;
                 }
 
-                try
-                {
-                    // Opening denies the holder nothing it still needs, so this is safe to do
-                    // against a lease whose owner died mid-write.
-                    using (new FileStream(lease, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-                    {
-                        // The open itself is the answer; nothing needs to be read.
-                    }
-
-                    File.Delete(lease);
-                }
-                catch (FileNotFoundException)
-                {
-                    // Pruned by another run between enumeration and open.
-                }
-                catch (DirectoryNotFoundException)
-                {
-                    // The whole lease directory went away underneath us; nothing left to check.
-                }
-                catch (IOException)
-                {
-                    // Still held: a live sibling run.
-                    return true;
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    // Cannot establish that it is stale, so it must be treated as live.
-                    return true;
-                }
+                // Held means its owner's handle is still open, which is a live sibling run.
+                // Establishing that is the whole purpose here; the pruning is a side effect.
+                if (TryPruneIfStale(lease) == ArtifactState.Held) return true;
             }
 
             return false;
@@ -348,6 +355,99 @@ internal static class OrphanedHostSweep
         {
             // Cannot arbitrate, so cannot safely conclude that anything is an orphan.
             return true;
+        }
+    }
+
+    /// <summary>What an attempt to reclaim one coordination file established.</summary>
+    private enum ArtifactState
+    {
+        /// <summary>Its owner was gone, and the file has been removed.</summary>
+        Pruned,
+
+        /// <summary>Already removed by another run.</summary>
+        Vanished,
+
+        /// <summary>Still open, or not reclaimable by this account. Left alone.</summary>
+        Held,
+    }
+
+    /// <summary>
+    /// Removes one coordination file if the run that created it is gone, and reports which.
+    /// </summary>
+    /// <remarks>
+    /// Liveness is an exclusive open, never a recorded pid: the kernel closes the handle when
+    /// the owner dies, so a file that still resists opening has a live owner and one that yields
+    /// does not. That is also what makes the delete race-safe — every holder opens with
+    /// <see cref="FileShare.None"/> or <see cref="FileShare.Read"/>, neither of which includes
+    /// <see cref="FileShare.Delete"/>, so a file reacquired between the open and the unlink
+    /// refuses to be removed and is reported <see cref="ArtifactState.Held"/> instead.
+    /// </remarks>
+    private static ArtifactState TryPruneIfStale(string path)
+    {
+        try
+        {
+            // Opening denies the holder nothing it still needs, so this is safe to do against
+            // a file whose owner died mid-write.
+            using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                // The open itself is the answer; nothing needs to be read.
+            }
+
+            File.Delete(path);
+            return ArtifactState.Pruned;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // Pruned by another run between enumeration and open, or the whole directory went.
+            return ArtifactState.Vanished;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ArtifactState.Held;
+        }
+    }
+
+    /// <summary>
+    /// Removes the leases and gates of runs that are gone, for <em>every</em> build output.
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="AnyLiveSiblingOf(string, string)"/> only ever prunes files keyed to the
+    /// executable it was asked about, so a build output that is never run again — the normal end
+    /// of an agent worktree — keeps its files forever. Nothing else revisits them, and the whole
+    /// point of per-checkout coordination is that checkouts are numerous and short-lived.</para>
+    /// <para>Safe to run against other checkouts' files precisely because staleness is proven by
+    /// a handle rather than assumed from a name or a timestamp: a run that still exists keeps
+    /// its file, whoever started it. Best-effort throughout — this is housekeeping, and must
+    /// never be the reason a test run fails.</para>
+    /// </remarks>
+    internal static void PruneAbandonedArtifacts(string claimDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimDirectory);
+
+        try
+        {
+            var stale = Directory.EnumerateFiles(claimDirectory, "*.run")
+                .Concat(Directory.EnumerateFiles(claimDirectory, "*.gate"))
+                .ToList();
+
+            foreach (var path in stale) TryPruneIfStale(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Nothing to reclaim if the directory cannot be listed. Unlike the sibling query,
+            // no verdict rests on this, so there is nothing to fail closed about.
+        }
+    }
+
+    /// <summary>Removes a file, ignoring the reasons it might legitimately refuse.</summary>
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); }
+        catch (Exception ex) when (
+            ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // Reacquired by another run, or not ours to unlink. Leaving it is harmless: the
+            // file carries no state, only the handle does.
         }
     }
 
@@ -367,6 +467,15 @@ internal static class OrphanedHostSweep
     /// </remarks>
     internal static string LeasePathFor(string ourExePath, int pid) =>
         Path.Join(ClaimDirectory(), LeasePrefix(ourExePath) + pid + ".run");
+
+    /// <summary>Full path of the startup gate for one build output.</summary>
+    /// <remarks>
+    /// Exposed for the same reason as <see cref="LeasePathFor"/>: the property worth proving
+    /// about the gate's cleanup is that the file is gone afterwards, and that is a statement
+    /// about a path rather than about the handle a test already holds.
+    /// </remarks>
+    internal static string GatePathFor(string ourExePath) =>
+        Path.Join(ClaimDirectory(), KeyFor(ourExePath) + ".gate");
 
     /// <summary>Stable, filename-safe key for one build output.</summary>
     /// <remarks>

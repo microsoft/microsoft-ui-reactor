@@ -316,13 +316,18 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// <c>uap5:ExecutionAlias/@Alias</c> to this layout's derived values.
     /// </summary>
     /// <remarks>
-    /// Writes only when something actually changed, so a rerun against an already-rewritten
+    /// <para>Writes only when something actually changed, so a rerun against an already-rewritten
     /// layout leaves the file — and its timestamp — alone. Elements are matched by local name
     /// so a revision of the manifest's namespace URIs does not silently turn this into a
     /// no-op; an alias that stopped being rewritten would reintroduce exactly the collision
-    /// this is here to remove.
+    /// this is here to remove.</para>
+    /// <para>Exposed to tests because it is the only place the derived names become something
+    /// Windows acts on. Two derived strings being unequal is a fact about a hash; two
+    /// <i>registrations</i> not colliding additionally requires those strings to reach the
+    /// manifest that gets registered, and this is where that either happens or silently does
+    /// not.</para>
     /// </remarks>
-    private void ApplyDerivedIdentity(string manifestPath)
+    internal void ApplyDerivedIdentity(string manifestPath)
     {
         var document = XDocument.Load(manifestPath);
         var changed = false;
@@ -852,7 +857,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                     "somewhere else. Continuing would either take over that package's name or " +
                     "unregister what may be another run's live host. Remove it by hand once " +
                     "you have confirmed nothing is using it: " +
-                    $"Get-AppxPackage -Name '{pkg.Id.Name}' | Remove-AppxPackage");
+                    $"Remove-AppxPackage -Package '{pkg.Id.FullName}'");
             }
 
             // Contention with this layout (rules 1 and 2) must fail loudly — registering on

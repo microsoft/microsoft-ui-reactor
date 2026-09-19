@@ -356,6 +356,122 @@ public class OrphanedHostSweepTests
     }
 
     /// <summary>
+    /// Releasing the gate removes its file. Every run of every checkout takes one, and a
+    /// worktree that is deleted is never run again, so a gate left behind is permanent litter
+    /// in a directory whose whole purpose is to be shared by short-lived checkouts.
+    /// </summary>
+    [TestMethod]
+    public void Releasing_The_Startup_Gate_Removes_Its_File()
+    {
+        var exe = Probe("gate-cleanup");
+        var path = OrphanedHostSweep.GatePathFor(exe);
+
+        using (var gate = OrphanedHostSweep.TryEnterStartupGate(exe, TimeSpan.Zero))
+        {
+            Assert.IsNotNull(gate, "Precondition: the gate must be enterable.");
+            Assert.IsTrue(File.Exists(path),
+                "Control: the gate must exist while held, or its absence afterwards proves " +
+                "nothing about cleanup.");
+        }
+
+        Assert.IsFalse(File.Exists(path),
+            $"'{path}' survived its gate being released, so every run of every checkout that " +
+            "ever takes a gate leaves one behind for good.");
+    }
+
+    /// <summary>
+    /// Reclamation covers other build outputs' leftovers, not just this one's. The sibling
+    /// query only ever looks at files keyed to the executable it was asked about, so a
+    /// checkout that is deleted after its last run keeps its files forever.
+    /// </summary>
+    /// <remarks>
+    /// Staged against a synthetic directory rather than the real one: this asserts that files
+    /// disappear, and the real directory is shared with any concurrent run of this same suite.
+    /// </remarks>
+    [TestMethod]
+    public void Reclamation_Removes_Another_Build_Outputs_Leftovers()
+    {
+        var dir = Path.Join(ClaimRoot, "prune-foreign");
+        Directory.CreateDirectory(dir);
+
+        var lease = Path.Join(dir, "0123456789abcdef.4242.run");
+        var gate = Path.Join(dir, "fedcba9876543210.gate");
+        File.WriteAllText(lease, "pid=4242");
+        File.WriteAllText(gate, string.Empty);
+
+        OrphanedHostSweep.PruneAbandonedArtifacts(dir);
+
+        Assert.IsFalse(File.Exists(lease),
+            "A dead run's lease from another build output was left behind, so the claim " +
+            "directory grows without bound as worktrees come and go.");
+        Assert.IsFalse(File.Exists(gate),
+            "A dead run's gate from another build output was left behind.");
+    }
+
+    /// <summary>
+    /// A live run's files stop reclamation from touching them, but not from continuing. If one
+    /// held file ended the pass, a single long-running suite would suppress reclamation for the
+    /// whole machine and the unbounded growth would come straight back.
+    /// </summary>
+    /// <remarks>
+    /// The load-bearing assertion is the second one. That the held file itself survives is
+    /// guaranteed by Windows — no handle opened without <c>FileShare.Delete</c> can be unlinked
+    /// — so it is a precondition here rather than a property of this code. What this code has
+    /// to get right is that it treats a refusal as "skip this one", not "stop".
+    /// </remarks>
+    [TestMethod]
+    public void A_Live_Runs_Files_Do_Not_Stop_Reclamation()
+    {
+        var dir = Path.Join(ClaimRoot, "prune-live");
+        Directory.CreateDirectory(dir);
+
+        // Enumerated in name order, so the held file is reached first and a pass that stops at
+        // the first refusal never reaches the dead one.
+        var held = Path.Join(dir, "0123456789abcdef.4242.run");
+        var dead = Path.Join(dir, "0123456789abcdef.4243.run");
+        File.WriteAllText(dead, "pid=4243");
+
+        // The same share mode a real lease is taken with, so the open test sees exactly what it
+        // would against another process's handle.
+        using (new FileStream(held, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read))
+        {
+            OrphanedHostSweep.PruneAbandonedArtifacts(dir);
+
+            Assert.IsTrue(File.Exists(held),
+                "Precondition: a held lease must survive, or the assertion below is measuring " +
+                "a pass that had nothing to skip.");
+            Assert.IsFalse(File.Exists(dead),
+                "A dead run's lease was left behind because a live run's lease came before it " +
+                "in the directory, so one long-running suite suppresses reclamation entirely.");
+        }
+    }
+
+    /// <summary>
+    /// Reclamation is housekeeping and must never fail a run. A claim directory that cannot be
+    /// listed is a reason to reclaim nothing, not a reason to throw on the way into the sweep.
+    /// </summary>
+    [TestMethod]
+    public void Reclamation_Tolerates_An_Unusable_Directory()
+    {
+        var notADirectory = Path.Join(ClaimRoot, "prune-blocked");
+        Directory.CreateDirectory(ClaimRoot);
+        File.WriteAllText(notADirectory, "occupied");
+
+        OrphanedHostSweep.PruneAbandonedArtifacts(notADirectory);
+        OrphanedHostSweep.PruneAbandonedArtifacts(Path.Join(ClaimRoot, "never-created"));
+    }
+
+    /// <summary>
+    /// A blank directory is a caller error, not something to silently skip.
+    /// </summary>
+    [TestMethod]
+    public void Reclamation_Rejects_A_Blank_Directory()
+    {
+        Assert.ThrowsExactly<ArgumentException>(
+            () => OrphanedHostSweep.PruneAbandonedArtifacts("  "));
+    }
+
+    /// <summary>
     /// A run that cannot record its lease must be told so, not told that a sibling is live.
     /// The two call for opposite actions and a boolean forced them to share one answer.
     /// </summary>
