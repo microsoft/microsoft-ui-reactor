@@ -383,7 +383,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 FullScreen: fullScreen,
                 InitialWindowSpec: options.EmbedRequested
                     ? BuildEmbedWindowSpec(options, $"Preview — {initialComponentName}", width, height)
-                    : null);
+                    : BuildPositionedWindowSpec(options, $"Preview — {initialComponentName}", width, height));
 
             Application.Start(_ =>
             {
@@ -397,8 +397,37 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     }
 
 
-    internal static WindowSpec BuildEmbedWindowSpec(DevtoolsCliOptions options, string baseTitle, double? width, double? height)
+    /// <summary>
+    /// Builds the initial spec for a non-embedded preview window when <c>--x</c>/<c>--y</c>
+    /// placed it explicitly, and <c>null</c> otherwise so the OS keeps choosing the position.
+    /// </summary>
+    /// <remarks>
+    /// The docs screenshot harness uses this to capture on a monitor whose scale matches the
+    /// repo's 150% capture convention when that monitor is not the primary display. It matters
+    /// because capture is <c>PrintWindow</c> over the live HWND in *physical* pixels, so the
+    /// captured size follows the DPI of whichever monitor the window sits on.
+    /// <para>Both axes are required together: a half-specified origin has no sensible meaning
+    /// (the other axis would fall back to an OS-chosen value on a possibly different monitor),
+    /// so a lone <c>--x</c> is ignored rather than guessed at.</para>
+    /// </remarks>
+    internal static WindowSpec? BuildPositionedWindowSpec(DevtoolsCliOptions options, string baseTitle, double? width, double? height)
     {
+        if (options.WindowX is not { } x || options.WindowY is not { } y) return null;
+
+        return new WindowSpec
+        {
+            Title = baseTitle,
+            Width = width,
+            Height = height,
+            StartPosition = WindowStartPosition.Manual,
+            ManualPosition = (x, y),
+            // Placement persistence would restore a previously saved rect and
+            // silently override the position just requested.
+            PersistPlacement = false,
+        };
+    }
+
+    internal static WindowSpec BuildEmbedWindowSpec(DevtoolsCliOptions options, string baseTitle, double? width, double? height)    {
         if (!options.EmbedRequested || options.EmbedHostPid is not { } hostPid)
             throw new ArgumentException("Embed options must include --embed and --embed-host-pid.", nameof(options));
 

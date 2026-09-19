@@ -58,6 +58,49 @@ public class CliFlagParsingTests
         Assert.Null(opts.WindowWidth);
     }
 
+    [Fact]
+    public void XAndY_AreParsed()
+    {
+        var opts = DevtoolsCliParser.Parse(
+            ["app.exe", "--devtools", "run", "--x", "2600", "--y", "120"]);
+        Assert.Equal(2600d, opts.WindowX);
+        Assert.Equal(120d, opts.WindowY);
+    }
+
+    // A coordinate is not a dimension. A monitor positioned left of or above the
+    // primary has a negative origin, and 0 is the primary's own origin, so the
+    // positive-only rule that guards --width/--height would silently discard
+    // perfectly valid positions. This is the case that would regress if someone
+    // "simplified" the two parsers into one.
+    [Theory]
+    [InlineData("0", 0d)]
+    [InlineData("-2560", -2560d)]
+    [InlineData("-1080.5", -1080.5d)]
+    public void X_AcceptsZeroAndNegativeCoordinates(string value, double expected)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--x", value]);
+        Assert.Equal(expected, opts.WindowX);
+    }
+
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("over-there")]
+    public void X_RejectsNonFinite(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--x", value]);
+        Assert.Null(opts.WindowX);
+    }
+
+    [Fact]
+    public void XAndY_DefaultToNullWhenAbsent()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
+        Assert.Null(opts.WindowX);
+        Assert.Null(opts.WindowY);
+    }
+
     // The harness formats these invariantly; parsing must match, or a
     // comma-decimal machine would read "600.5" as 6005.
     [Fact]
@@ -496,5 +539,40 @@ public class DevtoolsHostCliTests
         {
             AppContext.SetSwitch(switchName, false);
         }
+    }
+
+    // --x/--y place the capture window on a monitor whose scale matches the
+    // repo's capture convention when that is not the primary display. Capture is
+    // PrintWindow over the live HWND in physical pixels, so the monitor's DPI is
+    // what ends up baked into the PNG.
+    [Fact]
+    public void BuildPositionedWindowSpec_WithBothAxes_SetsManualPosition()
+    {
+        var options = DevtoolsCliParser.Parse(
+            ["app.exe", "--devtools", "run", "--x", "2600", "--y", "0"]);
+
+        var spec = DevtoolsHost.BuildPositionedWindowSpec(options, "Preview", width: 520, height: 360);
+
+        Assert.NotNull(spec);
+        Assert.Equal(WindowStartPosition.Manual, spec!.StartPosition);
+        Assert.Equal((2600d, 0d), spec.ManualPosition);
+        Assert.Equal(520d, spec.Width);
+        Assert.Equal(360d, spec.Height);
+        // Persistence would restore a saved rect over the position just requested.
+        Assert.False(spec.PersistPlacement);
+        // Validate() enforces the Manual/ManualPosition pairing; a spec that
+        // cannot validate would throw at window construction instead of here.
+        spec.Validate();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "app.exe", "--devtools", "run" })]
+    [InlineData((object)new[] { "app.exe", "--devtools", "run", "--x", "2600" })]
+    [InlineData((object)new[] { "app.exe", "--devtools", "run", "--y", "0" })]
+    public void BuildPositionedWindowSpec_WithoutBothAxes_ReturnsNull(string[] args)
+    {
+        var options = DevtoolsCliParser.Parse(args);
+
+        Assert.Null(DevtoolsHost.BuildPositionedWindowSpec(options, "Preview", width: 520, height: 360));
     }
 }

@@ -44,7 +44,9 @@ public sealed record DevtoolsCliOptions(
     string? EmbedValidationError = null,
     bool EmbedAutoEnabledVsCode = false,
     double? WindowWidth = null,
-    double? WindowHeight = null);
+    double? WindowHeight = null,
+    double? WindowX = null,
+    double? WindowY = null);
 
 /// <summary>
 /// Pure command-line parser for the devtools entry point. Has no side effects so it is
@@ -221,6 +223,16 @@ internal static class DevtoolsCliParser
         var windowWidth = ParseDimension(args, "--width");
         var windowHeight = ParseDimension(args, "--height");
 
+        // Window origin override, in DIPs of the virtual desktop. The docs
+        // harness uses this to place a capture window on a monitor whose scale
+        // matches the repo's capture convention, when that is not the primary
+        // display. Parsed separately from the size flags on purpose: a
+        // coordinate may legitimately be zero or negative (a monitor left of the
+        // primary has a negative origin), so the positive-only rule that guards
+        // width/height would silently drop valid positions.
+        var windowX = ParseCoordinate(args, "--x");
+        var windowY = ParseCoordinate(args, "--y");
+
         string? embedValidationError = null;
         if (embedRequested)
         {
@@ -253,7 +265,9 @@ internal static class DevtoolsCliParser
             EmbedValidationError: embedValidationError,
             EmbedAutoEnabledVsCode: embedAutoEnabledVsCode,
             WindowWidth: windowWidth,
-            WindowHeight: windowHeight);
+            WindowHeight: windowHeight,
+            WindowX: windowX,
+            WindowY: windowY);
     }
 
     /// <summary>
@@ -269,6 +283,22 @@ internal static class DevtoolsCliParser
         if (!double.TryParse(args[idx + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
             return null;
         return double.IsFinite(value) && value > 0 ? value : null;
+    }
+
+    /// <summary>
+    /// Reads a finite DIP coordinate following <paramref name="flag"/>. Unlike
+    /// <see cref="ParseDimension"/> this accepts zero and negative values, which
+    /// are ordinary virtual-desktop coordinates for a monitor positioned at or
+    /// left of / above the primary. Only non-finite input is rejected, since it
+    /// would reach the window placement path as garbage.
+    /// </summary>
+    private static double? ParseCoordinate(string[] args, string flag)
+    {
+        int idx = IndexOf(args, flag);
+        if (idx < 0 || idx + 1 >= args.Length) return null;
+        if (!double.TryParse(args[idx + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            return null;
+        return double.IsFinite(value) ? value : null;
     }
 
     private static (DevtoolsSubverb Subverb, int TrailingArgStart) ParseSubverbAfter(string[] args, int devtoolsIdx)

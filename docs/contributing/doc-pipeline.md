@@ -238,6 +238,41 @@ The practical check is comparative, not arithmetic — if your regenerated image
 is close in size to the one you replaced, you captured at the same scale as the
 last contributor; if it jumped by ~20%, you did not.
 
+##### When 150% is not your primary display
+
+Capture is `PrintWindow` over the live window in *physical* pixels, so the scale
+baked into a PNG is the DPI of whichever monitor the window lands on — and a doc
+app's window opens on the **primary** display. If your 150% monitor is not the
+primary one (and you cannot change that, e.g. over a remote session), set
+`REACTOR_DOCS_CAPTURE_ORIGIN` to a virtual-desktop `X,Y` origin on the monitor
+you want:
+
+```powershell
+$env:REACTOR_DOCS_CAPTURE_ORIGIN = '2600,0'
+mur docs compile --screenshots-only
+```
+
+The harness forwards that to each doc app as `--x` / `--y`, which the devtools
+preview host applies as the window's start position. Coordinates are DIPs and may
+be zero or negative — a monitor left of or above the primary has a negative
+origin. Both axes are required; a lone `--x` is ignored. Leave the variable unset
+when your primary display is already at 150%.
+
+To find the origin of each monitor, enumerate them with their DPI:
+
+```powershell
+# EnumDisplayMonitors + GetDpiForMonitor; the rect origin is the value to use.
+# Note GetDeviceCaps(LOGPIXELSY) reports the *session* DPI, which is fixed at
+# sign-in — it will not reflect a scale change and must not be used to check this.
+```
+
+**Bulk runs on a non-primary monitor are racy.** A window created off the primary
+display takes a `WM_DPICHANGED` before it re-lays-out, and under the load of a
+full ~50-app run a capture can occasionally land before that settles, yielding one
+image at the *primary's* scale. It is self-announcing — the image is ~33% smaller
+than the one it replaced — and re-running that topic alone fixes it. Compare
+dimensions against the previous images before committing a bulk regeneration.
+
 That number is a convention, not a law of the pipeline — it was chosen because
 it is what most of the corpus already used and it renders sharply on modern
 displays. What matters is that it is *written down*: before this section existed

@@ -28,6 +28,14 @@ Conventions for contributors:
 
 ### Added
 
+- **`REACTOR_DOCS_CAPTURE_ORIGIN` for regenerating screenshots when 150% is not
+  your primary display.** Capture is `PrintWindow` in physical pixels, so a PNG
+  takes the DPI of the monitor its window opens on — the primary. Setting the
+  variable to a virtual-desktop `X,Y` origin forwards `--x` / `--y` to the
+  devtools preview host, which opens the capture window there instead. Needed on
+  remote sessions, where the primary display cannot be changed. See
+  [`docs/contributing/doc-pipeline.md`](docs/contributing/doc-pipeline.md).
+
 - **`UnpackagedAppDataStore` — window placement now survives renaming your executable
   (spec 063 §4).** The unpackaged persistence store keys saved window placement on
   the entry **process name**, so shipping the same app under a renamed `.exe` silently stranded

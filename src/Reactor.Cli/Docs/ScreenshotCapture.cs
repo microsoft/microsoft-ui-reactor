@@ -41,9 +41,7 @@ internal static class ScreenshotCapture
     /// if any, is left exactly as it was.
     /// </exception>
     internal static void ProcessAndWrite(byte[] frameBytes, string outputPath, ScreenshotConfig screenshot)
-    {
-        var isThumb = string.Equals(screenshot.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase);
-        var processed = isThumb
+    {        var isThumb = string.Equals(screenshot.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase);        var processed = isThumb
             ? ImageProcessor.ProcessThumb(frameBytes, screenshot.ThumbWidth, screenshot.ThumbHeight)
             : ImageProcessor.Process(frameBytes, ImageProcessor.ParseCropMode(screenshot.Crop));
 
@@ -127,10 +125,18 @@ internal static class ScreenshotCapture
             $" --width {manifest.App.Width.ToString(CultureInfo.InvariantCulture)}" +
             $" --height {manifest.App.Height.ToString(CultureInfo.InvariantCulture)}";
 
+        // Optional capture origin, for the case where the monitor at the repo's
+        // 150% capture scale is not the primary display. Capture is PrintWindow
+        // over the live HWND in physical pixels, so the captured size follows the
+        // DPI of the monitor the window lands on. Environmental rather than
+        // per-app, hence an env var and not a manifest key: the same doc app
+        // should capture identically on any contributor's machine.
+        var originArgs = ResolveCaptureOriginArgs();
+
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5{sizeArgs}",
+            Arguments = $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5{sizeArgs}{originArgs}",
             RedirectStandardOutput = true,
             RedirectStandardError = false,
             UseShellExecute = false,
@@ -556,6 +562,44 @@ internal static class ScreenshotCapture
     internal const string CaptureHost = "127.0.0.1";
 
     internal static string FrameUrl(int port) => $"http://{CaptureHost}:{port}/frame";
+
+    /// <summary>
+    /// Environment variable naming the virtual-desktop origin, as <c>"X,Y"</c>, that
+    /// capture windows should open at. Unset means "let the OS place the window",
+    /// which is correct whenever the primary display already sits at the repo's
+    /// documented capture scale.
+    /// </summary>
+    internal const string CaptureOriginEnvVar = "REACTOR_DOCS_CAPTURE_ORIGIN";
+
+    /// <summary>
+    /// Translates <see cref="CaptureOriginEnvVar"/> into <c>--x</c>/<c>--y</c> arguments,
+    /// or an empty string when unset or unparseable.
+    /// </summary>
+    /// <remarks>
+    /// Coordinates may be zero or negative — a monitor left of or above the primary has a
+    /// negative origin — so this validates only that both parts are finite numbers.
+    /// Malformed input degrades to OS placement rather than throwing: a mistyped
+    /// environment variable should not abort a 200-screenshot run, and the resulting
+    /// images differ visibly in scale if the origin silently failed to apply.
+    /// </remarks>
+    internal static string BuildCaptureOriginArgs(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+        var parts = raw.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 2) return string.Empty;
+        if (!double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
+            !double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
+            !double.IsFinite(x) || !double.IsFinite(y))
+        {
+            return string.Empty;
+        }
+
+        return $" --x {x.ToString(CultureInfo.InvariantCulture)} --y {y.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    private static string ResolveCaptureOriginArgs()
+        => BuildCaptureOriginArgs(Environment.GetEnvironmentVariable(CaptureOriginEnvVar));
 
     internal static string PreviewUrl(int port) => $"http://{CaptureHost}:{port}/preview";
 
