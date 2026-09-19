@@ -1,5 +1,4 @@
 app:
-  title: "Advanced Patterns"
   width: 650
   height: 700
   startup-delay: 1500
@@ -8,30 +7,24 @@ screenshots:
   - id: error-boundary
     description: "Error boundary catching a crash and showing fallback UI"
     component: ErrorBoundaryDemo
-    region: client
     format: png
   - id: error-boundary-retry
     description: "ErrorBoundary with a Retry button keyed by WithKey"
     component: ErrorBoundaryRetryDemo
-    region: client
     format: png
   - id: memo-subtree
     description: "Memo skipping re-render of an expensive subtree"
     component: MemoSubtreeDemo
-    region: client
     format: png
   - id: set-escape-hatch
     description: "Using .Set() to access native WinUI properties"
     component: SetEscapeHatchDemo
-    region: client
     format: png
   - id: observable-viewmodel
     description: "UseObservableTree binding to an INPC view model"
     component: ObservableTreeDemo
-    region: client
     format: png
   - id: observable-collection
     description: "UseCollection tracking an ObservableCollection of tasks"
     component: ObservableCollectionDemo
-    region: client
     format: png

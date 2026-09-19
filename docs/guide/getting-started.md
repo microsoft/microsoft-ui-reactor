@@ -294,7 +294,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400);
+ReactorApp.Run<GettingStartedApp>("Getting Started");
 
 class GettingStartedApp : Component
 {
@@ -344,7 +344,7 @@ Here's a counter that tracks a single number:
 
 ```csharp
 // Launch with:
-//   ReactorApp.Run<CounterExample>("Counter", width: 600, height: 400);
+//   ReactorApp.Run<CounterExample>("Counter");
 
 class CounterExample : Component
 {
@@ -376,7 +376,7 @@ value:
 
 ```csharp
 // Launch with:
-//   ReactorApp.Run<MultipleStateExample>("Multiple State", width: 600, height: 400);
+//   ReactorApp.Run<MultipleStateExample>("Multiple State");
 
 class MultipleStateExample : Component
 {
@@ -418,7 +418,7 @@ Reactor provides a small set of layout primitives that compose together:
 
 ```csharp
 // Launch with:
-//   ReactorApp.Run<LayoutBasicsExample>("Layout", width: 600, height: 400);
+//   ReactorApp.Run<LayoutBasicsExample>("Layout");
 
 class LayoutBasicsExample : Component
 {
@@ -484,7 +484,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<TodoApp>("Todo App", width: 550, height: 600);
+ReactorApp.Run<TodoApp>("Todo App");
 
 class TodoApp : Component
 {
@@ -586,7 +586,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<CalculatorApp>("Calculator", width: 380, height: 500);
+ReactorApp.Run<CalculatorApp>("Calculator");
 
 class CalculatorApp : Component
 {

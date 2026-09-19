@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<ComponentsApp>("Components Demo", width: 650, height: 550
-);
+ReactorApp.Run<ComponentsApp>("Components Demo");
 
 // <snippet:basic-component>
 class Greeting : Component

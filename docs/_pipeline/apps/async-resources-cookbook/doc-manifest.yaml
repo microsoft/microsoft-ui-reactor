@@ -1,5 +1,4 @@
 app:
-  title: "Async Resources Cookbook"
   width: 600
   height: 600
   startup-delay: 1500
@@ -8,25 +7,20 @@ screenshots:
   - id: before-useresource
     description: "Component assembled from UseState + UseEffect showing a loaded user"
     component: BeforeUseResourceExample
-    region: client
     format: png
   - id: after-useresource
     description: "Same component using UseResource — one hook, same output"
     component: AfterUseResourceExample
-    region: client
     format: png
   - id: infinite-scroll
     description: "Virtualized commit list populated page-by-page as the user scrolls"
     component: InfiniteScrollExample
-    region: client
     format: png
   - id: use-mutation
     description: "Todo added optimistically before the server responds"
     component: UseMutationExample
-    region: client
     format: png
   - id: pending-fallback
     description: "Pending fallback visible while nested resources all load"
     component: PendingFallbackExample
-    region: client
     format: png

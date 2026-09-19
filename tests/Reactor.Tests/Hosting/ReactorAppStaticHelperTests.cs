@@ -176,7 +176,7 @@ public class ReactorAppStaticHelperTests
             Console.SetError(sw);
             try
             {
-                ReactorApp.EmitDipBehaviorChangeNoticeOnce();
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 800, height: 600);
                 var stderr = sw.ToString();
                 Assert.Contains("[reactor]", stderr);
                 Assert.Contains("DIP", stderr);
@@ -191,8 +191,30 @@ public class ReactorAppStaticHelperTests
         public void EmitDipBehaviorChangeNoticeOnce_SecondCall_IsSilent()
         {
             ReactorApp.ResetDipBehaviorChangeNoticeForTests();
-            ReactorApp.EmitDipBehaviorChangeNoticeOnce(); // first call latches
+            ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 800, height: 600); // first call latches
 
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 800, height: 600);
+                Assert.Empty(sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // The notice announces a migration that an app declaring no size has
+        // nothing to do about: it already gets the OS-chosen extent. Emitting it
+        // anyway contradicts the documented guidance to omit width/height, so a
+        // size-less Run must stay quiet.
+        [Fact]
+        public void EmitDipBehaviorChangeNoticeOnce_NoSizeSupplied_IsSilent()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
             var origErr = Console.Error;
             using var sw = new StringWriter();
             Console.SetError(sw);
@@ -200,6 +222,51 @@ public class ReactorAppStaticHelperTests
             {
                 ReactorApp.EmitDipBehaviorChangeNoticeOnce();
                 Assert.Empty(sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // A size-less call must also not consume the one-shot latch, or the next
+        // app that *does* declare a size would silently lose its notice.
+        [Fact]
+        public void EmitDipBehaviorChangeNoticeOnce_NoSizeThenSize_StillNotifies()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            ReactorApp.EmitDipBehaviorChangeNoticeOnce();
+
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 1024);
+                Assert.Contains("[reactor]", sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // Half-specified sizes are a supported shape (spec 036 §12.2a): the
+        // declared axis applies and the other takes the OS extent. That is still
+        // an explicit size, so it must notify.
+        [Theory]
+        [InlineData(640d, null)]
+        [InlineData(null, 480d)]
+        public void EmitDipBehaviorChangeNoticeOnce_SingleAxis_Notifies(double? width, double? height)
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width, height);
+                Assert.Contains("[reactor]", sw.ToString());
             }
             finally
             {

@@ -1,5 +1,4 @@
 app:
-  title: "Flex Layout"
   width: 700
   height: 600
   startup-delay: 1500
@@ -8,30 +7,24 @@ screenshots:
   - id: flex-direction
     description: "Row and column flex direction demo"
     component: FlexDirectionDemo
-    region: client
     format: png
   - id: justify-align
     description: "Justify-content and align-items demo"
     component: JustifyAlignDemo
-    region: client
     format: png
   - id: wrap-gap
     description: "Wrapping tags with gap spacing"
     component: WrapGapDemo
-    region: client
     format: png
   - id: grow-shrink
     description: "Flex grow and shrink sidebar layout"
     component: GrowShrinkDemo
-    region: client
     format: png
   - id: toolbar
     description: "Toolbar built with flex layout"
     component: ToolbarDemo
-    region: client
     format: png
   - id: flex-vs-stack
     description: "Comparison of FlexRow vs HStack"
     component: FlexVsStackDemo
-    region: client
     format: png

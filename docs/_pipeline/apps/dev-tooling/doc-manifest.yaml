@@ -1,5 +1,4 @@
 app:
-  title: "Dev Tooling Demo"
   width: 600
   height: 450
   startup-delay: 1500
@@ -8,10 +7,8 @@ screenshots:
   - id: preview-app
     description: "Preview mode demo app running"
     component: DevToolingApp
-    region: client
     format: png
   - id: iteration-demo
     description: "Iteration cycle demo with live list"
     component: IterationDemo
-    region: client
     format: png

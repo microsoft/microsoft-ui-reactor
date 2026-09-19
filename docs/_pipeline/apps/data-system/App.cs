@@ -10,8 +10,7 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Advanced.Factories;
 // </snippet:imports>
 
-ReactorApp.Run<DataSystemApp>("Data System", width: 900, height: 600
-);
+ReactorApp.Run<DataSystemApp>("Data System");
 
 record Product(int Id, string Name, string Category, double Price, int Stock);
 

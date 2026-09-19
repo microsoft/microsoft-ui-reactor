@@ -17,6 +17,66 @@ public class CliFlagParsingTests
         Assert.False(opts.PreviewAndDevtoolsConflict);
     }
 
+    // --width/--height let the docs screenshot harness declare the capture size
+    // in doc-manifest.yaml, so doc apps can omit width/height from their own
+    // ReactorApp.Run call without their screenshots changing size.
+    [Fact]
+    public void WidthAndHeight_AreParsed()
+    {
+        var opts = DevtoolsCliParser.Parse(
+            ["app.exe", "--devtools", "run", "--width", "640", "--height", "480"]);
+        Assert.Equal(640d, opts.WindowWidth);
+        Assert.Equal(480d, opts.WindowHeight);
+    }
+
+    [Fact]
+    public void WidthAndHeight_DefaultToNullWhenAbsent()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
+        Assert.Null(opts.WindowWidth);
+        Assert.Null(opts.WindowHeight);
+    }
+
+    // Null means "keep the size the app declared", so an unusable value must not
+    // be mistaken for an explicit request to resize — least of all to zero.
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("not-a-number")]
+    public void Width_RejectsNonPositiveOrNonFinite(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width", value]);
+        Assert.Null(opts.WindowWidth);
+    }
+
+    [Fact]
+    public void Width_MissingValueAtEndOfArgs_IsIgnored()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width"]);
+        Assert.Null(opts.WindowWidth);
+    }
+
+    // The harness formats these invariantly; parsing must match, or a
+    // comma-decimal machine would read "600.5" as 6005.
+    [Fact]
+    public void Width_ParsesInvariantlyRegardlessOfCurrentCulture()
+    {
+        var original = global::System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            global::System.Globalization.CultureInfo.CurrentCulture =
+                new global::System.Globalization.CultureInfo("nl-NL");
+            var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width", "600.5"]);
+            Assert.Equal(600.5d, opts.WindowWidth);
+        }
+        finally
+        {
+            global::System.Globalization.CultureInfo.CurrentCulture = original;
+        }
+    }
+
     [Fact]
     public void DevtoolsRun_ParsesAsRun()
     {
@@ -384,5 +444,57 @@ public class DevtoolsHostCliTests
         }
 
         Assert.Contains("[reactor] --embed requires '--devtools run'", stderr.ToString());
+    }
+
+    // The whole manifest-driven capture size rests on one expression in
+    // TryRunDevtoolsCore -- `options.WindowWidth ?? width` -- so it gets a
+    // direct test rather than only the end-to-end screenshot evidence.
+    // Reaching it needs both the feature switch on and a registered host, so a
+    // fake host captures the boot request the real devtools package would get.
+    private sealed class CapturingDevtoolsHost : IReactorDevtoolsHost
+    {
+        public ReactorDevtoolsBootRequest? Captured { get; private set; }
+
+        public bool TryHandleCommandLine(ReactorDevtoolsBootRequest request)
+        {
+            Captured = request;
+            return true;
+        }
+
+        public global::Microsoft.UI.Reactor.Core.Element? BuildDevtoolsMenu(
+            Func<IEnumerable<global::Microsoft.UI.Reactor.Core.MenuFlyoutItemBase>>? items,
+            string glyph,
+            string toolTip,
+            string? automationId) => null;
+    }
+
+    [Theory]
+    // CLI overrides the size the app declared in code.
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--width", "1024", "--height", "768" }, 1024d, 768d)]
+    // No CLI size: the app's own Run arguments survive.
+    [InlineData(new[] { "app.exe", "--devtools", "run" }, 800d, 600d)]
+    // Per-axis override: the unspecified axis must fall back, not reset.
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--width", "1024" }, 1024d, 600d)]
+    // A rejected value must not be mistaken for an explicit resize.
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--width", "0" }, 800d, 600d)]
+    public void TryRunDevtools_CliSizeOverridesRunSize(string[] args, double expectedWidth, double expectedHeight)
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+        var host = new CapturingDevtoolsHost();
+        ReactorDevtoolsBootstrap.Register(host);
+        try
+        {
+            AppContext.SetSwitch(switchName, true);
+            var handled = ReactorApp.TryRunDevtoolsForTest(args, title: "Preview", width: 800, height: 600);
+
+            Assert.True(handled);
+            Assert.NotNull(host.Captured);
+            Assert.Equal(expectedWidth, host.Captured!.Width);
+            Assert.Equal(expectedHeight, host.Captured.Height);
+        }
+        finally
+        {
+            AppContext.SetSwitch(switchName, false);
+        }
     }
 }

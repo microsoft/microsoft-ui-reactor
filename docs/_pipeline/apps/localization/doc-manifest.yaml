@@ -1,5 +1,4 @@
 app:
-  title: "Localization"
   width: 650
   height: 700
   startup-delay: 1500
@@ -8,25 +7,20 @@ screenshots:
   - id: locale-provider
     description: "Locale switcher with ComboBox and LocaleProvider wrapping content"
     component: LocaleSwitcher
-    region: client
     format: png
   - id: useintl-messages
     description: "Localized title and greeting using UseIntl and Message"
     component: LocalizedContent
-    region: client
     format: png
   - id: format-numbers-dates
     description: "Locale-aware currency, percent, date, and list formatting"
     component: FormattingDemo
-    region: client
     format: png
   - id: rtl-detection
     description: "RTL detection results for various locales"
     component: RtlDemo
-    region: client
     format: png
   - id: pseudo-localization
     description: "Pseudo-localization toggle showing transformed strings"
     component: PseudoLocDemo
-    region: client
     format: png

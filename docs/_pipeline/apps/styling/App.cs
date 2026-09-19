@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<StylingApp>("Styling and Theming", width: 650, height: 800
-);
+ReactorApp.Run<StylingApp>("Styling and Theming");
 
 // <snippet:theme-tokens>
 class ThemeTokensExample : Component

@@ -75,10 +75,24 @@ Conventions for contributors:
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected
   by ICU MessageFormat when rewriting source (spec 005 §10.4, #1131).
+- **Doc apps no longer hardcode a window size.** Every `docs/_pipeline/apps/*`
+  launch line dropped its `width:` / `height:` arguments, so the guide teaches
+  the OS-default shape introduced in #924. The screenshot harness now forwards
+  `app.width` / `app.height` from each `doc-manifest.yaml` to the devtools
+  preview host via the new `--width` / `--height` switches, which keeps captures
+  deterministic — the manifest is now the single declaration of a doc app's
+  capture size.
 
 ### Deprecated
 
 ### Removed
+
+- **Dead `doc-manifest.yaml` fields.** `app.title`, `app.theme`,
+  `screenshots[].region`, `screenshots[].theme`, `screenshots[].bounds` and the
+  `snippets:` block were parsed but never read by the doc pipeline — `region:`
+  alone appeared 224 times. They are removed from the schema and from all 53
+  manifests. Two manifests had silently drifted from the sizes actually in
+  effect (`animation`, `charting`), which is what being unread allowed.
 
 ### Fixed
 
@@ -109,6 +123,12 @@ Conventions for contributors:
   new guard (`WinAppSDKReferenceGuardTests.No_literal_SDK_pin_sits_below_the_central_pinned_version`)
   sweeps the tree for both pin shapes so the class cannot recur.
 
+- **The DIP migration notice no longer fires for apps that declare no window
+  size (spec 036 §12.1 / §12.2a).** `ReactorApp.Run` emitted the
+  `[reactor] … now DIPs …` stderr line on every launch, including the size-less
+  overloads the same notice recommends. It is now emitted only when the caller
+  actually supplies a width or height, and a size-less call no longer consumes
+  the one-shot latch.
 
 - **Content-collapse parking for recycled ItemsView rows (issue #1213).**
   Parking collapses template content instead of the outer container and restores

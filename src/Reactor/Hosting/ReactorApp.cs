@@ -495,7 +495,7 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
-        EmitDipBehaviorChangeNoticeOnce();
+        EmitDipBehaviorChangeNoticeOnce(width, height);
         if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
 
         StartApplication(() => new ReactorAppOptions(
@@ -527,7 +527,7 @@ public static partial class ReactorApp
     {
         ArgumentNullException.ThrowIfNull(spec);
         spec.Validate();
-        EmitDipBehaviorChangeNoticeOnce();
+        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
         if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
 
         StartApplication(() => new ReactorAppOptions(
@@ -567,7 +567,7 @@ public static partial class ReactorApp
         WindowIcon? icon = null,
         Action<ReactorHost>? configure = null)
     {
-        EmitDipBehaviorChangeNoticeOnce();
+        EmitDipBehaviorChangeNoticeOnce(width, height);
         if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
 
         StartApplication(() => new ReactorAppOptions(
@@ -593,7 +593,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(rootRender);
         spec.Validate();
-        EmitDipBehaviorChangeNoticeOnce();
+        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
         if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, rootRenderFunc: rootRender)) return;
 
         StartApplication(() => new ReactorAppOptions(
@@ -642,6 +642,10 @@ public static partial class ReactorApp
     public static void Run(Action<ReactorAppContext> startup)
     {
         ArgumentNullException.ThrowIfNull(startup);
+        // This overload takes no size arguments, so there is nothing to report
+        // here. Apps using it are multi-window: they size each window through
+        // OpenWindow(WindowSpec), which emits the notice itself. The call is
+        // kept so every Run overload stays visibly accounted for.
         EmitDipBehaviorChangeNoticeOnce();
         StartApplication(() => new ReactorAppOptions(Startup: startup));
     }
@@ -727,6 +731,15 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure,
         bool excludeFromShutdownPolicy = false)
     {
+        // Every window — primary (via StartApplication → BuildInitialWindowSpec)
+        // and secondary — is created here, so this is the one place that sees
+        // every explicit DIP size an app declares. The Run overloads emit from
+        // their own arguments as well, which is redundant but harmless under the
+        // one-shot latch; this call is what covers the sizes a Run signature
+        // never sees, notably the multi-window Run(startup) shape whose windows
+        // are sized only by the WindowSpec passed to OpenWindow.
+        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
+
         ReactorWindow window = new ReactorWindow(spec);
         window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
         try
@@ -1116,15 +1129,24 @@ public static partial class ReactorApp
     private static int _dipBehaviorChangeNoticeEmitted;
 
     /// <summary>
-    /// Emit one stderr <c>[reactor]</c> info-line per process the first time
-    /// any <c>Run</c> overload is invoked, describing the DIP-vs-pixel size
-    /// behavior change (spec 036 §12.1) and the dropped 1024×768 size default
-    /// (spec 036 §12.2a). The Phase-2 layer adds the actual
-    /// DIP→pixel conversion; the message is wired now so the diagnostic
-    /// surface lands in the same release.
+    /// Emit one stderr <c>[reactor]</c> info-line per process the first time a
+    /// <c>Run</c> overload is invoked <em>with an explicit size</em>, describing
+    /// the DIP-vs-pixel size behavior change (spec 036 §12.1) and the dropped
+    /// 1024×768 size default (spec 036 §12.2a).
     /// </summary>
-    internal static void EmitDipBehaviorChangeNoticeOnce()
+    /// <remarks>
+    /// Call sites pass the caller's declared size so the notice stays silent for
+    /// an app that declares none. Such an app has nothing to migrate — it already
+    /// gets the OS-chosen extent the message exists to announce — and warning it
+    /// anyway contradicts the guidance to omit the arguments. The notice is
+    /// therefore driven by whether a size was supplied, not by <c>Run</c> being
+    /// reached at all.
+    /// </remarks>
+    /// <param name="width">Caller-supplied DIP width, or <c>null</c> when unset.</param>
+    /// <param name="height">Caller-supplied DIP height, or <c>null</c> when unset.</param>
+    internal static void EmitDipBehaviorChangeNoticeOnce(double? width = null, double? height = null)
     {
+        if (width is null && height is null) return;
         if (Interlocked.CompareExchange(ref _dipBehaviorChangeNoticeEmitted, 1, 0) != 0) return;
         Console.Error.WriteLine(
             "[reactor] WindowSpec.Width / Height and ReactorApp.Run<T>(width, height) are now DIPs, " +
@@ -1174,8 +1196,8 @@ public static partial class ReactorApp
             var request = new ReactorDevtoolsBootRequest(
                 options,
                 title,
-                width,
-                height,
+                options.WindowWidth ?? width,
+                options.WindowHeight ?? height,
                 fullScreen,
                 hostRoot,
                 hostRootFactory,

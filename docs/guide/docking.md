@@ -27,8 +27,6 @@ time, then use `DockManager` like any other Reactor element:
 ```csharp
 ReactorApp.Run<DockingApp>(
     title: "Docking",
-    width: 900,
-    height: 600,
     configure: host => DockingNativeInterop.Register(host.Reconciler));
 ```
 

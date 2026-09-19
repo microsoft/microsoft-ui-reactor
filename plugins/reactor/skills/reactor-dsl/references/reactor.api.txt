@@ -1918,7 +1918,7 @@ Unmount(UnmountContext ctx, TControl control) → void
 Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl) → void
 
 ### record DevtoolsCliOptions
-new(DevtoolsSubverb? Subverb, string ComponentName, bool VsCodeMode, int Fps, string ListOutputPath, string ScreenshotOutputPath, int? McpPort, string LogLevel, McpTransport Transport, bool UsedDeprecatedPreview, bool PreviewAndDevtoolsConflict, string ProjectIdentifier = null, bool LogsDisabled = false, int? LogsCapacityMb = null, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false)
+new(DevtoolsSubverb? Subverb, string ComponentName, bool VsCodeMode, int Fps, string ListOutputPath, string ScreenshotOutputPath, int? McpPort, string LogLevel, McpTransport Transport, bool UsedDeprecatedPreview, bool PreviewAndDevtoolsConflict, string ProjectIdentifier = null, bool LogsDisabled = false, int? LogsCapacityMb = null, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null)
 DevtoolsSubverb? Subverb { get; init; }
 McpTransport Transport { get; init; }
 WindowEmbedStyle EmbedStyle { get; init; }
@@ -1928,6 +1928,8 @@ bool LogsDisabled { get; init; }
 bool PreviewAndDevtoolsConflict { get; init; }
 bool UsedDeprecatedPreview { get; init; }
 bool VsCodeMode { get; init; }
+double? WindowHeight { get; init; }
+double? WindowWidth { get; init; }
 int Fps { get; init; }
 int? EmbedHostPid { get; init; }
 int? LogsCapacityMb { get; init; }
@@ -1938,7 +1940,7 @@ string ListOutputPath { get; init; }
 string LogLevel { get; init; }
 string ProjectIdentifier { get; init; }
 string ScreenshotOutputPath { get; init; }
-Deconstruct(ref DevtoolsSubverb? Subverb, ref string ComponentName, ref bool VsCodeMode, ref int Fps, ref string ListOutputPath, ref string ScreenshotOutputPath, ref int? McpPort, ref string LogLevel, ref McpTransport Transport, ref bool UsedDeprecatedPreview, ref bool PreviewAndDevtoolsConflict, ref string ProjectIdentifier, ref bool LogsDisabled, ref int? LogsCapacityMb, ref bool EmbedRequested, ref WindowEmbedStyle EmbedStyle, ref int? EmbedHostPid, ref string EmbedValidationError, ref bool EmbedAutoEnabledVsCode) → void
+Deconstruct(ref DevtoolsSubverb? Subverb, ref string ComponentName, ref bool VsCodeMode, ref int Fps, ref string ListOutputPath, ref string ScreenshotOutputPath, ref int? McpPort, ref string LogLevel, ref McpTransport Transport, ref bool UsedDeprecatedPreview, ref bool PreviewAndDevtoolsConflict, ref string ProjectIdentifier, ref bool LogsDisabled, ref int? LogsCapacityMb, ref bool EmbedRequested, ref WindowEmbedStyle EmbedStyle, ref int? EmbedHostPid, ref string EmbedValidationError, ref bool EmbedAutoEnabledVsCode, ref double? WindowWidth, ref double? WindowHeight) → void
 Equals(DevtoolsCliOptions other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

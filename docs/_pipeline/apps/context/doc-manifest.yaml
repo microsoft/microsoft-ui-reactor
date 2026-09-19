@@ -1,5 +1,4 @@
 app:
-  title: "Context"
   width: 600
   height: 600
   startup-delay: 1500
@@ -8,35 +7,28 @@ screenshots:
   - id: provide-consume
     description: "Provider passing a name to a consumer Greeting component"
     component: ProvideConsumeExample
-    region: client
     format: png
   - id: theme-switch
     description: "Toggle switch controlling dark/light theme via context"
     component: ThemeSwitchExample
-    region: client
     format: png
   - id: nested-override
     description: "Nested contexts showing parent value and overridden child"
     component: NestedOverrideExample
-    region: client
     format: png
   - id: multiple-contexts
     description: "Component consuming both UserName and FontScale contexts"
     component: MultipleContextsExample
-    region: client
     format: png
   - id: user-context
     description: "Typed CurrentUser context driving an AccountMenu and AdminPanel"
     component: UserContextExample
-    region: client
     format: png
   - id: memoize-context-value
     description: "UseMemo-stabilized ThemeConfig context with toggleable mode and scale"
     component: MemoizeContextValueExample
-    region: client
     format: png
   - id: mock-provider-test
     description: "Same CartConsumer rendered with production default and a test stub Provide"
     component: MockProviderExample
-    region: client
     format: png

@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<AdvancedWindowingApp>("Advanced Windowing", width: 520, height: 360);
+ReactorApp.Run<AdvancedWindowingApp>("Advanced Windowing");
 
 class AdvancedWindowingApp : Component
 {

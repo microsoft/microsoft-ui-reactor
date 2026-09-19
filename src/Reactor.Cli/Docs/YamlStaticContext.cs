@@ -24,8 +24,6 @@ namespace Microsoft.UI.Reactor.Cli.Docs;
 [YamlSerializable(typeof(DocManifest))]
 [YamlSerializable(typeof(AppConfig))]
 [YamlSerializable(typeof(ScreenshotConfig))]
-[YamlSerializable(typeof(BoundsConfig))]
-[YamlSerializable(typeof(SnippetSettings))]
 // reference-map.yaml (ReferenceMap.Parse)
 [YamlSerializable(typeof(ReferenceMap.FileShape))]
 [YamlSerializable(typeof(ReferenceMap.DefaultEntry))]

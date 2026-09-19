@@ -4,8 +4,7 @@ using Microsoft.UI.Reactor.Hooks;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<DevToolingApp>("Dev Tooling Demo", width: 600, height: 450
-);
+ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
 
 // <snippet:preview-app>
 class DevToolingApp : Component
@@ -32,9 +31,7 @@ class DevToolingApp : Component
 
 // <snippet:entry-point>
 // Program entry point — this is the entire App.cs file:
-// ReactorApp.Run<DevToolingApp>("Dev Tooling Demo",
-//     width: 600, height: 450
-// );
+// ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
 //
 // Hot reload works when the app is launched under dotnet watch. Devtools
 // screenshot capture is enabled by the app project's Reactor.DevtoolsSupport

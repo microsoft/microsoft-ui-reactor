@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<HooksApp>("Hooks Demo", width: 650, height: 600
-);
+ReactorApp.Run<HooksApp>("Hooks Demo");
 
 // <snippet:usestate>
 class StateDemo : Component

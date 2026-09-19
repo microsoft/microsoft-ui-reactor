@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Microsoft.UI.Reactor.Cli.Docs;
@@ -117,10 +118,19 @@ internal static class ScreenshotCapture
             _ => "x64",
         };
 
+        // The capture window size comes from the manifest, not from the doc app's
+        // own ReactorApp.Run call, so a doc app can omit width/height (taking the
+        // OS default when a human runs it) without its screenshots changing size.
+        // Invariant formatting: --width/--height are machine-facing switches, and
+        // a comma-decimal locale would otherwise emit "600,5" and be rejected.
+        var sizeArgs =
+            $" --width {manifest.App.Width.ToString(CultureInfo.InvariantCulture)}" +
+            $" --height {manifest.App.Height.ToString(CultureInfo.InvariantCulture)}";
+
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5",
+            Arguments = $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5{sizeArgs}",
             RedirectStandardOutput = true,
             RedirectStandardError = false,
             UseShellExecute = false,

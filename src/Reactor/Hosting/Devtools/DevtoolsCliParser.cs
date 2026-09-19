@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI.Reactor;
 
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
@@ -41,7 +42,9 @@ public sealed record DevtoolsCliOptions(
     WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child,
     int? EmbedHostPid = null,
     string? EmbedValidationError = null,
-    bool EmbedAutoEnabledVsCode = false);
+    bool EmbedAutoEnabledVsCode = false,
+    double? WindowWidth = null,
+    double? WindowHeight = null);
 
 /// <summary>
 /// Pure command-line parser for the devtools entry point. Has no side effects so it is
@@ -209,6 +212,15 @@ internal static class DevtoolsCliParser
 
         _ = anchorIdx;
 
+        // Window size override for a devtools-hosted window. The docs screenshot
+        // harness passes these so a doc app's capture size is declared in its
+        // doc-manifest.yaml rather than baked into its ReactorApp.Run call — the
+        // app itself can then omit width/height and take the OS default when a
+        // human runs it. Only positive finite values win; anything else leaves
+        // the Run-supplied size in place.
+        var windowWidth = ParseDimension(args, "--width");
+        var windowHeight = ParseDimension(args, "--height");
+
         string? embedValidationError = null;
         if (embedRequested)
         {
@@ -239,7 +251,24 @@ internal static class DevtoolsCliParser
             EmbedStyle: embedStyle,
             EmbedHostPid: embedHostPid,
             EmbedValidationError: embedValidationError,
-            EmbedAutoEnabledVsCode: embedAutoEnabledVsCode);
+            EmbedAutoEnabledVsCode: embedAutoEnabledVsCode,
+            WindowWidth: windowWidth,
+            WindowHeight: windowHeight);
+    }
+
+    /// <summary>
+    /// Reads a positive, finite DIP dimension following <paramref name="flag"/>.
+    /// Returns <c>null</c> when absent or unusable, so the caller keeps whatever
+    /// size the app itself declared. Parsed invariantly: this is a machine-facing
+    /// switch, so a comma-decimal locale must not change how "600.5" is read.
+    /// </summary>
+    private static double? ParseDimension(string[] args, string flag)
+    {
+        int idx = IndexOf(args, flag);
+        if (idx < 0 || idx + 1 >= args.Length) return null;
+        if (!double.TryParse(args[idx + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            return null;
+        return double.IsFinite(value) && value > 0 ? value : null;
     }
 
     private static (DevtoolsSubverb Subverb, int TrailingArgStart) ParseSubverbAfter(string[] args, int devtoolsIdx)

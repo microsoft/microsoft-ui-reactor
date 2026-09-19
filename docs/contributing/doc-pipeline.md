@@ -226,9 +226,9 @@ last ran capture, not of a build server.
 
 Capture at **150%** display scaling. A doc app's `doc-manifest.yaml` declares a
 window size in *logical* pixels, so a captured PNG scales roughly with the
-display scale factor — but not by an exact multiple. Most manifests use
-`region: client`, which captures the client area only and so excludes the
-window frame, and the window manager may adjust the requested extent. Treat the
+display scale factor — but not by an exact multiple. Capture takes the client
+area only, so the window frame is excluded, and the window manager may adjust
+the requested extent. Treat the
 scale as the thing to match and the pixel dimensions as an observed
 consequence, not a formula to validate against: `v1-protocol` declares
 `width: 520`, and its committed `led-indicator.png` measures 640px wide when

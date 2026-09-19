@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<LayoutApp>("Layout Demo", width: 700, height: 650
-);
+ReactorApp.Run<LayoutApp>("Layout Demo");
 
 // <snippet:vstack-hstack>
 class StackDemo : Component

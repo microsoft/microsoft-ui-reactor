@@ -1,5 +1,4 @@
 app:
-  title: "Effects and Lifecycle"
   width: 600
   height: 550
   startup-delay: 1500
@@ -8,20 +7,16 @@ screenshots:
   - id: mount-effect
     description: "Component showing the timestamp when it was mounted"
     component: MountEffectExample
-    region: client
     format: png
   - id: dependency-effect
     description: "Search box with reactive results updating as query changes"
     component: DependencyEffectExample
-    region: client
     format: png
   - id: timer-cleanup
     description: "Timer counting elapsed seconds with start/stop buttons"
     component: TimerCleanupExample
-    region: client
     format: png
   - id: async-loading
     description: "User list after async loading completes"
     component: AsyncLoadingExample
-    region: client
     format: png
