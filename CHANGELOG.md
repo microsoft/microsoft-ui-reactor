@@ -150,6 +150,17 @@ Conventions for contributors:
   batch whose filter excludes the identity guard runs the host a second time to fetch it, so an
   owner can legitimately occupy two consecutive budgets, and a contender could time out and
   report a collision against a perfectly healthy run.
+- The packaged tier's layout locks now share one wait deadline across the whole set rather than
+  restarting the timeout for each supported algorithm version, so a contender's worst case stays
+  the single bounded wait that is documented instead of growing with every version added.
+- A packaged-tier lock file that opens but cannot be stamped with its owner record now fails
+  immediately as a storage error. It was previously indistinguishable from contention, so the
+  run retried until the full layout timeout elapsed and then blamed a competing owner that did
+  not exist.
+- The packaged tier's name-only registration lookup — the fallback used when broad package
+  enumeration is unavailable — now probes every supported algorithm version's derived name, not
+  just the current one, so this layout's own registration from before a version bump is still
+  found and migrated rather than being registered on top of.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

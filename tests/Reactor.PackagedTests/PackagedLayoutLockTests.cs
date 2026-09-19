@@ -23,11 +23,27 @@ public class PackagedLayoutLockTests
 {
     private string _root = string.Empty;
 
+    /// <summary>
+    /// Layouts handed out by <see cref="SyntheticLayout"/>, so teardown can remove the lock
+    /// files they caused under the production lock directory.
+    /// </summary>
+    /// <remarks>
+    /// Tests that open a lock directly rather than through <c>TryAcquireAllLocks</c> bypass
+    /// <c>Release</c>, which is what normally unlinks these. Left alone they accumulate one
+    /// file per test run per version under <c>%LOCALAPPDATA%</c> forever — the same unbounded
+    /// growth this PR removes from the E2E suite, reintroduced by its own tests.
+    /// </remarks>
+    private readonly List<string> _syntheticLayouts = new();
+
     [TestInitialize]
     public void SetUp()
     {
         _root = Path.Join(Path.GetTempPath(), "reactor-lock-tests", Guid.NewGuid().ToString("n"));
         Directory.CreateDirectory(_root);
+
+        // Direct TryOpenLockFile calls do not create it, so on a profile where the tier has
+        // never run the preconditions below would fail for the directory's absence.
+        AppxLooseLayoutDeployment.EnsureLockDirectory();
     }
 
     [TestCleanup]
@@ -36,6 +52,19 @@ public class PackagedLayoutLockTests
         try { Directory.Delete(_root, recursive: true); }
         catch (IOException) { /* a leaked handle here must not mask the test's own verdict */ }
         catch (UnauthorizedAccessException) { /* likewise: a read-only leftover is not a failure */ }
+
+        var versions = TwoVersions.Concat(WorktreeIdentity.SupportedAlgorithmVersions);
+        foreach (var layout in _syntheticLayouts)
+        {
+            foreach (var version in versions)
+            {
+                try { File.Delete(AppxLooseLayoutDeployment.LockPathFor(layout, version)); }
+                catch (IOException) { /* still held: the owning test's verdict stands regardless */ }
+                catch (UnauthorizedAccessException) { /* likewise */ }
+            }
+        }
+
+        _syntheticLayouts.Clear();
     }
 
     private string LockPath => Path.Join(_root, "layout.lock");
@@ -209,8 +238,12 @@ public class PackagedLayoutLockTests
         Assert.IsTrue(File.Exists(LockPath), "The refused delete removed the file anyway.");
     }
 
-    private static string SyntheticLayout() =>
-        Path.Join(Path.GetTempPath(), "reactor-layout-" + Guid.NewGuid().ToString("n"));
+    private string SyntheticLayout()
+    {
+        var layout = Path.Join(Path.GetTempPath(), "reactor-layout-" + Guid.NewGuid().ToString("n"));
+        _syntheticLayouts.Add(layout);
+        return layout;
+    }
 
     /// <summary>
     /// Two algorithm versions that are both non-live, so the multi-version property is measured
@@ -528,6 +561,165 @@ public class PackagedLayoutLockTests
             "An unrelated name was accepted, so the guard no longer detects real drift.");
         Assert.IsFalse(deployment.IsExpectedManifestName(null),
             "A manifest with no Identity/@Name was accepted as expected.");
+    }
+
+    /// <summary>
+    /// The name-only fallback must probe every name this layout could be registered under.
+    /// </summary>
+    /// <remarks>
+    /// When broad enumeration fails, this lookup is all that is left of rules 1 and 2. Probing
+    /// only the current derivation would miss this layout's own registration from before an
+    /// algorithm bump — a registration the drift guard accepts and cleanup is meant to migrate
+    /// — and registration would then proceed on top of it. Driven with two versions, since the
+    /// live list holds one and could not distinguish the two implementations.
+    /// </remarks>
+    [TestMethod]
+    public void The_Name_Only_Fallback_Probes_Every_Supported_Derivation()
+    {
+        var layout = SyntheticLayout();
+        var basePackageName = AppxLooseLayoutDeployment.PackageName;
+
+        var names = AppxLooseLayoutDeployment.FallbackLookupNames(
+            basePackageName, layout, TwoVersions);
+
+        foreach (var version in TwoVersions)
+        {
+            var derived = WorktreeIdentity.DerivePackageName(basePackageName, layout, version);
+            CollectionAssert.Contains(names.ToList(), derived,
+                $"The fallback never looks up the name version '{version}' derives, so a " +
+                "registration this layout owns under it survives the sweep and registration " +
+                "proceeds on top of it.");
+        }
+
+        CollectionAssert.Contains(names.ToList(), basePackageName,
+            "The base name is what a pre-derivation run of this same checkout registered " +
+            "under; dropping it loses the migration case the fallback exists to reach.");
+
+        Assert.AreEqual(names.Count, names.Distinct(StringComparer.Ordinal).Count(),
+            "The fallback probes a name more than once, so the enumeration below it does " +
+            "redundant work per duplicate.");
+    }
+
+    /// <summary>
+    /// A contender's total wait must be one timeout for the whole set, not one per version.
+    /// </summary>
+    /// <remarks>
+    /// <para>Each lock used to be given the full timeout, so the worst case was the timeout times
+    /// the number of supported versions. That is invisible today — one version — and silently
+    /// breaks the single bounded wait <c>AcquireLayoutLock</c> advertises the moment a second is
+    /// added, which is exactly when the multi-version path starts being exercised.</para>
+    /// <para><b>The staging is load-bearing.</b> A failed path aborts the whole acquisition, so
+    /// only one lock can ever time out and simply blocking the first one costs a single budget
+    /// under either implementation — that version of this test passes against the defect. The
+    /// per-path restart is only observable when an earlier lock is acquired <i>after waiting</i>,
+    /// so the first blocker is released mid-wait while the second is held throughout: the fixed
+    /// code spends what is left of one budget on the second lock, the defect spends a whole
+    /// fresh one.</para>
+    /// </remarks>
+    [TestMethod]
+    public void The_Whole_Lock_Set_Shares_One_Wait_Budget()
+    {
+        var layout = SyntheticLayout();
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(layout, TwoVersions);
+
+        Assert.AreEqual(2, paths.Count, "Precondition: the staging needs two distinct locks.");
+
+        var budget = TimeSpan.FromSeconds(3);
+        var releaseAfter = TimeSpan.FromSeconds(3);
+
+        var first = AppxLooseLayoutDeployment.TryOpenLockFile(paths[0], "pid=1");
+        using var second = AppxLooseLayoutDeployment.TryOpenLockFile(paths[1], "pid=1");
+        Assert.IsNotNull(first, "Precondition: the first blocker must be acquirable.");
+        Assert.IsNotNull(second, "Precondition: the second blocker must be acquirable.");
+
+        // Freed mid-wait, so the contender reaches the second lock with most of its budget
+        // already spent. Held to the end, so the second wait is what the budget must bound.
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(releaseAfter);
+            first!.Dispose();
+        });
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var acquired = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+            layout, "pid=2", budget, TimeSpan.FromMilliseconds(50), out var blockedOn, TwoVersions);
+        clock.Stop();
+
+        release.GetAwaiter().GetResult();
+
+        Assert.IsNull(acquired, "Precondition: the acquisition must be refused.");
+        Assert.AreEqual(paths[1], blockedOn,
+            "Precondition: the wait must have ended on the lock that was held throughout.");
+
+        // Anywhere strictly between one budget (correct) and releaseAfter + one budget (a fresh
+        // timeout per path) separates the two; the midpoint leaves equal slack for scheduling.
+        var ceiling = budget + (releaseAfter / 2);
+        Assert.IsTrue(
+            clock.Elapsed < ceiling,
+            $"Acquiring {paths.Count} version locks took {clock.Elapsed}, past the {ceiling} " +
+            $"that separates one shared {budget} budget from a fresh one per lock. A contender's " +
+            "real worst case therefore grows with every supported version instead of staying " +
+            "the single bounded wait AcquireLayoutLock documents.");
+    }
+
+    /// <summary>
+    /// Failing to stamp an already-opened lock is a storage fault and must not be retried as
+    /// contention.
+    /// </summary>
+    /// <remarks>
+    /// <para>The open succeeding means this process owns the file, so treating a failed write as
+    /// "held" can only burn the whole timeout before blaming a contender that never existed.</para>
+    /// <para>Also covers the disposal path: the stamp failure blocks the flush too, so
+    /// <c>Dispose</c> throws the same <see cref="IOException"/>. Letting that escape the
+    /// handler would pre-empt the wrapper and land back in the retry path, which is what an
+    /// unguarded <c>stream.Dispose()</c> there did.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Lock_That_Opens_But_Cannot_Be_Stamped_Fails_Loudly()
+    {
+        var path = Path.Join(_root, "range-locked.lock");
+        File.WriteAllText(path, new string('x', 64));
+
+        // A reader sharing ReadWrite, holding a byte-range lock: the open is permitted and only
+        // the write fails. The failure arrives as an IOException, which is precisely the family
+        // the outer handler converts to "held" — a staging that failed some other way would
+        // have escaped the old code too and measured nothing.
+        using var holder = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        holder.Lock(0, long.MaxValue);
+
+        try
+        {
+            // Control: the open must still succeed, or this measures the open path rather than
+            // the stamp.
+            using (var probe = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read))
+            {
+                Assert.IsTrue(probe.CanWrite, "Precondition: the staged file must open writable.");
+            }
+
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                AppxLooseLayoutDeployment.WaitForLockFile(
+                    path, "pid=1", TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(50));
+
+                Assert.Fail(
+                    "A lock that opened but could not be stamped was reported as ordinary " +
+                    "contention, so a storage failure is retried until the full layout timeout " +
+                    "and then blamed on a competing owner that does not exist.");
+            }
+            catch (AppxLooseLayoutDeployment.LockStampException)
+            {
+                clock.Stop();
+                Assert.IsTrue(
+                    clock.Elapsed < TimeSpan.FromSeconds(10),
+                    $"The storage failure surfaced only after {clock.Elapsed}, so it was being " +
+                    "retried rather than escaping the poll loop on the first occurrence.");
+            }
+        }
+        finally
+        {
+            holder.Unlock(0, long.MaxValue);
+        }
     }
 
     /// <summary>

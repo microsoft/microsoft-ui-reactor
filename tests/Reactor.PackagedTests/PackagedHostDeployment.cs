@@ -129,6 +129,32 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         SupportedDerivedNames().Contains(manifestName, StringComparer.Ordinal);
 
     /// <summary>
+    /// The names the registration sweep looks up when broad enumeration is unavailable.
+    /// </summary>
+    /// <remarks>
+    /// Every supported derivation plus the base name. The base name covers a pre-derivation run
+    /// of this same checkout; the superseded derivations cover a run from before an algorithm
+    /// bump. Both are registrations this layout owns and cleanup is expected to migrate, and
+    /// this lookup is the only way to reach them once enumeration has failed — probing just the
+    /// current derivation would leave them in place and let registration proceed on top.
+    /// </remarks>
+    internal IReadOnlyList<string> FallbackLookupNames() =>
+        FallbackLookupNames(PackageName, _layoutDir, WorktreeIdentity.SupportedAlgorithmVersions);
+
+    /// <inheritdoc cref="FallbackLookupNames()"/>
+    /// <remarks>
+    /// Parameterised over the version set for the same reason as
+    /// <see cref="DeriveSupportedNames"/>: one version exists today, so a test using the live
+    /// list could not tell "every supported derivation" from "the current one".
+    /// </remarks>
+    internal static IReadOnlyList<string> FallbackLookupNames(
+        string basePackageName, string layoutDirectory, IEnumerable<string> algorithmVersions) =>
+        DeriveSupportedNames(basePackageName, layoutDirectory, algorithmVersions)
+            .Append(basePackageName)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>
     /// The build hint shared by every "host not built" diagnostic, so the message is the same
     /// whether the host is missing at discovery time or at registration time.
     /// </summary>
@@ -559,6 +585,17 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         "PackagedTests");
 
     /// <summary>
+    /// Creates the lock directory, for tests that open lock files through
+    /// <see cref="TryOpenLockFile"/> rather than through <see cref="TryAcquireAllLocks"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the acquisition path creates the directory. A test that opens a lock file directly
+    /// would therefore fail its own precondition on a profile where the tier has never run,
+    /// diagnosing a missing directory as a held lock.
+    /// </remarks>
+    internal static void EnsureLockDirectory() => Directory.CreateDirectory(LockDirectory);
+
+    /// <summary>
     /// Opens the lock file exclusively and stamps <paramref name="ownerRecord"/> into it, or
     /// returns <see langword="null"/> when another run holds it.
     /// </summary>
@@ -579,6 +616,12 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             // Ownership transfers to the caller only on success. Returning without disposing
             // here would leave this process holding the writer lock while reporting failure, so
             // its own retries would collide with it until the deadline and bury the real error.
+            //
+            // Rethrown as a distinct type rather than as-is: the open succeeded, so a failure
+            // to stamp is a storage fault, not contention. Left as an IOException it would be
+            // swallowed by the catch below, turned into "held", and retried until the whole
+            // layout timeout elapsed — reporting a competing owner that does not exist and
+            // hiding the actual error.
             try
             {
                 stream.SetLength(0);
@@ -586,10 +629,20 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                 stream.Write(bytes, 0, bytes.Length);
                 stream.Flush(flushToDisk: true);
             }
-            catch
+            catch (Exception ex)
             {
-                stream.Dispose();
-                throw;
+                // Disposal is guarded because it flushes: when the stamp failed for a reason
+                // that also blocks the flush — a byte-range lock, a full volume — Dispose
+                // throws the same IOException, and letting that escape would pre-empt the
+                // wrapper below and land right back in the "held, retry" path this exists to
+                // avoid. The original failure is the one worth reporting either way.
+                try { stream.Dispose(); }
+                catch (Exception disposeFailure)
+                {
+                    throw new LockStampException(path, new AggregateException(ex, disposeFailure));
+                }
+
+                throw new LockStampException(path, ex);
             }
 
             return stream;
@@ -604,6 +657,28 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             // Refused, and indistinguishable here from "held". Both callers want the same
             // answer for both: the waiter retries, and the reclamation lease declines to act.
             return null;
+        }
+    }
+
+    /// <summary>
+    /// A lock file opened exclusively but could not be stamped with its owner record.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not an <see cref="IOException"/>. The waiter treats that family as "held by
+    /// someone else" and retries, which is right for a failed open and wrong for a failed write:
+    /// the write failing means this process already owns the file, so retrying can only spend
+    /// the full timeout before reporting a contender that was never there. Carrying a distinct
+    /// type makes the storage fault escape the poll loop on the first occurrence.
+    /// </remarks>
+    internal sealed class LockStampException : InvalidOperationException
+    {
+        internal LockStampException(string path, Exception inner)
+            : base(
+                $"The layout lock '{path}' was opened exclusively but its owner record could " +
+                $"not be written, so this run holds the lock without being able to identify " +
+                $"itself to a contender. This is a storage failure, not contention.",
+                inner)
+        {
         }
     }
 
@@ -703,9 +778,20 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         }
 
         var acquired = new List<FileStream>();
+
+        // One deadline for the whole set, not one per path. Each lock was previously given the
+        // full timeout, so a contender's worst case was the timeout multiplied by the number of
+        // supported versions — which is one today and therefore invisible, but silently breaks
+        // the single bounded wait AcquireLayoutLock advertises the moment a version is added.
+        // A path reached after the budget is spent still gets one attempt, so an uncontended
+        // set is always acquired regardless of how long the earlier waits took.
+        var deadline = DateTime.UtcNow + timeout;
         foreach (var path in paths)
         {
-            var stream = WaitForLockFile(path, ownerRecord, timeout, pollInterval);
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+
+            var stream = WaitForLockFile(path, ownerRecord, remaining, pollInterval);
             if (stream is null)
             {
                 blockedOn = path;
@@ -874,18 +960,21 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         catch (Exception ex) when (ex is COMException or UnauthorizedAccessException)
         {
             // Enumeration is the optional half of this. Without it, rules 1 and 2 collapse to
-            // whatever can be looked up by name: this layout's derived name, plus the base name
-            // that a pre-derivation run of this same checkout would have registered under —
-            // reclaiming that migration case is one of this sweep's stated guarantees, and the
-            // targeted lookup is the only way left to reach it.
+            // whatever can be looked up by name: every derived name this layout could be
+            // registered under, plus the base name that a pre-derivation run of this same
+            // checkout would have used — reclaiming that migration case is one of this sweep's
+            // stated guarantees, and the targeted lookup is the only way left to reach it.
+            // Every *supported* derivation rather than just the current one, to match the drift
+            // guard: after an algorithm bump this layout's own registration still carries the
+            // previous version's name, and missing it here would leave the very registration
+            // cleanup exists to migrate in place.
             //
             // Rule 2's general form (any *other* name installed from this layout) and rule 3
             // both need the enumeration and are simply unavailable here. That is acceptable in
             // opposite directions: rule 3 is housekeeping, and anything rule 2 still misses is
             // caught downstream, because registering over a directory another package claims
             // fails the registration loudly rather than silently running the wrong binary.
-            ours = new[] { EffectivePackageName, PackageName }
-                .Distinct(StringComparer.Ordinal)
+            ours = FallbackLookupNames()
                 .SelectMany(name => manager.FindPackagesForUser(string.Empty, name, PackagePublisher))
                 .DistinctBy(p => p.Id.FullName, StringComparer.Ordinal)
                 .ToList();
