@@ -54,7 +54,21 @@ public class WinUiNavigationMotionParityTests
     /// Bumping <c>WindowsAppSDKVersion</c> without re-verifying is exactly the drift this
     /// suite exists to catch — see the guard test at the bottom of this file.
     /// </summary>
-    private const string VerifiedAgainstWindowsAppSdkVersion = "2.1.3";
+    /// <remarks>
+    /// <para>Re-verified for the 2.1.3 → 2.2.0 bump (spec 063 §3). The four source files
+    /// backing every constant below —
+    /// <c>src/dxaml/phone/lib/{ThemeTransitions.cpp,ThemeTransitions.h,NavigateTransitionHelper.h,NavigateTransitionHelper.cpp}</c>
+    /// — are <b>byte-identical</b> between the <c>microsoft/microsoft-ui-xaml</c> tags
+    /// <c>winui3/release/2.1.3</c> (<c>fce9db16349395cd9617ed8dc08ab40df1f46415</c>) and
+    /// <c>winui3/release/2.2.0</c> (<c>fb389b88af6d358f09d0adb614f941b64a82515d</c>): blob
+    /// SHAs <c>ade27cbf…</c>, <c>2c9bb435…</c>, <c>8761d909…</c>, <c>bf82d5cd…</c> respectively.
+    /// Identical blob SHAs are content identity, so no line-level drift is possible.</para>
+    /// <para>The tag-to-tag diff is non-empty (22 files: ScrollView, RenderTargetBitmap,
+    /// ContentPresenter, and x:Bind/Setter markup codegen) and touches no animation code —
+    /// that non-empty diff is the positive control proving the comparison can detect a
+    /// change, so "no change here" is a measurement rather than a broken query.</para>
+    /// </remarks>
+    private const string VerifiedAgainstWindowsAppSdkVersion = "2.2.0";
 
     // ════════════════════════════════════════════════════════════════
     //  Entrance — ThemeTransitions.cpp,
@@ -226,18 +240,52 @@ public class WinUiNavigationMotionParityTests
             (it renders transitions on the Composition layer — spec 011, Appendix C), so an SDK
             bump can silently desynchronise Reactor's navigation motion from the platform's.
 
-            Re-read the sources in microsoft/microsoft-ui-xaml at the tag for {actual}:
-              dxaml/phone/lib/ThemeTransitions.cpp
+            ── HOW TO DISCHARGE THIS GUARD (spec 063 §3) ──────────────────────────────────
+            Do NOT just bump the constant below. Establish whether the sources changed.
+
+            1. Tags. microsoft/microsoft-ui-xaml tags the WinUI 3 line as
+               `winui3/release/<WindowsAppSDKVersion>` — keyed to the SDK *metapackage*
+               version ({actual}), NOT to the Microsoft.WindowsAppSDK.WinUI sub-package
+               version. There is no `winui3/release/<winui-subpackage-version>` tag.
+
+            2. ⚠ PATH PREFIX — this is the trap. At a release tag the tree is rooted under
+               `src/`, but on `winui3/main` it is NOT. Querying the main-branch path against
+               a release tag returns 404 for every file, which reads exactly like "this tree
+               isn't published at tags" and makes the guard look impossible to discharge.
+               It is published; the prefix just differs.
+                 at a tag:          src/dxaml/phone/lib/ThemeTransitions.cpp   ✓
+                 on winui3/main:        dxaml/phone/lib/ThemeTransitions.cpp   ✓
+
+            3. Compare blob SHAs, not file contents. A blob SHA is content identity, so equal
+               SHAs prove no line-level drift is possible — and it cannot be fooled by two
+               error pages comparing equal:
+
+                 gh api repos/microsoft/microsoft-ui-xaml/contents/src/dxaml/phone/lib/ThemeTransitions.cpp?ref=winui3/release/<old> --jq .sha
+                 gh api repos/microsoft/microsoft-ui-xaml/contents/src/dxaml/phone/lib/ThemeTransitions.cpp?ref=winui3/release/<new> --jq .sha
+
+               Repeat for all four files listed below. A non-200 is a MISS, never a match —
+               check the exit code, do not string-compare the output.
+
+            4. Positive control, required. If the SHAs are equal, prove your comparison could
+               have come out otherwise: diff the two tags and confirm the diff is non-empty
+               (`gh api repos/microsoft/microsoft-ui-xaml/compare/<oldtag>...<newtag> --jq '.files[].filename'`).
+               A README-resolves check is NOT sufficient — README.md exists under both
+               layouts, so it cannot distinguish a wrong prefix from an absent tree.
+
+            The four files backing every constant in this file:
+              src/dxaml/phone/lib/ThemeTransitions.cpp
                 EntranceNavigationTransitionInfo::CreateStoryboards   (translationOffset, in/outDuration, control points)
                 SlideNavigationTransitionInfo::CreateStoryboards      (translationExit/EntranceOffset, durations, control points)
                 DrillInNavigationTransitionInfo::CreateStoryboards    (scaleFactor per trigger, scale/opacity curves)
-              dxaml/phone/lib/ThemeTransitions.h
+              src/dxaml/phone/lib/ThemeTransitions.h
                 DrillInNavigationTransitionInfo::s_*Duration
-              dxaml/phone/lib/NavigateTransitionHelper.h
+              src/dxaml/phone/lib/NavigateTransitionHelper.h
                 SLIDE_EASE, SLIDE_OFFSET_IN/OUT, SLIDE_MID_TIME, SLIDE_END_TIME
+              src/dxaml/phone/lib/NavigateTransitionHelper.cpp
 
-            Then update the constants and the recorded values in this file together, and set
-            VerifiedAgainstWindowsAppSdkVersion to {actual}.
+            If the SHAs are equal, record them in the VerifiedAgainstWindowsAppSdkVersion
+            remarks and bump it to {actual}. If they differ, re-read the changed regions and
+            update the constants and their recorded values together.
             """);
     }
 }

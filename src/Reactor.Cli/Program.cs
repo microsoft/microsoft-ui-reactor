@@ -358,7 +358,7 @@ string GenerateCsproj() =>
                                         Trim="true" />
       </ItemGroup>
       <ItemGroup>
-        <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
       </ItemGroup>
       <ItemGroup>
         <ProjectReference Include="..\src\Reactor\Reactor.csproj" />

@@ -121,10 +121,10 @@ public class WinAppSDKReferenceGuardTests
     /// The Windows App Runtime that <c>bootstrap.ps1</c> installs must be able to load
     /// what this repo builds. Windows App SDK 2.x ships ONE framework package per major
     /// (<c>Microsoft.WindowsAppRuntime.2</c>, named by the SDK's own
-    /// <c>WindowsAppSDK-VersionInfo.json</c>), serviced 2.0 → 2.1 → 2.3 in place, and the
+    /// <c>WindowsAppSDK-VersionInfo.json</c>), serviced 2.0 → 2.1 → 2.2 → 2.3 in place, and the
     /// major-only winget id tracks that servicing. The major.minor ids are *separate*
     /// winget packages pinned to a single servicing line: <c>…WindowsAppRuntime.2.0</c>
-    /// still installs 2.0.1, which cannot satisfy an app built against 2.1.3. Hardcoding
+    /// still installs 2.0.1, which cannot satisfy an app built against 2.2.0. Hardcoding
     /// one let the id drift a whole minor behind <c>WindowsAppSDKVersion</c>, so the rule
     /// now lives in <c>tools/WindowsAppRuntimeId.ps1</c> — and this test is what keeps it
     /// honest, because the PowerShell script suites do not run when only
@@ -208,7 +208,7 @@ public class WinAppSDKReferenceGuardTests
     /// place — without needing any of them to be restorable.
     /// </summary>
     [Theory]
-    [InlineData("2.1.3", "Microsoft.WindowsAppRuntime.2")]   // what this repo pins today
+    [InlineData("2.2.0", "Microsoft.WindowsAppRuntime.2")]   // what this repo pins today
     [InlineData("2.0.1", "Microsoft.WindowsAppRuntime.2")]   // older 2.x -> same framework package
     [InlineData("2.3.1", "Microsoft.WindowsAppRuntime.2")]   // newer 2.x -> same framework package
     [InlineData("3.0.0", "Microsoft.WindowsAppRuntime.3")]   // next major -> follows automatically
@@ -235,6 +235,12 @@ public class WinAppSDKReferenceGuardTests
     /// would report a perfectly good runtime as too old).
     /// </summary>
     [Theory]
+    // Current floor. Without these the suite would keep validating only the previous
+    // pin and a regression in the minimum-version check could pass unnoticed.
+    [InlineData("2.2.0.0", "2.2.0", true)]    // exact match at today's pin
+    [InlineData("2.3.1.0", "2.2.0", true)]    // serviced forward past today's pin
+    [InlineData("2.1.3.0", "2.2.0", false)]   // the previous pin no longer suffices
+    // Historical mapping cases, retained so the rule itself stays pinned.
     [InlineData("2.3.1.0", "2.1.3", true)]    // serviced forward
     [InlineData("2.1.3.0", "2.1.3", true)]    // exact match, differing part counts
     [InlineData("2.0.1.0", "2.1.3", false)]   // the defect: present but too old
@@ -484,6 +490,716 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
             }
 
             yield return path;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Literal-pin sweep (spec 063 §3.0)
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Extensions worth scanning for a hand-written SDK version pin. Deliberately
+    /// broad: pins have historically hidden in markdown snippets and in a plain-text
+    /// LLM system prompt, not only in project files. <c>.dt</c> covers the docs
+    /// pipeline's <c>*.md.dt</c> templates, which are the *source* for generated
+    /// guides — a pin there would otherwise reach users via a compiled guide while
+    /// bypassing this sweep entirely.
+    /// </summary>
+    private static readonly string[] PinScanExtensions =
+        [".cs", ".csproj", ".proj", ".props", ".targets", ".vcxproj", ".wapproj", ".vbproj",
+         ".fsproj", ".xml", ".md", ".dt", ".ps1", ".txt", ".json", ".yml", ".yaml"];
+
+    /// <summary>
+    /// The two pin shapes that carry a literal version and do NOT inherit
+    /// <c>$(WindowsAppSDKVersion)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The second shape is the reason this test exists. Spec 059 §3 prescribed
+    /// grepping <c>Microsoft.WindowsAppSDK" Version=</c>, which structurally cannot
+    /// match a file-based-app <c>#:package</c> header — so 22 literal occurrences
+    /// across 20 files (18 of them shipped agent-kit recipes) sat a full major-minor
+    /// below the framework's own floor for an entire release cycle, advertising an
+    /// NU1605 downgrade to anyone who ran them. An enumeration that lives in a prose
+    /// instruction is only ever as good as the last person's regex; this makes it a
+    /// gate.
+    /// <para>Both patterns are matched against whole file text rather than
+    /// line-by-line: a `PackageReference` may legally split `Include` and `Version`
+    /// across lines, and a per-line scan would silently miss it while the one-line
+    /// examples elsewhere kept the positive control green.</para>
+    /// <para>Note this doc comment deliberately spells out no example version or
+    /// placeholder: the sweep reads every file including this one, so a literal here
+    /// would either fail the guard or force an exclusion that would blind it to the
+    /// very file defining it. The positive control below additionally requires a
+    /// *parseable numeric* version, so a prose placeholder cannot satisfy it.</para>
+    /// </remarks>
+    /// <summary>
+    /// Locates a <c>PackageReference</c> / <c>PackageVersion</c> element, in XML files
+    /// and in markdown/prose snippets alike. Attributes are pulled out of the matched
+    /// element separately so that attribute <i>order</i>, quote style, and
+    /// <c>VersionOverride</c> are all handled — a regex that hard-codes
+    /// <c>Include</c>-before-<c>Version</c> silently skips the legal reverse ordering.
+    /// </summary>
+    private static readonly Regex PackageElement = new(
+        @"<(?:PackageReference|PackageVersion)\b(?:[^>]*?/>|[^>]*?>.*?</(?:PackageReference|PackageVersion)>)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
+
+    private static readonly Regex PackageNameAttr = new(
+        @"(?:Include|Update)\s*=\s*[""']([^""']+)[""']",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Covers <c>VersionOverride</c>, which CPM explicitly permits, and the child
+    /// <c>&lt;Version&gt;</c> metadata form — MSBuild accepts item metadata as either
+    /// an attribute or a child element, and an attribute-only reader silently ignores
+    /// the latter.
+    /// </summary>
+    private static readonly Regex PackageVersionAttr = new(
+        @"Version\s*=\s*[""']([^""']+)[""']|<Version>\s*([^<\s]+)\s*</Version>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// <c>VersionOverride</c> is matched separately because it <i>wins</i> over
+    /// <c>Version</c> under central package management. A single alternation would
+    /// return whichever appeared first in the element, so an item carrying a current
+    /// <c>Version</c> followed by a stale <c>VersionOverride</c> would be recorded as
+    /// current while restore used the stale value.
+    /// </summary>
+    private static readonly Regex PackageVersionOverrideAttr = new(
+        @"VersionOverride\s*=\s*[""']([^""']+)[""']|<VersionOverride>\s*([^<\s]+)\s*</VersionOverride>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Extract the package name and the version that actually takes effect from one
+    /// <c>PackageReference</c> / <c>PackageVersion</c> element. Internal so the
+    /// attribute-order, quote-style, <c>VersionOverride</c>-precedence and child-metadata
+    /// branches can be tested directly — the live tree only supplies the ordinary
+    /// attribute form, so those branches are otherwise unreachable from the sweep and a
+    /// regression in them would not redden anything.
+    /// </summary>
+    internal static (string? Package, string? Version) ExtractPin(string elementText)
+    {
+        var name = PackageNameAttr.Match(elementText);
+        if (!name.Success) return (null, null);
+
+        // VersionOverride first: it is the effective value when both are present.
+        var ovr = PackageVersionOverrideAttr.Match(elementText);
+        if (ovr.Success)
+            return (name.Groups[1].Value, ovr.Groups[1].Success ? ovr.Groups[1].Value : ovr.Groups[2].Value);
+
+        var ver = PackageVersionAttr.Match(elementText);
+        if (!ver.Success) return (name.Groups[1].Value, null);
+        return (name.Groups[1].Value, ver.Groups[1].Success ? ver.Groups[1].Value : ver.Groups[2].Value);
+    }
+
+    private static readonly Regex FileBasedPin = new(
+        @"#:package\s+(Microsoft\.WindowsAppSDK(?:\.\w+)?)@([^\s""'`]+)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// The PowerShell shape used by the perf harness to stage a runtime. Neither of
+    /// the markup shapes above can see it, so without this a stale pin there would
+    /// stage a runtime too old to load what the harness builds.
+    /// </summary>
+    /// <remarks>
+    /// This doc deliberately does not spell out the literal assignment it matches. The
+    /// sweep reads every file including this one, so an example here would satisfy the
+    /// positive control by itself — the same self-satisfying-control defect already
+    /// fixed once for the file-based shape. The control additionally requires the
+    /// match to come from the harness script itself.
+    /// </remarks>
+    private static readonly Regex ScriptRuntimePin = new(
+        @"\$pkg\s*=\s*'(Microsoft\.WindowsAppSDK(?:\.\w+)?)'\s*;\s*\$ver\s*=\s*'([^']+)'",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Which central property each package's floor comes from. The repo deliberately
+    /// versions the WinUI sub-package independently of the metapackage (2.2.1 vs
+    /// 2.2.0), so comparing a WinUI pin against <c>WindowsAppSDKVersion</c> would
+    /// report a current pin as stale and let a genuinely stale one pass. Packages
+    /// absent from this map have no central floor and are not compared.
+    /// </summary>
+    private static readonly Dictionary<string, string> PackageFloorProperty = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Microsoft.WindowsAppSDK"] = "WindowsAppSDKVersion",
+        ["Microsoft.WindowsAppSDK.Runtime"] = "WindowsAppSDKVersion",
+        ["Microsoft.WindowsAppSDK.WinUI"] = "WindowsAppSDKWinUIVersion",
+    };
+
+    /// <summary>
+    /// No literal Windows App SDK pin anywhere in the tree may name a version BELOW
+    /// the central <c>WindowsAppSDKVersion</c>. A stale pin is an <c>NU1605</c>
+    /// downgrade against the floor the framework itself advertises, and the shipped
+    /// agent-kit recipes make it a user-facing defect rather than an internal one.
+    /// </summary>
+    /// <remarks>
+    /// Pins ABOVE the central version are allowed: docs legitimately state a
+    /// feature's minimum SDK (e.g. "TitleBar drag regions need ≥ 2.1.3"), and a
+    /// forward pin is not a downgrade. Only backward drift is an error.
+    /// </remarks>
+    [Fact]
+    public void No_literal_SDK_pin_sits_below_the_central_pinned_version()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+
+        // Each package compares against ITS OWN central floor (§3 — the WinUI
+        // sub-package is versioned independently of the metapackage).
+        var propsDoc = XDocument.Load(Path.Join(root!, "Directory.Build.props"));
+        string ReadCentral(string property) => propsDoc.Descendants()
+            .Where(e => e.Name.LocalName == property)
+            .Where(e => e.AncestorsAndSelf().All(a => a.Attribute("Condition") is null))
+            .Select(e => e.Value.Trim())
+            .Single();
+
+        var floors = PackageFloorProperty.Values.Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(p => p, ReadCentral, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (property, value) in floors)
+            Assert.True(ParsePin(value) is not null, $"Unparseable central {property} '{value}'");
+
+        var found = new List<(string Rel, int Line, string Label, string Package, string Version)>();
+        foreach (var file in EnumerateScannableFiles(root!))
+        {
+            var rel = Path.GetRelativePath(root!, file).Replace('\\', '/');
+
+            // Historical records deliberately quote the versions of their era and must
+            // not be rewritten: CHANGELOG entries cite the stale pins they fixed, the
+            // specs that document this defect necessarily name the old version, and
+            // docs/research holds dated investigation write-ups (e.g. a 1.7-era
+            // WinForms interop study pinning 1.7.*). Live guidance lives elsewhere —
+            // samples/WinFormsInterop/README.md is the current counterpart of that
+            // study and IS swept.
+            if (rel.Equals("CHANGELOG.md", StringComparison.OrdinalIgnoreCase)
+                || rel.StartsWith("docs/specs/", StringComparison.OrdinalIgnoreCase)
+                || rel.StartsWith("docs/research/", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Whole file text, not per line: a PackageReference may legally split its
+            // attributes across lines, and a per-line scan would miss it while the
+            // one-line examples elsewhere kept the positive control green.
+            var text = File.ReadAllText(file);
+            int LineOf(int index) => text.Take(index).Count(c => c == '\n') + 1;
+
+            foreach (Match el in PackageElement.Matches(text))
+            {
+                var (pkg, version) = ExtractPin(el.Value);
+                if (pkg is null || version is null) continue;
+                if (!PackageFloorProperty.ContainsKey(pkg)) continue;
+                found.Add((rel, LineOf(el.Index), "PackageReference", pkg, version));
+            }
+
+            foreach (Match m in FileBasedPin.Matches(text))
+            {
+                if (!PackageFloorProperty.ContainsKey(m.Groups[1].Value)) continue;
+                found.Add((rel, LineOf(m.Index), "#:package", m.Groups[1].Value, m.Groups[2].Value));
+            }
+
+            foreach (Match m in ScriptRuntimePin.Matches(text))
+            {
+                if (!PackageFloorProperty.ContainsKey(m.Groups[1].Value)) continue;
+                found.Add((rel, LineOf(m.Index), "script $ver", m.Groups[1].Value, m.Groups[2].Value));
+            }
+        }
+
+        // Positive control. A scanner whose patterns silently stopped matching would
+        // report zero offenders and pass just as green as a clean tree — the exact
+        // failure this test is meant to prevent. Require BOTH shapes to be observed,
+        // so a regex that decays reddens instead of blessing everything.
+        //
+        // The control demands a *parseable numeric* version, not merely a match: a
+        // prose placeholder in a doc comment (this file's own remarks, say) would
+        // otherwise satisfy it while every real pin had vanished or changed syntax.
+        foreach (var label in new[] { "PackageReference", "#:package", "script $ver" })
+        {
+            // The control must be satisfied from a PRODUCTION file. This test file is
+            // swept too, and it contains fixture strings in both the PackageReference
+            // and (historically) the script shapes — so a scanner that stopped
+            // recognising real project/docs content while still matching its own
+            // fixtures would leave `found` non-empty and pass. Same defect already
+            // fixed once for the script shape; this closes it for the others.
+            var ok = found.Any(f =>
+                f.Label == label
+                && ParsePin(f.Version) is not null
+                && !f.Rel.EndsWith("WinAppSDKReferenceGuardTests.cs", StringComparison.OrdinalIgnoreCase)
+                && (label != "script $ver"
+                    || f.Rel.EndsWith("Run-PerfBenchmark.ps1", StringComparison.OrdinalIgnoreCase)));
+
+            Assert.True(
+                ok,
+                $"Pin scanner found no '{label}' pin with a parseable numeric version in a "
+                    + "production file. Either the repo genuinely stopped using that shape (then "
+                    + "drop it from the scan), or the pattern has decayed and this guard is now "
+                    + "blessing every file it cannot parse. A zero result from an unvalidated "
+                    + "scanner is not a measurement.");
+        }
+
+        // A discovered pin whose version cannot be parsed is not "fine" — restore
+        // cannot use it either. Variable ($(...)) and floating (*) forms are handled
+        // by ComparePin and are legitimately non-numeric; anything else is malformed
+        // and must fail loudly rather than slip through as non-stale.
+        var unparseable = found
+            .Where(f => !f.Version.Contains('$')
+                        && !f.Version.Contains('{')
+                        && !f.Version.Contains('*')
+                        && !IsWellFormedRange(f.Version)
+                        && ParsePin(f.Version) is null)
+            .Select(f => $"{f.Rel}:{f.Line}  [{f.Label}]  {f.Package} '{f.Version}'")
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            unparseable.Count == 0,
+            "These Microsoft.WindowsAppSDK pins have a version this guard cannot parse, so it "
+                + "cannot tell whether they sit below the floor. Fix the literal (or teach "
+                + "ParsePin the form):\n  " + string.Join("\n  ", unparseable));
+
+        var stale = found
+            .Select(f =>
+            {
+                var floor = floors[PackageFloorProperty[f.Package]];
+                return (f.Rel, f.Line, f.Label, f.Package, f.Version, Floor: floor,
+                        Cmp: ComparePin(f.Version, floor, ParsePin(floor)!));
+            })
+            .Where(f => f.Cmp < 0)
+            .Select(f => $"{f.Rel}:{f.Line}  [{f.Label}]  {f.Package} {f.Version}  <  {f.Floor}")
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            stale.Count == 0,
+            $"These literal Microsoft.WindowsAppSDK pins are BELOW their central floor, "
+                + "which is an NU1605 downgrade against what the framework advertises. Bump "
+                + "them in lockstep with Directory.Build.props:\n  " + string.Join("\n  ", stale));
+    }
+
+    /// <summary>
+    /// Compare a pin against the central version. Negative means the pin is BELOW the
+    /// floor (an NU1605 downgrade); zero or positive means it is fine.
+    /// </summary>
+    /// <remarks>
+    /// Wildcard pins need their own arm. <c>2.1.*</c> floats only within the prefix it
+    /// names, so it can never resolve to <c>2.2.0</c> — treating it as
+    /// "non-comparable", as an earlier revision did, silently exempted exactly the
+    /// downgrade shape spec 059 §3 called out. The prefix is compared with the
+    /// corresponding leading components of the central version. An MSBuild-variable
+    /// pin (<c>$(WindowsAppSDKVersion)</c>) genuinely tracks the centre and is exempt.
+    /// </remarks>
+    /// <summary>
+    /// Whether a value is a well-formed NuGet interval: bracketed on both ends, and
+    /// every bound it specifies parseable. Used to decide both how
+    /// <see cref="ComparePin"/> reads it and whether the malformed-pin check should
+    /// exempt it — without this, "[2.2.0" (unterminated) and "[not-a-version]" were
+    /// exempted as ranges and then compared as 0, so an invalid literal passed.
+    /// </summary>
+    private static bool IsWellFormedRange(string raw)
+    {
+        var text = raw.Trim();
+        if (text.Length < 3) return false;
+        if (!(text.StartsWith('[') || text.StartsWith('('))) return false;
+        if (!(text.EndsWith(']') || text.EndsWith(')'))) return false;
+
+        var body = text[1..^1];
+        var comma = body.IndexOf(',');
+        if (comma < 0)
+        {
+            // Exact form "[2.1.3]" — must be inclusive on both ends and parseable.
+            return text.StartsWith('[') && text.EndsWith(']') && ParsePin(body.Trim()) is not null;
+        }
+
+        var lower = body[..comma].Trim();
+        var upper = body[(comma + 1)..].Trim();
+        if (lower.Length == 0 && upper.Length == 0) return false;
+        if (lower.Length > 0 && ParsePin(lower) is null) return false;
+        if (upper.Length > 0 && ParsePin(upper) is null) return false;
+        return true;
+    }
+
+    private static int ComparePin(string raw, string centralRaw, Version centralVersion)
+    {
+        var text = raw.Trim();
+
+        // Variable pins track the central value by construction: MSBuild
+        // $(WindowsAppSDKVersion), or a C# interpolation hole in a scaffold template
+        // (samples/apps/widget-creator generates WidgetSdkVersions from the same
+        // property). Neither is a literal, so neither can drift.
+        if (text.Contains('$') || text.Contains('{')) return 0;
+
+        // NuGet interval notation: [1.0,2.0) / (,2.1.3] / [2.2.0,) / [2.1.3] (exact).
+        // Restore resolves a range to its LOWEST satisfying version, so the lower bound
+        // is what decides whether the pin can drop below the floor — the opposite of a
+        // floating pin below, which takes the highest match. An earlier revision
+        // compared the upper bound and so accepted "[2.1.3,)", which restores 2.1.3.
+        if ((text.StartsWith('[') || text.StartsWith('(')) && IsWellFormedRange(text))
+        {
+            var inclusiveLower = text.StartsWith('[');
+            var body = text[1..^1];
+            var comma = body.IndexOf(',');
+
+            // No comma: an exact-version range, "[2.1.3]".
+            var lowerRaw = (comma < 0 ? body : body[..comma]).Trim();
+
+            // No lower bound ("(,2.1.3]") floats down to the earliest published
+            // version, which is necessarily below any floor.
+            if (lowerRaw.Length == 0) return -1;
+
+            var lower = ParsePin(lowerRaw);
+            if (lower is null) return 0;
+
+            if (lower < centralVersion) return -1;
+            if (lower > centralVersion) return 0;
+
+            // Equal numeric cores.
+            if (!inclusiveLower) return 0; // exclusive lower starts above the floor
+            var lowerPre = PrereleaseLabel(lowerRaw);
+            var floorLabel = PrereleaseLabel(centralRaw);
+            if (lowerPre is not null && floorLabel is null) return -1;
+            if (lowerPre is not null && floorLabel is not null
+                && ComparePrerelease(lowerPre, floorLabel) < 0) return -1;
+            return 0;
+        }
+
+        if (text.Contains('*'))
+        {
+            // A floating pin resolves to the HIGHEST available version matching its
+            // prefix — not the lowest. So 2.2.* can restore 2.2.1 and is NOT a
+            // downgrade against a 2.2.1 floor; only a prefix that cannot reach the
+            // floor at all is. (An earlier revision compared the zero-filled lowest
+            // version, which reported valid floating pins stale.) Note this differs
+            // from interval notation above, where NuGet picks the lowest satisfying
+            // version — the two syntaxes genuinely resolve in opposite directions.
+            var star = text.IndexOf('*');
+            var prefix = text[..star].TrimEnd('.');
+            if (prefix.Length == 0) return 0; // bare "*" floats to anything, incl. the floor
+
+            var dash = prefix.IndexOf('-');
+            var numericPrefix = dash >= 0 ? prefix[..dash] : prefix;
+            var preLabelPrefix = dash >= 0 ? prefix[(dash + 1)..].TrimEnd('.') : null;
+
+            var pinParts = numericPrefix.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (pinParts.Length == 0 || !pinParts.All(p => int.TryParse(p, out _))) return 0;
+
+            // Compare only the components the prefix actually specifies; the wildcard
+            // covers everything after them and can float up to the floor.
+            var floorParts = new[]
+            {
+                centralVersion.Major, centralVersion.Minor,
+                Math.Max(centralVersion.Build, 0), Math.Max(centralVersion.Revision, 0),
+            };
+            for (var i = 0; i < pinParts.Length && i < floorParts.Length; i++)
+            {
+                var p = int.Parse(pinParts[i]);
+                if (p != floorParts[i]) return p < floorParts[i] ? -1 : 1;
+            }
+
+            // Same numeric core as the floor. A prerelease float sits below a stable
+            // floor. Against a prerelease floor, the wildcard is a RANGE, not a
+            // concrete version: 2.2.0-preview.* can resolve 2.2.0-preview.1, so a
+            // floor whose label extends the wildcard's prefix is reachable and the pin
+            // is not a downgrade. Only a prefix that sorts strictly after the floor is.
+            var floorPre = PrereleaseLabel(centralRaw);
+            if (preLabelPrefix is not null)
+            {
+                if (floorPre is null) return -1;
+                // An empty prefix ("2.2.0-*") floats across every prerelease label, so
+                // it can reach any prerelease floor.
+                if (preLabelPrefix.Length == 0) return 0;
+                if (floorPre.Equals(preLabelPrefix, StringComparison.Ordinal)
+                    || floorPre.StartsWith(preLabelPrefix + ".", StringComparison.Ordinal))
+                {
+                    return 0; // the range can reach the floor
+                }
+                return ComparePrerelease(preLabelPrefix, floorPre) < 0 ? -1 : 0;
+            }
+            return floorPre is null ? 0 : 1;
+        }
+
+        var parsed = ParsePin(text);
+        if (parsed is null) return 0;
+        if (parsed < centralVersion) return -1;
+        if (parsed > centralVersion) return 1;
+
+        // Equal numeric cores. NuGet orders a prerelease BELOW the stable release of
+        // the same version, so 2.2.0-preview.1 is a real downgrade against a stable
+        // 2.2.0 — stripping the suffix (as ParsePin does for comparability) would
+        // otherwise report them equal and let it through.
+        var pinPre = PrereleaseLabel(text);
+        var centralPre = PrereleaseLabel(centralRaw);
+        if (pinPre is not null && centralPre is null) return -1;
+        if (pinPre is null && centralPre is not null) return 1;
+        if (pinPre is null) return 0;
+
+        // Both prerelease: compare identifier sequences per SemVer §11, so a
+        // prerelease floor (2.2.0-preview.2) still catches an older prerelease pin.
+        return ComparePrerelease(pinPre, centralPre!);
+    }
+
+    /// <summary>
+    /// The SemVer prerelease label of a version (<c>preview.1</c>), or null when the
+    /// version is stable. Build metadata (<c>+sha</c>) does not affect ordering.
+    /// </summary>
+    private static string? PrereleaseLabel(string version)
+    {
+        // Same anchored grammar as ParsePin — a prefix match would read a label off a
+        // malformed literal and let the two disagree about what parsed.
+        var m = Regex.Match(
+            version.Trim(),
+            @"^(?<core>\d+(?:\.\d+){0,3})(?:-(?<pre>[0-9A-Za-z][0-9A-Za-z.-]*))?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$");
+        if (!m.Success || !m.Groups["pre"].Success) return null;
+        return m.Groups["pre"].Value;
+    }
+
+    private static bool HasPrerelease(string version) => PrereleaseLabel(version) is not null;
+
+    /// <summary>
+    /// SemVer §11 precedence for prerelease labels: dot-separated identifiers compared
+    /// left to right; numeric identifiers compare numerically and rank below
+    /// alphanumeric ones; a shorter prefix ranks below its longer extension.
+    /// </summary>
+    private static int ComparePrerelease(string left, string right)
+    {
+        var l = left.Split('.');
+        var r = right.Split('.');
+        for (var i = 0; i < Math.Max(l.Length, r.Length); i++)
+        {
+            if (i >= l.Length) return -1;
+            if (i >= r.Length) return 1;
+
+            var lNum = int.TryParse(l[i], out var li);
+            var rNum = int.TryParse(r[i], out var ri);
+            if (lNum && rNum)
+            {
+                if (li != ri) return li < ri ? -1 : 1;
+            }
+            else if (lNum != rNum)
+            {
+                return lNum ? -1 : 1; // numeric identifiers rank below alphanumeric
+            }
+            else
+            {
+                var cmp = string.CompareOrdinal(l[i], r[i]);
+                if (cmp != 0) return cmp < 0 ? -1 : 1;
+            }
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Parse a concrete pin into a comparable <see cref="Version"/>. Returns null for
+    /// floating/variable pins, which <see cref="ComparePin"/> handles separately.
+    /// </summary>
+    private static Version? ParsePin(string raw)
+    {
+        var text = raw.Trim();
+        if (text.Length == 0 || text.Contains('$') || text.Contains('*')) return null;
+
+        // Anchored, not a prefix match. A leading-prefix pattern accepts
+        // "2.2.0not-a-version" as 2.2.0, which would both defeat the unparseable
+        // check and compare as current. The grammar is NuGet's: one to four numeric
+        // components, an optional SemVer prerelease label, an optional build metadata
+        // suffix (which does not affect ordering).
+        var m = Regex.Match(
+            text,
+            @"^(?<core>\d+(?:\.\d+){0,3})(?:-(?<pre>[0-9A-Za-z][0-9A-Za-z.-]*))?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$");
+        if (!m.Success) return null;
+
+        // Normalize part counts: [Version]'2.2' has Build -1 and would sort below
+        // '2.2.0', reporting a perfectly current pin as stale.
+        var parts = m.Groups["core"].Value.Split('.').Select(int.Parse).ToArray();
+        return new Version(
+            parts.Length > 0 ? parts[0] : 0,
+            parts.Length > 1 ? parts[1] : 0,
+            parts.Length > 2 ? parts[2] : 0,
+            parts.Length > 3 ? parts[3] : 0);
+    }
+
+    /// <summary>
+    /// Direct coverage of the ordering rules, because the current tree exercises only
+    /// stable and variable pins: the wildcard and prerelease branches would otherwise
+    /// be dead code that the sweep above never reaches, so a regression in them would
+    /// pass while the guard still claimed to enforce the pin policy.
+    /// </summary>
+    [Theory]
+    // Stable, the ordinary case.
+    [InlineData("2.2.0", "2.2.0", 0)]
+    [InlineData("2.1.3", "2.2.0", -1)]
+    [InlineData("2.3.1", "2.2.0", 1)]
+    // Part-count normalization: '2.2' must not sort below '2.2.0'.
+    [InlineData("2.2", "2.2.0", 0)]
+    // Variable pins track the centre by construction.
+    [InlineData("$(WindowsAppSDKVersion)", "2.2.0", 0)]
+    [InlineData("{WidgetSdkVersions.WindowsAppSdk}", "2.2.0", 0)]
+    // Floating pins resolve to the HIGHEST matching version, so a prefix that can
+    // reach the floor is fine; only one that cannot is a downgrade.
+    [InlineData("2.1.*", "2.2.0", -1)]
+    [InlineData("2.2.*", "2.2.0", 0)]
+    [InlineData("2.2.*", "2.2.1", 0)]    // can restore 2.2.1
+    [InlineData("2.*", "2.2.0", 0)]      // can restore any 2.x
+    [InlineData("1.*", "2.2.0", -1)]     // cannot leave 1.x
+    [InlineData("2.3.*", "2.2.0", 1)]
+    [InlineData("*", "2.2.0", 0)]
+    // Prerelease floats resolve only prereleases, which sit below the stable release.
+    [InlineData("2.2.0-*", "2.2.0", -1)]
+    [InlineData("2.2.0-preview.*", "2.2.0", -1)]
+    [InlineData("2.1.0-preview.*", "2.2.0", -1)]
+    // Against a PRERELEASE floor a wildcard is a range: it is not stale if it can
+    // reach the floor. 2.2.0-preview.* can resolve 2.2.0-preview.1.
+    [InlineData("2.2.0-preview.*", "2.2.0-preview.1", 0)]
+    [InlineData("2.2.0-alpha.*", "2.2.0-preview.1", -1)]
+    // A bare-major pin is legal NuGet and must not be exempt.
+    [InlineData("2", "2.2.0", -1)]
+    [InlineData("3", "2.2.0", 1)]
+    // An unqualified prerelease float reaches any prerelease floor.
+    [InlineData("2.2.0-*", "2.2.0-preview.1", 0)]
+    // NuGet interval notation: restore takes the LOWEST satisfying version, so the
+    // lower bound decides. (Floating pins above take the highest — opposite direction.)
+    [InlineData("(,2.1.3]", "2.2.0", -1)]        // no lower bound at all
+    [InlineData("[2.1.3,)", "2.2.0", -1)]        // can restore 2.1.3
+    [InlineData("[2.1.3,2.2.0)", "2.2.0", -1)]
+    [InlineData("[1.0,2.2.0]", "2.2.0", -1)]     // lower bound 1.0
+    [InlineData("[2.2.0,)", "2.2.0", 0)]         // starts at the floor
+    [InlineData("[2.3.0,)", "2.2.0", 0)]         // starts above the floor
+    [InlineData("[2.1.3]", "2.2.0", -1)]         // exact range, below the floor
+    [InlineData("[2.2.0]", "2.2.0", 0)]          // exact range, at the floor
+    // A prerelease lower bound sorts below the stable floor of the same core.
+    [InlineData("[2.2.0-preview.1,)", "2.2.0", -1)]
+    // Prerelease vs stable at the same core.
+    [InlineData("2.2.0-preview.1", "2.2.0", -1)]
+    [InlineData("2.2.0", "2.2.0-preview.1", 1)]
+    // Prerelease vs prerelease (a prerelease central floor).
+    [InlineData("2.2.0-preview.1", "2.2.0-preview.2", -1)]
+    [InlineData("2.2.0-preview.2", "2.2.0-preview.1", 1)]
+    [InlineData("2.2.0-preview.1", "2.2.0-preview.1", 0)]
+    // SemVer §11: numeric identifiers rank below alphanumeric; shorter prefix is lower.
+    [InlineData("2.2.0-1", "2.2.0-alpha", -1)]
+    [InlineData("2.2.0-alpha", "2.2.0-alpha.1", -1)]
+    public void Pin_ordering_follows_NuGet_precedence(string pin, string floor, int expected)
+    {
+        var floorVersion = ParsePin(floor) ?? new Version(0, 0, 0, 0);
+        var actual = ComparePin(pin, floor, floorVersion);
+        Assert.True(
+            Math.Sign(actual) == expected,
+            $"ComparePin('{pin}', floor '{floor}') returned {actual}, expected sign {expected}.");
+    }
+
+    /// <summary>
+    /// Directories never worth scanning. Pruned during recursion rather than filtered
+    /// afterwards: <c>EnumerateFiles(AllDirectories)</c> would walk every object under
+    /// <c>.git</c>, <c>bin</c>, <c>obj</c> and <c>node_modules</c> before discarding
+    /// them, turning a source scan into a full-checkout traversal on every run.
+    /// </summary>
+    private static readonly HashSet<string> PrunedDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", "bin", "obj", "node_modules", "local-nupkgs", "artifacts", ".vs",
+    };
+
+    /// <summary>
+    /// Direct coverage of the element-parsing branches the live tree never exercises.
+    /// The repo only contains ordinary single-line <c>Include</c>+<c>Version</c>
+    /// attributes, so reverse ordering, single quotes, <c>VersionOverride</c>
+    /// precedence and child metadata are all unreachable from the sweep — the
+    /// positive control would stay green from the ordinary references while any of
+    /// those branches silently regressed.
+    /// </summary>
+    [Theory]
+    // Ordinary form, both quote styles.
+    [InlineData(@"<PackageReference Include=""Microsoft.WindowsAppSDK"" Version=""9.9.9"" />", "9.9.9")]
+    [InlineData(@"<PackageReference Include='Microsoft.WindowsAppSDK' Version='9.9.9' />", "9.9.9")]
+    // Attributes are unordered in XML.
+    [InlineData(@"<PackageReference Version=""9.9.9"" Include=""Microsoft.WindowsAppSDK"" />", "9.9.9")]
+    // Split across lines.
+    [InlineData("<PackageReference Include=\"Microsoft.WindowsAppSDK\"\n    Version=\"9.9.9\" />", "9.9.9")]
+    // CPM override, alone and taking precedence over a different Version.
+    [InlineData(@"<PackageReference Include=""Microsoft.WindowsAppSDK"" VersionOverride=""9.9.9"" />", "9.9.9")]
+    [InlineData(@"<PackageReference Include=""Microsoft.WindowsAppSDK"" Version=""9.9.8"" VersionOverride=""9.9.9"" />", "9.9.9")]
+    // Child metadata, including override precedence in element form.
+    [InlineData("<PackageReference Include=\"Microsoft.WindowsAppSDK\"><Version>9.9.9</Version></PackageReference>", "9.9.9")]
+    [InlineData("<PackageReference Include=\"Microsoft.WindowsAppSDK\"><Version>9.9.8</Version><VersionOverride>9.9.9</VersionOverride></PackageReference>", "9.9.9")]
+    // Update= is the CPM sibling of Include=.
+    [InlineData(@"<PackageVersion Update=""Microsoft.WindowsAppSDK"" Version=""9.9.9"" />", "9.9.9")]
+    public void Pin_extraction_reads_the_effective_version(string element, string expected)
+    {
+        var (pkg, version) = ExtractPin(element);
+        Assert.Equal("Microsoft.WindowsAppSDK", pkg);
+        Assert.Equal(expected, version);
+    }
+
+    /// <summary>
+    /// A malformed literal must be rejected outright, not silently truncated to a
+    /// numeric prefix — a prefix match would read "2.2.0not-a-version" as current and
+    /// also hide it from the unparseable check.
+    /// </summary>
+    [Theory]
+    [InlineData("2.2.0")]
+    [InlineData("2.2")]
+    [InlineData("2")]
+    [InlineData("2.2.0.1")]
+    [InlineData("2.2.0-preview.1")]
+    [InlineData("2.2.0-preview.1+sha.abc")]
+    public void Well_formed_versions_parse(string version) =>
+        Assert.NotNull(ParsePin(version));
+
+    [Theory]
+    [InlineData("2.2.0not-a-version")]
+    [InlineData("v2.2.0")]
+    [InlineData("2.2.0.1.2")]
+    [InlineData("latest")]
+    [InlineData("2.2.0-")]
+    public void Malformed_versions_are_rejected(string version) =>
+        Assert.Null(ParsePin(version));
+
+    /// <summary>
+    /// A malformed interval must not be exempted as "a range". Both the well-formed
+    /// and malformed sets are asserted, so the predicate cannot pass by rejecting
+    /// everything.
+    /// </summary>
+    [Theory]
+    [InlineData("[2.1.3]", true)]
+    [InlineData("[2.1.3,)", true)]
+    [InlineData("(,2.1.3]", true)]
+    [InlineData("[2.1.3,2.2.0)", true)]
+    [InlineData("[2.2.0-preview.1,)", true)]
+    [InlineData("[2.2.0", false)]            // unterminated
+    [InlineData("[not-a-version]", false)]   // unparseable bound
+    [InlineData("[1.0,bogus]", false)]       // unparseable upper
+    [InlineData("(,)", false)]               // no bound at all
+    [InlineData("(2.1.3)", false)]           // exact form must be inclusive
+    public void Range_syntax_is_validated_before_being_exempted(string pin, bool wellFormed) =>
+        Assert.Equal(wellFormed, IsWellFormedRange(pin));
+
+    private static IEnumerable<string> EnumerateScannableFiles(string root)
+    {
+        var stack = new Stack<string>();
+        stack.Push(root);
+
+        while (stack.Count > 0)
+        {
+            var dir = stack.Pop();
+
+            string[] subdirs;
+            string[] files;
+            try
+            {
+                subdirs = Directory.GetDirectories(dir);
+                files = Directory.GetFiles(dir);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException)
+            {
+                continue;
+            }
+
+            foreach (var sub in subdirs)
+            {
+                if (!PrunedDirectories.Contains(Path.GetFileName(sub)))
+                    stack.Push(sub);
+            }
+
+            foreach (var path in files)
+            {
+                if (PinScanExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+                    yield return path;
+            }
         }
     }
 }

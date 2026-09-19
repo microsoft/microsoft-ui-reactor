@@ -100,3 +100,15 @@ public sealed class PackageIdentityProbeCollection { }
 /// </summary>
 [CollectionDefinition("AppBaseDirectoryAssets", DisableParallelization = true)]
 public sealed class AppBaseDirectoryAssetsCollection { }
+
+/// <summary>
+/// xUnit collection marker for persistence tests that either listen for
+/// process-global <see cref="Microsoft.UI.Reactor.Core.Diagnostics.ReactorEventSource"/>
+/// events or mutate <c>CrossProcessWriteGuard.AcquireTimeoutOverrideMs</c>. An
+/// <c>EventListener</c> sees every store's events regardless of which test produced
+/// them, so a concurrent writer using the same <c>storeKind</c> could satisfy another
+/// test's assertion; and the timeout override is a process-wide static that unrelated
+/// tests would otherwise observe. (spec 063 §5, §8)
+/// </summary>
+[CollectionDefinition("PersistenceEtw", DisableParallelization = true)]
+public sealed class PersistenceEtwCollection { }
