@@ -32,6 +32,7 @@
        here, and PackagedIdentityFixtures.IdentityGuard re-derives it inside the running host
        to assert an exact match. Two copies could disagree; one cannot. -->
   <ItemGroup>
+    <Compile Include="..\_shared\FinalPath.cs" Link="FinalPath.cs" />
     <Compile Include="..\_shared\WorktreeIdentity.cs" Link="WorktreeIdentity.cs" />
   </ItemGroup>
 

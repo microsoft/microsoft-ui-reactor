@@ -604,8 +604,24 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// that, a broken sharing mode or a premature release would reintroduce live-package
     /// eviction while every derivation and selection test stayed green.
     /// </remarks>
-    internal static FileStream? TryOpenLockFile(string path, string ownerRecord)
+    internal static FileStream? TryOpenLockFile(string path, string ownerRecord) =>
+        TryOpenLockFile(path, ownerRecord, out _);
+
+    /// <summary>
+    /// As <see cref="TryOpenLockFile(string, string)"/>, additionally reporting an access
+    /// refusal so a caller can tell a storage fault from contention after the fact.
+    /// </summary>
+    /// <remarks>
+    /// The refusal is an out-parameter rather than an exception because it must not stop the
+    /// poll: access denied is how a delete-pending lock file presents, and that clears itself.
+    /// Only the caller that has run out of time knows the refusal was permanent, so only it can
+    /// turn the record into a diagnosis.
+    /// </remarks>
+    internal static FileStream? TryOpenLockFile(
+        string path, string ownerRecord, out Exception? lastRefusal)
     {
+        lastRefusal = null;
+
         try
         {
             // FileShare.Read lets a contender read the owner record while still denying a
@@ -665,8 +681,17 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         catch (Exception ex) when (
             ex is UnauthorizedAccessException or System.Security.SecurityException)
         {
-            // Refused, and indistinguishable here from "held". Both callers want the same
-            // answer for both: the waiter retries, and the reclamation lease declines to act.
+            // Refused rather than held, and the two are not distinguishable from the exception
+            // alone. Refusal has a genuine transient form — Release unlinks lock files, and a
+            // third party holding one with delete sharing (an indexer, a scanner) leaves it
+            // delete-pending, which surfaces here as access denied and clears on its own. So
+            // this keeps returning null and the caller keeps polling, which is what recovers
+            // that case and what the reclamation probe wants for every case.
+            //
+            // What it must not do is let a permanent refusal — a read-only lock directory —
+            // masquerade as contention once the wait is over. The refusal is recorded so the
+            // timeout can name the storage fault instead of inventing a competing owner.
+            lastRefusal = ex;
             return null;
         }
     }
@@ -694,16 +719,21 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     }
 
     /// <summary>
-    /// The lock directory itself could not be prepared, so no lock name could be formed.
+    /// The lock could not be prepared or opened, so its layout cannot be shown to be free.
     /// </summary>
     /// <remarks>
-    /// Distinct from returning <c>null</c>, which every caller of
+    /// <para>Distinct from returning <c>null</c>, which every caller of
     /// <see cref="TryAcquireAllLocks"/> reads as "another run holds this layout". A missing or
     /// read-only <c>%LOCALAPPDATA%</c> is not a contender, and reporting it as one produced a
     /// collision message that named an owner which never existed, claimed a wait that never
     /// happened, and discarded the storage error that was the actual cause. Callers that
     /// genuinely want the conservative reading — the reclamation probe, for which "cannot be
-    /// shown free" must mean "leave it alone" — catch this back into <c>null</c> themselves.
+    /// shown free" must mean "leave it alone" — catch this back into <c>null</c>
+    /// themselves.</para>
+    /// <para>Two shapes, because the fault has two arrival points: the directory cannot be
+    /// created at all, or the directory exists and the lock file inside it refuses to open.
+    /// They are one type because every caller wants the same response, and two messages
+    /// because naming a file as a directory would send the reader to the wrong place.</para>
     /// </remarks>
     internal sealed class LockSetupException : InvalidOperationException
     {
@@ -715,6 +745,19 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                 inner)
         {
         }
+
+        private LockSetupException(Exception inner, string message)
+            : base(message, inner)
+        {
+        }
+
+        /// <summary>The lock file itself refused to open for the whole wait.</summary>
+        internal static LockSetupException ForRefusedFile(string path, Exception inner) =>
+            new(
+                inner,
+                $"The layout lock '{path}' refused to open for the whole wait. Access was " +
+                $"denied rather than the file being held, so this is a storage or permissions " +
+                $"failure, not contention: no other run was ever waited out.");
     }
 
     /// <summary>
@@ -726,13 +769,38 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// exits without touching the file.
     /// </remarks>
     internal static FileStream? WaitForLockFile(
-        string path, string ownerRecord, TimeSpan timeout, TimeSpan pollInterval)
+        string path, string ownerRecord, TimeSpan timeout, TimeSpan pollInterval) =>
+        WaitForLockFile(path, ownerRecord, timeout, pollInterval, out _);
+
+    /// <summary>
+    /// As <see cref="WaitForLockFile(string, string, TimeSpan, TimeSpan)"/>, reporting the last
+    /// access refusal seen while waiting.
+    /// </summary>
+    /// <remarks>
+    /// Set only when the wait failed <em>and</em> at least one attempt was refused rather than
+    /// blocked. That combination is the signature of a lock directory this run cannot write to,
+    /// which is worth saying plainly instead of reporting as a contender that outlasted the
+    /// timeout.
+    /// </remarks>
+    internal static FileStream? WaitForLockFile(
+        string path,
+        string ownerRecord,
+        TimeSpan timeout,
+        TimeSpan pollInterval,
+        out Exception? lastRefusal)
     {
+        lastRefusal = null;
+
         var deadline = DateTime.UtcNow + timeout;
         while (true)
         {
-            var stream = TryOpenLockFile(path, ownerRecord);
+            var stream = TryOpenLockFile(path, ownerRecord, out var refusal);
             if (stream is not null) return stream;
+
+            // Kept rather than overwritten with null: a refusal followed by an ordinary
+            // sharing violation is still evidence this run cannot open the file, and the last
+            // poll before the deadline is not special.
+            lastRefusal ??= refusal;
 
             if (DateTime.UtcNow >= deadline) return null;
             Thread.Sleep(pollInterval);
@@ -842,9 +910,16 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                 var remaining = deadline - DateTime.UtcNow;
                 if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
 
-                var stream = WaitForLockFile(path, ownerRecord, remaining, pollInterval);
+                var stream = WaitForLockFile(path, ownerRecord, remaining, pollInterval, out var refusal);
                 if (stream is null)
                 {
+                    // A refusal that survived the whole wait is a storage fault, not a
+                    // contender. Raising it here keeps the "cannot be shown free" contract the
+                    // reclamation probe depends on — it catches this type and leaves the
+                    // registration alone — while stopping the acquisition path from reporting
+                    // an owner it never saw. The enclosing catch releases what was acquired.
+                    if (refusal is not null) throw LockSetupException.ForRefusedFile(path, refusal);
+
                     blockedOn = path;
                     Release(acquired);
                     return null;

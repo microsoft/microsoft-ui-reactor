@@ -26,10 +26,8 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Win32.SafeHandles;
 
 namespace Reactor.Tests.Shared;
 
@@ -58,7 +56,7 @@ namespace Reactor.Tests.Shared;
 /// document it. <c>Derivation_Matches_The_Pinned_Version1_Vectors</c> is what forces the
 /// decision: any such change reddens it.</para>
 /// </remarks>
-internal static partial class WorktreeIdentity
+internal static class WorktreeIdentity
 {
     /// <summary>
     /// Version tag mixed into the hash input. Bump only with intent: it invalidates every
@@ -149,117 +147,9 @@ internal static partial class WorktreeIdentity
             throw new ArgumentException("Path must be a non-empty directory path.", nameof(path));
 
         var full = Path.GetFullPath(path);
-        var resolved = TryResolveFinalPath(full) ?? ResolveLinksInEveryComponent(full);
+        var resolved = FinalPath.TryResolve(full) ?? ResolveLinksInEveryComponent(full);
         return Path.TrimEndingDirectorySeparator(resolved).ToLowerInvariant();
     }
-
-    /// <summary>
-    /// Asks Windows for the final path of an existing directory, or null if it cannot.
-    /// </summary>
-    /// <remarks>
-    /// <para>This is the only mechanism that resolves mapped and <c>subst</c>'d drive letters,
-    /// and it does so in the same call that follows links — so two runs pointed at one physical
-    /// layout through different spellings derive one identity and contend for one lock, instead
-    /// of proceeding concurrently over the same files.</para>
-    /// <para>The handle is opened with no access rights at all: <c>GetFinalPathNameByHandle</c>
-    /// needs only a handle, not readable content, so requesting nothing lets this succeed on a
-    /// directory the caller could not otherwise open. <c>FILE_FLAG_BACKUP_SEMANTICS</c> is what
-    /// makes <c>CreateFile</c> open a directory rather than fail.</para>
-    /// <para>Every failure returns null rather than throwing. This runs while deciding an
-    /// identity, and an unreadable path is not an error there — the caller has a weaker but
-    /// working fallback, and turning a query failure into an exception would take down a run
-    /// over a question that has an answer.</para>
-    /// </remarks>
-    private static string? TryResolveFinalPath(string full)
-    {
-        try
-        {
-            using var handle = CreateFileW(
-                full,
-                dwDesiredAccess: 0,
-                dwShareMode: FileShareAll,
-                lpSecurityAttributes: IntPtr.Zero,
-                dwCreationDisposition: OpenExisting,
-                dwFlagsAndAttributes: FileFlagBackupSemantics,
-                hTemplateFile: IntPtr.Zero);
-
-            if (handle.IsInvalid) return null;
-
-            var buffer = new char[1024];
-            var length = FinalPathInto(handle, buffer);
-
-            // A return of 0 is failure; a return >= the buffer size is "needed this much room".
-            if (length == 0) return null;
-            if (length >= buffer.Length)
-            {
-                buffer = new char[length + 1];
-                length = FinalPathInto(handle, buffer);
-                if (length == 0 || length >= buffer.Length) return null;
-            }
-
-            return StripExtendedLengthPrefix(new string(buffer, 0, (int)length));
-        }
-        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>Pins <paramref name="buffer"/> and asks for the final path in DOS form.</summary>
-    private static unsafe uint FinalPathInto(SafeFileHandle handle, char[] buffer)
-    {
-        fixed (char* p = buffer)
-            return GetFinalPathNameByHandleW(handle, p, (uint)buffer.Length, VolumeNameDos);
-    }
-
-    /// <summary>
-    /// Converts the extended-length form <c>GetFinalPathNameByHandle</c> returns back into an
-    /// ordinary path.
-    /// </summary>
-    /// <remarks>
-    /// The API always answers with a <c>\\?\</c> prefix, and for a network location with
-    /// <c>\\?\UNC\server\share</c>, whose ordinary spelling is <c>\\server\share</c>. Leaving
-    /// either form in place would make the canonical string disagree with every path the rest
-    /// of this file produces via <see cref="Path.GetFullPath(string)"/>, so a directory would
-    /// hash one way when it exists and another way when the fallback ran.
-    /// </remarks>
-    private static string StripExtendedLengthPrefix(string path)
-    {
-        const string UncPrefix = @"\\?\UNC\";
-        const string DevicePrefix = @"\\?\";
-
-        if (path.StartsWith(UncPrefix, StringComparison.Ordinal))
-            return @"\\" + path[UncPrefix.Length..];
-
-        return path.StartsWith(DevicePrefix, StringComparison.Ordinal)
-            ? path[DevicePrefix.Length..]
-            : path;
-    }
-
-    private const uint FileShareAll = 0x00000001 | 0x00000002 | 0x00000004;
-    private const uint OpenExisting = 3;
-    private const uint FileFlagBackupSemantics = 0x02000000;
-    private const uint VolumeNameDos = 0x0;
-
-    // Source-generated interop rather than [DllImport]: the marshalling is emitted at compile
-    // time, which keeps this trim- and AOT-clean. Entry points are spelled with their explicit
-    // -W suffix because LibraryImport uses ExactSpelling and does not append one.
-    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-    private static partial SafeFileHandle CreateFileW(
-        string lpFileName,
-        uint dwDesiredAccess,
-        uint dwShareMode,
-        IntPtr lpSecurityAttributes,
-        uint dwCreationDisposition,
-        uint dwFlagsAndAttributes,
-        IntPtr hTemplateFile);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    private static unsafe partial uint GetFinalPathNameByHandleW(
-        SafeFileHandle hFile,
-        char* lpszFilePath,
-        uint cchFilePath,
-        uint dwFlags);
 
     /// <summary>
     /// Walks a rooted path from the root down, replacing each component that is a symlink or

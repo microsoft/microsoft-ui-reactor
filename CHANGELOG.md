@@ -193,6 +193,20 @@ Conventions for contributors:
   A staged lease is not a claim the process took, so the release seam could not see it, and
   disposing deliberately leaves the file behind — every run added another permanent file to the
   real per-user claim directory that later runs then paid to probe.
+- The orphaned-host sweep now resolves an executable path through the filesystem rather than by
+  string handling alone, so a junction, a `subst`'d drive or the extended-length `\\?\` spelling
+  all reach one path. Both the key that names a run's lease and gate and the check that decides
+  whether a live process is a sibling derive from it, so one build output reachable by two
+  spellings previously took two lease files, left each run seeing no sibling, and admitted both
+  to sweep — each then killing the other's running host.
+- A storage fault that stops the startup gate being addressed is now reported as itself rather
+  than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
+  unwritable claim directory spent the full timeout and then blamed a competing run that never
+  existed, discarding the storage error that was the only actionable fact.
+- A packaged-tier lock file this run is denied access to is likewise no longer reported as a lock
+  another run holds. The refusal is recorded and raised only once it has survived the whole wait,
+  so a genuinely transient denial — a lock left delete-pending by a third party holding it with
+  delete sharing — still clears on its own within the ordinary poll.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

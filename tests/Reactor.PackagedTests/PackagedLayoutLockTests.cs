@@ -881,6 +881,59 @@ public class PackagedLayoutLockTests
     }
 
     /// <summary>
+    /// A lock file this run is refused access to must not be reported as a lock somebody else
+    /// is holding.
+    /// </summary>
+    /// <remarks>
+    /// <para>Refusal and contention both made the poll fail, and a failed poll was reported
+    /// only as a timeout. A read-only lock directory therefore burned the full layout timeout
+    /// and then named a competing owner that did not exist, while the access error — the one
+    /// fact a reader could act on — was dropped.</para>
+    /// <para>The refusal is deliberately <em>not</em> propagated on first sight, which is why
+    /// this waits rather than throwing immediately. <c>Release</c> deletes lock files, so a
+    /// third party holding one with delete sharing leaves it delete-pending, and Windows
+    /// reports that as an access denial too — a transient that clears on its own within the
+    /// ordinary poll. Aborting on the first occurrence would turn that recoverable state into
+    /// a failed run. So the refusal is recorded and raised only once it has survived the whole
+    /// wait, which is a thing no transient does.</para>
+    /// <para>Staged with a directory occupying the lock file's name: Windows refuses to open
+    /// it as a file with the same access denial, deterministically, on every machine and
+    /// without needing any privilege the suite may not have.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Lock_File_That_Refuses_To_Open_Is_Not_Reported_As_Contention()
+    {
+        var layout = SyntheticLayout();
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(layout, TwoVersions);
+
+        Assert.AreEqual(2, paths.Count,
+            "Precondition: the staging needs the whole set, or blocking the first says nothing " +
+            "about how the set behaves.");
+
+        Directory.CreateDirectory(paths[0]);
+        try
+        {
+            var thrown = Assert.Throws<AppxLooseLayoutDeployment.LockSetupException>(
+                () => AppxLooseLayoutDeployment.TryAcquireAllLocks(
+                    layout, "pid=1", Instant, Instant, out _, TwoVersions),
+                "A lock this run is denied access to was reported as held by another run, so " +
+                "the caller waits out the full timeout and then blames an owner that does not " +
+                "exist.");
+
+            Assert.IsInstanceOfType<UnauthorizedAccessException>(thrown.InnerException,
+                "The access denial itself has to travel with the report. Without it the " +
+                "message is no more actionable than the false collision it replaced, and " +
+                "nothing distinguishes it from a lock name that could not be formed.");
+        }
+        finally
+        {
+            try { Directory.Delete(paths[0], recursive: true); }
+            catch (IOException) { /* temp leftovers are the OS's to collect */ }
+            catch (UnauthorizedAccessException) { /* likewise */ }
+        }
+    }
+
+    /// <summary>
     /// A fault partway through the set must give back the locks already taken.
     /// </summary>
     /// <remarks>

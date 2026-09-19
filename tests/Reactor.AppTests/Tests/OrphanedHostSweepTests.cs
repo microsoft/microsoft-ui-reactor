@@ -192,6 +192,54 @@ public class OrphanedHostSweepTests
     }
 
     /// <summary>
+    /// Two spellings that the filesystem resolves to one file must agree on both derived
+    /// answers: the key that names this run's lease and gate, and whether a live process is a
+    /// sibling.
+    /// </summary>
+    /// <remarks>
+    /// <para>Disagreement here inverts the whole scheme rather than weakening it. If one build
+    /// output has two keys, two runs of it take different lease files, each enumerates no
+    /// sibling, each is admitted to sweep, and each then kills the other's running host — the
+    /// cross-checkout kill this class exists to prevent, reintroduced one level down where no
+    /// other test looks.</para>
+    /// <para>The extended-length <c>\\?\</c> spelling is the alias used because it is exact and
+    /// needs no privilege: a junction or a <c>subst</c> drive is the realistic way a host
+    /// acquires two spellings in the field, but creating either requires rights a test run may
+    /// not have, and a test that quietly skips is indistinguishable from one that passes. This
+    /// one is refused by textual normalisation on every machine, so it discriminates
+    /// everywhere. Note the file is deliberately created: an absent path cannot be resolved by
+    /// the filesystem, so the sibling tests above exercise only the textual fallback.</para>
+    /// </remarks>
+    [TestMethod]
+    public void An_Alias_Spelling_Of_One_Image_Is_One_Build_Output()
+    {
+        var dir = Path.Join(ClaimRoot, "alias-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(dir);
+        var exe = Path.Join(dir, "Reactor.AppTests.Host.exe");
+        File.WriteAllText(exe, string.Empty);
+
+        var aliased = @"\\?\" + exe;
+        Assert.AreNotEqual(exe, aliased, StringComparer.OrdinalIgnoreCase,
+            "Control: the two spellings must differ textually, or matching them proves nothing.");
+
+        Assert.AreEqual(
+            OrphanedHostSweep.GatePathFor(exe),
+            OrphanedHostSweep.GatePathFor(aliased),
+            "Two spellings of one image took different startup gates, so both runs enter at " +
+            "once and their lease registration and sweep interleave freely.");
+
+        Assert.AreEqual(
+            OrphanedHostSweep.LeasePathFor(exe, 4242),
+            OrphanedHostSweep.LeasePathFor(aliased, 4242),
+            "Two spellings of one image took different lease files, so neither run can see the " +
+            "other as a live sibling and each is admitted to sweep the other's host.");
+
+        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, aliased)], exe).Count(),
+            "A live host reached by an alias was not recognised as our own image, so it " +
+            "survives a sweep that should have reclaimed it.");
+    }
+
+    /// <summary>
     /// Fails closed. A candidate whose path could not be read is left alone, because killing
     /// on "don't know" is exactly the machine-wide behaviour this replaced.
     /// </summary>
@@ -486,6 +534,44 @@ public class OrphanedHostSweepTests
         Assert.IsFalse(File.Exists(path),
             $"'{path}' survived its gate being released, so every run of every checkout that " +
             "ever takes a gate leaves one behind for good.");
+    }
+
+    /// <summary>
+    /// A storage fault that stops the gate being addressed is reported as itself, not as a
+    /// timeout waiting for a competing run.
+    /// </summary>
+    /// <remarks>
+    /// The two outcomes need opposite responses, and only one of them is worth waiting out.
+    /// Folded together, an unwritable claim directory spent the full startup-gate timeout and
+    /// then told the reader another run was stuck holding the gate — naming a competitor that
+    /// never existed, claiming a wait that resolved nothing, and discarding the storage error
+    /// that was the only actionable fact. The fault is staged by naming a directory under an
+    /// existing <i>file</i>, which Windows refuses to create deterministically and without any
+    /// privilege.
+    /// </remarks>
+    [TestMethod]
+    public void A_Claim_Directory_That_Cannot_Be_Created_Is_Not_Reported_As_Contention()
+    {
+        var blocker = Path.Join(ClaimRoot, "gate-fault-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(Path.GetDirectoryName(blocker)!);
+        File.WriteAllText(blocker, string.Empty);
+
+        var unusable = Path.Join(blocker, "claims");
+        var exe = Probe("gate-fault");
+
+        var thrown = Assert.Throws<OrphanedHostSweep.GateSetupException>(
+            () => OrphanedHostSweep.TryEnterStartupGate(exe, TimeSpan.Zero, unusable),
+            "An unusable claim directory was reported as a held gate, so the caller waits out " +
+            "a timeout and then blames a process that does not exist.");
+
+        Assert.IsNotNull(thrown.InnerException,
+            "The storage error is the only fact that explains the failure, so it must survive.");
+
+        using var control = OrphanedHostSweep.TryEnterStartupGate(
+            exe, TimeSpan.Zero, Path.Join(ClaimRoot, "gate-fault-ok-" + Guid.NewGuid().ToString("n")));
+        Assert.IsNotNull(control,
+            "Control: a usable directory must still admit the run, or the throw above says " +
+            "nothing about the fault and everything about the overload.");
     }
 
     /// <summary>

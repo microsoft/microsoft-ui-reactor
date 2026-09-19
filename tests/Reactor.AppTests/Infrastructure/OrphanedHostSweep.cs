@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using Reactor.Tests.Shared;
 
 namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 
@@ -101,21 +102,44 @@ internal static class OrphanedHostSweep
     /// <para>Separate from the lease file: a lease is held for the whole run and read by
     /// siblings, whereas this is exclusive and held for milliseconds. One file cannot be both
     /// without a run's own lease blocking every later run's admission.</para>
+    /// <para>The two ways this can fail are reported differently on purpose. A
+    /// <see langword="null"/> return means one thing only — the gate exists and somebody else
+    /// is holding it. A storage fault that stops the gate being addressed at all throws
+    /// <see cref="GateSetupException"/> instead, because it is not contention, no amount of
+    /// waiting resolves it, and reporting it as a timeout sends the reader hunting for a stuck
+    /// process that was never there.</para>
     /// </remarks>
-    internal static IDisposable? TryEnterStartupGate(string ourExePath, TimeSpan timeout)
+    /// <exception cref="GateSetupException">
+    /// The claim directory could not be created or addressed, so no gate could be named.
+    /// </exception>
+    internal static IDisposable? TryEnterStartupGate(string ourExePath, TimeSpan timeout) =>
+        TryEnterStartupGate(ourExePath, timeout, ClaimDirectory());
+
+    /// <inheritdoc cref="TryEnterStartupGate(string, TimeSpan)"/>
+    /// <param name="claimDirectory">
+    /// Directory holding the gate. A parameter only so a test can point this at a path it
+    /// controls; the setup-fault path below cannot otherwise be staged, because making the
+    /// real <c>%LOCALAPPDATA%</c> unwritable would break the machine rather than the test.
+    /// </param>
+    internal static IDisposable? TryEnterStartupGate(
+        string ourExePath, TimeSpan timeout, string claimDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ourExePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimDirectory);
 
         string path;
         try
         {
-            var dir = ClaimDirectory();
+            var dir = claimDirectory;
             Directory.CreateDirectory(dir);
             path = Path.Join(dir, KeyFor(ourExePath) + ".gate");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return null;
+            throw new GateSetupException(
+                $"Could not create or address the claim directory '{claimDirectory}', so this " +
+                "run cannot take a startup gate. This is a storage fault, not contention with " +
+                "another run.", ex);
         }
 
         var deadline = DateTime.UtcNow + timeout;
@@ -162,9 +186,26 @@ internal static class OrphanedHostSweep
     }
 
     /// <summary>
+    /// A storage fault that stopped the startup gate being addressed at all.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from the <see langword="null"/> that means contention, because the two need
+    /// opposite responses and only one of them is worth waiting out. An unwritable or missing
+    /// <c>%LOCALAPPDATA%</c> is not another run holding the gate, so reporting it as a timeout
+    /// would name a competing process that does not exist and hide the one fact — the storage
+    /// error — that explains the failure and can be acted on.
+    /// </remarks>
+    internal sealed class GateSetupException(string message, Exception inner)
+        : InvalidOperationException(message, inner);
+
+    /// <summary>
     /// Kills every process named <paramref name="processName"/> that runs the image at
     /// <paramref name="ourExePath"/>, and leaves the rest alone.
     /// </summary>
+    /// <exception cref="GateSetupException">
+    /// The claim directory could not be addressed. Propagated rather than folded into the
+    /// timeout below so the message names the storage fault instead of a phantom competitor.
+    /// </exception>
     internal static void KillOrphansOf(string processName, string ourExePath, string label)
     {
         // Held across admission *and* the process snapshot below, which is what makes the two
@@ -657,9 +698,35 @@ internal static class OrphanedHostSweep
         !string.IsNullOrWhiteSpace(candidatePath) &&
         string.Equals(NormalizePath(candidatePath), normalizedOurs, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The path one executable is agreed to have, whichever spelling a run reached it by.
+    /// </summary>
+    /// <remarks>
+    /// <para>Both users of this need the same answer for the same physical file or the whole
+    /// scheme inverts. <see cref="KeyFor"/> names the lease and gate files, and
+    /// <see cref="IsSameImage"/> decides whether a live process is a sibling; if one build
+    /// output has two spellings, two runs take different lease files, each enumerates no
+    /// sibling, and each then sweeps the other's running host — the exact cross-checkout kill
+    /// this class exists to stop, reintroduced one level down.</para>
+    /// <para><c>Path.GetFullPath</c> alone is not enough, because it is pure string handling:
+    /// measured on Windows it does expand 8.3 short components of an existing path, but it
+    /// leaves a <c>subst</c>'d or mapped drive letter pointing at the mapping and preserves the
+    /// extended-length <c>\\?\</c> spelling verbatim. A junction anywhere above the build
+    /// output — a linked <c>C:\src</c>, say — is the realistic way one host acquires two
+    /// spellings, and it too survives string normalisation. So the filesystem is asked.</para>
+    /// <para>Falls back to the textual form when the query cannot be answered, which is the
+    /// case that matters for a candidate process whose image has since been deleted. That is
+    /// strictly weaker but never wrong in the dangerous direction: an unresolved path can make
+    /// this fail to recognise a sibling it should have matched, and failing to match only ever
+    /// costs a skipped sweep, never an extra kill.</para>
+    /// </remarks>
     private static string NormalizePath(string path)
     {
-        try { return Path.GetFullPath(path); }
+        try
+        {
+            var full = Path.GetFullPath(path);
+            return FinalPath.TryResolve(full) ?? full;
+        }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
         {
             return path;
