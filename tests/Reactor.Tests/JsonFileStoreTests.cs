@@ -8,6 +8,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// handling, and 1 MB cap. Pure-IO tests over a temp directory; no XAML
 /// Application context required.
 /// </summary>
+[Collection("PersistenceEtw")]
 public class JsonFileStoreTests : IDisposable
 {
     private readonly string _path;
@@ -21,7 +22,14 @@ public class JsonFileStoreTests : IDisposable
 
     public void Dispose()
     {
-        try { if (global::System.IO.File.Exists(_path)) global::System.IO.File.Delete(_path); } catch { }
+        // The store leaves a .lock sidecar beside the document (spec 063 §5), so
+        // cleaning only _path would leak an empty file per test into %TEMP%.
+        foreach (var p in new[] { _path, CrossProcessWriteGuard.LockPathFor(_path) })
+        {
+            try { if (global::System.IO.File.Exists(p)) global::System.IO.File.Delete(p); }
+            catch (global::System.IO.IOException) { /* best effort */ }
+            catch (UnauthorizedAccessException) { /* best effort */ }
+        }
     }
 
     [Fact]

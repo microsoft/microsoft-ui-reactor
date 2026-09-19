@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hosting.Persistence;
 using Microsoft.UI.Reactor.Navigation;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -618,4 +619,19 @@ static class Migration054
     public static WindowSpec Main { get; } =
         new WindowSpec { Title = "Main" }.WithPersistence("main");
     // </snippet:migration-054-persistence>
+}
+
+// Spec 063 §4 — opting an unpackaged app into the SDK app-data store. Compiled
+// here so the guide snippet is real code rather than prose; the assignment runs
+// inside a method that the demo never calls, because switching the process-wide
+// store would repoint this app's own saved placement.
+static class UnpackagedPersistenceSetup
+{
+    // <snippet:unpackaged-store>
+    public static void UseStableIdentity()
+    {
+        ReactorApp.WindowPersistenceStore =
+            new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
+    }
+    // </snippet:unpackaged-store>
 }

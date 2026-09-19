@@ -208,7 +208,7 @@ Workflow modes (Phase-2 ranker):
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.UI.Reactor" Version="0.0.0-local" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
   </ItemGroup>
 </Project>
 ```
@@ -532,7 +532,7 @@ For lightweight demos, skip the `.csproj` entirely. Add a file-level header:
 
 ```csharp
 #:package Microsoft.UI.Reactor@0.0.0-local
-#:package Microsoft.WindowsAppSDK@2.0.1
+#:package Microsoft.WindowsAppSDK@2.2.0
 #:property OutputType=WinExe
 #:property TargetFramework=net10.0-windows10.0.22621.0
 #:property UseWinUI=true

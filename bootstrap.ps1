@@ -317,7 +317,7 @@ if (-not $winAppRuntimeId) {
     #
     # 'outdated' is a real state, not a theoretical one: the 2.x id is
     # major-wide, so a machine carrying 2.0.1 reports the package as installed
-    # even though it cannot load an app built against 2.1.3. Treating presence
+    # even though it cannot load an app built against 2.2.0. Treating presence
     # as sufficient would print [ok] over exactly the mismatch this check exists
     # to catch.
     #

@@ -28,8 +28,49 @@ Conventions for contributors:
 
 ### Added
 
+- **`UnpackagedAppDataStore` — window placement now survives renaming your executable
+  (spec 063 §4).** The unpackaged persistence store keys saved window placement on
+  the entry **process name**, so shipping the same app under a renamed `.exe` silently stranded
+  every user's saved layout — it was still on disk, under the old name, and never read again. Two
+  unrelated apps sharing an exe name collided the same way.
+
+  The new store keys on an explicit publisher/product pair instead, via the Windows App SDK's
+  first-class unpackaged app-data root
+  (`Microsoft.Windows.Storage.ApplicationData.GetForUnpackaged(publisher, product)`), persisting to
+  `<LocalPath>/reactor-windows.json`. Opt in by assigning it to
+  `ReactorApp.WindowPersistenceStore` before the first `OpenWindow`:
+
+  ```csharp
+  ReactorApp.WindowPersistenceStore = new UnpackagedAppDataStore("Contoso", "TimeTracker");
+  ```
+
+  It is opt-in rather than the new default because the two stores key their data differently, so
+  switching automatically would strand exactly the layouts it is meant to protect. `JsonFileStore`
+  remains the auto-detected default (spec 063 §6, D2).
+
+  It uses the SDK's `LocalPath` surface and deliberately **not** `LocalSettings`. On Windows App SDK
+  2.2.0, `GetForUnpackaged().LocalSettings` opens `HKCU\SOFTWARE\<publisher>\<product>` — a
+  *roaming* hive — instead of the machine-local
+  `HKCU\SOFTWARE\Classes\Local Settings\Software\…` it is contracted to use
+  ([WindowsAppSDK#6559](https://github.com/microsoft/WindowsAppSDK/issues/6559)).
+  Window placement is monitor-topology and DPI dependent, so roaming it would restore windows onto
+  monitors that do not exist on the current machine. `LocalPath` resolves under `%LOCALAPPDATA%`,
+  which does not roam, and is verified correct on 2.2.0 (spec 063 §3.1). Note that the
+  `LocalSettings` behaviour is a property of the *installed* 2.x runtime, which services in place,
+  rather than of the SDK version an app pins — so it can vary machine to machine for the same build
+  (spec 063 §3.2).
+
 ### Changed
 
+- **Windows App SDK bumped 2.1.3 → 2.2.0 (spec 063 §3).** `WindowsAppSDKWinUIVersion` moves
+  2.1.0 → **2.2.1** — the WinUI sub-package version is neither equal to nor a fixed offset from the
+  metapackage version, and must be read from the metapackage's own nuspec rather than inferred.
+  This remains an in-place servicing bump within the same side-by-side runtime family
+  (`Microsoft.WindowsAppRuntime.2`), so consumers do not need a new runtime generation.
+  `Microsoft.UI.Reactor` is framework-dependent and flows only the lean
+  `Microsoft.WindowsAppSDK.WinUI` sub-package, so the transitive floor consumers actually
+  inherit is **`Microsoft.WindowsAppSDK.WinUI >= 2.2.1`**; projects that reference the full
+  metapackage themselves (self-contained or MSIX) move to `Microsoft.WindowsAppSDK 2.2.0`.
 - E2E tests now run as one named winapp workflow: `WinAppUi` stamps `WINAPP_UI_WORKFLOW_ID` onto
   every `winapp ui` child and `AppTestBase` yields the UI turn after any test that used winapp.
   This keeps a concurrent agent from interleaving between a click and the assertion that reads its
@@ -87,6 +128,18 @@ Conventions for contributors:
 - The packaged tier's `.resw` tripwire scans the packaged host's transitive `ProjectReference`
   graph rather than two hardcoded directories, so a string resource added to a referenced runtime
   project is caught instead of silently entering the packaged PRI.
+- The E2E suite's startup gates and run leases are removed once the runs that created them are
+  gone, instead of accumulating one file per build output forever. Both live in a single per-user
+  directory shared by every checkout, and a lease was only ever pruned by a later run of that same
+  executable — so a worktree deleted after its last run left its files behind permanently.
+  Staleness is proven by an exclusive open rather than by a name, an age or a recorded pid, which
+  is what makes it safe to reclaim other checkouts' leftovers: a live run keeps its files whoever
+  started it, and a file reacquired between the open and the unlink refuses to be removed rather
+  than being pulled out from under its owner.
+- The packaged tier's recovery message for a conflicting registration now names the exact package
+  to remove (`Remove-AppxPackage -Package <full name>`) instead of a `Get-AppxPackage -Name`
+  pipeline, which is not publisher-unique and could unregister an unrelated package that happens
+  to share the name.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected
@@ -97,6 +150,34 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- **Window placement no longer vanishes when two app instances save at once
+  (spec 063 §5).** `JsonFileStore` — the default unpackaged persistence store — merged
+  its document under a per-*instance* lock and committed through a shared temp file, so
+  two instances or processes saving placement concurrently each wrote a document missing
+  the other's entries and the last writer won. Layouts disappeared even when the two
+  windows had *different* `PersistenceId`s. Measured: with 8 concurrent writers, 1 entry
+  survived.
+
+  Writes now take a named cross-process guard, stage through a per-process temp file, and
+  commit with `File.Replace`; reads grant delete sharing. Both halves matter — on Windows
+  a plain `File.Move(overwrite: true)` cannot replace a file another process has open even
+  when that reader grants delete sharing, so a concurrent reader could previously kill a
+  write outright (silently, since writes are best-effort). This affects every existing
+  unpackaged app, not only users of the new opt-in store.
+
+- **Stale `Microsoft.WindowsAppSDK` version pins in shipped agent-kit recipes and docs
+  (spec 063 §3.0).** **22 literal occurrences across 20 files** used a
+  `#:package Microsoft.WindowsAppSDK@2.0.1` file-based-app header, which the 2.1.3 bump
+  (spec 059) missed entirely because that shape does not match the
+  `Microsoft.WindowsAppSDK" Version=` grep that spec prescribed. They had been advertising a
+  version *below* the framework's own floor — an `NU1605` downgrade for anyone running them — and
+  the **18 recipe files** under `skills/recipes/` and
+  `plugins/reactor/skills/reactor-recipes/references/` are packed into the shipped NuGet agent
+  kit, so this was user-facing rather than internal-only. All now track the pinned version, and a
+  new guard (`WinAppSDKReferenceGuardTests.No_literal_SDK_pin_sits_below_the_central_pinned_version`)
+  sweeps the tree for both pin shapes so the class cannot recur.
+
 
 - **Content-collapse parking for recycled ItemsView rows (issue #1213).**
   Parking collapses template content instead of the outer container and restores

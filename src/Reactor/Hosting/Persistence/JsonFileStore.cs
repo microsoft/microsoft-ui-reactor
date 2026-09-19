@@ -18,10 +18,25 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 /// <c>false</c> from <see cref="TryRead"/> with no exception bubbling out —
 /// the spec calls for "warn-and-default" semantics on corruption.</para>
 /// <para>Writes are best-effort and survive disk-full / permission denied
-/// without throwing. The file is opened with <see cref="FileShare.None"/> to
-/// prevent concurrent same-process writers from clobbering each other; cross-
-/// process writers are out of scope (the store is keyed off the entry
-/// process's name).</para>
+/// without throwing.</para>
+/// <para><b>Concurrency.</b> Read-merge-write is serialized two ways: an in-process
+/// lock orders threads sharing an instance, and a named
+/// <see cref="CrossProcessWriteGuard"/> extends that ordering across separate
+/// instances and separate processes. Without the latter, two writers could each read
+/// the pre-merge document and the second rename would silently discard the first's
+/// entry — even when the two wrote <i>different</i> persistence ids. Each write stages
+/// through a temp file named for the writing process and thread, so a crash mid-write
+/// cannot leave a shared temp that another process renames over the real file.</para>
+/// <para>Readers take no guard, but they do open with
+/// <see cref="FileShare.Delete"/> in addition to <see cref="FileShare.Read"/>, and the
+/// commit uses <c>File.Replace</c> rather than <c>File.Move(overwrite: true)</c>.
+/// Measured on Windows: <c>Move</c> cannot replace a destination any process still
+/// holds open — it fails even when that reader granted delete sharing — whereas
+/// <c>Replace</c> succeeds precisely when the reader does grant it. Both halves are
+/// required; with only one, a concurrent reader in a second app instance silently
+/// kills the write, because write failures are swallowed by contract. The reader then
+/// continues against the file it opened, seeing either the previous document or the
+/// next one, never a torn one.</para>
 /// </remarks>
 public sealed class JsonFileStore : IWindowPersistenceStore
 {
@@ -33,10 +48,28 @@ public sealed class JsonFileStore : IWindowPersistenceStore
     public const long MaxFileSizeBytes = 1L * 1024 * 1024;
 
     // Stable, developer-authored label for the spec 044 Phase B Persistence
-    // events. NEVER a file path — paths are PII per §6.2.1.
-    private const string StoreKind = "json-file";
+    // events. NEVER a file path — paths are PII per §6.2.1. Instance rather
+    // than const because UnpackagedAppDataStore composes this type over a
+    // different root and must stay distinguishable on the trace (spec 063 §4).
+    private const string DefaultStoreKind = "json-file";
+
+    private readonly string _storeKind;
 
     private static int ClampSize(long bytes) => bytes > int.MaxValue ? int.MaxValue : (int)bytes;
+
+    /// <summary>
+    /// The one place this store opens the document for reading. Both read paths route
+    /// through it so the share mode cannot drift apart, and so a test can hold a stream
+    /// opened by the <i>production</i> code across a write — a test that opened its own
+    /// <see cref="FileStream"/> would keep passing if these flags regressed.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="FileShare.Delete"/> is load-bearing, not defensive: without it the
+    /// <c>File.Replace</c> that commits a write fails while any reader is open, and
+    /// because writes are best-effort that failure is silent.
+    /// </remarks>
+    internal static FileStream OpenForRead(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
 
     private readonly string _path;
     private readonly object _ioLock = new();
@@ -51,11 +84,21 @@ public sealed class JsonFileStore : IWindowPersistenceStore
     public JsonFileStore() : this(DefaultPath()) { }
 
     /// <summary>Construct with an explicit file path. Used by unit tests.</summary>
-    public JsonFileStore(string path)
+    public JsonFileStore(string path) : this(path, DefaultStoreKind) { }
+
+    /// <summary>
+    /// Construct with an explicit file path and trace label. Internal because the
+    /// label is a stable diagnostic contract, not something callers should invent:
+    /// <see cref="UnpackagedAppDataStore"/> composes this type over the Windows App
+    /// SDK app-data root and needs to stay distinguishable on the spec 044
+    /// Persistence trace. (spec 063 §4)
+    /// </summary>
+    internal JsonFileStore(string path, string storeKind)
     {
         if (string.IsNullOrEmpty(path))
             throw new ArgumentException("Path must be non-empty.", nameof(path));
         _path = path;
+        _storeKind = storeKind;
     }
 
     /// <summary>
@@ -100,11 +143,11 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 if (info.Length > MaxFileSizeBytes)
                 {
                     if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
-                        ReactorEventSource.Log.PersistenceRejected(StoreKind, "oversize-read");
+                        ReactorEventSource.Log.PersistenceRejected(_storeKind, "oversize-read");
                     return false;
                 }
 
-                using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var stream = OpenForRead(_path);
                 var doc = JsonDocument.Parse(stream);
                 if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
                 if (!doc.RootElement.TryGetProperty(id, out var entry)) return false;
@@ -114,7 +157,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 data = Convert.FromBase64String(b64);
                 if (data is not null
                     && ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
-                    ReactorEventSource.Log.PersistenceRead(StoreKind, ClampSize(info.Length));
+                    ReactorEventSource.Log.PersistenceRead(_storeKind, ClampSize(info.Length));
                 return data is not null;
             }
         }
@@ -151,8 +194,30 @@ public sealed class JsonFileStore : IWindowPersistenceStore
 
         try
         {
+            // Two locks, two scopes. The in-process lock keeps threads sharing this
+            // instance ordered; the lock-file guard extends that ordering across
+            // instances AND processes, which is what the IWindowPersistenceStore
+            // contract promises and what read-merge-write actually requires — two
+            // writers can otherwise both read the old document and the second rename
+            // silently discards the first's id.
             lock (_ioLock)
+            using (var guard = CrossProcessWriteGuard.Acquire(_path))
             {
+                // Not held means the lock was unavailable for the whole timeout, or
+                // could not be created at all (read-only directory, ACL denial,
+                // malformed path). Writing anyway would merge a stale document and
+                // drop a peer's entry — the exact lost update the guard exists to
+                // prevent — so this write is abandoned. The reason label is
+                // deliberately generic because the guard does not distinguish a
+                // timeout from a creation failure; the specific cause is on the
+                // swallowed-error diagnostic it emits.
+                if (!guard.IsHeld)
+                {
+                    if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
+                        ReactorEventSource.Log.PersistenceRejected(_storeKind, "write-lock-unavailable");
+                    return;
+                }
+
                 var dir = global::System.IO.Path.GetDirectoryName(_path);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
@@ -168,19 +233,40 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 if (bytes.Length > MaxFileSizeBytes)
                 {
                     if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
-                        ReactorEventSource.Log.PersistenceRejected(StoreKind, "oversize-write");
+                        ReactorEventSource.Log.PersistenceRejected(_storeKind, "oversize-write");
                     return;
                 }
 
-                // Atomic-ish: write to temp then rename. WinAPI MoveFileEx with
-                // MOVEFILE_REPLACE_EXISTING is what File.Move(_, _, true) maps
-                // to on Windows.
-                var tmp = _path + ".tmp";
-                File.WriteAllBytes(tmp, bytes);
-                File.Move(tmp, _path, overwrite: true);
+                // Commit. File.Move(overwrite:true) cannot replace a destination that
+                // any process still has open — measured: it fails with
+                // UnauthorizedAccessException even when the reader granted
+                // FileShare.Delete. File.Replace (ReplaceFileW) can, provided readers
+                // share delete, which TryRead/ReadDocumentOrEmpty do. Without this a
+                // concurrent reader in another app instance would silently kill the
+                // write, since write failures are swallowed by contract.
+                //
+                // Replace requires an existing destination, so the first write of a
+                // fresh store still goes through Move.
+                var tmp = $"{_path}.{Environment.ProcessId:x}.{Environment.CurrentManagedThreadId:x}.tmp";
+                try
+                {
+                    File.WriteAllBytes(tmp, bytes);
+                    if (File.Exists(_path))
+                        File.Replace(tmp, _path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                    else
+                        File.Move(tmp, _path, overwrite: true);
+                }
+                finally
+                {
+                    // Consumed on success; this only fires if the write or the commit
+                    // threw, and must not mask that exception.
+                    try { if (File.Exists(tmp)) File.Delete(tmp); }
+                    catch (IOException) { /* best effort */ }
+                    catch (UnauthorizedAccessException) { /* best effort */ }
+                }
 
                 if (ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
-                    ReactorEventSource.Log.PersistenceWrite(StoreKind, ClampSize(bytes.Length));
+                    ReactorEventSource.Log.PersistenceWrite(_storeKind, ClampSize(bytes.Length));
             }
         }
         catch (IOException ex)
@@ -200,7 +286,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
             if (!File.Exists(_path)) return new(StringComparer.Ordinal);
             var info = new FileInfo(_path);
             if (info.Length > MaxFileSizeBytes) return new(StringComparer.Ordinal);
-            using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var stream = OpenForRead(_path);
             return ParseStringMap(stream);
         }
         catch (IOException ex)

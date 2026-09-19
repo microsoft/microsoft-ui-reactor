@@ -6042,6 +6042,11 @@ Create<T>() → ElementRef<T>
 ### class UIThreadOnlyAttribute
 new()
 
+### class UnpackagedAppDataStore
+new(string publisher, string product)
+TryRead(string id, ref byte[] data) → bool
+Write(string id, byte[] data) → void
+
 ### static class UseAnnounceExtensions
 Component.UseAnnounce() → AnnounceHandle
 

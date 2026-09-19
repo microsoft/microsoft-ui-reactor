@@ -113,6 +113,15 @@ public static partial class ReactorApp
     /// already loaded their placement from the previous store would get a
     /// half-populated state. (spec 036 §8)
     /// </summary>
+    /// <remarks>
+    /// Unpackaged apps can opt into
+    /// <see cref="Hosting.Persistence.UnpackagedAppDataStore"/> by assigning one here
+    /// before the first <c>OpenWindow</c>. It persists under the Windows App SDK's
+    /// app-data root for an explicit publisher/product pair instead of the entry
+    /// process's name, so saved layouts survive an executable rename. It is not the
+    /// auto-detected default because the two stores key their data differently, so
+    /// switching does not migrate existing saved layouts. (spec 063 §4)
+    /// </remarks>
     public static Hosting.Persistence.IWindowPersistenceStore? WindowPersistenceStore
     {
         get => Volatile.Read(ref _windowPersistenceStore);
