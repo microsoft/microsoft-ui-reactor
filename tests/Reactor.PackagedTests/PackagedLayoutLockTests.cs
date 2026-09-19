@@ -779,6 +779,67 @@ public class PackagedLayoutLockTests
     }
 
     /// <summary>
+    /// A storage fault during classification must leave the registration alone, not abort.
+    /// </summary>
+    /// <remarks>
+    /// <para>The reclamation probe is documented to fail closed: anything it cannot establish
+    /// means "leave it alone". Making stamp failures propagate gave it a second way out that
+    /// was not folded back — the lock is taken and only the owner record fails, so the throw
+    /// happens after acquisition and reaches this path only while classifying someone else's
+    /// registration. Letting it escape aborts the whole packaged run over a storage fault on a
+    /// housekeeping probe.</para>
+    /// <para>Staged the same way as <c>A_Lock_That_Opens_But_Cannot_Be_Stamped_Fails_Loudly</c>:
+    /// a reader sharing <c>ReadWrite</c> with a byte-range lock permits the open and fails only
+    /// the write.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Stamp_Failure_While_Classifying_Leaves_The_Registration_Alone()
+    {
+        var layout = SyntheticLayout();
+        var lockPath = AppxLooseLayoutDeployment.LockPathFor(
+            layout, WorktreeIdentity.AlgorithmVersion);
+
+        File.WriteAllText(lockPath, new string('x', 64));
+
+        using var holder = new FileStream(
+            lockPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        holder.Lock(0, long.MaxValue);
+
+        try
+        {
+            using (var probe = new FileStream(
+                lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read))
+            {
+                Assert.IsTrue(probe.CanWrite,
+                    "Precondition: the staged lock must still open writable, or this measures " +
+                    "the open path rather than the stamp.");
+            }
+        }
+        catch (IOException)
+        {
+            holder.Unlock(0, long.MaxValue);
+            Assert.Inconclusive(
+                "Could not stage a writable-open-but-unwritable lock file on this machine, so " +
+                "the stamp path was never reached and nothing was measured.");
+            return;
+        }
+
+        try
+        {
+            var live = AppxLooseLayoutDeployment.IsLayoutLocked(layout);
+
+            Assert.IsTrue(live,
+                "A stamp failure during classification must read as 'cannot be shown free' and " +
+                "leave the registration alone. Letting it escape instead aborts the packaged " +
+                "run over a storage fault on a probe that is only ever advisory.");
+        }
+        finally
+        {
+            holder.Unlock(0, long.MaxValue);
+        }
+    }
+
+    /// <summary>
     /// A lock directory that cannot be prepared must not be reported as another run.
     /// </summary>
     /// <remarks>

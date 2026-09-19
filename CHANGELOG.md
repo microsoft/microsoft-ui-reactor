@@ -175,6 +175,14 @@ Conventions for contributors:
   has actually been read. It previously decided from the lookup alone, so a failure while reading
   the value was recorded in the detail text while the fixture still passed — a PRI compatibility
   check that could go green without resolving anything.
+- The packaged-tier reclamation probe now treats a stamp failure the same way it treats a setup
+  failure: as "this registration is in use, leave it alone". Only setup failures were caught, so a
+  storage fault while stamping a lock taken over someone else's registration escaped an advisory
+  liveness probe and aborted the whole run — the opposite of the fail-closed behaviour the probe
+  documents.
+- The packaged identity guard now checks the publisher as well as the name. A package family name
+  is `<name>_<publisherHash>`, so matching the name prefix alone accepted a same-named package
+  from any publisher — precisely the case the guard exists to tell apart.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

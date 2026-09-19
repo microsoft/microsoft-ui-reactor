@@ -1215,13 +1215,21 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         // the opposite — there the fault is fatal and must be reported as itself — which is
         // why the distinction is drawn by the exception and resolved per caller rather than
         // collapsed inside TryAcquireAllLocks.
+        //
+        // LockStampException belongs here for the same reason and is the easier one to miss:
+        // it is raised *after* a lock has been taken, so it reaches this path only while
+        // classifying someone else's registration. Letting it escape would abort the whole
+        // packaged run over a storage fault on a housekeeping probe, which inverts the
+        // fail-closed contract this method exists to honour — the answer it needs is "cannot
+        // be shown free", and that is exactly null. TryAcquireAllLocks has already released
+        // whatever it held before rethrowing, so nothing is leaked by swallowing it here.
         List<FileStream>? held;
         try
         {
             held = TryAcquireAllLocks(
                 layoutPath, owner, TimeSpan.Zero, TimeSpan.Zero, out _);
         }
-        catch (LockSetupException)
+        catch (Exception ex) when (ex is LockSetupException or LockStampException)
         {
             return null;
         }

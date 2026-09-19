@@ -58,6 +58,19 @@ internal static class PackagedIdentityFixtures
     internal const string PackageIdentityName = "Microsoft.UI.Reactor.PackagedTests.Host";
 
     /// <summary>
+    /// The publisher half of the identity, as spelled in <c>Identity/@Publisher</c>.
+    /// </summary>
+    /// <remarks>
+    /// Checked separately because the name alone does not identify a package. A family name is
+    /// <c>&lt;name&gt;_&lt;publisherHash&gt;</c>, so a prefix match on the name accepts any
+    /// publisher, and a package sharing this derived name and install path under a different
+    /// publisher would satisfy every other check here while the suite ran under the wrong
+    /// identity. Kept in parity with the deployment constant by
+    /// <c>Host_Side_Identity_Constants_Match_Their_Sources</c>.
+    /// </remarks>
+    internal const string PackageIdentityPublisher = "CN=Microsoft.UI.Reactor.PackagedTests.Host";
+
+    /// <summary>
     /// The identity this process must be running under: <see cref="PackageIdentityName"/>
     /// derived for the directory this build was deployed from.
     /// </summary>
@@ -141,13 +154,14 @@ internal static class PackagedIdentityFixtures
 
             // Corroborate through a completely different mechanism (WinRT rather than the
             // kernel32 probe), so a bug in one cannot make the other lie.
-            string? name = null, familyName = null, installPath = null;
+            string? name = null, familyName = null, installPath = null, publisher = null;
             try
             {
                 var pkg = global::Windows.ApplicationModel.Package.Current;
                 name = pkg.Id.Name;
                 familyName = pkg.Id.FamilyName;
                 installPath = pkg.InstalledLocation.Path;
+                publisher = pkg.Id.Publisher;
             }
             catch (Exception ex) when (ex is InvalidOperationException or COMException)
             {
@@ -173,6 +187,8 @@ internal static class PackagedIdentityFixtures
             var identityDetail =
                 $"expected={expectedName}; actual={name ?? "<null>"}; " +
                 $"family={familyName ?? "<null>"}; " +
+                $"expectedPublisher={PackageIdentityPublisher}; " +
+                $"publisher={publisher ?? "<null>"}; " +
                 $"baseDirectory={AppContext.BaseDirectory}; " +
                 $"installLocation={installPath ?? "<null>"}";
 
@@ -180,6 +196,16 @@ internal static class PackagedIdentityFixtures
             H.Check("PackagedIdentity_FamilyName_Derived_From_Name",
                 familyName is not null &&
                 familyName.StartsWith(expectedName + "_", StringComparison.Ordinal),
+                identityDetail);
+
+            // The name half is not an identity. A family name is <name>_<publisherHash>, so the
+            // prefix match above accepts every publisher that ever produced this name — and a
+            // package sharing the derived name and the install path but signed by a different
+            // publisher would pass every other check in this fixture while the tier ran under
+            // an identity it never registered. Compared against the manifest's publisher, the
+            // same value the deployment's own pre-flight check compares.
+            H.Check("PackagedIdentity_Publisher_Matches",
+                string.Equals(publisher, PackageIdentityPublisher, StringComparison.Ordinal),
                 identityDetail);
 
             // The registration must point at the build output this process is running
