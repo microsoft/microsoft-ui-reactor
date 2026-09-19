@@ -52,6 +52,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     private string? _registeredFullName;
     private string? _effectivePackageName;
     private string? _effectiveAliasExeName;
+    private IReadOnlyList<string>? _supportedDerivedNames;
 
     internal AppxLooseLayoutDeployment(string layoutDir) => _layoutDir = layoutDir;
 
@@ -81,6 +82,51 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// </remarks>
     internal string EffectiveAliasExeName =>
         _effectiveAliasExeName ??= WorktreeIdentity.DeriveAliasExeName(AliasExeName, _layoutDir);
+
+    /// <summary>
+    /// Every package name this layout could legitimately be carrying: the current algorithm
+    /// version's derivation plus each superseded one still listed as supported.
+    /// </summary>
+    /// <remarks>
+    /// The generated manifest is rewritten in place, so between an algorithm bump and the next
+    /// rebuild the layout carries the previous version's derived name. Accepting only the
+    /// current one would make the drift guard abort on exactly the manifest the rewrite below
+    /// is about to migrate. Exact derivations rather than a suffix-shape test, so a name that
+    /// merely looks derived — another layout's, for instance — is still rejected.
+    /// </remarks>
+    internal IReadOnlyList<string> SupportedDerivedNames() =>
+        _supportedDerivedNames ??=
+            DeriveSupportedNames(PackageName, _layoutDir, WorktreeIdentity.SupportedAlgorithmVersions);
+
+    /// <summary>
+    /// The accepted names for a given base, layout and set of algorithm versions.
+    /// </summary>
+    /// <remarks>
+    /// Pure and parameterised over the version set purely so a test can drive it with more than
+    /// one version. <see cref="WorktreeIdentity.SupportedAlgorithmVersions"/> currently holds a
+    /// single entry, which would make "every supported version is accepted" true of an
+    /// implementation that only ever derived the current one.
+    /// </remarks>
+    internal static IReadOnlyList<string> DeriveSupportedNames(
+        string basePackageName, string layoutDirectory, IEnumerable<string> algorithmVersions) =>
+        algorithmVersions
+            .Select(v => WorktreeIdentity.DerivePackageName(basePackageName, layoutDirectory, v))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>
+    /// Whether a manifest's <c>Identity/@Name</c> is one this layout may legitimately carry.
+    /// </summary>
+    /// <remarks>
+    /// The base name (freshly built) and any supported version's exact derivation (registered
+    /// earlier, possibly under a superseded version, with no intervening rebuild). Anything else
+    /// is drift, including a name that merely has a derived <i>shape</i> — that one most likely
+    /// belongs to a different layout, and adopting it would make cleanup sweep someone else's
+    /// registration.
+    /// </remarks>
+    internal bool IsExpectedManifestName(string? manifestName) =>
+        string.Equals(manifestName, PackageName, StringComparison.Ordinal) ||
+        SupportedDerivedNames().Contains(manifestName, StringComparer.Ordinal);
 
     /// <summary>
     /// The build hint shared by every "host not built" diagnostic, so the message is the same
@@ -221,14 +267,18 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         //
         // The name is checked against both spellings because this method rewrites the
         // generated manifest in place: a freshly built layout carries the base name, and a
-        // layout registered earlier without an intervening rebuild already carries the
-        // derived one. Any *third* value is real drift.
+        // layout registered earlier without an intervening rebuild already carries a derived
+        // one. Every *supported* algorithm version's derivation is accepted, not just the
+        // current one — after a version bump the layout still carries the previous version's
+        // name until something rewrites it, and this guard runs first, so accepting only the
+        // current derivation would abort before ApplyDerivedIdentity could migrate it and
+        // leave the tier unrunnable until a rebuild. Derivations are compared exactly rather
+        // than by suffix shape: a name that merely looks derived may belong to another layout,
+        // which is the ownership confusion RemoveExistingRegistrations exists to refuse.
+        // Any value that is neither the base name nor one of those derivations is real drift.
         var (manifestName, manifestPublisher) = ReadManifestIdentity(manifest);
-        var nameIsExpected =
-            string.Equals(manifestName, PackageName, StringComparison.Ordinal) ||
-            string.Equals(manifestName, EffectivePackageName, StringComparison.Ordinal);
 
-        if (!nameIsExpected ||
+        if (!IsExpectedManifestName(manifestName) ||
             !string.Equals(manifestPublisher, PackagePublisher, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
@@ -236,7 +286,7 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                 $"manifest's Identity element, so cleanup could not remove what registration " +
                 $"would create.\nManifest: {manifest}\n" +
                 $"  Name:      manifest '{manifestName}' vs constant '{PackageName}' " +
-                $"(or derived '{EffectivePackageName}')\n" +
+                $"(or a supported derivation: {string.Join(", ", SupportedDerivedNames())})\n" +
                 $"  Publisher: manifest '{manifestPublisher}' vs constant '{PackagePublisher}'");
         }
 
@@ -483,15 +533,24 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
     /// <summary>How long to wait for a sibling run to finish before giving up.</summary>
     /// <remarks>
-    /// Generous, because the expected wait is a full packaged run: blocking is the friendly
-    /// outcome, and a timeout is a diagnosis rather than a policy. Sized past the host process
-    /// budget — which is itself configurable through <c>REACTOR_PACKAGED_TIMEOUT_SECONDS</c> —
-    /// so an ordinary long run is waited out rather than reported as a collision. Timing out is
-    /// safe regardless: <see cref="Unregister"/> refuses to sweep without the claim, so a run
-    /// that never acquired it cannot evict the run it was waiting on.
+    /// <para>Generous, because the expected wait is a full packaged run: blocking is the friendly
+    /// outcome, and a timeout is a diagnosis rather than a policy. Timing out is safe regardless:
+    /// <see cref="Unregister"/> refuses to sweep without the claim, so a run that never acquired
+    /// it cannot evict the run it was waiting on.</para>
+    /// <para>Sized for <b>two</b> host process budgets, not one. A run holds this lock across its
+    /// whole batch, and a batch whose filter excludes the identity guard launches the host a
+    /// second time to fetch it (see <c>PackagedSelfTestBatch</c>), so the owner can legitimately
+    /// occupy two consecutive budgets. One budget plus the margin would let a contender time out
+    /// and report a collision against a perfectly healthy owner that is merely in its second
+    /// pass. The budget is itself configurable through <c>REACTOR_PACKAGED_TIMEOUT_SECONDS</c>,
+    /// so both terms scale with it; the fixed margin covers registration, the sweep and teardown,
+    /// which sit outside either pass.</para>
     /// </remarks>
     private static TimeSpan LayoutLockTimeout =>
-        TimeSpan.FromMilliseconds(PackagedSelfTestBatch.HostTimeoutMs) + TimeSpan.FromMinutes(5);
+        TimeSpan.FromMilliseconds(PackagedSelfTestBatch.HostTimeoutMs * 2L) + TimeSpan.FromMinutes(5);
+
+    /// <summary>The wait budget, exposed so a test can pin its sizing to the host's passes.</summary>
+    internal static TimeSpan LayoutLockTimeoutForTests => LayoutLockTimeout;
 
     /// <summary>Directory holding the per-layout lock files.</summary>
     private static string LockDirectory => Path.Join(

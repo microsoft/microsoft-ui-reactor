@@ -140,6 +140,16 @@ Conventions for contributors:
   to remove (`Remove-AppxPackage -Package <full name>`) instead of a `Get-AppxPackage -Name`
   pipeline, which is not publisher-unique and could unregister an unrelated package that happens
   to share the name.
+- The packaged tier's manifest drift guard now accepts the derived name produced by *any*
+  supported identity-algorithm version, not only the current one. The guard runs before the
+  rewrite that migrates a stale name, so after a version bump it would previously abort on
+  exactly the manifest the rewrite was about to heal, leaving the tier unrunnable until a
+  rebuild. Derivations are still compared exactly rather than by suffix shape, so a name
+  belonging to a different layout remains drift.
+- The packaged tier's layout-lock wait is sized for two host process budgets instead of one. A
+  batch whose filter excludes the identity guard runs the host a second time to fetch it, so an
+  owner can legitimately occupy two consecutive budgets, and a contender could time out and
+  report a collision against a perfectly healthy run.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

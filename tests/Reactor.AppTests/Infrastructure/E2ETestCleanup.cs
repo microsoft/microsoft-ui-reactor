@@ -30,11 +30,20 @@ internal static class E2ETestCleanup
     /// </param>
     /// <param name="stopwatch">Started in the matching test initialize; may be null.</param>
     /// <param name="fallbackTestName">Used when MSTest did not inject a context.</param>
+    /// <param name="yield">
+    /// The handoff to perform when the test took a turn. Injected so the decision this function
+    /// makes — yield exactly when the test used winapp — is testable without spawning a
+    /// <c>winapp.exe</c> child. Tests that call <see cref="WinAppUi.ReleaseUiTurn"/> directly
+    /// prove the handoff works, not that this function still performs it; the regression worth
+    /// catching is this call going missing, which nothing fails on and which leaves every real
+    /// E2E test holding the workflow's idle grace after cleanup.
+    /// </param>
     internal static void RecordAndYield(
         TestContext? testContext,
         long invocationCountAtStart,
         Stopwatch? stopwatch,
-        string fallbackTestName)
+        string fallbackTestName,
+        Action? yield = null)
     {
         var spawned = WinAppUi.InvocationCount - invocationCountAtStart;
         var seconds = stopwatch?.Elapsed.TotalSeconds ?? 0;
@@ -46,6 +55,6 @@ internal static class E2ETestCleanup
         // Skipped when the test never touched winapp, so a headless test in this assembly doesn't
         // pay a process spawn to release a turn it never took.
         if (spawned > 0)
-            WinAppUi.ReleaseUiTurn();
+            (yield ?? (() => WinAppUi.ReleaseUiTurn()))();
     }
 }

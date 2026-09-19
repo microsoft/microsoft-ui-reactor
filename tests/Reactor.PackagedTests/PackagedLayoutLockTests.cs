@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Reactor.Tests.Shared;
 
 namespace Microsoft.UI.Reactor.PackagedTests;
 
@@ -409,5 +410,150 @@ public class PackagedLayoutLockTests
             "The probe climbed past a component it could not resolve, enumerated a readable " +
             "ancestor, and called the target gone — so a live layout under an unreadable " +
             "parent directory would have its registration reclaimed.");
+    }
+
+    /// <summary>
+    /// A manifest left on a superseded version's derived name must be accepted, not treated as
+    /// drift.
+    /// </summary>
+    /// <remarks>
+    /// <para>The generated manifest is rewritten in place, so after an algorithm bump a layout
+    /// registered earlier still carries the previous version's name until something rewrites it.
+    /// The drift guard runs <i>before</i> that rewrite, so accepting only the current derivation
+    /// would abort on exactly the manifest the rewrite was about to migrate — leaving the tier
+    /// unrunnable until someone rebuilt, which is not a failure mode a contributor could read
+    /// off the message.</para>
+    /// <para>Driven through the version-parameterised helper rather than the live supported
+    /// list: that list holds one entry today, so "every supported version is accepted" is
+    /// trivially true of an implementation that only derives the current one. Two versions make
+    /// the difference observable.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Superseded_Versions_Name_Is_Accepted_Rather_Than_Called_Drift()
+    {
+        var layout = Path.Join(Path.GetTempPath(), "reactor-stale-" + Guid.NewGuid().ToString("n"));
+        var basePackageName = AppxLooseLayoutDeployment.PackageName;
+
+        var current = WorktreeIdentity.DerivePackageName(
+            basePackageName, layout, WorktreeIdentity.AlgorithmVersion);
+        var superseded = WorktreeIdentity.DerivePackageName(basePackageName, layout, "0");
+
+        // Control: the two versions genuinely disagree, so accepting both is a real widening
+        // and not the same string counted twice.
+        Assert.AreNotEqual(current, superseded,
+            "Two algorithm versions derived the same name, so this test could not tell a guard " +
+            "that accepts every supported version from one that accepts only the current one.");
+
+        var accepted = AppxLooseLayoutDeployment.DeriveSupportedNames(
+            basePackageName, layout, new[] { WorktreeIdentity.AlgorithmVersion, "0" });
+
+        CollectionAssert.Contains(accepted.ToList(), superseded,
+            "A layout still carrying a superseded version's derived name would be reported as " +
+            "drift and abort the run, even though the rewrite immediately after the guard is " +
+            "what migrates it.");
+        CollectionAssert.Contains(accepted.ToList(), current,
+            "The current version's derivation must stay accepted.");
+    }
+
+    /// <summary>
+    /// Widening to superseded versions must not widen to <i>any</i> derived-looking name.
+    /// </summary>
+    /// <remarks>
+    /// The cheap way to accept a stale name is a suffix-shape test, which also accepts a name
+    /// derived for a different directory. Adopting one of those would point cleanup at another
+    /// layout's registration — the ownership confusion the sweep exists to refuse — so the
+    /// comparison has to stay exact.
+    /// </remarks>
+    [TestMethod]
+    public void Another_Layouts_Derived_Name_Is_Still_Drift()
+    {
+        var mine = Path.Join(Path.GetTempPath(), "reactor-mine-" + Guid.NewGuid().ToString("n"));
+        var theirs = Path.Join(Path.GetTempPath(), "reactor-theirs-" + Guid.NewGuid().ToString("n"));
+        var basePackageName = AppxLooseLayoutDeployment.PackageName;
+
+        var foreign = WorktreeIdentity.DerivePackageName(
+            basePackageName, theirs, WorktreeIdentity.AlgorithmVersion);
+
+        // Control: the foreign name really is well-formed, so rejecting it is the exactness of
+        // the comparison and not the name failing to look derived at all.
+        Assert.IsTrue(WorktreeIdentity.IsDerivedFrom(foreign, basePackageName),
+            "The foreign name is not shaped like a derivation, so this proves nothing about a " +
+            "guard that tests shape instead of identity.");
+
+        var accepted = AppxLooseLayoutDeployment.DeriveSupportedNames(
+            basePackageName, mine, new[] { WorktreeIdentity.AlgorithmVersion, "0" });
+
+        CollectionAssert.DoesNotContain(accepted.ToList(), foreign,
+            "A name derived for a different layout was accepted as this layout's own, so " +
+            "cleanup would sweep a registration belonging to another checkout.");
+
+        // Through the live predicate as well, not just the pure helper: a guard that tested
+        // suffix shape instead of consulting the helper would pass the assertion above while
+        // still adopting the foreign name.
+        Assert.IsFalse(
+            new AppxLooseLayoutDeployment(mine).IsExpectedManifestName(foreign),
+            "The drift guard accepted a name derived for a different layout, so a manifest " +
+            "belonging to another checkout would be treated as this one's and swept.");
+    }
+
+    /// <summary>
+    /// The live guard must be wired to the supported list, not to a hardcoded version.
+    /// </summary>
+    /// <remarks>
+    /// The two tests above prove the helper widens correctly; this one proves the instance the
+    /// guard actually consults is that helper applied to the real supported set, so adding a
+    /// version to <see cref="WorktreeIdentity.SupportedAlgorithmVersions"/> is enough to make
+    /// the guard accept it.
+    /// </remarks>
+    [TestMethod]
+    public void The_Guard_Accepts_Exactly_The_Base_Name_And_The_Supported_Derivations()
+    {
+        var layout = Path.Join(Path.GetTempPath(), "reactor-wired-" + Guid.NewGuid().ToString("n"));
+        var deployment = new AppxLooseLayoutDeployment(layout);
+
+        var expected = AppxLooseLayoutDeployment.DeriveSupportedNames(
+            AppxLooseLayoutDeployment.PackageName, layout, WorktreeIdentity.SupportedAlgorithmVersions);
+
+        CollectionAssert.AreEquivalent(
+            expected.ToList(), deployment.SupportedDerivedNames().ToList(),
+            "The guard's accepted set is not the supported versions applied to this layout, so " +
+            "adding a version to SupportedAlgorithmVersions would not actually make the guard " +
+            "accept a manifest still carrying it.");
+
+        Assert.IsTrue(deployment.IsExpectedManifestName(AppxLooseLayoutDeployment.PackageName),
+            "A freshly built layout carries the base name and must not be called drift.");
+        Assert.IsTrue(deployment.IsExpectedManifestName(deployment.EffectivePackageName),
+            "A layout already rewritten by this version must not be called drift.");
+        Assert.IsFalse(deployment.IsExpectedManifestName(AppxLooseLayoutDeployment.PackageName + ".nope"),
+            "An unrelated name was accepted, so the guard no longer detects real drift.");
+        Assert.IsFalse(deployment.IsExpectedManifestName(null),
+            "A manifest with no Identity/@Name was accepted as expected.");
+    }
+
+    /// <summary>
+    /// The wait must cover every pass the owner can legitimately make, not just one.
+    /// </summary>
+    /// <remarks>
+    /// The lock is held across a whole batch, and a batch whose filter excludes the identity
+    /// guard runs the host a <i>second</i> time to fetch it. Both passes can approach the full
+    /// process budget, so a wait sized for one lets a contender give up and report a collision
+    /// against an owner that is simply still working — the exact false positive this lock exists
+    /// to avoid. Asserted as a strict inequality against two budgets so the fixed margin is
+    /// required to survive too; the constants are read rather than restated, so the test still
+    /// means this after <c>REACTOR_PACKAGED_TIMEOUT_SECONDS</c> changes the budget.
+    /// </remarks>
+    [TestMethod]
+    public void The_Wait_Budget_Covers_Both_Host_Passes()
+    {
+        var oneBudget = TimeSpan.FromMilliseconds(PackagedSelfTestBatch.HostTimeoutMs);
+        var twoBudgets = oneBudget + oneBudget;
+        var actual = AppxLooseLayoutDeployment.LayoutLockTimeoutForTests;
+
+        Assert.IsTrue(
+            actual > twoBudgets,
+            $"The layout-lock wait is {actual}, which does not exceed the two host passes an " +
+            $"owner can legitimately make ({twoBudgets}; one budget is {oneBudget}). A contender " +
+            "would abort mid-way through a healthy owner's identity-guard pass and report a " +
+            "collision that is not one.");
     }
 }

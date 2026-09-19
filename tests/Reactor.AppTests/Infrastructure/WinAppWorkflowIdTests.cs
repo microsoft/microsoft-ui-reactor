@@ -240,6 +240,45 @@ public class WinAppWorkflowIdTests
         }
     }
 
+    /// <summary>
+    /// The cleanup boundary must yield exactly when the test took a turn.
+    /// </summary>
+    /// <remarks>
+    /// <para>The tests above prove <see cref="WinAppUi.ReleaseUiTurn"/> works by calling it
+    /// directly, which is a different claim from "the teardown every E2E base class runs still
+    /// calls it". Delete the call from <c>RecordAndYield</c> and those tests stay green while
+    /// every real test ends its turn holding the workflow's idle grace — a throughput bug with
+    /// no failing assertion anywhere. The seam exists so this decision is observable without
+    /// spawning a <c>winapp.exe</c> child.</para>
+    /// <para>Both directions are asserted: skipping the yield is the point of the
+    /// <c>spawned &gt; 0</c> test (a headless test must not pay a process spawn), so an
+    /// implementation that always yielded would be just as wrong as one that never did.</para>
+    /// </remarks>
+    [TestMethod]
+    public void TheCleanupBoundaryYieldsOnlyWhenTheTestUsedWinApp()
+    {
+        var yields = 0;
+
+        // Sampled "at start" equal to the current count, so the finished test spawned nothing.
+        E2ETestCleanup.RecordAndYield(
+            null, WinAppUi.InvocationCount, null, nameof(TheCleanupBoundaryYieldsOnlyWhenTheTestUsedWinApp),
+            () => yields++);
+
+        Assert.AreEqual(0, yields,
+            "A test that never touched winapp released a turn it never took, paying a process " +
+            "spawn per headless test in this assembly.");
+
+        // One below the current count, so the finished test looks like it spawned exactly one.
+        E2ETestCleanup.RecordAndYield(
+            null, WinAppUi.InvocationCount - 1, null, nameof(TheCleanupBoundaryYieldsOnlyWhenTheTestUsedWinApp),
+            () => yields++);
+
+        Assert.AreEqual(1, yields,
+            "The shared teardown did not hand the desktop back after a test that used winapp, " +
+            "so every E2E test holds its workflow's idle grace until the next one starts and " +
+            "concurrent agents serialise behind it.");
+    }
+
     [TestMethod]
     public void ReleaseUiTurn_IsAcceptedBecauseTheWorkflowIdReachesWinApp()
     {
