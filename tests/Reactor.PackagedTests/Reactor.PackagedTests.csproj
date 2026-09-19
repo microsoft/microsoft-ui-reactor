@@ -17,6 +17,9 @@
     <EnableMSTestRunner>true</EnableMSTestRunner>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Required by the [LibraryImport] source generator, which emits an unsafe stub. Used by
+         the linked WorktreeIdentity.cs to resolve a directory's final path. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

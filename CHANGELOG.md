@@ -183,6 +183,16 @@ Conventions for contributors:
 - The packaged identity guard now checks the publisher as well as the name. A package family name
   is `<name>_<publisherHash>`, so matching the name prefix alone accepted a same-named package
   from any publisher — precisely the case the guard exists to tell apart.
+- Per-checkout identity derivation now resolves a layout directory through the filesystem rather
+  than by string handling alone, so mapped or `subst`'d drive letters and the extended-length
+  `\\?\` spelling all reach one identity. The override accepts any rooted path that exists and
+  preserves the spelling it was handed, so two runs pointed at one physical layout through
+  different spellings previously took different locks and then rewrote and registered the same
+  generated manifest concurrently.
+- The orphaned-host sweep tests now record every lease they stage and delete it at class cleanup.
+  A staged lease is not a claim the process took, so the release seam could not see it, and
+  disposing deliberately leaves the file behind — every run added another permanent file to the
+  real per-user claim directory that later runs then paid to probe.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

@@ -26,8 +26,10 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace Reactor.Tests.Shared;
 
@@ -56,7 +58,7 @@ namespace Reactor.Tests.Shared;
 /// document it. <c>Derivation_Matches_The_Pinned_Version1_Vectors</c> is what forces the
 /// decision: any such change reddens it.</para>
 /// </remarks>
-internal static class WorktreeIdentity
+internal static partial class WorktreeIdentity
 {
     /// <summary>
     /// Version tag mixed into the hash input. Bump only with intent: it invalidates every
@@ -118,37 +120,160 @@ internal static class WorktreeIdentity
     /// same way.
     /// </summary>
     /// <remarks>
-    /// <para>Absolutises, resolves symlinks and junctions in <em>every</em> path component (not
-    /// just the final one — a junction high up, such as a linked <c>C:\src</c>, is the realistic
-    /// way a worktree acquires two spellings), strips any trailing separator
-    /// (<c>AppContext.BaseDirectory</c> has one, a joined layout path typically does not), and
-    /// lowercases — Windows paths are case-insensitive, so two spellings differing only in case
-    /// are the same directory and must not derive two identities.</para>
-    /// <para>It deliberately does <em>not</em> claim to defeat every alternate spelling Windows
-    /// admits: 8.3 short names and <c>subst</c>'d drives still hash differently from their long
-    /// or physical form. Those are not how a build produces a layout path twice, and the
-    /// consequence of a miss is a loud, fail-closed identity-guard mismatch rather than silent
-    /// cross-checkout interference.</para>
+    /// <para>Absolutises, then asks Windows for the directory's <em>final</em> path, which
+    /// collapses the alternate spellings the filesystem admits: symlinks and junctions in any
+    /// component, mapped or <c>subst</c>'d drive letters, and the extended-length
+    /// <c>\\?\</c> form all resolve to the one physical path. Trailing separators are stripped
+    /// (<c>AppContext.BaseDirectory</c> has one, a joined layout path typically does not) and
+    /// the result is lowercased — Windows paths are case-insensitive, so two spellings
+    /// differing only in case are the same directory and must not derive two identities.</para>
+    /// <para>8.3 short names are handled a step earlier and were already handled before this
+    /// query existed: measured on Windows, <c>Path.GetFullPath</c> expands a short component
+    /// of an existing path to its long form. <c>subst</c>'d drives are the counter-example that
+    /// motivated going to the filesystem — <c>GetFullPath</c> returns <c>X:\bin\x64</c>
+    /// unchanged, so without this two runs pointed at one layout through a drive mapping and
+    /// through its real path would derive different identities, take different lock files, and
+    /// then rewrite and register the same generated manifest concurrently.</para>
+    /// <para>Final-path resolution needs a handle, so it only works on a directory that
+    /// exists. When it does not — a path being derived before it is created, or a volume that
+    /// refuses the query — the walk falls back to resolving links component by component,
+    /// which covers the common junction case without a handle. The fallback is strictly
+    /// weaker: a <c>subst</c> or <c>\\?\</c> spelling of a directory that does not yet exist
+    /// still hashes differently from its physical form. That is acceptable only because a
+    /// layout directory is always registered after it is built, so the path this is asked
+    /// about at registration time exists by then.</para>
     /// </remarks>
     internal static string Canonicalize(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Path must be a non-empty directory path.", nameof(path));
 
-        var full = ResolveLinksInEveryComponent(Path.GetFullPath(path));
-        return Path.TrimEndingDirectorySeparator(full).ToLowerInvariant();
+        var full = Path.GetFullPath(path);
+        var resolved = TryResolveFinalPath(full) ?? ResolveLinksInEveryComponent(full);
+        return Path.TrimEndingDirectorySeparator(resolved).ToLowerInvariant();
     }
+
+    /// <summary>
+    /// Asks Windows for the final path of an existing directory, or null if it cannot.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the only mechanism that resolves mapped and <c>subst</c>'d drive letters,
+    /// and it does so in the same call that follows links — so two runs pointed at one physical
+    /// layout through different spellings derive one identity and contend for one lock, instead
+    /// of proceeding concurrently over the same files.</para>
+    /// <para>The handle is opened with no access rights at all: <c>GetFinalPathNameByHandle</c>
+    /// needs only a handle, not readable content, so requesting nothing lets this succeed on a
+    /// directory the caller could not otherwise open. <c>FILE_FLAG_BACKUP_SEMANTICS</c> is what
+    /// makes <c>CreateFile</c> open a directory rather than fail.</para>
+    /// <para>Every failure returns null rather than throwing. This runs while deciding an
+    /// identity, and an unreadable path is not an error there — the caller has a weaker but
+    /// working fallback, and turning a query failure into an exception would take down a run
+    /// over a question that has an answer.</para>
+    /// </remarks>
+    private static string? TryResolveFinalPath(string full)
+    {
+        try
+        {
+            using var handle = CreateFileW(
+                full,
+                dwDesiredAccess: 0,
+                dwShareMode: FileShareAll,
+                lpSecurityAttributes: IntPtr.Zero,
+                dwCreationDisposition: OpenExisting,
+                dwFlagsAndAttributes: FileFlagBackupSemantics,
+                hTemplateFile: IntPtr.Zero);
+
+            if (handle.IsInvalid) return null;
+
+            var buffer = new char[1024];
+            var length = FinalPathInto(handle, buffer);
+
+            // A return of 0 is failure; a return >= the buffer size is "needed this much room".
+            if (length == 0) return null;
+            if (length >= buffer.Length)
+            {
+                buffer = new char[length + 1];
+                length = FinalPathInto(handle, buffer);
+                if (length == 0 || length >= buffer.Length) return null;
+            }
+
+            return StripExtendedLengthPrefix(new string(buffer, 0, (int)length));
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Pins <paramref name="buffer"/> and asks for the final path in DOS form.</summary>
+    private static unsafe uint FinalPathInto(SafeFileHandle handle, char[] buffer)
+    {
+        fixed (char* p = buffer)
+            return GetFinalPathNameByHandleW(handle, p, (uint)buffer.Length, VolumeNameDos);
+    }
+
+    /// <summary>
+    /// Converts the extended-length form <c>GetFinalPathNameByHandle</c> returns back into an
+    /// ordinary path.
+    /// </summary>
+    /// <remarks>
+    /// The API always answers with a <c>\\?\</c> prefix, and for a network location with
+    /// <c>\\?\UNC\server\share</c>, whose ordinary spelling is <c>\\server\share</c>. Leaving
+    /// either form in place would make the canonical string disagree with every path the rest
+    /// of this file produces via <see cref="Path.GetFullPath(string)"/>, so a directory would
+    /// hash one way when it exists and another way when the fallback ran.
+    /// </remarks>
+    private static string StripExtendedLengthPrefix(string path)
+    {
+        const string UncPrefix = @"\\?\UNC\";
+        const string DevicePrefix = @"\\?\";
+
+        if (path.StartsWith(UncPrefix, StringComparison.Ordinal))
+            return @"\\" + path[UncPrefix.Length..];
+
+        return path.StartsWith(DevicePrefix, StringComparison.Ordinal)
+            ? path[DevicePrefix.Length..]
+            : path;
+    }
+
+    private const uint FileShareAll = 0x00000001 | 0x00000002 | 0x00000004;
+    private const uint OpenExisting = 3;
+    private const uint FileFlagBackupSemantics = 0x02000000;
+    private const uint VolumeNameDos = 0x0;
+
+    // Source-generated interop rather than [DllImport]: the marshalling is emitted at compile
+    // time, which keeps this trim- and AOT-clean. Entry points are spelled with their explicit
+    // -W suffix because LibraryImport uses ExactSpelling and does not append one.
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial SafeFileHandle CreateFileW(
+        string lpFileName,
+        uint dwDesiredAccess,
+        uint dwShareMode,
+        IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition,
+        uint dwFlagsAndAttributes,
+        IntPtr hTemplateFile);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static unsafe partial uint GetFinalPathNameByHandleW(
+        SafeFileHandle hFile,
+        char* lpszFilePath,
+        uint cchFilePath,
+        uint dwFlags);
 
     /// <summary>
     /// Walks a rooted path from the root down, replacing each component that is a symlink or
     /// junction with its final target.
     /// </summary>
     /// <remarks>
-    /// <c>Directory.ResolveLinkTarget</c> only reports a target when the path handed to it is
-    /// itself a link, so calling it once on a full path leaves any linked parent unresolved.
-    /// Resolving component by component is what makes the linked and physical spellings of one
-    /// directory converge. Best-effort throughout: a component that cannot be inspected is kept
-    /// verbatim, because an unreadable or not-yet-created path is not an error here.
+    /// The fallback for when a handle cannot be taken, so this is what canonicalises a path
+    /// that does not exist yet. <c>Directory.ResolveLinkTarget</c> only reports a target when
+    /// the path handed to it is itself a link, so calling it once on a full path leaves any
+    /// linked parent unresolved. Resolving component by component is what makes the linked and
+    /// physical spellings of one directory converge — a junction high up, such as a linked
+    /// <c>C:\src</c>, is the realistic way a worktree acquires two spellings. Best-effort
+    /// throughout: a component that cannot be inspected is kept verbatim, because an unreadable
+    /// or not-yet-created path is not an error here.
     /// </remarks>
     private static string ResolveLinksInEveryComponent(string full)
     {

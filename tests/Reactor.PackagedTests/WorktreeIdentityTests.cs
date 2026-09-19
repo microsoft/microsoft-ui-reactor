@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Xml.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Reactor.Tests.Shared;
@@ -18,7 +19,7 @@ namespace Microsoft.UI.Reactor.PackagedTests;
 /// speed and is safe beside a concurrently running packaged tier.</para>
 /// </remarks>
 [TestClass]
-public class WorktreeIdentityTests
+public partial class WorktreeIdentityTests
 {
     private const string Base = AppxLooseLayoutDeployment.PackageName;
     private const string BaseAlias = AppxLooseLayoutDeployment.AliasExeName;
@@ -181,6 +182,132 @@ public class WorktreeIdentityTests
         Assert.AreEqual(expected, WorktreeIdentity.DerivePackageName(Base, PathA + Path.DirectorySeparatorChar));
         Assert.AreEqual(expected, WorktreeIdentity.DerivePackageName(Base, Path.Join(PathA, "..", "x64")));
     }
+
+    /// <summary>
+    /// The extended-length spelling of a directory must derive the identity its ordinary
+    /// spelling does.
+    /// </summary>
+    /// <remarks>
+    /// <para>The deterministic half of the alternate-spelling coverage, and the one alternate
+    /// spelling available on every machine — unlike 8.3 names, which a volume may have
+    /// disabled, or <c>subst</c> drives, which need a device mapping this suite will not make.
+    /// It exercises the same two steps a <c>subst</c> spelling does, because both are resolved
+    /// by the final-path query and its prefix conversion.</para>
+    /// <para><c>Path.GetFullPath</c> preserves <c>\\?\</c> verbatim, so a canonicaliser that
+    /// stops at string handling reads this as a different directory and derives a second
+    /// identity for one physical layout.</para>
+    /// <para>It also pins the reverse conversion. Windows answers the final-path query in
+    /// extended-length form, so a canonicaliser that forwarded the answer unchanged would make
+    /// a directory hash one way while it exists and another way once the handle-less fallback
+    /// runs — two identities for one path again, this time depending only on timing.</para>
+    /// </remarks>
+    [TestMethod]
+    public void The_Extended_Length_Spelling_Derives_The_Same_Identity()
+    {
+        var dir = Path.Join(Path.GetTempPath(), "reactor-wt-ext-" + Guid.NewGuid().ToString("N"), "bin", "x64");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var ordinary = WorktreeIdentity.Canonicalize(dir);
+            var extended = WorktreeIdentity.Canonicalize(@"\\?\" + dir);
+
+            Assert.IsFalse(
+                ordinary.StartsWith(@"\\?\", StringComparison.Ordinal),
+                "A canonical path must be an ordinary path. Windows reports a final path in " +
+                "extended-length form, so leaving the prefix on makes an existing directory " +
+                "hash differently from the same directory before it is created.");
+
+            Assert.AreEqual(
+                ordinary,
+                extended,
+                "Two spellings of one physical directory canonicalised differently, so the two " +
+                "runs derive different identities, take different lock files, and then rewrite " +
+                "and register the same generated manifest concurrently.");
+
+            Assert.AreEqual(
+                WorktreeIdentity.DerivePackageName(Base, dir),
+                WorktreeIdentity.DerivePackageName(Base, @"\\?\" + dir),
+                "The derived package name is what scopes every lookup and removal, so it is " +
+                "the value that actually has to converge.");
+        }
+        finally
+        {
+            Directory.Delete(Path.GetFullPath(Path.Join(dir, "..", "..")), recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// An 8.3 short-name spelling must derive the identity its long spelling does.
+    /// </summary>
+    /// <remarks>
+    /// <para>The spelling the canonicaliser's own documentation used to claim it declined to
+    /// reconcile. Measured, that claim was wrong: <c>Path.GetFullPath</c> expands a short
+    /// component of an existing path, so short names already converged. This pins that they
+    /// keep converging, because the property matters regardless of which step provides it —
+    /// <c>REACTOR_PACKAGED_HOST_DIR</c> accepts any rooted path that exists and preserves the
+    /// spelling it was handed, so two agents pointed at one layout through different spellings
+    /// would otherwise each believe they owned it.</para>
+    /// <para>Staged rather than assumed: 8.3 generation is a per-volume setting and is often
+    /// off, in which case there is no second spelling to reconcile and the test has nothing to
+    /// measure. Asserting anyway would pass for the wrong reason — the two spellings would be
+    /// byte-identical — so the run is declared inconclusive instead of silently vacuous.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Short_Name_Spelling_Derives_The_Same_Identity()
+    {
+        var root = Path.Join(Path.GetTempPath(), "reactor-wt-8dot3-" + Guid.NewGuid().ToString("N"));
+        var layout = Path.Join(root, "LayoutNameLongerThanEightDotThree", "bin", "x64");
+        Directory.CreateDirectory(layout);
+
+        try
+        {
+            var shortSpelling = TryGetShortPath(layout);
+
+            if (shortSpelling is null ||
+                string.Equals(shortSpelling, layout, StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.Inconclusive(
+                    "8.3 short-name generation is disabled for this volume, so this path has " +
+                    "only one spelling and there is nothing for canonicalisation to reconcile.");
+            }
+
+            Assert.AreEqual(
+                WorktreeIdentity.DerivePackageName(Base, layout),
+                WorktreeIdentity.DerivePackageName(Base, shortSpelling!),
+                "A short-name spelling of the layout derived a second identity for one physical " +
+                "directory, which is what lets two runs register the same layout concurrently.");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// The short-name spelling of <paramref name="path"/>, or null if the platform declines.
+    /// </summary>
+    private static string? TryGetShortPath(string path)
+    {
+        var buffer = new char[1024];
+        var length = ShortPathInto(path, buffer);
+        return length == 0 || length >= buffer.Length ? null : new string(buffer, 0, (int)length);
+    }
+
+    /// <summary>Pins <paramref name="buffer"/> and asks for the short-name spelling.</summary>
+    private static unsafe uint ShortPathInto(string path, char[] buffer)
+    {
+        fixed (char* p = buffer)
+            return GetShortPathNameW(path, p, (uint)buffer.Length);
+    }
+
+    // Source-generated interop rather than [DllImport]; no managed API reports a short name.
+    // Spelled with the explicit -W suffix because LibraryImport uses ExactSpelling.
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static unsafe partial uint GetShortPathNameW(
+        string lpszLongPath,
+        char* lpszShortPath,
+        uint cchBuffer);
 
     /// <summary>
     /// A junction anywhere in the path — not just on the final component — must normalise away.

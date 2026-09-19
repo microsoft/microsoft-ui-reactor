@@ -82,21 +82,59 @@ public class OrphanedHostSweepTests
     }
 
     /// <summary>
+    /// A staged lease has to be recorded so class cleanup can remove it, because nothing else
+    /// will.
+    /// </summary>
+    /// <remarks>
+    /// Both halves are load-bearing and neither is visible from a <c>[ClassCleanup]</c>, so
+    /// they are pinned here. A staged lease is not a claim this process took, so the release
+    /// seam cannot see it; disposing deliberately leaves the file behind, because that is what
+    /// a process exit does and the prune test depends on it. Together that means an unrecorded
+    /// staged lease is never deleted by anything, and every run of this suite would add another
+    /// permanent file to the real per-user claim directory.
+    /// </remarks>
+    [TestMethod]
+    public void A_Staged_Lease_Is_Recorded_And_Removed_By_Cleanup()
+    {
+        var exe = Probe("staged-cleanup-" + Guid.NewGuid().ToString("n"));
+        var path = OrphanedHostSweep.LeasePathFor(exe, ForeignPid);
+
+        StageForeignLease(exe).Dispose();
+
+        Assert.IsTrue(File.Exists(path),
+            "Precondition: disposing a staged lease closes the handle and leaves the file, the " +
+            "way a process exit does.");
+        CollectionAssert.Contains(StagedLeases, path,
+            "An unrecorded staged lease is unreachable by every cleanup path there is, so it " +
+            "stays in the real claim directory forever.");
+
+        DeleteStagedLeases();
+
+        Assert.IsFalse(File.Exists(path),
+            "Cleanup left a staged lease behind, so each run of this suite leaks another file " +
+            "into the per-user claim directory that later runs then pay to probe.");
+    }
+
+    /// <summary>
     /// Releases the leases these tests took and removes everything they staged.
     /// </summary>
     /// <remarks>
-    /// Claims are recorded as real files under the shared per-user claim directory, and a run
-    /// deliberately never releases its own — the lease is meant to last the whole process. That
-    /// is right for a run and wrong for a suite: every path here is unique to this execution,
-    /// so nothing ever revisits those files and each run of this class would otherwise leave a
-    /// permanent <c>.run</c> file behind in a production directory. The release is scoped to
-    /// this class's synthetic root so the lease the E2E tests hold for the real host, in this
-    /// same process, is left untouched.
+    /// <para>Claims are recorded as real files under the shared per-user claim directory, and a
+    /// run deliberately never releases its own — the lease is meant to last the whole process.
+    /// That is right for a run and wrong for a suite: every path here is unique to this
+    /// execution, so nothing ever revisits those files and each run of this class would
+    /// otherwise leave a permanent <c>.run</c> file behind in a production directory. The
+    /// release is scoped to this class's synthetic root so the lease the E2E tests hold for the
+    /// real host, in this same process, is left untouched.</para>
+    /// <para>Staged foreign leases need the second step. They are not claims this process took,
+    /// so they are absent from <c>LayoutRunClaim.Held</c> and the release seam cannot reach
+    /// them; only the tests that deliberately provoke a prune clean up after themselves.</para>
     /// </remarks>
     [ClassCleanup]
     public static void ReleaseStagedClaims()
     {
         OrphanedHostSweep.LayoutRunClaim.ReleaseForTestsUnder(ClaimRoot);
+        DeleteStagedLeases();
 
         try
         {
@@ -599,14 +637,48 @@ public class OrphanedHostSweepTests
     /// Stages the lease another live run of <paramref name="exePath"/> would hold.
     /// </summary>
     /// <remarks>
-    /// Opened with the same share mode the production path uses, because that share mode is the
-    /// whole signal: liveness is "this handle still refuses an exclusive open", so a stand-in
-    /// that opened it any other way would answer a different question than the sweep asks.
+    /// <para>Opened with the same share mode the production path uses, because that share mode
+    /// is the whole signal: liveness is "this handle still refuses an exclusive open", so a
+    /// stand-in that opened it any other way would answer a different question than the sweep
+    /// asks.</para>
+    /// <para>The path is recorded for class cleanup rather than deleted on dispose. Disposing
+    /// has to leave the file behind — that is exactly what a process exit does, and
+    /// <c>A_Stale_Lease_Is_Pruned_And_Does_Not_Block</c> asserts the sweep prunes what is left
+    /// — but a staged lease is not a claim this process took, so it is absent from
+    /// <c>LayoutRunClaim.Held</c> and the release seam cannot see it. Without this record the
+    /// tests that never trigger a prune would each leave a permanent <c>.run</c> file in the
+    /// real per-user claim directory.</para>
     /// </remarks>
     private static FileStream StageForeignLease(string exePath)
     {
         var path = OrphanedHostSweep.LeasePathFor(exePath, ForeignPid);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        lock (StagedLeases) StagedLeases.Add(path);
         return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+    }
+
+    /// <summary>Every lease file <see cref="StageForeignLease"/> created, for class cleanup.</summary>
+    private static readonly List<string> StagedLeases = [];
+
+    /// <summary>Removes the staged lease files, ignoring the ones a test already pruned.</summary>
+    private static void DeleteStagedLeases()
+    {
+        lock (StagedLeases)
+        {
+            foreach (var path in StagedLeases)
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // A handle a test left open outlives this sweep; the file is then the OS's
+                    // to collect. Failing cleanup would turn a passing suite red for nothing.
+                }
+            }
+
+            StagedLeases.Clear();
+        }
     }
 }
