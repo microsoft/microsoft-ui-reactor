@@ -629,15 +629,26 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                 stream.Write(bytes, 0, bytes.Length);
                 stream.Flush(flushToDisk: true);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or NotSupportedException
+                or ObjectDisposedException or UnauthorizedAccessException
+                or System.Security.SecurityException)
             {
                 // Disposal is guarded because it flushes: when the stamp failed for a reason
                 // that also blocks the flush — a byte-range lock, a full volume — Dispose
                 // throws the same IOException, and letting that escape would pre-empt the
                 // wrapper below and land right back in the "held, retry" path this exists to
                 // avoid. The original failure is the one worth reporting either way.
+                //
+                // Both filters are deliberately wider than IOException alone. They exist to
+                // name what a write to an open FileStream can fail with, not to select among
+                // those failures: every one of them means this process holds a lock it cannot
+                // stamp, which is the same fault. A type left out would skip the disposal
+                // below and leak the handle, so the set errs wide on purpose. NotSupportedException
+                // is not hypothetical — SetLength raises it on a non-seekable target.
                 try { stream.Dispose(); }
-                catch (Exception disposeFailure)
+                catch (Exception disposeFailure) when (disposeFailure is IOException
+                    or NotSupportedException or ObjectDisposedException
+                    or UnauthorizedAccessException or System.Security.SecurityException)
                 {
                     throw new LockStampException(path, new AggregateException(ex, disposeFailure));
                 }
