@@ -426,8 +426,14 @@ internal static class OrphanedHostSweep
 
         try
         {
+            // Ordered explicitly: Directory.EnumerateFiles guarantees no order, and the
+            // regression test for "a held artifact skips rather than stops" depends on the
+            // held file being reached before the dead one. Left to the file system, that
+            // premise holds only by NTFS index-order accident, so an implementation that
+            // stopped at the first refusal could still pass.
             var stale = Directory.EnumerateFiles(claimDirectory, "*.run")
                 .Concat(Directory.EnumerateFiles(claimDirectory, "*.gate"))
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             foreach (var path in stale) TryPruneIfStale(path);

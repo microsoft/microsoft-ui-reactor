@@ -425,8 +425,10 @@ public class OrphanedHostSweepTests
         var dir = Path.Join(ClaimRoot, "prune-live");
         Directory.CreateDirectory(dir);
 
-        // Enumerated in name order, so the held file is reached first and a pass that stops at
-        // the first refusal never reaches the dead one.
+        // Enumerated in name order by the sweep itself, so the held file is reached first and a
+        // pass that stops at the first refusal never reaches the dead one. That ordering is a
+        // property of the production code, not of the file system — Directory.EnumerateFiles
+        // promises no order, and without the explicit sort this staging would be an accident.
         var held = Path.Join(dir, "0123456789abcdef.4242.run");
         var dead = Path.Join(dir, "0123456789abcdef.4243.run");
         File.WriteAllText(dead, "pid=4243");

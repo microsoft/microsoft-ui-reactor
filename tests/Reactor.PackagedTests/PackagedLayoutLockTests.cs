@@ -615,6 +615,11 @@ public class PackagedLayoutLockTests
     /// so the first blocker is released mid-wait while the second is held throughout: the fixed
     /// code spends what is left of one budget on the second lock, the defect spends a whole
     /// fresh one.</para>
+    /// <para>The release lands at half the budget rather than at its edge. Timed to expire
+    /// together, ordinary scheduler jitter can let the shared deadline pass first, and the
+    /// <em>correct</em> implementation then reports the first lock as blocked and fails here.
+    /// Half leaves the separation from the per-path mutant intact — <c>releaseAfter</c> — while
+    /// putting the release a full <c>releaseAfter</c> clear of the deadline.</para>
     /// </remarks>
     [TestMethod]
     public void The_Whole_Lock_Set_Shares_One_Wait_Budget()
@@ -624,7 +629,7 @@ public class PackagedLayoutLockTests
 
         Assert.AreEqual(2, paths.Count, "Precondition: the staging needs two distinct locks.");
 
-        var budget = TimeSpan.FromSeconds(3);
+        var budget = TimeSpan.FromSeconds(6);
         var releaseAfter = TimeSpan.FromSeconds(3);
 
         var first = AppxLooseLayoutDeployment.TryOpenLockFile(paths[0], "pid=1");
@@ -632,15 +637,17 @@ public class PackagedLayoutLockTests
         Assert.IsNotNull(first, "Precondition: the first blocker must be acquirable.");
         Assert.IsNotNull(second, "Precondition: the second blocker must be acquirable.");
 
-        // Freed mid-wait, so the contender reaches the second lock with most of its budget
+        // Freed mid-wait, so the contender reaches the second lock with part of its budget
         // already spent. Held to the end, so the second wait is what the budget must bound.
+        var releasedAt = TimeSpan.Zero;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         var release = Task.Run(async () =>
         {
             await Task.Delay(releaseAfter);
             first!.Dispose();
+            releasedAt = clock.Elapsed;
         });
 
-        var clock = System.Diagnostics.Stopwatch.StartNew();
         var acquired = AppxLooseLayoutDeployment.TryAcquireAllLocks(
             layout, "pid=2", budget, TimeSpan.FromMilliseconds(50), out var blockedOn, TwoVersions);
         clock.Stop();
@@ -648,6 +655,13 @@ public class PackagedLayoutLockTests
         release.GetAwaiter().GetResult();
 
         Assert.IsNull(acquired, "Precondition: the acquisition must be refused.");
+
+        // Separated from the assertion below so a machine slow enough to miss the release
+        // window says so, instead of being reported as a budget that was not shared.
+        Assert.IsTrue(releasedAt < budget,
+            $"Precondition: the first lock was released at {releasedAt}, past the {budget} " +
+            "deadline, so the first wait timed out on its own and the measurement below is " +
+            "not about how the budget is divided.");
         Assert.AreEqual(paths[1], blockedOn,
             "Precondition: the wait must have ended on the lock that was held throughout.");
 
@@ -715,6 +729,57 @@ public class PackagedLayoutLockTests
                     $"The storage failure surfaced only after {clock.Elapsed}, so it was being " +
                     "retried rather than escaping the poll loop on the first occurrence.");
             }
+        }
+        finally
+        {
+            holder.Unlock(0, long.MaxValue);
+        }
+    }
+
+    /// <summary>
+    /// A fault partway through the set must give back the locks already taken.
+    /// </summary>
+    /// <remarks>
+    /// <para>The refusal path releases, but the throwing one did not, and making stamp failures
+    /// propagate is what created a throwing one. A storage fault on the second version's lock
+    /// would therefore leave the first version's handle open for the lifetime of the process:
+    /// every later packaged run over this layout would wait the full timeout and report a
+    /// collision against an owner that has already finished and told the truth about failing.
+    /// Worst for the run that reported a real error.</para>
+    /// <para>The reacquisition is the oracle, not the exception. A leaked handle is held with
+    /// <c>FileShare.Read</c>, so the only thing that distinguishes released from leaked is
+    /// whether a second writer can take the same path.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Fault_Partway_Through_Releases_The_Locks_Already_Held()
+    {
+        var layout = SyntheticLayout();
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(layout, TwoVersions);
+
+        Assert.AreEqual(2, paths.Count, "Precondition: the staging needs two distinct locks.");
+
+        // Second lock only: the first must be acquired successfully, or the release under test
+        // has nothing to give back and the test passes against a leak.
+        File.WriteAllText(paths[1], new string('x', 64));
+        using var holder = new FileStream(
+            paths[1], FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        holder.Lock(0, long.MaxValue);
+
+        try
+        {
+            Assert.Throws<AppxLooseLayoutDeployment.LockStampException>(
+                () => AppxLooseLayoutDeployment.TryAcquireAllLocks(
+                    layout, "pid=1", TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(50),
+                    out _, TwoVersions),
+                "Precondition: the staged fault must reach the caller, or nothing exercised " +
+                "the path that has to release first.");
+
+            var reacquired = AppxLooseLayoutDeployment.TryOpenLockFile(paths[0], "pid=2");
+            Assert.IsNotNull(reacquired,
+                "The first version's lock was still held after the acquisition threw on the " +
+                "second, so a fault wedges every later run over this layout until the process " +
+                "that failed exits.");
+            reacquired.Dispose();
         }
         finally
         {

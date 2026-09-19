@@ -161,6 +161,11 @@ Conventions for contributors:
   enumeration is unavailable — now probes every supported algorithm version's derived name, not
   just the current one, so this layout's own registration from before a version bump is still
   found and migrated rather than being registered on top of.
+- A packaged-tier run that fails partway through taking its layout locks now releases the ones it
+  already holds instead of only doing so when it is refused. Making stamp failures surface as
+  errors introduced a path out of acquisition that skipped the release, so a storage fault on one
+  version's lock would hold another version's open until the process exited — wedging every later
+  run over that layout behind the run that correctly reported a failure.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

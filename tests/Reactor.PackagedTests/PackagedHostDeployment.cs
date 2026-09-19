@@ -750,8 +750,9 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// the other's live package. A single version-independent name would not fix that either,
     /// because the earlier revision does not know to take it — the set has to be acquired, so
     /// that whichever name the other run uses, it is already held.</para>
-    /// <para>All-or-nothing: a partial acquisition is released before returning, or a refused
-    /// run would keep part of the set and wedge the run it just deferred to.</para>
+    /// <para>All-or-nothing: a partial acquisition is released before returning <em>or before
+    /// propagating</em>, or a refused run would keep part of the set and wedge the run it just
+    /// deferred to.</para>
     /// </remarks>
     internal static List<FileStream>? TryAcquireAllLocks(
         string layoutPath,
@@ -786,20 +787,34 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         // A path reached after the budget is spent still gets one attempt, so an uncontended
         // set is always acquired regardless of how long the earlier waits took.
         var deadline = DateTime.UtcNow + timeout;
-        foreach (var path in paths)
+
+        // The throwing path needs the same release as the refusing one. WaitForLockFile
+        // propagates LockStampException by design, so a storage fault on a later version would
+        // otherwise leave every earlier lock in this set open until the process exits — the
+        // all-or-nothing guarantee holding only for the outcome that was already handled, and
+        // the wedge worst for the run that reported a real error.
+        try
         {
-            var remaining = deadline - DateTime.UtcNow;
-            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
-
-            var stream = WaitForLockFile(path, ownerRecord, remaining, pollInterval);
-            if (stream is null)
+            foreach (var path in paths)
             {
-                blockedOn = path;
-                Release(acquired);
-                return null;
-            }
+                var remaining = deadline - DateTime.UtcNow;
+                if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
 
-            acquired.Add(stream);
+                var stream = WaitForLockFile(path, ownerRecord, remaining, pollInterval);
+                if (stream is null)
+                {
+                    blockedOn = path;
+                    Release(acquired);
+                    return null;
+                }
+
+                acquired.Add(stream);
+            }
+        }
+        catch
+        {
+            Release(acquired);
+            throw;
         }
 
         return acquired;

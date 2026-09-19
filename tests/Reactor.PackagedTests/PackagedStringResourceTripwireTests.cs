@@ -67,6 +67,11 @@ public class PackagedStringResourceTripwireTests
     /// short set that still looks plausible. This pins the two properties that make the scan
     /// meaningful: it reaches past the host projects into the referenced runtime projects, and
     /// it includes the packaged host itself.
+    /// <para><c>Reactor.Localization.Generator</c> is the load-bearing entry. Every other
+    /// expected root is either seeded by hand or a <em>direct</em> <c>ProjectReference</c> of
+    /// the packaged host, so without it this control still passes against a walk that stops
+    /// after one level — which is the failure mode it exists to catch. That one is reached only
+    /// through <c>src/Reactor</c>.</para>
     /// </remarks>
     [TestMethod]
     public void The_Project_Walk_Reaches_The_Referenced_Runtime_Projects()
@@ -81,6 +86,7 @@ public class PackagedStringResourceTripwireTests
                      "tests/Reactor.AppTests.Host",
                      "src/Reactor",
                      "src/Reactor.Advanced",
+                     "src/Reactor.Localization.Generator",
                  })
         {
             CollectionAssert.Contains(roots, expected,
