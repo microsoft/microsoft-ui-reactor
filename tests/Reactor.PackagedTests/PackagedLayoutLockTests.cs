@@ -144,6 +144,70 @@ public class PackagedLayoutLockTests
     }
 
     /// <summary>A synthetic layout path, unique per test, for the whole-set acquisitions.</summary>
+    /// <summary>
+    /// A released lock set must leave no files behind.
+    /// </summary>
+    /// <remarks>
+    /// Acquisition is <c>OpenOrCreate</c>, so without this every layout directory ever locked —
+    /// including every abandoned-layout probe, which locks a directory that no longer exists —
+    /// leaves a permanent file under <c>%LOCALAPPDATA%</c>. The audience for per-checkout
+    /// identities is agents creating and destroying worktrees, so that set has no bound.
+    /// </remarks>
+    [TestMethod]
+    public void Releasing_A_Lock_Set_Removes_Its_Files()
+    {
+        var layout = SyntheticLayout();
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(layout, TwoVersions);
+
+        var held = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+            layout, "pid=1", Instant, Instant, out _, TwoVersions);
+
+        Assert.IsNotNull(held, "Precondition: an unheld layout must be acquirable.");
+        foreach (var path in paths)
+        {
+            Assert.IsTrue(File.Exists(path),
+                $"Precondition: acquiring must create '{Path.GetFileName(path)}', or the " +
+                "assertion below passes without the cleanup running at all.");
+        }
+
+        AppxLooseLayoutDeployment.Release(held);
+
+        foreach (var path in paths)
+        {
+            Assert.IsFalse(File.Exists(path),
+                $"'{Path.GetFileName(path)}' survived its holder, so lock files accumulate " +
+                "permanently — one per layout directory this machine has ever locked.");
+        }
+    }
+
+    /// <summary>
+    /// The property that makes the cleanup above race-safe rather than lucky: a lock file
+    /// another run currently holds cannot be unlinked.
+    /// </summary>
+    /// <remarks>
+    /// <para>Deleting after releasing opens a window — this run closes its handle, another run
+    /// acquires the same file, and only then does the delete land. What closes it is the share
+    /// mode: <c>TryOpenLockFile</c> shares <c>Read</c> and <b>not</b> <c>Delete</c>, so Windows
+    /// refuses to unlink a held lock and the cleanup simply gives up on it.</para>
+    /// <para>That makes this an assertion about <c>TryOpenLockFile</c>, not about the cleanup.
+    /// Add <see cref="FileShare.Delete"/> there and this reddens — which is precisely the change
+    /// that would let a finishing run unlink the file a live run is holding, handing the next
+    /// two contenders one lock file each and no mutual exclusion at all.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Held_Lock_File_Cannot_Be_Unlinked()
+    {
+        using var held = AppxLooseLayoutDeployment.TryOpenLockFile(LockPath, "pid=1");
+        Assert.IsNotNull(held, "Precondition: the lock must be acquirable.");
+
+        Assert.ThrowsExactly<IOException>(
+            () => File.Delete(LockPath),
+            "A lock file was unlinked while its holder still had it open, so the post-release " +
+            "cleanup can destroy a file another run has already reacquired.");
+
+        Assert.IsTrue(File.Exists(LockPath), "The refused delete removed the file anyway.");
+    }
+
     private static string SyntheticLayout() =>
         Path.Join(Path.GetTempPath(), "reactor-layout-" + Guid.NewGuid().ToString("n"));
 

@@ -188,6 +188,62 @@ public class OrphanedHostSweepTests
     }
 
     /// <summary>
+    /// A claim directory that cannot be listed must read as "a sibling may be live", never as
+    /// "no siblings".
+    /// </summary>
+    /// <remarks>
+    /// <para>The answer this returns is what licenses killing processes. Every unlistable
+    /// directory — an ACL this account is excluded from, a disconnected redirected
+    /// <c>%LOCALAPPDATA%</c>, a handle limit — has to fail closed, because the alternative is a
+    /// sweep that kills another agent's running host precisely when it could not check whether
+    /// one existed.</para>
+    /// <para>Staged by pointing the claim directory at a path occupied by a <em>file</em>.
+    /// Windows rejects listing it with an I/O error, which is the same channel a permission or
+    /// device fault arrives through, and unlike an ACL change it needs no privilege and leaves
+    /// nothing behind. That shape is also exactly what a <c>Directory.Exists</c> pre-check
+    /// mistakes for "missing": the guard this replaced returned "no siblings" here.</para>
+    /// </remarks>
+    [TestMethod]
+    public void An_Unlistable_Claim_Directory_Reports_A_Possible_Live_Sibling()
+    {
+        var notADirectory = Path.Join(ClaimRoot, "occupied-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(ClaimRoot);
+        File.WriteAllText(notADirectory, "not a directory");
+
+        try
+        {
+            Assert.IsTrue(
+                OrphanedHostSweep.AnyLiveSiblingOf(Probe("unlistable"), notADirectory),
+                "A claim directory that could not be listed was reported as holding no live " +
+                "siblings, which licenses the sweep to kill hosts it never managed to check " +
+                "for.");
+        }
+        finally
+        {
+            File.Delete(notADirectory);
+        }
+    }
+
+    /// <summary>
+    /// Discriminator for the test above: a listable, genuinely empty claim directory must still
+    /// report no siblings.
+    /// </summary>
+    /// <remarks>
+    /// Without this, "fail closed" could be satisfied by returning <see langword="true"/>
+    /// unconditionally — which would disable the sweep entirely and reintroduce the stale-host
+    /// flake it exists to fix. The pair is what pins the behaviour to the fault, not to the
+    /// verdict.
+    /// </remarks>
+    [TestMethod]
+    public void An_Empty_Claim_Directory_Reports_No_Live_Sibling()
+    {
+        var empty = Path.Join(ClaimRoot, "empty-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(empty);
+
+        Assert.IsFalse(OrphanedHostSweep.AnyLiveSiblingOf(Probe("listable"), empty));
+    }
+
+    /// <summary>
     /// This assembly sweeps two different hosts, so leases must be tracked per executable. A
     /// single "already registered something" flag makes the first host vouch for the second
     /// without ever consulting its lease, leaving that host sweepable while a sibling run is

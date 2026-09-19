@@ -41,11 +41,20 @@ namespace Reactor.Tests.Shared;
 /// (which knows the directory it is running from) compute the same answer with no channel
 /// between them. That is what lets the in-host identity guard stay an exact equality check
 /// rather than degrading to a prefix match.</para>
-/// <para><b>The algorithm is versioned.</b> Changing <see cref="AlgorithmVersion"/> — or the
-/// hash, alphabet, or suffix length — changes every derived package family, which orphans
-/// existing registrations and moves package-scoped app data. Registrations left by the old
-/// algorithm are reclaimed by the stale-layout sweep in the deployment, but only once their
-/// layout directory is gone.</para>
+/// <para><b>The algorithm is versioned, but only the seed is migratable.</b> Bumping
+/// <see cref="AlgorithmVersion"/> changes every derived package family, which orphans existing
+/// registrations and moves package-scoped app data; those registrations are still reclaimed by
+/// the stale-layout sweep in the deployment once their layout directory is gone, because
+/// <see cref="DeriveSuffix(string, string)"/> can reproduce any listed version's output by
+/// re-running today's primitives over that version's seed.</para>
+/// <para>Changing the <em>hash, alphabet, or suffix length</em> is a different and harder
+/// change, and adding a version to <see cref="SupportedAlgorithmVersions"/> does not cover it.
+/// Those primitives are constants applied to every version, so after such a change re-deriving
+/// an old version reproduces the new output, never the name that version actually registered —
+/// the sweep stops recognizing those registrations and strands them permanently. Preserve the
+/// previous derivation alongside the new one, or accept the stranding deliberately and
+/// document it. <c>Derivation_Matches_The_Pinned_Version1_Vectors</c> is what forces the
+/// decision: any such change reddens it.</para>
 /// </remarks>
 internal static class WorktreeIdentity
 {
@@ -67,6 +76,10 @@ internal static class WorktreeIdentity
     /// promise above says does not happen.</para>
     /// <para>When bumping <see cref="AlgorithmVersion"/>, prepend the new value and keep the old
     /// ones. Dropping a version is a deliberate decision to stop reclaiming its leftovers.</para>
+    /// <para><b>This list migrates seed changes only.</b> A listed version is replayed by
+    /// feeding its string to today's hash, alphabet, and suffix length, so it reproduces what
+    /// that version emitted only while those primitives are unchanged. Changing them is not
+    /// made migratable by adding an entry here; see the remarks on the type.</para>
     /// </remarks>
     internal static readonly string[] SupportedAlgorithmVersions = [AlgorithmVersion];
 

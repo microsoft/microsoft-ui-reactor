@@ -277,15 +277,30 @@ internal static class OrphanedHostSweep
     /// has a live owner and one that yields does not. Reading a pid back and probing it would
     /// reintroduce the reuse hazard the file handle exists to avoid.
     /// </remarks>
-    internal static bool AnyLiveSiblingOf(string ourExePath)
+    internal static bool AnyLiveSiblingOf(string ourExePath) =>
+        AnyLiveSiblingOf(ourExePath, ClaimDirectory());
+
+    /// <inheritdoc cref="AnyLiveSiblingOf(string)"/>
+    /// <param name="claimDirectory">
+    /// Directory holding the leases. A parameter only so a test can point this at a directory
+    /// it controls; the fail-closed path below cannot otherwise be staged, because making the
+    /// real claim directory unlistable would require editing this account's own ACLs.
+    /// </param>
+    internal static bool AnyLiveSiblingOf(string ourExePath, string claimDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ourExePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimDirectory);
 
         try
         {
-            var dir = ClaimDirectory();
-            if (!Directory.Exists(dir)) return false;
+            var dir = claimDirectory;
 
+            // Deliberately no Directory.Exists guard. It answers false for an unlistable
+            // directory exactly as it does for a missing one, and "missing" here would mean
+            // "no siblings", which admits the destructive sweep. By the time this runs the
+            // caller has already created its own lease in this directory, so the directory
+            // provably exists and any failure to list it is an access or I/O fault. Letting
+            // the enumeration throw sends that fault to the catch below, which fails closed.
             var prefix = LeasePrefix(ourExePath);
             var mine = prefix + Environment.ProcessId + ".run";
 

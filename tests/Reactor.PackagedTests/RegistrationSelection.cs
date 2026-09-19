@@ -15,6 +15,18 @@ internal enum RegistrationDisposition
     RemoveContending,
 
     /// <summary>
+    /// Carries the name this layout would register under, but belongs to a different — or
+    /// unreadable — install path, so it cannot be shown to be ours to remove.
+    /// </summary>
+    /// <remarks>
+    /// Registering anyway would take over a name another package holds, and removing it would
+    /// destroy a registration that may be backing a live run. Neither is recoverable, so the
+    /// run aborts and says what it found. A stranded registration is recoverable by hand; a
+    /// sibling agent's evicted host mid-test is not.
+    /// </remarks>
+    FailConflicting,
+
+    /// <summary>
     /// A derived registration whose worktree is gone. Housekeeping: reclaiming it must never
     /// fail a test run.
     /// </summary>
@@ -61,8 +73,10 @@ internal readonly record struct RegistrationRecord(string Name, string? Installe
 /// installing packages.</para>
 /// <para>The rules, in the order they are evaluated:</para>
 /// <list type="number">
-/// <item><description>This layout's derived name — a registration left by an earlier run of
-/// this same checkout.</description></item>
+/// <item><description>This layout's derived name, <em>and</em> a recorded install path that is
+/// this layout — a registration left by an earlier run of this same checkout. The same name
+/// over any other or unreadable path is a conflict that aborts the run rather than a
+/// removal.</description></item>
 /// <item><description>Any package installed from this exact layout directory, whatever it is
 /// called. Catches a registration made under the base name before identities were derived;
 /// registering a second package over a directory another package already claims was observed
@@ -72,11 +86,12 @@ internal readonly record struct RegistrationRecord(string Name, string? Installe
 /// layout's lock — a deleted worktree.</description>
 /// </item>
 /// </list>
-/// <para><b>None of the three can reach a concurrently running checkout.</b> Rule 1 is keyed to
-/// this directory's hash, rule 2 to this directory itself, and rule 3 requires both that the
-/// directory be provably absent and that nobody holds its lock. A path that cannot be read is
-/// not absent, and a run whose worktree was deleted underneath it still holds its lock, because
-/// the lock lives under <c>%LOCALAPPDATA%</c> rather than in the worktree.</para>
+/// <para><b>None of the three can reach a concurrently running checkout.</b> Rule 1 requires
+/// this directory's own recorded path, rule 2 is keyed to this directory itself, and rule 3
+/// requires both that the directory be provably absent and that nobody holds its lock. A path
+/// that cannot be read is not absent, and a run whose worktree was deleted underneath it still
+/// holds its lock, because the lock lives under <c>%LOCALAPPDATA%</c> rather than in the
+/// worktree.</para>
 /// </remarks>
 internal static class RegistrationSelection
 {
@@ -118,7 +133,22 @@ internal static class RegistrationSelection
         var versions = supportedVersions ?? WorktreeIdentity.SupportedAlgorithmVersions;
 
         if (string.Equals(package.Name, effectivePackageName, StringComparison.Ordinal))
-            return RegistrationDisposition.RemoveContending;
+        {
+            // A name match is not an ownership proof. The suffix is a 40-bit hash of the path,
+            // so two different layouts can in principle derive one name, and a stale
+            // misassociation reaches the same state without any hash collision at all. In
+            // either case the package under our name is someone else's, and it may be backing a
+            // live run — removing it is precisely the eviction this whole file exists to
+            // prevent, and arriving at it through our *own* name would be the worst version.
+            //
+            // The recorded install path is what settles it, canonicalized so junction and
+            // physical spellings of one directory agree. A null path is unreadable, not
+            // matching, and is treated as foreign for the same reason: it cannot be shown to be
+            // ours.
+            return WorktreeIdentity.IsSameDirectory(package.InstalledPath, layoutDir)
+                ? RegistrationDisposition.RemoveContending
+                : RegistrationDisposition.FailConflicting;
+        }
 
         if (WorktreeIdentity.IsSameDirectory(package.InstalledPath, layoutDir))
             return RegistrationDisposition.RemoveContending;

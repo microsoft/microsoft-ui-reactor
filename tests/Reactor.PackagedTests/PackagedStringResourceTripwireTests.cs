@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Microsoft.UI.Reactor.PackagedTests;
@@ -30,27 +31,117 @@ namespace Microsoft.UI.Reactor.PackagedTests;
 public class PackagedStringResourceTripwireTests
 {
     /// <summary>
-    /// The packaged host and the selftest host whose sources it links must ship no
-    /// <c>.resw</c>.
+    /// Every project that feeds the packaged host's resource graph must ship no <c>.resw</c>.
     /// </summary>
+    /// <remarks>
+    /// The roots are walked from the packaged host's own <c>ProjectReference</c> graph rather
+    /// than listed here. A hardcoded pair of host directories was blind to the runtime projects
+    /// the host references, so a <c>.resw</c> added to one of those could enter the packaged
+    /// PRI while this test still reported zero — the scan would be measuring the wrong tree and
+    /// reporting the same clean answer either way.
+    /// </remarks>
     [TestMethod]
     public void The_Packaged_Host_Ships_No_String_Resources()
     {
-        var hostSources = Path.Join(RepoRoot, "tests", "Reactor.AppTests.Host");
-        var packagedSources = Path.Join(RepoRoot, "tests", "Reactor.PackagedTests.Host");
+        var roots = PackagedHostProjectDirectories();
 
-        Assert.IsTrue(Directory.Exists(hostSources),
-            $"Precondition: expected the selftest host sources at {hostSources}. " +
-            "If the layout moved, retarget this test rather than deleting it.");
+        Assert.IsTrue(roots.Count >= 3,
+            "Precondition: the packaged host's project graph should reach the selftest host and " +
+            "the runtime projects it references. Finding almost nothing means the .csproj walk " +
+            "broke, and the zero below would be meaningless.\n" + string.Join("\n", roots));
 
-        var resw = ScanForResw(hostSources, packagedSources);
+        var resw = ScanForResw([.. roots]);
 
         Assert.AreEqual(0, resw.Count,
-            "The packaged host now ships .resw string resources, which are indexed into " +
-            "resources.pri under the pre-rewrite package identity and are not covered by the " +
-            "Packaged_ResourceResolution fixture. See the remarks on this test.\n" +
+            "A project in the packaged host's graph now ships .resw string resources, which are " +
+            "indexed into resources.pri under the pre-rewrite package identity and are not " +
+            "covered by the Packaged_ResourceResolution fixture. See the remarks on this test.\n" +
             string.Join("\n", resw));
     }
+
+    /// <summary>
+    /// Positive control for the graph walk above.
+    /// </summary>
+    /// <remarks>
+    /// The walk can only ever report a set of directories, and a broken XML query returns a
+    /// short set that still looks plausible. This pins the two properties that make the scan
+    /// meaningful: it reaches past the host projects into the referenced runtime projects, and
+    /// it includes the packaged host itself.
+    /// </remarks>
+    [TestMethod]
+    public void The_Project_Walk_Reaches_The_Referenced_Runtime_Projects()
+    {
+        var roots = PackagedHostProjectDirectories()
+            .Select(d => Path.GetRelativePath(RepoRoot, d).Replace('\\', '/'))
+            .ToList();
+
+        foreach (var expected in new[]
+                 {
+                     "tests/Reactor.PackagedTests.Host",
+                     "tests/Reactor.AppTests.Host",
+                     "src/Reactor",
+                     "src/Reactor.Advanced",
+                 })
+        {
+            CollectionAssert.Contains(roots, expected,
+                $"The packaged host's project graph should include '{expected}'. If it no longer " +
+                "does, confirm the reference was removed on purpose rather than that the walk " +
+                "stopped working.\n" + string.Join("\n", roots));
+        }
+    }
+
+    /// <summary>
+    /// Directories of every project in the packaged host's transitive
+    /// <c>ProjectReference</c> graph, plus the selftest host whose sources it links.
+    /// </summary>
+    /// <remarks>
+    /// Read straight from the project XML. That is coarser than an MSBuild evaluation — it
+    /// takes the whole project directory rather than the exact resource item set — which is the
+    /// safe direction for a tripwire: it can report a <c>.resw</c> that would not have been
+    /// packaged, but it cannot miss one that would.
+    /// </remarks>
+    private static List<string> PackagedHostProjectDirectories()
+    {
+        var start = Path.Join(
+            RepoRoot, "tests", "Reactor.PackagedTests.Host", "Reactor.PackagedTests.Host.csproj");
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<string>();
+        pending.Push(start);
+
+        // Linked rather than referenced: the packaged host owns no source of its own and
+        // compiles every .cs from the selftest host, so that tree is part of its inputs even
+        // though no ProjectReference names it.
+        var roots = new List<string> { Path.Join(RepoRoot, "tests", "Reactor.AppTests.Host") };
+
+        while (pending.Count > 0)
+        {
+            var project = pending.Pop();
+            if (!seen.Add(Path.GetFullPath(project)) || !File.Exists(project)) continue;
+
+            var dir = Path.GetDirectoryName(project)!;
+            roots.Add(dir);
+
+            foreach (var reference in ProjectReferencesOf(project))
+            {
+                pending.Push(Path.GetFullPath(Path.Join(dir, reference)));
+            }
+        }
+
+        return roots
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>The raw <c>Include</c> paths of a project's <c>ProjectReference</c> items.</summary>
+    private static IEnumerable<string> ProjectReferencesOf(string projectPath) =>
+        XDocument.Load(projectPath)
+            .Descendants()
+            .Where(e => e.Name.LocalName == "ProjectReference")
+            .Select(e => e.Attribute("Include")?.Value)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!.Replace('\\', Path.DirectorySeparatorChar));
 
     /// <summary>
     /// Positive control for the scan above.

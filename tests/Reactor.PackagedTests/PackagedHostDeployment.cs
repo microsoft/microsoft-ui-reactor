@@ -655,16 +655,51 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         return acquired;
     }
 
-    private static void Release(List<FileStream> streams)
+    /// <summary>Closes a held lock set and removes the files it created.</summary>
+    /// <remarks>
+    /// <para>The delete matters because acquisition uses <c>OpenOrCreate</c>: without it every
+    /// worktree ever registered, and every abandoned-layout probe, would leave a permanent
+    /// <c>.lock</c> under <c>%LOCALAPPDATA%</c>. For the agent-created worktrees this tier is
+    /// meant to support, that set is unbounded.</para>
+    /// <para>It is race-safe rather than merely best-effort by luck. The holder's handle is
+    /// opened with <see cref="FileShare.Read"/>, which does not include
+    /// <see cref="FileShare.Delete"/>, so Windows refuses to unlink a lock file another run has
+    /// already reacquired in the window after this one closed its handle. That refusal arrives
+    /// as the <c>IOException</c> swallowed below, which is the correct outcome: the file is in
+    /// use and must stay.</para>
+    /// </remarks>
+    internal static void Release(List<FileStream> streams)
     {
         foreach (var stream in streams)
         {
+            var path = TryGetName(stream);
+
             try { stream.Dispose(); }
             catch (IOException)
             {
                 // Closing is best-effort; process exit closes the handle regardless. Swallowed
                 // per handle so one failure does not strand the rest of the set.
             }
+
+            if (path is null) continue;
+
+            try { File.Delete(path); }
+            catch (Exception ex) when (
+                ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                // Reacquired by another run, or not ours to unlink. Leaving it is harmless:
+                // the file carries no state, only the handle does.
+            }
+        }
+    }
+
+    /// <summary>The path behind a stream, or <see langword="null"/> when it cannot be read.</summary>
+    private static string? TryGetName(FileStream stream)
+    {
+        try { return stream.Name; }
+        catch (Exception ex) when (ex is NotSupportedException or ObjectDisposedException)
+        {
+            return null;
         }
     }
 
@@ -800,6 +835,25 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
                 record, layout, EffectivePackageName, PackageName, ProbeLayout, IsLayoutLocked);
 
             if (disposition == RegistrationDisposition.Leave) continue;
+
+            // Our own name over a path that is not this layout. Both available actions are
+            // destructive: registering takes over a name another package holds, and removing
+            // it may evict a live run. Abort instead, and name the path so the developer can
+            // decide.
+            if (disposition == RegistrationDisposition.FailConflicting)
+            {
+                throw new InvalidOperationException(
+                    $"A package named '{pkg.Id.FullName}' is already registered for this user " +
+                    $"under the identity this layout derives ('{EffectivePackageName}'), but it " +
+                    $"records its install path as " +
+                    $"'{record.InstalledPath ?? "<unreadable>"}' rather than '{layout}'. The " +
+                    "derived suffix is a hash of the layout path, so this is either a hash " +
+                    "collision between two checkouts or a stale registration left pointing " +
+                    "somewhere else. Continuing would either take over that package's name or " +
+                    "unregister what may be another run's live host. Remove it by hand once " +
+                    "you have confirmed nothing is using it: " +
+                    $"Get-AppxPackage -Name '{pkg.Id.Name}' | Remove-AppxPackage");
+            }
 
             // Contention with this layout (rules 1 and 2) must fail loudly — registering on
             // top of it is the silent-wrong-binary bug this guards. Reclaiming an unrelated

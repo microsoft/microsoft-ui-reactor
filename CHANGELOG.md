@@ -71,6 +71,22 @@ Conventions for contributors:
   each register after the other's query and both conclude they were alone. A run that cannot
   record its lease at all now aborts rather than continuing unregistered, since an unregistered
   run is invisible to the next one to start and its host would be killed as an orphan.
+- The packaged tier now aborts rather than acting when a package holding this layout's derived
+  name records some other install path, or none. Name equality is not an ownership proof: the
+  suffix is a 40-bit hash, and a registration left pointing elsewhere reaches the same state with
+  no collision at all. Removing it could evict another checkout's live host through our own name;
+  the abort names the package and the manual `Remove-AppxPackage` recovery.
+- Packaged-tier layout locks are deleted when released, instead of accumulating one file per
+  layout directory the machine has ever locked. The delete is race-safe because the lock handle
+  does not share `FileShare.Delete`, so a file another run has already reacquired refuses to be
+  unlinked.
+- The E2E sweep's live-sibling check no longer pre-checks the claim directory with
+  `Directory.Exists`, which answered false for an unlistable directory exactly as for a missing
+  one and so read as "no siblings" — the verdict that licenses killing hosts. Listing failures
+  now fail closed.
+- The packaged tier's `.resw` tripwire scans the packaged host's transitive `ProjectReference`
+  graph rather than two hardcoded directories, so a string resource added to a referenced runtime
+  project is caught instead of silently entering the packaged PRI.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

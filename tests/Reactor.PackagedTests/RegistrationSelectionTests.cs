@@ -165,16 +165,41 @@ public class RegistrationSelectionTests
     }
 
     /// <summary>
-    /// A package sharing our derived name is contending regardless of where it claims to live;
-    /// the name is this layout's by construction.
+    /// Rule 1's guard: our derived name over a <em>different</em> path is a conflict, not a
+    /// removal.
     /// </summary>
+    /// <remarks>
+    /// The suffix is 40 bits of hashed path, so two checkouts deriving one name is possible,
+    /// and a registration left pointing at a path it no longer occupies reaches the same state
+    /// with no collision at all. Either way the package under our name is not demonstrably
+    /// ours, and it may be backing another agent's live run — removing it would be this file's
+    /// original eviction bug reached through our own name. Aborting strands a registration,
+    /// which a developer can undo; the alternative cannot be undone.
+    /// </remarks>
     [TestMethod]
-    public void Our_Derived_Name_Is_Contending_Even_From_Another_Path()
+    public void Our_Derived_Name_From_Another_Path_Aborts_The_Run()
     {
         var confused = new RegistrationRecord(
             WorktreeIdentity.DerivePackageName(Base, Layout), SiblingLayout);
 
-        Assert.AreEqual(RegistrationDisposition.RemoveContending, Classify(confused));
+        Assert.AreEqual(
+            RegistrationDisposition.FailConflicting,
+            Classify(confused),
+            "A package holding this layout's derived name but installed elsewhere was selected " +
+            "for removal. Name equality is not an ownership proof.");
+    }
+
+    /// <summary>
+    /// The same guard with an unreadable path. Unreadable is not matching: it is the one state
+    /// in which nothing at all is known about what would be destroyed.
+    /// </summary>
+    [TestMethod]
+    public void Our_Derived_Name_With_An_Unreadable_Path_Aborts_The_Run()
+    {
+        var opaque = new RegistrationRecord(
+            WorktreeIdentity.DerivePackageName(Base, Layout), InstalledPath: null);
+
+        Assert.AreEqual(RegistrationDisposition.FailConflicting, Classify(opaque));
     }
 
     /// <summary>

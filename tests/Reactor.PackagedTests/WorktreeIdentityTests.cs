@@ -79,8 +79,16 @@ public class WorktreeIdentityTests
     /// of every checkout on every machine, orphaning existing registrations.</para>
     /// <para>This is the one assertion that fails on such a change. If it fails, the fix is not
     /// to update the constants: it is to decide whether the change was intended, and if it was,
-    /// bump <c>WorktreeIdentity.AlgorithmVersion</c> and update these vectors in the same
-    /// commit. A version bump alone reddens this test, because the version is part of the hash
+    /// to act on which kind of change it is. A <em>seed</em> change — bumping
+    /// <c>WorktreeIdentity.AlgorithmVersion</c> — is migratable: prepend the new version to
+    /// <c>SupportedAlgorithmVersions</c> and update these vectors in the same commit, and the
+    /// sweep goes on reclaiming what the old version registered. A change to the <em>hash,
+    /// alphabet, or suffix length</em> is not, because those primitives are applied to every
+    /// listed version, so replaying version 1 after such a change yields the new output rather
+    /// than the names version 1 actually registered. See
+    /// <see cref="A_Listed_Version_Is_Replayed_With_Todays_Primitives"/>, which measures that
+    /// limitation, and the remarks on <c>WorktreeIdentity</c> for what to do instead.</para>
+    /// <para>A version bump alone reddens this test, because the version is part of the hash
     /// seed — so there is no separate assertion on the version itself, which would be a
     /// compile-time constant compared to its own literal.</para>
     /// <para>The path is deliberately fictional and absolute. It does not exist, so component
@@ -109,6 +117,50 @@ public class WorktreeIdentityTests
             "reactor-packaged-test-host-wtk7tlege.exe",
             WorktreeIdentity.DeriveAliasExeName(BaseAlias, canonicalPath),
             "Version-1 alias name changed." + note);
+    }
+
+    /// <summary>
+    /// Pins a second algorithm version's output, making it measurable that
+    /// <c>SupportedAlgorithmVersions</c> replays old versions through <em>today's</em> hash,
+    /// alphabet and suffix length rather than through anything that version captured.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the assertion behind the narrowed migratability contract on
+    /// <c>WorktreeIdentity</c>. The version reaches the output only as part of the hash seed —
+    /// there is no per-version table of primitives — so listing a version does not preserve how
+    /// that version encoded its hash. Prose saying otherwise is untestable; a second pinned
+    /// vector is not.</para>
+    /// <para>What makes it decisive is that both vectors fail <em>together</em>. Change the
+    /// alphabet, the suffix length, or the hash, and this reddens alongside
+    /// <see cref="Derivation_Matches_The_Pinned_Version1_Vectors"/>, which is precisely the
+    /// demonstration that a supported older version was not insulated from the change and that
+    /// its registrations are now unrecognizable. Change only the seed shape and just this pair
+    /// of vectors moves.</para>
+    /// <para><c>"0"</c> is deliberately not a version this code ever shipped. The parameter
+    /// accepts any non-empty string, so no real version has to be retired to keep a second
+    /// vector pinned.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Listed_Version_Is_Replayed_With_Todays_Primitives()
+    {
+        const string canonicalPath = @"C:\reactor-golden\layout\bin\x64";
+        const string otherVersion = "0";
+
+        Assert.AreEqual(
+            "wqvg2yycn",
+            WorktreeIdentity.DeriveSuffix(canonicalPath, otherVersion),
+            "A non-current algorithm version now derives a different suffix. If " +
+            "Derivation_Matches_The_Pinned_Version1_Vectors also failed, a shared primitive " +
+            "changed and every version in SupportedAlgorithmVersions now replays to the wrong " +
+            "name — registrations made by those versions can no longer be recognized or " +
+            "reclaimed. See the remarks on WorktreeIdentity.");
+
+        Assert.AreNotEqual(
+            WorktreeIdentity.DeriveSuffix(canonicalPath, otherVersion),
+            WorktreeIdentity.DeriveSuffix(canonicalPath, WorktreeIdentity.AlgorithmVersion),
+            "Two algorithm versions derived the same suffix for one directory, so the version " +
+            "is not reaching the hash seed and a bump would silently reuse the previous " +
+            "version's package family.");
     }
 
     /// <summary>
