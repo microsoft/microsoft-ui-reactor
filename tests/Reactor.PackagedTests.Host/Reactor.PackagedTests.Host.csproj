@@ -54,6 +54,10 @@
              Exclude="..\Reactor.AppTests.Host\obj\**\*.cs;..\Reactor.AppTests.Host\bin\**\*.cs"
              Link="Host\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+    <!-- Shared with Reactor.PackagedTests so the deployment's derived identity and the
+         in-host identity guard's expectation are computed by one implementation. -->
+    <Compile Include="..\_shared\FinalPath.cs" Link="FinalPath.cs" />
+    <Compile Include="..\_shared\WorktreeIdentity.cs" Link="WorktreeIdentity.cs" />
     <Page Include="..\Reactor.AppTests.Host\Themes\Generic.xaml" Link="Themes\Generic.xaml" />
     <!-- Not named AppIcon.ico: ReactorWindow's no-icon fallback probes Assets\AppIcon.ico,
          which would give every window an icon and make the fixtures' zero-icon control

@@ -39,6 +39,7 @@ public class PackagedSelfTestBatch
 
     private static readonly Dictionary<string, FixtureOutcome> _byFixture = new(StringComparer.Ordinal);
     private static IPackagedHostDeployment? _deployment;
+    private static string? _aliasPath;
     private static string _fullOutput = "";
     private static string? _initError;
     private static int _exitCode;
@@ -83,6 +84,7 @@ public class PackagedSelfTestBatch
         {
             _deployment = new AppxLooseLayoutDeployment(AppxLooseLayoutDeployment.ResolveLayoutDirectory());
             var alias = _deployment.Register();
+            _aliasPath = alias;
 
             var filter = ResolveFilter();
             var (stdout, stderr, exitCode, timedOut) = RunHost(alias, filter);
@@ -220,7 +222,8 @@ public class PackagedSelfTestBatch
             $"'{IdentityGuardFixture}' did not pass ({guard.Status}), so nothing establishes that " +
             $"this run had MSIX package identity — every identity-dependent check in it is " +
             $"therefore vacuous. Most likely the host was started from its build output instead " +
-            $"of through the '{AppxLooseLayoutDeployment.AliasExeName}' execution alias.\n" +
+            $"of through the execution alias " +
+            $"('{_aliasPath ?? AppxLooseLayoutDeployment.AliasExeName}').\n" +
             guard.Detail);
 
         var skipped = _byFixture
@@ -423,6 +426,12 @@ public class PackagedSelfTestBatch
 
     private static int TimeoutMs =>
         ResolveTimeoutSeconds(Environment.GetEnvironmentVariable("REACTOR_PACKAGED_TIMEOUT_SECONDS")) * 1000;
+
+    /// <summary>
+    /// The host process budget, so the layout claim can be waited out past an ordinary long run
+    /// rather than reported as a collision.
+    /// </summary>
+    internal static int HostTimeoutMs => TimeoutMs;
 
     /// <summary>
     /// Resolves the process budget in seconds, falling back to the default for absent,

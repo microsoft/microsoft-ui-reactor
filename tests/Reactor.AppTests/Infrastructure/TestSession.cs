@@ -58,10 +58,12 @@ public class TestSession
         // drown in environmental noise.
         SessionInteractivityGuard.EnsureInteractive("TestSession.AssemblyInit");
 
-        KillOrphanedProcesses();
-
+        // Resolve the host we are about to launch *before* sweeping, so the sweep can tell
+        // this checkout's orphans apart from another checkout's live host.
         var exePath = FindHostExe();
         Console.WriteLine($"Host app: {exePath}");
+
+        OrphanedHostSweep.KillOrphansOf("Reactor.AppTests.Host", exePath, "Host app");
 
         try
         {
@@ -119,21 +121,6 @@ public class TestSession
                 _appProcess.Dispose();
                 _appProcess = null;
             }
-        }
-    }
-
-    private static void KillOrphanedProcesses()
-    {
-        foreach (var proc in Process.GetProcessesByName("Reactor.AppTests.Host"))
-        {
-            try
-            {
-                Console.WriteLine($"Killing orphaned Host app (PID {proc.Id}).");
-                proc.Kill();
-                proc.WaitForExit(3000);
-            }
-            catch { }
-            finally { proc.Dispose(); }
         }
     }
 

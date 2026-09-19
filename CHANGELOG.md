@@ -71,6 +71,142 @@ Conventions for contributors:
   `Microsoft.WindowsAppSDK.WinUI` sub-package, so the transitive floor consumers actually
   inherit is **`Microsoft.WindowsAppSDK.WinUI >= 2.2.1`**; projects that reference the full
   metapackage themselves (self-contained or MSIX) move to `Microsoft.WindowsAppSDK 2.2.0`.
+- E2E tests now run as one named winapp workflow: `WinAppUi` stamps `WINAPP_UI_WORKFLOW_ID` onto
+  every `winapp ui` child and `AppTestBase` yields the UI turn after any test that used winapp.
+  This keeps a concurrent agent from interleaving between a click and the assertion that reads its
+  result, which anonymous one-shot commands allow. An ambient `WINAPP_UI_WORKFLOW_ID` is inherited
+  so a harness can group the run with its own calls. See `TESTING.md` §4.
+- The packaged selftest tier registers its host under an identity derived from the layout
+  directory (`<name>.w<hash>`, with a matching execution alias) instead of the literal name in
+  `Package.appxmanifest`, so concurrent checkouts can run it without evicting each other's
+  registration or contending for one alias stub. Cleanup is scoped to the derived name, to
+  packages installed from the same directory, and to derived packages whose directory is provably
+  gone and whose layout lock no run still holds — including those registered by a superseded
+  revision of the derivation, so bumping it does not strand the identities the previous one
+  created. A path that merely cannot be read is not treated as gone.
+  Sweeps by hand or in CI must now match `Microsoft.UI.Reactor.PackagedTests.Host*`. See
+  `TESTING.md` §3 and [microsoft/winappCli#763](https://github.com/microsoft/winappCli/issues/763).
+- The E2E suite's start-up sweep of orphaned test hosts is now scoped to the host executable in
+  the current checkout. It previously killed every process with a matching name anywhere on the
+  machine, so starting the suite in one worktree terminated another worktree's live host. A
+  candidate whose image path cannot be read is left alone rather than killed. Two runs of the
+  *same* checkout share an executable path, so the sweep is additionally gated on claiming that
+  build output: every live run holds its own lease, and a run that finds another run's lease still
+  held skips the sweep instead of killing the live sibling. A single-owner claim was not enough —
+  a refused run still launched a host, and once the owner exited a third run could acquire the
+  freed claim and sweep that host away. Leases are tracked per host executable, since the suite
+  sweeps both the WinUI and WinForms hosts.
+- The packaged tier serializes runs that share one checkout behind a per-user lock on the derived
+  identity, since registration and the alias stub are per-user rather than per-session. Runs in
+  different checkouts still proceed in parallel. The lock is taken over every supported identity
+  algorithm version rather than just the current one, so a run on a revision that derives a
+  different name still blocks — locking only the current version would let two runs holding
+  different names both register over one layout.
+- Reclaiming an abandoned packaged registration now holds the layout lock across the removal
+  instead of sampling it first. Sampling only reports whether a run held the lock at that
+  instant, which leaves a window for a run to start and register between the check and the
+  `RemovePackage` that then unregisters it.
+- The E2E suite's start-up sweep admits one run at a time per host executable, holding a gate
+  across registering its own lease, querying for live siblings, and snapshotting processes.
+  Those three steps were separately correct but interleaved: two runs starting together could
+  each register after the other's query and both conclude they were alone. A run that cannot
+  record its lease at all now aborts rather than continuing unregistered, since an unregistered
+  run is invisible to the next one to start and its host would be killed as an orphan.
+- The packaged tier now aborts rather than acting when a package holding this layout's derived
+  name records some other install path, or none. Name equality is not an ownership proof: the
+  suffix is a 40-bit hash, and a registration left pointing elsewhere reaches the same state with
+  no collision at all. Removing it could evict another checkout's live host through our own name;
+  the abort names the package and the manual `Remove-AppxPackage` recovery.
+- Packaged-tier layout locks are deleted when released, instead of accumulating one file per
+  layout directory the machine has ever locked. The delete is race-safe because the lock handle
+  does not share `FileShare.Delete`, so a file another run has already reacquired refuses to be
+  unlinked.
+- The E2E sweep's live-sibling check no longer pre-checks the claim directory with
+  `Directory.Exists`, which answered false for an unlistable directory exactly as for a missing
+  one and so read as "no siblings" — the verdict that licenses killing hosts. Listing failures
+  now fail closed.
+- The packaged tier's `.resw` tripwire scans the packaged host's transitive `ProjectReference`
+  graph rather than two hardcoded directories, so a string resource added to a referenced runtime
+  project is caught instead of silently entering the packaged PRI.
+- The E2E suite's startup gates and run leases are removed once the runs that created them are
+  gone, instead of accumulating one file per build output forever. Both live in a single per-user
+  directory shared by every checkout, and a lease was only ever pruned by a later run of that same
+  executable — so a worktree deleted after its last run left its files behind permanently.
+  Staleness is proven by an exclusive open rather than by a name, an age or a recorded pid, which
+  is what makes it safe to reclaim other checkouts' leftovers: a live run keeps its files whoever
+  started it, and a file reacquired between the open and the unlink refuses to be removed rather
+  than being pulled out from under its owner.
+- The packaged tier's recovery message for a conflicting registration now names the exact package
+  to remove (`Remove-AppxPackage -Package <full name>`) instead of a `Get-AppxPackage -Name`
+  pipeline, which is not publisher-unique and could unregister an unrelated package that happens
+  to share the name.
+- The packaged tier's manifest drift guard now accepts the derived name produced by *any*
+  supported identity-algorithm version, not only the current one. The guard runs before the
+  rewrite that migrates a stale name, so after a version bump it would previously abort on
+  exactly the manifest the rewrite was about to heal, leaving the tier unrunnable until a
+  rebuild. Derivations are still compared exactly rather than by suffix shape, so a name
+  belonging to a different layout remains drift.
+- The packaged tier's layout-lock wait is sized for two host process budgets instead of one. A
+  batch whose filter excludes the identity guard runs the host a second time to fetch it, so an
+  owner can legitimately occupy two consecutive budgets, and a contender could time out and
+  report a collision against a perfectly healthy run.
+- The packaged tier's layout locks now share one wait deadline across the whole set rather than
+  restarting the timeout for each supported algorithm version, so a contender's worst case stays
+  the single bounded wait that is documented instead of growing with every version added.
+- A packaged-tier lock file that opens but cannot be stamped with its owner record now fails
+  immediately as a storage error. It was previously indistinguishable from contention, so the
+  run retried until the full layout timeout elapsed and then blamed a competing owner that did
+  not exist.
+- The packaged tier's name-only registration lookup — the fallback used when broad package
+  enumeration is unavailable — now probes every supported algorithm version's derived name, not
+  just the current one, so this layout's own registration from before a version bump is still
+  found and migrated rather than being registered on top of.
+- A packaged-tier run that fails partway through taking its layout locks now releases the ones it
+  already holds instead of only doing so when it is refused. Making stamp failures surface as
+  errors introduced a path out of acquisition that skipped the release, so a storage fault on one
+  version's lock would hold another version's open until the process exited — wedging every later
+  run over that layout behind the run that correctly reported a failure.
+- A packaged-tier run whose lock directory cannot be prepared — an unavailable or read-only
+  `%LOCALAPPDATA%` — now reports the storage fault itself instead of a collision. Setup failure
+  and contention were both signalled the same way, so the run named an owner that never existed,
+  claimed a wait that never happened, and discarded the error that explained it. The reclamation
+  probe still reads an unusable lock directory as "leave the registration alone".
+- The packaged `ms-appx:`/MRT resolution fixture now reports success only once the resource value
+  has actually been read. It previously decided from the lookup alone, so a failure while reading
+  the value was recorded in the detail text while the fixture still passed — a PRI compatibility
+  check that could go green without resolving anything.
+- The packaged-tier reclamation probe now treats a stamp failure the same way it treats a setup
+  failure: as "this registration is in use, leave it alone". Only setup failures were caught, so a
+  storage fault while stamping a lock taken over someone else's registration escaped an advisory
+  liveness probe and aborted the whole run — the opposite of the fail-closed behaviour the probe
+  documents.
+- The packaged identity guard now checks the publisher as well as the name. A package family name
+  is `<name>_<publisherHash>`, so matching the name prefix alone accepted a same-named package
+  from any publisher — precisely the case the guard exists to tell apart.
+- Per-checkout identity derivation now resolves a layout directory through the filesystem rather
+  than by string handling alone, so mapped or `subst`'d drive letters and the extended-length
+  `\\?\` spelling all reach one identity. The override accepts any rooted path that exists and
+  preserves the spelling it was handed, so two runs pointed at one physical layout through
+  different spellings previously took different locks and then rewrote and registered the same
+  generated manifest concurrently.
+- The orphaned-host sweep tests now record every lease they stage and delete it at class cleanup.
+  A staged lease is not a claim the process took, so the release seam could not see it, and
+  disposing deliberately leaves the file behind — every run added another permanent file to the
+  real per-user claim directory that later runs then paid to probe.
+- The orphaned-host sweep now resolves an executable path through the filesystem rather than by
+  string handling alone, so a junction, a `subst`'d drive or the extended-length `\\?\` spelling
+  all reach one path. Both the key that names a run's lease and gate and the check that decides
+  whether a live process is a sibling derive from it, so one build output reachable by two
+  spellings previously took two lease files, left each run seeing no sibling, and admitted both
+  to sweep — each then killing the other's running host.
+- A storage fault that stops the startup gate being addressed is now reported as itself rather
+  than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
+  unwritable claim directory spent the full timeout and then blamed a competing run that never
+  existed, discarding the storage error that was the only actionable fact.
+- A packaged-tier lock file this run is denied access to is likewise no longer reported as a lock
+  another run holds. The refusal is recorded and raised only once it has survived the whole wait,
+  so a genuinely transient denial — a lock left delete-pending by a third party holding it with
+  delete sharing — still clears on its own within the ordinary poll.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

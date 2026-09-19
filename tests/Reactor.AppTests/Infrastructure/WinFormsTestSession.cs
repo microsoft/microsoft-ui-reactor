@@ -43,10 +43,12 @@ public class WinFormsTestSession
 
         SessionInteractivityGuard.EnsureInteractive("WinFormsTestSession.Init");
 
-        KillOrphanedProcesses();
-
+        // Resolved before the sweep so it can distinguish this checkout's orphans from
+        // another checkout's live host. See OrphanedHostSweep.
         var exePath = FindHostExe();
         Console.WriteLine($"WinForms host: {exePath}");
+
+        OrphanedHostSweep.KillOrphansOf(ProcessName, exePath, "WinForms host");
 
         try
         {
@@ -101,20 +103,7 @@ public class WinFormsTestSession
         }
     }
 
-    private static void KillOrphanedProcesses()
-    {
-        foreach (var proc in Process.GetProcessesByName(ProcessName))
-        {
-            try
-            {
-                Console.WriteLine($"Killing orphaned WinForms host (PID {proc.Id}).");
-                proc.Kill();
-                proc.WaitForExit(3000);
-            }
-            catch { }
-            finally { proc.Dispose(); }
-        }
-    }
+
 
     private static string FindHostExe()
     {

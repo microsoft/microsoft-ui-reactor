@@ -102,7 +102,183 @@ public sealed class WinAppUi
     /// </summary>
     public static long InvocationCount;
 
+    // ─── UI turn continuity ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// winapp's logical-UI-workflow variable. Every <c>winapp ui</c> mutation takes a turn on the
+    /// interactive desktop whether or not this is set — collision arbitration is unconditional.
+    /// What the variable buys is <em>continuity</em>: a workflow that names itself keeps a
+    /// post-command idle grace, so a second agent driving the same desktop cannot interleave
+    /// between our click and the assertion that reads the result. An anonymous command releases
+    /// the desktop the instant it exits, which is exactly the window a concurrent run slips into.
+    /// </summary>
+    internal const string WorkflowIdEnvVar = "WINAPP_UI_WORKFLOW_ID";
+
+    /// <summary>Mirrors winapp's own cap; a longer value is rejected with InvalidWorkflowId.</summary>
+    internal const int MaxWorkflowIdLength = 256;
+
+    /// <summary>
+    /// UTF-8 that refuses to encode ill-formed UTF-16 instead of substituting U+FFFD — the same
+    /// encoder configuration winapp hashes the workflow id with.
+    /// </summary>
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>
+    /// The workflow id stamped onto every <c>winapp ui</c> child process, resolved once per test
+    /// process. Public so a failure report can name the workflow that held the desktop.
+    /// </summary>
+    public static string WorkflowId { get; } = ResolveWorkflowId(
+        Environment.GetEnvironmentVariable(WorkflowIdEnvVar),
+        Environment.ProcessId,
+        Guid.NewGuid());
+
+    /// <summary>
+    /// Picks the workflow id for this test process. An ambient value wins, so an agent harness (or
+    /// a developer) can group a whole test run with surrounding manual <c>winapp ui</c> calls into
+    /// one workflow. Only a *usable* ambient value wins: winapp hard-fails an unusable id on every
+    /// single command, so inheriting one would break the entire suite rather than degrade it —
+    /// falling back to a synthesized id is strictly better than propagating a guaranteed error.
+    /// </summary>
+    /// <remarks>
+    /// The three rejection cases are winapp's, not ours: empty/whitespace, longer than
+    /// <see cref="MaxWorkflowIdLength"/>, and text that is not well-formed UTF-16. The last one is
+    /// easy to miss — winapp hashes the id with a strict UTF-8 encoder specifically so that
+    /// distinct ill-formed ids cannot collide onto one owner key, which makes an unpaired
+    /// surrogate a hard error rather than a mangled-but-accepted value.
+    /// </remarks>
+    internal static string ResolveWorkflowId(string? ambient, int pid, Guid unique)
+    {
+        if (!string.IsNullOrWhiteSpace(ambient)
+            && ambient.Length <= MaxWorkflowIdLength
+            && IsWellFormedUtf16(ambient))
+        {
+            return ambient;
+        }
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"reactor-apptests-{pid}-{unique:N}");
+    }
+
+    /// <summary>
+    /// Whether a string survives strict UTF-8 encoding — i.e. contains no unpaired surrogate.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately asks the same encoder winapp uses rather than scanning for surrogate code
+    /// units by hand, so this cannot drift from the rule it is predicting.
+    /// </remarks>
+    private static bool IsWellFormedUtf16(string value)
+    {
+        try
+        {
+            StrictUtf8.GetByteCount(value);
+            return true;
+        }
+        catch (EncoderFallbackException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Releases this workflow's UI turn instead of waiting out the idle grace. Best-effort by
+    /// construction: yielding is an optimization that hands the desktop to a waiting agent sooner,
+    /// so a failure here must never redden a test that already passed. The turn is released by the
+    /// idle grace regardless, making the worst case a short delay rather than a stranded desktop.
+    /// </summary>
+    /// <returns>
+    /// winapp's exit code, or <see langword="null"/> if the process could not be run at all.
+    /// Surfaced rather than discarded because it is the one externally observable proof that a
+    /// workflow id reached the child: <c>winapp ui yield</c> exits non-zero when the variable is
+    /// absent and zero when it is present.
+    /// </returns>
+    internal static int? ReleaseUiTurn()
+    {
+        try
+        {
+            RecordInvocation();
+
+            var psi = CreateStartInfo("yield", "--json");
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return null;
+
+            if (!proc.WaitForExit(YieldTimeoutMs))
+            {
+                TryKill(proc);
+                return null;
+            }
+
+            return proc.ExitCode;
+        }
+        // Narrow rather than bare: the contract is that yielding cannot redden a passing test, and
+        // these are the failures that actually mean "winapp could not be run here" (missing or
+        // unlaunchable executable, a process that died between calls, an unresolvable winapp.exe
+        // surfacing through the static initializer). Something outside this set is not a yield
+        // problem and should surface rather than be silently turned into a null.
+        catch (System.ComponentModel.Win32Exception ex) { return YieldUnavailable(ex); }
+        catch (InvalidOperationException ex) { return YieldUnavailable(ex); }
+        catch (NotSupportedException ex) { return YieldUnavailable(ex); }
+        catch (TypeInitializationException ex) { return YieldUnavailable(ex); }
+    }
+
+    private static int? YieldUnavailable(Exception ex)
+    {
+        Console.WriteLine($"Could not release the winapp UI turn ({ex.GetType().Name}: {ex.Message}). " +
+                          "Falling back to the idle grace.");
+        return null;
+    }
+
+    /// <summary>
+    /// Best-effort termination of a winapp child that overran its timeout. The caller is already
+    /// failing or returning null, so a kill failure changes no outcome — but it is reported rather
+    /// than swallowed, because repeated failures leave orphaned winapp processes holding the UI
+    /// turn, which looks like an unrelated hang in the *next* test.
+    /// </summary>
+    internal static void TryKill(Process proc)
+    {
+        try
+        {
+            proc.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException ex) { WarnKillFailed(ex); }
+        catch (NotSupportedException ex) { WarnKillFailed(ex); }
+        catch (System.ComponentModel.Win32Exception ex) { WarnKillFailed(ex); }
+        catch (AggregateException ex) { WarnKillFailed(ex); }
+
+        static void WarnKillFailed(Exception ex) =>
+            Console.WriteLine($"Could not terminate the timed-out winapp child " +
+                              $"({ex.GetType().Name}: {ex.Message}).");
+    }
+
+    private const int YieldTimeoutMs = 10_000;
+
     // ─── Process plumbing ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds the <see cref="ProcessStartInfo"/> for one <c>winapp ui</c> child. The single place
+    /// the workflow id is stamped: every spawn in this harness routes through here, so the turn
+    /// continuity cannot be wired on one path and silently missing on another.
+    /// </summary>
+    internal static ProcessStartInfo CreateStartInfo(params string[] args)
+    {
+        var psi = new ProcessStartInfo(WinAppExe)
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+        };
+        psi.ArgumentList.Add("ui");
+        foreach (var a in args) psi.ArgumentList.Add(a);
+
+        // Stamp every child with this run's workflow id so the whole suite reads as one logical
+        // UI workflow to winapp's turn arbitration, rather than a few thousand anonymous one-shots
+        // that each drop the desktop the moment they exit.
+        psi.Environment[WorkflowIdEnvVar] = WorkflowId;
+
+        return psi;
+    }
 
     private readonly record struct RunResult(int ExitCode, string StdOut, string StdErr);
 
@@ -114,16 +290,7 @@ public sealed class WinAppUi
     {
         RecordInvocation();
 
-        var psi = new ProcessStartInfo(WinAppExe)
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-        };
-        psi.ArgumentList.Add("ui");
-        foreach (var a in args) psi.ArgumentList.Add(a);
+        var psi = CreateStartInfo(args);
 
         using var proc = new Process { StartInfo = psi };
         var sbOut = new StringBuilder();
@@ -146,7 +313,7 @@ public sealed class WinAppUi
 
         if (!proc.WaitForExit(processTimeoutMs))
         {
-            try { proc.Kill(true); } catch { }
+            TryKill(proc);
             throw new WinAppTimeoutException(
                 $"winapp ui {string.Join(' ', args)} did not exit within {processTimeoutMs}ms.");
         }

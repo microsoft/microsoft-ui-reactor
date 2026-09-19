@@ -586,6 +586,53 @@ adds only MSIX properties and a `Package.appxmanifest`, so the two hosts cannot 
 registers that layout and launches its `uap5:AppExecutionAlias` stub, which keeps package identity
 while still inheriting stdout — so the TAP contract and flags from tier 2 are reused unchanged.
 
+### The registered identity is per-checkout, not the one in the manifest
+
+An MSIX `Identity/@Name` is machine-global, and so is an execution alias. Registered literally,
+this tier could only ever run in one checkout at a time: registration is name-scoped rather than
+path-scoped, so a second checkout starting its packaged run would evict the first one's package and
+repoint `%LOCALAPPDATA%\Microsoft\WindowsApps\reactor-packaged-test-host.exe` at its own build
+output — leaving the first run either dead or, worse, silently exercising the wrong binary.
+
+So `AppxLooseLayoutDeployment` derives both from the layout directory before registering, rewriting
+the **generated** `AppxManifest.xml` in the build output:
+
+```text
+Microsoft.UI.Reactor.PackagedTests.Host   ->  Microsoft.UI.Reactor.PackagedTests.Host.w53j3givo
+reactor-packaged-test-host.exe            ->  reactor-packaged-test-host-w53j3givo.exe
+```
+
+The suffix is a hash of the canonicalised layout directory — the build output the package is
+registered from, e.g. `tests\Reactor.PackagedTests.Host\bin\x64\Debug\net10.0-windows…\AppX`. That
+path is stable for a checkout and different between checkouts, so the derived identity is too. Two
+worktrees — or two agents — can run the packaged tier concurrently without seeing each other. The
+derivation itself lives in `tests/_shared/WorktreeIdentity.cs`, linked into both the deployment and
+the host so the two sides cannot disagree about it.
+
+Consequences worth knowing:
+
+- **`Package.appxmanifest` still holds the base identity**, and that is what
+  `Deployment_Constants_Match_The_Manifest` checks. The rewrite only ever touches build output, so
+  it is idempotent and self-healing: a rebuild regenerates the base name and the next run derives
+  again.
+- **Cleanup is scoped to this layout.** `Register()` removes registrations under this layout's
+  derived name, plus any package installed *from this exact directory* (which is what reclaims a
+  registration made under the base name before identities were derived), plus derived-shaped
+  packages whose directory no longer exists (a deleted worktree). None of those rules can match a
+  live checkout other than this one.
+- **Sweeping by hand is machine-wide — and destructive while anything is running.**
+  `Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*'` matches *every* checkout's
+  derived package, not just yours, so unregistering what it returns will evict a packaged run
+  happening in another worktree. Use it only as a deliberate clean-slate sweep once all packaged
+  runs have stopped (this is why CI can: the runner has exactly one checkout). Routine per-run
+  cleanup needs no manual step at all — `Register()` already scopes itself to this layout. If you
+  do need to remove one checkout's package while others live, match the exact derived name or the
+  install location rather than the wildcard. Note the bare base name matches nothing once
+  identities are derived.
+- **`Packaged_IdentityGuard` stays an exact equality check.** It re-derives the expected name from
+  `AppContext.BaseDirectory` rather than being told it, which works because the tier already
+  requires the install location and the running directory to be the same path.
+
 ### Writing a packaged fixture
 
 Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Two steps,
@@ -706,6 +753,31 @@ enough that queue ordering makes a timing-sensitive race always won or always lo
 or `1`) for that environment and tool version. If the defect is *when* state is read rather than
 *whether* input arrived, prove the detector with a mutation before counting repeated green E2E
 runs as evidence.
+
+### The suite runs as one named winapp workflow
+
+Every `winapp ui` mutation takes a turn on the interactive desktop, so two agents driving UI at
+once are serialized rather than interleaved. That arbitration is unconditional and cannot be
+switched off. What *is* opt-in is **continuity**: an anonymous `winapp ui` command drops the
+desktop the instant it exits, so a concurrent run can slip in between our click and the assertion
+that reads its result. A command that names its workflow keeps a short post-command idle grace
+instead, which closes that window.
+
+`WinAppUi` therefore stamps `WINAPP_UI_WORKFLOW_ID` onto every child it spawns
+(`WinAppUi.CreateStartInfo` is the single site, so no verb can miss it), and `AppTestBase` yields
+the turn in `[TestCleanup]` once a test has actually used winapp — holding it across the much
+longer gaps *between* tests would block a waiting agent for the idle grace after every test.
+
+An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
+own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp
+rejects an empty or over-long id on every single command, so one of those would fail the entire
+suite rather than merely lose continuity, and the harness synthesizes an id instead.
+
+> **This does not stop a non-winapp window stealing the foreground.** Turn arbitration only
+> coordinates winapp callers. On a busy desktop, clicks still fail with
+> `{"error":{"code":"foreground_not_target"}}` when an unrelated app takes the foreground
+> mid-test — a real and reproducible source of local flake that is *not* a product regression.
+> Running the tier on a desktop you are not also using is the only fix for that.
 
 ### Don't co-locate the E2E and selftest tiers
 

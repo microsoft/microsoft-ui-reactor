@@ -203,6 +203,38 @@ internal sealed class Harness
     }
 
     /// <summary>
+    /// <see cref="Check(string, bool)"/>, but carries the inputs into the failure line.
+    /// </summary>
+    /// <remarks>
+    /// <para>TAP <c>#</c> comment lines are diagnostics, and the reporting layers drop them:
+    /// <c>SelfTestBatch</c>'s parser keeps only lines starting <c>ok</c> / <c>not ok</c>, so a
+    /// fixture that logs its inputs with <c>Console.WriteLine("# …")</c> still surfaces as a
+    /// bare "assertion failed" in the MSTest detail. That is only visible in the raw TAP fast
+    /// loop.</para>
+    /// <para>Use this for a check whose inputs are not recoverable from the check name — a live
+    /// resource URI, a resolved path, an identity read off the running package. A verdict
+    /// without its inputs says something is wrong without saying which half disagreed.</para>
+    /// <para><paramref name="detail"/> is emitted after the name, where the batch parser
+    /// already tolerates arbitrary text: attribution reads the first token only.</para>
+    /// </remarks>
+    public void Check(string name, bool result, string detail)
+    {
+        _checks++;
+        if (result)
+            Console.WriteLine($"ok {name}");
+        else
+        {
+            Console.WriteLine($"not ok {name} - assertion failed: {Sanitize(detail)}");
+            _failures++;
+        }
+    }
+
+    /// <summary>Keeps a detail string on one TAP line so the parser cannot mis-split it.</summary>
+    private static string Sanitize(string detail) =>
+        detail.Replace("\r", " ", StringComparison.Ordinal)
+              .Replace("\n", " ", StringComparison.Ordinal);
+
+    /// <summary>
     /// Emits a TAP "skipped" line for a check this run cannot make, without counting it as a pass
     /// OR a failure. The assertion stays explicit in the log instead of being silently dropped.
     ///

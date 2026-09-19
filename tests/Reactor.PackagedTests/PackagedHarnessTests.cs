@@ -570,6 +570,15 @@ public class PackagedHarnessTests
             "AppxLooseLayoutDeployment.PackageName; Packaged_IdentityGuard would fail against a " +
             "correctly registered package.");
 
+        var packageIdentityPublisher = ConstValue(fixtureSource, "PackageIdentityPublisher");
+        Assert.AreEqual(
+            AppxLooseLayoutDeployment.PackagePublisher,
+            packageIdentityPublisher,
+            "PackagedIdentityFixtures.PackageIdentityPublisher drifted from " +
+            "AppxLooseLayoutDeployment.PackagePublisher. The guard compares Package.Current's " +
+            "publisher against it, so drift makes the one check that distinguishes two " +
+            "same-named packages fail against the package this tier actually registers.");
+
         var hostAssemblyName = ConstValue(fixtureSource, "PackagedHostAssemblyName");
         var hostProject = File.ReadAllText(Path.Join(
             root, "tests", "Reactor.PackagedTests.Host", "Reactor.PackagedTests.Host.csproj"));
