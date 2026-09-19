@@ -39,6 +39,77 @@ public class OrphanedHostSweepTests
     private static OrphanedHostSweep.Candidate At(int pid, string? path) => new(pid, path);
 
     /// <summary>
+    /// The cleanup seam has to actually remove the file, and has to leave every claim outside
+    /// its root alone.
+    /// </summary>
+    /// <remarks>
+    /// Both halves matter, and the second is the dangerous one. A lease is deliberately never
+    /// released by a real run, so a cleanup that released everything would drop the lease this
+    /// same process holds for the real host while the E2E tests are still running — and a
+    /// concurrent run in another checkout would then see nothing live and sweep this run's
+    /// host, which is precisely the failure the lease exists to prevent. Deleting the file is
+    /// the other half: closing the handle leaves the <c>.run</c> behind, and every future
+    /// sibling probe would still enumerate it.
+    /// </remarks>
+    [TestMethod]
+    public void Releasing_Staged_Claims_Removes_Only_That_Roots_Files()
+    {
+        var mineRoot = Path.Join(ClaimRoot, "release-" + Guid.NewGuid().ToString("n"));
+        var mine = Path.Join(mineRoot, "Reactor.AppTests.Host.exe");
+        var theirs = Probe("release-bystander-" + Guid.NewGuid().ToString("n"));
+
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(mine),
+            "Precondition: the claim under test has to be taken before it can be released.");
+        Assert.AreEqual(Admitted, OrphanedHostSweep.LayoutRunClaim.TryAcquireFor(theirs),
+            "Precondition: the bystander claim has to be taken too. Admitted rather than " +
+            "Deferred because siblings are scoped to one build output, and this is a " +
+            "different path — the claim above is not a sibling of it.");
+
+        var minePath = OrphanedHostSweep.LeasePathFor(mine, Environment.ProcessId);
+        var theirsPath = OrphanedHostSweep.LeasePathFor(theirs, Environment.ProcessId);
+
+        Assert.IsTrue(File.Exists(minePath), "Precondition: taking a claim writes its lease file.");
+        Assert.IsTrue(File.Exists(theirsPath), "Precondition: the bystander's lease file exists.");
+
+        OrphanedHostSweep.LayoutRunClaim.ReleaseForTestsUnder(mineRoot);
+
+        Assert.IsFalse(File.Exists(minePath),
+            "The released claim's lease file must be removed, not merely closed — a file left " +
+            "behind is still enumerated as a sibling by every later run.");
+        Assert.IsTrue(File.Exists(theirsPath),
+            "A claim outside the released root must survive. Releasing everything would drop " +
+            "the live host's own lease mid-run and expose it to a concurrent checkout's sweep.");
+    }
+
+    /// <summary>
+    /// Releases the leases these tests took and removes everything they staged.
+    /// </summary>
+    /// <remarks>
+    /// Claims are recorded as real files under the shared per-user claim directory, and a run
+    /// deliberately never releases its own — the lease is meant to last the whole process. That
+    /// is right for a run and wrong for a suite: every path here is unique to this execution,
+    /// so nothing ever revisits those files and each run of this class would otherwise leave a
+    /// permanent <c>.run</c> file behind in a production directory. The release is scoped to
+    /// this class's synthetic root so the lease the E2E tests hold for the real host, in this
+    /// same process, is left untouched.
+    /// </remarks>
+    [ClassCleanup]
+    public static void ReleaseStagedClaims()
+    {
+        OrphanedHostSweep.LayoutRunClaim.ReleaseForTestsUnder(ClaimRoot);
+
+        try
+        {
+            if (Directory.Exists(ClaimRoot)) Directory.Delete(ClaimRoot, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Staging lives under the temp directory; a file still held here is the OS's to
+            // collect, and failing cleanup would turn a passing suite red for nothing.
+        }
+    }
+
+    /// <summary>
     /// The regression itself. Two checkouts build a host with the same file name, so process
     /// name cannot distinguish them; only the image path can.
     /// </summary>

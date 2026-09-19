@@ -525,7 +525,8 @@ internal static class OrphanedHostSweep
     {
         private static readonly object Gate = new();
 
-        private static readonly Dictionary<string, IDisposable> Held = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, (string ExePath, IDisposable Lease)> Held =
+            new(StringComparer.Ordinal);
 
         internal static SweepAdmission TryAcquireFor(string ourExePath)
         {
@@ -544,7 +545,7 @@ internal static class OrphanedHostSweep
                     // itself so the caller can refuse to continue rather than proceed unseen.
                     if (lease is null) return SweepAdmission.Unavailable;
 
-                    Held[key] = lease;
+                    Held[key] = (ourExePath, lease);
                 }
 
                 // Registered before the question is asked, so a sibling starting concurrently
@@ -553,6 +554,58 @@ internal static class OrphanedHostSweep
                 return AnyLiveSiblingOf(ourExePath)
                     ? SweepAdmission.Deferred
                     : SweepAdmission.Admitted;
+            }
+        }
+
+        /// <summary>
+        /// Drops the leases taken for executables under <paramref name="root"/> and removes
+        /// their files. Tests only.
+        /// </summary>
+        /// <remarks>
+        /// <para>A real run never calls this: the lease must cover the whole run, and process
+        /// exit is exactly that lifetime. Tests are the one caller for which that is wrong.
+        /// Each synthetic executable path they exercise takes a real lease under the shared
+        /// per-user claim directory, and because the path is unique per run no later run ever
+        /// revisits the file — so without this the suite deposits a permanently abandoned
+        /// <c>.run</c> file per claim test, in the production directory, every time it runs.</para>
+        /// <para>Scoped to a root rather than releasing everything, and that is the whole
+        /// design. This assembly's E2E tests hold a lease for the real host in this same
+        /// process, and releasing it mid-run would let a concurrent run of another checkout
+        /// conclude that nothing is live and sweep this run's host — reintroducing the exact
+        /// failure the lease exists to prevent, from the cleanup meant to be harmless.</para>
+        /// <para>Removal is part of the contract, not a nicety. Disposing the stream only
+        /// closes the handle; the file survives and would still be enumerated by every future
+        /// sibling probe, which is the accumulation this exists to prevent.</para>
+        /// </remarks>
+        internal static void ReleaseForTestsUnder(string root)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(root);
+
+            lock (Gate)
+            {
+                var matching = Held
+                    .Where(e => e.Value.ExePath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                foreach (var (key, entry) in matching)
+                {
+                    var path = (entry.Lease as FileStream)?.Name;
+                    entry.Lease.Dispose();
+                    Held.Remove(key);
+
+                    if (path is null) continue;
+
+                    try
+                    {
+                        File.Delete(path);
+                    }
+                    catch (Exception ex) when (
+                        ex is IOException or UnauthorizedAccessException)
+                    {
+                        // Best effort: a file that cannot be removed is left for the stale
+                        // pruner, which is the same fate as a crashed run's lease.
+                    }
+                }
             }
         }
     }

@@ -737,6 +737,89 @@ public class PackagedLayoutLockTests
     }
 
     /// <summary>
+    /// The liveness probe reports a lock this process already holds as live.
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="AppxLooseLayoutDeployment.IsLayoutLocked"/> answers by attempting the
+    /// acquisition, and the lock denies a second writer regardless of who asks — so a run that
+    /// took its own layout lock sees that layout as live for the rest of the batch. This is the
+    /// property that decides what liveness can and cannot be used for during classification:
+    /// registration cleanup runs while the layout lock is held, so gating any <i>same-layout</i>
+    /// branch on "not live" would gate it on a predicate that is always false there, turning
+    /// the legacy-registration migration into dead code.</para>
+    /// <para>Pinned as a test because it is load-bearing and invisible: the probe reads as an
+    /// ordinary liveness question, and nothing at the call site hints that the caller's own
+    /// lock is part of the answer.</para>
+    /// </remarks>
+    [TestMethod]
+    public void The_Liveness_Probe_Counts_This_Runs_Own_Lock_As_Live()
+    {
+        var layout = SyntheticLayout();
+
+        var free = AppxLooseLayoutDeployment.IsLayoutLocked(layout);
+        Assert.IsFalse(free,
+            "Precondition: an unlocked layout must read as not live, or the assertion below " +
+            "cannot tell a held lock from a probe that always says live.");
+
+        var held = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+            layout, "pid=1", TimeSpan.Zero, TimeSpan.Zero, out _);
+        Assert.IsNotNull(held, "Precondition: the layout lock must be acquirable.");
+
+        try
+        {
+            Assert.IsTrue(AppxLooseLayoutDeployment.IsLayoutLocked(layout),
+                "The liveness probe did not report a lock held by this very process, so a " +
+                "classification rule could be written believing 'not live' is reachable for " +
+                "the layout the run has already locked.");
+        }
+        finally
+        {
+            AppxLooseLayoutDeployment.Release(held!);
+        }
+    }
+
+    /// <summary>
+    /// A lock directory that cannot be prepared must not be reported as another run.
+    /// </summary>
+    /// <remarks>
+    /// <para>Setup failure and contention were both <c>null</c>, and AcquireLayoutLock reads
+    /// every null as a collision. An unusable lock directory therefore produced a message that
+    /// named an owner which never existed and claimed a wait that never happened, while the
+    /// storage error that actually caused it was discarded — the one diagnostic that would
+    /// have explained the failure.</para>
+    /// <para>An empty algorithm version is the trigger because it fails inside
+    /// <c>LockPathsFor</c> deterministically and without depending on machine state: no lock
+    /// name can be formed, which is the same class of fault as an unwritable
+    /// <c>%LOCALAPPDATA%</c> and reaches the identical catch. Forcing the storage fault itself
+    /// would mean making a real per-user directory unwritable mid-suite.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Lock_Directory_That_Cannot_Be_Prepared_Is_Not_Reported_As_Contention()
+    {
+        var layout = SyntheticLayout();
+        var unusable = new[] { string.Empty };
+
+        var thrown = Assert.Throws<AppxLooseLayoutDeployment.LockSetupException>(
+            () => AppxLooseLayoutDeployment.TryAcquireAllLocks(
+                layout, "pid=1", TimeSpan.Zero, TimeSpan.Zero, out _, unusable),
+            "A lock set that cannot even be named must surface as a setup failure. Returning " +
+            "null instead makes it indistinguishable from a live contender, and the caller " +
+            "reports a collision against an owner that does not exist.");
+
+        Assert.IsNotNull(thrown.InnerException,
+            "The originating storage error has to travel with it, or the report is no more " +
+            "actionable than the false collision it replaced.");
+
+        var inIoFamily = typeof(IOException).IsAssignableFrom(
+            typeof(AppxLooseLayoutDeployment.LockSetupException));
+        Assert.IsFalse(inIoFamily,
+            "Deliberately outside the IOException family the poll loop treats as 'held by " +
+            "someone else' — a setup fault must escape on the first occurrence rather than " +
+            "spend the full timeout retrying. Checked by assignability rather than a type " +
+            "test on the instance, which the compiler folds to a constant and proves nothing.");
+    }
+
+    /// <summary>
     /// A fault partway through the set must give back the locks already taken.
     /// </summary>
     /// <remarks>

@@ -275,8 +275,16 @@ internal static class PackagedIdentityFixtures
                 var files = global::Windows.ApplicationModel.Resources.Core.ResourceManager
                     .Current.MainResourceMap.GetSubtree("Files");
                 var candidate = files?.GetValue(PackagedImage);
-                mrtResolved = candidate is not null;
-                mrtDetail = candidate?.ValueAsString ?? "<null>";
+
+                // Resolved only once the value has actually been read. GetValue returning a
+                // candidate is not resolution: reading ValueAsString is what consumes the
+                // resource, and it can throw after the candidate exists. Setting the verdict
+                // on the candidate alone let the catch below record the error while the
+                // fixture still reported ok — a PRI compatibility check that passes without
+                // ever resolving anything, which is the one outcome it must not produce.
+                var value = candidate?.ValueAsString;
+                mrtResolved = value is not null;
+                mrtDetail = value ?? "<null>";
             }
             // Same narrowing as above: a genuine MRT miss surfaces as one of these, and
             // everything else is this fixture being wrong rather than resolution being wrong.

@@ -166,6 +166,15 @@ Conventions for contributors:
   errors introduced a path out of acquisition that skipped the release, so a storage fault on one
   version's lock would hold another version's open until the process exited — wedging every later
   run over that layout behind the run that correctly reported a failure.
+- A packaged-tier run whose lock directory cannot be prepared — an unavailable or read-only
+  `%LOCALAPPDATA%` — now reports the storage fault itself instead of a collision. Setup failure
+  and contention were both signalled the same way, so the run named an owner that never existed,
+  claimed a wait that never happened, and discarded the error that explained it. The reclamation
+  probe still reads an unusable lock directory as "leave the registration alone".
+- The packaged `ms-appx:`/MRT resolution fixture now reports success only once the resource value
+  has actually been read. It previously decided from the lookup alone, so a failure while reading
+  the value was recorded in the detail text while the fixture still passed — a PRI compatibility
+  check that could go green without resolving anything.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

@@ -694,6 +694,30 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     }
 
     /// <summary>
+    /// The lock directory itself could not be prepared, so no lock name could be formed.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from returning <c>null</c>, which every caller of
+    /// <see cref="TryAcquireAllLocks"/> reads as "another run holds this layout". A missing or
+    /// read-only <c>%LOCALAPPDATA%</c> is not a contender, and reporting it as one produced a
+    /// collision message that named an owner which never existed, claimed a wait that never
+    /// happened, and discarded the storage error that was the actual cause. Callers that
+    /// genuinely want the conservative reading — the reclamation probe, for which "cannot be
+    /// shown free" must mean "leave it alone" — catch this back into <c>null</c> themselves.
+    /// </remarks>
+    internal sealed class LockSetupException : InvalidOperationException
+    {
+        internal LockSetupException(string directory, Exception inner)
+            : base(
+                $"The layout lock directory '{directory}' could not be prepared, so this run " +
+                $"cannot arbitrate with concurrent runs over the same layout. This is a " +
+                $"storage failure, not contention.",
+                inner)
+        {
+        }
+    }
+
+    /// <summary>
     /// Polls <see cref="TryOpenLockFile"/> until it succeeds or <paramref name="timeout"/>
     /// elapses.
     /// </summary>
@@ -785,8 +809,15 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             ex is ArgumentException or IOException or UnauthorizedAccessException
                 or System.Security.SecurityException)
         {
-            // A path that cannot even be turned into a lock name cannot be shown to be free.
-            return null;
+            // A path that cannot even be turned into a lock name cannot be shown to be free —
+            // but it is not contention either, and returning null here made the two
+            // indistinguishable. AcquireLayoutLock reads every null as "another run holds the
+            // layout", so an unavailable or read-only %LOCALAPPDATA% was reported instantly as
+            // a collision that had lasted the full timeout, naming an owner that never existed
+            // and hiding the storage error. The reclamation path still wants null — it treats
+            // "cannot be shown free" as live and leaves the registration alone — so this is
+            // thrown rather than returned, and caught back into null there.
+            throw new LockSetupException(LockDirectory, ex);
         }
 
         var acquired = new List<FileStream>();
@@ -1176,8 +1207,24 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
         // No wait: a held lock means a live run, and the correct response is to leave its
         // registration alone immediately, not to queue behind it.
-        var held = TryAcquireAllLocks(
-            layoutPath, owner, TimeSpan.Zero, TimeSpan.Zero, out _);
+        //
+        // A setup failure is folded back into the same "cannot proceed" answer on purpose.
+        // This path only ever decides whether to leave another run's registration alone, and
+        // the conservative reading is correct for it: if the lock directory is unusable, this
+        // run cannot show the layout is free, so it must not reclaim. AcquireLayoutLock wants
+        // the opposite — there the fault is fatal and must be reported as itself — which is
+        // why the distinction is drawn by the exception and resolved per caller rather than
+        // collapsed inside TryAcquireAllLocks.
+        List<FileStream>? held;
+        try
+        {
+            held = TryAcquireAllLocks(
+                layoutPath, owner, TimeSpan.Zero, TimeSpan.Zero, out _);
+        }
+        catch (LockSetupException)
+        {
+            return null;
+        }
 
         return held is null ? null : new ReclamationLease(held);
     }

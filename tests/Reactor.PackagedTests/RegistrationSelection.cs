@@ -150,6 +150,27 @@ internal static class RegistrationSelection
                 : RegistrationDisposition.FailConflicting;
         }
 
+        // Legacy same-layout registration: a different name over *our own* layout directory.
+        // Deliberately not gated on isLayoutLive, and the omission is load-bearing rather than
+        // an oversight.
+        //
+        // By the time classification runs this process already holds the layout lock —
+        // AcquireLayoutLock precedes RemoveExistingRegistrations — and the liveness probe is
+        // acquisition-based: it reports "live" exactly when the lock cannot be taken, which our
+        // own held handle guarantees. Adding `&& !isLayoutLive(...)` here would therefore gate
+        // the branch on a predicate that is always false at this point, turning the migration
+        // of pre-derivation registrations into dead code. The_Liveness_Probe_Counts_This_Runs_
+        // Own_Lock_As_Live pins that, so the gate cannot be added back by inspection.
+        //
+        // The residual risk is real but unreachable by any lock-based test: a runner from
+        // before identity derivation existed participates in no lock protocol, so it holds no
+        // lock and no probe can observe it. Detecting it needs process inspection — the image
+        // path under the layout directory, which OrphanedHostSweep does for the E2E tier and
+        // this tier has no equivalent of. It is also self-limiting: for a pre-derivation and a
+        // post-derivation runner to be live over one layout, that build output must have been
+        // rebuilt in place beneath a running host, which already overwrote its binaries and
+        // manifest. And unregistering does not terminate a process, so the consequence stops
+        // short of the cross-worktree kill this file's other rules exist to prevent.
         if (WorktreeIdentity.IsSameDirectory(package.InstalledPath, layoutDir))
             return RegistrationDisposition.RemoveContending;
 
