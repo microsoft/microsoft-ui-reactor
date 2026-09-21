@@ -562,7 +562,10 @@ internal static class ScreenshotCapture
     /// </summary>
     /// <remarks>
     /// Coordinates may be zero or negative — a monitor left of or above the primary has a
-    /// negative origin — so this validates only that both parts are finite numbers.
+    /// negative origin — so this validates that both parts are finite numbers within the
+    /// range a window position can actually represent. An oversized-but-finite value is
+    /// rejected for the same reason the CLI parser rejects it: the downstream
+    /// DIP→physical conversion overflows and the window lands off-screen.
     /// Malformed input degrades to OS placement rather than throwing: a mistyped
     /// environment variable should not abort a 200-screenshot run, and the resulting
     /// images differ visibly in scale if the origin silently failed to apply.
@@ -573,15 +576,34 @@ internal static class ScreenshotCapture
 
         var parts = raw.Split(',', StringSplitOptions.TrimEntries);
         if (parts.Length != 2) return string.Empty;
-        if (!double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
-            !double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
-            !double.IsFinite(x) || !double.IsFinite(y))
-        {
+        if (!TryParseCoordinate(parts[0], out var x) || !TryParseCoordinate(parts[1], out var y))
             return string.Empty;
-        }
 
         return $" --x {x.ToString(CultureInfo.InvariantCulture)} --y {y.ToString(CultureInfo.InvariantCulture)}";
     }
+
+    /// <summary>
+    /// Mirrors the CLI parser's coordinate rule: finite, and small enough that the
+    /// DIP→physical conversion at placement time cannot overflow.
+    /// </summary>
+    private static bool TryParseCoordinate(string raw, out double value)
+    {
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            return false;
+        if (!double.IsFinite(value) || Math.Abs(value) > MaxWindowCoordinateDip)
+        {
+            value = 0;
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Matches <c>DevtoolsCliParser</c>'s bound; see the constant there for the
+    /// overflow this prevents. Duplicated rather than shared because
+    /// <c>Reactor.Cli</c> does not reference the parser's internals.
+    /// </summary>
+    private const double MaxWindowCoordinateDip = 65_536;
 
     /// <summary>
     /// Assembles the full <c>dotnet run</c> command line for a doc app's capture process.

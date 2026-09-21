@@ -286,11 +286,25 @@ internal static class DevtoolsCliParser
     }
 
     /// <summary>
+    /// The largest DIP magnitude accepted for a window origin. Chosen so the value
+    /// survives the downstream conversion rather than to model any real display:
+    /// <c>ReactorWindow.DipToPhysicalPoint</c> computes <c>dip * dpi / 96</c> and casts
+    /// the result to <c>int</c>. A merely-finite input does not survive that —
+    /// <c>1e308 * 144 / 96</c> overflows to infinity and the cast saturates to
+    /// <c>int.MaxValue</c>, moving the window to the far edge of the coordinate space
+    /// where capture fails. At 500% scaling this bound still converts to ±327,680
+    /// physical pixels, comfortably inside <c>int</c>, while being orders of magnitude
+    /// larger than any real multi-monitor arrangement.
+    /// </summary>
+    private const double MaxWindowCoordinateDip = 65_536;
+
+    /// <summary>
     /// Reads a finite DIP coordinate following <paramref name="flag"/>. Unlike
     /// <see cref="ParseDimension"/> this accepts zero and negative values, which
     /// are ordinary virtual-desktop coordinates for a monitor positioned at or
-    /// left of / above the primary. Only non-finite input is rejected, since it
-    /// would reach the window placement path as garbage.
+    /// left of / above the primary. Values that are non-finite, or finite but too
+    /// large to convert to a physical pixel position, are rejected so the caller
+    /// falls back to OS placement instead of flinging the window off-screen.
     /// </summary>
     private static double? ParseCoordinate(string[] args, string flag)
     {
@@ -298,7 +312,8 @@ internal static class DevtoolsCliParser
         if (idx < 0 || idx + 1 >= args.Length) return null;
         if (!double.TryParse(args[idx + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
             return null;
-        return double.IsFinite(value) ? value : null;
+        if (!double.IsFinite(value) || Math.Abs(value) > MaxWindowCoordinateDip) return null;
+        return value;
     }
 
     private static (DevtoolsSubverb Subverb, int TrailingArgStart) ParseSubverbAfter(string[] args, int devtoolsIdx)

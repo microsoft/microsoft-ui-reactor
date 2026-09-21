@@ -58,9 +58,24 @@ public class CaptureOriginTests
     [InlineData("NaN,0")]
     [InlineData("0,Infinity")]
     [InlineData(",")]
+    // Finite but unrepresentable: the downstream DIP→physical conversion overflows
+    // and the window is flung to the edge of the coordinate space. The env-var path
+    // must reject these exactly as the CLI parser does, or the two disagree about
+    // what a valid origin is.
+    [InlineData("1e308,0")]
+    [InlineData("0,-1e308")]
+    [InlineData("70000,0")]
     public void MalformedOrigin_FallsBackToOsPlacement(string raw)
     {
         Assert.Equal(string.Empty, ScreenshotCapture.BuildCaptureOriginArgs(raw));
+    }
+
+    [Theory]
+    [InlineData("65536,0", " --x 65536 --y 0")]
+    [InlineData("7680,-1440", " --x 7680 --y -1440")]
+    public void OriginsWithinRepresentableRange_AreAccepted(string raw, string expected)
+    {
+        Assert.Equal(expected, ScreenshotCapture.BuildCaptureOriginArgs(raw));
     }
 
     // The flags are machine-facing. Under a comma-decimal culture a naive

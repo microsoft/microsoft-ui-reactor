@@ -93,6 +93,33 @@ public class CliFlagParsingTests
         Assert.Null(opts.WindowX);
     }
 
+    // Finite is not sufficient. ReactorWindow.DipToPhysicalPoint computes
+    // dip * dpi / 96 and casts to int; 1e308 * 144 / 96 overflows to infinity and
+    // the cast saturates to int.MaxValue, so the window is moved to the far edge
+    // of the coordinate space and capture fails. Measured, not assumed.
+    [Theory]
+    [InlineData("1e308")]
+    [InlineData("-1e308")]
+    [InlineData("70000")]
+    [InlineData("-70000")]
+    public void X_RejectsFiniteButUnrepresentableCoordinates(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--x", value]);
+        Assert.Null(opts.WindowX);
+    }
+
+    // The bound must not shut out real multi-monitor layouts: a 4-wide 4K array
+    // reaches ~7,680 DIPs, well inside it.
+    [Theory]
+    [InlineData("65536")]
+    [InlineData("-65536")]
+    [InlineData("7680")]
+    public void X_AcceptsCoordinatesWithinRepresentableRange(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--x", value]);
+        Assert.NotNull(opts.WindowX);
+    }
+
     [Fact]
     public void XAndY_DefaultToNullWhenAbsent()
     {
