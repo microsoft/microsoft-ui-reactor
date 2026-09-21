@@ -251,6 +251,33 @@ public class ReactorAppStaticHelperTests
             }
         }
 
+        // OpenWindow validates its spec before emitting, so a spec that is about
+        // to be rejected cannot burn the latch and silence the next window that
+        // legitimately should report. This pins the ordering headlessly: an
+        // invalid spec throws from Validate(), and the latch must survive.
+        [Fact]
+        public void InvalidSpec_RejectedBeforeNotice_LeavesLatchUnconsumed()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+
+            var invalid = new WindowSpec { Title = "Bad", Width = -1 };
+            Assert.ThrowsAny<ArgumentException>(() => invalid.Validate());
+
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                // The next well-formed sized window must still get the notice.
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 800, height: 600);
+                Assert.Contains("[reactor]", sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
         // Half-specified sizes are a supported shape (spec 036 §12.2a): the
         // declared axis applies and the other takes the OS extent. That is still
         // an explicit size, so it must notify.

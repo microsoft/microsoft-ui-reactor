@@ -705,6 +705,12 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(root);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
+        // Validate before the notice so an invalid spec cannot consume the
+        // one-shot latch and then throw, silencing the next window that would
+        // legitimately have reported. The Run(WindowSpec) overloads order it the
+        // same way; ReactorWindow's constructor validates again, which is
+        // idempotent and already the existing pattern.
+        spec.Validate();
         EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
         return OpenWindowCore(spec, root, renderFunc: null, configure: configure);
     }
@@ -723,6 +729,9 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(render);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
+        // See the Func<Component> overload above: validate first so a rejected
+        // spec cannot burn the notice latch.
+        spec.Validate();
         EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
         return OpenWindowCore(spec, rootFactory: null, render, configure: configure);
     }
