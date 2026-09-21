@@ -33,10 +33,9 @@ public class WinFormsTestSession
 
     public static void Init(object? context = null)
     {
-        _refCount++;
-
         if (_app != null)
         {
+            _refCount++;
             Console.WriteLine($"WinForms session already active (ref {_refCount}), reusing.");
             return;
         }
@@ -63,6 +62,11 @@ public class WinFormsTestSession
             SessionInteractivityGuard.RecheckAfterFailure("WinFormsTestSession bootstrap");
             throw;
         }
+
+        // Counted only on success. See TestSession.AssemblyInit for why an increment taken
+        // before the work leaks: MSTest does not run a class's cleanup when its initialize
+        // threw, so the count never returns to zero and the host and its lease outlive the run.
+        _refCount++;
     }
 
     public static void Cleanup()

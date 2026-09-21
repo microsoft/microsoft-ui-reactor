@@ -36,7 +36,11 @@ internal static class OrphanedHostSweep
     /// <param name="ExecutablePath">
     /// Full path to the running image, or <see langword="null"/> when it could not be read.
     /// </param>
-    internal readonly record struct Candidate(int Pid, string? ExecutablePath);
+    /// <param name="SessionId">
+    /// Terminal-services session the process belongs to, or <see langword="null"/> when it
+    /// could not be read.
+    /// </param>
+    internal readonly record struct Candidate(int Pid, string? ExecutablePath, int? SessionId);
 
     /// <summary>Whether a run may sweep, must skip, or could not be admitted at all.</summary>
     /// <remarks>
@@ -60,7 +64,8 @@ internal static class OrphanedHostSweep
     }
 
     /// <summary>
-    /// Selects the candidates that belong to the build at <paramref name="ourExePath"/>.
+    /// Selects the candidates that belong to the build at <paramref name="ourExePath"/> and run
+    /// in session <paramref name="ourSessionId"/>.
     /// </summary>
     /// <remarks>
     /// <para><b>Fails closed.</b> A candidate whose path could not be read is left alone rather
@@ -70,16 +75,28 @@ internal static class OrphanedHostSweep
     /// cross-checkout kill this exists to prevent. The cost of a miss is one stale process,
     /// which does not affect the run that follows: the session binds to the PID and HWND of
     /// the host it launches itself.</para>
+    /// <para><b>Scoped to one session, because the liveness leases are not machine-wide.</b>
+    /// <see cref="Process.GetProcessesByName(string)"/> enumerates every session on the
+    /// machine, but <see cref="ClaimDirectory"/> lives under the current user's
+    /// <c>%LOCALAPPDATA%</c>. A host belonging to a different Windows user therefore has its
+    /// lease in a namespace this run cannot see, so it presents exactly as an orphan does —
+    /// right image, no live sibling — and an elevated run has the rights to act on that
+    /// mistake. Path scoping does not help: the other user may be running the very same build
+    /// output. Comparing sessions restores the invariant the lease depends on, because a
+    /// session belongs to one user and our own orphans are always in ours: this process
+    /// launched them. A candidate whose session cannot be read is left alone for the same
+    /// reason an unreadable path is.</para>
     /// </remarks>
     internal static IEnumerable<Candidate> SelectOurs(
-        IEnumerable<Candidate> candidates, string ourExePath)
+        IEnumerable<Candidate> candidates, string ourExePath, int ourSessionId)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         if (string.IsNullOrWhiteSpace(ourExePath))
             throw new ArgumentException("Our executable path must be non-empty.", nameof(ourExePath));
 
         var ours = NormalizePath(ourExePath);
-        return candidates.Where(c => IsSameImage(c.ExecutablePath, ours));
+        return candidates.Where(c =>
+            c.SessionId == ourSessionId && IsSameImage(c.ExecutablePath, ours));
     }
 
     /// <summary>
@@ -234,6 +251,11 @@ internal static class OrphanedHostSweep
     /// </exception>
     internal static void KillOrphansOf(string processName, string ourExePath, string label)
     {
+        // Before anything is keyed off this path. Everything below — the gate, the lease, the
+        // sibling probe — is named by KeyFor(ourExePath), and KeyFor is only single-valued for
+        // a path the filesystem can resolve. See RequireResolvableImage.
+        RequireResolvableImage(ourExePath, label);
+
         // Held across admission *and* the process snapshot below, which is what makes the two
         // one step. See TryEnterStartupGate for why they cannot be separated.
         using var gate = TryEnterStartupGate(ourExePath, StartupGateTimeout);
@@ -279,11 +301,13 @@ internal static class OrphanedHostSweep
 
         var processes = Process.GetProcessesByName(processName);
 
+        var ourSessionId = Process.GetCurrentProcess().SessionId;
+
         var candidates = processes
-            .Select(p => new Candidate(SafePid(p), TryGetExecutablePath(p)))
+            .Select(p => new Candidate(SafePid(p), TryGetExecutablePath(p), SafeSessionId(p)))
             .ToList();
 
-        var doomed = SelectOurs(candidates, ourExePath).Select(c => c.Pid).ToHashSet();
+        var doomed = SelectOurs(candidates, ourExePath, ourSessionId).Select(c => c.Pid).ToHashSet();
 
         foreach (var proc in processes)
         {
@@ -694,12 +718,85 @@ internal static class OrphanedHostSweep
         }
     }
 
+    /// <summary>
+    /// Throws unless the filesystem can resolve <paramref name="ourExePath"/>, which is the
+    /// precondition for this run's coordination key being the same one every other run of this
+    /// image derives.
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="NormalizePath"/> falls back to the caller's own spelling when the
+    /// filesystem cannot answer. For <see cref="IsSameImage"/> that is merely weaker, and
+    /// weaker in the safe direction: an unmatched candidate is a skipped kill. For
+    /// <see cref="KeyFor"/> it is not weaker, it is <em>unsound</em> — the fallback makes the
+    /// key a function of how the caller happened to spell the path. Two runs of one build
+    /// output, one resolving and one falling back, take different gate and lease files, so each
+    /// enumerates no sibling, each is admitted, and each kills the other's live host. That is
+    /// the cross-checkout kill this class exists to prevent, arrived at through the mechanism
+    /// meant to prevent it.</para>
+    /// <para>So the destructive path demands the strong answer rather than accepting the weak
+    /// one. This costs nothing in practice: the argument is the host executable this run is
+    /// about to launch and keep running, so it exists and resolves. Refusing is also the
+    /// conservative half of the trade — the alternative is a run that sweeps while unable to
+    /// agree with anyone about what it is sweeping. It matches how an unwritable lease is
+    /// already treated a few lines below, and for the same reason: a run that cannot be
+    /// coordinated with must not perform an irreversible action.</para>
+    /// <para>Deliberately not folded into <see cref="KeyFor"/>. Naming a gate or lease file for
+    /// a path that does not exist is perfectly well defined and is what the headless tests do;
+    /// it is only <em>sweeping</em> on such a key that is unsafe, so the demand belongs at the
+    /// destructive entry point.</para>
+    /// </remarks>
+    internal static void RequireResolvableImage(string ourExePath, string label)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ourExePath);
+
+        string? resolved = null;
+        try
+        {
+            resolved = FinalPath.TryResolve(Path.GetFullPath(ourExePath));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        {
+            // Fall through to the throw below with the same message: why the filesystem could
+            // not answer does not change what this run is allowed to do.
+        }
+
+        if (resolved is not null) return;
+
+        throw new InvalidOperationException(
+            $"Could not resolve this checkout's {label} at '{ourExePath}' through the " +
+            "filesystem, so the key naming this run's startup gate and liveness lease would " +
+            "fall back to this caller's spelling of the path. Another run reaching the same " +
+            "build output by a different spelling would derive a different key, see no live " +
+            "sibling, and kill this run's host mid-test. Refusing to sweep instead. Check that " +
+            "the path exists and is readable by this user.");
+    }
+
     private static int SafePid(Process proc)
     {
         try { return proc.Id; }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
             return -1;
+        }
+    }
+
+    /// <summary>
+    /// The terminal-services session a process belongs to, or <see langword="null"/> when it
+    /// cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// Null rather than a sentinel number, so an unreadable session can never accidentally
+    /// equal a real one. <see cref="SelectOurs"/> leaves such a candidate alone, which is the
+    /// same fail-closed treatment an unreadable path gets and for the same reason: our own
+    /// orphans read back fine, because this process launched them.
+    /// </remarks>
+    private static int? SafeSessionId(Process proc)
+    {
+        try { return proc.SessionId; }
+        catch (Exception ex) when (
+            ex is InvalidOperationException or NotSupportedException or Win32Exception)
+        {
+            return null;
         }
     }
 
@@ -741,10 +838,15 @@ internal static class OrphanedHostSweep
     /// output — a linked <c>C:\src</c>, say — is the realistic way one host acquires two
     /// spellings, and it too survives string normalisation. So the filesystem is asked.</para>
     /// <para>Falls back to the textual form when the query cannot be answered, which is the
-    /// case that matters for a candidate process whose image has since been deleted. That is
-    /// strictly weaker but never wrong in the dangerous direction: an unresolved path can make
-    /// this fail to recognise a sibling it should have matched, and failing to match only ever
-    /// costs a skipped sweep, never an extra kill.</para>
+    /// case that matters for a candidate process whose image has since been deleted. For
+    /// <see cref="IsSameImage"/> that is strictly weaker but never wrong in the dangerous
+    /// direction: an unresolved path can make this fail to recognise a sibling it should have
+    /// matched, and failing to match only ever costs a skipped sweep, never an extra kill.</para>
+    /// <para><b>The same fallback is not safe for <see cref="KeyFor"/>,</b> where it would make
+    /// the key depend on the caller's spelling rather than on the file, and two runs that
+    /// disagree about the key sweep each other. It is kept here rather than split because the
+    /// candidate side genuinely needs it, and the destructive path instead refuses to run at
+    /// all unless our own image resolves — see <see cref="RequireResolvableImage"/>.</para>
     /// </remarks>
     private static string NormalizePath(string path)
     {

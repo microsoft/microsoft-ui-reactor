@@ -46,10 +46,9 @@ public class TestSession
     /// </summary>
     public static void AssemblyInit(object? context = null)
     {
-        _refCount++;
-
         if (_app != null)
         {
+            _refCount++;
             Console.WriteLine($"Session already active (ref {_refCount}), reusing.");
             return;
         }
@@ -79,6 +78,14 @@ public class TestSession
             SessionInteractivityGuard.RecheckAfterFailure("TestSession bootstrap");
             throw;
         }
+
+        // Counted only here, because every statement above can throw and MSTest does not run a
+        // class's cleanup when its initialize failed. An increment taken before the work is
+        // therefore never balanced: the next class that initializes successfully sees a count
+        // of two, its own cleanup takes it to one rather than zero, and the host process and
+        // its liveness lease survive the whole assembly. Leaking the lease is the worse half —
+        // it keeps every concurrent run of this checkout deferring its sweep indefinitely.
+        _refCount++;
     }
 
     /// <summary>

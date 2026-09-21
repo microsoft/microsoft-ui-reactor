@@ -220,6 +220,20 @@ Conventions for contributors:
   whether a live process is a sibling derive from it, so one build output reachable by two
   spellings previously took two lease files, left each run seeing no sibling, and admitted both
   to sweep — each then killing the other's running host.
+- The orphaned-host sweep now only considers processes in this run's own Windows session, and
+  refuses to run at all when this checkout's own executable cannot be resolved. Process
+  enumeration is machine-wide while the liveness leases are per-user files, so another user
+  running the same build output had no lease this run could see and so presented exactly as an
+  orphan: right image, no live sibling. Path scoping cannot separate them, because it is the
+  same path. Separately, the resolution fallback that keeps the sibling check safe is not safe
+  for the key naming the gate and lease: falling back to the caller's spelling makes the key a
+  function of how the path was written, so two runs of one build output could again derive
+  different keys, each see no sibling, and each kill the other's host.
+- The E2E suite's session reference count is now taken only once bootstrap has succeeded.
+  MSTest does not run a class's cleanup when its initialize threw, so a count taken before the
+  work leaked on every failed bootstrap: the count never returned to zero, and the host process
+  and its liveness lease outlived the run — leaving the next run to defer to a sibling that was
+  no longer there.
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never

@@ -36,7 +36,19 @@ public class OrphanedHostSweepTests
     private static string Probe(string name) =>
         Path.Join(ClaimRoot, name, "Reactor.AppTests.Host.exe");
 
-    private static OrphanedHostSweep.Candidate At(int pid, string? path) => new(pid, path);
+    private static OrphanedHostSweep.Candidate At(int pid, string? path) =>
+        new(pid, path, OurSession);
+
+    /// <summary>
+    /// The session the synthetic candidates are stamped with, and the one passed as "ours".
+    /// </summary>
+    /// <remarks>
+    /// A literal rather than this process's real session id. The sweep only ever compares the
+    /// two for equality, so a fixed pair exercises the comparison exactly while keeping the
+    /// tests independent of how the suite was launched — an interactive session, a service, or
+    /// a CI agent all number differently.
+    /// </remarks>
+    private const int OurSession = 7;
 
     /// <summary>
     /// The cleanup seam has to actually remove the file, and has to leave every claim outside
@@ -177,7 +189,7 @@ public class OrphanedHostSweepTests
     public void A_Host_From_Another_Checkout_Is_Not_Swept()
     {
         var selected = OrphanedHostSweep
-            .SelectOurs([At(100, Ours), At(200, Theirs)], Ours)
+            .SelectOurs([At(100, Ours), At(200, Theirs)], Ours, OurSession)
             .Select(c => c.Pid)
             .ToList();
 
@@ -193,7 +205,7 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void Our_Own_Orphan_Is_Still_Swept()
     {
-        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, Ours)], Ours).Count());
+        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, Ours)], Ours, OurSession).Count());
     }
 
     /// <summary>
@@ -207,9 +219,9 @@ public class OrphanedHostSweepTests
         var unnormalized = Path.Join(Path.GetTempPath(), "checkout-a", ".", "Reactor.AppTests.Host.exe");
         var cased = Ours.ToUpperInvariant();
 
-        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, unnormalized)], Ours).Count(),
+        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, unnormalized)], Ours, OurSession).Count(),
             "A redundant path segment names the same image.");
-        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, cased)], Ours).Count(),
+        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, cased)], Ours, OurSession).Count(),
             "Windows paths are case-insensitive.");
     }
 
@@ -256,7 +268,7 @@ public class OrphanedHostSweepTests
             "Two spellings of one image took different lease files, so neither run can see the " +
             "other as a live sibling and each is admitted to sweep the other's host.");
 
-        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, aliased)], exe).Count(),
+        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(100, aliased)], exe, OurSession).Count(),
             "A live host reached by an alias was not recognised as our own image, so it " +
             "survives a sweep that should have reclaimed it.");
     }
@@ -268,7 +280,89 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void A_Candidate_With_An_Unreadable_Path_Is_Left_Alone()
     {
-        Assert.AreEqual(0, OrphanedHostSweep.SelectOurs([At(100, null), At(200, "  ")], Ours).Count());
+        Assert.AreEqual(0, OrphanedHostSweep.SelectOurs([At(100, null), At(200, "  ")], Ours, OurSession).Count());
+    }
+
+    /// <summary>
+    /// A host belonging to another Windows user is not an orphan, however exactly its image
+    /// path matches.
+    /// </summary>
+    /// <remarks>
+    /// <para>Process enumeration is machine-wide, but the liveness leases are per-user files
+    /// under <c>%LOCALAPPDATA%</c>. Another user running this same build output therefore
+    /// registers a lease this run cannot see, and so presents exactly as an orphan does: right
+    /// image, no live sibling. Path scoping cannot separate them — it is the same path — so
+    /// without the session comparison an elevated run has both the mistaken verdict and the
+    /// rights to act on it.</para>
+    /// <para>The image path is deliberately identical to ours here. Using a different one
+    /// would let the existing path check carry the assertion and the test would still pass
+    /// with session scoping removed.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Host_In_Another_Session_Is_Not_Swept()
+    {
+        var otherUser = new OrphanedHostSweep.Candidate(300, Ours, OurSession + 1);
+
+        Assert.AreEqual(0, OrphanedHostSweep.SelectOurs([otherUser], Ours, OurSession).Count(),
+            "A process running our image in a different session belongs to a different user, " +
+            "whose lease is in a namespace this run cannot read.");
+
+        Assert.AreEqual(1, OrphanedHostSweep.SelectOurs([At(300, Ours)], Ours, OurSession).Count(),
+            "Control: the same candidate in our own session is still swept, so the assertion " +
+            "above is about the session and not about the path.");
+    }
+
+    /// <summary>
+    /// A candidate whose session could not be read is left alone, for the same reason an
+    /// unreadable path is.
+    /// </summary>
+    /// <remarks>
+    /// Null is not a session number, so it can never coincide with a real one. Our own orphans
+    /// always read back — this process launched them — so the only candidates this excludes are
+    /// ones there was never positive evidence for.
+    /// </remarks>
+    [TestMethod]
+    public void A_Candidate_With_An_Unreadable_Session_Is_Left_Alone()
+    {
+        var unknown = new OrphanedHostSweep.Candidate(400, Ours, null);
+
+        Assert.AreEqual(0, OrphanedHostSweep.SelectOurs([unknown], Ours, OurSession).Count());
+    }
+
+    /// <summary>
+    /// The destructive path refuses to run at all when our own image cannot be resolved through
+    /// the filesystem.
+    /// </summary>
+    /// <remarks>
+    /// <para>Everything the sweep coordinates on — the startup gate, the liveness lease, the
+    /// sibling probe — is named by a digest of this path, and that digest is only a function of
+    /// the <em>file</em> while the filesystem can be asked. When it cannot, the key silently
+    /// becomes a function of the caller's spelling instead. Two runs of one build output that
+    /// disagree about the key take different gate and lease files, so each sees no sibling,
+    /// each is admitted, and each kills the other's live host.</para>
+    /// <para>Unlike the sibling predicate, there is no safe weaker answer available here, so
+    /// the sweep declines rather than proceeding on a key nobody else will derive.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Sweep_Is_Refused_When_Our_Own_Image_Cannot_Be_Resolved()
+    {
+        var absent = Path.Join(ClaimRoot, "never-created", "Reactor.AppTests.Host.exe");
+        Assert.IsFalse(File.Exists(absent), "Control: the path must not exist.");
+
+        var ex = Assert.ThrowsExactly<InvalidOperationException>(
+            () => OrphanedHostSweep.RequireResolvableImage(absent, "Host app"));
+
+        StringAssert.Contains(ex.Message, absent,
+            "The refusal has to name the path, or nobody can act on it.");
+
+        // The positive control. A real file resolves, so the guard is discriminating between
+        // resolvable and unresolvable rather than refusing everything.
+        var dir = Path.Join(ClaimRoot, "resolvable-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(dir);
+        var present = Path.Join(dir, "Reactor.AppTests.Host.exe");
+        File.WriteAllText(present, string.Empty);
+
+        OrphanedHostSweep.RequireResolvableImage(present, "Host app");
     }
 
     /// <summary>
@@ -279,7 +373,7 @@ public class OrphanedHostSweepTests
     public void An_Empty_Executable_Path_Is_Rejected()
     {
         Assert.ThrowsExactly<ArgumentException>(
-            () => OrphanedHostSweep.SelectOurs([At(100, Ours)], "  ").ToList());
+            () => OrphanedHostSweep.SelectOurs([At(100, Ours)], "  ", OurSession).ToList());
     }
     /// <summary>
     /// Path scoping alone does not separate two runs of the <em>same</em> checkout: their hosts
@@ -472,7 +566,7 @@ public class OrphanedHostSweepTests
         // what makes disagreeing about them a defect rather than a preference.
         Assert.AreEqual(
             1,
-            OrphanedHostSweep.SelectOurs([new OrphanedHostSweep.Candidate(1, viaDot)], plain).Count(),
+            OrphanedHostSweep.SelectOurs([new OrphanedHostSweep.Candidate(1, viaDot, OurSession)], plain, OurSession).Count(),
             "Precondition: the sweep must already consider these one image.");
 
         using var foreign = StageForeignLease(plain);
