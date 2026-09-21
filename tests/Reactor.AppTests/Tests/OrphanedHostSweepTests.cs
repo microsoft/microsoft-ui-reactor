@@ -405,13 +405,13 @@ public class OrphanedHostSweepTests
         {
             var parents = OrphanedHostSweep.SnapshotParentPids();
 
-            Assert.IsTrue(parents.ContainsKey(child.Id),
+            Assert.IsTrue(parents.TryGetValue(child.Id, out var parentPid),
                 "Precondition: the snapshot must contain the child, or the probe below is " +
                 "answering from a missing entry rather than from the process table.");
 
             Assert.AreEqual(
                 Environment.ProcessId,
-                parents[child.Id],
+                parentPid,
                 "Precondition: this test process must really be the child's parent.");
 
             Assert.IsTrue(
