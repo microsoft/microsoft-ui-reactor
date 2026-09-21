@@ -155,7 +155,7 @@ For quick experiments, skip the class entirely. Pass a lambda to
 //         TextBlock($"Count: {n}").FontSize(20),
 //         Button("+1", () => setN(n + 1))
 //     ).Padding(24);
-// }, width: 400, height: 300);
+// });
 ```
 
 This is useful for throwaway prototypes or testing a single interaction.

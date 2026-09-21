@@ -47,7 +47,7 @@ class DevToolingApp : Component
 //         TextBlock($"Count: {n}").FontSize(20),
 //         Button("+1", () => setN(n + 1))
 //     ).Padding(24);
-// }, width: 400, height: 300);
+// });
 // </snippet:function-entry>
 
 // <snippet:iteration-demo>

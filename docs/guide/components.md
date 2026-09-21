@@ -289,7 +289,7 @@ ReactorApp.Run("Title", ctx =>
     var (n, setN) = ctx.UseState(0);
     return Button($"Count: {n}", () => setN(n + 1))
         .AutomationName("Increment count");
-}, width: 400, height: 300);
+});
 ```
 
 ## Composition
