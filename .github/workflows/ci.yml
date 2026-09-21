@@ -305,15 +305,29 @@ jobs:
       # older than the 2026-09-09 merge), and continuity only matters where several agents share
       # a desktop, which a single-checkout runner never does. When a release does ship the verb,
       # pin it above and set REACTOR_E2E_REQUIRE_UI_YIELD=1 to turn the skip into an assertion.
+      #
+      # `ui yield` is a sound sentinel for the whole mechanism rather than one verb of it: #767 is
+      # what added UiYieldCommand, alongside the desktop lock, scheduler and participant registry
+      # and the coordination call in every other `ui` verb. A build without the verb has no turn
+      # arbitration at all, so the probe answers "is any of this in force?" and not merely "can we
+      # yield?".
       - name: Record winapp UI-turn capability
         continue-on-error: true
         shell: pwsh
         run: |
-          winapp --version
+          # $LASTEXITCODE must be read with no pipeline-stopping cmdlet in between: piping a
+          # native command into `Select-Object -First 1` stops the pipeline early and leaves
+          # $LASTEXITCODE *empty*, which compares unequal to 0 and would report a winapp that
+          # resolved perfectly well as missing.
+          $versionLines = winapp --version 2>&1
+          $version = if ($LASTEXITCODE -eq 0) { $versionLines | Select-Object -First 1 }
+                     else { "<winapp did not resolve>" }
           winapp ui yield --help *> $null
           $present = ($LASTEXITCODE -eq 0)
+          Write-Host "winapp version: $version"
           Write-Host "winapp 'ui yield' verb present: $present"
-          "winapp \`ui yield\` verb present: **$present**" >> $env:GITHUB_STEP_SUMMARY
+          "winapp version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
+          "winapp ``ui yield`` verb present (winappCli#767): **$present**" >> $env:GITHUB_STEP_SUMMARY
 
       # The E2E suite launches Reactor.AppTests.Host.exe and drives it cross-process.
       # The Host is a ProjectReference of the test project, so building the test

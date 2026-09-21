@@ -801,6 +801,21 @@ runs as evidence.
 
 ### The suite runs as one named winapp workflow
 
+> **This section describes a winapp that carries [winappCli#767][winapp767], and nothing in it is
+> in force without one.** That PR *introduced* interactive-desktop coordination wholesale — the
+> lock, the scheduler, the participant registry, the `ui yield` verb, and the coordination call in
+> every `ui` verb. It merged **2026-09-09**, and the newest published release is **v0.6.1
+> (2026-08-19)**, so every release to date predates it. `setup-WinAppCli` downloads
+> `releases/download/<tag>/winappcli-<arch>.zip`, which means CI's `latest` resolves to a build
+> with **no turn arbitration at all** — not merely one missing `ui yield`. Against such a build
+> the stamped variable is simply an unread environment variable: inert, harmless, and
+> forward-compatible, so this wiring starts working the day a release carries #767 with no change
+> here. The E2E job records which winapp it resolved and whether the verb is present in its step
+> summary, so this is an observed fact per run rather than an assumption; `ui yield` is a sound
+> sentinel for the whole subsystem precisely because #767 is what added it.
+
+[winapp767]: https://github.com/microsoft/winappCli/pull/767
+
 Every `winapp ui` mutation takes a turn on the interactive desktop, so two agents driving UI at
 once are serialized rather than interleaved. That arbitration is unconditional and cannot be
 switched off. What *is* opt-in is **continuity**: an anonymous `winapp ui` command drops the

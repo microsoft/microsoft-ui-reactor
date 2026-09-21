@@ -75,7 +75,12 @@ Conventions for contributors:
   every `winapp ui` child and `AppTestBase` yields the UI turn after any test that used winapp.
   This keeps a concurrent agent from interleaving between a click and the assertion that reads its
   result, which anonymous one-shot commands allow. An ambient `WINAPP_UI_WORKFLOW_ID` is inherited
-  so a harness can group the run with its own calls. See `TESTING.md` §4.
+  so a harness can group the run with its own calls. **Requires a winapp carrying winappCli#767**,
+  which introduced interactive-desktop coordination wholesale (the lock, scheduler, participant
+  registry and `ui yield`); it merged 2026-09-09 and the newest published release, v0.6.1
+  (2026-08-19), predates it. Against an earlier build the stamp is an unread environment variable
+  — inert and harmless — and this wiring becomes effective the day a release carries #767, with no
+  further change here. See `TESTING.md` §4.
 - The packaged selftest tier registers its host under an identity derived from the layout
   directory (`<name>.w<hash>`, with a matching execution alias) instead of the literal name in
   `Package.appxmanifest`, so concurrent checkouts can run it without evicting each other's
