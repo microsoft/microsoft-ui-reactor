@@ -180,19 +180,85 @@ public sealed class WinAppUi
     }
 
     /// <summary>
+    /// Whether the resolved winapp implements <c>ui yield</c> at all, probed once per test
+    /// process and cached.
+    /// </summary>
+    /// <remarks>
+    /// <para>Cooperative UI turns landed whole in winappCli#767, so a build without the verb has
+    /// no turn arbitration to release and every yield is a spawn that can only fail. Asking once
+    /// turns a per-test cost into a per-process one; the probe is forced lazily from
+    /// <see cref="ReleaseUiTurn"/>, so a run that never drives the UI never pays even that.</para>
+    /// <para><see cref="Lazy{T}"/> rather than a plain field because MSTest may run test classes
+    /// in parallel: the default publication mode runs the probe exactly once no matter how many
+    /// threads reach it together, which is the difference between one extra <c>winapp.exe</c> and
+    /// one per worker.</para>
+    /// </remarks>
+    internal static bool SupportsUiYield => YieldVerb.Value;
+
+    private static readonly Lazy<bool> YieldVerb = new(ProbeYieldVerb);
+
+    /// <summary>
+    /// Asks the resolved winapp whether it understands <c>ui yield</c>, as opposed to
+    /// understanding it and refusing this caller.
+    /// </summary>
+    /// <remarks>
+    /// <c>--help</c> for a verb that exists succeeds and never consults the environment, which is
+    /// what makes it a capability probe rather than a yield attempt. The exit code of a real
+    /// <c>ui yield</c> cannot be used here: it is non-zero both for "no such verb" and for "verb
+    /// present, no workflow id reached me", and caching the second as the first would silently
+    /// disable yielding for a whole run precisely when the continuity wiring had broken.
+    /// </remarks>
+    private static bool ProbeYieldVerb()
+    {
+        try
+        {
+            var psi = CreateStartInfo("yield", "--help");
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return false;
+
+            if (!proc.WaitForExit(YieldTimeoutMs))
+            {
+                TryKill(proc);
+                return false;
+            }
+
+            return proc.ExitCode == 0;
+        }
+        // Same narrow set as ReleaseUiTurn: these mean "winapp could not be run here", which is
+        // indistinguishable from the verb being absent as far as the caller is concerned.
+        catch (System.ComponentModel.Win32Exception) { return false; }
+        catch (InvalidOperationException) { return false; }
+        catch (NotSupportedException) { return false; }
+        catch (TypeInitializationException) { return false; }
+    }
+
+    /// <summary>
     /// Releases this workflow's UI turn instead of waiting out the idle grace. Best-effort by
     /// construction: yielding is an optimization that hands the desktop to a waiting agent sooner,
     /// so a failure here must never redden a test that already passed. The turn is released by the
     /// idle grace regardless, making the worst case a short delay rather than a stranded desktop.
     /// </summary>
+    /// <param name="verbPresent">
+    /// Overrides the cached <see cref="SupportsUiYield"/> probe. Injected so the decision to skip
+    /// the spawn is testable without depending on which winapp the machine happens to resolve —
+    /// the regression worth catching is this gate going missing, and an environment-derived oracle
+    /// could not catch it on a machine whose winapp has the verb.
+    /// </param>
     /// <returns>
-    /// winapp's exit code, or <see langword="null"/> if the process could not be run at all.
-    /// Surfaced rather than discarded because it is the one externally observable proof that a
-    /// workflow id reached the child: <c>winapp ui yield</c> exits non-zero when the variable is
-    /// absent and zero when it is present.
+    /// winapp's exit code, or <see langword="null"/> if the process could not be run at all —
+    /// including when the resolved winapp has no such verb, which is the same "nothing was
+    /// released" outcome from the caller's point of view. Surfaced rather than discarded because
+    /// it is the one externally observable proof that a workflow id reached the child:
+    /// <c>winapp ui yield</c> exits non-zero when the variable is absent and zero when it is
+    /// present.
     /// </returns>
-    internal static int? ReleaseUiTurn()
+    internal static int? ReleaseUiTurn(bool? verbPresent = null)
     {
+        // Ahead of RecordInvocation, so a winapp that cannot yield costs neither a process nor a
+        // phantom entry in the per-test spawn metric.
+        if (!(verbPresent ?? SupportsUiYield)) return null;
+
         try
         {
             RecordInvocation();

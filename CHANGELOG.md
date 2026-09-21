@@ -286,6 +286,15 @@ Conventions for contributors:
   caller's own, and an unresolved candidate is no longer matched against a resolved image at
   all — declining costs a skipped sweep, which is the harmless half of that predicate's error
   space.
+- The E2E teardown no longer spawns a `winapp.exe` per UI test to invoke a verb the installed CLI
+  may not have. Cooperative UI turns landed whole in winappCli#767, so a build without `ui yield`
+  has no turn to release and the handoff could only exit on an unknown verb. The verb is now
+  probed once per test process with `winapp ui yield --help` and cached, and the yield is skipped
+  when it is absent. `--help` is the probe rather than a trial yield because a yield exits
+  non-zero both for "no such verb" and for "verb present, no workflow id reached me", and caching
+  the second as the first would disable continuity for the rest of the run precisely when the
+  wiring it exists to exercise had broken. The strict switch is unchanged: with
+  `REACTOR_E2E_REQUIRE_UI_YIELD` set, a missing verb is still a failure rather than a skip.
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never

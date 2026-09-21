@@ -846,6 +846,14 @@ instead, which closes that window.
 the turn in `[TestCleanup]` once a test has actually used winapp — holding it across the much
 longer gaps *between* tests would block a waiting agent for the idle grace after every test.
 
+The yield is also gated on the resolved winapp implementing `ui yield` at all, probed once per
+test process via `winapp ui yield --help` and cached on `WinAppUi.SupportsUiYield`. Against a
+pre-#767 build there is no turn to release, so the handoff would spawn a `winapp.exe` per UI test
+only to have it exit on an unknown verb. `--help` is the probe rather than a real yield because a
+yield's exit code is non-zero both for "no such verb" and for "verb present, no workflow id
+arrived", and caching the second as the first would silently disable continuity exactly when the
+wiring had broken.
+
 An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
 own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp
 rejects an empty or over-long id on every single command, so one of those would fail the entire

@@ -199,32 +199,13 @@ public class WinAppWorkflowIdTests
     /// Whether the resolved winapp understands <c>ui yield</c> at all, as opposed to
     /// understanding it and refusing this caller.
     /// </summary>
-    private static bool YieldVerbExists()
-    {
-        try
-        {
-            var psi = WinAppUi.CreateStartInfo("yield", "--help");
-            psi.RedirectStandardOutput = true;
-            psi.RedirectStandardError = true;
-
-            using var proc = Process.Start(psi);
-            if (proc is null) return false;
-
-            if (!proc.WaitForExit(10_000))
-            {
-                WinAppUi.TryKill(proc);
-                return false;
-            }
-
-            // `--help` for a verb that exists succeeds and never consults the environment, so
-            // this separates "no such verb" from "verb present, caller refused".
-            return proc.ExitCode == 0;
-        }
-        catch (System.ComponentModel.Win32Exception) { return false; }
-        catch (InvalidOperationException) { return false; }
-        catch (NotSupportedException) { return false; }
-        catch (TypeInitializationException) { return false; }
-    }
+    /// <remarks>
+    /// Delegates to the harness rather than probing separately: production now skips the yield
+    /// on a winapp without the verb, so a second probe here could disagree with the one that
+    /// actually governs behaviour, and these gates would then describe a capability the suite
+    /// was not using. Sharing the cache also keeps the whole run to a single probe process.
+    /// </remarks>
+    private static bool YieldVerbExists() => WinAppUi.SupportsUiYield;
 
     private static void RequireYieldVerb()
     {
@@ -326,6 +307,25 @@ public class WinAppWorkflowIdTests
             "The shared teardown did not hand the desktop back after a test that used winapp, " +
             "so every E2E test holds its workflow's idle grace until the next one starts and " +
             "concurrent agents serialise behind it.");
+    }
+
+    [TestMethod]
+    public void ReleaseUiTurn_SkipsTheSpawnWhenWinAppHasNoYieldVerb()
+    {
+        // Environment-independent on purpose. The capability is injected rather than probed so
+        // this measures the gate itself; reading the real winapp would make the assertion agree
+        // with the product for whichever reason the local machine supplies, and would prove
+        // nothing at all on a machine whose winapp does have the verb.
+        var before = WinAppUi.InvocationCount;
+
+        var exit = WinAppUi.ReleaseUiTurn(verbPresent: false);
+
+        Assert.IsNull(exit, "A winapp with no `ui yield` verb reported an exit code, so it was run.");
+        Assert.AreEqual(
+            before,
+            WinAppUi.InvocationCount,
+            "The teardown spawned a winapp.exe to invoke a verb that does not exist, paying a " +
+            "process launch per UI test for a command that can only fail.");
     }
 
     [TestMethod]

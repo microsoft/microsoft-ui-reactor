@@ -53,7 +53,9 @@ internal static class E2ETestCleanup
         WinAppMetrics.Record(name, spawned, seconds);
 
         // Skipped when the test never touched winapp, so a headless test in this assembly doesn't
-        // pay a process spawn to release a turn it never took.
+        // pay a process spawn to release a turn it never took. WinAppUi.ReleaseUiTurn applies the
+        // second gate — a winapp with no `ui yield` verb has no turn to release — so this stays a
+        // question about the finished test rather than about the installed CLI.
         if (spawned > 0)
             (yield ?? (() => WinAppUi.ReleaseUiTurn()))();
     }
