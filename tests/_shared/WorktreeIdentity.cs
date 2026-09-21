@@ -317,8 +317,20 @@ internal static class WorktreeIdentity
     /// recoverable, instead of an eviction, which is not.</para>
     /// <para>Only when both sides resolved. A path the filesystem cannot answer for falls back
     /// to the caller's own spelling, whose case carries no information about what is on disk,
-    /// so an exact comparison there would invent distinctions rather than report them. Those
-    /// comparisons stay case-insensitive.</para>
+    /// so an exact comparison there would invent distinctions rather than report them. When
+    /// <em>neither</em> side resolved both are caller spellings and the comparison stays
+    /// case-insensitive.</para>
+    /// <para><b>A resolved path is never the same directory as an unresolved one.</b> The
+    /// mixed case is not a weaker version of either — it compares the filesystem's own case
+    /// against a spelling the filesystem never confirmed, so the only comparison available is
+    /// the case-insensitive one, and that reopens the eviction the paragraph above closes. It
+    /// is reachable exactly where it costs most: during registration this run's layout exists
+    /// and resolves, while another package's recorded install path may have been deleted or be
+    /// momentarily unreadable, and a foreign directory differing only in case would then be
+    /// judged ours and its registration removed. Refusing to answer yes turns that into
+    /// <c>FailConflicting</c>. The capability given up is matching a recorded path whose
+    /// directory is gone against a live one — which cannot arise for two spellings of the same
+    /// directory, since a directory that resolves for us resolves for the other side too.</para>
     /// </remarks>
     internal static bool IsSameDirectory(string? left, string? right)
     {
@@ -330,10 +342,12 @@ internal static class WorktreeIdentity
             var l = CanonicalizeCore(left);
             var r = CanonicalizeCore(right);
 
+            if (l.Resolved != r.Resolved) return false;
+
             return string.Equals(
                 l.Value,
                 r.Value,
-                l.Resolved && r.Resolved ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+                l.Resolved ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
         {

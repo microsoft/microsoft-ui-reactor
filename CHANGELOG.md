@@ -272,8 +272,20 @@ Conventions for contributors:
   query reports a directory's on-disk case whatever case it is asked with, so comparing the
   resolved spellings exactly still treats two spellings of one directory as equal while
   correctly separating two directories, turning a silent eviction into the conflict refusal the
-  deployment already reports. Paths that cannot be resolved keep the case-insensitive
-  comparison, since the caller's own spelling carries no information about what is on disk.
+  deployment already reports. When neither path resolves both spellings are the caller's own and
+  the comparison stays case-insensitive, but a resolved path is never matched against an
+  unresolved one: that pairing can only be compared case-insensitively and is reachable exactly
+  where it costs most, since during registration this run's layout resolves while a foreign
+  recorded path may have been deleted or be momentarily unreadable.
+- The E2E orphan sweep applies the same rule to executables, in both the kill predicate and the
+  claim key. Two checkouts differing only in case hold two different host binaries, but the
+  predicate folded case and so judged one checkout's live host to be the other's own image, and
+  the gate and lease key folded case and so put two unrelated runs in one claim namespace. Both
+  now preserve the resolved spelling, so the two stop sharing a startup gate and stop reading
+  each other's lease as a sibling. Unresolved paths are still folded, where the spelling is the
+  caller's own, and an unresolved candidate is no longer matched against a resolved image at
+  all — declining costs a skipped sweep, which is the harmless half of that predicate's error
+  space.
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never

@@ -1057,4 +1057,155 @@ public class OrphanedHostSweepTests
             StagedLeases.Clear();
         }
     }
+
+    /// <summary>
+    /// A host belonging to a checkout whose directory differs from ours only in case is not our
+    /// image, and must survive the sweep.
+    /// </summary>
+    /// <remarks>
+    /// <para>The kill predicate used to compare resolved paths case-insensitively, which reads
+    /// as harmless on Windows and is not. Under a case-sensitive parent <c>Repo</c> and
+    /// <c>repo</c> are two checkouts holding two different binaries, and folding case makes one
+    /// of them answer "mine" for the other's live host. Every other condition then agrees by
+    /// construction — same session, and an orphan's launcher is gone — so nothing downstream
+    /// stops the kill.</para>
+    /// <para>The candidate is stamped with our own session and a dead launcher deliberately, so
+    /// the image path is the only thing that can exclude it. Both binaries are really created,
+    /// because the defect lives in the branch where the filesystem <em>does</em> answer: two
+    /// absent paths fall back to their spellings and are still compared case-insensitively, by
+    /// design.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Host_From_A_Checkout_Differing_Only_In_Case_Is_Not_Ours()
+    {
+        var root = Path.Join(ClaimRoot, "case-image-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(root);
+
+        if (!TryEnableCaseSensitivity(root))
+        {
+            Assert.Inconclusive(
+                "This filesystem cannot be made case-sensitive, so two checkouts differing " +
+                "only in case cannot exist and the premise is unreachable.");
+        }
+
+        var ours = StageExe(Path.Join(root, "repo"));
+        var theirs = StageExe(Path.Join(root, "Repo"));
+
+        // Positive control. On a filesystem that merged the two spellings these would be one
+        // file, and the assertion below would pass for a reason that has nothing to do with
+        // the predicate under test.
+        Assert.AreEqual(2, Directory.GetDirectories(root).Length,
+            "Precondition: the two spellings must really be two checkouts.");
+
+        Assert.AreEqual(
+            1,
+            OrphanedHostSweep.SelectOurs([At(100, ours)], ours, OurSession).Count(),
+            "Control: our own host must still be selected, or the test below proves only that " +
+            "the predicate stopped matching anything.");
+
+        Assert.AreEqual(
+            0,
+            OrphanedHostSweep.SelectOurs([At(200, theirs)], ours, OurSession).Count(),
+            "A host from a different checkout was judged to be our own image, so this run " +
+            "would terminate another checkout's process.");
+    }
+
+    /// <summary>
+    /// Those same two checkouts must also not share a startup gate or a lease prefix.
+    /// </summary>
+    /// <remarks>
+    /// <para>The key and the kill predicate are required to agree about what one build output
+    /// is, and the agreement has to hold in both directions. Making the predicate case-exact
+    /// without doing the same to the key leaves two distinct checkouts sharing one claim
+    /// namespace: each reads the other's lease as its own live sibling and stands down from a
+    /// sweep it was entitled to run, and each queues behind the other at a gate that was never
+    /// meant to span them.</para>
+    /// <para>The alias control is the other half. A key that simply hashed the caller's
+    /// spelling would satisfy the first assertion trivially while breaking the property the
+    /// whole claim scheme rests on, so one image reached two ways is asserted to keep one key.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Checkouts_Differing_Only_In_Case_Do_Not_Share_A_Claim_Key()
+    {
+        var root = Path.Join(ClaimRoot, "case-key-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(root);
+
+        if (!TryEnableCaseSensitivity(root))
+        {
+            Assert.Inconclusive(
+                "This filesystem cannot be made case-sensitive, so two checkouts differing " +
+                "only in case cannot exist and the premise is unreachable.");
+        }
+
+        var ours = StageExe(Path.Join(root, "repo"));
+        var theirs = StageExe(Path.Join(root, "Repo"));
+
+        Assert.AreEqual(2, Directory.GetDirectories(root).Length,
+            "Precondition: the two spellings must really be two checkouts.");
+
+        Assert.AreNotEqual(
+            OrphanedHostSweep.GatePathFor(ours),
+            OrphanedHostSweep.GatePathFor(theirs),
+            "Two different checkouts took one startup gate, so each stands down from its own " +
+            "sweep on the strength of the other's lease and each blocks the other's admission.");
+
+        Assert.AreNotEqual(
+            OrphanedHostSweep.LeasePathFor(ours, 4242),
+            OrphanedHostSweep.LeasePathFor(theirs, 4242),
+            "Two different checkouts wrote into one lease namespace, so each reads the other " +
+            "as its own live sibling.");
+
+        Assert.AreEqual(
+            OrphanedHostSweep.GatePathFor(ours),
+            OrphanedHostSweep.GatePathFor(@"\\?\" + ours),
+            "Control: one image reached by two spellings must still take one gate, which is " +
+            "the property the whole claim scheme rests on.");
+    }
+
+    /// <summary>Creates an empty host binary under <paramref name="directory"/>.</summary>
+    /// <remarks>
+    /// Real files, because the behaviour under test only exists once the filesystem can answer
+    /// for the path. An empty file is enough: nothing here launches it, and the final-path
+    /// query needs only a handle.
+    /// </remarks>
+    private static string StageExe(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        var exe = Path.Join(directory, "Reactor.AppTests.Host.exe");
+        File.WriteAllText(exe, string.Empty);
+        return exe;
+    }
+
+    /// <summary>
+    /// Marks a directory case-sensitive, reporting whether the filesystem accepted it.
+    /// </summary>
+    /// <remarks>
+    /// Measured to succeed unelevated on a developer machine. Reported rather than asserted so
+    /// the caller can skip on a volume that refuses, since the premise is then unreachable.
+    /// </remarks>
+    private static bool TryEnableCaseSensitivity(string directory)
+    {
+        try
+        {
+            using var proc = Process.Start(new ProcessStartInfo
+            {
+                FileName = "fsutil.exe",
+                Arguments = $"file setCaseSensitiveInfo \"{directory}\" enable",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+
+            if (proc is null) return false;
+
+            proc.WaitForExit(30_000);
+            return proc.HasExited && proc.ExitCode == 0;
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
+    }
 }

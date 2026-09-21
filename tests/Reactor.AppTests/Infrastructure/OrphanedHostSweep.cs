@@ -118,7 +118,7 @@ internal static partial class OrphanedHostSweep
         if (string.IsNullOrWhiteSpace(ourExePath))
             throw new ArgumentException("Our executable path must be non-empty.", nameof(ourExePath));
 
-        var ours = NormalizePath(ourExePath);
+        var ours = NormalizePathCore(ourExePath);
         return candidates.Where(c =>
             c.SessionId == ourSessionId
             && !c.LauncherIsLive
@@ -611,14 +611,24 @@ internal static partial class OrphanedHostSweep
 
     /// <summary>Stable, filename-safe key for one build output.</summary>
     /// <remarks>
-    /// Normalized through the same <see cref="NormalizePath"/> the kill predicate uses. The two
-    /// must agree: <see cref="SelectOurs"/> treats <c>bin\.\Host.exe</c> and <c>bin\Host.exe</c>
-    /// as one image, so if the claim keyed off the raw spelling those two runs would take
-    /// different claim files, each conclude no sibling was live, and sweep the other's host.
+    /// <para>Normalized through the same <see cref="NormalizePathCore"/> the kill predicate
+    /// uses. The two must agree: <see cref="SelectOurs"/> treats <c>bin\.\Host.exe</c> and
+    /// <c>bin\Host.exe</c> as one image, so if the claim keyed off the raw spelling those two
+    /// runs would take different claim files, each conclude no sibling was live, and sweep the
+    /// other's host.</para>
+    /// <para>Which is why the case folding here is conditional rather than unconditional.
+    /// <see cref="IsSameImage"/> distinguishes two resolved paths that differ only in case, so
+    /// folding a resolved path would break the agreement in the other direction: two distinct
+    /// checkouts would share one gate and one lease prefix, each would read the other's lease
+    /// as its own sibling and skip its own sweep, and each would hold up the other at a gate
+    /// that was never meant to span them. An unresolved path is still folded, because there the
+    /// spelling is the caller's and folding is what makes two runs that wrote it differently
+    /// agree.</para>
     /// </remarks>
     private static string KeyFor(string ourExePath)
     {
-        var canonical = NormalizePath(ourExePath.Trim()).ToUpperInvariant();
+        var normalized = NormalizePathCore(ourExePath.Trim());
+        var canonical = normalized.Resolved ? normalized.Value : normalized.Value.ToUpperInvariant();
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         return Convert.ToHexString(hash, 0, 8).ToLowerInvariant();
     }
@@ -759,7 +769,7 @@ internal static partial class OrphanedHostSweep
     /// image derives.
     /// </summary>
     /// <remarks>
-    /// <para><see cref="NormalizePath"/> falls back to the caller's own spelling when the
+    /// <para><see cref="NormalizePathCore"/> falls back to the caller's own spelling when the
     /// filesystem cannot answer. For <see cref="IsSameImage"/> that is merely weaker, and
     /// weaker in the safe direction: an unmatched candidate is a skipped kill. For
     /// <see cref="KeyFor"/> it is not weaker, it is <em>unsound</em> — the fallback makes the
@@ -973,12 +983,32 @@ internal static partial class OrphanedHostSweep
         }
     }
 
-    private static bool IsSameImage(string? candidatePath, string normalizedOurs) =>
-        !string.IsNullOrWhiteSpace(candidatePath) &&
-        string.Equals(NormalizePath(candidatePath), normalizedOurs, StringComparison.OrdinalIgnoreCase);
+    private static bool IsSameImage(
+        string? candidatePath, (string Value, bool Resolved) ours)
+    {
+        if (string.IsNullOrWhiteSpace(candidatePath)) return false;
+
+        var candidate = NormalizePathCore(candidatePath);
+
+        // A resolved path and an unresolved one are never the same image. Only the resolved
+        // side's case came from the filesystem, so the sole comparison available across the two
+        // is the case-insensitive one — and that is precisely what would let a host from a
+        // checkout differing only in case be selected as ours and killed. Declining costs a
+        // skipped kill, which is the harmless half of this predicate's error space, and costs
+        // nothing in practice: a live process keeps its image mapped, so a candidate that
+        // cannot be resolved while our own image can is a transient or permission failure
+        // rather than a deleted binary.
+        if (candidate.Resolved != ours.Resolved) return false;
+
+        return string.Equals(
+            candidate.Value,
+            ours.Value,
+            candidate.Resolved ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
-    /// The path one executable is agreed to have, whichever spelling a run reached it by.
+    /// The path one executable is agreed to have, whichever spelling a run reached it by,
+    /// together with whether the filesystem answered for it.
     /// </summary>
     /// <remarks>
     /// <para>Both users of this need the same answer for the same physical file or the whole
@@ -993,27 +1023,32 @@ internal static partial class OrphanedHostSweep
     /// extended-length <c>\\?\</c> spelling verbatim. A junction anywhere above the build
     /// output — a linked <c>C:\src</c>, say — is the realistic way one host acquires two
     /// spellings, and it too survives string normalisation. So the filesystem is asked.</para>
-    /// <para>Falls back to the textual form when the query cannot be answered, which is the
-    /// case that matters for a candidate process whose image has since been deleted. For
-    /// <see cref="IsSameImage"/> that is strictly weaker but never wrong in the dangerous
-    /// direction: an unresolved path can make this fail to recognise a sibling it should have
-    /// matched, and failing to match only ever costs a skipped sweep, never an extra kill.</para>
-    /// <para><b>The same fallback is not safe for <see cref="KeyFor"/>,</b> where it would make
-    /// the key depend on the caller's spelling rather than on the file, and two runs that
-    /// disagree about the key sweep each other. It is kept here rather than split because the
-    /// candidate side genuinely needs it, and the destructive path instead refuses to run at
-    /// all unless our own image resolves — see <see cref="RequireResolvableImage"/>.</para>
+    /// <para>Falls back to the textual form when the query cannot be answered, and reports
+    /// which of the two happened, because the callers must treat them differently. A resolved
+    /// path carries the file's <em>on-disk</em> case — the final-path query returns it whatever
+    /// case it is asked with — while an unresolved one carries only the spelling the caller
+    /// happened to write. Comparing or keying the two kinds of string the same way is exactly
+    /// what let two checkouts differing only in case be treated as one image.</para>
+    /// <para>The fallback is still never wrong in the dangerous direction for
+    /// <see cref="IsSameImage"/>: an unresolved path can only make it fail to recognise an
+    /// image it should have matched, and failing to match costs a skipped sweep rather than an
+    /// extra kill. <b>It remains unsafe for <see cref="KeyFor"/>,</b> where it would make the
+    /// key depend on the caller's spelling rather than on the file, and two runs that disagree
+    /// about the key sweep each other. It is kept here rather than split because the candidate
+    /// side genuinely needs it, and the destructive path instead refuses to run at all unless
+    /// our own image resolves — see <see cref="RequireResolvableImage"/>.</para>
     /// </remarks>
-    private static string NormalizePath(string path)
+    private static (string Value, bool Resolved) NormalizePathCore(string path)
     {
         try
         {
             var full = Path.GetFullPath(path);
-            return FinalPath.TryResolve(full) ?? full;
+            var resolved = FinalPath.TryResolve(full);
+            return (resolved ?? full, resolved is not null);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
         {
-            return path;
+            return (path, false);
         }
     }
 }

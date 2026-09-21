@@ -450,6 +450,72 @@ public partial class WorktreeIdentityTests
     }
 
     /// <summary>
+    /// A path the filesystem answered for is never the same directory as one it could not.
+    /// </summary>
+    /// <remarks>
+    /// <para>The case-exact comparison only applies when both sides resolve, so the mixed state
+    /// is where the old over-match survived — and it is reachable exactly where it does the
+    /// most damage. During registration this run's layout exists and resolves, while another
+    /// package's recorded install path may have been deleted or be momentarily unreadable. A
+    /// foreign directory differing only in case would then be compared case-insensitively
+    /// against the filesystem's own spelling of ours, judged to be ours, classified
+    /// <c>RemoveContending</c>, and unregistered while its owner was still running.</para>
+    /// <para>Answering "different" makes that a <c>FailConflicting</c> refusal instead. The
+    /// second assertion pins the boundary rather than leaving it implied: when
+    /// <em>neither</em> side resolved both spellings are the caller's own and the comparison
+    /// stays case-insensitive, which is deliberate and is what the headless callers rely on.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Resolved_Path_Is_Never_The_Same_Directory_As_An_Unresolved_One()
+    {
+        var root = Path.Join(Path.GetTempPath(), "reactor-case-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            if (!TryEnableCaseSensitivity(root))
+            {
+                Assert.Inconclusive(
+                    "This filesystem cannot be made case-sensitive, so a path that differs " +
+                    "from an existing directory only in case cannot be absent.");
+            }
+
+            var present = Path.Join(root, "Repo");
+            var absent = Path.Join(root, "repo");
+            Directory.CreateDirectory(present);
+
+            // Positive control. If the volume merged the spellings, `absent` would exist and
+            // both sides would resolve, so the mixed state under test would never be entered.
+            Assert.IsFalse(Directory.Exists(absent),
+                "Precondition: the lower-cased spelling must really be a different, absent " +
+                "directory.");
+
+            Assert.IsFalse(
+                WorktreeIdentity.IsSameDirectory(absent, present),
+                "A recorded path the filesystem could not answer for was matched against a " +
+                "live directory that differs only in case, so another checkout's registration " +
+                "would be treated as this run's own and removed.");
+
+            Assert.IsFalse(
+                WorktreeIdentity.IsSameDirectory(present, absent),
+                "The comparison must not depend on argument order.");
+
+            var goneUpper = Path.Join(root, "Vanished");
+            var goneLower = Path.Join(root, "vanished");
+
+            Assert.IsTrue(
+                WorktreeIdentity.IsSameDirectory(goneUpper, goneLower),
+                "Boundary: with neither side resolvable both spellings are the caller's own " +
+                "and carry no filesystem case, so these must still compare equal.");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Marks a directory case-sensitive, reporting whether the filesystem accepted it.
     /// </summary>
     private static bool TryEnableCaseSensitivity(string directory)
