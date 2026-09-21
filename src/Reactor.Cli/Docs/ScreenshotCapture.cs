@@ -116,27 +116,12 @@ internal static class ScreenshotCapture
             _ => "x64",
         };
 
-        // The capture window size comes from the manifest, not from the doc app's
-        // own ReactorApp.Run call, so a doc app can omit width/height (taking the
-        // OS default when a human runs it) without its screenshots changing size.
-        // Invariant formatting: --width/--height are machine-facing switches, and
-        // a comma-decimal locale would otherwise emit "600,5" and be rejected.
-        var sizeArgs =
-            $" --width {manifest.App.Width.ToString(CultureInfo.InvariantCulture)}" +
-            $" --height {manifest.App.Height.ToString(CultureInfo.InvariantCulture)}";
-
-        // Optional capture origin, for the case where the monitor at the repo's
-        // 150% capture scale is not the primary display. Capture is PrintWindow
-        // over the live HWND in physical pixels, so the captured size follows the
-        // DPI of the monitor the window lands on. Environmental rather than
-        // per-app, hence an env var and not a manifest key: the same doc app
-        // should capture identically on any contributor's machine.
-        var originArgs = ResolveCaptureOriginArgs();
-
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5{sizeArgs}{originArgs}",
+            Arguments = BuildPreviewArguments(
+                csproj, platform, manifest.App.Width, manifest.App.Height,
+                Environment.GetEnvironmentVariable(CaptureOriginEnvVar)),
             RedirectStandardOutput = true,
             RedirectStandardError = false,
             UseShellExecute = false,
@@ -598,8 +583,34 @@ internal static class ScreenshotCapture
         return $" --x {x.ToString(CultureInfo.InvariantCulture)} --y {y.ToString(CultureInfo.InvariantCulture)}";
     }
 
-    private static string ResolveCaptureOriginArgs()
-        => BuildCaptureOriginArgs(Environment.GetEnvironmentVariable(CaptureOriginEnvVar));
+    /// <summary>
+    /// Assembles the full <c>dotnet run</c> command line for a doc app's capture process.
+    /// </summary>
+    /// <remarks>
+    /// Extracted from <c>CaptureAsync</c> so the manifest-to-devtools size handoff is
+    /// testable. That handoff is the single carrier of every doc screenshot's dimensions —
+    /// the doc apps themselves no longer declare a size — so dropping
+    /// <c>--width</c>/<c>--height</c> here would silently resize every image in the repo
+    /// with nothing failing. Keep the assertion on this seam, not just on the pieces.
+    /// <para>Widths and heights are formatted invariantly because they are machine-facing
+    /// switches: a comma-decimal locale would otherwise emit <c>600,5</c>, which the
+    /// receiving parser rejects.</para>
+    /// </remarks>
+    internal static string BuildPreviewArguments(
+        string csproj,
+        string platform,
+        int width,
+        int height,
+        string? captureOrigin)
+    {
+        var sizeArgs =
+            $" --width {width.ToString(CultureInfo.InvariantCulture)}" +
+            $" --height {height.ToString(CultureInfo.InvariantCulture)}";
+
+        return $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5"
+             + sizeArgs
+             + BuildCaptureOriginArgs(captureOrigin);
+    }
 
     internal static string PreviewUrl(int port) => $"http://{CaptureHost}:{port}/preview";
 

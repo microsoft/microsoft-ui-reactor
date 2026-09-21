@@ -71,4 +71,68 @@ public class CaptureOriginTests
     {
         Assert.Equal(" --x 2600.5 --y 120.25", ScreenshotCapture.BuildCaptureOriginArgs("2600.5,120.25"));
     }
+
+    // The assembled command line is the single carrier of every doc screenshot's
+    // size: the doc apps no longer declare one, so if --width/--height stopped
+    // being appended here every image in the repo would silently resize with
+    // nothing failing. Asserting on the pieces is not enough — this pins the seam.
+    [Fact]
+    public void PreviewArguments_ForwardBothManifestDimensions()
+    {
+        var args = ScreenshotCapture.BuildPreviewArguments(
+            @"C:\docs\_pipeline\apps\getting-started\getting-started.csproj",
+            "x64", width: 600, height: 400, captureOrigin: null);
+
+        Assert.Contains("--width 600", args);
+        Assert.Contains("--height 400", args);
+        // The devtools verb must survive too, or the app starts as a normal run
+        // with no capture server and the harness times out waiting for a port.
+        Assert.Contains("--preview", args);
+        Assert.Contains("--vscode", args);
+        Assert.Contains(@"--project ""C:\docs\_pipeline\apps\getting-started\getting-started.csproj""", args);
+        Assert.Contains("-p:Platform=x64", args);
+        // No origin requested: the window must be left to OS placement.
+        Assert.DoesNotContain("--x ", args);
+        Assert.DoesNotContain("--y ", args);
+    }
+
+    [Fact]
+    public void PreviewArguments_AppendOriginWhenRequested()
+    {
+        var args = ScreenshotCapture.BuildPreviewArguments(
+            @"C:\app\app.csproj", "ARM64", width: 520, height: 360, captureOrigin: "2600,0");
+
+        Assert.Contains("--width 520", args);
+        Assert.Contains("--height 360", args);
+        Assert.Contains("--x 2600", args);
+        Assert.Contains("--y 0", args);
+        Assert.Contains("-p:Platform=ARM64", args);
+    }
+
+    // A malformed origin must not take the size arguments down with it — the
+    // capture should still be correctly sized, just OS-placed.
+    [Fact]
+    public void PreviewArguments_MalformedOriginStillForwardsSize()
+    {
+        var args = ScreenshotCapture.BuildPreviewArguments(
+            @"C:\app\app.csproj", "x64", width: 800, height: 600, captureOrigin: "garbage");
+
+        Assert.Contains("--width 800", args);
+        Assert.Contains("--height 600", args);
+        Assert.DoesNotContain("--x ", args);
+    }
+
+    // Same invariant-culture hazard as the origin, on the path that carries every
+    // screenshot's size.
+    [CulturedFact(new[] { "nl-NL" })]
+    public void PreviewArguments_FormatSizeInvariantly()
+    {
+        var args = ScreenshotCapture.BuildPreviewArguments(
+            @"C:\app\app.csproj", "x64", width: 1200, height: 900, captureOrigin: null);
+
+        Assert.Contains("--width 1200", args);
+        Assert.Contains("--height 900", args);
+        // A culture-sensitive int.ToString("N0")-style path would emit "1.200".
+        Assert.DoesNotContain("1.200", args);
+    }
 }
