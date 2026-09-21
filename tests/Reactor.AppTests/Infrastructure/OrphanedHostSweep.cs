@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using Reactor.Tests.Shared;
@@ -21,7 +22,7 @@ namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 /// two builds of the same host. The path is resolved before the sweep runs, so the sweep can
 /// be told what "ours" means.</para>
 /// </remarks>
-internal static class OrphanedHostSweep
+internal static partial class OrphanedHostSweep
 {
     /// <summary>How long a run waits for the startup gate before giving up.</summary>
     /// <remarks>
@@ -40,7 +41,14 @@ internal static class OrphanedHostSweep
     /// Terminal-services session the process belongs to, or <see langword="null"/> when it
     /// could not be read.
     /// </param>
-    internal readonly record struct Candidate(int Pid, string? ExecutablePath, int? SessionId);
+    /// <param name="LauncherIsLive">
+    /// Whether the process that started this one is still running. <see langword="true"/> means
+    /// the candidate is demonstrably attended and must not be swept; <see langword="false"/>
+    /// means its launcher is gone, which is what "orphan" means. Supplied by the caller rather
+    /// than queried here so selection stays pure data.
+    /// </param>
+    internal readonly record struct Candidate(
+        int Pid, string? ExecutablePath, int? SessionId, bool LauncherIsLive);
 
     /// <summary>Whether a run may sweep, must skip, or could not be admitted at all.</summary>
     /// <remarks>
@@ -86,6 +94,22 @@ internal static class OrphanedHostSweep
     /// session belongs to one user and our own orphans are always in ours: this process
     /// launched them. A candidate whose session cannot be read is left alone for the same
     /// reason an unreadable path is.</para>
+    /// <para><b>Requires the launcher to be gone, which is the only staleness signal that does
+    /// not depend on the other run cooperating.</b> The lease establishes that no <em>other
+    /// participant</em> in this protocol is live, and that is strictly weaker than "nothing is
+    /// live": a run started from a revision predating the lease writes no lease at all, so it
+    /// is invisible to admission, and this run would be admitted and would then find that run's
+    /// perfectly healthy host sharing our image path and kill it mid-test. No handshake can fix
+    /// that, because the other side is already running code that does not implement it.
+    /// <see cref="Candidate.LauncherIsLive"/> is decidable without its cooperation: a host is
+    /// started as a direct child of the run that owns it, so its run being alive is a fact
+    /// about the process table rather than about any file this protocol writes. A host whose
+    /// launcher is still running is attended by definition, whatever revision started it, and
+    /// an orphan's launcher is by definition gone.</para>
+    /// <para>The two conditions are kept because neither subsumes the other. The launcher check
+    /// alone would admit killing a host whose own run has already exited but which a sibling
+    /// run is still driving; the lease alone misses every non-participant. Both must say
+    /// "stale" before anything is killed.</para>
     /// </remarks>
     internal static IEnumerable<Candidate> SelectOurs(
         IEnumerable<Candidate> candidates, string ourExePath, int ourSessionId)
@@ -96,7 +120,9 @@ internal static class OrphanedHostSweep
 
         var ours = NormalizePath(ourExePath);
         return candidates.Where(c =>
-            c.SessionId == ourSessionId && IsSameImage(c.ExecutablePath, ours));
+            c.SessionId == ourSessionId
+            && !c.LauncherIsLive
+            && IsSameImage(c.ExecutablePath, ours));
     }
 
     /// <summary>
@@ -303,8 +329,17 @@ internal static class OrphanedHostSweep
 
         var ourSessionId = Process.GetCurrentProcess().SessionId;
 
+        // One snapshot for the whole batch, taken under the gate alongside the process list so
+        // both describe the same moment.
+        var parents = SnapshotParentPids();
+
         var candidates = processes
-            .Select(p => new Candidate(SafePid(p), TryGetExecutablePath(p), SafeSessionId(p)))
+            .Select(p =>
+            {
+                var pid = SafePid(p);
+                return new Candidate(
+                    pid, TryGetExecutablePath(p), SafeSessionId(p), LauncherIsLive(pid, parents));
+            })
             .ToList();
 
         var doomed = SelectOurs(candidates, ourExePath, ourSessionId).Select(c => c.Pid).ToHashSet();
@@ -770,6 +805,127 @@ internal static class OrphanedHostSweep
             "sibling, and kill this run's host mid-test. Refusing to sweep instead. Check that " +
             "the path exists and is readable by this user.");
     }
+
+    /// <summary>
+    /// Whether the process that started <paramref name="pid"/> is still running.
+    /// </summary>
+    /// <remarks>
+    /// <para>Defaults to <see langword="true"/> — "attended" — on every uncertainty, because
+    /// this value only ever gates a kill. An unreadable parent is a reason not to act, not a
+    /// licence to; the cost of a false "attended" is one stale process that the next run will
+    /// reconsider, while the cost of a false "orphan" is terminating a live suite.</para>
+    /// <para><b>Guards against pid reuse, which is what makes a parent id alone unusable.</b>
+    /// A recorded parent id outlives the parent, and Windows reissues ids freely, so an orphan
+    /// whose launcher died can name an id that now belongs to something unrelated and would
+    /// read back as live. A real parent necessarily started before its child, so a candidate
+    /// parent that started <em>after</em> the process it supposedly launched is a reused id and
+    /// is reported as gone. Equal timestamps are treated as the parent being live, keeping the
+    /// tie on the conservative side of a clock with coarse resolution.</para>
+    /// <para>Reads the parent id from a Toolhelp snapshot rather than per-process
+    /// <c>NtQueryInformationProcess</c>: one snapshot answers for every candidate at once and
+    /// needs no handle to a process this run may not be able to open.</para>
+    /// </remarks>
+    internal static bool LauncherIsLive(int pid, IReadOnlyDictionary<int, int> parents)
+    {
+        if (pid <= 0 || !parents.TryGetValue(pid, out var parentPid) || parentPid <= 0)
+            return true;
+
+        try
+        {
+            using var child = Process.GetProcessById(pid);
+            using var parent = Process.GetProcessById(parentPid);
+
+            return parent.StartTime <= child.StartTime;
+        }
+        catch (ArgumentException)
+        {
+            // The parent id names nothing running: the launcher is gone, which is exactly the
+            // orphan case. A vanished *child* lands here too and is harmless — it is already
+            // dead, so reporting it sweepable kills nothing.
+            return false;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Every running process's parent id, or an empty map when the snapshot cannot be taken.
+    /// </summary>
+    /// <remarks>
+    /// An empty map makes <see cref="LauncherIsLive"/> answer "attended" for everything, so a
+    /// snapshot failure disables the sweep rather than broadening it. That is the same
+    /// fail-closed direction every other unreadable fact here takes.
+    /// </remarks>
+    internal static IReadOnlyDictionary<int, int> SnapshotParentPids()
+    {
+        var map = new Dictionary<int, int>();
+        var snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+        if (snapshot == IntPtr.Zero || snapshot == InvalidHandleValue)
+            return map;
+
+        try
+        {
+            var entry = new ProcessEntry32 { dwSize = Marshal.SizeOf<ProcessEntry32>() };
+
+            if (!Process32First(snapshot, ref entry))
+                return map;
+
+            do
+            {
+                map[(int)entry.th32ProcessID] = (int)entry.th32ParentProcessID;
+            }
+            while (Process32Next(snapshot, ref entry));
+        }
+        finally
+        {
+            CloseHandle(snapshot);
+        }
+
+        return map;
+    }
+
+    private static readonly IntPtr InvalidHandleValue = new(-1);
+
+    private const uint TH32CS_SNAPPROCESS = 0x00000002;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private unsafe struct ProcessEntry32
+    {
+        public int dwSize;
+        public uint cntUsage;
+        public uint th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public uint th32ModuleID;
+        public uint cntThreads;
+        public uint th32ParentProcessID;
+        public int pcPriClassBase;
+        public uint dwFlags;
+
+        // Inline rather than a marshalled string so the struct stays blittable, which is what
+        // lets the LibraryImport generator pass it by reference with no marshalling stub. The
+        // image name is not read here; only its size contributes to dwSize.
+        public fixed char szExeFile[260];
+    }
+
+    // ExactSpelling, so the Unicode exports are named explicitly: LibraryImport does not append
+    // the W suffix the way the old DllImport CharSet behaviour did.
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "Process32FirstW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool Process32First(IntPtr hSnapshot, ref ProcessEntry32 lppe);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "Process32NextW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool Process32Next(IntPtr hSnapshot, ref ProcessEntry32 lppe);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseHandle(IntPtr hObject);
 
     private static int SafePid(Process proc)
     {

@@ -152,24 +152,44 @@ internal static class WorktreeIdentity
     /// collapses case-insensitive spellings and already distinguishes case-sensitive ones. The
     /// lowercasing exists for the fallback above, where no handle is available and the spelling
     /// is whatever the caller wrote.</para>
-    /// <para>Left as-is deliberately. Removing the lowercasing would invalidate every
-    /// previously derived identity and so needs an algorithm version bump (see the class
-    /// remarks), and the collision it would fix is already contained rather than dangerous:
-    /// two such checkouts derive one name, and the second is refused by the ownership check in
-    /// <c>RemoveExistingRegistrations</c> — which names a hash collision between two checkouts
-    /// as one of its two causes and aborts with the conflicting install path — rather than
-    /// evicting the first or running the wrong binary. The cost is that the two cannot run
-    /// concurrently, which is the same cost as a genuine hash collision. Rename one of the
-    /// directories to something other than a case variant.</para>
+    /// <para>Left as-is in <em>derivation</em> deliberately, and compensated for in comparison.
+    /// Removing the lowercasing here would invalidate every previously derived identity and so
+    /// needs an algorithm version bump (see the class remarks). What actually made the
+    /// collision dangerous was not the shared name but that <see cref="IsSameDirectory"/> once
+    /// canonicalised the same way, so the ownership check in <c>RemoveExistingRegistrations</c>
+    /// judged the other checkout's install path to be this one's and removed its live
+    /// registration. That comparison now matches the resolved spelling case-exactly, so the two
+    /// directories are correctly seen as different and the registration is refused with the
+    /// conflicting install path instead. The residual cost is that two such checkouts share one
+    /// derived name and therefore cannot run concurrently — the same cost as a genuine hash
+    /// collision, and a loud refusal rather than an eviction. Rename one of the directories to
+    /// something other than a case variant.</para>
     /// </remarks>
     internal static string Canonicalize(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Path must be a non-empty directory path.", nameof(path));
 
+        return CanonicalizeCore(path).Value.ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// The canonical spelling of <paramref name="path"/> in its own case, together with whether
+    /// the filesystem answered for it.
+    /// </summary>
+    /// <remarks>
+    /// Split out so <see cref="IsSameDirectory"/> can compare the spelling the filesystem
+    /// reported rather than the lowercased one <see cref="Canonicalize"/> hands to derivation.
+    /// The two want different things from the same work: derivation needs a single stable value
+    /// per directory and is versioned, while comparison must not claim two directories are one.
+    /// </remarks>
+    private static (string Value, bool Resolved) CanonicalizeCore(string path)
+    {
         var full = Path.GetFullPath(path);
-        var resolved = FinalPath.TryResolve(full) ?? ResolveLinksInEveryComponent(full);
-        return Path.TrimEndingDirectorySeparator(resolved).ToLowerInvariant();
+        var resolved = FinalPath.TryResolve(full);
+
+        return (Path.TrimEndingDirectorySeparator(resolved ?? ResolveLinksInEveryComponent(full)),
+                resolved is not null);
     }
 
     /// <summary>
@@ -283,6 +303,22 @@ internal static class WorktreeIdentity
     /// <para>Returns <see langword="false"/> rather than throwing for an empty or unusable
     /// path, because callers are asking a yes/no ownership question about data that came from
     /// outside the process.</para>
+    /// <para><b>Compares the resolved spelling case-exactly, which is deliberately stricter
+    /// than derivation.</b> <see cref="Canonicalize"/> lowercases, so on a case-sensitive
+    /// parent directory two genuinely distinct directories collapse to one string. That is
+    /// tolerable for derivation, where the consequence is a shared package name, but not here:
+    /// callers use this to decide whether a recorded registration is <em>theirs</em>, and
+    /// answering yes for someone else's directory turns a name collision into one checkout
+    /// unregistering another's live package. Comparing the resolved paths exactly makes this
+    /// agree with the filesystem instead — the final-path query reports a directory's on-disk
+    /// case whatever case it is asked with, so two spellings of one directory still produce
+    /// byte-identical strings and still compare equal, while two directories that differ only
+    /// in case correctly do not. A derivation collision then degrades to a refusal, which is
+    /// recoverable, instead of an eviction, which is not.</para>
+    /// <para>Only when both sides resolved. A path the filesystem cannot answer for falls back
+    /// to the caller's own spelling, whose case carries no information about what is on disk,
+    /// so an exact comparison there would invent distinctions rather than report them. Those
+    /// comparisons stay case-insensitive.</para>
     /// </remarks>
     internal static bool IsSameDirectory(string? left, string? right)
     {
@@ -291,8 +327,13 @@ internal static class WorktreeIdentity
 
         try
         {
-            // Canonicalize lowercases, so an ordinal comparison is already case-insensitive.
-            return string.Equals(Canonicalize(left), Canonicalize(right), StringComparison.Ordinal);
+            var l = CanonicalizeCore(left);
+            var r = CanonicalizeCore(right);
+
+            return string.Equals(
+                l.Value,
+                r.Value,
+                l.Resolved && r.Resolved ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
         {

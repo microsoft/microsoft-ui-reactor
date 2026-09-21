@@ -253,6 +253,27 @@ Conventions for contributors:
   string handling alone and so appears whatever the directory's state, meaning any two sets for
   one layout still overlap — but the set otherwise depended on when during its own construction
   the filesystem happened to be asked.
+- The orphaned-host sweep now also requires a candidate's launching process to be gone before it
+  will kill it. Admission proves only that no other *participant* in the lease protocol is live,
+  which is strictly weaker than "nothing is live": a run started from a revision predating the
+  lease writes no lease, so it is invisible to admission, and the sweep would then find its
+  perfectly healthy host sharing our image path and matching every other rule. No handshake can
+  close that, because the other side is already running code that does not implement it. A host
+  is started as a direct child of the run that owns it, so launcher liveness is a fact about the
+  process table rather than about any file this protocol writes, and it is therefore decidable
+  for a non-participant. Both conditions are kept: the launcher check alone would admit killing
+  a host whose own run exited but which a sibling is still driving.
+- Ownership comparison of two install paths is now case-exact whenever both resolve, which is
+  deliberately stricter than identity derivation. Derivation lowercases, so under a
+  case-sensitive parent directory — which `fsutil file setCaseSensitiveInfo` and WSL both
+  enable — `Repo` and `repo` derive one package name. That collision alone is survivable, but
+  the ownership check canonicalised the same way, so a registration belonging to one checkout
+  was judged to be the other's own and unregistered while it was still running. The final-path
+  query reports a directory's on-disk case whatever case it is asked with, so comparing the
+  resolved spellings exactly still treats two spellings of one directory as equal while
+  correctly separating two directories, turning a silent eviction into the conflict refusal the
+  deployment already reports. Paths that cannot be resolved keep the case-insensitive
+  comparison, since the caller's own spelling carries no information about what is on disk.
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never

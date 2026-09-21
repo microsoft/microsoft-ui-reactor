@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -36,8 +38,21 @@ public class OrphanedHostSweepTests
     private static string Probe(string name) =>
         Path.Join(ClaimRoot, name, "Reactor.AppTests.Host.exe");
 
+    /// <summary>
+    /// A candidate with the default disposition every existing test assumes: our session, and
+    /// a launcher that is already gone.
+    /// </summary>
+    /// <remarks>
+    /// Sweepable by default because these tests are about the image-path and session rules, and
+    /// a candidate whose launcher is live is excluded before those are reached. Tests that care
+    /// about the launcher say so with <see cref="Attended"/>.
+    /// </remarks>
     private static OrphanedHostSweep.Candidate At(int pid, string? path) =>
-        new(pid, path, OurSession);
+        new(pid, path, OurSession, LauncherIsLive: false);
+
+    /// <summary>The same candidate, but still owned by a running launcher.</summary>
+    private static OrphanedHostSweep.Candidate Attended(int pid, string? path) =>
+        new(pid, path, OurSession, LauncherIsLive: true);
 
     /// <summary>
     /// The session the synthetic candidates are stamped with, and the one passed as "ours".
@@ -301,7 +316,7 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void A_Host_In_Another_Session_Is_Not_Swept()
     {
-        var otherUser = new OrphanedHostSweep.Candidate(300, Ours, OurSession + 1);
+        var otherUser = new OrphanedHostSweep.Candidate(300, Ours, OurSession + 1, LauncherIsLive: false);
 
         Assert.AreEqual(0, OrphanedHostSweep.SelectOurs([otherUser], Ours, OurSession).Count(),
             "A process running our image in a different session belongs to a different user, " +
@@ -324,9 +339,102 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void A_Candidate_With_An_Unreadable_Session_Is_Left_Alone()
     {
-        var unknown = new OrphanedHostSweep.Candidate(400, Ours, null);
+        var unknown = new OrphanedHostSweep.Candidate(400, Ours, null, LauncherIsLive: false);
 
         Assert.AreEqual(0, OrphanedHostSweep.SelectOurs([unknown], Ours, OurSession).Count());
+    }
+
+    /// <summary>
+    /// A host whose launcher is still running is never swept, however this run was admitted.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the case the lease cannot cover, and it is not hypothetical. Admission
+    /// proves only that no other <em>participant</em> is live: a run started from a revision
+    /// predating the lease protocol writes no lease, so it is invisible to admission, this run
+    /// is admitted, and its snapshot then finds that run's healthy host sharing our image path.
+    /// Every other rule here agrees it should die — same image, same session, no sibling — so
+    /// without the launcher check the sweep kills a live suite.</para>
+    /// <para>The image path is deliberately ours and the session deliberately ours, so the only
+    /// thing standing between this candidate and the doomed set is the launcher. Dropping that
+    /// condition reddens this test and nothing else.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Host_Whose_Launcher_Is_Still_Running_Is_Not_Swept()
+    {
+        Assert.AreEqual(
+            0,
+            OrphanedHostSweep.SelectOurs([Attended(500, Ours)], Ours, OurSession).Count(),
+            "A host whose launching run is still alive is attended, not orphaned. Sweeping it " +
+            "kills a live suite that simply does not write a lease this run can see.");
+
+        Assert.AreEqual(
+            1,
+            OrphanedHostSweep.SelectOurs([At(500, Ours)], Ours, OurSession).Count(),
+            "Control: the identical candidate with a dead launcher is still swept, so the " +
+            "assertion above is about the launcher and not about the path or the session.");
+    }
+
+    /// <summary>
+    /// The real probe agrees with the process table: a live child reads as attended, and the
+    /// same pid reads as orphaned once its launcher is gone.
+    /// </summary>
+    /// <remarks>
+    /// <para>The selection tests above take <c>LauncherIsLive</c> as data, so they pin the rule
+    /// but say nothing about whether the value handed to it is ever right. This drives the
+    /// actual Toolhelp snapshot against a process this test really launched, which is the only
+    /// way the interop, the parent lookup and the start-time guard are exercised at all.</para>
+    /// <para>Both directions are asserted against the <em>same</em> pid. A probe hard-wired to
+    /// either answer passes one half, so checking only one would leave the constant
+    /// indistinguishable from a working query.</para>
+    /// </remarks>
+    [TestMethod]
+    public void The_Launcher_Probe_Tracks_A_Real_Process()
+    {
+        // A child of this test process, so its launcher is known-alive: us.
+        using var child = Process.Start(new ProcessStartInfo
+        {
+            FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe",
+            Arguments = "/c pause",
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start the probe child.");
+
+        try
+        {
+            var parents = OrphanedHostSweep.SnapshotParentPids();
+
+            Assert.IsTrue(parents.ContainsKey(child.Id),
+                "Precondition: the snapshot must contain the child, or the probe below is " +
+                "answering from a missing entry rather than from the process table.");
+
+            Assert.AreEqual(
+                Environment.ProcessId,
+                parents[child.Id],
+                "Precondition: this test process must really be the child's parent.");
+
+            Assert.IsTrue(
+                OrphanedHostSweep.LauncherIsLive(child.Id, parents),
+                "A process whose launcher is this very test was reported as orphaned.");
+
+            // Now the orphan case, without killing anything real: the same child, described by
+            // a snapshot whose recorded parent no longer exists. Pid 0 is never a live process,
+            // and the map is what the probe reads, so this is the state a dead launcher leaves.
+            var orphaned = new Dictionary<int, int>(parents) { [child.Id] = int.MaxValue };
+
+            Assert.IsFalse(
+                OrphanedHostSweep.LauncherIsLive(child.Id, orphaned),
+                "A process whose recorded launcher is not running must read as orphaned.");
+        }
+        finally
+        {
+            try { child.Kill(entireProcessTree: true); child.WaitForExit(10_000); }
+            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
+            {
+                Console.WriteLine($"Probe child already gone: {ex.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -566,7 +674,7 @@ public class OrphanedHostSweepTests
         // what makes disagreeing about them a defect rather than a preference.
         Assert.AreEqual(
             1,
-            OrphanedHostSweep.SelectOurs([new OrphanedHostSweep.Candidate(1, viaDot, OurSession)], plain, OurSession).Count(),
+            OrphanedHostSweep.SelectOurs([At(1, viaDot)], plain, OurSession).Count(),
             "Precondition: the sweep must already consider these one image.");
 
         using var foreign = StageForeignLease(plain);

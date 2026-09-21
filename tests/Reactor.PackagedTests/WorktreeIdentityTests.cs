@@ -360,6 +360,19 @@ public partial class WorktreeIdentityTests
             Assert.IsFalse(
                 WorktreeIdentity.IsSameDirectory(leaf, Path.Join(physical, "bin")),
                 "A parent directory is not the same directory.");
+
+            // The same comparison must stay insensitive to how the caller *spelled* an existing
+            // directory. The exactness added for case-sensitive parents is about what the
+            // filesystem reports, not about the caller's input, and the resolver returns the
+            // on-disk case whatever case it is asked with -- so this must still be true.
+            Assert.IsTrue(
+                WorktreeIdentity.IsSameDirectory(leaf, leaf.ToUpperInvariant()),
+                "Two case spellings of one existing directory must still compare equal: the " +
+                "final-path query reports the same on-disk case for both.");
+
+            Assert.IsTrue(
+                WorktreeIdentity.IsSameDirectory(leaf.ToLowerInvariant(), leaf.ToUpperInvariant()),
+                "Neither side's spelling should matter once the filesystem has answered.");
         }
         finally
         {
@@ -373,6 +386,94 @@ public partial class WorktreeIdentityTests
                 Console.WriteLine($"Junction already removed before cleanup: {ex.Message}");
             }
             Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Two directories that differ only in case are two directories, and the ownership
+    /// comparison has to say so.
+    /// </summary>
+    /// <remarks>
+    /// <para>Derivation lowercases, so under a case-sensitive parent <c>Repo</c> and
+    /// <c>repo</c> collapse to one package name. That much is a tolerated collision. What must
+    /// not follow from it is <see cref="WorktreeIdentity.IsSameDirectory"/> agreeing, because
+    /// that is the ownership test: a registration recorded against <c>Repo</c> would be judged
+    /// to be <c>repo</c>'s own, classified <c>RemoveContending</c>, and unregistered out from
+    /// under a live run. Answering "different" turns that eviction into the conflict refusal
+    /// the deployment already knows how to report.</para>
+    /// <para>The shared derived name is asserted too, so the test states the whole situation
+    /// rather than half of it: the collision is real and is deliberately survived, not avoided.
+    /// Skipped where the filesystem cannot be made case-sensitive, since the premise is then
+    /// unreachable and asserting anything about it would be theatre.</para>
+    /// </remarks>
+    [TestMethod]
+    public void Two_Directories_Differing_Only_In_Case_Are_Not_One_Directory()
+    {
+        var root = Path.Join(Path.GetTempPath(), "reactor-case-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            if (!TryEnableCaseSensitivity(root))
+            {
+                Assert.Inconclusive(
+                    "This filesystem cannot be made case-sensitive, so two directories " +
+                    "differing only in case cannot exist and the premise is unreachable.");
+            }
+
+            var upper = Path.Join(root, "Repo");
+            var lower = Path.Join(root, "repo");
+            Directory.CreateDirectory(upper);
+            Directory.CreateDirectory(lower);
+
+            // Positive control. Without it, a filesystem that silently merged the two would
+            // leave every assertion below passing for the wrong reason.
+            Assert.AreEqual(2, Directory.GetDirectories(root).Length,
+                "Precondition: the two spellings must really be two directories.");
+
+            Assert.AreEqual(
+                WorktreeIdentity.DerivePackageName(Base, upper),
+                WorktreeIdentity.DerivePackageName(Base, lower),
+                "Precondition: derivation lowercases, so these are expected to collide. If this " +
+                "ever stops being true the collision has been fixed at the source and the " +
+                "containment below is no longer what protects the other checkout.");
+
+            Assert.IsFalse(
+                WorktreeIdentity.IsSameDirectory(upper, lower),
+                "Two distinct directories compared equal, so a registration belonging to one " +
+                "would be treated as the other's own and removed while it was still running.");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Marks a directory case-sensitive, reporting whether the filesystem accepted it.
+    /// </summary>
+    private static bool TryEnableCaseSensitivity(string directory)
+    {
+        try
+        {
+            using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "fsutil.exe",
+                Arguments = $"file setCaseSensitiveInfo \"{directory}\" enable",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+
+            if (proc is null) return false;
+
+            proc.WaitForExit(30_000);
+            return proc.HasExited && proc.ExitCode == 0;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
         }
     }
 
