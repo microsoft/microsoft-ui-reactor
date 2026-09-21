@@ -234,6 +234,16 @@ Conventions for contributors:
   work leaked on every failed bootstrap: the count never returned to zero, and the host process
   and its liveness lease outlived the run — leaving the next run to defer to a sibling that was
   no longer there.
+- The packaged tier's `.resw` tripwire judges build output by the path below each scanned
+  project root rather than by the absolute path. A checkout beneath any directory named `bin` or
+  `obj` — `C:\bin\reactor`, a build agent's `obj` workspace — put that component in every path,
+  so every source `.resw` was discarded and the scan reported zero. For a tripwire whose only
+  possible finding is "none found", that is indistinguishable from a clean tree. The existing
+  positive control could not catch it, because it stages its tree under `%TEMP%`.
+- The documented by-hand packaged cleanup in `TESTING.md` now filters on the package publisher,
+  matching the runtime sweep in `AppxLooseLayoutDeployment` and the `Unregister packaged host`
+  step in CI. A name wildcard alone can match a current-user package from another publisher that
+  happens to share the prefix, and the documented command would have unregistered it.
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never

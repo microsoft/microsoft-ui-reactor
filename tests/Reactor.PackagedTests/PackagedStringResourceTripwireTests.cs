@@ -195,19 +195,86 @@ public class PackagedStringResourceTripwireTests
     }
 
     /// <summary>
+    /// The scan's verdict does not depend on where the repository was cloned.
+    /// </summary>
+    /// <remarks>
+    /// <para>The control above stages its tree under <c>%TEMP%</c>, which on an ordinary
+    /// machine has no <c>bin</c> or <c>obj</c> component — so it passes whether the build-output
+    /// filter reads the absolute path or the path below the root. This stages the same tree
+    /// beneath a directory named <c>bin</c>, which is the case that separates them.</para>
+    /// <para>It matters because a checkout really can sit there: <c>C:\bin\reactor</c>, or a
+    /// build agent rooted in an <c>obj</c> workspace. An absolute-path filter discards every
+    /// source <c>.resw</c> in that layout and the tripwire reports zero, which is the same
+    /// answer it gives for a clean tree.</para>
+    /// </remarks>
+    [TestMethod]
+    public void The_Scan_Is_Not_Blinded_By_A_Checkout_Under_A_Build_Output_Name()
+    {
+        var staging = Path.Join(Path.GetTempPath(), "reactor-resw-" + Guid.NewGuid().ToString("n"));
+        try
+        {
+            // The repository root, as if cloned to C:\bin\checkout.
+            var root = Path.Join(staging, "bin", "checkout");
+
+            var wanted = Path.Join(root, "Strings", "en-us", "Resources.resw");
+            Directory.CreateDirectory(Path.GetDirectoryName(wanted)!);
+            File.WriteAllText(wanted, "<root />");
+
+            var ignored = Path.Join(root, "obj", "x64", "Resources.resw");
+            Directory.CreateDirectory(Path.GetDirectoryName(ignored)!);
+            File.WriteAllText(ignored, "<root />");
+
+            var found = ScanForResw(root);
+
+            CollectionAssert.Contains(found, wanted,
+                "A source .resw went missing because the checkout sits under a directory named " +
+                "'bin'. The tripwire would report a clean tree in this layout however many " +
+                "string resources were added.\n" + string.Join("\n", found));
+
+            CollectionAssert.DoesNotContain(found, ignored,
+                "Build output below the root must still be ignored, or the fix above traded a " +
+                "false negative for a false positive.\n" + string.Join("\n", found));
+        }
+        finally
+        {
+            if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// The one scan both the repository check and its positive control go through, so the
     /// control cannot pass while the real check is broken.
     /// </summary>
     private static List<string> ScanForResw(params string[] roots) =>
         roots
             .Where(Directory.Exists)
-            .SelectMany(d => Directory.EnumerateFiles(d, "*.resw", SearchOption.AllDirectories))
-            .Where(IsSourceFile)
+            .SelectMany(d => Directory
+                .EnumerateFiles(d, "*.resw", SearchOption.AllDirectories)
+                .Where(f => IsSourceFile(d, f)))
             .ToList();
 
-    private static bool IsSourceFile(string path) =>
-        !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
-        !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Whether a <c>.resw</c> under <paramref name="root"/> is a source file rather than build
+    /// output, judged by the path <em>below</em> the root.
+    /// </summary>
+    /// <remarks>
+    /// <para>Deliberately relative. Testing the absolute path instead means the verdict depends
+    /// on where the repository happens to be cloned: a checkout under any directory named
+    /// <c>bin</c> or <c>obj</c> — <c>C:\bin\reactor</c>, a build agent's <c>obj</c> workspace —
+    /// puts that component in <em>every</em> path, so every source <c>.resw</c> is discarded
+    /// and the scan reports zero. For a tripwire whose only possible finding is "none found",
+    /// that is indistinguishable from a clean tree, which is the one way it can fail silently.
+    /// </para>
+    /// <para>Matching whole components rather than a substring keeps a directory such as
+    /// <c>binaries</c> from being read as <c>bin</c>. The filename is included in the walk only
+    /// because it cannot collide: a file matching <c>*.resw</c> is never named <c>bin</c>.
+    /// </para>
+    /// </remarks>
+    private static bool IsSourceFile(string root, string path) =>
+        !Path.GetRelativePath(root, path)
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(part => part.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                      || part.Equals("obj", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Walks up from the test binary to the directory holding <c>Reactor.slnx</c>.</summary>
     private static string RepoRoot

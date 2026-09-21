@@ -629,6 +629,19 @@ Consequences worth knowing:
   do need to remove one checkout's package while others live, match the exact derived name or the
   install location rather than the wildcard. Note the bare base name matches nothing once
   identities are derived.
+- **Filter the publisher before you remove anything.** A name wildcard alone can match a
+  current-user package from a *different* publisher that happens to share the prefix, and a bare
+  `| Remove-AppxPackage` would unregister it. The deployment rewrites only `Identity/@Name`,
+  never `Identity/@Publisher`, so every registration this repo is entitled to remove carries
+  `CN=Microsoft.UI.Reactor.PackagedTests.Host` exactly. Both automated sweeps already filter on
+  it — `AppxLooseLayoutDeployment` at runtime and the `Unregister packaged host` step in CI — so
+  any sweep you run by hand should too:
+
+  ```powershell
+  Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' |
+      Where-Object { $_.Publisher -eq 'CN=Microsoft.UI.Reactor.PackagedTests.Host' } |
+      Remove-AppxPackage
+  ```
 - **`Packaged_IdentityGuard` stays an exact equality check.** It re-derives the expected name from
   `AppContext.BaseDirectory` rather than being told it, which works because the tier already
   requires the install location and the running directory to be the same path.
@@ -654,7 +667,10 @@ dotnet test tests\Reactor.PackagedTests -p:Platform=x64         # shell 1: check
 dotnet test tests\Reactor.PackagedTests -p:Platform=x64         # shell 2: checkout B (C:\src\probe)
 
 # 3. From a THIRD shell, while both are still running, take the measurement.
+#    Publisher-scoped so a same-prefix package from another publisher cannot be miscounted
+#    as one of ours.
 Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' |
+    Where-Object { $_.Publisher -eq 'CN=Microsoft.UI.Reactor.PackagedTests.Host' } |
     Select-Object Name, InstallLocation
 Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WindowsApps\reactor-packaged-test-host*.exe"
 ```
@@ -671,10 +687,12 @@ What it has to show: **two** packages with different `Name` values and different
 the first, which is the failure the derivation exists to prevent, and the tier would then silently
 exercise the wrong binary.
 
-Clean up with the wildcard sweep described above, once both runs have stopped:
+Clean up with the publisher-scoped wildcard sweep described above, once both runs have stopped:
 
 ```powershell
-Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' | Remove-AppxPackage
+Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' |
+    Where-Object { $_.Publisher -eq 'CN=Microsoft.UI.Reactor.PackagedTests.Host' } |
+    Remove-AppxPackage
 git worktree remove C:\src\probe
 ```
 
