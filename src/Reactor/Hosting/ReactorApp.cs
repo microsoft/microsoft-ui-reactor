@@ -1126,10 +1126,11 @@ public static partial class ReactorApp
     private static int _dipBehaviorChangeNoticeEmitted;
 
     /// <summary>
-    /// Emit one stderr <c>[reactor]</c> info-line per process the first time a
-    /// <c>Run</c> overload is invoked <em>with an explicit size</em>, describing
-    /// the DIP-vs-pixel size behavior change (spec 036 §12.1) and the dropped
-    /// 1024×768 size default (spec 036 §12.2a).
+    /// Emit one stderr <c>[reactor]</c> info-line per process the first time a window is
+    /// opened <em>with an explicit size</em> — whether through a <c>Run</c> overload or a
+    /// public <c>OpenWindow(WindowSpec, …)</c> call — describing the DIP-vs-pixel size
+    /// behavior change (spec 036 §12.1) and the dropped 1024×768 size default
+    /// (spec 036 §12.2a).
     /// </summary>
     /// <remarks>
     /// Call sites pass the caller's declared size so the notice stays silent for

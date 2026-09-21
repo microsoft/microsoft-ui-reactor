@@ -271,10 +271,25 @@ internal static class DevtoolsCliParser
     }
 
     /// <summary>
+    /// The largest DIP magnitude accepted for a window origin or extent. Chosen so the
+    /// value survives the downstream conversion rather than to model any real display:
+    /// <c>ReactorWindow.DipToPhysicalPoint</c> / <c>DipToPhysicalScalar</c> compute
+    /// <c>dip * dpi / 96</c> and cast the result to <c>int</c>. A merely-finite input does
+    /// not survive that — <c>1e308 * 144 / 96</c> overflows to infinity and the cast
+    /// saturates to <c>int.MaxValue</c>, moving or resizing the window to the far edge of
+    /// the coordinate space where capture fails. At 500% scaling this bound still converts
+    /// to ±327,680 physical pixels, comfortably inside <c>int</c>, while being orders of
+    /// magnitude larger than any real monitor arrangement or window.
+    /// </summary>
+    private const double MaxWindowCoordinateDip = 65_536;
+
+    /// <summary>
     /// Reads a positive, finite DIP dimension following <paramref name="flag"/>.
     /// Returns <c>null</c> when absent or unusable, so the caller keeps whatever
     /// size the app itself declared. Parsed invariantly: this is a machine-facing
     /// switch, so a comma-decimal locale must not change how "600.5" is read.
+    /// Oversized-but-finite values are rejected for the same reason coordinates are —
+    /// they cannot survive the DIP→physical conversion.
     /// </summary>
     private static double? ParseDimension(string[] args, string flag)
     {
@@ -282,21 +297,8 @@ internal static class DevtoolsCliParser
         if (idx < 0 || idx + 1 >= args.Length) return null;
         if (!double.TryParse(args[idx + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
             return null;
-        return double.IsFinite(value) && value > 0 ? value : null;
+        return double.IsFinite(value) && value > 0 && value <= MaxWindowCoordinateDip ? value : null;
     }
-
-    /// <summary>
-    /// The largest DIP magnitude accepted for a window origin. Chosen so the value
-    /// survives the downstream conversion rather than to model any real display:
-    /// <c>ReactorWindow.DipToPhysicalPoint</c> computes <c>dip * dpi / 96</c> and casts
-    /// the result to <c>int</c>. A merely-finite input does not survive that —
-    /// <c>1e308 * 144 / 96</c> overflows to infinity and the cast saturates to
-    /// <c>int.MaxValue</c>, moving the window to the far edge of the coordinate space
-    /// where capture fails. At 500% scaling this bound still converts to ±327,680
-    /// physical pixels, comfortably inside <c>int</c>, while being orders of magnitude
-    /// larger than any real multi-monitor arrangement.
-    /// </summary>
-    private const double MaxWindowCoordinateDip = 65_536;
 
     /// <summary>
     /// Reads a finite DIP coordinate following <paramref name="flag"/>. Unlike

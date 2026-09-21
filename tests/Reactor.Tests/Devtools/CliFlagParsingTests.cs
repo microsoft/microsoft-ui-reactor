@@ -45,10 +45,27 @@ public class CliFlagParsingTests
     [InlineData("NaN")]
     [InlineData("Infinity")]
     [InlineData("not-a-number")]
+    // Same overflow class as coordinates: DipToPhysicalScalar multiplies by DPI and
+    // casts to int, so an oversized-but-finite extent becomes an int-max resize
+    // rather than falling back to the app's own size.
+    [InlineData("1e308")]
+    [InlineData("70000")]
     public void Width_RejectsNonPositiveOrNonFinite(string value)
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width", value]);
         Assert.Null(opts.WindowWidth);
+    }
+
+    // Positive control for the bound above: a genuinely large but usable extent —
+    // an 8K-wide window at the limit — must still be accepted, or the guard would
+    // be satisfied by rejecting everything.
+    [Theory]
+    [InlineData("65536")]
+    [InlineData("7680")]
+    public void Width_AcceptsLargeButRepresentableDimensions(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width", value]);
+        Assert.NotNull(opts.WindowWidth);
     }
 
     [Fact]
