@@ -253,23 +253,78 @@ public class ReactorAppStaticHelperTests
 
         // OpenWindow validates its spec before emitting, so a spec that is about
         // to be rejected cannot burn the latch and silence the next window that
-        // legitimately should report. This pins the ordering headlessly: an
-        // invalid spec throws from Validate(), and the latch must survive.
+        // legitimately should report. This drives ValidateAndAnnounceSpec — the
+        // actual code OpenWindow runs — rather than re-implementing the order in
+        // the test, so reverting the production ordering reddens it.
         [Fact]
-        public void InvalidSpec_RejectedBeforeNotice_LeavesLatchUnconsumed()
+        public void ValidateAndAnnounceSpec_InvalidSpec_ThrowsWithoutConsumingLatch()
         {
             ReactorApp.ResetDipBehaviorChangeNoticeForTests();
 
-            var invalid = new WindowSpec { Title = "Bad", Width = -1 };
-            Assert.ThrowsAny<ArgumentException>(() => invalid.Validate());
+            var origErr = Console.Error;
+            using var duringInvalid = new StringWriter();
+            Console.SetError(duringInvalid);
+            try
+            {
+                // Width = -1 fails WindowSpec.Validate. Emitting before that check
+                // would both print here and latch.
+                Assert.ThrowsAny<ArgumentException>(() =>
+                    ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "Bad", Width = -1 }));
+                Assert.Empty(duringInvalid.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
 
+            using var duringValid = new StringWriter();
+            Console.SetError(duringValid);
+            try
+            {
+                // The latch must still be unspent, so the next good window reports.
+                ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "Good", Width = 800, Height = 600 });
+                Assert.Contains("[reactor]", duringValid.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // Positive control: the seam does announce a valid sized spec, so the
+        // assertion above cannot pass merely because the emit never fires.
+        [Fact]
+        public void ValidateAndAnnounceSpec_ValidSizedSpec_Announces()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
             var origErr = Console.Error;
             using var sw = new StringWriter();
             Console.SetError(sw);
             try
             {
-                // The next well-formed sized window must still get the notice.
-                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 800, height: 600);
+                ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "T", Width = 640, Height = 480 });
+                Assert.Contains("[reactor]", sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // A spec that declares no size still must not consume the latch.
+        [Fact]
+        public void ValidateAndAnnounceSpec_UnsizedSpec_IsSilentAndLeavesLatch()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "T" });
+                Assert.Empty(sw.ToString());
+
+                ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "T2", Width = 800 });
                 Assert.Contains("[reactor]", sw.ToString());
             }
             finally

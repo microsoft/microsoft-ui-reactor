@@ -705,13 +705,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(root);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        // Validate before the notice so an invalid spec cannot consume the
-        // one-shot latch and then throw, silencing the next window that would
-        // legitimately have reported. The Run(WindowSpec) overloads order it the
-        // same way; ReactorWindow's constructor validates again, which is
-        // idempotent and already the existing pattern.
-        spec.Validate();
-        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
+        ValidateAndAnnounceSpec(spec);
         return OpenWindowCore(spec, root, renderFunc: null, configure: configure);
     }
 
@@ -729,10 +723,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(render);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        // See the Func<Component> overload above: validate first so a rejected
-        // spec cannot burn the notice latch.
-        spec.Validate();
-        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
+        ValidateAndAnnounceSpec(spec);
         return OpenWindowCore(spec, rootFactory: null, render, configure: configure);
     }
 
@@ -1133,6 +1124,26 @@ public static partial class ReactorApp
     }
 
     private static int _dipBehaviorChangeNoticeEmitted;
+
+    /// <summary>
+    /// The <c>OpenWindow</c> pre-flight: reject an invalid spec, then announce its size.
+    /// </summary>
+    /// <remarks>
+    /// The order is the point, which is why this is a named method rather than two lines
+    /// at each call site. <see cref="EmitDipBehaviorChangeNoticeOnce"/> latches once per
+    /// process, so emitting before validation would let a spec that is about to throw
+    /// consume the latch and silence the next window that legitimately should report.
+    /// Extracted so that ordering is reachable from a headless test —
+    /// <c>OpenWindow</c> itself constructs WinUI types and cannot run in
+    /// <c>Reactor.Tests</c>. <c>ReactorWindow</c>'s constructor validates again,
+    /// which is idempotent and already the pattern the <c>Run(WindowSpec)</c> overloads follow.
+    /// </remarks>
+    /// <param name="spec">The window spec to validate and, if sized, announce.</param>
+    internal static void ValidateAndAnnounceSpec(WindowSpec spec)
+    {
+        spec.Validate();
+        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
+    }
 
     /// <summary>
     /// Emit one stderr <c>[reactor]</c> info-line per process the first time a window is
