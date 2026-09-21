@@ -383,7 +383,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 FullScreen: fullScreen,
                 InitialWindowSpec: options.EmbedRequested
                     ? BuildEmbedWindowSpec(options, $"Preview — {initialComponentName}", width, height)
-                    : BuildPositionedWindowSpec(options, $"Preview — {initialComponentName}", width, height));
+                    : BuildPositionedWindowSpec(options, $"Preview — {initialComponentName}", width, height, fullScreen));
 
             Application.Start(_ =>
             {
@@ -409,8 +409,17 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     /// <para>Both axes are required together: a half-specified origin has no sensible meaning
     /// (the other axis would fall back to an OS-chosen value on a possibly different monitor),
     /// so a lone <c>--x</c> is ignored rather than guessed at.</para>
+    /// <para>Returning a non-null spec makes <see cref="ReactorApp.BuildInitialWindowSpec"/>
+    /// take its pass-through branch, so every flat option this path still cares about has to be
+    /// restated here — <paramref name="fullScreen"/> in particular, which would otherwise be
+    /// silently dropped for a preview launched with an explicit origin.</para>
     /// </remarks>
-    internal static WindowSpec? BuildPositionedWindowSpec(DevtoolsCliOptions options, string baseTitle, double? width, double? height)
+    internal static WindowSpec? BuildPositionedWindowSpec(
+        DevtoolsCliOptions options,
+        string baseTitle,
+        double? width,
+        double? height,
+        bool fullScreen = false)
     {
         if (options.WindowX is not { } x || options.WindowY is not { } y) return null;
 
@@ -419,6 +428,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
             Title = baseTitle,
             Width = width,
             Height = height,
+            Presenter = fullScreen ? PresenterKind.FullScreen : PresenterKind.Overlapped,
             StartPosition = WindowStartPosition.Manual,
             ManualPosition = (x, y),
             // Placement persistence would restore a previously saved rect and

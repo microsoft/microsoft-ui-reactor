@@ -244,8 +244,7 @@ Capture is `PrintWindow` over the live window in *physical* pixels, so the scale
 baked into a PNG is the DPI of whichever monitor the window lands on — and a doc
 app's window opens on the **primary** display. If your 150% monitor is not the
 primary one (and you cannot change that, e.g. over a remote session), set
-`REACTOR_DOCS_CAPTURE_ORIGIN` to a virtual-desktop `X,Y` origin on the monitor
-you want:
+`REACTOR_DOCS_CAPTURE_ORIGIN` to the origin of the monitor you want:
 
 ```powershell
 $env:REACTOR_DOCS_CAPTURE_ORIGIN = '2600,0'
@@ -253,18 +252,63 @@ mur docs compile --screenshots-only
 ```
 
 The harness forwards that to each doc app as `--x` / `--y`, which the devtools
-preview host applies as the window's start position. Coordinates are DIPs and may
-be zero or negative — a monitor left of or above the primary has a negative
-origin. Both axes are required; a lone `--x` is ignored. Leave the variable unset
-when your primary display is already at 150%.
+preview host applies as the window's start position.
 
-To find the origin of each monitor, enumerate them with their DPI:
+**The value is in DIPs, not physical pixels**, because it becomes
+`WindowSpec.ManualPosition` and the window converts it with *its own* DPI — which
+at initial placement is the **primary** monitor's. The two are the same number
+only when the primary display is at 100%. Otherwise:
+
+```
+dipX = physicalX * 96 / primaryDpi
+```
+
+Get the value to paste with this probe, which enumerates each monitor, reports
+its scale, and does that division for you:
 
 ```powershell
-# EnumDisplayMonitors + GetDpiForMonitor; the rect origin is the value to use.
-# Note GetDeviceCaps(LOGPIXELSY) reports the *session* DPI, which is fixed at
-# sign-in — it will not reflect a scale change and must not be used to check this.
+Add-Type -TypeDefinition @'
+using System; using System.Collections.Generic; using System.Runtime.InteropServices;
+public static class MonProbe {
+  public delegate bool Cb(IntPtr h, IntPtr dc, ref RECT r, IntPtr d);
+  [DllImport("user32.dll")] public static extern bool EnumDisplayMonitors(IntPtr a, IntPtr b, Cb c, IntPtr d);
+  [DllImport("Shcore.dll")] public static extern int GetDpiForMonitor(IntPtr h, int t, out uint x, out uint y);
+  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool GetMonitorInfoW(IntPtr h, ref MI mi);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L,T,R,B; }
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct MI {
+    public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string szDevice; }
+  public static List<string> Go() {
+    SetProcessDpiAwarenessContext((IntPtr)(-4));
+    var rows = new List<string>(); uint pdpi = 96;
+    EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr h, IntPtr dc, ref RECT r, IntPtr d) => {
+      uint dx, dy; GetDpiForMonitor(h, 0, out dx, out dy);
+      var mi = new MI(); mi.cbSize = Marshal.SizeOf(typeof(MI)); GetMonitorInfoW(h, ref mi);
+      if ((mi.dwFlags & 1) != 0) pdpi = dx;
+      rows.Add(string.Format("{0}|{1}|{2}|{3}", mi.szDevice, dx, r.L, r.T)); return true;
+    }, IntPtr.Zero);
+    var outp = new List<string>();
+    foreach (var row in rows) { var p = row.Split('|'); uint dpi = uint.Parse(p[1]);
+      outp.Add(string.Format("{0,-14} scale={1,4}%  REACTOR_DOCS_CAPTURE_ORIGIN='{2},{3}'",
+        p[0], Math.Round(dpi/96.0*100), Math.Round(int.Parse(p[2]) * 96.0 / pdpi), Math.Round(int.Parse(p[3]) * 96.0 / pdpi))); }
+    return outp;
+  }
+}
+'@ -ErrorAction SilentlyContinue
+[MonProbe]::Go() | ForEach-Object { $_ }
 ```
+
+Pick the line whose `scale=` reads 150%, and nudge the X a little further in
+(e.g. `2600` rather than `2560`) so the window is unambiguously inside that
+monitor. Coordinates may be zero or negative — a monitor left of or above the
+primary has a negative origin. Both axes are required; a lone `--x` is ignored.
+Leave the variable unset when your primary display is already at 150%.
+
+> **Do not use `GetDeviceCaps(LOGPIXELSY)` to check your scaling.** It reports the
+> *session* DPI, which is fixed at sign-in: it will keep reporting the old value
+> after you change the display scale, so it cannot verify the thing you just
+> changed. `GetDpiForMonitor`, as above, is live.
 
 **Bulk runs on a non-primary monitor are racy.** A window created off the primary
 display takes a `WM_DPICHANGED` before it re-lays-out, and under the load of a

@@ -644,8 +644,12 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(startup);
         // This overload takes no size arguments, so there is nothing to report
         // here. Apps using it are multi-window: they size each window through
-        // OpenWindow(WindowSpec), which emits the notice itself. The call is
-        // kept so every Run overload stays visibly accounted for.
+        // the public OpenWindow(WindowSpec) overloads, which emit the notice
+        // themselves. The emit deliberately sits on those public entries rather
+        // than on OpenWindowCore, because the core is also the funnel for
+        // framework-created windows (e.g. docking's floating panes, whose
+        // width/height default to non-null literals) — reporting those would
+        // announce a migration the app never asked for and cannot act on.
         EmitDipBehaviorChangeNoticeOnce();
         StartApplication(() => new ReactorAppOptions(Startup: startup));
     }
@@ -701,6 +705,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(root);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
+        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
         return OpenWindowCore(spec, root, renderFunc: null, configure: configure);
     }
 
@@ -718,6 +723,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(render);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
+        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
         return OpenWindowCore(spec, rootFactory: null, render, configure: configure);
     }
 
@@ -731,15 +737,6 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure,
         bool excludeFromShutdownPolicy = false)
     {
-        // Every window — primary (via StartApplication → BuildInitialWindowSpec)
-        // and secondary — is created here, so this is the one place that sees
-        // every explicit DIP size an app declares. The Run overloads emit from
-        // their own arguments as well, which is redundant but harmless under the
-        // one-shot latch; this call is what covers the sizes a Run signature
-        // never sees, notably the multi-window Run(startup) shape whose windows
-        // are sized only by the WindowSpec passed to OpenWindow.
-        EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
-
         ReactorWindow window = new ReactorWindow(spec);
         window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
         try

@@ -524,6 +524,10 @@ public class DevtoolsHostCliTests
     {
         const string switchName = "Reactor.DevtoolsSupport";
         var host = new CapturingDevtoolsHost();
+        // Register writes a process-global static with no public reset, so the
+        // prior value is restored below; otherwise every later test in this
+        // process would resolve the fake instead of the real devtools host.
+        var previous = ReactorDevtoolsBootstrap.CurrentForTests;
         ReactorDevtoolsBootstrap.Register(host);
         try
         {
@@ -538,6 +542,7 @@ public class DevtoolsHostCliTests
         finally
         {
             AppContext.SetSwitch(switchName, false);
+            ReactorDevtoolsBootstrap.RestoreForTests(previous);
         }
     }
 
@@ -560,9 +565,56 @@ public class DevtoolsHostCliTests
         Assert.Equal(360d, spec.Height);
         // Persistence would restore a saved rect over the position just requested.
         Assert.False(spec.PersistPlacement);
-        // Validate() enforces the Manual/ManualPosition pairing; a spec that
-        // cannot validate would throw at window construction instead of here.
-        spec.Validate();
+    }
+
+    // Returning a non-null spec flips BuildInitialWindowSpec to its pass-through
+    // branch, so any flat option not restated on the spec is silently dropped.
+    // fullScreen is the one that bites: before --x/--y existed this path always
+    // passed InitialWindowSpec: null, and a preview of a full-screen app opened
+    // full-screen. Composing both halves is what catches that — testing the
+    // builder alone cannot, because the loss happens at the seam.
+    [Theory]
+    [InlineData(true, PresenterKind.FullScreen)]
+    [InlineData(false, PresenterKind.Overlapped)]
+    public void PositionedSpec_PreservesFullScreenThroughBuildInitialWindowSpec(
+        bool fullScreen, PresenterKind expected)
+    {
+        var options = DevtoolsCliParser.Parse(
+            ["app.exe", "--devtools", "run", "--x", "2600", "--y", "0"]);
+        var positioned = DevtoolsHost.BuildPositionedWindowSpec(
+            options, "Preview", width: 520, height: 360, fullScreen: fullScreen);
+
+        var resolved = ReactorApp.BuildInitialWindowSpec(new ReactorAppOptions(
+            WindowTitle: "Preview",
+            WindowWidth: 520,
+            WindowHeight: 360,
+            FullScreen: fullScreen,
+            InitialWindowSpec: positioned));
+
+        Assert.Equal(expected, resolved.Presenter);
+        Assert.Equal((2600d, 0d), resolved.ManualPosition);
+    }
+
+    // The same composition without an origin must keep taking the synthesis
+    // branch — a positive control proving the assertion above is about the
+    // positioned spec and not about BuildInitialWindowSpec in general.
+    [Fact]
+    public void WithoutOrigin_FullScreenStillFlowsThroughFlatOptions()
+    {
+        var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
+        var positioned = DevtoolsHost.BuildPositionedWindowSpec(
+            options, "Preview", width: 520, height: 360, fullScreen: true);
+
+        Assert.Null(positioned);
+
+        var resolved = ReactorApp.BuildInitialWindowSpec(new ReactorAppOptions(
+            WindowTitle: "Preview",
+            WindowWidth: 520,
+            WindowHeight: 360,
+            FullScreen: true,
+            InitialWindowSpec: positioned));
+
+        Assert.Equal(PresenterKind.FullScreen, resolved.Presenter);
     }
 
     [Theory]
