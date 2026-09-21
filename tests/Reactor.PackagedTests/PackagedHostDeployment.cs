@@ -841,15 +841,30 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     /// <see cref="TryAcquireReclamationLease"/> promises cannot happen to a run whose directory
     /// was removed out from under it. For an ordinary path the spellings collapse to one, so
     /// this adds no files to the common case.</para>
+    /// <para>The spellings are snapshotted <em>once</em> and then crossed with the versions,
+    /// rather than being recomputed inside the cross. Recomputing re-asks the filesystem per
+    /// version, and the answer is not stable across those calls: if the layout directory is
+    /// deleted midway, the versions enumerated afterwards contribute only the weaker textual
+    /// form and the resolved spelling is missing from their share of the set, making the set a
+    /// ragged cross rather than the complete one this documents. It is not a false grant —
+    /// <see cref="WorktreeIdentity.CandidateCanonicalForms"/> always includes a spelling derived
+    /// by string handling alone, so any two sets for one layout still share that name and still
+    /// exclude each other — but it does mean the set depends on when within its own construction
+    /// the filesystem was asked. One snapshot makes it a function of a single observation, so
+    /// every version contributes the same spellings whatever happens to the directory while the
+    /// locks are being named.</para>
     /// </remarks>
     internal static IReadOnlyList<string> LockPathsFor(
-        string layoutPath, IReadOnlyList<string>? versions = null) =>
-        (versions ?? WorktreeIdentity.SupportedAlgorithmVersions)
-            .SelectMany(_ => WorktreeIdentity.CandidateCanonicalForms(layoutPath),
-                (version, form) => LockPathForCanonicalForm(form, version))
+        string layoutPath, IReadOnlyList<string>? versions = null)
+    {
+        var forms = WorktreeIdentity.CandidateCanonicalForms(layoutPath);
+
+        return (versions ?? WorktreeIdentity.SupportedAlgorithmVersions)
+            .SelectMany(_ => forms, (version, form) => LockPathForCanonicalForm(form, version))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
 
     /// <summary>
     /// Takes every supported version's lock for one layout, all or nothing.

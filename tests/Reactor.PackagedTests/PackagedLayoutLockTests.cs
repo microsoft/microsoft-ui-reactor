@@ -1208,4 +1208,80 @@ public class PackagedLayoutLockTests
             WorktreeIdentity.Canonicalize(layout),
             "The resolved physical spelling is missing from the candidate set.");
     }
+
+    /// <summary>
+    /// Every algorithm version is crossed with the same spellings, so the set is a complete
+    /// rectangle rather than a ragged one.
+    /// </summary>
+    /// <remarks>
+    /// Canonicalisation consults the filesystem, so recomputing it inside the version cross
+    /// asks a question whose answer can change between iterations. Snapshotting it once makes
+    /// the set a function of one observation; this pins the observable consequence, which is
+    /// that the count is exactly spellings x versions and each version contributes the same
+    /// number of names.
+    /// </remarks>
+    [TestMethod]
+    public void Every_Version_Is_Crossed_With_The_Same_Spellings()
+    {
+        var layout = SyntheticLayout();
+        Directory.CreateDirectory(layout);
+
+        var aliased = @"\\?\" + layout;
+        var forms = WorktreeIdentity.CandidateCanonicalForms(aliased);
+
+        Assert.IsTrue(forms.Count > 1,
+            "Precondition: this needs a path with more than one spelling, or a ragged cross " +
+            "would be indistinguishable from a complete one.");
+
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(aliased, TwoVersions);
+
+        Assert.AreEqual(forms.Count * TwoVersions.Length, paths.Count,
+            "The lock set is not the full cross of spellings and versions.\n" +
+            string.Join("\n", paths));
+    }
+
+    /// <summary>
+    /// One spelling in the candidate set never depends on the directory existing, which is what
+    /// keeps any two candidate sets for a path overlapping.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the invariant that makes the lock set fail-closed rather than merely
+    /// usually-correct. Two runs can legitimately derive different candidate sets for one
+    /// layout — one asks while the directory is live and resolves it, the other asks after it
+    /// is gone and cannot — and a lock set is only an exclusion if the two sets share a name.
+    /// The textual spelling is computed by string handling alone, so it is in every set the
+    /// same input can produce, present or absent. Any two therefore intersect, and a reclaimer
+    /// can never acquire a set disjoint from a live run's.</para>
+    /// <para>Asserted in both directory states against the same input, because a set that
+    /// merely contains the form while the directory exists does not establish the property that
+    /// matters, which is that losing the directory cannot remove it.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Spelling_That_Does_Not_Need_The_Directory_Is_Always_In_The_Set()
+    {
+        var layout = SyntheticLayout();
+        Directory.CreateDirectory(layout);
+
+        var aliased = @"\\?\" + layout;
+        var textual = Path.TrimEndingDirectorySeparator(layout).ToLowerInvariant();
+
+        var whilePresent = WorktreeIdentity.CandidateCanonicalForms(aliased);
+        CollectionAssert.Contains(whilePresent.ToArray(), textual,
+            "The existence-independent spelling is missing while the directory is live.\n" +
+            string.Join("\n", whilePresent));
+
+        Directory.Delete(layout, recursive: true);
+        Assert.IsFalse(Directory.Exists(layout), "Control: the layout must actually be gone.");
+
+        var onceGone = WorktreeIdentity.CandidateCanonicalForms(aliased);
+        CollectionAssert.Contains(onceGone.ToArray(), textual,
+            "Deleting the directory removed the one spelling that is supposed to survive it, so " +
+            "two runs could derive disjoint lock sets and both be admitted.\n" +
+            string.Join("\n", onceGone));
+
+        CollectionAssert.IsSubsetOf(
+            new[] { textual },
+            whilePresent.Intersect(onceGone, StringComparer.Ordinal).ToArray(),
+            "The two candidate sets do not overlap, which is what the lock set relies on.");
+    }
 }

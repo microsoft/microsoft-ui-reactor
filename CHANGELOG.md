@@ -244,6 +244,15 @@ Conventions for contributors:
   matching the runtime sweep in `AppxLooseLayoutDeployment` and the `Unregister packaged host`
   step in CI. A name wildcard alone can match a current-user package from another publisher that
   happens to share the prefix, and the documented command would have unregistered it.
+- The packaged tier's lock-path set now snapshots the layout's canonical spellings once and
+  crosses that snapshot with the algorithm versions, instead of recomputing them inside the
+  cross. Canonicalisation consults the filesystem, so passing it as the cross's collection
+  selector re-asked per version; a layout deleted midway made the later versions contribute only
+  the textual spelling, producing a ragged cross rather than the complete one the lock set is
+  documented to be. Exclusion itself was never at risk — one candidate spelling is derived by
+  string handling alone and so appears whatever the directory's state, meaning any two sets for
+  one layout still overlap — but the set otherwise depended on when during its own construction
+  the filesystem happened to be asked.
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never

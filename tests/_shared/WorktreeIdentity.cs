@@ -142,6 +142,25 @@ internal static class WorktreeIdentity
     /// still hashes differently from its physical form. That is acceptable only because a
     /// layout directory is always registered after it is built, so the path this is asked
     /// about at registration time exists by then.</para>
+    /// <para><b>Known limitation: per-directory case sensitivity.</b> The lowercasing assumes
+    /// the Windows default, where two spellings differing only in case are the same directory.
+    /// Windows can enable case sensitivity per directory (<c>fsutil file setCaseSensitiveInfo</c>,
+    /// which WSL sets), and under such a parent <c>Repo</c> and <c>repo</c> are two directories
+    /// that derive one identity. Note this is only about the lowercasing and not about the
+    /// filesystem query: measured here, <c>GetFinalPathNameByHandle</c> returns the path in its
+    /// <em>on-disk</em> case whatever case it is asked with, so resolution alone already
+    /// collapses case-insensitive spellings and already distinguishes case-sensitive ones. The
+    /// lowercasing exists for the fallback above, where no handle is available and the spelling
+    /// is whatever the caller wrote.</para>
+    /// <para>Left as-is deliberately. Removing the lowercasing would invalidate every
+    /// previously derived identity and so needs an algorithm version bump (see the class
+    /// remarks), and the collision it would fix is already contained rather than dangerous:
+    /// two such checkouts derive one name, and the second is refused by the ownership check in
+    /// <c>RemoveExistingRegistrations</c> — which names a hash collision between two checkouts
+    /// as one of its two causes and aborts with the conflicting install path — rather than
+    /// evicting the first or running the wrong binary. The cost is that the two cannot run
+    /// concurrently, which is the same cost as a genuine hash collision. Rename one of the
+    /// directories to something other than a case variant.</para>
     /// </remarks>
     internal static string Canonicalize(string path)
     {
