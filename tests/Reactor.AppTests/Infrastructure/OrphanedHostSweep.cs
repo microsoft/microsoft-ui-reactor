@@ -104,13 +104,15 @@ internal static class OrphanedHostSweep
     /// without a run's own lease blocking every later run's admission.</para>
     /// <para>The two ways this can fail are reported differently on purpose. A
     /// <see langword="null"/> return means one thing only — the gate exists and somebody else
-    /// is holding it. A storage fault that stops the gate being addressed at all throws
+    /// is holding it, which a sharing or lock violation is the only evidence for. Anything
+    /// that stops the gate being addressed or opened at all throws
     /// <see cref="GateSetupException"/> instead, because it is not contention, no amount of
     /// waiting resolves it, and reporting it as a timeout sends the reader hunting for a stuck
     /// process that was never there.</para>
     /// </remarks>
     /// <exception cref="GateSetupException">
-    /// The claim directory could not be created or addressed, so no gate could be named.
+    /// The claim directory could not be created, or the gate itself could not be opened for
+    /// the whole wait for a reason other than another run holding it.
     /// </exception>
     internal static IDisposable? TryEnterStartupGate(string ourExePath, TimeSpan timeout) =>
         TryEnterStartupGate(ourExePath, timeout, ClaimDirectory());
@@ -143,6 +145,7 @@ internal static class OrphanedHostSweep
         }
 
         var deadline = DateTime.UtcNow + timeout;
+        Exception? lastRefusal = null;
         while (true)
         {
             try
@@ -153,7 +156,30 @@ internal static class OrphanedHostSweep
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                if (DateTime.UtcNow >= deadline) return null;
+                // Polling continues for every failure, because refusal has a genuine transient
+                // form: releasing a gate unlinks it, and a third party holding it with delete
+                // sharing leaves it delete-pending, which presents as access denied and clears
+                // on its own. Only the classification differs — a sharing or lock violation is
+                // the one failure that establishes another run holds the gate, so anything
+                // else (an ACL denial, a directory occupying the gate's name, a parent that
+                // has gone away) is recorded and, if it outlasts the wait, reported as the
+                // fault it is rather than as a competitor that was never there.
+                //
+                // Overwritten rather than kept, so this describes how the wait actually
+                // finished: a storage error later replaced by a real contender reads as
+                // contention again, and the reverse for the same reason.
+                lastRefusal = FileContention.IsHeldByAnother(ex) ? null : ex;
+
+                if (DateTime.UtcNow >= deadline)
+                {
+                    if (lastRefusal is null) return null;
+
+                    throw new GateSetupException(
+                        $"The startup gate '{path}' could not be opened for the whole wait, " +
+                        "and not because another run held it. This is a storage fault, not " +
+                        "contention: no competing run was ever waited out.", lastRefusal);
+                }
+
                 Thread.Sleep(100);
             }
         }

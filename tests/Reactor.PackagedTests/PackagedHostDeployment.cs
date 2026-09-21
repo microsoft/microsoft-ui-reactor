@@ -674,24 +674,23 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
 
             return stream;
         }
-        catch (IOException)
-        {
-            return null;
-        }
         catch (Exception ex) when (
-            ex is UnauthorizedAccessException or System.Security.SecurityException)
+            ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            // Refused rather than held, and the two are not distinguishable from the exception
-            // alone. Refusal has a genuine transient form — Release unlinks lock files, and a
-            // third party holding one with delete sharing (an indexer, a scanner) leaves it
-            // delete-pending, which surfaces here as access denied and clears on its own. So
-            // this keeps returning null and the caller keeps polling, which is what recovers
-            // that case and what the reclamation probe wants for every case.
+            // Refused rather than held, and the two are not distinguishable from the fact of
+            // failure alone — only from what failed. Refusal has a genuine transient form:
+            // Release unlinks lock files, and a third party holding one with delete sharing
+            // (an indexer, a scanner) leaves it delete-pending, which surfaces here as access
+            // denied and clears on its own. So this keeps returning null and the caller keeps
+            // polling, which is what recovers that case and what the reclamation probe wants
+            // for every case.
             //
-            // What it must not do is let a permanent refusal — a read-only lock directory —
-            // masquerade as contention once the wait is over. The refusal is recorded so the
-            // timeout can name the storage fault instead of inventing a competing owner.
-            lastRefusal = ex;
+            // What it must not do is let a failure that is not contention — a read-only lock
+            // directory, a directory occupying the lock's name, a missing parent — masquerade
+            // as contention once the wait is over. Only a sharing or lock violation is evidence
+            // that somebody else holds this file; everything else is recorded so the timeout
+            // can name the storage fault instead of inventing a competing owner.
+            lastRefusal = FileContention.IsHeldByAnother(ex) ? null : ex;
             return null;
         }
     }
@@ -751,13 +750,13 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         {
         }
 
-        /// <summary>The lock file itself refused to open for the whole wait.</summary>
+        /// <summary>The lock file itself could not be opened for the whole wait.</summary>
         internal static LockSetupException ForRefusedFile(string path, Exception inner) =>
             new(
                 inner,
-                $"The layout lock '{path}' refused to open for the whole wait. Access was " +
-                $"denied rather than the file being held, so this is a storage or permissions " +
-                $"failure, not contention: no other run was ever waited out.");
+                $"The layout lock '{path}' could not be opened for the whole wait, and not " +
+                $"because another run held it. This is a storage or permissions failure, not " +
+                $"contention: no competing run was ever waited out.");
     }
 
     /// <summary>
@@ -773,14 +772,14 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
         WaitForLockFile(path, ownerRecord, timeout, pollInterval, out _);
 
     /// <summary>
-    /// As <see cref="WaitForLockFile(string, string, TimeSpan, TimeSpan)"/>, reporting the last
-    /// access refusal seen while waiting.
+    /// As <see cref="WaitForLockFile(string, string, TimeSpan, TimeSpan)"/>, reporting the
+    /// failure that outlasted the wait when it was not contention.
     /// </summary>
     /// <remarks>
-    /// Set only when the wait failed <em>and</em> at least one attempt was refused rather than
-    /// blocked. That combination is the signature of a lock directory this run cannot write to,
-    /// which is worth saying plainly instead of reporting as a contender that outlasted the
-    /// timeout.
+    /// Set only when the wait failed <em>and</em> the final attempt failed for a reason that
+    /// does not establish another holder. That combination is the signature of a lock this run
+    /// cannot open at all, which is worth saying plainly instead of reporting as a contender
+    /// that outlasted the timeout.
     /// </remarks>
     internal static FileStream? WaitForLockFile(
         string path,
@@ -797,10 +796,12 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
             var stream = TryOpenLockFile(path, ownerRecord, out var refusal);
             if (stream is not null) return stream;
 
-            // Kept rather than overwritten with null: a refusal followed by an ordinary
-            // sharing violation is still evidence this run cannot open the file, and the last
-            // poll before the deadline is not special.
-            lastRefusal ??= refusal;
+            // Overwritten rather than kept, so this ends up describing how the wait actually
+            // finished. A refusal that was later replaced by a genuine sharing violation means
+            // a real contender now holds the file, and reporting the earlier storage error
+            // would name the wrong cause; clearing it back to null restores the contention
+            // reading. The reverse ordering is preserved for the same reason.
+            lastRefusal = refusal;
 
             if (DateTime.UtcNow >= deadline) return null;
             Thread.Sleep(pollInterval);

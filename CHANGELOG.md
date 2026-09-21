@@ -202,11 +202,15 @@ Conventions for contributors:
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never
-  existed, discarding the storage error that was the only actionable fact.
-- A packaged-tier lock file this run is denied access to is likewise no longer reported as a lock
-  another run holds. The refusal is recorded and raised only once it has survived the whole wait,
-  so a genuinely transient denial — a lock left delete-pending by a third party holding it with
-  delete sharing — still clears on its own within the ordinary poll.
+  existed, discarding the storage error that was the only actionable fact. The same applies to
+  the gate file itself: only a sharing or lock violation establishes another holder, so an ACL
+  denial or a directory occupying the gate's name is now reported as the fault it is.
+- A packaged-tier lock file this run cannot open is likewise no longer reported as a lock
+  another run holds. The failure is recorded and raised only once it has outlasted the whole
+  wait, so a genuinely transient denial — a lock left delete-pending by a third party holding it
+  with delete sharing — still clears on its own within the ordinary poll. Classification is by
+  Win32 error code rather than exception type, because `DirectoryNotFoundException` is an
+  `IOException` and a missing lock directory is not a competing run.
 - Localization extraction now converts recognized count-based singular/plural ternaries
   into ICU plural messages (spec 005 §10.4, #1131).
 - Localization extraction normalizes boolean select arguments to the string keys expected

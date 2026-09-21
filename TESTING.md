@@ -633,6 +633,47 @@ Consequences worth knowing:
   `AppContext.BaseDirectory` rather than being told it, which works because the tier already
   requires the install location and the running directory to be the same path.
 
+#### Verifying coexistence by hand
+
+The automated tests prove the derivation is *distinct* — different layouts yield different package
+names and different alias stubs, and one layout is stable across reruns. They do not prove Windows
+then keeps two such registrations and two alias stubs alive **at the same time**, because the
+automated tiers only ever register one package per run. That last step is a machine-level fact, so
+it is checked by hand when the derivation or the registration path changes. Tracked as #1264.
+
+Roughly ten minutes, and it needs Developer Mode plus a second checkout:
+
+```powershell
+# 1. Two checkouts, each with the packaged host built.
+git worktree add -b coexist-probe C:\src\probe origin/main
+dotnet build tests\Reactor.PackagedTests.Host -p:Platform=x64   # in each checkout
+
+# 2. Register both. Run in two shells, or sequentially — order does not matter.
+dotnet test tests\Reactor.PackagedTests -p:Platform=x64         # checkout A
+dotnet test tests\Reactor.PackagedTests -p:Platform=x64         # checkout B (C:\src\probe)
+
+# 3. The assertions. Two packages, two aliases, each resolving to its own checkout.
+Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' |
+    Select-Object Name, InstallLocation
+Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WindowsApps\reactor-packaged-test-host*.exe"
+```
+
+What it has to show: **two** packages with different `Name` values and different
+`InstallLocation`s, and **two** alias stubs. One of either means the second registration evicted
+the first, which is the failure the derivation exists to prevent, and the tier would then silently
+exercise the wrong binary.
+
+The interesting run is the concurrent one — start both suites within a few seconds of each other,
+so registration in one overlaps the other's. Sequential registration can pass while concurrent
+registration does not.
+
+Clean up with the wildcard sweep described above, once both runs have stopped:
+
+```powershell
+Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' | Remove-AppxPackage
+git worktree remove C:\src\probe
+```
+
 ### Writing a packaged fixture
 
 Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Two steps,

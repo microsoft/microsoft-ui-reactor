@@ -24,6 +24,8 @@
   <ItemGroup>
     <!-- Shared with the packaged tier so both agree what "the same path" means (see FinalPath.cs). -->
     <Compile Include="..\_shared\FinalPath.cs" Link="FinalPath.cs" />
+    <!-- Likewise for telling a held file apart from one this run cannot open at all. -->
+    <Compile Include="..\_shared\FileContention.cs" Link="FileContention.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- Build dependency: ensures Host is built before tests, no runtime reference -->

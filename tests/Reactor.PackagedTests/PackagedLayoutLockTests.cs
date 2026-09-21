@@ -934,6 +934,68 @@ public class PackagedLayoutLockTests
     }
 
     /// <summary>
+    /// A lock genuinely held by another writer must still read as contention, and only that.
+    /// </summary>
+    /// <remarks>
+    /// The discriminating half of the two tests around it. Classifying every failed open as a
+    /// fault would satisfy both of those and break the scheme outright — every real collision
+    /// would abort instead of waiting — so the sharing violation has to be pinned as the one
+    /// failure that still ends the wait as a timeout rather than an exception.
+    /// </remarks>
+    [TestMethod]
+    public void A_Lock_Held_By_Another_Writer_Is_Still_Reported_As_Contention()
+    {
+        var layout = SyntheticLayout();
+        var paths = AppxLooseLayoutDeployment.LockPathsFor(layout, TwoVersions);
+
+        using var holder = new FileStream(
+            paths[0], FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+
+        var held = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+            layout, "pid=1", Instant, Instant, out var blockedOn, TwoVersions);
+
+        Assert.IsNull(held,
+            "Precondition: a lock another writer holds must not be acquirable.");
+        Assert.AreEqual(paths[0], blockedOn,
+            "A real collision has to report the lock it lost, not raise a setup failure. " +
+            "Turning contention into an exception would abort every run that merely needed " +
+            "to wait its turn.");
+    }
+
+    /// <summary>
+    /// An I/O failure that is not a sharing violation is not evidence of another run either.
+    /// </summary>
+    /// <remarks>
+    /// <c>TryOpenLockFile</c> recorded only access denials as refusals, so any other
+    /// <c>IOException</c> — a missing lock directory, a full volume — left the record empty and
+    /// the timeout reported a competing packaged run instead of the storage fault. Staged with
+    /// a missing parent directory, which raises <c>DirectoryNotFoundException</c>: an
+    /// <c>IOException</c> subclass, and therefore the exact shape that used to slip through a
+    /// classification made by type instead of by error code.
+    /// </remarks>
+    [TestMethod]
+    public void A_Non_Contention_Io_Failure_Is_Not_Reported_As_Contention()
+    {
+        var missing = Path.Join(_root, "gone", "layout.lock");
+
+        var stream = AppxLooseLayoutDeployment.WaitForLockFile(
+            missing, "pid=1", Instant, Instant, out var refusal);
+
+        Assert.IsNull(stream,
+            "Precondition: a lock path whose parent directory does not exist cannot be opened.");
+
+        Assert.IsInstanceOfType<DirectoryNotFoundException>(refusal,
+            "A non-contention I/O failure was not recorded as a refusal, so nothing " +
+            "downstream can tell it from a lock somebody else holds: the caller waits out the " +
+            "whole layout timeout and then blames an owner that cannot exist, because the " +
+            "directory that would contain its lock does not.");
+
+        Assert.IsTrue(Directory.Exists(_root),
+            "Control: only the lock's own parent is missing, so the failure above is the " +
+            "staged one and not the whole temp root having gone away.");
+    }
+
+    /// <summary>
     /// A fault partway through the set must give back the locks already taken.
     /// </summary>
     /// <remarks>

@@ -136,6 +136,12 @@ public class OrphanedHostSweepTests
         OrphanedHostSweep.LayoutRunClaim.ReleaseForTestsUnder(ClaimRoot);
         DeleteStagedLeases();
 
+        // Before the recursive delete below, which cannot remove a directory holding an open
+        // handle. Deliberately held for the class's lifetime by the contention control, so
+        // this is the only place they can be closed.
+        foreach (var gate in HeldGates) { try { gate.Dispose(); } catch (IOException) { } }
+        HeldGates.Clear();
+
         try
         {
             if (Directory.Exists(ClaimRoot)) Directory.Delete(ClaimRoot, recursive: true);
@@ -573,6 +579,72 @@ public class OrphanedHostSweepTests
             "Control: a usable directory must still admit the run, or the throw above says " +
             "nothing about the fault and everything about the overload.");
     }
+
+    /// <summary>
+    /// A gate path this run cannot open is likewise not contention, even though the claim
+    /// directory around it is perfectly healthy.
+    /// </summary>
+    /// <remarks>
+    /// <para>The directory and the gate fail at different points, and only the first was
+    /// distinguished. The open loop retried every <c>IOException</c> and
+    /// <c>UnauthorizedAccessException</c> alike, so a permanent fault at the gate path itself
+    /// — an ACL denial, or a directory occupying <c>&lt;key&gt;.gate</c> — still spent the full
+    /// two-minute startup timeout and still ended by blaming a run that was never there.</para>
+    /// <para>Retrying is nevertheless kept for every failure, because refusal has a real
+    /// transient form: releasing a gate unlinks it, and a third party holding it with delete
+    /// sharing leaves it delete-pending, which also presents as access denied and clears on its
+    /// own. Only a sharing or lock violation proves another run holds the gate, so that is the
+    /// single failure allowed to end the wait as a timeout.</para>
+    /// <para>Staged with a directory occupying the gate's exact name, which Windows refuses to
+    /// open as a file deterministically and without privilege.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Gate_Path_That_Cannot_Be_Opened_Is_Not_Reported_As_Contention()
+    {
+        var exe = Probe("gate-path-fault-" + Guid.NewGuid().ToString("n"));
+        var claims = Path.Join(ClaimRoot, "gate-path-claims-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(claims);
+
+        var gate = Path.Join(claims, Path.GetFileName(OrphanedHostSweep.GatePathFor(exe)));
+        Directory.CreateDirectory(gate);
+
+        var thrown = Assert.Throws<OrphanedHostSweep.GateSetupException>(
+            () => OrphanedHostSweep.TryEnterStartupGate(exe, TimeSpan.Zero, claims),
+            "A gate this run cannot open at all was reported as a gate somebody else holds, " +
+            "so the caller waits out the whole timeout and then names a phantom competitor.");
+
+        Assert.IsInstanceOfType<UnauthorizedAccessException>(thrown.InnerException,
+            "The refusal itself has to travel with the report, or it is no more actionable " +
+            "than the false contention it replaced.");
+
+        Assert.IsNull(
+            OrphanedHostSweep.TryEnterStartupGate(exe, TimeSpan.Zero, ContendedClaims(exe)),
+            "Control: a gate genuinely held by another handle must still read as contention. " +
+            "Without this the throw above is satisfied by a gate that never admits anyone.");
+    }
+
+    /// <summary>
+    /// A claim directory whose gate for <paramref name="exe"/> is already held, so an
+    /// acquisition against it meets a real sharing violation rather than a storage fault.
+    /// </summary>
+    /// <remarks>
+    /// Held for the remainder of the class rather than released, because the handle is the
+    /// whole point: closing it would turn the control assertion into a second uncontended
+    /// acquisition, which passes whatever the classification does.
+    /// </remarks>
+    private static string ContendedClaims(string exe)
+    {
+        var claims = Path.Join(ClaimRoot, "gate-contended-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(claims);
+
+        var gate = Path.Join(claims, Path.GetFileName(OrphanedHostSweep.GatePathFor(exe)));
+        HeldGates.Add(new FileStream(
+            gate, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None));
+
+        return claims;
+    }
+
+    private static readonly List<FileStream> HeldGates = [];
 
     /// <summary>
     /// Reclamation covers other build outputs' leftovers, not just this one's. The sibling
