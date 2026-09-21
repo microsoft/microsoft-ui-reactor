@@ -296,6 +296,25 @@ jobs:
       - name: Setup winapp CLI
         uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
+      # Records which winapp this job actually resolved, and whether it carries the
+      # cooperative-UI-turn verb (winappCli#767). The E2E suite's continuity tests skip when
+      # `ui yield` is absent, and Microsoft.Testing.Platform reports a skip as *passed with
+      # zero skipped* — so without this step a run against a winapp that predates #767 looks
+      # identical to one where the continuity was measured. Never gates the job: no published
+      # winapp contains #767 yet (v0.6.0 2026-08-12 stable / v0.6.1 2026-08-19 prerelease, both
+      # older than the 2026-09-09 merge), and continuity only matters where several agents share
+      # a desktop, which a single-checkout runner never does. When a release does ship the verb,
+      # pin it above and set REACTOR_E2E_REQUIRE_UI_YIELD=1 to turn the skip into an assertion.
+      - name: Record winapp UI-turn capability
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          winapp --version
+          winapp ui yield --help *> $null
+          $present = ($LASTEXITCODE -eq 0)
+          Write-Host "winapp 'ui yield' verb present: $present"
+          "winapp \`ui yield\` verb present: **$present**" >> $env:GITHUB_STEP_SUMMARY
+
       # The E2E suite launches Reactor.AppTests.Host.exe and drives it cross-process.
       # The Host is a ProjectReference of the test project, so building the test
       # project (Debug/x64 — the path TestSession.FindHostExe expects) builds it too.

@@ -228,16 +228,65 @@ public class WinAppWorkflowIdTests
 
     private static void RequireYieldVerb()
     {
-        if (!YieldVerbExists())
+        var present = YieldVerbExists();
+
+        // Unconditional, so the capability is a recorded fact rather than an inference from a
+        // test that quietly did not run. MTP reports `Assert.Inconclusive` as *passed with zero
+        // skipped*, so without this line a run where winapp lacks the verb is indistinguishable
+        // in every report from one where the differential was measured and held.
+        Console.WriteLine(
+            $"[Reactor.AppTests] winapp `ui yield` verb present: {present}. " +
+            $"Strict mode ({RequireYieldEnvVar}): {StrictYieldRequested()}.");
+
+        if (present) return;
+
+        var explanation =
+            "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
+            "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
+            "(merged 2026-09-09) and no published winapp contains it yet — v0.6.0 is the " +
+            "newest stable and v0.6.1 the newest prerelease, both from August 2026 — so " +
+            "there is no version to pin `setup-WinAppCli` to.";
+
+        // Opt-in enforcement. The verb cannot be required by default without turning every run
+        // red against a dependency that has not shipped it, but a caller that *has* pinned a
+        // build containing #767 needs a way to prove the continuity is live rather than take
+        // the silent skip. Setting the variable converts this gate into a hard failure, which
+        // is also the switch to flip in CI the day a release carries the verb.
+        if (StrictYieldRequested())
         {
-            Assert.Inconclusive(
-                "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
-                "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
-                "(merged 2026-09-09) and no published winapp contains it yet — v0.6.0 is the " +
-                "newest stable and v0.6.1 the newest prerelease, both from August 2026 — so " +
-                "there is no version to pin `setup-WinAppCli` to. Once a release ships with it, " +
-                "pin that version and turn this gate into an assertion.");
+            Assert.Fail(
+                $"{explanation} {RequireYieldEnvVar} is set, so its absence is being treated as " +
+                "a failure: either pin a winapp containing #767 or unset the variable.");
         }
+
+        Assert.Inconclusive(
+            $"{explanation} Once a release ships with it, pin that version and set " +
+            $"{RequireYieldEnvVar}=1 to make this an assertion.");
+    }
+
+    /// <summary>Opt-in switch that turns a missing <c>ui yield</c> verb into a failure.</summary>
+    internal const string RequireYieldEnvVar = "REACTOR_E2E_REQUIRE_UI_YIELD";
+
+    private static bool StrictYieldRequested() =>
+        IsStrictYieldValue(Environment.GetEnvironmentVariable(RequireYieldEnvVar));
+
+    /// <summary>
+    /// Whether an environment variable value asks for strict enforcement.
+    /// </summary>
+    /// <remarks>
+    /// Split out as a pure function so both directions are testable without mutating the
+    /// process environment. Unset and empty must read as "not requested" — an unset variable is
+    /// the default for every existing run, and a shell that exports an empty value means the
+    /// same thing — while <c>0</c> and <c>false</c> are honoured because a caller disabling the
+    /// switch explicitly must not silently enable it.
+    /// </remarks>
+    internal static bool IsStrictYieldValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var trimmed = value.Trim();
+        return !trimmed.Equals("0", StringComparison.Ordinal)
+            && !trimmed.Equals("false", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -339,5 +388,41 @@ public class WinAppWorkflowIdTests
         catch (InvalidOperationException) { return null; }
         catch (NotSupportedException) { return null; }
         catch (TypeInitializationException) { return null; }
+    }
+
+    // ── The strict-mode switch ───────────────────────────────────────────────
+    //
+    // The two tests above skip when winapp has no `ui yield` verb, and MTP reports a skip as
+    // *passed with zero skipped*. The switch is what gives a caller who has pinned a build
+    // containing #767 a way to demand the measurement instead of accepting that silence, so its
+    // decision is asserted directly — otherwise the escape hatch is itself unverified.
+
+    [TestMethod]
+    [DataRow(null, DisplayName = "unset")]
+    [DataRow("", DisplayName = "empty")]
+    [DataRow("   ", DisplayName = "whitespace")]
+    [DataRow("0", DisplayName = "zero")]
+    [DataRow("false", DisplayName = "false")]
+    [DataRow("False", DisplayName = "False")]
+    public void StrictYield_IsNotRequestedByDefaultOrWhenExplicitlyDisabled(string? value)
+    {
+        Assert.IsFalse(
+            WinAppWorkflowIdTests.IsStrictYieldValue(value),
+            $"'{value ?? "<null>"}' enabled strict mode, so a run that never asked for it would " +
+            "fail against a winapp that has not shipped the verb.");
+    }
+
+    [TestMethod]
+    [DataRow("1", DisplayName = "one")]
+    [DataRow("true", DisplayName = "true")]
+    [DataRow("TRUE", DisplayName = "TRUE")]
+    [DataRow(" 1 ", DisplayName = "padded")]
+    [DataRow("yes", DisplayName = "yes")]
+    public void StrictYield_IsRequestedWhenTheVariableIsSet(string value)
+    {
+        Assert.IsTrue(
+            WinAppWorkflowIdTests.IsStrictYieldValue(value),
+            $"'{value}' did not enable strict mode, so pinning a winapp with the verb still " +
+            "could not turn the silent skip into a measurement.");
     }
 }

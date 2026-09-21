@@ -139,7 +139,23 @@ public class OrphanedHostSweepTests
         // Before the recursive delete below, which cannot remove a directory holding an open
         // handle. Deliberately held for the class's lifetime by the contention control, so
         // this is the only place they can be closed.
-        foreach (var gate in HeldGates) { try { gate.Dispose(); } catch (IOException) { } }
+        foreach (var gate in HeldGates)
+        {
+            try
+            {
+                gate.Dispose();
+            }
+            catch (IOException ex)
+            {
+                // Non-fatal by design — teardown must not redden a passing suite — but not
+                // silent: a gate that will not close is why the recursive delete below may
+                // then fail, so recording it is what makes that second failure explicable.
+                Console.WriteLine(
+                    $"[Reactor.AppTests] Could not release a staged gate handle: " +
+                    $"{ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
         HeldGates.Clear();
 
         try

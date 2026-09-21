@@ -648,24 +648,28 @@ Roughly ten minutes, and it needs Developer Mode plus a second checkout:
 git worktree add -b coexist-probe C:\src\probe origin/main
 dotnet build tests\Reactor.PackagedTests.Host -p:Platform=x64   # in each checkout
 
-# 2. Register both. Run in two shells, or sequentially — order does not matter.
-dotnet test tests\Reactor.PackagedTests -p:Platform=x64         # checkout A
-dotnet test tests\Reactor.PackagedTests -p:Platform=x64         # checkout B (C:\src\probe)
+# 2. Start BOTH suites and leave them running. Two shells, started within a few seconds
+#    of each other, so one run's registration overlaps the other's.
+dotnet test tests\Reactor.PackagedTests -p:Platform=x64         # shell 1: checkout A
+dotnet test tests\Reactor.PackagedTests -p:Platform=x64         # shell 2: checkout B (C:\src\probe)
 
-# 3. The assertions. Two packages, two aliases, each resolving to its own checkout.
+# 3. From a THIRD shell, while both are still running, take the measurement.
 Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' |
     Select-Object Name, InstallLocation
 Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WindowsApps\reactor-packaged-test-host*.exe"
 ```
 
+**Step 3 has to run while both suites are still going.** Each `dotnet test` unregisters its own
+package in `PackagedSelfTestBatch` class cleanup, so a run that has finished has already removed
+the very registration this is trying to observe: sequential runs never overlap, and waiting for
+both concurrent runs to exit leaves nothing to see. A third shell is the only vantage point from
+which the two-package state exists. If the suites are too quick to catch, raise
+`REACTOR_PACKAGED_TIMEOUT_SECONDS` or run a filtered subset that takes longer.
+
 What it has to show: **two** packages with different `Name` values and different
 `InstallLocation`s, and **two** alias stubs. One of either means the second registration evicted
 the first, which is the failure the derivation exists to prevent, and the tier would then silently
 exercise the wrong binary.
-
-The interesting run is the concurrent one — start both suites within a few seconds of each other,
-so registration in one overlaps the other's. Sequential registration can pass while concurrent
-registration does not.
 
 Clean up with the wildcard sweep described above, once both runs have stopped:
 

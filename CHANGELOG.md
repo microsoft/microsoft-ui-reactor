@@ -106,6 +106,22 @@ Conventions for contributors:
   instead of sampling it first. Sampling only reports whether a run held the lock at that
   instant, which leaves a window for a run to start and register between the check and the
   `RemovePackage` that then unregisters it.
+- The packaged layout lock is now taken under every spelling a layout could canonicalize to,
+  not just the one its path reduces to today. Canonicalization asks the filesystem what a path
+  really points at, so an aliased directory — a `subst`'d drive, a junction, an extended-length
+  `\\?\` path — reduces to its physical location while it exists and to its textual spelling
+  once it is gone. A run therefore locked one name while a later run asking whether that
+  registration could be reclaimed derived another, took a different file, found it free, and was
+  granted a lease over a live run. That is the exact eviction the lease documents as impossible
+  for a run whose directory was deleted out from under it. Locking the union is fail-closed, and
+  for an ordinary path the spellings collapse to one, so the common case takes no extra files.
+- The E2E continuity tests now report whether the resolved `winapp` carries the `ui yield` verb
+  instead of skipping silently, and honour `REACTOR_E2E_REQUIRE_UI_YIELD` to turn its absence
+  into a failure. Cooperative UI turns landed in winappCli#767 (merged 2026-09-09) and no
+  published `winapp` contains it yet, so the verb cannot be required by default — but
+  Microsoft.Testing.Platform reports a skip as *passed with zero skipped*, which made a run that
+  measured nothing indistinguishable from one that measured the continuity. CI records the
+  capability in its step summary for the same reason.
 - The E2E suite's start-up sweep admits one run at a time per host executable, holding a gate
   across registering its own lease, querying for live siblings, and snapshotting processes.
   Those three steps were separately correct but interleaved: two runs starting together could

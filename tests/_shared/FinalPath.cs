@@ -97,13 +97,17 @@ internal static partial class FinalPath
     /// ordinary path.
     /// </summary>
     /// <remarks>
-    /// The API always answers with a <c>\\?\</c> prefix, and for a network location with
+    /// <para>The API always answers with a <c>\\?\</c> prefix, and for a network location with
     /// <c>\\?\UNC\server\share</c>, whose ordinary spelling is <c>\\server\share</c>. Leaving
     /// either form in place would make the answer disagree with every path its callers produce
     /// via <see cref="Path.GetFullPath(string)"/>, so one location would hash one way when it
     /// exists and another way when a caller's fallback ran.
+    /// </para>
+    /// <para>Exposed rather than private because a caller deriving a path's <em>unresolved</em>
+    /// form has to strip the prefix the same way this does, or the two spellings of one
+    /// location would still disagree on the one code path that never gets a handle.</para>
     /// </remarks>
-    private static string StripExtendedLengthPrefix(string path)
+    internal static string StripExtendedLengthPrefix(string path)
     {
         const string UncPrefix = @"\\?\UNC\";
         const string DevicePrefix = @"\\?\";

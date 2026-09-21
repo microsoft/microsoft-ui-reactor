@@ -816,20 +816,37 @@ internal sealed class AppxLooseLayoutDeployment : IPackagedHostDeployment
     internal static string LockPathFor(string layoutPath, string version) =>
         Path.Join(LockDirectory, WorktreeIdentity.DeriveSuffix(layoutPath, version) + ".lock");
 
+    /// <summary>Lock file for one already-canonical spelling of a layout under one version.</summary>
+    private static string LockPathForCanonicalForm(string canonicalForm, string version) =>
+        Path.Join(
+            LockDirectory,
+            WorktreeIdentity.DeriveSuffixForCanonicalForm(canonicalForm, version) + ".lock");
+
     /// <summary>
     /// Every algorithm version's lock file for a layout, in a fixed order.
     /// </summary>
     /// <remarks>
-    /// Ordered so that two runs acquiring the whole set do so in the same sequence and cannot
-    /// deadlock by taking them in opposite orders. Sorted explicitly rather than relying on the
-    /// declaration order of <see cref="WorktreeIdentity.SupportedAlgorithmVersions"/>, so that
-    /// prepending a new version later cannot silently introduce a lock-ordering inversion
-    /// against a run still executing the previous revision's order.
+    /// <para>Ordered so that two runs acquiring the whole set do so in the same sequence and
+    /// cannot deadlock by taking them in opposite orders. Sorted explicitly rather than relying
+    /// on the declaration order of <see cref="WorktreeIdentity.SupportedAlgorithmVersions"/>, so
+    /// that prepending a new version later cannot silently introduce a lock-ordering inversion
+    /// against a run still executing the previous revision's order.</para>
+    /// <para>Every version is crossed with every <em>spelling</em> the layout could be
+    /// canonicalised to, for the same reason the set spans versions at all. Canonicalisation
+    /// consults the filesystem, so a run that locks while its directory exists holds the
+    /// resolved name, while a run asking whether that registration may be reclaimed asks about
+    /// a directory that has since been deleted and can only derive the weaker one. Locking a
+    /// single spelling would let those two names differ, and the reclaimer would then be
+    /// granted a lease over a live run — precisely the eviction
+    /// <see cref="TryAcquireReclamationLease"/> promises cannot happen to a run whose directory
+    /// was removed out from under it. For an ordinary path the spellings collapse to one, so
+    /// this adds no files to the common case.</para>
     /// </remarks>
     internal static IReadOnlyList<string> LockPathsFor(
         string layoutPath, IReadOnlyList<string>? versions = null) =>
         (versions ?? WorktreeIdentity.SupportedAlgorithmVersions)
-            .Select(v => LockPathFor(layoutPath, v))
+            .SelectMany(_ => WorktreeIdentity.CandidateCanonicalForms(layoutPath),
+                (version, form) => LockPathForCanonicalForm(form, version))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToList();

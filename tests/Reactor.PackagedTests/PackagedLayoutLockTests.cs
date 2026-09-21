@@ -1072,4 +1072,140 @@ public class PackagedLayoutLockTests
             "would abort mid-way through a healthy owner's identity-guard pass and report a " +
             "collision that is not one.");
     }
+
+    // ── The lock key must not change when the layout stops existing ──────────────
+
+    /// <summary>
+    /// A run that locked while its directory existed must still be seen by a reclaimer that
+    /// asks about the same directory after it has been deleted.
+    /// </summary>
+    /// <remarks>
+    /// <para>The regression. Canonicalisation consults the filesystem, so one path reduces to
+    /// the physical location while the directory exists and to its textual spelling once it is
+    /// gone. The owner locks under the first name and a reclaimer derives the second, so the
+    /// reclaimer takes a different file, finds it free, and is granted a lease over a live
+    /// registration — the exact eviction <c>TryAcquireReclamationLease</c> documents as
+    /// impossible ("a run whose directory was deleted out from under it is still running, still
+    /// registered, and must not have its registration reclaimed").</para>
+    /// <para>The extended-length spelling is the alias used here because it is deterministic,
+    /// needs no privileges, and works on any volume: <c>\\?\C:\x</c> resolves to <c>c:\x</c>
+    /// through a handle and stays <c>\\?\c:\x</c> without one. A junction or <c>subst</c> would
+    /// exercise the same divergence but needs rights a run may not have.</para>
+    /// </remarks>
+    [TestMethod]
+    public void A_Lock_Taken_Before_The_Layout_Vanished_Still_Blocks_Reclamation()
+    {
+        var layout = SyntheticLayout();
+        Directory.CreateDirectory(layout);
+        var aliased = @"\\?\" + layout;
+
+        // The owner: locks while the directory exists, so it holds the resolved spelling.
+        var held = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+            aliased, "owner", Instant, Instant, out _);
+        Assert.IsNotNull(held, "The owner could not take its own layout lock.");
+
+        try
+        {
+            // The directory is removed out from under the still-running owner.
+            Directory.Delete(layout, recursive: true);
+
+            var reclaimer = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+                aliased, "reclaimer", Instant, Instant, out var blockedOn);
+
+            if (reclaimer is not null)
+            {
+                AppxLooseLayoutDeployment.Release(reclaimer);
+                Assert.Fail(
+                    "A reclaimer was granted the lock for a layout whose owner is still holding " +
+                    "it, because deleting the directory changed the name the key is derived " +
+                    "from. It would now unregister a live run's package.");
+            }
+
+            Assert.IsNotNull(blockedOn, "The refusal did not report which lock blocked it.");
+        }
+        finally
+        {
+            AppxLooseLayoutDeployment.Release(held);
+        }
+    }
+
+    /// <summary>
+    /// The negative control: reclaiming a genuinely abandoned layout must still succeed.
+    /// </summary>
+    /// <remarks>
+    /// Without this, the test above is satisfied by any change that simply stops granting
+    /// leases — including deleting the reclamation feature outright. Rule 3 exists to clean up
+    /// after deleted worktrees, so a deleted directory with no live owner has to remain
+    /// reclaimable.
+    /// </remarks>
+    [TestMethod]
+    public void A_Deleted_Layout_With_No_Live_Owner_Is_Still_Reclaimable()
+    {
+        var layout = SyntheticLayout();
+        Directory.CreateDirectory(layout);
+        var aliased = @"\\?\" + layout;
+
+        // Taken and released while it existed, exactly as a finished run would leave things.
+        var previous = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+            aliased, "previous", Instant, Instant, out _);
+        Assert.IsNotNull(previous);
+        AppxLooseLayoutDeployment.Release(previous);
+
+        Directory.Delete(layout, recursive: true);
+
+        var reclaimer = AppxLooseLayoutDeployment.TryAcquireAllLocks(
+            aliased, "reclaimer", Instant, Instant, out _);
+
+        Assert.IsNotNull(reclaimer,
+            "An abandoned layout could not be reclaimed, so rule 3 can no longer clean up after " +
+            "a deleted worktree.");
+        AppxLooseLayoutDeployment.Release(reclaimer);
+    }
+
+    /// <summary>
+    /// An ordinary path must not multiply the lock set.
+    /// </summary>
+    /// <remarks>
+    /// The fix locks every spelling a layout could canonicalise to. For a plain physical path
+    /// all of those collapse to one value, so the common case must still take exactly one file
+    /// per algorithm version — otherwise every run pays for an alias case it does not have.
+    /// </remarks>
+    [TestMethod]
+    public void An_Ordinary_Layout_Path_Still_Takes_One_Lock_Per_Version()
+    {
+        var layout = SyntheticLayout();
+        Directory.CreateDirectory(layout);
+
+        var forms = WorktreeIdentity.CandidateCanonicalForms(layout);
+        Assert.AreEqual(1, forms.Count,
+            $"A plain path produced {forms.Count} canonical spellings ({string.Join(", ", forms)}), " +
+            "so every run would take extra lock files it does not need.");
+
+        Assert.AreEqual(
+            TwoVersions.Length,
+            AppxLooseLayoutDeployment.LockPathsFor(layout, TwoVersions).Count,
+            "The lock set for an ordinary path grew beyond one file per algorithm version.");
+    }
+
+    /// <summary>
+    /// The aliased case is the one that needs more than one name, and it has to actually
+    /// produce more than one — otherwise the regression above would pass vacuously.
+    /// </summary>
+    [TestMethod]
+    public void An_Aliased_Layout_Path_Is_Locked_Under_Every_Spelling()
+    {
+        var layout = SyntheticLayout();
+        Directory.CreateDirectory(layout);
+
+        var forms = WorktreeIdentity.CandidateCanonicalForms(@"\\?\" + layout);
+
+        Assert.IsTrue(forms.Count > 1,
+            "An extended-length spelling of a live directory reduced to a single canonical " +
+            "form, so the lock set cannot cover the name a later reclaimer will derive.");
+
+        CollectionAssert.Contains(
+            forms.ToArray(),
+            WorktreeIdentity.Canonicalize(layout),
+            "The resolved physical spelling is missing from the candidate set.");
+    }
 }

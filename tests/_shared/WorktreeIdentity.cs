@@ -24,8 +24,10 @@
 // in-host guard can never disagree about what the effective identity is.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -152,6 +154,50 @@ internal static class WorktreeIdentity
     }
 
     /// <summary>
+    /// Every canonical form one directory path could be reduced to, strongest first.
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="Canonicalize"/> is deliberately existence-<em>dependent</em>: it asks
+    /// the filesystem what a path really points at, which is the only way to collapse a
+    /// <c>subst</c>'d drive or an extended-length spelling onto the physical directory. The
+    /// consequence is that the same input canonicalises one way while the directory exists and
+    /// another way after it is gone, because the query needs a handle and the walk that
+    /// replaces it cannot resolve what is no longer there.</para>
+    /// <para>That is harmless for identity — a layout is registered after it is built, so
+    /// derivation always happens against a live directory — but it is <b>not</b> harmless for
+    /// the lock that arbitrates ownership of a registration. A run locks while its directory
+    /// exists, so it holds the resolved form; a later run asking whether that registration may
+    /// be reclaimed asks about a directory that has since been deleted, derives the weaker
+    /// form, takes a <em>different</em> file, and is granted a lease over a live run.</para>
+    /// <para>The answer is the one the cross-version lock set already uses: do not try to guess
+    /// which spelling the other run chose, and instead take every name this layout could be
+    /// known by. Locking the union is unconditionally fail-closed — an extra candidate can only
+    /// cause a refusal, never a false grant — and for an ordinary path all three forms collapse
+    /// to one, so nothing is locked that was not locked before.</para>
+    /// </remarks>
+    internal static IReadOnlyList<string> CandidateCanonicalForms(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Path must be a non-empty directory path.", nameof(path));
+
+        var full = Path.GetFullPath(path);
+
+        // 1. What a run derives while the directory exists. 2. What a run derives once it is
+        // gone but the links above it survive. 3. What is left when even those are gone.
+        return new[]
+            {
+                Canonicalize(path),
+                Normalize(ResolveLinksInEveryComponent(full)),
+                Normalize(FinalPath.StripExtendedLengthPrefix(full)),
+            }
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        static string Normalize(string value) =>
+            Path.TrimEndingDirectorySeparator(value).ToLowerInvariant();
+    }
+
+    /// <summary>
     /// Walks a rooted path from the root down, replacing each component that is a symlink or
     /// junction with its final target.
     /// </summary>
@@ -254,7 +300,27 @@ internal static class WorktreeIdentity
     {
         ArgumentException.ThrowIfNullOrEmpty(algorithmVersion);
 
-        var seed = algorithmVersion + "\n" + Canonicalize(layoutDirectory);
+        return DeriveSuffixForCanonicalForm(Canonicalize(layoutDirectory), algorithmVersion);
+    }
+
+    /// <summary>
+    /// The derived suffix for an already-canonical layout path.
+    /// </summary>
+    /// <remarks>
+    /// Separated from <see cref="DeriveSuffix(string, string)"/> so a caller holding one of the
+    /// forms <see cref="CandidateCanonicalForms"/> produced can hash <em>that</em> form. Feeding
+    /// it back through <see cref="Canonicalize"/> would undo the distinction: while the
+    /// directory still exists, every spelling resolves to the physical path again, the
+    /// candidates collapse to one, and the lock set silently loses the extra names it exists to
+    /// take. The hash input is unchanged, so this is the same value the pinned vectors record.
+    /// </remarks>
+    internal static string DeriveSuffixForCanonicalForm(
+        string canonicalForm, string algorithmVersion)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(algorithmVersion);
+        ArgumentException.ThrowIfNullOrEmpty(canonicalForm);
+
+        var seed = algorithmVersion + "\n" + canonicalForm;
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
         return SuffixMarker + Base32(hash, SuffixHashLength);
     }
