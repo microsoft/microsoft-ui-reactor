@@ -10,7 +10,7 @@
 // whatever `mur pack-local` printed (default: 0.0.0-local). For a real NuGet
 // consumer, set Version to a published Microsoft.UI.Reactor release.
 #:package Microsoft.UI.Reactor@0.0.0-local
-#:package Microsoft.WindowsAppSDK@2.0.1
+#:package Microsoft.WindowsAppSDK@2.2.0
 #:property OutputType=WinExe
 #:property TargetFramework=net10.0-windows10.0.22621.0
 #:property UseWinUI=true

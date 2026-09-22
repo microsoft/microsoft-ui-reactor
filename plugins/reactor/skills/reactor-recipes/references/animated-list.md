@@ -17,7 +17,7 @@ in sight. This is the SwiftUI `withAnimation { … }` analog.
 
 ```csharp
 // #:package Microsoft.UI.Reactor@0.0.0-local
-// #:package Microsoft.WindowsAppSDK@2.0.1
+// #:package Microsoft.WindowsAppSDK@2.2.0
 // #:property OutputType=WinExe
 // #:property TargetFramework=net10.0-windows10.0.22621.0
 // #:property UseWinUI=true

@@ -300,20 +300,17 @@ There are **two snippet forms**. Use the right one for the page.
 
 ```yaml
 app:
-  title: "Human-readable app title"
-  width: 600                    # Window width for screenshot capture
-  height: 400                   # Window height
+  width: 600                    # Window width (DIPs) for screenshot capture
+  height: 400                   # Window height (DIPs)
   startup-delay: 1500           # ms to wait before capturing (default 2000)
 
 screenshots:
   - id: main-view
     description: "Description of what's shown"
-    region: client              # "client" (no title bar) or "window"
     crop: content               # "content" auto-crops whitespace; use "none" for full-frame layouts
     format: png
   - id: detail-view
     description: "Detailed view after interaction"
-    region: client
     crop: content
     format: png
   # Controls-catalog index thumbnails (spec 041 §6.3, §12 Q7).
@@ -324,11 +321,17 @@ screenshots:
   - id: forms-group
     kind: catalog-thumb
     description: "Forms category thumbnail for the controls catalog index."
-    region: client
     format: png
     # thumb-width / thumb-height default to 320 x 240 — override only if a
     # catalog category benefits from a non-default aspect.
 ```
+
+`app.width` / `app.height` are the **only** declaration of a doc app's capture
+size: the compiler forwards them to the app as `--width` / `--height`, and the
+app's own `ReactorApp.Run` deliberately omits both so a human running it gets the
+OS-chosen extent. Changing the screenshot size means editing the manifest, not
+`App.cs`. (The interop doc apps are the exception — they never call
+`ReactorApp.Run` and size their own host window in code.)
 
 ### App Code Guidelines
 
@@ -340,9 +343,13 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<MyApp>("Title", width: 600, height: 400);
+ReactorApp.Run<MyApp>("Title");
 ```
 
+- Do not pass `width:` / `height:` to `ReactorApp.Run`. The capture size comes
+  from `app.width` / `app.height` in `doc-manifest.yaml`; hardcoding it here
+  teaches readers a shape the framework has moved away from, since an omitted
+  size lets the OS pick the window extent.
 - Do not pass `devtools:` or `preview:` to `ReactorApp.Run`; those parameters no longer exist.
 - Screenshot capture is enabled by the doc-app project switch. New doc apps under `docs/_pipeline/apps/` inherit `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />` from `docs/_pipeline/apps/Directory.Build.props`.
 - Each component class in the file can be wrapped in snippet markers.

@@ -1,5 +1,4 @@
 app:
-  title: "Hooks Demo"
   width: 650
   height: 600
   startup-delay: 1500
@@ -8,35 +7,28 @@ screenshots:
   - id: usestate
     description: "UseState demo with color and size controls"
     component: StateDemo
-    region: client
     format: png
   - id: usereducer
     description: "UseReducer demo with dynamic list"
     component: ReducerDemo
-    region: client
     format: png
   - id: usereducer-redux
     description: "Redux-style UseReducer with dispatch"
     component: ReduxReducerDemo
-    region: client
     format: png
   - id: useeffect
     description: "UseEffect timer with cleanup"
     component: EffectDemo
-    region: client
     format: png
   - id: usememo
     description: "UseMemo for derived computations"
     component: MemoDemo
-    region: client
     format: png
   - id: useref
     description: "UseRef for persistent mutable values"
     component: RefDemo
-    region: client
     format: png
   - id: usecallback
     description: "UseCallback for stable references"
     component: CallbackDemo
-    region: client
     format: png

@@ -29,16 +29,12 @@ public class WinFormsTestBase
         _testStopwatch = System.Diagnostics.Stopwatch.StartNew();
     }
 
-    // Record how many winapp.exe processes this test spawned (process-per-call overhead).
+    // Record how many winapp.exe processes this test spawned (process-per-call overhead), then
+    // hand the desktop back. Shared with AppTestBase — see E2ETestCleanup for why the recording
+    // and the yield must not be separated.
     [TestCleanup]
-    public void RecordWinAppInvocations()
-    {
-        var spawned = WinAppUi.InvocationCount - _winappCountAtStart;
-        var seconds = (_testStopwatch?.Elapsed.TotalSeconds) ?? 0;
-        var name = TestContext?.TestName ?? GetType().Name;
-        TestContext?.WriteLine($"winapp-invocations={spawned}");
-        WinAppMetrics.Record(name, spawned, seconds);
-    }
+    public void RecordWinAppInvocations() => E2ETestCleanup.RecordAndYield(
+        TestContext, _winappCountAtStart, _testStopwatch, GetType().Name);
 
     protected static UiElement Element(string selector, string? automationId = null, UiRect? cachedBounds = null) =>
         new(App, Uia, selector, automationId, WinFormsTestSession.HostHwnd, cachedBounds);

@@ -9,8 +9,7 @@ using static Microsoft.UI.Reactor.Charting.Charts;
 // </snippet:imports>
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<ChartingApp>("Charting", width: 700, height: 800
-);
+ReactorApp.Run<ChartingApp>("Charting");
 
 record SalesPoint(double Month, double Revenue);
 record CategoryData(string Name, double Value);

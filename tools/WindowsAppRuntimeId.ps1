@@ -12,11 +12,11 @@
            against 1.7 genuinely needs the 1.7 runtime.
       2.x  ships ONE framework package for the whole MAJOR -- the SDK's own
            WindowsAppSDK-VersionInfo.json names Microsoft.WindowsAppRuntime.2 as
-           the framework family for 2.1.3 -- serviced 2.0 -> 2.1 -> 2.3 in place.
-           The major-only winget id tracks that servicing. The major.minor ids
-           are SEPARATE winget packages pinned to a single servicing line:
+           the framework family for 2.2.0 -- serviced 2.0 -> 2.1 -> 2.2 -> 2.3 in
+           place. The major-only winget id tracks that servicing. The major.minor
+           ids are SEPARATE winget packages pinned to a single servicing line:
            Microsoft.WindowsAppRuntime.2.0 is still 2.0.1 and cannot satisfy an
-           app built against 2.1.3, and Microsoft.WindowsAppRuntime.2.1 does not
+           app built against 2.2.0, and Microsoft.WindowsAppRuntime.2.1 does not
            exist at all.
 
     Because the 2.x id is major-wide, its presence alone does NOT prove the

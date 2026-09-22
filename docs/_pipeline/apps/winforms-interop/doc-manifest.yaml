@@ -1,5 +1,4 @@
 app:
-  title: "WinForms Interop"
   width: 800
   height: 500
   startup-delay: 2500
@@ -8,14 +7,11 @@ screenshots:
   - id: island-control
     description: "Reactor counter component hosted inside a WinForms form"
     component: WinFormsHostDemo
-    region: window
     format: png
   - id: designer
     description: "WinForms designer showing XamlIslandControl with ComponentType property"
-    region: window
     format: png
   - id: background
     description: "Reactor component with explicit theme-aware background in WinForms"
     component: BackgroundDemo
-    region: client
     format: png

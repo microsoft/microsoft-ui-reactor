@@ -59,6 +59,10 @@
 
   <ItemGroup>
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+    <!-- PackagedIdentityFixtures lives here and is linked into the packaged host, so the
+         derivation has to compile in both. -->
+    <Compile Include="..\_shared\FinalPath.cs" Link="FinalPath.cs" />
+    <Compile Include="..\_shared\WorktreeIdentity.cs" Link="WorktreeIdentity.cs" />
   </ItemGroup>
 
   <!--

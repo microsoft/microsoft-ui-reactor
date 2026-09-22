@@ -5,8 +5,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hooks;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<LoginRecipeApp>("Login Recipe", width: 360, height: 380
-);
+ReactorApp.Run<LoginRecipeApp>("Login Recipe");
 
 class LoginRecipeApp : Component
 {

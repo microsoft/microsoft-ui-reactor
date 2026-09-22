@@ -6,8 +6,7 @@ using static Microsoft.UI.Reactor.Factories;
 // pair — the bad shape and the corrected shape — so the page can show
 // the analyzer's catch and the fix side by side. Deliberate
 // counterexamples name the analyzer code in their comments.
-ReactorApp.Run<RulesApp>("Rules of Reactor", width: 360, height: 220
-);
+ReactorApp.Run<RulesApp>("Rules of Reactor");
 
 class RulesApp : Component
 {

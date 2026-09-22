@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Hosting.Persistence;
 using Microsoft.UI.Reactor.Hosting.Shell;
+using Reactor.Tests.Shared;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -44,8 +45,44 @@ internal static class PackagedIdentityFixtures
     /// </summary>
     internal const string PackagedHostAssemblyName = "Reactor.PackagedTests.Host";
 
-    /// <summary>Expected <c>Identity/@Name</c> from the packaged host's manifest.</summary>
+    /// <summary>
+    /// Base <c>Identity/@Name</c> as declared in the packaged host's source manifest.
+    /// </summary>
+    /// <remarks>
+    /// Not what the package is actually registered as. The deployment uniquifies this per
+    /// layout directory so that concurrent checkouts of this repo cannot evict each other's
+    /// registration or fight over one execution alias; use
+    /// <see cref="ExpectedPackageIdentityName"/> for anything that compares against a live
+    /// package.
+    /// </remarks>
     internal const string PackageIdentityName = "Microsoft.UI.Reactor.PackagedTests.Host";
+
+    /// <summary>
+    /// The publisher half of the identity, as spelled in <c>Identity/@Publisher</c>.
+    /// </summary>
+    /// <remarks>
+    /// Checked separately because the name alone does not identify a package. A family name is
+    /// <c>&lt;name&gt;_&lt;publisherHash&gt;</c>, so a prefix match on the name accepts any
+    /// publisher, and a package sharing this derived name and install path under a different
+    /// publisher would satisfy every other check here while the suite ran under the wrong
+    /// identity. Kept in parity with the deployment constant by
+    /// <c>Host_Side_Identity_Constants_Match_Their_Sources</c>.
+    /// </remarks>
+    internal const string PackageIdentityPublisher = "CN=Microsoft.UI.Reactor.PackagedTests.Host";
+
+    /// <summary>
+    /// The identity this process must be running under: <see cref="PackageIdentityName"/>
+    /// derived for the directory this build was deployed from.
+    /// </summary>
+    /// <remarks>
+    /// Re-derived here rather than passed in. The deployment derives from the layout directory
+    /// it registers, this derives from the directory the process is running out of, and the
+    /// tier's own install-location invariant says those are the same directory — so the two
+    /// sides agree with no channel between them, and the checks below stay exact equality
+    /// rather than degrading to a prefix match that a stale registration could satisfy.
+    /// </remarks>
+    internal static string ExpectedPackageIdentityName =>
+        WorktreeIdentity.DerivePackageName(PackageIdentityName, AppContext.BaseDirectory);
 
     /// <summary>
     /// True when this process is the packaged host, i.e. when package identity is a
@@ -117,13 +154,14 @@ internal static class PackagedIdentityFixtures
 
             // Corroborate through a completely different mechanism (WinRT rather than the
             // kernel32 probe), so a bug in one cannot make the other lie.
-            string? name = null, familyName = null, installPath = null;
+            string? name = null, familyName = null, installPath = null, publisher = null;
             try
             {
                 var pkg = global::Windows.ApplicationModel.Package.Current;
                 name = pkg.Id.Name;
                 familyName = pkg.Id.FamilyName;
                 installPath = pkg.InstalledLocation.Path;
+                publisher = pkg.Id.Publisher;
             }
             catch (Exception ex) when (ex is InvalidOperationException or COMException)
             {
@@ -138,23 +176,169 @@ internal static class PackagedIdentityFixtures
                 Console.WriteLine($"# Package.Current threw: {ex.GetType().Name}: {ex.Message}");
             }
 
-            H.Check("PackagedIdentity_Package_Name_Matches", name == PackageIdentityName);
+            var expectedName = ExpectedPackageIdentityName;
+
+            // Both halves of the comparison travel with the verdict, not through `#` lines.
+            // The TAP reader keeps only `ok`/`not ok`, so a `Console.WriteLine("# ...")`
+            // diagnostic is dropped before it reaches the MSTest failure detail — the exact
+            // failure would be visible in raw TAP and invisible in CI. Every side of the
+            // comparison is derived from a path, so a mismatch is only diagnosable with the
+            // path and the name that came out of it.
+            var identityDetail =
+                $"expected={expectedName}; actual={name ?? "<null>"}; " +
+                $"family={familyName ?? "<null>"}; " +
+                $"expectedPublisher={PackageIdentityPublisher}; " +
+                $"publisher={publisher ?? "<null>"}; " +
+                $"baseDirectory={AppContext.BaseDirectory}; " +
+                $"installLocation={installPath ?? "<null>"}";
+
+            H.Check("PackagedIdentity_Package_Name_Matches", name == expectedName, identityDetail);
             H.Check("PackagedIdentity_FamilyName_Derived_From_Name",
                 familyName is not null &&
-                familyName.StartsWith(PackageIdentityName + "_", StringComparison.Ordinal));
+                familyName.StartsWith(expectedName + "_", StringComparison.Ordinal),
+                identityDetail);
+
+            // The name half is not an identity. A family name is <name>_<publisherHash>, so the
+            // prefix match above accepts every publisher that ever produced this name — and a
+            // package sharing the derived name and the install path but signed by a different
+            // publisher would pass every other check in this fixture while the tier ran under
+            // an identity it never registered. Compared against the manifest's publisher, the
+            // same value the deployment's own pre-flight check compares.
+            H.Check("PackagedIdentity_Publisher_Matches",
+                string.Equals(publisher, PackageIdentityPublisher, StringComparison.Ordinal),
+                identityDetail);
 
             // The registration must point at the build output this process is running
             // from. A stale registration of an older layout would otherwise let the tier
-            // silently test a different binary.
-            var baseDir = global::System.IO.Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+            // silently test a different binary. Compared through the same canonicalisation
+            // the identity itself is derived from: a raw comparison would reject a valid
+            // package whenever the recorded and running spellings of one directory differ,
+            // which is exactly what a junctioned parent produces.
             H.Check("PackagedIdentity_InstallLocation_Is_This_Build",
-                installPath is not null &&
-                string.Equals(
-                    global::System.IO.Path.TrimEndingDirectorySeparator(installPath),
-                    baseDir,
-                    StringComparison.OrdinalIgnoreCase));
+                WorktreeIdentity.IsSameDirectory(installPath, AppContext.BaseDirectory),
+                identityDetail);
 
             return Task.CompletedTask;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  MRT / PRI — the identity rewrite happens after PRI indexing
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Resolves packaged content through MRT under the <i>derived</i> identity.
+    /// </summary>
+    /// <remarks>
+    /// <para>This tier rewrites <c>Identity/@Name</c> in the generated manifest after the
+    /// build has already produced <c>resources.pri</c>, and a PRI's primary resource map is
+    /// named for the package it was indexed against. Measured on this build, the map is
+    /// <c>Microsoft.UI.Reactor.PackagedTests.Host</c> with
+    /// <c>uniqueName="ms-appx://Microsoft.UI.Reactor.PackagedTests.Host/"</c>, while the
+    /// package registers as that name plus a per-layout suffix — so the two genuinely
+    /// disagree, and the host genuinely has indexed content: <c>Themes/Generic.xaml</c> is a
+    /// <c>Page</c>, <c>Images\*.png</c> and the window icon are <c>Content</c>, and the
+    /// generated PRI is ~1.3 MB with a populated <c>Files</c> subtree.</para>
+    /// <para>So the question is not whether the mismatch exists — it does — but whether
+    /// Windows resolves packaged content by the running package's install location or by the
+    /// name recorded in the PRI. That is a property of the OS, not of this repo, and it is
+    /// not something to reason about: this fixture measures it. It is the reason the rewrite
+    /// is allowed to stay after PRI generation, and it is what fails if a future Windows or
+    /// Windows App SDK version starts keying resolution on the recorded name.</para>
+    /// <para>Deliberately probes two independent mechanisms. <c>ms-appx:</c> through
+    /// <c>StorageFile</c> is the path XAML uses for packaged content; Reactor's own
+    /// <c>WindowIcon</c> does <b>not</b> exercise it, because it rewrites <c>ms-appx:</c>
+    /// onto a <c>BaseDirectory</c> filesystem path and never reaches MRT. The
+    /// <c>MainResourceMap</c> subtree lookup is the raw MRT path with no file-system
+    /// fallback available to mask a failure.</para>
+    /// </remarks>
+    internal class ResourceResolution(Harness h) : SelfTestFixtureBase(h)
+    {
+        /// <summary>A <c>Content</c> item of the packaged host, present in the PRI's <c>Files</c> subtree.</summary>
+        private const string PackagedImage = "Images/Square44x44Logo.png";
+
+        public override async Task RunAsync()
+        {
+            if (!RequirePackagedTier(H, this)) return;
+
+            var packageName = TryPackageName() ?? "<null>";
+            var mapUri = TryMainResourceMapUri() ?? "<null>";
+
+            // Mechanism 1: ms-appx: through StorageFile — what XAML uses for packaged content.
+            string? storageDetail;
+            var storageResolved = false;
+            try
+            {
+                var file = await global::Windows.Storage.StorageFile.GetFileFromApplicationUriAsync(
+                    new Uri("ms-appx:///" + PackagedImage));
+                storageResolved = !string.IsNullOrEmpty(file?.Path);
+                storageDetail = file?.Path ?? "<null>";
+            }
+            // Narrowed deliberately. A resolution failure arrives as one of these — a missing
+            // asset, a malformed URI, or an MRT/WinRT HRESULT — and each is a real answer worth
+            // recording. Anything else is a defect in this fixture, and swallowing it would
+            // report "resolution broke" for a fault that has nothing to do with resolution.
+            catch (Exception ex) when (ex is FileNotFoundException or ArgumentException
+                or COMException or UnauthorizedAccessException)
+            {
+                storageDetail = $"{ex.GetType().Name}: {ex.Message}";
+            }
+
+            // Both halves of the disagreement travel with the verdict. Without them a failure
+            // says resolution broke without saying whether the package, the recorded map, or
+            // the asset itself was the part that moved.
+            H.Check("PackagedResources_MsAppx_Resolves_Under_Derived_Identity", storageResolved,
+                $"ms-appx:///{PackagedImage} -> {storageDetail}; " +
+                $"package={packageName}; mainResourceMap={mapUri}");
+
+            // Mechanism 2: the raw MRT map. No filesystem fallback can mask a failure here,
+            // so this is the check that actually pins resolution to the PRI rather than to
+            // the install directory happening to contain the file.
+            string? mrtDetail;
+            var mrtResolved = false;
+            try
+            {
+                var files = global::Windows.ApplicationModel.Resources.Core.ResourceManager
+                    .Current.MainResourceMap.GetSubtree("Files");
+                var candidate = files?.GetValue(PackagedImage);
+
+                // Resolved only once the value has actually been read. GetValue returning a
+                // candidate is not resolution: reading ValueAsString is what consumes the
+                // resource, and it can throw after the candidate exists. Setting the verdict
+                // on the candidate alone let the catch below record the error while the
+                // fixture still reported ok — a PRI compatibility check that passes without
+                // ever resolving anything, which is the one outcome it must not produce.
+                var value = candidate?.ValueAsString;
+                mrtResolved = value is not null;
+                mrtDetail = value ?? "<null>";
+            }
+            // Same narrowing as above: a genuine MRT miss surfaces as one of these, and
+            // everything else is this fixture being wrong rather than resolution being wrong.
+            catch (Exception ex) when (ex is ArgumentException or COMException
+                or InvalidOperationException)
+            {
+                mrtDetail = $"{ex.GetType().Name}: {ex.Message}";
+            }
+
+            H.Check("PackagedResources_MrtSubtree_Resolves_Under_Derived_Identity", mrtResolved,
+                $"Files/{PackagedImage} -> {mrtDetail}; " +
+                $"package={packageName}; mainResourceMap={mapUri}");
+        }
+
+        private static string? TryPackageName()
+        {
+            try { return global::Windows.ApplicationModel.Package.Current.Id.Name; }
+            catch (Exception ex) when (ex is InvalidOperationException or COMException) { return null; }
+        }
+
+        private static string? TryMainResourceMapUri()
+        {
+            try
+            {
+                return global::Windows.ApplicationModel.Resources.Core.ResourceManager
+                    .Current.MainResourceMap.Uri?.ToString();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or COMException) { return null; }
         }
     }
 

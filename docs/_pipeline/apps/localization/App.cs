@@ -4,8 +4,7 @@ using Microsoft.UI.Reactor.Localization;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<LocalizationApp>("Localization", width: 650, height: 700
-);
+ReactorApp.Run<LocalizationApp>("Localization");
 
 // <snippet:resource-provider>
 class DemoResourceProvider : IStringResourceProvider

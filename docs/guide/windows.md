@@ -18,8 +18,7 @@ surface — icon, min/max size, backdrop, corner style, or placement persistence
 `ReactorWindow` handle for imperative lifecycle operations.
 
 ```csharp
-ReactorApp.Run<WindowsApp>("Windows Demo", width: 640, height: 520
-);
+ReactorApp.Run<WindowsApp>("Windows Demo");
 ```
 
 ```csharp
@@ -170,6 +169,33 @@ Caveats:
 - `PositionChanged` fires eagerly during drags; debounce in app code if needed.
 - `PersistenceId` alone is only identity. Placement restore/save requires
   `PersistPlacement = true` or `.WithPersistence(...)`.
+
+### Where placement is stored
+
+Reactor picks a store on the first `OpenWindow`: packaged apps get
+`ApplicationData.Current.LocalSettings`, unpackaged apps get a JSON file under
+`%LOCALAPPDATA%/<ProcessName>/`. Because that default is keyed on the **process
+name**, renaming your executable strands previously saved layouts.
+
+Unpackaged apps can opt into a stable identity instead — assign the store before
+the first `OpenWindow`:
+
+```csharp
+public static void UseStableIdentity()
+{
+    ReactorApp.WindowPersistenceStore =
+        new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
+}
+```
+
+`UnpackagedAppDataStore` keys on the publisher/product pair you supply rather than
+the process name, so saved layouts survive a rename. It is opt-in, not the default,
+because the two stores key their data differently and switching does not migrate
+existing layouts. Multiple app instances sharing one publisher/product are safe:
+writes are serialized across processes, so a save for one window cannot drop another
+window's entry. Two windows that share a `PersistenceId` still overwrite each other
+by design — serialization removes the *lost-update* race, not the deliberate
+last-writer-wins of a single key.
 
 ## Z-order & visibility
 

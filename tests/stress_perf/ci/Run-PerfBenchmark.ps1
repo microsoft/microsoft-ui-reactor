@@ -451,18 +451,27 @@ function Stage-RustRuntime {
         #    the shared windows-reactor-setup cache (e.g. local experimentation) fall back to
         #    the highest *version* — never the largest file, which is arbitrary and could stage
         #    a mismatched runtime and reintroduce 0xC0000135. Else download the pinned version.
-        $pkg = 'Microsoft.WindowsAppSDK.Runtime'; $ver = '2.1.3'
+        $pkg = 'Microsoft.WindowsAppSDK.Runtime'; $ver = '2.2.0'
         $nupkg = $null
         $pinned = Join-Path $cache "$pkg.$ver.nupkg"
         if (Test-Path $pinned) {
             $nupkg = $pinned
         } elseif (Test-Path $cache) {
+            # Fall back to a cached copy, but only one that can actually load what this
+            # build produces: 2.x services in place, so a cached version BELOW the pin
+            # (and any other major) cannot satisfy an app built against $ver. Taking
+            # the highest cached version unconditionally would silently stage 2.1.3 for
+            # a 2.2.0 build and fail at runtime with 0xC0000135.
+            $minVer = [version]$ver
             $nupkg = Get-ChildItem $cache -Filter "$pkg.*.nupkg" -File -ErrorAction SilentlyContinue |
-                Sort-Object @{ Expression = {
+                ForEach-Object {
                     $p = [version]'0.0'
-                    try { [void][version]::TryParse($_.BaseName.Substring($pkg.Length + 1), [ref]$p) } catch {}
-                    $p } } -Descending |
-                Select-Object -First 1 -ExpandProperty FullName
+                    $ok = [version]::TryParse($_.BaseName.Substring($pkg.Length + 1), [ref]$p)
+                    if ($ok) { [pscustomobject]@{ File = $_.FullName; Ver = $p } }
+                } |
+                Where-Object { $_.Ver.Major -eq $minVer.Major -and $_.Ver -ge $minVer } |
+                Sort-Object Ver -Descending |
+                Select-Object -First 1 -ExpandProperty File
         }
         if (-not $nupkg) {
             $null = New-Item -ItemType Directory -Force -Path $cache -ErrorAction SilentlyContinue
@@ -492,11 +501,12 @@ function Stage-RustRuntime {
         $extract = Join-Path $cache ("perfci-runtime-extract-" + [IO.Path]::GetFileNameWithoutExtension($nupkg))
         $msixDir = Join-Path $extract "MSIX\win10-$arch"
         # Resolve the per-arch framework MSIX. 2.x ships Microsoft.WindowsAppRuntime.2.msix
-        # (the '2' is the stable WinAppSDK API-contract major, identical across 2.1.3/2.10/…),
-        # so that exact name is the fast path. Only if it is absent — e.g. the non-pinned
-        # fallback above selected a cached package from a future major whose framework MSIX is
-        # numbered differently (…\Microsoft.WindowsAppRuntime.N.msix) — glob for the framework
-        # MSIX by its stable stem so a valid runtime still stages instead of failing outright.
+        # (the '2' is the stable WinAppSDK API-contract major, identical across 2.2.0/2.10/…),
+        # so that exact name is the fast path. The glob below is a safety net for a payload
+        # whose framework MSIX is numbered differently (…\Microsoft.WindowsAppRuntime.N.msix);
+        # the cache fallback above is now constrained to the SAME major at or above $ver, so a
+        # cross-major payload should no longer reach here — the glob exists so an unexpected
+        # layout still stages a valid runtime instead of failing outright.
         # The glob is scoped to the 'Microsoft.WindowsAppRuntime.<major>.msix' shape (no embedded
         # dot after the stem) so it can't pick an unrelated package (DDLM/Singleton) that lacks
         # the runtime DLLs.

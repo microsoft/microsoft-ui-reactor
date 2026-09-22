@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<ModifierSystemApp>("Modifier System", width: 650, height: 550);
+ReactorApp.Run<ModifierSystemApp>("Modifier System");
 
 class ModifierSystemApp : Component
 {

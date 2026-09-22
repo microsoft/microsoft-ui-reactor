@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<SearchRecipeApp>("Search-with-Suggestions Recipe", width: 460, height: 380
-);
+ReactorApp.Run<SearchRecipeApp>("Search-with-Suggestions Recipe");
 
 class SearchRecipeApp : Component
 {

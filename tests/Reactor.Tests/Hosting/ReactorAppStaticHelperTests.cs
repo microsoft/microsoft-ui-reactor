@@ -176,7 +176,7 @@ public class ReactorAppStaticHelperTests
             Console.SetError(sw);
             try
             {
-                ReactorApp.EmitDipBehaviorChangeNoticeOnce();
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 800, height: 600);
                 var stderr = sw.ToString();
                 Assert.Contains("[reactor]", stderr);
                 Assert.Contains("DIP", stderr);
@@ -191,8 +191,30 @@ public class ReactorAppStaticHelperTests
         public void EmitDipBehaviorChangeNoticeOnce_SecondCall_IsSilent()
         {
             ReactorApp.ResetDipBehaviorChangeNoticeForTests();
-            ReactorApp.EmitDipBehaviorChangeNoticeOnce(); // first call latches
+            ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 800, height: 600); // first call latches
 
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 800, height: 600);
+                Assert.Empty(sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // The notice announces a migration that an app declaring no size has
+        // nothing to do about: it already gets the OS-chosen extent. Emitting it
+        // anyway contradicts the documented guidance to omit width/height, so a
+        // size-less Run must stay quiet.
+        [Fact]
+        public void EmitDipBehaviorChangeNoticeOnce_NoSizeSupplied_IsSilent()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
             var origErr = Console.Error;
             using var sw = new StringWriter();
             Console.SetError(sw);
@@ -200,6 +222,181 @@ public class ReactorAppStaticHelperTests
             {
                 ReactorApp.EmitDipBehaviorChangeNoticeOnce();
                 Assert.Empty(sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // A size-less call must also not consume the one-shot latch, or the next
+        // app that *does* declare a size would silently lose its notice.
+        [Fact]
+        public void EmitDipBehaviorChangeNoticeOnce_NoSizeThenSize_StillNotifies()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            ReactorApp.EmitDipBehaviorChangeNoticeOnce();
+
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width: 1024);
+                Assert.Contains("[reactor]", sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // OpenWindow announces only after the window actually opened, so a spec
+        // that is about to be rejected cannot burn the one-shot latch and silence
+        // the next window that legitimately should report. This drives
+        // OpenAndAnnounce — the code OpenWindow runs — with a failing open, which
+        // is how the ordering is reachable without constructing WinUI types.
+        [Fact]
+        public void OpenAndAnnounce_FailedOpen_DoesNotConsumeLatch()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var sized = new WindowSpec { Title = "Bad", Width = 800, Height = 600 };
+
+            var origErr = Console.Error;
+            using var duringFailure = new StringWriter();
+            Console.SetError(duringFailure);
+            try
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                    ReactorApp.OpenAndAnnounce(sized, () => throw new InvalidOperationException("rejected")));
+                Assert.Empty(duringFailure.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+
+            using var duringSuccess = new StringWriter();
+            Console.SetError(duringSuccess);
+            try
+            {
+                // Latch must still be unspent, so the next window that opens reports.
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(sized.Width, sized.Height);
+                Assert.Contains("[reactor]", duringSuccess.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // The open callback is the only thing that may validate. WindowSpec.Validate
+        // is not side-effect free — it maintains edge-triggered warning state — so a
+        // second call inside OpenAndAnnounce would double-count those warnings and
+        // defeat the edge trigger. This asserts the seam calls the opener exactly
+        // once and validates zero times itself.
+        [Fact]
+        public void OpenAndAnnounce_DoesNotValidateSpecItself()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var before = WindowSpec.NoDragAffordanceWarningCountForTests;
+            try
+            {
+                // A spec whose combination trips the edge-triggered warning.
+                var suspicious = new WindowSpec
+                {
+                    Title = "No drag",
+                    Width = 320,
+                    Height = 240,
+                    Style = WindowStyle.None,
+                    IsMovableByBackground = false,
+                };
+
+                var opens = 0;
+                var origErr = Console.Error;
+                using var sw = new StringWriter();
+                Console.SetError(sw);
+                try
+                {
+                    // Stand in for the real opener, which is what validates.
+                    ReactorApp.OpenAndAnnounce(suspicious, () => { opens++; suspicious.Validate(); return null!; });
+                }
+                finally
+                {
+                    Console.SetError(origErr);
+                }
+
+                Assert.Equal(1, opens);
+                // Exactly one validation — the opener's. A seam that validated too
+                // would leave 2 here and break the edge trigger the warning relies on.
+                Assert.Equal(before + 1, WindowSpec.NoDragAffordanceWarningCountForTests);
+            }
+            finally
+            {
+                WindowSpec.NoDragAffordanceWarningCountForTests = before;
+            }
+        }
+
+        // Positive control: the seam does announce after a successful open, so the
+        // assertions above cannot pass merely because the emit never fires.
+        [Fact]
+        public void OpenAndAnnounce_SuccessfulOpen_Announces()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.OpenAndAnnounce(
+                    new WindowSpec { Title = "T", Width = 640, Height = 480 },
+                    () => null!);
+                Assert.Contains("[reactor]", sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // A window that declares no size still must not consume the latch.
+        [Fact]
+        public void OpenAndAnnounce_UnsizedSpec_IsSilentAndLeavesLatch()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.OpenAndAnnounce(new WindowSpec { Title = "T" }, () => null!);
+                Assert.Empty(sw.ToString());
+
+                ReactorApp.OpenAndAnnounce(new WindowSpec { Title = "T2", Width = 800 }, () => null!);
+                Assert.Contains("[reactor]", sw.ToString());
+            }
+            finally
+            {
+                Console.SetError(origErr);
+            }
+        }
+
+        // Half-specified sizes are a supported shape (spec 036 §12.2a): the
+        // declared axis applies and the other takes the OS extent. That is still
+        // an explicit size, so it must notify.
+        [Theory]
+        [InlineData(640d, null)]
+        [InlineData(null, 480d)]
+        public void EmitDipBehaviorChangeNoticeOnce_SingleAxis_Notifies(double? width, double? height)
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var origErr = Console.Error;
+            using var sw = new StringWriter();
+            Console.SetError(sw);
+            try
+            {
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(width, height);
+                Assert.Contains("[reactor]", sw.ToString());
             }
             finally
             {

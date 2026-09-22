@@ -18,6 +18,14 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 /// (<c>"json-file"</c>, <c>"packaged-settings"</c>, <c>"placement"</c>);
 /// rejection <c>reason</c> labels are similarly bounded.
 /// </summary>
+/// <para><b>Collection isolation.</b> An <see cref="EventListener"/> receives
+/// process-global events, and these assertions discriminate on <c>storeKind</c> — a
+/// value other suites also emit. A concurrently running
+/// <c>UnpackagedAppDataStoreTests</c> writing through the same store kind could
+/// satisfy an assertion this test's own operation failed to produce, making a
+/// mutation silently survive. Both suites therefore share a collection so xUnit runs
+/// them serially.</para>
+[Collection("PersistenceEtw")]
 public class PersistenceEtwBridgeTests : IDisposable
 {
     private sealed class CapturingListener : EventListener
@@ -53,7 +61,13 @@ public class PersistenceEtwBridgeTests : IDisposable
     {
         _listener.DisableEvents(ReactorEventSource.Log);
         _listener.Dispose();
-        try { if (global::System.IO.File.Exists(_path)) global::System.IO.File.Delete(_path); } catch { }
+        // The store leaves a .lock sidecar beside the document (spec 063 §5).
+        foreach (var p in new[] { _path, CrossProcessWriteGuard.LockPathFor(_path) })
+        {
+            try { if (global::System.IO.File.Exists(p)) global::System.IO.File.Delete(p); }
+            catch (global::System.IO.IOException) { /* best effort */ }
+            catch (UnauthorizedAccessException) { /* best effort */ }
+        }
     }
 
     /// <summary>
@@ -132,6 +146,146 @@ public class PersistenceEtwBridgeTests : IDisposable
             nameof(ReactorEventSource.PersistenceRead),
             0,
             "json-file");
+    }
+
+    // ── UnpackagedAppDataStore is distinguishable on the trace ──────────
+
+    /// <summary>
+    /// Spec 063 §4 — <see cref="UnpackagedAppDataStore"/> composes
+    /// <see cref="JsonFileStore"/> over a different root and writes the identical
+    /// document shape, so the <c>storeKind</c> label is the *only* thing that tells
+    /// the two apart on a trace. Distinguishability was the stated justification for
+    /// turning <c>JsonFileStore</c>'s <c>StoreKind</c> const into an instance field,
+    /// so it needs an assertion: without one, the composed store could silently report
+    /// as <c>"json-file"</c> and the refactor would be paying for nothing.
+    /// </summary>
+    /// <remarks>
+    /// Covers write <b>and</b> read. The label reaches three event paths
+    /// (<c>PersistenceWrite</c>, <c>PersistenceRead</c>, <c>PersistenceRejected</c>),
+    /// so asserting only the write path would let a regression that hard-coded
+    /// <c>"json-file"</c> on either of the others through. The rejection path is
+    /// covered by <see cref="UnpackagedAppDataStore_oversize_write_rejects_with_its_own_storeKind"/>.
+    /// </remarks>
+    [Fact]
+    public void UnpackagedAppDataStore_Write_and_Read_emit_its_own_storeKind_not_json_file()
+    {
+        var publisher = "ReactorEtwTest" + Guid.NewGuid().ToString("N").Substring(0, 12);
+        var store = new UnpackagedAppDataStore(publisher, "ReactorPersistence");
+        try
+        {
+            store.Write("main", new byte[] { 1, 2, 3 });
+
+            var evt = AssertEvent(
+                _listener.Events,
+                nameof(ReactorEventSource.PersistenceWrite),
+                0,
+                "unpackaged-appdata");
+            Assert.True((int)(evt.Payload?[1] ?? 0) > 0);
+
+            // Read path — a separate emit site with its own storeKind argument.
+            Assert.True(store.TryRead("main", out _));
+            AssertEvent(
+                _listener.Events,
+                nameof(ReactorEventSource.PersistenceRead),
+                0,
+                "unpackaged-appdata");
+
+            // PII (§6.2.1): the SDK-derived app-data path must not reach the payload.
+            Assert.DoesNotContain(_listener.Events, e =>
+                e.Payload?.Any(p => p is string s
+                    && s.Contains(store.Path, StringComparison.OrdinalIgnoreCase)) == true);
+        }
+        finally
+        {
+            CleanupAppData(publisher);
+        }
+    }
+
+    /// <summary>
+    /// The third emit site: <c>PersistenceRejected</c> must also carry the composed
+    /// store's own label rather than <c>"json-file"</c>.
+    /// </summary>
+    [Fact]
+    public void UnpackagedAppDataStore_oversize_write_rejects_with_its_own_storeKind()
+    {
+        var publisher = "ReactorEtwTest" + Guid.NewGuid().ToString("N").Substring(0, 12);
+        var store = new UnpackagedAppDataStore(publisher, "ReactorPersistence");
+        try
+        {
+            // Exceeds JsonFileStore.MaxFileSizeBytes once base64-encoded, so the write
+            // takes the oversize-rejection arm. Cast for consistency with the
+            // oversize-read case below; the constant is a long, which C# accepts as an
+            // array bound either way.
+            store.Write("main", new byte[(int)JsonFileStore.MaxFileSizeBytes]);
+
+            AssertEvent(
+                _listener.Events,
+                nameof(ReactorEventSource.PersistenceRejected),
+                0,
+                "unpackaged-appdata");
+        }
+        finally
+        {
+            CleanupAppData(publisher);
+        }
+    }
+
+    /// <summary>
+    /// The lock-unavailable rejection arm. A write that cannot take the cross-process
+    /// guard is refused (spec 063 §5), and that refusal has its own label — without a
+    /// test, a regression emitting the wrong store kind or reason on this path would
+    /// pass, since the oversize case exercises a different branch.
+    /// </summary>
+    [Fact]
+    public void Write_blocked_on_the_cross_process_lock_rejects_with_its_own_reason()
+    {
+        var store = new JsonFileStore(_path);
+
+        // Hold the lock from outside the store, exactly as a peer process would, and
+        // shorten the wait so the test does not pay the production timeout.
+        CrossProcessWriteGuard.AcquireTimeoutOverrideMs = 50;
+        try
+        {
+            using var peer = new global::System.IO.FileStream(
+                CrossProcessWriteGuard.LockPathFor(_path),
+                global::System.IO.FileMode.OpenOrCreate,
+                global::System.IO.FileAccess.ReadWrite,
+                global::System.IO.FileShare.None);
+
+            store.Write("main", new byte[] { 1, 2, 3 });
+
+            AssertEvent(
+                _listener.Events,
+                nameof(ReactorEventSource.PersistenceRejected),
+                0,
+                "json-file");
+            Assert.Contains(_listener.Events, e =>
+                e.EventName == nameof(ReactorEventSource.PersistenceRejected)
+                && e.Payload is { } p && p.Count > 1
+                && (p[1] as string) == "write-lock-unavailable");
+        }
+        finally
+        {
+            CrossProcessWriteGuard.AcquireTimeoutOverrideMs = null;
+        }
+    }
+
+    private static void CleanupAppData(string publisher)
+    {
+        // Narrowed to what a delete can legitimately hit; see the Dispose rationale.
+        try
+        {
+            var dir = global::System.IO.Path.Join(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), publisher);
+            if (global::System.IO.Directory.Exists(dir))
+                global::System.IO.Directory.Delete(dir, recursive: true);
+        }
+        catch (global::System.Exception ex) when (ex is global::System.IO.IOException
+                                                    or UnauthorizedAccessException)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[test cleanup] could not remove app-data dir for '{publisher}': {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     // ── JsonFileStore explicit rejects → PersistenceRejected ────────────

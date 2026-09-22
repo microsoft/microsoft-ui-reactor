@@ -7,15 +7,22 @@ internal class DocManifest
 {
     public AppConfig App { get; set; } = new();
     public List<ScreenshotConfig> Screenshots { get; set; } = [];
-    public SnippetSettings? Snippets { get; set; }
 }
 
 internal class AppConfig
 {
-    public string Title { get; set; } = "";
+    /// <summary>
+    /// Capture window size in DIPs, forwarded to the doc app as
+    /// <c>--width</c>/<c>--height</c>. For a doc app hosted by
+    /// <c>ReactorApp.Run</c> this is the sole declaration of its screenshot
+    /// size — the app's own <c>Run</c> call omits it so a human running the app
+    /// gets the OS-chosen extent. The interop doc apps
+    /// (<c>winforms-interop</c>, <c>wpf-interop</c>) are the exception: they
+    /// never call <c>ReactorApp.Run</c> and size their own host window in code,
+    /// so these values do not reach them.
+    /// </summary>
     public int Width { get; set; } = 800;
     public int Height { get; set; } = 600;
-    public string Theme { get; set; } = "light";
     public int StartupDelay { get; set; } = 2000;
 }
 
@@ -23,12 +30,9 @@ internal class ScreenshotConfig
 {
     public string Id { get; set; } = "";
     public string Description { get; set; } = "";
-    public string Region { get; set; } = "client";
     public string Format { get; set; } = "png";
     public string Crop { get; set; } = "content";
     public string? Component { get; set; }
-    public string? Theme { get; set; }
-    public BoundsConfig? Bounds { get; set; }
 
     /// <summary>
     /// Capture kind. Defaults to <c>screenshot</c> (full-size, border + drop shadow).
@@ -43,20 +47,6 @@ internal class ScreenshotConfig
 
     /// <summary>Target height in pixels for <c>kind: catalog-thumb</c>. Defaults to 240.</summary>
     public int ThumbHeight { get; set; } = 240;
-}
-
-internal class BoundsConfig
-{
-    public int X { get; set; }
-    public int Y { get; set; }
-    public int Width { get; set; }
-    public int Height { get; set; }
-}
-
-internal class SnippetSettings
-{
-    public bool TrimNamespaceUsings { get; set; }
-    public int MaxLinesWarning { get; set; } = 30;
 }
 
 internal static class ManifestParser

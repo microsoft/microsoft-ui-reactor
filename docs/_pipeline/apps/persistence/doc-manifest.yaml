@@ -1,5 +1,4 @@
 app:
-  title: "Persistence Demo"
   width: 440
   height: 360
   startup-delay: 1200
@@ -8,5 +7,4 @@ screenshots:
   - id: notes-editor
     description: "Tiny notes editor that demonstrates UsePersisted in the Window scope."
     component: PersistenceApp
-    region: client
     format: png

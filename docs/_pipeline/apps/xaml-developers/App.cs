@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<XamlDevelopersShowcase>("Reactor for XAML Developers", width: 720, height: 620
-);
+ReactorApp.Run<XamlDevelopersShowcase>("Reactor for XAML Developers");
 
 enum TutorialRoute
 {

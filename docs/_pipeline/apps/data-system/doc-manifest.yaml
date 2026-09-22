@@ -1,5 +1,4 @@
 app:
-  title: "Data System"
   width: 900
   height: 600
   startup-delay: 3000
@@ -8,40 +7,32 @@ screenshots:
   - id: explicit-columns
     description: "DataGrid with explicitly defined columns showing products"
     component: ExplicitColumnsDemo
-    region: client
     format: png
   - id: auto-columns
     description: "DataGrid with auto-generated columns from reflection"
     component: AutoColumnsDemo
-    region: client
     format: png
   - id: sort-filter
     description: "DataGrid sorted by price with search enabled"
     component: SortFilterDemo
-    region: client
     format: png
   - id: selection
     description: "DataGrid with multi-select showing selected rows"
     component: SelectionDemo
-    region: client
     format: png
   - id: inline-editing
     description: "DataGrid with cell editing active on a name field"
     component: InlineEditingDemo
-    region: client
     format: png
   - id: column-features
     description: "DataGrid with pinned ID column and resized columns"
     component: ColumnFeaturesDemo
-    region: client
     format: png
   - id: paging
     description: "DataGrid loading blocks incrementally with placeholder rows"
     component: PagingDemo
-    region: client
     format: png
   - id: row-details
     description: "DataGrid with an expanded row showing detail content"
     component: RowDetailsDemo
-    region: client
     format: png

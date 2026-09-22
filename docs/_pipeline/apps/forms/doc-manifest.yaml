@@ -1,5 +1,4 @@
 app:
-  title: "Forms"
   width: 600
   height: 900
   startup-delay: 1500
@@ -8,65 +7,52 @@ screenshots:
   - id: controlled-input
     description: "Controlled text input with live preview"
     component: ControlledInputDemo
-    region: client
     format: png
   - id: input-types
     description: "All input control types in a form"
     component: InputTypesDemo
-    region: client
     format: png
   - id: validation
     description: "Simple validation with derived state"
     component: ValidationDemo
-    region: client
     format: png
   - id: keep-submit-reachable
     description: "Form using .Immediate() on NumberBox and .IsDisabledFocusable() on Submit so keyboard users can always reach the button"
     component: KeepSubmitReachableDemo
-    region: client
     format: png
   - id: validation-context
     description: "Validation context with email and password fields"
     component: ValidationContextDemo
-    region: client
     format: png
   - id: form-field
     description: "FormField helper with label, required indicator, and error display"
     component: FormFieldDemo
-    region: client
     format: png
   - id: masked-input
     description: "Masked phone and date input with raw value display"
     component: MaskedInputDemo
-    region: client
     format: png
   - id: input-formatters
     description: "Currency and uppercase input formatters"
     component: InputFormattersDemo
-    region: client
     format: png
   - id: auto-suggest
     description: "AutoSuggestBox with custom inline suggestion list filtered by typed prefix."
     component: AutoSuggestDemo
-    region: client
     format: png
   - id: date-picker
     description: "DatePicker (always-set) and CalendarDatePicker (nullable) with format strings."
     component: DatePickerDemo
-    region: client
     format: png
   - id: time-picker
     description: "TimePicker bound to a TimeSpan with formatted display."
     component: TimePickerDemo
-    region: client
     format: png
   - id: calendar-view
     description: "CalendarView month grid with multi-select and selection summary."
     component: CalendarViewDemo
-    region: client
     format: png
   - id: color-picker
     description: "ColorPicker (ring spectrum, alpha enabled) with a live preview swatch."
     component: ColorPickerDemo
-    region: client
     format: png

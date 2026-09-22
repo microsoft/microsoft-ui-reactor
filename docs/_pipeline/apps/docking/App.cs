@@ -8,8 +8,6 @@ using static Microsoft.UI.Reactor.Factories;
 // <snippet:register>
 ReactorApp.Run<DockingApp>(
     title: "Docking",
-    width: 900,
-    height: 600,
     configure: host => DockingNativeInterop.Register(host.Reconciler));
 // </snippet:register>
 

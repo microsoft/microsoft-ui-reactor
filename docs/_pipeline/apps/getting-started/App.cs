@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400);
+ReactorApp.Run<GettingStartedApp>("Getting Started");
 
 class GettingStartedApp : Component
 {
@@ -29,7 +29,7 @@ class GettingStartedApp : Component
 
 // <snippet:usestate-counter>
 // Launch with:
-//   ReactorApp.Run<CounterExample>("Counter", width: 600, height: 400);
+//   ReactorApp.Run<CounterExample>("Counter");
 
 class CounterExample : Component
 {
@@ -51,7 +51,7 @@ class CounterExample : Component
 
 // <snippet:layout-basics>
 // Launch with:
-//   ReactorApp.Run<LayoutBasicsExample>("Layout", width: 600, height: 400);
+//   ReactorApp.Run<LayoutBasicsExample>("Layout");
 
 class LayoutBasicsExample : Component
 {
@@ -87,7 +87,7 @@ class LayoutBasicsExample : Component
 
 // <snippet:multiple-state>
 // Launch with:
-//   ReactorApp.Run<MultipleStateExample>("Multiple State", width: 600, height: 400);
+//   ReactorApp.Run<MultipleStateExample>("Multiple State");
 
 class MultipleStateExample : Component
 {

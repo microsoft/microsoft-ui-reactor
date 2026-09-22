@@ -2,8 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<MultiStepFormApp>("Multi-Step Form Recipe", width: 420, height: 460
-);
+ReactorApp.Run<MultiStepFormApp>("Multi-Step Form Recipe");
 
 class MultiStepFormApp : Component
 {

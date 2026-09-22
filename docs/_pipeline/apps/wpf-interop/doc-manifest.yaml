@@ -1,5 +1,4 @@
 app:
-  title: "WPF Interop"
   width: 640
   height: 420
   startup-delay: 1500

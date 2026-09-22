@@ -4,8 +4,7 @@ using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<CollectionsApp>("Collections", width: 700, height: 600
-);
+ReactorApp.Run<CollectionsApp>("Collections");
 
 // <snippet:sample-data>
 record Contact(string Id, string Name, string Email);

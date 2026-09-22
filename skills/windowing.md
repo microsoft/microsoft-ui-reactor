@@ -70,6 +70,22 @@ UseWindow()?.SavePlacement(); // optional immediate flush
 `PersistenceId` alone is not enough; use `.WithPersistence(...)` or set
 `PersistPlacement = true` explicitly.
 
+Placement goes to an auto-picked store: `ApplicationData.Current.LocalSettings`
+when packaged, else a JSON file under `%LOCALAPPDATA%/<ProcessName>/`. That
+default is keyed on the **process name**, so renaming the exe strands saved
+layouts. Unpackaged apps can opt into a stable publisher/product identity
+before the first `OpenWindow`:
+
+```csharp
+using Microsoft.UI.Reactor.Hosting.Persistence;
+
+ReactorApp.WindowPersistenceStore =
+    new UnpackagedAppDataStore(publisher: "Contoso", product: "TimeTracker");
+```
+
+Opt-in rather than default: the two stores key data differently, so switching
+does not migrate existing layouts.
+
 ## Visibility, z-order, and chrome
 
 ```csharp

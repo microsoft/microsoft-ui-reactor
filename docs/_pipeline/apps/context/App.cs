@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<ContextApp>("Context", width: 600, height: 600
-);
+ReactorApp.Run<ContextApp>("Context");
 
 // <snippet:create-context>
 static class Contexts

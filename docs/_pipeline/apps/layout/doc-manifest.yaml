@@ -1,5 +1,4 @@
 app:
-  title: "Layout Demo"
   width: 700
   height: 650
   startup-delay: 1500
@@ -8,55 +7,44 @@ screenshots:
   - id: vstack-hstack
     description: "VStack and HStack layout demo"
     component: StackDemo
-    region: client
     format: png
   - id: grid-layout
     description: "Grid with columns, rows, and placement"
     component: GridDemo
-    region: client
     format: png
   - id: scrollview-border
     description: "ScrollView inside a styled Border"
     component: ScrollBorderDemo
-    region: client
     format: png
   - id: expander-canvas
     description: "Expander and Canvas elements"
     component: ExpanderCanvasDemo
-    region: client
     format: png
   - id: responsive
     description: "Responsive layout switching between HStack and VStack"
     component: ResponsiveDemo
-    region: client
     format: png
   - id: card
     description: "Card chrome wrapping a recent-activity summary"
     component: CardDemo
-    region: client
     format: png
   - id: type-ramp
     description: "Title / Subtitle / BodyLarge / BodyStrong / Body factories"
     component: TypeRampDemo
-    region: client
     format: png
   - id: app-shell
     description: "App-shell scaffold: title bar, sidebar, content, and status bar"
     component: AppShellExample
-    region: client
     format: png
   - id: auto-grid
     description: "WrapGrid auto-flowing 11 tiles into 4-column rows"
     component: AutoGridExample
-    region: client
     format: png
   - id: responsive-switcher
     description: "HStack-to-VStack switch driven by a simulated wide-window toggle"
     component: ResponsiveSwitcherExample
-    region: client
     format: png
   - id: do-grid-for-forms
     description: "Two-column Auto/Star Grid form with aligned labels"
     component: DoGridForForms
-    region: client
     format: png

@@ -6,7 +6,7 @@ using static Microsoft.UI.Reactor.Factories;
 // the page previously carried as uncompiled prose blocks. Keeping them here
 // means CI fails if the DataTemplate-replacement or Style-replacement shapes
 // ever drift from the real factory / modifier surface.
-ReactorApp.Run<ReactorVsXamlApp>("Reactor vs XAML", width: 640, height: 520);
+ReactorApp.Run<ReactorVsXamlApp>("Reactor vs XAML");
 
 record Product(int Id, string Name, string Category);
 

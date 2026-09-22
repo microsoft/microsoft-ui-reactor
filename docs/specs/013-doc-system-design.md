@@ -82,6 +82,16 @@ Rules:
 
 ### App Manifest (`doc-manifest.yaml`)
 
+> **Status:** the schema below is the original design. Several fields were
+> parsed but never read by the compiler and have since been removed —
+> `app.title`, `app.theme`, `screenshots[].region`, `screenshots[].theme`,
+> `screenshots[].bounds`, and the `snippets:` block. The shipping schema is
+> documented in [`docs/_pipeline/ai-author-skill.md`](../_pipeline/ai-author-skill.md);
+> treat the example below as historical. Note also that `app.width`/`app.height`
+> are now **live** — they are forwarded to the doc app as `--width`/`--height`
+> and are the only declaration of a capture's size, because doc apps no longer
+> pass a size to `ReactorApp.Run`.
+
 ```yaml
 app:
   title: "Getting Started"
@@ -472,7 +482,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400);
+ReactorApp.Run<GettingStartedApp>("Getting Started");
 
 class GettingStartedApp : Component
 {
@@ -494,7 +504,6 @@ class GettingStartedApp : Component
 
 ```yaml
 app:
-  title: "Getting Started"
   width: 600
   height: 400
   startup-delay: 1500
@@ -502,7 +511,6 @@ app:
 screenshots:
   - id: hello-world
     description: "Hello World app running"
-    region: client
     format: png
 ```
 

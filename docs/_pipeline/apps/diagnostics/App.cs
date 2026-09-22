@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Diagnostics;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<DiagnosticsApp>("Diagnostics Demo", width: 360, height: 240);
+ReactorApp.Run<DiagnosticsApp>("Diagnostics Demo");
 
 class DiagnosticsApp : Component
 {

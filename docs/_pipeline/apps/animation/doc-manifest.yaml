@@ -1,77 +1,62 @@
 app:
-  title: "Animation"
   width: 650
-  height: 900
+  height: 700
   startup-delay: 2000
 
 screenshots:
   - id: opacity-transition
     description: "Text fading in and out with OpacityTransition"
     component: OpacityDemo
-    region: client
     format: png
   - id: scale-transition
     description: "Text scaling up with ScaleTransition"
     component: ScaleDemo
-    region: client
     format: png
   - id: translation-transition
     description: "Text sliding horizontally with TranslationTransition"
     component: TranslationDemo
-    region: client
     format: png
   - id: background-transition
     description: "Panel background animating between warm and cool colors"
     component: BackgroundDemo
-    region: client
     format: png
   - id: combined-transitions
     description: "Element combining opacity, scale, and translation transitions"
     component: CombinedDemo
-    region: client
     format: png
   - id: layout-animation
     description: "List items animating when added or removed"
     component: LayoutAnimationDemo
-    region: client
     format: png
   - id: connected-animation
     description: "Connected animation between list and detail views"
     component: ConnectedAnimationDemo
-    region: client
     format: png
   - id: with-animation
     description: "WithAnimation scope animating opacity via compositor"
     component: WithAnimationDemo
-    region: client
     format: png
   - id: animate-modifier
     description: "Spring-animated opacity with .Animate() modifier"
     component: AnimateDemo
-    region: client
     format: png
   - id: interaction-states
     description: "Hover and press effects with zero-reconcile InteractionStates"
     component: InteractionStatesDemo
-    region: client
     format: png
   - id: enter-exit-transition
     description: "Element entering and exiting with Fade + Slide transition"
     component: TransitionDemo
-    region: client
     format: png
   - id: stagger
     description: "Staggered animation cascade on shuffled list items"
     component: StaggerDemo
-    region: client
     format: png
   - id: keyframes
     description: "Keyframe pulse animation triggered by button press"
     component: KeyframeDemo
-    region: client
     format: png
   - id: choreography
     description: "Sequenced animation using WithAnimationAsync"
     component: ChoreographyDemo
-    region: client
     format: png

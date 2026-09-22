@@ -2,8 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<ModalDialogRecipeApp>("Modal Dialog Recipe", width: 420, height: 320
-);
+ReactorApp.Run<ModalDialogRecipeApp>("Modal Dialog Recipe");
 
 class ModalDialogRecipeApp : Component
 {

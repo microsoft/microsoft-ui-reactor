@@ -1,5 +1,4 @@
 app:
-  title: "Settings Recipe"
   width: 460
   height: 420
   startup-delay: 1200
@@ -8,5 +7,4 @@ screenshots:
   - id: settings
     description: "Settings page with a Toggle, ComboBox, and Slider, each persisted by key."
     component: SettingsRecipeApp
-    region: client
     format: png

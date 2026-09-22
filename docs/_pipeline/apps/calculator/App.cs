@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<CalculatorApp>("Calculator", width: 380, height: 500);
+ReactorApp.Run<CalculatorApp>("Calculator");
 
 class CalculatorApp : Component
 {

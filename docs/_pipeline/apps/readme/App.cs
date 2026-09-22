@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<ReadmeShowcase>("Reactor Showcase", width: 600, height: 500
-);
+ReactorApp.Run<ReadmeShowcase>("Reactor Showcase");
 
 // <snippet:hello-world>
 class HelloWorld : Component

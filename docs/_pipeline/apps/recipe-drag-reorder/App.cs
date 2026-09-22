@@ -6,8 +6,7 @@ using Microsoft.UI.Reactor.Input;
 using Windows.System;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<DragReorderApp>("Drag-Reorder Recipe", width: 360, height: 440
-);
+ReactorApp.Run<DragReorderApp>("Drag-Reorder Recipe");
 
 class DragReorderApp : Component
 {

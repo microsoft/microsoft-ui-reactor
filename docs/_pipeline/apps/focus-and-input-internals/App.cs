@@ -5,9 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<FocusInputInternalsApp>(
-    title: "Focus and Input Internals",
-    width: 900,
-    height: 600);
+    title: "Focus and Input Internals");
 
 class FocusInputInternalsApp : Component
 {

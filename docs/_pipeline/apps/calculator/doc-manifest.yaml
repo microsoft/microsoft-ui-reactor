@@ -1,5 +1,4 @@
 app:
-  title: "Calculator"
   width: 380
   height: 500
   startup-delay: 1500
@@ -7,5 +6,4 @@ app:
 screenshots:
   - id: calculator
     description: "Calculator app with button grid"
-    region: client
     format: png

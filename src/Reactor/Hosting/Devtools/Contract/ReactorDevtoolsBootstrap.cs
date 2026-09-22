@@ -27,6 +27,19 @@ public static class ReactorDevtoolsBootstrap
         }
     }
 
+    /// <summary>
+    /// The registered host without triggering the lazy package load, so a test can
+    /// capture and restore it around a <see cref="Register"/> call.
+    /// </summary>
+    internal static IReactorDevtoolsHost? CurrentForTests => Volatile.Read(ref _host);
+
+    /// <summary>
+    /// Restores a value captured from <see cref="CurrentForTests"/>, including
+    /// <c>null</c>. <see cref="Register"/> cannot do this — it rejects null, since
+    /// unregistering is not a thing the product ever wants.
+    /// </summary>
+    internal static void RestoreForTests(IReactorDevtoolsHost? host) => Volatile.Write(ref _host, host);
+
     private static void TryLoadOptionalDevtoolsPackage()
     {
         try

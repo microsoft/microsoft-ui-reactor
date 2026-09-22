@@ -110,7 +110,7 @@ Full coverage on [Styling](styling.md), [Animation](animation.md),
 
 | API | Purpose |
 |---|---|
-| `ReactorApp.Run<TComp>(title, width?, height?, fullScreen?, configure?)` | Single-window app. |
+| `ReactorApp.Run<TComp>(title, width?, height?, fullScreen?, icon?, configure?)` | Single-window app. Omit `width`/`height` to take the OS default size. |
 | `ReactorApp.OpenWindow(spec, root)` | Additional window from a `WindowSpec`. |
 | `ReactorHost` / `ReactorHostControl` | Embed Reactor in XAML / WinForms. |
 | `NavigationHost(nav, routeMap)` | Multi-page navigation. |

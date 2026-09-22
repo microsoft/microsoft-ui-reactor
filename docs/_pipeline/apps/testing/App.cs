@@ -7,8 +7,7 @@ using static Microsoft.UI.Reactor.Factories;
 // one representative screenshot. The page itself uses the snippets below
 // as the canonical Reactor-test shapes (component-under-test, effect-aware,
 // accessibility-scanner target).
-ReactorApp.Run<TestingApp>("Testing Demo", width: 360, height: 240
-);
+ReactorApp.Run<TestingApp>("Testing Demo");
 
 // <snippet:counter-component>
 class Counter : Component

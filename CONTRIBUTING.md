@@ -23,7 +23,9 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- Windows App SDK 2.0 — restored automatically from NuGet, no manual install required
+- Windows App SDK 2.2 or newer — restored automatically from NuGet, no manual install required
+  (the pinned floor lives in `WindowsAppSDKVersion` / `WindowsAppSDKWinUIVersion` in
+  `Directory.Build.props`)
 - Visual Studio 2022 (17.8+) or VS Code with C# Dev Kit
 
 > **Windows App SDK packages:** The right package is injected centrally by `Directory.Build.targets` based on each project's shape: framework-dependent **libraries** (including the shipped `Microsoft.UI.Reactor`) reference the lean `Microsoft.WindowsAppSDK.WinUI` sub-package; framework-dependent **apps** additionally reference `Microsoft.WindowsAppSDK.Runtime`; **self-contained / MSIX** projects keep the full `Microsoft.WindowsAppSDK` metapackage (it bundles the runtime + DWriteCore redist). The metapackage's AI/ML/Widgets/DWrite slices are otherwise unused. Versions are pinned in `Directory.Build.props` (`WindowsAppSDKWinUIVersion` and `WindowsAppSDKVersion`) — update them there to change the version for every project at once.

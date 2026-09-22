@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Microsoft.UI.Reactor.Cli.Docs;
@@ -40,9 +41,7 @@ internal static class ScreenshotCapture
     /// if any, is left exactly as it was.
     /// </exception>
     internal static void ProcessAndWrite(byte[] frameBytes, string outputPath, ScreenshotConfig screenshot)
-    {
-        var isThumb = string.Equals(screenshot.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase);
-        var processed = isThumb
+    {        var isThumb = string.Equals(screenshot.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase);        var processed = isThumb
             ? ImageProcessor.ProcessThumb(frameBytes, screenshot.ThumbWidth, screenshot.ThumbHeight)
             : ImageProcessor.Process(frameBytes, ImageProcessor.ParseCropMode(screenshot.Crop));
 
@@ -120,7 +119,9 @@ internal static class ScreenshotCapture
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5",
+            Arguments = BuildPreviewArguments(
+                csproj, platform, manifest.App.Width, manifest.App.Height,
+                Environment.GetEnvironmentVariable(CaptureOriginEnvVar)),
             RedirectStandardOutput = true,
             RedirectStandardError = false,
             UseShellExecute = false,
@@ -546,6 +547,92 @@ internal static class ScreenshotCapture
     internal const string CaptureHost = "127.0.0.1";
 
     internal static string FrameUrl(int port) => $"http://{CaptureHost}:{port}/frame";
+
+    /// <summary>
+    /// Environment variable naming the virtual-desktop origin, as <c>"X,Y"</c>, that
+    /// capture windows should open at. Unset means "let the OS place the window",
+    /// which is correct whenever the primary display already sits at the repo's
+    /// documented capture scale.
+    /// </summary>
+    internal const string CaptureOriginEnvVar = "REACTOR_DOCS_CAPTURE_ORIGIN";
+
+    /// <summary>
+    /// Translates <see cref="CaptureOriginEnvVar"/> into <c>--x</c>/<c>--y</c> arguments,
+    /// or an empty string when unset or unparseable.
+    /// </summary>
+    /// <remarks>
+    /// Coordinates may be zero or negative — a monitor left of or above the primary has a
+    /// negative origin — so this validates that both parts are finite numbers within the
+    /// range a window position can actually represent. An oversized-but-finite value is
+    /// rejected for the same reason the CLI parser rejects it: the downstream
+    /// DIP→physical conversion overflows and the window lands off-screen.
+    /// Malformed input degrades to OS placement rather than throwing: a mistyped
+    /// environment variable should not abort a 200-screenshot run, and the resulting
+    /// images differ visibly in scale if the origin silently failed to apply.
+    /// </remarks>
+    internal static string BuildCaptureOriginArgs(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+        var parts = raw.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 2) return string.Empty;
+        if (!TryParseCoordinate(parts[0], out var x) || !TryParseCoordinate(parts[1], out var y))
+            return string.Empty;
+
+        return $" --x {x.ToString(CultureInfo.InvariantCulture)} --y {y.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    /// <summary>
+    /// Mirrors the CLI parser's coordinate rule: finite, and small enough that the
+    /// DIP→physical conversion at placement time cannot overflow.
+    /// </summary>
+    private static bool TryParseCoordinate(string raw, out double value)
+    {
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            return false;
+        if (!double.IsFinite(value) || Math.Abs(value) > MaxWindowCoordinateDip)
+        {
+            value = 0;
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Matches <c>DevtoolsCliParser</c>'s bound; see the constant there for the
+    /// overflow this prevents. Duplicated rather than shared because
+    /// <c>Reactor.Cli</c> does not reference the parser's internals.
+    /// </summary>
+    private const double MaxWindowCoordinateDip = 65_536;
+
+    /// <summary>
+    /// Assembles the full <c>dotnet run</c> command line for a doc app's capture process.
+    /// </summary>
+    /// <remarks>
+    /// Extracted from <c>CaptureAsync</c> so the manifest-to-devtools size handoff is
+    /// testable. That handoff is the single carrier of every doc screenshot's dimensions —
+    /// the doc apps themselves no longer declare a size — so dropping
+    /// <c>--width</c>/<c>--height</c> here would silently resize every image in the repo
+    /// with nothing failing. Keep the assertion on this seam, not just on the pieces.
+    /// <para>Widths and heights are formatted invariantly because they are machine-facing
+    /// switches: a comma-decimal locale would otherwise emit <c>600,5</c>, which the
+    /// receiving parser rejects.</para>
+    /// </remarks>
+    internal static string BuildPreviewArguments(
+        string csproj,
+        string platform,
+        int width,
+        int height,
+        string? captureOrigin)
+    {
+        var sizeArgs =
+            $" --width {width.ToString(CultureInfo.InvariantCulture)}" +
+            $" --height {height.ToString(CultureInfo.InvariantCulture)}";
+
+        return $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5"
+             + sizeArgs
+             + BuildCaptureOriginArgs(captureOrigin);
+    }
 
     internal static string PreviewUrl(int port) => $"http://{CaptureHost}:{port}/preview";
 

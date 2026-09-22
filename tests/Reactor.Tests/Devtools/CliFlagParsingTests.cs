@@ -17,6 +17,153 @@ public class CliFlagParsingTests
         Assert.False(opts.PreviewAndDevtoolsConflict);
     }
 
+    // --width/--height let the docs screenshot harness declare the capture size
+    // in doc-manifest.yaml, so doc apps can omit width/height from their own
+    // ReactorApp.Run call without their screenshots changing size.
+    [Fact]
+    public void WidthAndHeight_AreParsed()
+    {
+        var opts = DevtoolsCliParser.Parse(
+            ["app.exe", "--devtools", "run", "--width", "640", "--height", "480"]);
+        Assert.Equal(640d, opts.WindowWidth);
+        Assert.Equal(480d, opts.WindowHeight);
+    }
+
+    [Fact]
+    public void WidthAndHeight_DefaultToNullWhenAbsent()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
+        Assert.Null(opts.WindowWidth);
+        Assert.Null(opts.WindowHeight);
+    }
+
+    // Null means "keep the size the app declared", so an unusable value must not
+    // be mistaken for an explicit request to resize — least of all to zero.
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("not-a-number")]
+    // Same overflow class as coordinates: DipToPhysicalScalar multiplies by DPI and
+    // casts to int, so an oversized-but-finite extent becomes an int-max resize
+    // rather than falling back to the app's own size.
+    [InlineData("1e308")]
+    [InlineData("70000")]
+    public void Width_RejectsNonPositiveOrNonFinite(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width", value]);
+        Assert.Null(opts.WindowWidth);
+    }
+
+    // Positive control for the bound above: a genuinely large but usable extent —
+    // an 8K-wide window at the limit — must still be accepted, or the guard would
+    // be satisfied by rejecting everything.
+    [Theory]
+    [InlineData("65536")]
+    [InlineData("7680")]
+    public void Width_AcceptsLargeButRepresentableDimensions(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width", value]);
+        Assert.NotNull(opts.WindowWidth);
+    }
+
+    [Fact]
+    public void Width_MissingValueAtEndOfArgs_IsIgnored()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width"]);
+        Assert.Null(opts.WindowWidth);
+    }
+
+    [Fact]
+    public void XAndY_AreParsed()
+    {
+        var opts = DevtoolsCliParser.Parse(
+            ["app.exe", "--devtools", "run", "--x", "2600", "--y", "120"]);
+        Assert.Equal(2600d, opts.WindowX);
+        Assert.Equal(120d, opts.WindowY);
+    }
+
+    // A coordinate is not a dimension. A monitor positioned left of or above the
+    // primary has a negative origin, and 0 is the primary's own origin, so the
+    // positive-only rule that guards --width/--height would silently discard
+    // perfectly valid positions. This is the case that would regress if someone
+    // "simplified" the two parsers into one.
+    [Theory]
+    [InlineData("0", 0d)]
+    [InlineData("-2560", -2560d)]
+    [InlineData("-1080.5", -1080.5d)]
+    public void X_AcceptsZeroAndNegativeCoordinates(string value, double expected)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--x", value]);
+        Assert.Equal(expected, opts.WindowX);
+    }
+
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("over-there")]
+    public void X_RejectsNonFinite(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--x", value]);
+        Assert.Null(opts.WindowX);
+    }
+
+    // Finite is not sufficient. ReactorWindow.DipToPhysicalPoint computes
+    // dip * dpi / 96 and casts to int; 1e308 * 144 / 96 overflows to infinity and
+    // the cast saturates to int.MaxValue, so the window is moved to the far edge
+    // of the coordinate space and capture fails. Measured, not assumed.
+    [Theory]
+    [InlineData("1e308")]
+    [InlineData("-1e308")]
+    [InlineData("70000")]
+    [InlineData("-70000")]
+    public void X_RejectsFiniteButUnrepresentableCoordinates(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--x", value]);
+        Assert.Null(opts.WindowX);
+    }
+
+    // The bound must not shut out real multi-monitor layouts: a 4-wide 4K array
+    // reaches ~7,680 DIPs, well inside it.
+    [Theory]
+    [InlineData("65536")]
+    [InlineData("-65536")]
+    [InlineData("7680")]
+    public void X_AcceptsCoordinatesWithinRepresentableRange(string value)
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--x", value]);
+        Assert.NotNull(opts.WindowX);
+    }
+
+    [Fact]
+    public void XAndY_DefaultToNullWhenAbsent()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
+        Assert.Null(opts.WindowX);
+        Assert.Null(opts.WindowY);
+    }
+
+    // The harness formats these invariantly; parsing must match, or a
+    // comma-decimal machine would read "600.5" as 6005.
+    [Fact]
+    public void Width_ParsesInvariantlyRegardlessOfCurrentCulture()
+    {
+        var original = global::System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            global::System.Globalization.CultureInfo.CurrentCulture =
+                new global::System.Globalization.CultureInfo("nl-NL");
+            var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--width", "600.5"]);
+            Assert.Equal(600.5d, opts.WindowWidth);
+        }
+        finally
+        {
+            global::System.Globalization.CultureInfo.CurrentCulture = original;
+        }
+    }
+
     [Fact]
     public void DevtoolsRun_ParsesAsRun()
     {
@@ -384,5 +531,144 @@ public class DevtoolsHostCliTests
         }
 
         Assert.Contains("[reactor] --embed requires '--devtools run'", stderr.ToString());
+    }
+
+    // The whole manifest-driven capture size rests on one expression in
+    // TryRunDevtoolsCore -- `options.WindowWidth ?? width` -- so it gets a
+    // direct test rather than only the end-to-end screenshot evidence.
+    // Reaching it needs both the feature switch on and a registered host, so a
+    // fake host captures the boot request the real devtools package would get.
+    private sealed class CapturingDevtoolsHost : IReactorDevtoolsHost
+    {
+        public ReactorDevtoolsBootRequest? Captured { get; private set; }
+
+        public bool TryHandleCommandLine(ReactorDevtoolsBootRequest request)
+        {
+            Captured = request;
+            return true;
+        }
+
+        public global::Microsoft.UI.Reactor.Core.Element? BuildDevtoolsMenu(
+            Func<IEnumerable<global::Microsoft.UI.Reactor.Core.MenuFlyoutItemBase>>? items,
+            string glyph,
+            string toolTip,
+            string? automationId) => null;
+    }
+
+    [Theory]
+    // CLI overrides the size the app declared in code.
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--width", "1024", "--height", "768" }, 1024d, 768d)]
+    // No CLI size: the app's own Run arguments survive.
+    [InlineData(new[] { "app.exe", "--devtools", "run" }, 800d, 600d)]
+    // Per-axis override: the unspecified axis must fall back, not reset.
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--width", "1024" }, 1024d, 600d)]
+    // A rejected value must not be mistaken for an explicit resize.
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--width", "0" }, 800d, 600d)]
+    public void TryRunDevtools_CliSizeOverridesRunSize(string[] args, double expectedWidth, double expectedHeight)
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+        var host = new CapturingDevtoolsHost();
+        // Register writes a process-global static with no public reset, so the
+        // prior value is restored below; otherwise every later test in this
+        // process would resolve the fake instead of the real devtools host.
+        var previous = ReactorDevtoolsBootstrap.CurrentForTests;
+        ReactorDevtoolsBootstrap.Register(host);
+        try
+        {
+            AppContext.SetSwitch(switchName, true);
+            var handled = ReactorApp.TryRunDevtoolsForTest(args, title: "Preview", width: 800, height: 600);
+
+            Assert.True(handled);
+            Assert.NotNull(host.Captured);
+            Assert.Equal(expectedWidth, host.Captured!.Width);
+            Assert.Equal(expectedHeight, host.Captured.Height);
+        }
+        finally
+        {
+            AppContext.SetSwitch(switchName, false);
+            ReactorDevtoolsBootstrap.RestoreForTests(previous);
+        }
+    }
+
+    // --x/--y place the capture window on a monitor whose scale matches the
+    // repo's capture convention when that is not the primary display. Capture is
+    // PrintWindow over the live HWND in physical pixels, so the monitor's DPI is
+    // what ends up baked into the PNG.
+    [Fact]
+    public void BuildPositionedWindowSpec_WithBothAxes_SetsManualPosition()
+    {
+        var options = DevtoolsCliParser.Parse(
+            ["app.exe", "--devtools", "run", "--x", "2600", "--y", "0"]);
+
+        var spec = DevtoolsHost.BuildPositionedWindowSpec(options, "Preview", width: 520, height: 360);
+
+        Assert.NotNull(spec);
+        Assert.Equal(WindowStartPosition.Manual, spec!.StartPosition);
+        Assert.Equal((2600d, 0d), spec.ManualPosition);
+        Assert.Equal(520d, spec.Width);
+        Assert.Equal(360d, spec.Height);
+        // Persistence would restore a saved rect over the position just requested.
+        Assert.False(spec.PersistPlacement);
+    }
+
+    // Returning a non-null spec flips BuildInitialWindowSpec to its pass-through
+    // branch, so any flat option not restated on the spec is silently dropped.
+    // fullScreen is the one that bites: before --x/--y existed this path always
+    // passed InitialWindowSpec: null, and a preview of a full-screen app opened
+    // full-screen. Composing both halves is what catches that — testing the
+    // builder alone cannot, because the loss happens at the seam.
+    [Theory]
+    [InlineData(true, PresenterKind.FullScreen)]
+    [InlineData(false, PresenterKind.Overlapped)]
+    public void PositionedSpec_PreservesFullScreenThroughBuildInitialWindowSpec(
+        bool fullScreen, PresenterKind expected)
+    {
+        var options = DevtoolsCliParser.Parse(
+            ["app.exe", "--devtools", "run", "--x", "2600", "--y", "0"]);
+        var positioned = DevtoolsHost.BuildPositionedWindowSpec(
+            options, "Preview", width: 520, height: 360, fullScreen: fullScreen);
+
+        var resolved = ReactorApp.BuildInitialWindowSpec(new ReactorAppOptions(
+            WindowTitle: "Preview",
+            WindowWidth: 520,
+            WindowHeight: 360,
+            FullScreen: fullScreen,
+            InitialWindowSpec: positioned));
+
+        Assert.Equal(expected, resolved.Presenter);
+        Assert.Equal((2600d, 0d), resolved.ManualPosition);
+    }
+
+    // The same composition without an origin must keep taking the synthesis
+    // branch — a positive control proving the assertion above is about the
+    // positioned spec and not about BuildInitialWindowSpec in general.
+    [Fact]
+    public void WithoutOrigin_FullScreenStillFlowsThroughFlatOptions()
+    {
+        var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
+        var positioned = DevtoolsHost.BuildPositionedWindowSpec(
+            options, "Preview", width: 520, height: 360, fullScreen: true);
+
+        Assert.Null(positioned);
+
+        var resolved = ReactorApp.BuildInitialWindowSpec(new ReactorAppOptions(
+            WindowTitle: "Preview",
+            WindowWidth: 520,
+            WindowHeight: 360,
+            FullScreen: true,
+            InitialWindowSpec: positioned));
+
+        Assert.Equal(PresenterKind.FullScreen, resolved.Presenter);
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "app.exe", "--devtools", "run" })]
+    [InlineData((object)new[] { "app.exe", "--devtools", "run", "--x", "2600" })]
+    [InlineData((object)new[] { "app.exe", "--devtools", "run", "--y", "0" })]
+    public void BuildPositionedWindowSpec_WithoutBothAxes_ReturnsNull(string[] args)
+    {
+        var options = DevtoolsCliParser.Parse(args);
+
+        Assert.Null(DevtoolsHost.BuildPositionedWindowSpec(options, "Preview", width: 520, height: 360));
     }
 }

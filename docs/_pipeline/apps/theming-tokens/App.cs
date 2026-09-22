@@ -7,8 +7,7 @@ using static Microsoft.UI.Reactor.Factories;
 // Doc app for `theming-tokens.md` — renders a swatch grid for every named
 // `Theme.*` token defined in src/Reactor/Core/Theme.cs. The doc-app harness
 // captures `light` and `dark` variants for the page's lead screenshot pair.
-ReactorApp.Run<ThemingTokensApp>("Theming Tokens", width: 760, height: 720
-);
+ReactorApp.Run<ThemingTokensApp>("Theming Tokens");
 
 class ThemingTokensApp : Component
 {

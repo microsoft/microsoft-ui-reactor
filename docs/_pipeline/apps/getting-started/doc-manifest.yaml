@@ -1,5 +1,4 @@
 app:
-  title: "Getting Started"
   width: 600
   height: 400
   startup-delay: 1500
@@ -8,15 +7,12 @@ screenshots:
   - id: hello-world
     description: "Hello World app with name input"
     component: GettingStartedApp
-    region: client
     format: png
   - id: counter
     description: "Counter with increment and decrement buttons"
     component: CounterExample
-    region: client
     format: png
   - id: layout-basics
     description: "Layout demo with horizontal and vertical stacks"
     component: LayoutBasicsExample
-    region: client
     format: png
