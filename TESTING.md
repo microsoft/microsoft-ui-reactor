@@ -657,8 +657,11 @@ it is checked by hand when the derivation or the registration path changes. Trac
 Roughly ten minutes, and it needs Developer Mode plus a second checkout:
 
 ```powershell
-# 1. Two checkouts, each with the packaged host built.
-git worktree add -b coexist-probe C:\src\probe origin/main
+# 1. Two checkouts, each with the packaged host built. Branch from a ref that actually
+#    CONTAINS the derivation you are testing - origin/main once your change has merged,
+#    otherwise the branch under test. A probe cut from a ref without the derivation
+#    registers the undifferentiated name and the check reads as a failure it did not find.
+git worktree add -b coexist-probe C:\src\probe <ref-with-the-derivation>
 dotnet build tests\Reactor.PackagedTests.Host -p:Platform=x64   # in each checkout
 
 # 2. Start BOTH suites and leave them running. Two shells, started within a few seconds
@@ -687,6 +690,23 @@ What it has to show: **two** packages with different `Name` values and different
 the first, which is the failure the derivation exists to prevent, and the tier would then silently
 exercise the wrong binary.
 
+**Last run: PASS.** Recorded here so the check carries evidence rather than a promise. Two
+checkouts of the branch that introduced the derivation, both full packaged suites started within
+seconds of each other, measured from a third shell while both were live:
+
+```text
+Microsoft.UI.Reactor.PackagedTests.Host.w53j3givo  C:\Users\...\azchohfi-jubilant-happiness\tests\...
+Microsoft.UI.Reactor.PackagedTests.Host.wmphu2equ  C:\src\probe\tests\Reactor.PackagedTests.Host\bin\...
+reactor-packaged-test-host-w53j3givo.exe
+reactor-packaged-test-host-wmphu2equ.exe
+```
+
+Two names, two install locations, two stubs. Both suites then ran to completion overlapped at
+**1648 passed / 0 failed** each, which is a stronger result than the check requires: coexisting
+registrations are what it asks for, but two green concurrent corpora also show the two hosts did
+not disturb each other's fixtures. Re-measure when the derivation or the registration path changes;
+a pass recorded against older code is not evidence about new code.
+
 Clean up with the publisher-scoped wildcard sweep described above, once both runs have stopped:
 
 ```powershell
@@ -694,6 +714,7 @@ Get-AppxPackage -Name 'Microsoft.UI.Reactor.PackagedTests.Host*' |
     Where-Object { $_.Publisher -eq 'CN=Microsoft.UI.Reactor.PackagedTests.Host' } |
     Remove-AppxPackage
 git worktree remove C:\src\probe
+git branch -D coexist-probe
 ```
 
 ### Writing a packaged fixture

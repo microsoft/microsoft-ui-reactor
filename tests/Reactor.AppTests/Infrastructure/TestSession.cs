@@ -80,16 +80,18 @@ public class TestSession
             launched = proc;
             var app = new WinAppUi(proc.Id, hwnd);
             var uia = new UiaPropertyReader(hwnd);
+            Console.WriteLine($"winapp UI automation bound to Host window (HWND 0x{hwnd:X}).");
 
-            // Published only once every step above has succeeded. Assigning as we went would
-            // make a later failure indistinguishable from a healthy session to the next class:
-            // AssemblyInit's reuse path keys on _app alone, so a throw between _app and _uia
-            // left the next class incrementing the ref count on a session whose reader was
+            // Published only once every step above has succeeded, and deliberately the last
+            // thing in the block - including after the log line, since a redirected stdout can
+            // throw and that would leave a dead session looking healthy to the next class.
+            // Assigning as we went would make a later failure indistinguishable from a healthy
+            // session: AssemblyInit's reuse path keys on _app alone, so a throw between _app and
+            // _uia left the next class incrementing the ref count on a session whose reader was
             // never built, and failing later on a null field far from the actual cause.
             _appProcess = proc;
             _app = app;
             _uia = uia;
-            Console.WriteLine($"winapp UI automation bound to Host window (HWND 0x{hwnd:X}).");
         }
         catch (Exception ex)
         {

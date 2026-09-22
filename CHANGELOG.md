@@ -337,6 +337,19 @@ Conventions for contributors:
   reaper's own warning describes, reached through success rather than failure. It now waits a
   bounded five seconds and reports a process that outlives that, which is one stuck in the kernel
   where a further kill would not help either.
+- The cleanup tests' own reaper no longer re-opens a bare process id. They asserted on a probe by
+  id after the `Process` that started it had been disposed, so between the assertion and the kill
+  Windows was free to reassign that id and the helper could have reported on, or terminated, an
+  unrelated process - the same defect the orphan sweep was fixed for, reintroduced in the test
+  infrastructure that exists to check it. The helper now opens and holds a handle for the whole
+  decision. This one is deliberately not backed by a new test: the window it closes needs Windows
+  to actually recycle an id, which will not happen inside a run, so any test written for it would
+  pass identically with the fix removed.
+- Session statics are published only after the bootstrap has nothing left that can throw. The
+  three fields were assigned before the launch was logged, so a failing write to a redirected or
+  closed stdout would have left a session visible to the next test class with its process already
+  killed - a narrower instance of the half-published session above, through the one statement that
+  looked too inert to matter.
 - A packaged-tier lock file this run cannot open is likewise no longer reported as a lock
   another run holds. The failure is recorded and raised only once it has outlasted the whole
   wait, so a genuinely transient denial — a lock left delete-pending by a third party holding it

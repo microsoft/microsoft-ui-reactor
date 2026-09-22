@@ -63,20 +63,20 @@ public sealed class TestSessionCleanupTests
     public void TheProbeProcessOutlivesDisposalAlone()
     {
         var proc = StartLongLivedProcess();
-        var pid = proc.Id;
+        using var reaper = OpenPinnedHandle(proc.Id);
 
         try
         {
             proc.Dispose();
 
             Assert.IsFalse(
-                IsGone(pid, settleMs: 1000),
+                IsGone(reaper, settleMs: 1000),
                 "The probe exited from disposal alone, so KillAndDispose_TerminatesTheProcess " +
                 "would pass even with the kill removed.");
         }
         finally
         {
-            ForceKill(pid);
+            ForceKill(reaper);
         }
     }
 
@@ -88,6 +88,7 @@ public sealed class TestSessionCleanupTests
     {
         var proc = StartLongLivedProcess();
         var pid = proc.Id;
+        using var reaper = OpenPinnedHandle(pid);
 
         try
         {
@@ -96,17 +97,19 @@ public sealed class TestSessionCleanupTests
 
             Assert.IsNull(handle, "The reference must be cleared so no later call can touch it.");
 
-            // Asked of a fresh lookup rather than the disposed object, so the answer comes from
-            // the OS rather than from cached state on a Process we just tore down.
+            // Asked of a separately owned handle rather than the disposed object, so the answer
+            // comes from the OS rather than from cached state on a Process we just tore down -
+            // and, because that handle has been open since before the kill, it is still about
+            // this process and not whatever the id was recycled to.
             Assert.IsTrue(
-                IsGone(pid),
+                IsGone(reaper),
                 $"PID {pid} is still running. A host abandoned by a failed bootstrap keeps the " +
                 "liveness lease, which defers the orphan sweep of every concurrent run of this " +
                 "checkout for as long as it lives.");
         }
         finally
         {
-            ForceKill(pid);
+            ForceKill(reaper);
         }
     }
 
@@ -140,19 +143,40 @@ public sealed class TestSessionCleanupTests
         Assert.IsNull(handle);
     }
 
-    private static bool IsGone(int pid, int settleMs = 5000)
+    /// <summary>
+    /// A second, independently owned handle to the probe, used for every later question about
+    /// it and for reaping it.
+    /// </summary>
+    /// <remarks>
+    /// Holding an open handle keeps the process object alive as a zombie once it exits, which
+    /// reserves its id for as long as this handle lives. That is what makes the id safe to act
+    /// on: the tests dispose or kill the <em>first</em> <see cref="Process"/> as part of what
+    /// they are testing, and re-opening the bare id afterwards would target whatever Windows had
+    /// since given it to. Reaping is the dangerous half - it would kill a stranger - but the
+    /// liveness question has the same flaw and would silently answer about the wrong process.
+    /// <para>Touching <see cref="Process.SafeHandle"/> is what opens and retains the handle;
+    /// <see cref="Process.GetProcessById"/> alone returns an object that owns nothing.</para>
+    /// </remarks>
+    private static Process OpenPinnedHandle(int pid)
     {
-        // The id can outlive the process briefly while it is still being torn down, so allow a
-        // short settle rather than asserting on the first reading.
+        var reaper = Process.GetProcessById(pid);
+        _ = reaper.SafeHandle;
+        return reaper;
+    }
+
+    private static bool IsGone(Process reaper, int settleMs = 5000)
+    {
+        // The process can take a moment to finish being torn down, so allow a short settle
+        // rather than asserting on the first reading.
         var deadline = Environment.TickCount64 + settleMs;
         do
         {
             try
             {
-                using var found = Process.GetProcessById(pid);
-                if (found.HasExited) return true;
+                reaper.Refresh();
+                if (reaper.HasExited) return true;
             }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
+            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
             {
                 return true;
             }
@@ -165,21 +189,22 @@ public sealed class TestSessionCleanupTests
     }
 
     /// <summary>Reaps a probe the test itself is responsible for, so none outlive the run.</summary>
-    private static void ForceKill(int pid)    {
+    private static void ForceKill(Process reaper)
+    {
         try
         {
-            using var found = Process.GetProcessById(pid);
-            if (!found.HasExited)
+            reaper.Refresh();
+            if (!reaper.HasExited)
             {
-                found.Kill(entireProcessTree: true);
-                found.WaitForExit(5000);
+                reaper.Kill(entireProcessTree: true);
+                reaper.WaitForExit(5000);
             }
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {
-            // The pid was never valid, or the process exited on its own before or during the
-            // kill. This is a belt-and-braces reaper for a probe the test already expects to
-            // have terminated, so all three mean the job is done.
+            // The process exited on its own before or during the kill. This is a belt-and-braces
+            // reaper for a probe the test already expects to have terminated, so both mean the
+            // job is done.
         }
     }
 }

@@ -58,14 +58,15 @@ public class WinFormsTestSession
             launched = proc;
             var app = new WinAppUi(proc.Id, hwnd);
             var uia = new UiaPropertyReader(hwnd);
+            Console.WriteLine($"winapp UI automation bound to WinForms host (HWND 0x{hwnd:X}).");
 
-            // Published only on full success, for the reason given in TestSession.AssemblyInit:
-            // the reuse path above keys on _app alone, so a throw between _app and _uia would
-            // hand the next class a session whose reader was never built.
+            // Published only on full success, and last of all - including after the log, which
+            // can throw on a redirected stdout. See TestSession.AssemblyInit: the reuse path
+            // above keys on _app alone, so anything that throws after a partial publish would
+            // hand the next class a dead or half-built session.
             _appProcess = proc;
             _app = app;
             _uia = uia;
-            Console.WriteLine($"winapp UI automation bound to WinForms host (HWND 0x{hwnd:X}).");
         }
         catch (Exception ex)
         {
