@@ -295,6 +295,20 @@ Conventions for contributors:
   the second as the first would disable continuity for the rest of the run precisely when the
   wiring it exists to exercise had broken. The strict switch is unchanged: with
   `REACTOR_E2E_REQUIRE_UI_YIELD` set, a missing verb is still a failure rather than a skip.
+- The E2E orphan sweep can no longer kill a process that merely inherited a doomed one's process
+  id. Every candidate was classified from a snapshot and killed afterwards by id, but the objects
+  `Process.GetProcessesByName` returns hold no handle, so the kill re-opened the id: a host that
+  exited in between, and whose id Windows then reassigned, meant terminating a stranger. The
+  sweep now pins a handle to each process before reading anything about it, which keeps the id
+  reserved for as long as the decision is in flight, and a candidate that cannot be pinned is
+  excluded rather than killed on an id that no longer proves anything — the same "never act on
+  don't-know" rule the path and session checks already follow, at a cost of one stale process.
+- The E2E assembly declares `DoNotParallelize`. Its tests share one desktop, one winapp workflow
+  id and one process-wide invocation counter, so running them concurrently would let a headless
+  test release the UI turn a neighbour was mid-interaction on, and let the wiring probe's real
+  `ui yield` release someone else's turn. MSTest is sequential by default, so nothing changes
+  today; the declaration exists so a `.runsettings` or a `--parallel` cannot flip that assumption
+  silently, since the resulting failures would be indistinguishable from ordinary UI flake.
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never

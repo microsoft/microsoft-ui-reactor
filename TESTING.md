@@ -865,6 +865,18 @@ suite rather than merely lose continuity, and the harness synthesizes an id inst
 > mid-test — a real and reproducible source of local flake that is *not* a product regression.
 > Running the tier on a desktop you are not also using is the only fix for that.
 
+### Don't parallelize the E2E tier
+
+The assembly carries `[assembly: DoNotParallelize]`. That is not a performance preference: the
+tier's tests share a desktop, a workflow id and a process-wide winapp invocation counter, so they
+are not independent in the way parallelization assumes. Two examples of what breaks, both
+silently — a headless test can see the invocation counter move because a *concurrent* UI test
+spawned winapp, and then release the shared turn out from under it; and `WinAppWorkflowIdTests`
+sends a real `ui yield` to prove the wiring works, which would release whatever turn a neighbour
+was holding. MSTest does not parallelize unless asked, so the attribute changes nothing today;
+it is there so a `.runsettings` or a `--parallel` can't flip the assumption the tier is built on
+without anyone noticing, because the resulting failures would read as ordinary UI flake.
+
 ### Don't co-locate the E2E and selftest tiers
 
 CI runs them as separate jobs on separate runners today, and that isolation is load-bearing

@@ -48,11 +48,18 @@ public class OrphanedHostSweepTests
     /// about the launcher say so with <see cref="Attended"/>.
     /// </remarks>
     private static OrphanedHostSweep.Candidate At(int pid, string? path) =>
-        new(pid, path, OurSession, LauncherIsLive: false);
+        new(pid, path, OurSession, LauncherIsLive: false, IdentityPinned: true);
 
     /// <summary>The same candidate, but still owned by a running launcher.</summary>
     private static OrphanedHostSweep.Candidate Attended(int pid, string? path) =>
-        new(pid, path, OurSession, LauncherIsLive: true);
+        new(pid, path, OurSession, LauncherIsLive: true, IdentityPinned: true);
+
+    /// <summary>
+    /// The same candidate, but one whose process handle could not be held open — so its pid is
+    /// no longer proof that the process classified is the process that would be killed.
+    /// </summary>
+    private static OrphanedHostSweep.Candidate Unpinned(int pid, string? path) =>
+        new(pid, path, OurSession, LauncherIsLive: false, IdentityPinned: false);
 
     /// <summary>
     /// The session the synthetic candidates are stamped with, and the one passed as "ours".
@@ -316,7 +323,7 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void A_Host_In_Another_Session_Is_Not_Swept()
     {
-        var otherUser = new OrphanedHostSweep.Candidate(300, Ours, OurSession + 1, LauncherIsLive: false);
+        var otherUser = new OrphanedHostSweep.Candidate(300, Ours, OurSession + 1, LauncherIsLive: false, IdentityPinned: true);
 
         Assert.AreEqual(0, OrphanedHostSweep.SelectOurs([otherUser], Ours, OurSession).Count(),
             "A process running our image in a different session belongs to a different user, " +
@@ -339,7 +346,7 @@ public class OrphanedHostSweepTests
     [TestMethod]
     public void A_Candidate_With_An_Unreadable_Session_Is_Left_Alone()
     {
-        var unknown = new OrphanedHostSweep.Candidate(400, Ours, null, LauncherIsLive: false);
+        var unknown = new OrphanedHostSweep.Candidate(400, Ours, null, LauncherIsLive: false, IdentityPinned: true);
 
         Assert.AreEqual(0, OrphanedHostSweep.SelectOurs([unknown], Ours, OurSession).Count());
     }
@@ -1207,5 +1214,27 @@ public class OrphanedHostSweepTests
         {
             return false;
         }
+    }
+
+    // ── Identity pinning ─────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void A_Host_Whose_Identity_Could_Not_Be_Pinned_Is_Not_Swept()
+    {
+        var path = Probe("pin-a");
+
+        // Identical in every other respect to a candidate the sweep would kill, so the pin is
+        // the only difference between the two verdicts and nothing else can explain the result.
+        var killable = OrphanedHostSweep.SelectOurs([At(4321, path)], path, OurSession).ToList();
+        Assert.AreEqual(1, killable.Count, "the control candidate was not selectable, so the comparison below proves nothing.");
+
+        var selected = OrphanedHostSweep.SelectOurs([Unpinned(4321, path)], path, OurSession).ToList();
+
+        Assert.AreEqual(
+            0,
+            selected.Count,
+            "A host the sweep could not hold a handle to was still selected for killing. Its pid " +
+            "is only a claim about the moment of the snapshot: the process may have exited and " +
+            "Windows may have reassigned the id, so the kill would land on an unrelated process.");
     }
 }

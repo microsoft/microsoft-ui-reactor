@@ -47,8 +47,17 @@ internal static partial class OrphanedHostSweep
     /// means its launcher is gone, which is what "orphan" means. Supplied by the caller rather
     /// than queried here so selection stays pure data.
     /// </param>
+    /// <param name="IdentityPinned">
+    /// Whether the caller holds an open handle to this process, taken before anything about it
+    /// was inspected. Windows will not recycle a process id while a handle to its process object
+    /// is open, so a pinned candidate's <paramref name="Pid"/> still names the process that was
+    /// classified. Without that, the id is only a claim about the moment the snapshot was taken:
+    /// the process may exit and Windows may hand its id to something unrelated before the kill,
+    /// which would then terminate a stranger. Supplied by the caller for the same reason as
+    /// <paramref name="LauncherIsLive"/>.
+    /// </param>
     internal readonly record struct Candidate(
-        int Pid, string? ExecutablePath, int? SessionId, bool LauncherIsLive);
+        int Pid, string? ExecutablePath, int? SessionId, bool LauncherIsLive, bool IdentityPinned);
 
     /// <summary>Whether a run may sweep, must skip, or could not be admitted at all.</summary>
     /// <remarks>
@@ -110,6 +119,11 @@ internal static partial class OrphanedHostSweep
     /// alone would admit killing a host whose own run has already exited but which a sibling
     /// run is still driving; the lease alone misses every non-participant. Both must say
     /// "stale" before anything is killed.</para>
+    /// <para><see cref="Candidate.IdentityPinned"/> is a third, independent condition, and it
+    /// guards a different question: not "should this process die?" but "is this still the
+    /// process I decided about?". Every rule here is evaluated against a snapshot and acted on
+    /// afterwards, so without an open handle the process id joining the two is free to change
+    /// owner in between.</para>
     /// </remarks>
     internal static IEnumerable<Candidate> SelectOurs(
         IEnumerable<Candidate> candidates, string ourExePath, int ourSessionId)
@@ -122,6 +136,7 @@ internal static partial class OrphanedHostSweep
         return candidates.Where(c =>
             c.SessionId == ourSessionId
             && !c.LauncherIsLive
+            && c.IdentityPinned
             && IsSameImage(c.ExecutablePath, ours));
     }
 
@@ -327,26 +342,30 @@ internal static partial class OrphanedHostSweep
 
         var processes = Process.GetProcessesByName(processName);
 
-        var ourSessionId = Process.GetCurrentProcess().SessionId;
-
-        // One snapshot for the whole batch, taken under the gate alongside the process list so
-        // both describe the same moment.
-        var parents = SnapshotParentPids();
-
-        var candidates = processes
-            .Select(p =>
-            {
-                var pid = SafePid(p);
-                return new Candidate(
-                    pid, TryGetExecutablePath(p), SafeSessionId(p), LauncherIsLive(pid, parents));
-            })
-            .ToList();
-
-        var doomed = SelectOurs(candidates, ourExePath, ourSessionId).Select(c => c.Pid).ToHashSet();
-
-        foreach (var proc in processes)
+        try
         {
-            using (proc)
+            var ourSessionId = Process.GetCurrentProcess().SessionId;
+
+            // One snapshot for the whole batch, taken under the gate alongside the process list so
+            // both describe the same moment.
+            var parents = SnapshotParentPids();
+
+            var candidates = processes
+                .Select(p =>
+                {
+                    // Pinned before anything is read about the process, so every later fact —
+                    // path, session, launcher — describes the process this handle names, and the
+                    // kill below reaches that same process rather than whatever inherits its id.
+                    var pinned = TryPinIdentity(p);
+                    var pid = SafePid(p);
+                    return new Candidate(
+                        pid, TryGetExecutablePath(p), SafeSessionId(p), LauncherIsLive(pid, parents), pinned);
+                })
+                .ToList();
+
+            var doomed = SelectOurs(candidates, ourExePath, ourSessionId).Select(c => c.Pid).ToHashSet();
+
+            foreach (var proc in processes)
             {
                 var pid = SafePid(proc);
                 if (!doomed.Contains(pid))
@@ -359,6 +378,44 @@ internal static partial class OrphanedHostSweep
                 Console.WriteLine($"Killing orphaned {label} (PID {pid}).");
                 TryKill(proc, label, pid);
             }
+        }
+        finally
+        {
+            // Releases the pinned handles too, which is what lets Windows finally reclaim the ids
+            // of the processes this sweep killed.
+            foreach (var proc in processes) proc.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Opens and retains a handle to <paramref name="proc"/>, so its process id cannot be
+    /// reassigned while this sweep is deciding what to do with it.
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="Process.GetProcessesByName(string)"/> hands back objects that carry a
+    /// process id, not an owned handle: reading <see cref="Process.MainModule"/> or
+    /// <see cref="Process.SessionId"/> opens a handle internally and closes it again. A later
+    /// <see cref="Process.Kill(bool)"/> therefore re-opens by id, and if the original process has
+    /// exited in the meantime and Windows has reused the id, it terminates the stranger that
+    /// inherited it. Touching <see cref="Process.SafeHandle"/> makes the object hold the handle
+    /// for its lifetime, and an open handle keeps the kernel's process object — and therefore its
+    /// id — reserved even after the process exits.</para>
+    /// <para>Failure is not an error here. A process that exited between the enumeration and this
+    /// call, or one this run has no right to open, simply cannot be pinned, and an unpinnable
+    /// candidate is excluded from the sweep rather than killed on an id that is no longer proof
+    /// of anything. That is the same "never kill on don't-know" rule the path and session checks
+    /// already follow, and it costs at most one stale process.</para>
+    /// </remarks>
+    private static bool TryPinIdentity(Process proc)
+    {
+        try
+        {
+            return !proc.SafeHandle.IsInvalid;
+        }
+        catch (Exception ex) when (
+            ex is InvalidOperationException or NotSupportedException or Win32Exception)
+        {
+            return false;
         }
     }
 
