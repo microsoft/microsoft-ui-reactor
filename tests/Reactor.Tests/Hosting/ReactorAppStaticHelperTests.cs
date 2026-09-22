@@ -251,39 +251,38 @@ public class ReactorAppStaticHelperTests
             }
         }
 
-        // OpenWindow validates its spec before emitting, so a spec that is about
-        // to be rejected cannot burn the latch and silence the next window that
-        // legitimately should report. This drives ValidateAndAnnounceSpec — the
-        // actual code OpenWindow runs — rather than re-implementing the order in
-        // the test, so reverting the production ordering reddens it.
+        // OpenWindow announces only after the window actually opened, so a spec
+        // that is about to be rejected cannot burn the one-shot latch and silence
+        // the next window that legitimately should report. This drives
+        // OpenAndAnnounce — the code OpenWindow runs — with a failing open, which
+        // is how the ordering is reachable without constructing WinUI types.
         [Fact]
-        public void ValidateAndAnnounceSpec_InvalidSpec_ThrowsWithoutConsumingLatch()
+        public void OpenAndAnnounce_FailedOpen_DoesNotConsumeLatch()
         {
             ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var sized = new WindowSpec { Title = "Bad", Width = 800, Height = 600 };
 
             var origErr = Console.Error;
-            using var duringInvalid = new StringWriter();
-            Console.SetError(duringInvalid);
+            using var duringFailure = new StringWriter();
+            Console.SetError(duringFailure);
             try
             {
-                // Width = -1 fails WindowSpec.Validate. Emitting before that check
-                // would both print here and latch.
-                Assert.ThrowsAny<ArgumentException>(() =>
-                    ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "Bad", Width = -1 }));
-                Assert.Empty(duringInvalid.ToString());
+                Assert.Throws<InvalidOperationException>(() =>
+                    ReactorApp.OpenAndAnnounce(sized, () => throw new InvalidOperationException("rejected")));
+                Assert.Empty(duringFailure.ToString());
             }
             finally
             {
                 Console.SetError(origErr);
             }
 
-            using var duringValid = new StringWriter();
-            Console.SetError(duringValid);
+            using var duringSuccess = new StringWriter();
+            Console.SetError(duringSuccess);
             try
             {
-                // The latch must still be unspent, so the next good window reports.
-                ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "Good", Width = 800, Height = 600 });
-                Assert.Contains("[reactor]", duringValid.ToString());
+                // Latch must still be unspent, so the next window that opens reports.
+                ReactorApp.EmitDipBehaviorChangeNoticeOnce(sized.Width, sized.Height);
+                Assert.Contains("[reactor]", duringSuccess.ToString());
             }
             finally
             {
@@ -291,10 +290,57 @@ public class ReactorAppStaticHelperTests
             }
         }
 
-        // Positive control: the seam does announce a valid sized spec, so the
-        // assertion above cannot pass merely because the emit never fires.
+        // The open callback is the only thing that may validate. WindowSpec.Validate
+        // is not side-effect free — it maintains edge-triggered warning state — so a
+        // second call inside OpenAndAnnounce would double-count those warnings and
+        // defeat the edge trigger. This asserts the seam calls the opener exactly
+        // once and validates zero times itself.
         [Fact]
-        public void ValidateAndAnnounceSpec_ValidSizedSpec_Announces()
+        public void OpenAndAnnounce_DoesNotValidateSpecItself()
+        {
+            ReactorApp.ResetDipBehaviorChangeNoticeForTests();
+            var before = WindowSpec.NoDragAffordanceWarningCountForTests;
+            try
+            {
+                // A spec whose combination trips the edge-triggered warning.
+                var suspicious = new WindowSpec
+                {
+                    Title = "No drag",
+                    Width = 320,
+                    Height = 240,
+                    Style = WindowStyle.None,
+                    IsMovableByBackground = false,
+                };
+
+                var opens = 0;
+                var origErr = Console.Error;
+                using var sw = new StringWriter();
+                Console.SetError(sw);
+                try
+                {
+                    // Stand in for the real opener, which is what validates.
+                    ReactorApp.OpenAndAnnounce(suspicious, () => { opens++; suspicious.Validate(); return null!; });
+                }
+                finally
+                {
+                    Console.SetError(origErr);
+                }
+
+                Assert.Equal(1, opens);
+                // Exactly one validation — the opener's. A seam that validated too
+                // would leave 2 here and break the edge trigger the warning relies on.
+                Assert.Equal(before + 1, WindowSpec.NoDragAffordanceWarningCountForTests);
+            }
+            finally
+            {
+                WindowSpec.NoDragAffordanceWarningCountForTests = before;
+            }
+        }
+
+        // Positive control: the seam does announce after a successful open, so the
+        // assertions above cannot pass merely because the emit never fires.
+        [Fact]
+        public void OpenAndAnnounce_SuccessfulOpen_Announces()
         {
             ReactorApp.ResetDipBehaviorChangeNoticeForTests();
             var origErr = Console.Error;
@@ -302,7 +348,9 @@ public class ReactorAppStaticHelperTests
             Console.SetError(sw);
             try
             {
-                ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "T", Width = 640, Height = 480 });
+                ReactorApp.OpenAndAnnounce(
+                    new WindowSpec { Title = "T", Width = 640, Height = 480 },
+                    () => null!);
                 Assert.Contains("[reactor]", sw.ToString());
             }
             finally
@@ -311,9 +359,9 @@ public class ReactorAppStaticHelperTests
             }
         }
 
-        // A spec that declares no size still must not consume the latch.
+        // A window that declares no size still must not consume the latch.
         [Fact]
-        public void ValidateAndAnnounceSpec_UnsizedSpec_IsSilentAndLeavesLatch()
+        public void OpenAndAnnounce_UnsizedSpec_IsSilentAndLeavesLatch()
         {
             ReactorApp.ResetDipBehaviorChangeNoticeForTests();
             var origErr = Console.Error;
@@ -321,10 +369,10 @@ public class ReactorAppStaticHelperTests
             Console.SetError(sw);
             try
             {
-                ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "T" });
+                ReactorApp.OpenAndAnnounce(new WindowSpec { Title = "T" }, () => null!);
                 Assert.Empty(sw.ToString());
 
-                ReactorApp.ValidateAndAnnounceSpec(new WindowSpec { Title = "T2", Width = 800 });
+                ReactorApp.OpenAndAnnounce(new WindowSpec { Title = "T2", Width = 800 }, () => null!);
                 Assert.Contains("[reactor]", sw.ToString());
             }
             finally

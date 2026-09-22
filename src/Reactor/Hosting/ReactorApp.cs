@@ -705,8 +705,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(root);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        ValidateAndAnnounceSpec(spec);
-        return OpenWindowCore(spec, root, renderFunc: null, configure: configure);
+        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, root, renderFunc: null, configure: configure));
     }
 
     /// <summary>
@@ -723,8 +722,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(render);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        ValidateAndAnnounceSpec(spec);
-        return OpenWindowCore(spec, rootFactory: null, render, configure: configure);
+        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, rootFactory: null, render, configure: configure));
     }
 
     // Internal overload used by the legacy Run<TRoot>/Run(string, Func) bridges
@@ -1126,23 +1124,26 @@ public static partial class ReactorApp
     private static int _dipBehaviorChangeNoticeEmitted;
 
     /// <summary>
-    /// The <c>OpenWindow</c> pre-flight: reject an invalid spec, then announce its size.
+    /// Opens a window and then announces its declared size, in that order.
     /// </summary>
     /// <remarks>
     /// The order is the point, which is why this is a named method rather than two lines
     /// at each call site. <see cref="EmitDipBehaviorChangeNoticeOnce"/> latches once per
-    /// process, so emitting before validation would let a spec that is about to throw
-    /// consume the latch and silence the next window that legitimately should report.
-    /// Extracted so that ordering is reachable from a headless test —
-    /// <c>OpenWindow</c> itself constructs WinUI types and cannot run in
-    /// <c>Reactor.Tests</c>. <c>ReactorWindow</c>'s constructor validates again,
-    /// which is idempotent and already the pattern the <c>Run(WindowSpec)</c> overloads follow.
+    /// process, so announcing first would let a spec that is about to be rejected consume
+    /// the latch and silence the next window that legitimately should report.
+    /// <para>The open callback is what validates — <c>ReactorWindow</c>'s constructor calls
+    /// <c>WindowSpec.Validate</c> — so this deliberately does <b>not</b> validate again.
+    /// <c>Validate</c> is not side-effect free: it maintains edge-triggered warning state
+    /// (see <c>WindowSpec.NoDragAffordanceWarningCountForTests</c>), so a second call would
+    /// double-count those warnings and defeat the edge trigger.</para>
     /// </remarks>
-    /// <param name="spec">The window spec to validate and, if sized, announce.</param>
-    internal static void ValidateAndAnnounceSpec(WindowSpec spec)
+    /// <param name="spec">The window spec whose size is announced once the open succeeds.</param>
+    /// <param name="open">Opens the window; throws if <paramref name="spec"/> is invalid.</param>
+    internal static ReactorWindow OpenAndAnnounce(WindowSpec spec, Func<ReactorWindow> open)
     {
-        spec.Validate();
+        var window = open();
         EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
+        return window;
     }
 
     /// <summary>
