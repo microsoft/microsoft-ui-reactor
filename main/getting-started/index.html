@@ -4073,7 +4073,7 @@ through):</p>
 <a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="k">using</span><span class="w"> </span><span class="nn">static</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Factories</span><span class="p">;</span>
 <a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="k">using</span><span class="w"> </span><span class="nn">Microsoft.UI.Xaml</span><span class="p">;</span>
 <a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="o">&lt;</span><span class="n">GettingStartedApp</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Getting Started&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">width</span><span class="p">:</span><span class="w"> </span><span class="mi">600</span><span class="p">,</span><span class="w"> </span><span class="n">height</span><span class="p">:</span><span class="w"> </span><span class="mi">400</span><span class="p">);</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="o">&lt;</span><span class="n">GettingStartedApp</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Getting Started&quot;</span><span class="p">);</span>
 <a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
 <a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">GettingStartedApp</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="p">{</span>
@@ -4114,7 +4114,7 @@ managing values that change over time.</p>
 <h3 id="counter-example">Counter Example<a class="headerlink" href="#counter-example" title="Permanent link">&para;</a></h3>
 <p>Here's a counter that tracks a single number:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1">// Launch with:</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="c1">//   ReactorApp.Run&lt;CounterExample&gt;(&quot;Counter&quot;, width: 600, height: 400);</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="c1">//   ReactorApp.Run&lt;CounterExample&gt;(&quot;Counter&quot;);</span>
 <a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
 <a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">CounterExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="p">{</span>
@@ -4140,7 +4140,7 @@ element trees and updates only the WinUI controls that actually changed.</p>
 <p>Components can call <code>UseState</code> multiple times — each call tracks an independent
 value:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1">// Launch with:</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="c1">//   ReactorApp.Run&lt;MultipleStateExample&gt;(&quot;Multiple State&quot;, width: 600, height: 400);</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="c1">//   ReactorApp.Run&lt;MultipleStateExample&gt;(&quot;Multiple State&quot;);</span>
 <a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
 <a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">MultipleStateExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="p">{</span>
@@ -4177,7 +4177,7 @@ expressions work because <code>Render()</code> runs every time state changes.</p
 <h2 id="layout-basics">Layout Basics<a class="headerlink" href="#layout-basics" title="Permanent link">&para;</a></h2>
 <p>Reactor provides a small set of layout primitives that compose together:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1">// Launch with:</span>
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="c1">//   ReactorApp.Run&lt;LayoutBasicsExample&gt;(&quot;Layout&quot;, width: 600, height: 400);</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="c1">//   ReactorApp.Run&lt;LayoutBasicsExample&gt;(&quot;Layout&quot;);</span>
 <a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
 <a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">LayoutBasicsExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="p">{</span>
@@ -4255,7 +4255,7 @@ of items, a way to add new ones, and checkboxes to mark them done.</p>
 <a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="k">using</span><span class="w"> </span><span class="nn">static</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Factories</span><span class="p">;</span>
 <a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="k">using</span><span class="w"> </span><span class="nn">Microsoft.UI.Xaml</span><span class="p">;</span>
 <a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>
-<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="o">&lt;</span><span class="n">TodoApp</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Todo App&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">width</span><span class="p">:</span><span class="w"> </span><span class="mi">550</span><span class="p">,</span><span class="w"> </span><span class="n">height</span><span class="p">:</span><span class="w"> </span><span class="mi">600</span><span class="p">);</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="o">&lt;</span><span class="n">TodoApp</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Todo App&quot;</span><span class="p">);</span>
 <a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>
 <a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">TodoApp</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a><span class="p">{</span>
@@ -4352,7 +4352,7 @@ of items, a way to add new ones, and checkboxes to mark them done.</p>
 <a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="k">using</span><span class="w"> </span><span class="nn">static</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Factories</span><span class="p">;</span>
 <a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="k">using</span><span class="w"> </span><span class="nn">Microsoft.UI.Xaml</span><span class="p">;</span>
 <a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>
-<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="o">&lt;</span><span class="n">CalculatorApp</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Calculator&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">width</span><span class="p">:</span><span class="w"> </span><span class="mi">380</span><span class="p">,</span><span class="w"> </span><span class="n">height</span><span class="p">:</span><span class="w"> </span><span class="mi">500</span><span class="p">);</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="o">&lt;</span><span class="n">CalculatorApp</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Calculator&quot;</span><span class="p">);</span>
 <a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>
 <a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">CalculatorApp</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a><span class="p">{</span>
