@@ -49,17 +49,32 @@ public class WinFormsTestSession
 
         OrphanedHostSweep.KillOrphansOf(ProcessName, exePath, "WinForms host");
 
+        Process? launched = null;
+
         try
         {
             var (proc, hwnd) = HostLaunch.LaunchAndBind(exePath, WindowTitle);
+            launched = proc;
+            var app = new WinAppUi(proc.Id, hwnd);
+            var uia = new UiaPropertyReader(hwnd);
+
+            // Published only on full success, for the reason given in TestSession.AssemblyInit:
+            // the reuse path above keys on _app alone, so a throw between _app and _uia would
+            // hand the next class a session whose reader was never built.
             _appProcess = proc;
-            _app = new WinAppUi(proc.Id, hwnd);
-            _uia = new UiaPropertyReader(hwnd);
+            _app = app;
+            _uia = uia;
             Console.WriteLine($"winapp UI automation bound to WinForms host (HWND 0x{hwnd:X}).");
         }
-        catch (Exception ex) when (ex is WinAppException or TimeoutException)
+        catch (Exception ex)
         {
-            SessionInteractivityGuard.RecheckAfterFailure("WinFormsTestSession bootstrap");
+            // Nothing was published, so ForceCleanup cannot see this process and nothing else
+            // will reap it. See TestSession.AssemblyInit.
+            KillAndDispose(ref launched);
+
+            if (ex is WinAppException or TimeoutException)
+                SessionInteractivityGuard.RecheckAfterFailure("WinFormsTestSession bootstrap");
+
             throw;
         }
 
@@ -87,23 +102,30 @@ public class WinFormsTestSession
         _refCount = 0;
         _app = null;
         _uia = null;
+        KillAndDispose(ref _appProcess);
+    }
 
-        if (_appProcess != null)
+    /// <summary>
+    /// Kills <paramref name="proc"/> if it is still running, disposes it and clears the
+    /// reference. See <see cref="TestSession"/> for why failures are swallowed.
+    /// </summary>
+    private static void KillAndDispose(ref Process? proc)
+    {
+        if (proc is null) return;
+
+        try
         {
-            try
+            if (!proc.HasExited)
             {
-                if (!_appProcess.HasExited)
-                {
-                    _appProcess.Kill();
-                    _appProcess.WaitForExit(5000);
-                }
+                proc.Kill();
+                proc.WaitForExit(5000);
             }
-            catch { }
-            finally
-            {
-                _appProcess.Dispose();
-                _appProcess = null;
-            }
+        }
+        catch { }
+        finally
+        {
+            proc.Dispose();
+            proc = null;
         }
     }
 

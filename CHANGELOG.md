@@ -309,6 +309,15 @@ Conventions for contributors:
   `ui yield` release someone else's turn. MSTest is sequential by default, so nothing changes
   today; the declaration exists so a `.runsettings` or a `--parallel` cannot flip that assumption
   silently, since the resulting failures would be indistinguishable from ordinary UI flake.
+- A failed E2E session bootstrap no longer leaves a half-published session behind. The host
+  process, the winapp wrapper and the UIA reader were assigned to statics as each was built, but
+  the reuse path keys on the wrapper alone, so a throw between the two - a `COMException` out of
+  the reader, say, which the narrow `WinAppException`/`TimeoutException` filter did not even
+  catch - left the next test class incrementing the ref count on a session whose reader was never
+  built, then failing on a null field far from the cause. Publication now happens only once all
+  three have been constructed, and a launch abandoned by a failure is killed rather than dropped:
+  nothing else would ever have reaped it, and while it lived it held the liveness lease that
+  defers the orphan sweep of every concurrent run of the checkout.
 - A storage fault that stops the startup gate being addressed is now reported as itself rather
   than as contention. Setup failure and a genuinely held gate were both a `null` return, so an
   unwritable claim directory spent the full timeout and then blamed a competing run that never

@@ -64,18 +64,40 @@ public class TestSession
 
         OrphanedHostSweep.KillOrphansOf("Reactor.AppTests.Host", exePath, "Host app");
 
+        Process? launched = null;
+
         try
         {
             var (proc, hwnd) = HostLaunch.LaunchAndBind(exePath, WindowTitle);
+            launched = proc;
+            var app = new WinAppUi(proc.Id, hwnd);
+            var uia = new UiaPropertyReader(hwnd);
+
+            // Published only once every step above has succeeded. Assigning as we went would
+            // make a later failure indistinguishable from a healthy session to the next class:
+            // AssemblyInit's reuse path keys on _app alone, so a throw between _app and _uia
+            // left the next class incrementing the ref count on a session whose reader was
+            // never built, and failing later on a null field far from the actual cause.
             _appProcess = proc;
-            _app = new WinAppUi(proc.Id, hwnd);
-            _uia = new UiaPropertyReader(hwnd);
+            _app = app;
+            _uia = uia;
             Console.WriteLine($"winapp UI automation bound to Host window (HWND 0x{hwnd:X}).");
         }
-        catch (Exception ex) when (ex is WinAppException or TimeoutException)
+        catch (Exception ex)
         {
-            // A mid-init screen lock surfaces here. Reclassify as Inconclusive when locked.
-            SessionInteractivityGuard.RecheckAfterFailure("TestSession bootstrap");
+            // The statics were never assigned, so ForceCleanup cannot see this process and
+            // nothing else will ever reap it. Left alive it holds the liveness lease, which
+            // defers the orphan sweep of every concurrent run of this checkout for as long as
+            // it lives — the same leak the ref-count ordering below exists to avoid.
+            KillAndDispose(ref launched);
+
+            // Unchanged for the two types that were previously filtered: a mid-init screen lock
+            // surfaces as one of these and is reclassified as Inconclusive. Everything else —
+            // a COMException out of the UIA reader, say — now gets the cleanup without being
+            // reclassified, rather than escaping before either could happen.
+            if (ex is WinAppException or TimeoutException)
+                SessionInteractivityGuard.RecheckAfterFailure("TestSession bootstrap");
+
             throw;
         }
 
@@ -111,23 +133,37 @@ public class TestSession
         _refCount = 0;
         _app = null;
         _uia = null;
+        KillAndDispose(ref _appProcess);
+    }
 
-        if (_appProcess != null)
+    /// <summary>
+    /// Kills <paramref name="proc"/> if it is still running, disposes it, and clears the
+    /// reference, swallowing anything that goes wrong.
+    /// </summary>
+    /// <remarks>
+    /// Shared by normal teardown and by the bootstrap's failure path so a host launched by a
+    /// failed initialization is reaped exactly the way a successful one is. Failures are
+    /// swallowed because both callers are already cleaning up: the process may have exited on
+    /// its own between the check and the kill, and in the bootstrap case an exception here
+    /// would replace the one that actually explains the failure.
+    /// </remarks>
+    internal static void KillAndDispose(ref Process? proc)
+    {
+        if (proc is null) return;
+
+        try
         {
-            try
+            if (!proc.HasExited)
             {
-                if (!_appProcess.HasExited)
-                {
-                    _appProcess.Kill();
-                    _appProcess.WaitForExit(5000);
-                }
+                proc.Kill();
+                proc.WaitForExit(5000);
             }
-            catch { }
-            finally
-            {
-                _appProcess.Dispose();
-                _appProcess = null;
-            }
+        }
+        catch { }
+        finally
+        {
+            proc.Dispose();
+            proc = null;
         }
     }
 
