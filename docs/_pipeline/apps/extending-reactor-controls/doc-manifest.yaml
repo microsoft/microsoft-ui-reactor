@@ -1,5 +1,4 @@
 app:
-  title: "Extending Reactor"
   width: 540
   height: 360
   startup-delay: 1500
@@ -8,5 +7,4 @@ screenshots:
   - id: star-meter
     description: "Custom StarMeter element wrapping WinUI RatingControl, registered via a descriptor and used like any built-in."
     component: ExtendingApp
-    region: client
     format: png

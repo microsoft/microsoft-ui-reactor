@@ -10,7 +10,7 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Advanced.Factories;
 using Colors = Microsoft.UI.Colors;
 
-ReactorApp.Run<Win2DCanvasApp>("Win2D canvas", width: 920, height: 760);
+ReactorApp.Run<Win2DCanvasApp>("Win2D canvas");
 
 // <snippet:manual-canvas>
 class ManualCanvasDemo : Component

@@ -12,7 +12,7 @@ using Windows.UI;
 // first reference to `LedIndicator` (via .Of) triggers its static cctor
 // which calls ControlRegistry.Register globally.
 ReactorApp.Run<V1ProtocolApp>(
-    "V1 Protocol Demo", width: 520, height: 360);
+    "V1 Protocol Demo");
 
 // <snippet:element-record>
 // An Element record describes what you want on screen — no WinUI types, no

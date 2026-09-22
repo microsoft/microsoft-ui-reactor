@@ -1,5 +1,4 @@
 app:
-  title: "Styling and Theming"
   width: 650
   height: 800
   startup-delay: 1500
@@ -8,45 +7,36 @@ screenshots:
   - id: theme-tokens
     description: "Themed text with primary, secondary, accent, and accent background"
     component: ThemeTokensExample
-    region: client
     format: png
   - id: card-layout
     description: "Dashboard cards with themed backgrounds and accent values"
     component: CardLayoutExample
-    region: client
     format: png
   - id: color-modifiers
     description: "Three text elements with theme token, hex, and mixed colors"
     component: ColorModifiersExample
-    region: client
     format: png
   - id: signal-colors
     description: "Signal color badges for info, success, warning, error"
     component: SignalColorsExample
-    region: client
     format: png
   - id: dark-light-toggle
     description: "Toggle switch controlling dark/light mode with RequestedTheme"
     component: DarkLightToggleExample
-    region: client
     format: png
   - id: color-scheme-hook
     description: "Color scheme display with UseColorScheme and UseIsDarkTheme"
     component: ColorSchemeHookExample
-    region: client
     format: png
   - id: lightweight-styling
     description: "Buttons with lightweight styling resource overrides"
     component: LightweightStylingExample
-    region: client
     format: png
   - id: brand-override
     description: "Brand-color override cascading from a single Resources call at the root"
     component: BrandOverrideExample
-    region: client
     format: png
   - id: scoped-theme-override
     description: "Light app with one panel scoped to Dark via RequestedTheme on a region root"
     component: ScopedThemeOverrideExample
-    region: client
     format: png

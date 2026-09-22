@@ -6,8 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.System;
 
-ReactorApp.Run<CommandingApp>("Commanding", width: 650, height: 550
-);
+ReactorApp.Run<CommandingApp>("Commanding");
 
 // <snippet:basic-command>
 class BasicCommandExample : Component

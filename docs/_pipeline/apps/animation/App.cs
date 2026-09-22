@@ -4,8 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<AnimationApp>("Animation", width: 650, height: 700
-);
+ReactorApp.Run<AnimationApp>("Animation");
 
 // <snippet:opacity-transition>
 class OpacityDemo : Component

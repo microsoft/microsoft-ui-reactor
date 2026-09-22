@@ -4,8 +4,7 @@ using Microsoft.UI.Reactor.Hooks;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<StatusAndInfoApp>("Status and Info", width: 640, height: 1000
-);
+ReactorApp.Run<StatusAndInfoApp>("Status and Info");
 
 // <snippet:infobar-severities>
 class InfoBarSeveritiesDemo : Component

@@ -7,8 +7,7 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-ReactorApp.Run<FormsApp>("Forms", width: 600, height: 900
-);
+ReactorApp.Run<FormsApp>("Forms");
 
 // <snippet:controlled-input>
 class ControlledInputDemo : Component

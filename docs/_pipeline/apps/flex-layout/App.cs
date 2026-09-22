@@ -4,8 +4,7 @@ using Microsoft.UI.Reactor.Layout;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<FlexLayoutApp>("Flex Layout", width: 700, height: 600
-);
+ReactorApp.Run<FlexLayoutApp>("Flex Layout");
 
 // <snippet:flex-direction>
 class FlexDirectionDemo : Component

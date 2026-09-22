@@ -5,8 +5,7 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 
-ReactorApp.Run<AccessibilityApp>("Accessibility", width: 650, height: 700
-);
+ReactorApp.Run<AccessibilityApp>("Accessibility");
 
 // <snippet:tier1-modifiers>
 class Tier1Demo : Component

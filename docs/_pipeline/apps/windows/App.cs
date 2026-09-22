@@ -5,8 +5,7 @@ using Microsoft.UI.Reactor.Navigation;
 using static Microsoft.UI.Reactor.Factories;
 
 // <snippet:run>
-ReactorApp.Run<WindowsApp>("Windows Demo", width: 640, height: 520
-);
+ReactorApp.Run<WindowsApp>("Windows Demo");
 // </snippet:run>
 
 // <snippet:shell>

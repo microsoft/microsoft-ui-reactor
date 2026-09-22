@@ -12,8 +12,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Component = Microsoft.UI.Reactor.Core.Component;
 
-ReactorApp.Run<AdvancedApp>("Advanced Patterns", width: 650, height: 700
-);
+ReactorApp.Run<AdvancedApp>("Advanced Patterns");
 
 // <snippet:error-boundary>
 class ErrorBoundaryDemo : Component

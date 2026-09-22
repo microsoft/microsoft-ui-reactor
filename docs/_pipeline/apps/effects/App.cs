@@ -3,8 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<EffectsApp>("Effects and Lifecycle", width: 600, height: 550
-);
+ReactorApp.Run<EffectsApp>("Effects and Lifecycle");
 
 // <snippet:mount-effect>
 class MountEffectExample : Component

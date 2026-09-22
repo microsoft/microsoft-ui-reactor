@@ -1,5 +1,4 @@
 app:
-  title: "Reactor Showcase"
   width: 600
   height: 500
   startup-delay: 1500
@@ -8,20 +7,16 @@ screenshots:
   - id: hello-world
     description: "Minimal hello world component"
     component: HelloWorld
-    region: client
     format: png
   - id: counter
     description: "Quick counter with increment and decrement"
     component: QuickCounter
-    region: client
     format: png
   - id: styled-text
     description: "Text elements with different styles"
     component: StyledText
-    region: client
     format: png
   - id: showcase
     description: "Full showcase with greeting and counter"
     component: ReadmeShowcase
-    region: client
     format: png

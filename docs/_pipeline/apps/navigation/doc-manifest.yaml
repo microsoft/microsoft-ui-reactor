@@ -1,5 +1,4 @@
 app:
-  title: "Navigation"
   width: 800
   height: 700
   startup-delay: 1500
@@ -8,45 +7,36 @@ screenshots:
   - id: basic-navigation
     description: "Basic navigation with buttons and NavigationHost"
     component: BasicNavDemo
-    region: client
     format: png
   - id: navigation-view
     description: "NavigationView with sidebar menu"
     component: NavViewDemo
-    region: client
     format: png
   - id: stack-operations
     description: "Navigate, Replace, Reset, GoBack, GoForward"
     component: StackOperationsDemo
-    region: client
     format: png
   - id: lifecycle
     description: "Navigation lifecycle event log"
     component: LifecyclePage
-    region: client
     format: png
   - id: page-transitions
     description: "DrillIn page transition on navigate"
     component: PageTransitionsDemo
-    region: client
     format: png
   - id: deep-linking
     description: "DeepLinkMap resolving URI patterns to routes"
     component: DeepLinkingDemo
-    region: client
     format: png
   - id: state-serialization
     description: "Navigation state save and restore"
     component: StateSerializationDemo
-    region: client
     format: png
   - id: page-caching
     description: "NavigationHost with page caching enabled"
     component: PageCachingDemo
-    region: client
     format: png
   - id: tab-navigation
     description: "TabView with three document tabs"
     component: TabNavDemo
-    region: client
     format: png

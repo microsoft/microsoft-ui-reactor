@@ -18,8 +18,7 @@ surface — icon, min/max size, backdrop, corner style, or placement persistence
 `ReactorWindow` handle for imperative lifecycle operations.
 
 ```csharp
-ReactorApp.Run<WindowsApp>("Windows Demo", width: 640, height: 520
-);
+ReactorApp.Run<WindowsApp>("Windows Demo");
 ```
 
 ```csharp

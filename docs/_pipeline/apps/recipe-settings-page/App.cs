@@ -2,8 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<SettingsRecipeApp>("Settings Recipe", width: 460, height: 420
-);
+ReactorApp.Run<SettingsRecipeApp>("Settings Recipe");
 
 class SettingsRecipeApp : Component
 {

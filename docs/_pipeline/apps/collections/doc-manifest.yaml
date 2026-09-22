@@ -1,5 +1,4 @@
 app:
-  title: "Collections"
   width: 700
   height: 600
   startup-delay: 1500
@@ -8,45 +7,36 @@ screenshots:
   - id: listview
     description: "ListView with contact data"
     component: ListViewDemo
-    region: client
     format: png
   - id: lazyvstack
     description: "LazyVStack with 50 virtualized items"
     component: LazyVStackDemo
-    region: client
     format: png
   - id: gridview
     description: "GridView with contact cards"
     component: GridViewDemo
-    region: client
     format: png
   - id: virtuallist
     description: "VirtualList with 10,000 count-based items"
     component: VirtualListDemo
-    region: client
     format: png
   - id: foreach
     description: "ForEach rendering colored tags"
     component: ForEachDemo
-    region: client
     format: png
   - id: withkey
     description: "Dynamic list with WithKey for stable identity"
     component: WithKeyDemo
-    region: client
     format: png
   - id: grouping
     description: "Composed VStack of group-header + items per group, scrollable."
     component: GroupingDemo
-    region: client
     format: png
   - id: drag-reorder
     description: "ListView with CanReorderItems / CanDragItems set for drag-to-reorder."
     component: DragReorderDemo
-    region: client
     format: png
   - id: lazy-loading
     description: "VirtualList with onVisibleRangeChanged-driven incremental load showing 50 of 1000 loaded."
     component: LazyLoadingDemo
-    region: client
     format: png

@@ -1,52 +1,42 @@
 app:
-  title: "Charting"
   width: 700
-  height: 600
+  height: 800
   startup-delay: 2000
 
 screenshots:
   - id: line-chart
     description: "Line chart with monthly sales data"
     component: LineChartDemo
-    region: client
     format: png
   - id: bar-chart
     description: "Bar chart comparing quarterly revenue"
     component: BarChartDemo
-    region: client
     format: png
   - id: area-chart
     description: "Area chart showing cumulative growth"
     component: AreaChartDemo
-    region: client
     format: png
   - id: pie-chart
     description: "Pie chart with category breakdown"
     component: PieChartDemo
-    region: client
     format: png
   - id: combined-chart
     description: "Interactive chart with year selector"
     component: CombinedChartDemo
-    region: client
     format: png
   - id: dynamic-data
     description: "Bar chart with randomized data on button press"
     component: DynamicDataDemo
-    region: client
     format: png
   - id: pie-label-view
     description: "Pie chart with percent rendered inside each slice via LabelView"
     component: PieLabelViewDemo
-    region: client
     format: png
   - id: axis-tick-view
     description: "Line chart with month-name axis ticks via XTickLabelView"
     component: AxisTickViewDemo
-    region: client
     format: png
   - id: accessible-chart
     description: "Accessible chart with screen-reader annotations and keyboard navigation"
     component: AccessibleChartDemo
-    region: client
     format: png

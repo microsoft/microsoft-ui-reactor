@@ -1073,9 +1073,15 @@ one — every other framework treats these as DIPs).
 
 We do not add a `legacyPixelSize: true` opt-out. Instead:
 
-- The first call to `Run<TRoot>` from a process that hasn't pinned a
-  Reactor version >= the release containing this change emits one
-  `[reactor]` info line on stderr describing the new size semantics.
+- The first window opened **with an explicit size** — whether through a `Run`
+  overload or a public `OpenWindow(WindowSpec, …)` call — emits one `[reactor]`
+  info line on stderr describing the new size semantics, once per process.
+  A call that declares no size stays silent and does **not** consume that
+  one-shot latch: such an app already gets the OS-chosen extent the message
+  exists to announce, so warning it would contradict §12.2a's guidance to omit
+  the arguments, and consuming the latch would rob the next sized window of its
+  notice. `OpenWindow` validates the spec before announcing it, so a spec that
+  is about to be rejected cannot burn the latch either.
 - The release notes flag this prominently. Apps that liked the old
   size can divide by their display scale.
 

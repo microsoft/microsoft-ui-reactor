@@ -1,5 +1,4 @@
 app:
-  title: "Commanding"
   width: 650
   height: 550
   startup-delay: 1500
@@ -8,40 +7,32 @@ screenshots:
   - id: basic-command
     description: "Text editor with a Save command button and saved indicator"
     component: BasicCommandExample
-    region: client
     format: png
   - id: standard-commands
     description: "Command bar with Cut, Copy, Paste, and Undo standard commands"
     component: StandardCommandsExample
-    region: client
     format: png
   - id: async-command
     description: "Save button with progress ring during async execution"
     component: AsyncCommandExample
-    region: client
     format: png
   - id: command-bar
     description: "Command bar with primary and secondary commands"
     component: CommandBarExample
-    region: client
     format: png
   - id: menu-bar
     description: "Menu bar with File and Edit menus using commands"
     component: MenuBarExample
-    region: client
     format: png
   - id: button-and-menu
     description: "One Command record bound to both a Button and a MenuFlyout item"
     component: ButtonAndMenuExample
-    region: client
     format: png
   - id: parameterized-command
     description: "Single Command<TodoItem> driving Delete on every list row"
     component: ParameterizedCommandExample
-    region: client
     format: png
   - id: async-with-progress
     description: "Async UseCommand with IsExecuting-driven ProgressBar"
     component: AsyncWithProgressExample
-    region: client
     format: png

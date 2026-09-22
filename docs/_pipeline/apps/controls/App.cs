@@ -14,8 +14,7 @@ using static Microsoft.UI.Reactor.Factories;
 // `doc-manifest.yaml` declares one `kind: catalog-thumb` capture per
 // category; the harness downscales to 320×240. The snippet markers below
 // power the lead snippet in `docs/_pipeline/templates/controls.md.dt`.
-ReactorApp.Run<ControlsCatalogApp>("Controls Catalog", width: 480, height: 320
-);
+ReactorApp.Run<ControlsCatalogApp>("Controls Catalog");
 
 // <snippet:lead>
 class ControlsCatalogApp : Component

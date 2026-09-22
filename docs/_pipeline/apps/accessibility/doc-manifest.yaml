@@ -1,5 +1,4 @@
 app:
-  title: "Accessibility"
   width: 650
   height: 700
   startup-delay: 1500
@@ -8,40 +7,32 @@ screenshots:
   - id: tier1-modifiers
     description: "Tier 1 accessibility modifiers: heading levels, tab order, access keys"
     component: Tier1Demo
-    region: client
     format: png
   - id: tier2-modifiers
     description: "Tier 2 modifiers: HelpText, FullDescription, AccessibilityHidden"
     component: Tier2Demo
-    region: client
     format: png
   - id: accessible-form
     description: "Accessible registration form with landmarks, labels, and tab order"
     component: AccessibleFormDemo
-    region: client
     format: png
   - id: landmarks
     description: "Navigation, Main, and Search landmarks in a page layout"
     component: LandmarksDemo
-    region: client
     format: png
   - id: heading-hierarchy
     description: "Heading hierarchy with Level1, Level2, and Level3 headings"
     component: HeadingHierarchyDemo
-    region: client
     format: png
   - id: focus-trap
     description: "Modal dialog with keyboard focus trapped inside"
     component: FocusTrapDemo
-    region: client
     format: png
   - id: announcements
     description: "Save button triggering screen reader announcement"
     component: AnnouncementsDemo
-    region: client
     format: png
   - id: semantic-panel
     description: "Star rating with SemanticPanel providing slider role"
     component: SemanticPanelDemo
-    region: client
     format: png

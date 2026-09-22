@@ -30,9 +30,7 @@ preview workflow:
 
 ```csharp
 // Program entry point — this is the entire App.cs file:
-// ReactorApp.Run<DevToolingApp>("Dev Tooling Demo",
-//     width: 600, height: 450
-// );
+// ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
 //
 // Hot reload works when the app is launched under dotnet watch. Devtools
 // screenshot capture is enabled by the app project's Reactor.DevtoolsSupport
@@ -157,7 +155,7 @@ For quick experiments, skip the class entirely. Pass a lambda to
 //         TextBlock($"Count: {n}").FontSize(20),
 //         Button("+1", () => setN(n + 1))
 //     ).Padding(24);
-// }, width: 400, height: 300);
+// });
 ```
 
 This is useful for throwaway prototypes or testing a single interaction.
