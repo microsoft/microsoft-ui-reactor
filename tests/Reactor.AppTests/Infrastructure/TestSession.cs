@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -46,10 +47,9 @@ public class TestSession
     /// </summary>
     public static void AssemblyInit(object? context = null)
     {
-        _refCount++;
-
         if (_app != null)
         {
+            _refCount++;
             Console.WriteLine($"Session already active (ref {_refCount}), reusing.");
             return;
         }
@@ -58,25 +58,66 @@ public class TestSession
         // drown in environmental noise.
         SessionInteractivityGuard.EnsureInteractive("TestSession.AssemblyInit");
 
-        KillOrphanedProcesses();
-
+        // Resolve the host we are about to launch *before* sweeping, so the sweep can tell
+        // this checkout's orphans apart from another checkout's live host.
         var exePath = FindHostExe();
         Console.WriteLine($"Host app: {exePath}");
 
+        OrphanedHostSweep.KillOrphansOf("Reactor.AppTests.Host", exePath, "Host app");
+
+        Process? launched = null;
+
         try
         {
+            // Outside winapp's turn arbitration on purpose, and the one gap in this tier's
+            // concurrency story: the Host is launched and foregrounded directly, before any
+            // `winapp ui` call has been made and so before this suite holds a turn to be
+            // arbitrated against. Two suites starting at once can therefore each raise a Host
+            // over the other's input. Closing it would need winapp to hold a turn on behalf of
+            // a process it did not spawn, which the CLI does not expose; TESTING.md documents
+            // the narrowed guarantee rather than leaving it implied.
             var (proc, hwnd) = HostLaunch.LaunchAndBind(exePath, WindowTitle);
-            _appProcess = proc;
-            _app = new WinAppUi(proc.Id, hwnd);
-            _uia = new UiaPropertyReader(hwnd);
+            launched = proc;
+            var app = new WinAppUi(proc.Id, hwnd);
+            var uia = new UiaPropertyReader(hwnd);
             Console.WriteLine($"winapp UI automation bound to Host window (HWND 0x{hwnd:X}).");
+
+            // Published only once every step above has succeeded, and deliberately the last
+            // thing in the block - including after the log line, since a redirected stdout can
+            // throw and that would leave a dead session looking healthy to the next class.
+            // Assigning as we went would make a later failure indistinguishable from a healthy
+            // session: AssemblyInit's reuse path keys on _app alone, so a throw between _app and
+            // _uia left the next class incrementing the ref count on a session whose reader was
+            // never built, and failing later on a null field far from the actual cause.
+            _appProcess = proc;
+            _app = app;
+            _uia = uia;
         }
-        catch (Exception ex) when (ex is WinAppException or TimeoutException)
+        catch (Exception ex)
         {
-            // A mid-init screen lock surfaces here. Reclassify as Inconclusive when locked.
-            SessionInteractivityGuard.RecheckAfterFailure("TestSession bootstrap");
+            // The statics were never assigned, so ForceCleanup cannot see this process and
+            // nothing else will ever reap it. Left alive it holds the liveness lease, which
+            // defers the orphan sweep of every concurrent run of this checkout for as long as
+            // it lives — the same leak the ref-count ordering below exists to avoid.
+            KillAndDispose(ref launched);
+
+            // Unchanged for the two types that were previously filtered: a mid-init screen lock
+            // surfaces as one of these and is reclassified as Inconclusive. Everything else —
+            // a COMException out of the UIA reader, say — now gets the cleanup without being
+            // reclassified, rather than escaping before either could happen.
+            if (ex is WinAppException or TimeoutException)
+                SessionInteractivityGuard.RecheckAfterFailure("TestSession bootstrap");
+
             throw;
         }
+
+        // Counted only here, because every statement above can throw and MSTest does not run a
+        // class's cleanup when its initialize failed. An increment taken before the work is
+        // therefore never balanced: the next class that initializes successfully sees a count
+        // of two, its own cleanup takes it to one rather than zero, and the host process and
+        // its liveness lease survive the whole assembly. Leaking the lease is the worse half —
+        // it keeps every concurrent run of this checkout deferring its sweep indefinitely.
+        _refCount++;
     }
 
     /// <summary>
@@ -102,38 +143,41 @@ public class TestSession
         _refCount = 0;
         _app = null;
         _uia = null;
-
-        if (_appProcess != null)
-        {
-            try
-            {
-                if (!_appProcess.HasExited)
-                {
-                    _appProcess.Kill();
-                    _appProcess.WaitForExit(5000);
-                }
-            }
-            catch { }
-            finally
-            {
-                _appProcess.Dispose();
-                _appProcess = null;
-            }
-        }
+        KillAndDispose(ref _appProcess);
     }
 
-    private static void KillOrphanedProcesses()
+    /// <summary>
+    /// Kills <paramref name="proc"/> if it is still running, disposes it, and clears the
+    /// reference, swallowing anything that goes wrong.
+    /// </summary>
+    /// <remarks>
+    /// Shared by normal teardown and by the bootstrap's failure path so a host launched by a
+    /// failed initialization is reaped exactly the way a successful one is. Failures are
+    /// swallowed because both callers are already cleaning up: the process may have exited on
+    /// its own between the check and the kill, and in the bootstrap case an exception here
+    /// would replace the one that actually explains the failure.
+    /// </remarks>
+    internal static void KillAndDispose(ref Process? proc)
     {
-        foreach (var proc in Process.GetProcessesByName("Reactor.AppTests.Host"))
+        if (proc is null) return;
+
+        using var doomed = proc;
+        proc = null;
+
+        try
         {
-            try
+            if (!doomed.HasExited)
             {
-                Console.WriteLine($"Killing orphaned Host app (PID {proc.Id}).");
-                proc.Kill();
-                proc.WaitForExit(3000);
+                doomed.Kill();
+                doomed.WaitForExit(5000);
             }
-            catch { }
-            finally { proc.Dispose(); }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or Win32Exception)
+        {
+            // The three ways a teardown kill legitimately fails: the process exited between
+            // the check and the kill, it is not one this API can terminate, or Windows refused
+            // the operation. In every case it is either already gone or beyond our reach.
+            // Anything else is a defect in this file and is deliberately left to propagate.
         }
     }
 

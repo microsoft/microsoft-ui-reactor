@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -33,34 +34,56 @@ public class WinFormsTestSession
 
     public static void Init(object? context = null)
     {
-        _refCount++;
-
         if (_app != null)
         {
+            _refCount++;
             Console.WriteLine($"WinForms session already active (ref {_refCount}), reusing.");
             return;
         }
 
         SessionInteractivityGuard.EnsureInteractive("WinFormsTestSession.Init");
 
-        KillOrphanedProcesses();
-
+        // Resolved before the sweep so it can distinguish this checkout's orphans from
+        // another checkout's live host. See OrphanedHostSweep.
         var exePath = FindHostExe();
         Console.WriteLine($"WinForms host: {exePath}");
+
+        OrphanedHostSweep.KillOrphansOf(ProcessName, exePath, "WinForms host");
+
+        Process? launched = null;
 
         try
         {
             var (proc, hwnd) = HostLaunch.LaunchAndBind(exePath, WindowTitle);
-            _appProcess = proc;
-            _app = new WinAppUi(proc.Id, hwnd);
-            _uia = new UiaPropertyReader(hwnd);
+            launched = proc;
+            var app = new WinAppUi(proc.Id, hwnd);
+            var uia = new UiaPropertyReader(hwnd);
             Console.WriteLine($"winapp UI automation bound to WinForms host (HWND 0x{hwnd:X}).");
+
+            // Published only on full success, and last of all - including after the log, which
+            // can throw on a redirected stdout. See TestSession.AssemblyInit: the reuse path
+            // above keys on _app alone, so anything that throws after a partial publish would
+            // hand the next class a dead or half-built session.
+            _appProcess = proc;
+            _app = app;
+            _uia = uia;
         }
-        catch (Exception ex) when (ex is WinAppException or TimeoutException)
+        catch (Exception ex)
         {
-            SessionInteractivityGuard.RecheckAfterFailure("WinFormsTestSession bootstrap");
+            // Nothing was published, so ForceCleanup cannot see this process and nothing else
+            // will reap it. See TestSession.AssemblyInit.
+            KillAndDispose(ref launched);
+
+            if (ex is WinAppException or TimeoutException)
+                SessionInteractivityGuard.RecheckAfterFailure("WinFormsTestSession bootstrap");
+
             throw;
         }
+
+        // Counted only on success. See TestSession.AssemblyInit for why an increment taken
+        // before the work leaks: MSTest does not run a class's cleanup when its initialize
+        // threw, so the count never returns to zero and the host and its lease outlive the run.
+        _refCount++;
     }
 
     public static void Cleanup()
@@ -81,40 +104,35 @@ public class WinFormsTestSession
         _refCount = 0;
         _app = null;
         _uia = null;
-
-        if (_appProcess != null)
-        {
-            try
-            {
-                if (!_appProcess.HasExited)
-                {
-                    _appProcess.Kill();
-                    _appProcess.WaitForExit(5000);
-                }
-            }
-            catch { }
-            finally
-            {
-                _appProcess.Dispose();
-                _appProcess = null;
-            }
-        }
+        KillAndDispose(ref _appProcess);
     }
 
-    private static void KillOrphanedProcesses()
+    /// <summary>
+    /// Kills <paramref name="proc"/> if it is still running, disposes it and clears the
+    /// reference. See <see cref="TestSession"/> for why failures are swallowed.
+    /// </summary>
+    private static void KillAndDispose(ref Process? proc)
     {
-        foreach (var proc in Process.GetProcessesByName(ProcessName))
+        if (proc is null) return;
+
+        using var doomed = proc;
+        proc = null;
+
+        try
         {
-            try
+            if (!doomed.HasExited)
             {
-                Console.WriteLine($"Killing orphaned WinForms host (PID {proc.Id}).");
-                proc.Kill();
-                proc.WaitForExit(3000);
+                doomed.Kill();
+                doomed.WaitForExit(5000);
             }
-            catch { }
-            finally { proc.Dispose(); }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or Win32Exception)
+        {
+            // See TestSession.KillAndDispose for why exactly these three are swallowed.
         }
     }
+
+
 
     private static string FindHostExe()
     {
