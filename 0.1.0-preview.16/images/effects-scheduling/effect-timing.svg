@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 11px; fill: #1f2328; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .lifeline { stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 4 3; }
+    .actor-rect { fill: #f6f8fa; stroke: #57606a; stroke-width: 1.5; }
+    .msg { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .note { fill: #fff8c5; stroke: #9a6700; stroke-width: 1; }
+    .marker-fill { fill: #57606a; }
+    .step-num { font-size: 10.5px; fill: #57606a; font-weight: 600; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #e6edf3; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .lifeline { stroke: #6e7681; }
+      .actor-rect { fill: #21262d; stroke: #8b949e; }
+      .msg { stroke: #8b949e; }
+      .note { fill: #341a00; stroke: #d29922; }
+      .marker-fill { fill: #8b949e; }
+      .step-num { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Actors -->
+  <rect class="actor-rect" x="60" y="20" width="160" height="44" rx="6"/>
+  <text class="label" x="140" y="40" text-anchor="middle">Component.Render</text>
+  <text class="sub" x="140" y="56" text-anchor="middle">user code</text>
+
+  <rect class="actor-rect" x="280" y="20" width="160" height="44" rx="6"/>
+  <text class="label" x="360" y="40" text-anchor="middle">Reconciler</text>
+  <text class="sub" x="360" y="56" text-anchor="middle">diff + commit</text>
+
+  <rect class="actor-rect" x="500" y="20" width="160" height="44" rx="6"/>
+  <text class="label" x="580" y="40" text-anchor="middle">WinUI tree</text>
+  <text class="sub" x="580" y="56" text-anchor="middle">controls in window</text>
+
+  <rect class="actor-rect" x="720" y="20" width="160" height="44" rx="6"/>
+  <text class="label" x="800" y="40" text-anchor="middle">FlushEffects</text>
+  <text class="sub" x="800" y="56" text-anchor="middle">ctx.FlushEffects</text>
+
+  <!-- Lifelines -->
+  <line class="lifeline" x1="140" y1="64" x2="140" y2="520"/>
+  <line class="lifeline" x1="360" y1="64" x2="360" y2="520"/>
+  <line class="lifeline" x1="580" y1="64" x2="580" y2="520"/>
+  <line class="lifeline" x1="800" y1="64" x2="800" y2="520"/>
+
+  <!-- Messages -->
+  <text class="step-num" x="40" y="106">1</text>
+  <path class="msg" d="M140 110 L360 110" marker-end="url(#arr)"/>
+  <text class="edge-label" x="250" y="100" text-anchor="middle">return Element tree</text>
+
+  <text class="step-num" x="40" y="156">2</text>
+  <path class="msg" d="M360 160 C 320 175 320 175 360 195" marker-end="url(#arr)"/>
+  <text class="edge-label" x="380" y="175">diff old vs new</text>
+
+  <text class="step-num" x="40" y="236">3</text>
+  <path class="msg" d="M360 240 L580 240" marker-end="url(#arr)"/>
+  <text class="edge-label" x="470" y="230" text-anchor="middle">mount / update controls (commit)</text>
+
+  <!-- Note over WinUI -->
+  <rect class="note" x="500" y="265" width="170" height="36" rx="4"/>
+  <text class="sub" x="585" y="288" text-anchor="middle">pixels visible to user</text>
+
+  <text class="step-num" x="40" y="346">4</text>
+  <path class="msg" d="M360 350 L800 350" marker-end="url(#arr)"/>
+  <text class="edge-label" x="580" y="340" text-anchor="middle">FlushEffectsTraced(ctx)</text>
+
+  <text class="step-num" x="40" y="396">5</text>
+  <path class="msg" d="M800 400 C 760 412 760 412 800 425" marker-end="url(#arr)"/>
+  <text class="edge-label" x="700" y="408" text-anchor="end">phase 1 — cleanups</text>
+  <text class="sub" x="700" y="422" text-anchor="end">prev deps unsubscribe</text>
+
+  <text class="step-num" x="40" y="466">6</text>
+  <path class="msg" d="M800 470 C 760 482 760 482 800 495" marker-end="url(#arr)"/>
+  <text class="edge-label" x="700" y="478" text-anchor="end">phase 2 — effect bodies</text>
+  <text class="sub" x="700" y="492" text-anchor="end">new subscribe / fetch / set</text>
+</svg>

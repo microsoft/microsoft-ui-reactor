@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 540" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .group { fill: none; stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .group-label { font-size: 12px; font-weight: 600; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-a11y { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .group { stroke: #6e7681; }
+      .group-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-a11y { fill: #033a16; stroke: #3fb950; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Top row: pointer → hit → routed → element → component -->
+  <rect class="box-accent" x="20" y="40" width="150" height="60" rx="6"/>
+  <text class="label" x="95" y="64" text-anchor="middle">Pointer / Key</text>
+  <text class="sub" x="95" y="82" text-anchor="middle">OS input source</text>
+
+  <rect class="box" x="210" y="40" width="150" height="60" rx="6"/>
+  <text class="label" x="285" y="64" text-anchor="middle">WinUI hit test</text>
+  <text class="sub" x="285" y="82" text-anchor="middle">visual-tree topmost</text>
+
+  <rect class="box" x="400" y="40" width="170" height="60" rx="6"/>
+  <text class="label" x="485" y="64" text-anchor="middle">Routed event</text>
+  <text class="sub" x="485" y="82" text-anchor="middle">tunnel + bubble</text>
+
+  <rect class="box" x="610" y="40" width="200" height="60" rx="6"/>
+  <text class="label" x="710" y="64" text-anchor="middle">Reactor element callback</text>
+  <text class="sub" x="710" y="82" text-anchor="middle">.OnTapped · .OnPointerPressed</text>
+
+  <rect class="box-accent" x="850" y="40" width="200" height="60" rx="6"/>
+  <text class="label" x="950" y="64" text-anchor="middle">Component handler</text>
+  <text class="sub" x="950" y="82" text-anchor="middle">setState · imperative call</text>
+
+  <path class="edge" d="M170 70 L210 70" marker-end="url(#arr)"/>
+  <path class="edge" d="M360 70 L400 70" marker-end="url(#arr)"/>
+  <path class="edge" d="M570 70 L610 70" marker-end="url(#arr)"/>
+  <path class="edge" d="M810 70 L850 70" marker-end="url(#arr)"/>
+
+  <!-- Focus subsystem -->
+  <rect class="group" x="40" y="160" width="540" height="170" rx="8"/>
+  <text class="group-label" x="60" y="180">Focus subsystem</text>
+
+  <rect class="box" x="60" y="200" width="160" height="60" rx="6"/>
+  <text class="label" x="140" y="223" text-anchor="middle">UseFocusTrap</text>
+  <text class="sub" x="140" y="241" text-anchor="middle">LosingFocus interceptor</text>
+
+  <rect class="box" x="240" y="200" width="160" height="60" rx="6"/>
+  <text class="label" x="320" y="223" text-anchor="middle">FocusManager</text>
+  <text class="sub" x="320" y="241" text-anchor="middle">FocusNext / Prev</text>
+
+  <rect class="box" x="420" y="200" width="160" height="60" rx="6"/>
+  <text class="label" x="500" y="223" text-anchor="middle">Revalidation</text>
+  <text class="sub" x="500" y="241" text-anchor="middle">Window.Activated</text>
+
+  <path class="edge-dashed" d="M140 200 L470 110" marker-end="url(#arr)"/>
+  <text class="edge-label" x="200" y="160">owns LosingFocus, cancels route outside container</text>
+
+  <path class="edge" d="M320 200 L285 110" marker-end="url(#arr)"/>
+  <text class="edge-label" x="240" y="160">control.Focus(Programmatic)</text>
+
+  <path class="edge" d="M500 200 L500 110" marker-end="url(#arr)"/>
+  <text class="edge-label" x="510" y="155">invalidate resources</text>
+
+  <!-- A11y subsystem -->
+  <rect class="group" x="620" y="160" width="540" height="170" rx="8"/>
+  <text class="group-label" x="640" y="180">Accessibility surface</text>
+
+  <rect class="box-a11y" x="640" y="200" width="160" height="60" rx="6"/>
+  <text class="label" x="720" y="223" text-anchor="middle">UseAnnounce</text>
+  <text class="sub" x="720" y="241" text-anchor="middle">AnnounceHandle</text>
+
+  <rect class="box-a11y" x="820" y="200" width="170" height="60" rx="6"/>
+  <text class="label" x="905" y="223" text-anchor="middle">AutomationPeer</text>
+  <text class="sub" x="905" y="241" text-anchor="middle">RaiseNotificationEvent</text>
+
+  <rect class="box-a11y" x="1010" y="200" width="140" height="60" rx="6"/>
+  <text class="label" x="1080" y="223" text-anchor="middle">AT clients</text>
+  <text class="sub" x="1080" y="241" text-anchor="middle">Narrator · NVDA · JAWS</text>
+
+  <path class="edge-dashed" d="M950 100 L 720 200" marker-end="url(#arr)"/>
+  <text class="edge-label" x="850" y="145">fires Announce</text>
+
+  <path class="edge" d="M800 230 L820 230" marker-end="url(#arr)"/>
+  <path class="edge" d="M990 230 L1010 230" marker-end="url(#arr)"/>
+
+  <!-- Caption -->
+  <text class="sub" x="600" y="380" text-anchor="middle">Pointer / keyboard events route up the visual tree; programmatic focus pushes directly to controls; announcements run alongside via automation peers.</text>
+</svg>

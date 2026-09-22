@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 280" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; font-style: italic; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .edge { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Step 0: Text("hi") -->
+  <rect class="box-accent" x="20" y="60" width="140" height="60" rx="6"/>
+  <text class="label" x="90" y="84" text-anchor="middle">Text("hi")</text>
+  <text class="sub" x="90" y="103" text-anchor="middle">TextBlockElement</text>
+
+  <!-- Step 1: +Bold -->
+  <rect class="box" x="200" y="50" width="160" height="80" rx="6"/>
+  <text class="label" x="280" y="72" text-anchor="middle">TextBlockElement</text>
+  <text class="sub" x="280" y="90" text-anchor="middle">Modifiers = {</text>
+  <text class="sub" x="280" y="103" text-anchor="middle">  FontWeight=Bold</text>
+  <text class="sub" x="280" y="116" text-anchor="middle">}</text>
+
+  <!-- Step 2: +Margin -->
+  <rect class="box" x="400" y="50" width="160" height="80" rx="6"/>
+  <text class="label" x="480" y="72" text-anchor="middle">TextBlockElement</text>
+  <text class="sub" x="480" y="90" text-anchor="middle">Modifiers.Merge({</text>
+  <text class="sub" x="480" y="103" text-anchor="middle">  Margin=8</text>
+  <text class="sub" x="480" y="116" text-anchor="middle">})</text>
+
+  <!-- Step 3: +Background -->
+  <rect class="box" x="600" y="50" width="170" height="80" rx="6"/>
+  <text class="label" x="685" y="72" text-anchor="middle">TextBlockElement</text>
+  <text class="sub" x="685" y="90" text-anchor="middle">ThemeBindings[</text>
+  <text class="sub" x="685" y="103" text-anchor="middle">  "Background"]</text>
+  <text class="sub" x="685" y="116" text-anchor="middle">= Theme.Accent</text>
+
+  <!-- Step 4: +Grid -->
+  <rect class="box" x="810" y="50" width="160" height="80" rx="6"/>
+  <text class="label" x="890" y="72" text-anchor="middle">TextBlockElement</text>
+  <text class="sub" x="890" y="90" text-anchor="middle">Attached[</text>
+  <text class="sub" x="890" y="103" text-anchor="middle">  GridRow] = 1</text>
+  <text class="sub" x="890" y="116" text-anchor="middle"></text>
+
+  <!-- Step 5: +Set (last) -->
+  <rect class="box" x="540" y="170" width="180" height="74" rx="6"/>
+  <text class="label" x="630" y="192" text-anchor="middle">TextBlockElement</text>
+  <text class="sub" x="630" y="210" text-anchor="middle">+ Set(tb =&gt;</text>
+  <text class="sub" x="630" y="223" text-anchor="middle">  tb.TextWrapping = …)</text>
+  <text class="sub" x="630" y="237" text-anchor="middle">callback queue</text>
+
+  <!-- Reconciler -->
+  <rect class="box-accent" x="100" y="170" width="240" height="74" rx="6"/>
+  <text class="label" x="220" y="192" text-anchor="middle">Reconciler (commit)</text>
+  <text class="sub" x="220" y="211" text-anchor="middle">reads Modifiers · ThemeBindings ·</text>
+  <text class="sub" x="220" y="226" text-anchor="middle">Attached · runs Set callbacks</text>
+
+  <!-- Edges across top row -->
+  <path class="edge" d="M160 88 L200 88" marker-end="url(#arr)"/>
+  <text class="edge-label" x="180" y="82" text-anchor="middle">.Bold</text>
+
+  <path class="edge" d="M360 88 L400 88" marker-end="url(#arr)"/>
+  <text class="edge-label" x="380" y="82" text-anchor="middle">.Margin(8)</text>
+
+  <path class="edge" d="M560 88 L600 88" marker-end="url(#arr)"/>
+  <text class="edge-label" x="580" y="82" text-anchor="middle">.Background()</text>
+
+  <path class="edge" d="M770 88 L810 88" marker-end="url(#arr)"/>
+  <text class="edge-label" x="790" y="82" text-anchor="middle">.Grid(row: 1)</text>
+
+  <!-- Step 4 → Step 5 (down) -->
+  <path class="edge" d="M890 130 Q 890 170 720 200" marker-end="url(#arr)"/>
+  <text class="edge-label" x="850" y="160" text-anchor="middle">.Set(…)</text>
+
+  <!-- Step 5 → Reconciler -->
+  <path class="edge" d="M540 207 L340 207" marker-end="url(#arr)"/>
+</svg>
