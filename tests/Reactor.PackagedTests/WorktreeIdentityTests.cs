@@ -460,14 +460,19 @@ public partial class WorktreeIdentityTests
     /// foreign directory differing only in case would then be compared case-insensitively
     /// against the filesystem's own spelling of ours, judged to be ours, classified
     /// <c>RemoveContending</c>, and unregistered while its owner was still running.</para>
-    /// <para>Answering "different" makes that a <c>FailConflicting</c> refusal instead. The
-    /// second assertion pins the boundary rather than leaving it implied: when
-    /// <em>neither</em> side resolved both spellings are the caller's own and the comparison
-    /// stays case-insensitive, which is deliberate and is what the headless callers rely on.
-    /// </para>
+    /// <para>Answering "different" makes that a <c>FailConflicting</c> refusal instead.</para>
+    /// <para>The third assertion closes the same hole one step further out. Two paths that
+    /// <em>both</em> fail to resolve can only be compared case-insensitively, so on a
+    /// case-sensitive parent two genuinely different directories compare equal — and that
+    /// answer reaches the same destructive branch. An earlier version of this test asserted the
+    /// opposite, on the reasoning that with neither side resolvable both spellings are the
+    /// caller's own; that reasoning does not survive contact with the call site, where one side
+    /// is a foreign package's recorded install path and only the other is ours. A transient
+    /// failure to resolve our own layout — an ACL denial or a momentary sharing violation — is
+    /// then enough to turn a derived-name collision into an eviction.</para>
     /// </remarks>
     [TestMethod]
-    public void A_Resolved_Path_Is_Never_The_Same_Directory_As_An_Unresolved_One()
+    public void Directory_Sameness_Requires_The_Filesystem_To_Confirm_Both_Spellings()
     {
         var root = Path.Join(Path.GetTempPath(), "reactor-case-" + Guid.NewGuid().ToString("n"));
         Directory.CreateDirectory(root);
@@ -504,10 +509,26 @@ public partial class WorktreeIdentityTests
             var goneUpper = Path.Join(root, "Vanished");
             var goneLower = Path.Join(root, "vanished");
 
-            Assert.IsTrue(
+            // Positive control for the pair below: on this case-sensitive parent these really
+            // are two different directories, so "equal" would be a wrong answer rather than a
+            // harmless one.
+            Assert.IsFalse(Directory.Exists(goneUpper), "Precondition: neither spelling exists.");
+            Assert.IsFalse(Directory.Exists(goneLower), "Precondition: neither spelling exists.");
+
+            Assert.IsFalse(
                 WorktreeIdentity.IsSameDirectory(goneUpper, goneLower),
-                "Boundary: with neither side resolvable both spellings are the caller's own " +
-                "and carry no filesystem case, so these must still compare equal.");
+                "Two paths the filesystem could not answer for were judged the same directory. " +
+                "They can only be compared case-insensitively, and on a case-sensitive parent " +
+                "these are two different directories, so a transient failure to resolve would " +
+                "promote a derived-name collision into removing another checkout's package.");
+
+            // The same spelling twice is still not provable while it does not resolve. Pinned so
+            // the rule cannot be weakened to "unequal only when the spellings differ", which
+            // would restore the over-match above for every caller that passes a foreign path.
+            Assert.IsFalse(
+                WorktreeIdentity.IsSameDirectory(goneUpper, goneUpper),
+                "Sameness must be grounded in the filesystem, not in string equality of two " +
+                "spellings neither of which was confirmed.");
         }
         finally
         {

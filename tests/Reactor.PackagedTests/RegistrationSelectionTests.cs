@@ -23,9 +23,37 @@ public class RegistrationSelectionTests
 {
     private const string Base = "Microsoft.UI.Reactor.PackagedTests.Host";
 
-    private static string Layout => Path.Join(Path.GetTempPath(), "checkout-a", "layout");
+    /// <summary>
+    /// Root for the two directories that stand in for live checkouts. Created for real, because
+    /// <see cref="WorktreeIdentity.IsSameDirectory"/> only calls two paths the same directory
+    /// when the filesystem confirms both spellings — a fabricated path is indistinguishable
+    /// from one whose directory was deleted, and is deliberately not provable.
+    /// </summary>
+    /// <remarks>
+    /// Per-run unique, so two agents running this suite over one machine's temp directory do
+    /// not share, delete, or derive identities from each other's fixtures — the same hazard
+    /// this whole file exists to address, applied to its own fixture.
+    /// </remarks>
+    private static string _root = string.Empty;
 
-    private static string SiblingLayout => Path.Join(Path.GetTempPath(), "checkout-b", "layout");
+    private static string Layout => Path.Join(_root, "checkout-a", "layout");
+
+    private static string SiblingLayout => Path.Join(_root, "checkout-b", "layout");
+
+    [ClassInitialize]
+    public static void CreateLayouts(TestContext _)
+    {
+        _root = Path.Join(Path.GetTempPath(), "reactor-regsel-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(Layout);
+        Directory.CreateDirectory(SiblingLayout);
+    }
+
+    [ClassCleanup]
+    public static void RemoveLayouts()
+    {
+        if (_root.Length > 0 && Directory.Exists(_root))
+            Directory.Delete(_root, recursive: true);
+    }
 
     /// <summary>Presence probe that answers <c>Present</c> for an explicit set of directories.</summary>
     /// <remarks>Anything not listed is <see cref="LayoutPresence.Absent"/>: provably gone,

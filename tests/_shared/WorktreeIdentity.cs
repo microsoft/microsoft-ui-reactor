@@ -317,20 +317,23 @@ internal static class WorktreeIdentity
     /// recoverable, instead of an eviction, which is not.</para>
     /// <para>Only when both sides resolved. A path the filesystem cannot answer for falls back
     /// to the caller's own spelling, whose case carries no information about what is on disk,
-    /// so an exact comparison there would invent distinctions rather than report them. When
-    /// <em>neither</em> side resolved both are caller spellings and the comparison stays
-    /// case-insensitive.</para>
-    /// <para><b>A resolved path is never the same directory as an unresolved one.</b> The
-    /// mixed case is not a weaker version of either — it compares the filesystem's own case
-    /// against a spelling the filesystem never confirmed, so the only comparison available is
-    /// the case-insensitive one, and that reopens the eviction the paragraph above closes. It
-    /// is reachable exactly where it costs most: during registration this run's layout exists
-    /// and resolves, while another package's recorded install path may have been deleted or be
-    /// momentarily unreadable, and a foreign directory differing only in case would then be
-    /// judged ours and its registration removed. Refusing to answer yes turns that into
-    /// <c>FailConflicting</c>. The capability given up is matching a recorded path whose
-    /// directory is gone against a live one — which cannot arise for two spellings of the same
-    /// directory, since a directory that resolves for us resolves for the other side too.</para>
+    /// so an exact comparison there would invent distinctions rather than report them.</para>
+    /// <para><b>An unresolved path is therefore never provably the same directory as anything,
+    /// including another unresolved one.</b> Two spellings the filesystem never confirmed can
+    /// only be compared case-insensitively, and on a case-sensitive parent that is exactly the
+    /// over-match the paragraph above closes: <c>…\Vanished</c> and <c>…\vanished</c> are two
+    /// different directories and would compare equal. Every caller of this asks a destructive
+    /// question — <see cref="RegistrationSelection"/> turns a yes into <c>RemoveContending</c>,
+    /// which unregisters another checkout's package — so a comparison that cannot be grounded
+    /// in the filesystem must answer no. Returning yes there would let a transient failure to
+    /// resolve, an ACL denial or a momentary sharing violation, promote a derived-name
+    /// collision into an eviction.</para>
+    /// <para>This is fail-closed in the direction that costs least. A no where the answer was
+    /// really yes leaves a registration behind, which the next run reclaims; a yes where the
+    /// answer was really no removes a live package out from under another run, which nothing
+    /// recovers. The capability given up is matching a recorded path whose directory is gone
+    /// against a live one, and that cannot arise for two spellings of the same directory, since
+    /// a directory that resolves for us resolves for the other side too.</para>
     /// </remarks>
     internal static bool IsSameDirectory(string? left, string? right)
     {
@@ -342,12 +345,9 @@ internal static class WorktreeIdentity
             var l = CanonicalizeCore(left);
             var r = CanonicalizeCore(right);
 
-            if (l.Resolved != r.Resolved) return false;
+            if (!l.Resolved || !r.Resolved) return false;
 
-            return string.Equals(
-                l.Value,
-                r.Value,
-                l.Resolved ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+            return string.Equals(l.Value, r.Value, StringComparison.Ordinal);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
         {

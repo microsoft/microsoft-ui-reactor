@@ -272,11 +272,9 @@ Conventions for contributors:
   query reports a directory's on-disk case whatever case it is asked with, so comparing the
   resolved spellings exactly still treats two spellings of one directory as equal while
   correctly separating two directories, turning a silent eviction into the conflict refusal the
-  deployment already reports. When neither path resolves both spellings are the caller's own and
-  the comparison stays case-insensitive, but a resolved path is never matched against an
-  unresolved one: that pairing can only be compared case-insensitively and is reachable exactly
-  where it costs most, since during registration this run's layout resolves while a foreign
-  recorded path may have been deleted or be momentarily unreadable.
+  deployment already reports. Two paths are only judged the same directory when the filesystem
+  confirms both spellings; see the fail-closed note below for why an unresolvable path proves
+  nothing here.
 - The E2E orphan sweep applies the same rule to executables, in both the kill predicate and the
   claim key. Two checkouts differing only in case hold two different host binaries, but the
   predicate folded case and so judged one checkout's live host to be the other's own image, and
@@ -324,6 +322,15 @@ Conventions for contributors:
   existed, discarding the storage error that was the only actionable fact. The same applies to
   the gate file itself: only a sharing or lock violation establishes another holder, so an ACL
   denial or a directory occupying the gate's name is now reported as the fault it is.
+- Two install paths are the same directory only when the filesystem confirms both spellings.
+  Where neither path resolved, the comparison fell back to a case-insensitive string match, and
+  the previous release note justified that by saying both spellings are then the caller's own.
+  That claim was wrong: every production caller is a destructive ownership check, and each turns
+  a match into an unregistration. So an unresolvable recorded path that merely looked like ours
+  proved ownership of a registration that might belong to another checkout - and the paths most
+  likely to be unresolvable are exactly the foreign ones, since this run's own layout is the one
+  guaranteed to exist. The comparison now fails closed unless both sides resolve, which costs a
+  reported conflict the caller can act on in place of a silent eviction it cannot.
 - A packaged-tier lock file this run cannot open is likewise no longer reported as a lock
   another run holds. The failure is recorded and raised only once it has outlasted the whole
   wait, so a genuinely transient denial — a lock left delete-pending by a third party holding it
