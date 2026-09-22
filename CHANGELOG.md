@@ -28,6 +28,20 @@ Conventions for contributors:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.0-preview.16] — 2026-09-22
+
+### Added
+
 - **`REACTOR_DOCS_CAPTURE_ORIGIN` for regenerating screenshots when 150% is not
   your primary display.** Capture is `PrintWindow` in physical pixels, so a PNG
   takes the DPI of the monitor its window opens on — the primary. Setting the
