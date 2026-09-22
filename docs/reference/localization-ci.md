@@ -38,7 +38,7 @@ structural issues (missing keys → `REACTOR_LOC001` warnings/errors).
 
 | Command | Exit code ≠ 0 when | Typical fix |
 |---|---|---|
-| `extract --dry-run` | Bare string literals found in DSL calls | Run `mur loc extract --rewrite` locally |
+| `extract --dry-run` | Bare string literals found in DSL calls — icon-glyph-only literals don't count | Run `mur loc extract --rewrite` locally |
 | `validate` | Broken ICU syntax or parameter mismatch across locales | Fix the `.resw` value |
 | `prune --dry-run` | Keys in `.resw` with zero code references | Run `mur loc prune` locally to remove them |
 

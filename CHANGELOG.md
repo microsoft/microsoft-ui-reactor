@@ -389,6 +389,19 @@ Conventions for contributors:
 
 ### Fixed
 
+- **`mur loc extract` no longer offers icon glyphs as localizable strings
+  (spec 005 §10.2, #1182).** Segoe Fluent / MDL2 glyphs reach the DSL as ordinary string
+  literals — `Button("\uE74D", onDelete)` — so the scanner treated them like any other bare
+  string: a `.resw` key whose value is a private-use code point, and an `extract --dry-run`
+  CI gate that could only be satisfied by sending that code point to translators.
+
+  Literals whose code points are *all* in a Unicode private-use area are now skipped. The
+  filter sits on the two sinks every extraction funnels through, so it covers each shape the
+  scanner reads: plain literals, interpolated strings, both branches of a ternary, and the
+  literal side of a `??` fallback. The test is *all*, not *any*, so a mixed string such as
+  `"\uE74D Delete"` still contains prose and is still extracted, as is the text branch of
+  `isOpen ? "\uE70D" : "Visible"`.
+
 - **Window placement no longer vanishes when two app instances save at once
   (spec 063 §5).** `JsonFileStore` — the default unpackaged persistence store — merged
   its document under a per-*instance* lock and committed through a shared temp file, so

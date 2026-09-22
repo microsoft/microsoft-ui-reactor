@@ -640,6 +640,24 @@ mur loc extract --source src/ --output Strings/en-US/ --dry-run
    `Heading("Settings")`, `.Placeholder("Search...")`, `.Header("Column Name")`
 3. **String interpolations** — `Text($"Welcome, {name}")` → suggests ICU message
 
+**What it skips:**
+
+1. **Empty and whitespace-only literals** — nothing to translate
+2. **Icon glyphs** — a literal whose code points are *all* in a Unicode private-use area,
+   which is how Segoe Fluent / MDL2 icons are written (`Button("\uE74D", onDelete)`).
+   These are symbols, not prose: extracting them puts a code point that renders as a box
+   outside the icon font in front of a translator. The filter is applied at the two points
+   where a string is recorded, so it covers every shape the scanner reads: plain literals,
+   interpolated strings, both branches of a ternary, and the literal side of a `??` fallback.
+
+The private-use test is *all*, not *any*, and that distinction is the point. A **mixed**
+string such as `"\uE74D Delete"` still contains prose and **is** extracted, glyph included,
+so the translator sees the icon in context; likewise only the glyph branch of
+`isOpen ? "\uE70D" : "Visible"` drops out, and `"Visible"` is still extracted on its own.
+Both supplementary private-use planes (`U+F0000`–`U+FFFFD` and `U+100000`–`U+10FFFD`) count
+alongside the BMP area `U+E000`–`U+F8FF`. An unpaired surrogate is not a private-use code
+point, so a literal containing one is still extracted.
+
 **What it produces:**
 
 For each bare string found, the CLI:
