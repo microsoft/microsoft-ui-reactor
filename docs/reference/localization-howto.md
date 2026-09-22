@@ -136,7 +136,7 @@ these so you can exclude them during review:
 | Color hex values | `"#e57373"`, `"#4A90D9"` | Not displayed to users |
 | Technical units | `"px"`, `"ms"` | Debatable — may localize later |
 | Seed/test data | `new("Build Reactor library", true)` | Not UI chrome |
-| Emoji-only content | `Text("×")` (delete button) | Symbol, not text |
+| Symbol-only content | `Text("×")` (delete button) | Symbol, not text |
 
 Icon glyphs are the one category you don't have to track by hand. A literal
 whose code points are *all* in a Unicode private-use area — which is how Segoe
