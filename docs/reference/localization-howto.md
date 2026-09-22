@@ -138,6 +138,15 @@ these so you can exclude them during review:
 | Seed/test data | `new("Build Reactor library", true)` | Not UI chrome |
 | Emoji-only content | `Text("×")` (delete button) | Symbol, not text |
 
+Icon glyphs are the one category you don't have to track by hand. A literal
+whose code points are *all* in a Unicode private-use area — which is how Segoe
+Fluent / MDL2 icons are written, e.g. `Button("\uE74D", onDelete)` — is skipped
+by the scanner and never reaches your review list. A string that *mixes* a glyph
+with prose, such as `"\uE74D Delete"`, is still extracted, because it does
+contain text to translate. Every other row above still needs your eye: `"×"` is
+an ordinary multiplication sign rather than a private-use code point, so the
+exclusion does not cover it.
+
 ### 1c. Wrap your app root in a `LocaleProvider`
 
 The extractor adds `var t = UseIntl();` to each component, but someone
