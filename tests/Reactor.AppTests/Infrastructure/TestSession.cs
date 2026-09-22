@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -151,19 +152,23 @@ public class TestSession
     {
         if (proc is null) return;
 
+        using var doomed = proc;
+        proc = null;
+
         try
         {
-            if (!proc.HasExited)
+            if (!doomed.HasExited)
             {
-                proc.Kill();
-                proc.WaitForExit(5000);
+                doomed.Kill();
+                doomed.WaitForExit(5000);
             }
         }
-        catch { }
-        finally
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or Win32Exception)
         {
-            proc.Dispose();
-            proc = null;
+            // The three ways a teardown kill legitimately fails: the process exited between
+            // the check and the kill, it is not one this API can terminate, or Windows refused
+            // the operation. In every case it is either already gone or beyond our reach.
+            // Anything else is a defect in this file and is deliberately left to propagate.
         }
     }
 

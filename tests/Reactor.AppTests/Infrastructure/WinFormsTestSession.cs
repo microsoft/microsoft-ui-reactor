@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -113,19 +114,20 @@ public class WinFormsTestSession
     {
         if (proc is null) return;
 
+        using var doomed = proc;
+        proc = null;
+
         try
         {
-            if (!proc.HasExited)
+            if (!doomed.HasExited)
             {
-                proc.Kill();
-                proc.WaitForExit(5000);
+                doomed.Kill();
+                doomed.WaitForExit(5000);
             }
         }
-        catch { }
-        finally
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or Win32Exception)
         {
-            proc.Dispose();
-            proc = null;
+            // See TestSession.KillAndDispose for why exactly these three are swallowed.
         }
     }
 

@@ -178,6 +178,9 @@ public sealed class TestSessionCleanupTests
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
         {
+            // The pid was never valid, or the process exited on its own before or during the
+            // kill. This is a belt-and-braces reaper for a probe the test already expects to
+            // have terminated, so all three mean the job is done.
         }
     }
 }
