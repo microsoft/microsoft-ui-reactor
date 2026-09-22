@@ -331,6 +331,12 @@ Conventions for contributors:
   likely to be unresolvable are exactly the foreign ones, since this run's own layout is the one
   guaranteed to exist. The comparison now fails closed unless both sides resolve, which costs a
   reported conflict the caller can act on in place of a silent eviction it cannot.
+- A killed `winapp.exe` is now waited for. `Process.Kill` only requests termination, and every
+  caller of the timeout reaper returned or threw the instant it came back, so the next test's
+  first `winapp ui` call raced a child that still held the UI turn - the orphan symptom the
+  reaper's own warning describes, reached through success rather than failure. It now waits a
+  bounded five seconds and reports a process that outlives that, which is one stuck in the kernel
+  where a further kill would not help either.
 - A packaged-tier lock file this run cannot open is likewise no longer reported as a lock
   another run holds. The failure is recorded and raised only once it has outlasted the whole
   wait, so a genuinely transient denial — a lock left delete-pending by a third party holding it

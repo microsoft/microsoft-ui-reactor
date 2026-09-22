@@ -165,8 +165,7 @@ public sealed class TestSessionCleanupTests
     }
 
     /// <summary>Reaps a probe the test itself is responsible for, so none outlive the run.</summary>
-    private static void ForceKill(int pid)
-    {
+    private static void ForceKill(int pid)    {
         try
         {
             using var found = Process.GetProcessById(pid);

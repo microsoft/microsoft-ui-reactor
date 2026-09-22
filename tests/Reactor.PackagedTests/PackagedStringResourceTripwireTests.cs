@@ -102,9 +102,22 @@ public class PackagedStringResourceTripwireTests
     /// </summary>
     /// <remarks>
     /// Read straight from the project XML. That is coarser than an MSBuild evaluation — it
-    /// takes the whole project directory rather than the exact resource item set — which is the
-    /// safe direction for a tripwire: it can report a <c>.resw</c> that would not have been
-    /// packaged, but it cannot miss one that would.
+    /// takes the whole project directory rather than the exact resource item set — so it will
+    /// happily report a <c>.resw</c> that would never have been packaged, which is the safe
+    /// direction for a tripwire.
+    /// <para>It is <em>not</em> complete in the other direction, and saying otherwise would
+    /// overstate it. A project directory is a proxy for a project's inputs, not the inputs
+    /// themselves, so three kinds of packaged <c>.resw</c> are invisible here: one linked in
+    /// from outside any walked directory (this host already links the selftest host's sources,
+    /// which is why that root is added by hand — a second such link would need adding too); one
+    /// generated into <c>obj</c> by a target, since <see cref="IsSourceFile"/> excludes build
+    /// output; and one that legitimately lives beneath a directory component named <c>bin</c>
+    /// or <c>obj</c>, which that same filter cannot tell from build output.</para>
+    /// <para>None of the three exists in this repository today, and the tripwire is worth
+    /// having for the case that does — someone adding a <c>Strings/</c> tree to a project in
+    /// this graph. Treat a zero as "no <c>.resw</c> was committed to these projects", not as
+    /// "the PRI contains no string resources". Grounding it in the evaluated resource items or
+    /// the generated PRI is what would make the stronger claim true.</para>
     /// </remarks>
     private static List<string> PackagedHostProjectDirectories()
     {

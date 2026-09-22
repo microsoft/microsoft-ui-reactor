@@ -865,6 +865,15 @@ suite rather than merely lose continuity, and the harness synthesizes an id inst
 > mid-test — a real and reproducible source of local flake that is *not* a product regression.
 > Running the tier on a desktop you are not also using is the only fix for that.
 
+> **Our own Host launch is one of those windows.** The guarantee covers the *body* of a run,
+> not its startup. `HostLaunch.LaunchAndBind` starts the Host and brings its window up directly,
+> before any `winapp ui` call has been made and therefore before this suite holds a turn at all.
+> So two suites whose startups overlap can each foreground a Host while the other is mid-input,
+> and the symptom is an ordinary `foreground_not_target` on the *other* agent's click. Stagger
+> starts if you are launching several runs at once; once both are past `AssemblyInit` the
+> arbitration above applies normally. Closing this properly needs winapp to arbitrate a turn for
+> a process it did not spawn, which is not something the CLI exposes today.
+
 ### Don't parallelize the E2E tier
 
 The assembly carries `[assembly: DoNotParallelize]`. That is not a performance preference: the

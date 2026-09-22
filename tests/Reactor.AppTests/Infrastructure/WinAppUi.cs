@@ -295,26 +295,72 @@ public sealed class WinAppUi
     }
 
     /// <summary>
-    /// Best-effort termination of a winapp child that overran its timeout. The caller is already
-    /// failing or returning null, so a kill failure changes no outcome — but it is reported rather
-    /// than swallowed, because repeated failures leave orphaned winapp processes holding the UI
-    /// turn, which looks like an unrelated hang in the *next* test.
+    /// Best-effort termination of a winapp child that overran its timeout, waiting a bounded
+    /// time for it to actually go.
     /// </summary>
+    /// <remarks>
+    /// The caller is already failing or returning null, so a kill failure changes no outcome —
+    /// but it is reported rather than swallowed, because repeated failures leave orphaned winapp
+    /// processes holding the UI turn, which looks like an unrelated hang in the *next* test.
+    /// <para><see cref="Process.Kill(bool)"/> only <em>requests</em> termination and returns
+    /// immediately, so reporting the kill is not the same as the process being gone. Every
+    /// caller returns or throws the moment this comes back, which put the next test's first
+    /// `winapp ui` call in a race with a child that still held the turn — the same orphan
+    /// symptom the warning above exists to make legible, arrived at through success rather than
+    /// failure. Waiting closes that window; a process still alive after the grace period is
+    /// reported, since at that point it is stuck in the kernel and no further kill will help.</para>
+    /// <para><b>Deliberately untested, because the available oracle was vacuous.</b> A test was
+    /// written asserting the postcondition — exited by the time this returns — and then mutation
+    /// checked by deleting the wait. It stayed green across three consecutive runs: a
+    /// <c>ping.exe</c> probe is already reaped by the time <c>Kill</c> returns, so the healthy
+    /// and broken builds are indistinguishable to it. Shipping it would have implied coverage
+    /// that does not exist, so it was dropped rather than kept green. The guarantee here rests on
+    /// <see cref="Process.Kill(bool)"/> being documented as asynchronous; a real oracle needs a
+    /// process that is slow to die on demand, which nothing in this tier currently provides.</para>
+    /// </remarks>
     internal static void TryKill(Process proc)
     {
+        var requested = false;
+
         try
         {
             proc.Kill(entireProcessTree: true);
+            requested = true;
         }
         catch (InvalidOperationException ex) { WarnKillFailed(ex); }
         catch (NotSupportedException ex) { WarnKillFailed(ex); }
         catch (System.ComponentModel.Win32Exception ex) { WarnKillFailed(ex); }
         catch (AggregateException ex) { WarnKillFailed(ex); }
 
+        if (!requested) return;
+
+        try
+        {
+            if (!proc.WaitForExit(KillGraceMs))
+            {
+                Console.WriteLine(
+                    $"Timed-out winapp child did not exit within {KillGraceMs}ms of being killed; " +
+                    "it may still hold the UI turn as the next test starts.");
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // The process is gone and its handle no longer answers, which is the outcome the
+            // wait was after. Nothing to report.
+        }
+
         static void WarnKillFailed(Exception ex) =>
             Console.WriteLine($"Could not terminate the timed-out winapp child " +
                               $"({ex.GetType().Name}: {ex.Message}).");
     }
+
+    /// <summary>
+    /// How long to wait for a killed winapp child to actually exit. Short on purpose: this runs
+    /// only after a timeout has already been paid, and a process that has not gone this long
+    /// after <c>TerminateProcess</c> is blocked in kernel mode, where waiting longer changes
+    /// nothing.
+    /// </summary>
+    private const int KillGraceMs = 5_000;
 
     private const int YieldTimeoutMs = 10_000;
 

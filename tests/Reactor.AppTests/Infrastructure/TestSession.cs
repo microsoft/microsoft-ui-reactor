@@ -69,6 +69,13 @@ public class TestSession
 
         try
         {
+            // Outside winapp's turn arbitration on purpose, and the one gap in this tier's
+            // concurrency story: the Host is launched and foregrounded directly, before any
+            // `winapp ui` call has been made and so before this suite holds a turn to be
+            // arbitrated against. Two suites starting at once can therefore each raise a Host
+            // over the other's input. Closing it would need winapp to hold a turn on behalf of
+            // a process it did not spawn, which the CLI does not expose; TESTING.md documents
+            // the narrowed guarantee rather than leaving it implied.
             var (proc, hwnd) = HostLaunch.LaunchAndBind(exePath, WindowTitle);
             launched = proc;
             var app = new WinAppUi(proc.Id, hwnd);
