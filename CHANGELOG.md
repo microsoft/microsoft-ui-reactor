@@ -395,10 +395,11 @@ Conventions for contributors:
   string: a `.resw` key whose value is a private-use code point, and an `extract --dry-run`
   CI gate that could only be satisfied by sending that code point to translators.
 
-  Literals whose code points are *all* in a Unicode private-use area are now skipped, across
-  all three extraction shapes — plain literals, each branch of a ternary, and interpolated
-  strings. The test is *all*, not *any*, so a mixed string such as `"\uE74D Delete"` still
-  contains prose and is still extracted, as is the text branch of
+  Literals whose code points are *all* in a Unicode private-use area are now skipped. The
+  filter sits on the two sinks every extraction funnels through, so it covers each shape the
+  scanner reads: plain literals, interpolated strings, both branches of a ternary, and the
+  literal side of a `??` fallback. The test is *all*, not *any*, so a mixed string such as
+  `"\uE74D Delete"` still contains prose and is still extracted, as is the text branch of
   `isOpen ? "\uE70D" : "Visible"`.
 
 - **Window placement no longer vanishes when two app instances save at once

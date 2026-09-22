@@ -646,8 +646,9 @@ mur loc extract --source src/ --output Strings/en-US/ --dry-run
 2. **Icon glyphs** — a literal whose code points are *all* in a Unicode private-use area,
    which is how Segoe Fluent / MDL2 icons are written (`Button("\uE74D", onDelete)`).
    These are symbols, not prose: extracting them puts a code point that renders as a box
-   outside the icon font in front of a translator. The exclusion applies to every
-   extraction shape — plain literals, each branch of a ternary, and interpolated strings.
+   outside the icon font in front of a translator. The filter is applied at the two points
+   where a string is recorded, so it covers every shape the scanner reads: plain literals,
+   interpolated strings, both branches of a ternary, and the literal side of a `??` fallback.
 
 The private-use test is *all*, not *any*, and that distinction is the point. A **mixed**
 string such as `"\uE74D Delete"` still contains prose and **is** extracted, glyph included,
