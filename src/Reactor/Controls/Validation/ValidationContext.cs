@@ -9,6 +9,9 @@ public sealed class ValidationContext
     private readonly object _lock = new();
     private readonly Dictionary<string, List<ValidationMessage>> _messages = new();
     private readonly Dictionary<string, List<ValidationMessage>> _externalMessages = new();
+    // Tracks the exact message instances the last async pass contributed per field, so a
+    // later pass can retract them without clearing synchronous results too.
+    private readonly Dictionary<string, List<ValidationMessage>> _asyncOwned = new();
     private readonly HashSet<string> _registeredFields = new();
     private readonly HashSet<string> _touchedFields = new();
     private readonly Dictionary<string, object?> _initialValues = new();
@@ -243,6 +246,65 @@ public sealed class ValidationContext
             if (a![i] != b[i]) return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// Installs the complete result of an async validation pass for a field in one step,
+    /// replacing whatever the previous async pass contributed while leaving synchronous
+    /// validator messages in place.
+    /// <para>
+    /// The async path used to <c>Add</c> each result as it resolved, which exposed a
+    /// partial verdict, repainted between messages, and appended duplicates on every
+    /// re-run because nothing retracted the previous pass. The instances contributed by
+    /// the last pass are tracked so they can be removed precisely, rather than by
+    /// clearing the field — which would also discard sync results.
+    /// </para>
+    /// </summary>
+    internal void ApplyAsyncValidation(string field, List<ValidationMessage> messages)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            _messages.TryGetValue(field, out var current);
+            _asyncOwned.TryGetValue(field, out var previouslyOwned);
+
+            var next = new List<ValidationMessage>();
+            if (current is not null)
+            {
+                foreach (var message in current)
+                {
+                    if (previouslyOwned is not null && ContainsReference(previouslyOwned, message))
+                        continue;
+                    next.Add(message);
+                }
+            }
+            next.AddRange(messages);
+
+            changed = !SameMessages(current, next);
+            if (changed)
+            {
+                if (next.Count == 0)
+                    _messages.Remove(field);
+                else
+                    _messages[field] = next;
+                _version++;
+            }
+
+            if (messages.Count == 0)
+                _asyncOwned.Remove(field);
+            else
+                _asyncOwned[field] = messages;
+        }
+        if (changed) RaiseChanged();
+    }
+
+    private static bool ContainsReference(List<ValidationMessage> list, ValidationMessage message)
+    {
+        foreach (var candidate in list)
+        {
+            if (ReferenceEquals(candidate, message)) return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -504,12 +566,27 @@ public sealed class ValidationContext
     /// </summary>
     public void SetInitialValue(string field, object? value)
     {
+        bool changed;
         lock (_lock)
         {
+            var wasDirty = IsDirtyLocked(field);
             _initialValues[field] = value;
             if (!_currentValues.ContainsKey(field))
                 _currentValues[field] = value;
+
+            // Re-baselining an edited field flips IsDirty without touching messages or
+            // touched state, so subscribers have to hear about it too.
+            changed = IsDirtyLocked(field) != wasDirty;
+            if (changed) _version++;
         }
+        if (changed) RaiseChanged();
+    }
+
+    private bool IsDirtyLocked(string field)
+    {
+        if (!_initialValues.TryGetValue(field, out var initial)) return false;
+        if (!_currentValues.TryGetValue(field, out var current)) return false;
+        return !Equals(initial, current);
     }
 
     /// <summary>

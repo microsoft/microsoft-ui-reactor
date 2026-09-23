@@ -273,6 +273,108 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void Re_Baselining_A_Dirty_Field_Notifies()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("name", "a");
+        ctx.NotifyValueChanged("name", "b");
+        Assert.True(ctx.IsDirty("name"));
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Adopting the edited value as the new baseline flips IsDirty with no message
+        // or touched-state change, so subscribers would otherwise stay stale.
+        ctx.SetInitialValue("name", "b");
+
+        Assert.False(ctx.IsDirty("name"));
+        Assert.Equal(1, notifications);
+
+        // ...and a re-seed that changes nothing observable stays quiet.
+        ctx.SetInitialValue("name", "b");
+        Assert.Equal(1, notifications);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Async validators — one atomic install, no duplicates
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Async_Validators_Install_As_One_Notification()
+    {
+        var ctx = new ValidationContext();
+        var seen = new List<int>();
+        ctx.Changed += () => seen.Add(ctx.GetMessages("username").Count);
+
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Already taken"),
+        };
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+
+        // Adding each result as it resolved exposed a partial verdict and repainted
+        // between messages.
+        Assert.Single(seen);
+        Assert.Equal(2, seen[0]);
+        Assert.Equal(2, ctx.GetMessages("username").Count);
+    }
+
+    [Fact]
+    public async Task Repeating_Async_Validation_Replaces_Instead_Of_Appending()
+    {
+        var ctx = new ValidationContext();
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+        };
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("username"));
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+
+        Assert.Single(ctx.GetMessages("username"));
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
+    public async Task Async_Validation_Leaves_Synchronous_Messages_Alone()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "username", "", Validate.Required("Username is required"));
+        Assert.Single(ctx.GetMessages("username"));
+
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+        };
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "", validators, TestContext.Current.CancellationToken);
+
+        // Retracting the previous async pass must not take the sync verdict with it.
+        var texts = ctx.GetMessages("username").Select(m => m.Text).ToList();
+        Assert.Equal(2, texts.Count);
+        Assert.Contains("Username is required", texts);
+        Assert.Contains("Reserved", texts);
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "", validators, TestContext.Current.CancellationToken);
+
+        texts = [.. ctx.GetMessages("username").Select(m => m.Text)];
+        Assert.Equal(2, texts.Count);
+        Assert.Contains("Username is required", texts);
+    }
+
+    [Fact]
     public async Task An_Async_Rule_Re_Evaluated_To_The_Same_Verdict_Is_Silent()
     {
         var ctx = new ValidationContext();

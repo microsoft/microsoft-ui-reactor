@@ -145,6 +145,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
+        // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render
+        // that UseValidationContext schedules when a background async validator raises
+        // ValidationContext.Changed — resolves its marshal target from that static and
+        // throws when it is null. Seed it exactly as ReactorHost does (spec 036 §4.3).
+        if (ReactorApp.UIDispatcher is null)
+            ReactorApp.UIDispatcher = _dispatcherQueue;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
         // ContentControl inherits IsTabStop=true from Control. Set it to false
