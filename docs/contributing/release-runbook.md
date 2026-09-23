@@ -181,7 +181,7 @@ After pushing the tag:
 2. Confirm the OneBranch official pipeline starts for the tag.
 3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)). Check **all three** of its jobs:
    - a green `publish` beside a red `deploy` means the environment refused the tag ref, and the site stays stale even though `gh-pages` is already correct — see [Which refs may deploy](#which-refs-may-deploy);
-   - a green `deploy` beside a red `verify` means the deployment reported success but the live site is serving something else — see [Why a release commit deploys twice](#why-a-release-commit-deploys-twice).
+   - a green `deploy` beside a red `verify` means the deployment reported success but the live site did not confirm it. Read the annotation before concluding anything: `…is not serving the artifact this run published` means the deployment was stranded, while `Could not read … at all` means no probe reached known-good content and the run says nothing either way. The two call for different responses — see [Why a release commit deploys twice](#why-a-release-commit-deploys-twice).
 4. Approve the `Production_PublishNuGet` stage when ready to publish to NuGet.org.
 5. Verify the packages appear on NuGet.org.
 6. Install the released template package or a locally packed template and create a smoke app that restores against NuGet.org.
