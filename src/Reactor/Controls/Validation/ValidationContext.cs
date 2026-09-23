@@ -394,13 +394,18 @@ public sealed class ValidationContext
     /// </summary>
     public void MarkAllTouched()
     {
-        bool changed = false;
+        bool changed;
         lock (_lock)
         {
+            // Add unconditionally and compare the set size rather than branching per
+            // field: HashSet.Add already de-duplicates, so a filtered loop would only
+            // add a second hash lookup per field (and, via LINQ, an allocation) inside
+            // this lock to reach the same answer.
+            var touchedBefore = _touchedFields.Count;
             foreach (var field in _registeredFields)
-            {
-                if (_touchedFields.Add(field)) changed = true;
-            }
+                _touchedFields.Add(field);
+
+            changed = _touchedFields.Count != touchedBefore;
             if (changed) _version++;
         }
         if (changed) RaiseChanged();
