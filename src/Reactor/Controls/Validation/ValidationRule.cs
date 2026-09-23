@@ -78,6 +78,12 @@ public static class ValidationRuleDsl
 
     /// <summary>
     /// Evaluates the async validation rule against a ValidationContext.
+    /// <para>
+    /// The previous verdict is kept while the check is in flight and replaced once,
+    /// at the end. Clearing first would raise <see cref="ValidationContext.Changed"/>
+    /// twice per evaluation for an already-failing rule, and would briefly report the
+    /// field as valid in between.
+    /// </para>
     /// </summary>
     public static async Task EvaluateAsync(this ValidationRuleElement rule, ValidationContext ctx,
         CancellationToken cancellationToken = default)
@@ -88,9 +94,6 @@ public static class ValidationRuleDsl
             return;
         }
 
-        // Drop the previous verdict while the check is in flight, then install the new
-        // one — both diffed, so an unchanged outcome stays silent.
-        ctx.ReplaceInternal(rule.Field, []);
         var result = await rule.AsyncPredicate();
         cancellationToken.ThrowIfCancellationRequested();
 

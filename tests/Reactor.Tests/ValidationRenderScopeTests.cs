@@ -227,6 +227,76 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void The_Per_Render_Seed_Then_Notify_Pattern_Settles()
+    {
+        // DirtyResetDemo's shape: register, re-seed the baseline and re-notify the
+        // current value on *every* render. SetInitialValue used to rewind the current
+        // value, so once the user had typed, the rewind and the re-notify took turns
+        // and the subscription repainted forever.
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        void RenderPass(string typed)
+        {
+            ctx.RegisterField("name");
+            ctx.SetInitialValue("name", "John Doe");
+            ctx.NotifyValueChanged("name", typed);
+        }
+
+        RenderPass("John Doe");
+        Assert.Equal(0, notifications);         // nothing moved on first paint
+        Assert.False(ctx.IsDirty("name"));
+
+        RenderPass("John Doex");                // user typed
+        var afterEdit = notifications;
+        Assert.Equal(1, afterEdit);
+        Assert.True(ctx.IsDirty("name"));
+
+        // Every subsequent repaint over the same value must be silent.
+        for (var i = 0; i < 5; i++) RenderPass("John Doex");
+
+        Assert.Equal(afterEdit, notifications);
+        Assert.True(ctx.IsDirty("name"));
+    }
+
+    [Fact]
+    public void Re_Seeding_An_Initial_Value_Does_Not_Rewind_The_Current_One()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("name", "John Doe");
+        ctx.NotifyValueChanged("name", "edited");
+
+        ctx.SetInitialValue("name", "John Doe");
+
+        Assert.True(ctx.IsDirty("name"));
+    }
+
+    [Fact]
+    public async Task An_Async_Rule_Re_Evaluated_To_The_Same_Verdict_Is_Silent()
+    {
+        var ctx = new ValidationContext();
+        var rule = ValidationRuleAsync(
+            () => global::System.Threading.Tasks.Task.FromResult(false),
+            "Username is taken",
+            "username");
+
+        await rule.EvaluateAsync(ctx, TestContext.Current.CancellationToken);
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var version = ctx.Version;
+
+        // Clearing before the await would raise once for the clear and again for the
+        // identical failure, and briefly report the field valid in between.
+        await rule.EvaluateAsync(ctx, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, notifications);
+        Assert.Equal(version, ctx.Version);
+        Assert.Single(ctx.GetMessages("username"));
+    }
+
+    [Fact]
     public void A_Rule_Flipping_Verdict_Notifies_Each_Way()
     {
         var ctx = new ValidationContext();

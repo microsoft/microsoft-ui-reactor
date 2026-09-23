@@ -492,13 +492,23 @@ public sealed class ValidationContext
 
     /// <summary>
     /// Stores the initial value for a field. Called at field registration time.
+    /// <para>
+    /// The current value is seeded only the first time the field is seen. Re-seeding it
+    /// on every call would rewind whatever the user has since typed — harmless while
+    /// nothing watched the context, but with change notification it becomes a permanent
+    /// repaint loop for the common <c>SetInitialValue(...)</c> +
+    /// <c>NotifyValueChanged(...)</c> pair that components run on each render: the
+    /// rewind and the re-notify would take turns forever. Use <see cref="Reset(string)"/>
+    /// to deliberately return a field to its baseline.
+    /// </para>
     /// </summary>
     public void SetInitialValue(string field, object? value)
     {
         lock (_lock)
         {
             _initialValues[field] = value;
-            _currentValues[field] = value;
+            if (!_currentValues.ContainsKey(field))
+                _currentValues[field] = value;
         }
     }
 
