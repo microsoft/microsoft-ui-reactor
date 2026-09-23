@@ -88,6 +88,27 @@ public sealed class DocsDeployWiringTests
 
         Assert.Contains("versions=", run, StringComparison.Ordinal);
         Assert.Contains("$GITHUB_OUTPUT", run, StringComparison.Ordinal);
+
+        // The versions this run published drive which directories verify
+        // probes. Without them the probe silently narrows to the `latest`
+        // holder, which never covers a backported tag or a `main` push.
+        Assert.Matches(@"published=", run);
+        Assert.Contains("PUBLISHED_VERSIONS_FILE", run, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Publish the main version")]
+    [InlineData("Publish the release version")]
+    [InlineData("Backfill release versions")]
+    public void Every_publishing_step_records_what_it_published(string stepName)
+    {
+        var step = Steps("publish").Single(s => Scalar(s, "name") == stepName);
+        var run = Scalar(step, "run")!;
+
+        // The artifact step hard-fails on an empty list, so a step that stops
+        // recording turns into a red run rather than a quieter gate — but only
+        // if every step records in the first place.
+        Assert.Contains("$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE", run, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -116,6 +137,7 @@ public sealed class DocsDeployWiringTests
         Assert.Equal("${{ needs.deploy.outputs.page_url }}", Scalar(env, "DOCS_BASE_URL"));
         Assert.Equal("${{ github.run_id }}", Scalar(env, "DOCS_EXPECTED_RUN_ID"));
         Assert.Equal("${{ needs.publish.outputs.versions }}", Scalar(env, "DOCS_EXPECTED_VERSIONS"));
+        Assert.Equal("${{ needs.publish.outputs.published }}", Scalar(env, "DOCS_PUBLISHED_VERSIONS"));
     }
 
     [Fact]

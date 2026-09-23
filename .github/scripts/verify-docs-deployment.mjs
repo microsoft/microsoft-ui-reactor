@@ -17,6 +17,7 @@
 // Run it locally against a deployed site with:
 //   DOCS_BASE_URL=https://microsoft.github.io/microsoft-ui-reactor/ \
 //   DOCS_EXPECTED_RUN_ID=123 DOCS_EXPECTED_VERSIONS='[{"version":"main","aliases":[]}]' \
+//   DOCS_PUBLISHED_VERSIONS='["main"]' \
 //   node .github/scripts/verify-docs-deployment.mjs
 //
 // The decision logic is a pure function so it can be tested without a network:
@@ -28,6 +29,19 @@ import { pathToFileURL } from "node:url";
 export const STAMP_PATH = "deploy-stamp.json";
 export const VERSIONS_PATH = "versions.json";
 export const LATEST_ALIAS = "latest";
+
+/**
+ * The page a version probe fetches.
+ *
+ * Explicitly `index.html` rather than the bare directory: a bare directory is
+ * only equivalent on a server that has no directory listing. GitHub Pages 404s
+ * a directory whose index is missing, but a plain static server answers 200
+ * with a generated listing — which quietly turns a broken deployment into a
+ * passing probe when this gate is exercised locally.
+ */
+function versionIndex(version) {
+  return `${version}/index.html`;
+}
 
 /**
  * @typedef {{ ok: boolean, status: number|null, body: string|null, error: string|null }} Probe
@@ -55,24 +69,46 @@ function aliasHolder(entries, alias) {
 }
 
 /**
- * Picks the two version directories worth fetching.
+ * Picks the version directories worth fetching.
  *
- * `target` is the version this run most plausibly published — the one holding
- * `latest`, else `main`, else whatever came first. `control` is any *other*
- * published version, fetched with an identical request shape: it is the
- * positive control that separates "the probe cannot see the site at all" from
- * "the site is serving someone else's deployment". A no-match is not a
- * measurement until the same probe is shown able to match.
+ * `targets` are the versions this run actually published, because those are the
+ * ones whose bytes are new on the live site. Probing only the `latest` holder
+ * would miss them: publishing a backported tag deliberately does not move
+ * `latest` (see the "Publish the release version" step in docs.yml), and a
+ * `main` push republishes `main` while `latest` sits on a release. In both
+ * cases a broken new directory would pass as long as `versions.json` listed it.
+ * The `latest` holder is probed as well, since it is what the site root serves.
+ *
+ * `control` is any *other* published version, fetched with an identical request
+ * shape: it is the positive control that separates "the probe cannot see the
+ * site at all" from "the site is serving someone else's deployment". A no-match
+ * is not a measurement until the same probe is shown able to match.
  */
-export function selectProbeTargets(expectedVersions) {
+export function selectProbeTargets(expectedVersions, publishedVersions = []) {
   const entries = Array.isArray(expectedVersions) ? expectedVersions : [];
-  const target =
-    aliasHolder(entries, LATEST_ALIAS) ??
-    entries.find((entry) => entry?.version === "main")?.version ??
-    entries[0]?.version ??
-    null;
-  const control = entries.find((entry) => entry?.version && entry.version !== target)?.version ?? null;
-  return { target, control };
+  const known = new Set(entries.map((entry) => entry?.version).filter(Boolean));
+  const published = (Array.isArray(publishedVersions) ? publishedVersions : []).filter((v) => known.has(v));
+  const latest = aliasHolder(entries, LATEST_ALIAS);
+
+  const targets = [];
+  for (const version of published) {
+    if (!targets.includes(version)) targets.push(version);
+  }
+
+  // Only reached when the caller could not say what it published; keeps the
+  // gate meaningful rather than probing nothing at all.
+  if (targets.length === 0) {
+    const fallback =
+      latest ?? entries.find((entry) => entry?.version === "main")?.version ?? entries[0]?.version ?? null;
+    if (fallback) targets.push(fallback);
+  }
+
+  if (latest && !targets.includes(latest)) targets.push(latest);
+
+  const control =
+    entries.map((entry) => entry?.version).find((version) => version && !targets.includes(version)) ?? null;
+
+  return { targets, control };
 }
 
 /**
@@ -81,7 +117,7 @@ export function selectProbeTargets(expectedVersions) {
  * @returns {{ status: "pass"|"stranded"|"probe-broken", failures: {kind: string, message: string}[], evidence: string[], liveRunId: string|null }}
  */
 export function evaluate({ expectedRunId, expectedVersions, observations }) {
-  const { stamp, versions, target, control } = observations;
+  const { stamp, versions, control } = observations;
   const failures = [];
   const evidence = [];
   let liveRunId = null;
@@ -163,13 +199,15 @@ export function evaluate({ expectedRunId, expectedVersions, observations }) {
     }
   }
 
-  if (target && !target.probe?.ok) {
-    failures.push({
-      kind: "target-unreachable",
-      message: `${target.version}/ did not respond 200 (${describeProbe(target.probe)}).`,
-    });
-  } else if (target) {
-    evidence.push(`${target.version}/ responded 200`);
+  for (const target of observations.targets ?? []) {
+    if (!target.probe?.ok) {
+      failures.push({
+        kind: "target-unreachable",
+        message: `${target.version}/ did not respond 200 (${describeProbe(target.probe)}).`,
+      });
+    } else {
+      evidence.push(`${target.version}/ responded 200`);
+    }
   }
 
   if (control?.probe?.ok) {
@@ -210,19 +248,19 @@ export async function probe(baseUrl, path, { fetchImpl = fetch, uuid = randomUUI
   }
 }
 
-async function observe(baseUrl, expectedVersions, deps) {
-  const { target, control } = selectProbeTargets(expectedVersions);
-  const [stamp, versions, targetProbe, controlProbe] = await Promise.all([
+async function observe(baseUrl, expectedVersions, publishedVersions, deps) {
+  const { targets, control } = selectProbeTargets(expectedVersions, publishedVersions);
+  const [stamp, versions, ...rest] = await Promise.all([
     probe(baseUrl, STAMP_PATH, deps),
     probe(baseUrl, VERSIONS_PATH, deps),
-    target ? probe(baseUrl, `${target}/`, deps) : Promise.resolve(null),
-    control ? probe(baseUrl, `${control}/`, deps) : Promise.resolve(null),
+    ...targets.map((version) => probe(baseUrl, versionIndex(version), deps)),
+    ...(control ? [probe(baseUrl, versionIndex(control), deps)] : []),
   ]);
   return {
     stamp,
     versions,
-    target: target ? { version: target, probe: targetProbe } : null,
-    control: control ? { version: control, probe: controlProbe } : null,
+    targets: targets.map((version, i) => ({ version, probe: rest[i] })),
+    control: control ? { version: control, probe: rest[targets.length] } : null,
   };
 }
 
@@ -237,6 +275,7 @@ export async function verifyDeployment({
   baseUrl,
   expectedRunId,
   expectedVersions,
+  publishedVersions = [],
   timeoutMs = 600_000,
   intervalMs = 15_000,
   fetchImpl = fetch,
@@ -251,7 +290,7 @@ export async function verifyDeployment({
 
   for (;;) {
     attempt += 1;
-    const observations = await observe(baseUrl, expectedVersions, { fetchImpl, uuid });
+    const observations = await observe(baseUrl, expectedVersions, publishedVersions, { fetchImpl, uuid });
     verdict = { ...evaluate({ expectedRunId, expectedVersions, observations }), attempt };
 
     if (verdict.status === "pass") return verdict;
@@ -300,6 +339,15 @@ function requireEnv(name) {
   return value;
 }
 
+function requireJsonArrayEnv(name) {
+  const parsed = parseJson(requireEnv(name));
+  if (parsed.error !== null || !Array.isArray(parsed.value)) {
+    console.error(`::error::${name} is not a JSON array: ${parsed.error ?? "parsed to a non-array"}`);
+    process.exit(3);
+  }
+  return parsed.value;
+}
+
 // `import.meta.main` is Node 24+; compare URLs so this also runs on Node 20/22.
 // pathToFileURL rather than string concatenation: a Windows drive letter would
 // otherwise parse as the URL host and never match.
@@ -307,18 +355,18 @@ const invokedDirectly = Boolean(process.argv[1]) && import.meta.url === pathToFi
 if (invokedDirectly) {
   const baseUrl = requireEnv("DOCS_BASE_URL");
   const expectedRunId = requireEnv("DOCS_EXPECTED_RUN_ID");
-  const rawVersions = requireEnv("DOCS_EXPECTED_VERSIONS");
+  const expectedVersions = requireJsonArrayEnv("DOCS_EXPECTED_VERSIONS");
 
-  const parsed = parseJson(rawVersions);
-  if (parsed.error !== null || !Array.isArray(parsed.value)) {
-    console.error(`::error::DOCS_EXPECTED_VERSIONS is not a JSON array: ${parsed.error ?? "parsed to a non-array"}`);
-    process.exit(3);
-  }
+  // Required rather than defaulted: without it the probe silently falls back to
+  // the `latest` holder, which is exactly the blind spot that lets a broken
+  // backported-tag or `main` directory pass. A wiring mistake should be loud.
+  const publishedVersions = requireJsonArrayEnv("DOCS_PUBLISHED_VERSIONS");
 
   const verdict = await verifyDeployment({
     baseUrl,
     expectedRunId,
-    expectedVersions: parsed.value,
+    expectedVersions,
+    publishedVersions,
     timeoutMs: Number(process.env.DOCS_VERIFY_TIMEOUT_SECONDS ?? 600) * 1000,
     intervalMs: Number(process.env.DOCS_VERIFY_INTERVAL_SECONDS ?? 15) * 1000,
   });

@@ -29,6 +29,9 @@ const EXPECTED_VERSIONS = [
   { version: "0.1.0-preview.15", title: "0.1.0-preview.15", aliases: [] },
 ];
 
+// What a release-tag run publishes: the tag holds `latest` because it is newest.
+const PUBLISHED_RELEASE = ["0.1.0-preview.16"];
+
 function ok(body) {
   return { ok: true, status: 200, body, error: null };
 }
@@ -41,14 +44,14 @@ function unreachable() {
   return { ok: false, status: null, body: null, error: "getaddrinfo ENOTFOUND" };
 }
 
-/** A healthy live site: this run's stamp, the full version list, both pages. */
-function healthy(overrides = {}) {
-  const { target, control } = selectProbeTargets(EXPECTED_VERSIONS);
+/** A healthy live site: this run's stamp, the full version list, every page. */
+function healthy(overrides = {}, published = PUBLISHED_RELEASE) {
+  const { targets, control } = selectProbeTargets(EXPECTED_VERSIONS, published);
   return {
     stamp: ok(JSON.stringify({ run_id: THIS_RUN, sha: "459f7234" })),
     versions: ok(JSON.stringify(EXPECTED_VERSIONS)),
-    target: { version: target, probe: ok("<html>") },
-    control: { version: control, probe: ok("<html>") },
+    targets: targets.map((version) => ({ version, probe: ok("<html>") })),
+    control: control ? { version: control, probe: ok("<html>") } : null,
     ...overrides,
   };
 }
@@ -57,16 +60,45 @@ function verdictFor(observations, expectedVersions = EXPECTED_VERSIONS) {
   return evaluate({ expectedRunId: THIS_RUN, expectedVersions, observations });
 }
 
-test("probe targets pick the latest holder and a distinct control", () => {
-  assert.deepEqual(selectProbeTargets(EXPECTED_VERSIONS), {
-    target: "0.1.0-preview.16",
+test("probe targets cover the published version and the latest holder", () => {
+  assert.deepEqual(selectProbeTargets(EXPECTED_VERSIONS, PUBLISHED_RELEASE), {
+    targets: ["0.1.0-preview.16"],
     control: "main",
   });
 });
 
+// A backported tag publishes its version without moving `latest`, so probing
+// only the alias holder would never touch the directory this run just wrote.
+test("a backported tag is probed alongside the untouched latest holder", () => {
+  const { targets, control } = selectProbeTargets(EXPECTED_VERSIONS, ["0.1.0-preview.15"]);
+  assert.deepEqual(targets, ["0.1.0-preview.15", "0.1.0-preview.16"]);
+  assert.equal(control, "main");
+});
+
+test("a main push probes main, which does not hold latest", () => {
+  const { targets } = selectProbeTargets(EXPECTED_VERSIONS, ["main"]);
+  assert.deepEqual(targets, ["main", "0.1.0-preview.16"]);
+});
+
+test("a backfill probes every version it published", () => {
+  const { targets } = selectProbeTargets(EXPECTED_VERSIONS, ["0.1.0-preview.15", "0.1.0-preview.16"]);
+  assert.deepEqual(targets, ["0.1.0-preview.15", "0.1.0-preview.16"]);
+});
+
+test("probe targets fall back to the latest holder when nothing was reported", () => {
+  assert.deepEqual(selectProbeTargets(EXPECTED_VERSIONS, []).targets, ["0.1.0-preview.16"]);
+});
+
 test("probe targets fall back to main when nothing holds latest", () => {
   const unreleased = [{ version: "main", aliases: [] }];
-  assert.deepEqual(selectProbeTargets(unreleased), { target: "main", control: null });
+  assert.deepEqual(selectProbeTargets(unreleased, []), { targets: ["main"], control: null });
+});
+
+test("a published version the live site never listed is not probed blindly", () => {
+  // Guards the set intersection: probing a name absent from versions.json would
+  // report a 404 that the versions-missing check already explains better.
+  const { targets } = selectProbeTargets(EXPECTED_VERSIONS, ["0.9.9-never-published"]);
+  assert.deepEqual(targets, ["0.1.0-preview.16"]);
 });
 
 test("a live site serving this run passes", () => {
@@ -143,8 +175,10 @@ test("a live site carrying extra newer versions still passes", () => {
 });
 
 test("a published version whose directory 404s is stranded", () => {
-  const { target } = selectProbeTargets(EXPECTED_VERSIONS);
-  const verdict = verdictFor(healthy({ target: { version: target, probe: notFound() } }));
+  const { targets } = selectProbeTargets(EXPECTED_VERSIONS, PUBLISHED_RELEASE);
+  const verdict = verdictFor(
+    healthy({ targets: targets.map((version) => ({ version, probe: notFound() })) }),
+  );
   assert.equal(verdict.status, "stranded");
   assert.deepEqual(
     verdict.failures.map((f) => f.kind),
@@ -152,15 +186,38 @@ test("a published version whose directory 404s is stranded", () => {
   );
 });
 
+// The reviewer's case: a backported tag does not move `latest`, so a gate that
+// only probed the alias holder would pass while the directory this run just
+// published was broken.
+test("a broken backported directory is stranded even though latest is fine", () => {
+  const published = ["0.1.0-preview.15"];
+  const { targets, control } = selectProbeTargets(EXPECTED_VERSIONS, published);
+  const verdict = verdictFor({
+    stamp: ok(JSON.stringify({ run_id: THIS_RUN })),
+    versions: ok(JSON.stringify(EXPECTED_VERSIONS)),
+    targets: targets.map((version) => ({
+      version,
+      probe: version === "0.1.0-preview.15" ? notFound() : ok("<html>"),
+    })),
+    control: control ? { version: control, probe: ok("<html>") } : null,
+  });
+  assert.equal(verdict.status, "stranded");
+  assert.deepEqual(
+    verdict.failures.map((f) => f.kind),
+    ["target-unreachable"],
+  );
+  assert.match(verdict.failures[0].message, /0\.1\.0-preview\.15/);
+});
+
 // The positive control. Without it, a probe that cannot reach the site at all
 // is indistinguishable from a site that is serving the wrong deployment, and
 // the gate would blame the release for a broken network.
 test("a probe that sees no known-good content anywhere reports probe-broken", () => {
-  const { target, control } = selectProbeTargets(EXPECTED_VERSIONS);
+  const { targets, control } = selectProbeTargets(EXPECTED_VERSIONS, PUBLISHED_RELEASE);
   const verdict = verdictFor({
     stamp: unreachable(),
     versions: unreachable(),
-    target: { version: target, probe: unreachable() },
+    targets: targets.map((version) => ({ version, probe: unreachable() })),
     control: { version: control, probe: unreachable() },
   });
   assert.equal(verdict.status, "probe-broken");
@@ -168,11 +225,11 @@ test("a probe that sees no known-good content anywhere reports probe-broken", ()
 });
 
 test("a reachable versions.json keeps a stamp failure classified as stranded", () => {
-  const { target, control } = selectProbeTargets(EXPECTED_VERSIONS);
+  const { targets, control } = selectProbeTargets(EXPECTED_VERSIONS, PUBLISHED_RELEASE);
   const verdict = verdictFor({
     stamp: notFound(),
     versions: ok(JSON.stringify(EXPECTED_VERSIONS)),
-    target: { version: target, probe: notFound() },
+    targets: targets.map((version) => ({ version, probe: notFound() })),
     control: { version: control, probe: notFound() },
   });
   assert.equal(verdict.status, "stranded");
@@ -181,12 +238,14 @@ test("a reachable versions.json keeps a stamp failure classified as stranded", (
 
 test("the poll loop returns as soon as the deployment propagates", async () => {
   let clock = 0;
-  let calls = 0;
+  let stampFetches = 0;
+  const requested = [];
   const fetchImpl = async (url) => {
-    // The first round still serves the other run; the second serves this one.
-    const servedRun = calls < 4 ? OTHER_RUN : THIS_RUN;
-    calls += 1;
+    requested.push(url);
     if (url.includes("deploy-stamp.json")) {
+      // The first round still serves the other run; the second serves this one.
+      stampFetches += 1;
+      const servedRun = stampFetches === 1 ? OTHER_RUN : THIS_RUN;
       return { status: 200, text: async () => JSON.stringify({ run_id: servedRun }) };
     }
     if (url.includes("versions.json")) {
@@ -199,6 +258,7 @@ test("the poll loop returns as soon as the deployment propagates", async () => {
     baseUrl: "https://example.test/docs/",
     expectedRunId: THIS_RUN,
     expectedVersions: EXPECTED_VERSIONS,
+    publishedVersions: PUBLISHED_RELEASE,
     timeoutMs: 60_000,
     intervalMs: 1_000,
     fetchImpl,
@@ -212,6 +272,10 @@ test("the poll loop returns as soon as the deployment propagates", async () => {
 
   assert.equal(verdict.status, "pass");
   assert.equal(verdict.attempt, 2);
+
+  // The driver must actually request the version this run published, not just
+  // decide it should have.
+  assert.ok(requested.some((url) => url.includes("/0.1.0-preview.16/index.html?nc=")));
 });
 
 test("the poll loop gives up once the window closes", async () => {
@@ -230,6 +294,7 @@ test("the poll loop gives up once the window closes", async () => {
     baseUrl: "https://example.test/docs/",
     expectedRunId: THIS_RUN,
     expectedVersions: EXPECTED_VERSIONS,
+    publishedVersions: PUBLISHED_RELEASE,
     timeoutMs: 3_000,
     intervalMs: 1_000,
     fetchImpl,
@@ -282,11 +347,11 @@ test("a base URL without a trailing slash still resolves inside the site", async
   };
 
   await probe("https://owner.github.io/repo", "versions.json", { fetchImpl, uuid: () => "k" });
-  await probe("https://owner.github.io/repo/", "0.1.0-preview.16/", { fetchImpl, uuid: () => "k" });
+  await probe("https://owner.github.io/repo/", "0.1.0-preview.16/index.html", { fetchImpl, uuid: () => "k" });
 
   assert.deepEqual(seen, [
     "https://owner.github.io/repo/versions.json?nc=k",
-    "https://owner.github.io/repo/0.1.0-preview.16/?nc=k",
+    "https://owner.github.io/repo/0.1.0-preview.16/index.html?nc=k",
   ]);
 });
 
@@ -309,7 +374,7 @@ test("exit codes separate a stranded deploy from a broken probe", () => {
   const broken = verdictFor({
     stamp: unreachable(),
     versions: unreachable(),
-    target: null,
+    targets: [],
     control: null,
   });
   assert.equal(report({ ...broken, attempt: 1 }, { log: silence, err: silence }), 2);

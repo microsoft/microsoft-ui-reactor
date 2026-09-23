@@ -55,6 +55,15 @@ env:
   MIKE_BRANCH: gh-pages
   LATEST_ALIAS: latest
   MAIN_VERSION: main
+  # Every publishing step appends the version it wrote to
+  # "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE", and the artifact step turns that
+  # into a job output. The verify job probes exactly these directories: probing
+  # only the `latest` holder would skip a backported tag (which deliberately
+  # does not move `latest`) and skip `main` on a branch push, so a broken new
+  # directory could pass on the strength of its versions.json entry alone.
+  # Held as a bare filename because workflow-level env cannot expand
+  # $RUNNER_TEMP; every use joins the two.
+  PUBLISHED_VERSIONS_FILE: published-versions.txt
 
 jobs:
   publish:
@@ -65,6 +74,7 @@ jobs:
       # them for why each exists.
       deploy: ${{ steps.deploy-gate.outputs.deploy }}
       versions: ${{ steps.artifact.outputs.versions }}
+      published: ${{ steps.artifact.outputs.published }}
     permissions:
       contents: write # mike commits the rendered site to gh-pages
     steps:
@@ -104,6 +114,7 @@ jobs:
         run: |
           mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy \
             --title 'main (development)' "$MAIN_VERSION"
+          echo "$MAIN_VERSION" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
 
           # Until a release version exists there is nothing for the site root to
           # redirect to, which would leave it a 404. Point the root at main for
@@ -120,6 +131,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           newest="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+          echo "$version" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
 
           if [ "$GITHUB_REF_NAME" = "$newest" ]; then
             mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy \
@@ -180,6 +192,7 @@ jobs:
             else
               mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy "${tag#v}"
             fi
+            echo "${tag#v}" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
             echo "::endgroup::"
           done
 
@@ -298,6 +311,21 @@ jobs:
           # Compact, because a job output is a single line.
           echo "versions=$(jq -c . site/versions.json)" >> "$GITHUB_OUTPUT"
 
+          # The versions this run actually wrote, for the verify job to probe.
+          # Every trigger path publishes at least one (main push, release tag,
+          # or backfill), so an empty list means a publishing step stopped
+          # recording and the gate would quietly fall back to probing only the
+          # `latest` holder. Fail instead of verifying less than we think.
+          published_file="$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
+          if [ ! -s "$published_file" ]; then
+            echo "::error::No publishing step recorded a version in $published_file, so the verify job cannot know what to probe. Every trigger path must append the version it published."
+            exit 1
+          fi
+
+          published="$(jq -R -s -c 'split("\n") | map(select(length > 0)) | unique' < "$published_file")"
+          echo "This run published: $published"
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
@@ -350,6 +378,7 @@ jobs:
           DOCS_BASE_URL: ${{ needs.deploy.outputs.page_url }}
           DOCS_EXPECTED_RUN_ID: ${{ github.run_id }}
           DOCS_EXPECTED_VERSIONS: ${{ needs.publish.outputs.versions }}
+          DOCS_PUBLISHED_VERSIONS: ${{ needs.publish.outputs.published }}
           DOCS_VERIFY_TIMEOUT_SECONDS: '600'
           DOCS_VERIFY_INTERVAL_SECONDS: '15'
         run: node .github/scripts/verify-docs-deployment.mjs
