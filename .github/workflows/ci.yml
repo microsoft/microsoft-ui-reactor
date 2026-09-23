@@ -326,6 +326,12 @@ jobs:
       # yield?".
       - name: Record winapp UI-turn capability
         continue-on-error: true
+        # Bounds a hang, which `continue-on-error` does not: that only forgives a step that
+        # *fails*, so a winapp wedged in `--version` or `ui --cli-schema` would sit here
+        # consuming the job's 45-minute budget and the E2E tests would never start. This step is
+        # pure diagnostics and finishes in seconds, so a short ceiling costs nothing and converts
+        # "the whole job died before testing anything" into "the capability line is missing".
+        timeout-minutes: 3
         shell: pwsh
         run: |
           # Resolve the same binary the tests will, in the same order as

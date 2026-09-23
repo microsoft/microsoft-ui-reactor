@@ -910,7 +910,8 @@ Both attempts share a single 10-second budget, and a schema attempt that *times 
 probe rather than falling through. A binary that hangs has not reported that `--cli-schema` is
 unsupported, so spawning a second child to hang again would spend the rest of the budget to learn
 nothing — and two independently bounded waits would let an unresponsive winapp cost twice the
-advertised probe time.
+advertised probe time. The worst case is one 10-second wait plus a single 5-second kill grace
+(`TryKill` waits that long for the child to actually go), so 15 seconds rather than 10.
 
 An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
 own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp

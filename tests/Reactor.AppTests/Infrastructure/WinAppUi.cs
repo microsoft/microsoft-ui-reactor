@@ -266,7 +266,9 @@ public sealed class WinAppUi
     /// bounded waits would let a generally unresponsive binary cost twice the advertised probe
     /// time, and a timed-out first attempt stops the probe outright: a winapp that hangs on
     /// <c>--cli-schema</c> has not told us the flag is unsupported, so spawning a second child to
-    /// hang again would spend the remaining budget to learn nothing.</para>
+    /// hang again would spend the remaining budget to learn nothing. The wall-clock worst case is
+    /// that budget plus one <see cref="KillGraceMs"/>, since <see cref="TryKill"/> waits for the
+    /// child it killed to actually go.</para>
     /// </remarks>
     private static UiVerbSupport ProbeYieldVerb()
     {

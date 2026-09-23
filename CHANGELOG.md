@@ -64,8 +64,8 @@ Conventions for contributors:
   share one 10-second deadline instead of each getting their own, and a schema attempt that
   *times out* now stops the probe rather than falling through — a binary that hangs has not
   reported that `--cli-schema` is unsupported, so a second spawn would spend the remaining budget
-  to learn nothing. Previously an unresponsive winapp could cost two 10-second waits plus two
-  5-second kill graces (PR #1272).
+  to learn nothing. The worst case is now one 10-second wait plus a single 5-second kill grace,
+  where it was previously two of each (PR #1272).
 - A capability probe that cannot read winapp's command set no longer reports the verb as absent.
   The result is a tri-state, and `Unreadable` fails under `REACTOR_E2E_REQUIRE_UI_YIELD` rather
   than passing as a skip — "the probe broke" is not "the feature is missing". A command set with
@@ -80,6 +80,10 @@ Conventions for contributors:
   order and exports the result, which also means the winapp CI installs is the winapp CI tests;
   the suite logs the path it resolved beside the capability, and the strict-mode failure names it
   (PR #1272).
+- CI's winapp capability step cannot hang the E2E job. It shells out to `winapp --version` and
+  `winapp ui --cli-schema` for diagnostics, and `continue-on-error` only forgives a step that
+  *fails* — a wedged winapp would have sat there consuming the job's 45-minute budget before any
+  test ran. The step now carries its own short `timeout-minutes` ceiling (PR #1272).
 - CI's recorded winapp version is a version again rather than the first line of an ASCII-art
   banner, which is what `winapp --version` leads with on the runner (PR #1272).
 
