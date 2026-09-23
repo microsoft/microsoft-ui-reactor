@@ -63,10 +63,10 @@ public static class UpgradeCommand
         // Install() is a no-op when the resolved version is already installed, and
         // deliberately leaves an existing install alone when it can't resolve a
         // newer one — so this is safe to run on every upgrade.
-        var templateRc = WinAppSdkTemplates.Install(repoRoot, templateSource, templateVersion);
-        if (templateRc != 0)
+        var templateOutcome = WinAppSdkTemplates.Install(repoRoot, templateSource, templateVersion);
+        if (templateOutcome == WinAppSdkTemplates.InstallOutcome.Failed)
         {
-            Console.Error.WriteLine($"  Could not install {WinAppSdkTemplates.PackageId} (exit {templateRc}); the rest of the upgrade completed.");
+            Console.Error.WriteLine($"  Could not install {WinAppSdkTemplates.PackageId}; the rest of the upgrade completed.");
         }
 
         // 3. Refresh Claude plugin (best-effort; not every user has Claude Code).

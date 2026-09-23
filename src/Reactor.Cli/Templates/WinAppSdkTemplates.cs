@@ -146,13 +146,33 @@ public static class WinAppSdkTemplates
         return null;
     }
 
+    /// <summary>What an <see cref="Install"/> call actually did.</summary>
+    public enum InstallOutcome
+    {
+        /// <summary>The pack was not present and is now installed.</summary>
+        Installed,
+        /// <summary>An older pack was replaced with a newer one.</summary>
+        Updated,
+        /// <summary>The resolved version was already installed; nothing changed.</summary>
+        AlreadyCurrent,
+        /// <summary>No version could be resolved, so the existing install was left untouched.</summary>
+        KeptExisting,
+        /// <summary>The install was attempted and failed.</summary>
+        Failed,
+    }
+
     /// <summary>
     /// Installs (or updates) the template pack.
     /// </summary>
     /// <param name="workingDirectory">Working directory for the `dotnet` process.</param>
     /// <param name="source">Extra NuGet source — a local folder holding the nupkg, or a feed URL. This is how an unpublished build gets tested.</param>
     /// <param name="version">Explicit version to pin. When omitted the newest published version is resolved.</param>
-    public static int Install(string workingDirectory, string? source = null, string? version = null)
+    /// <remarks>
+    /// Returns what actually happened rather than a bare exit code: "kept the
+    /// existing install because nothing could be resolved" is a success for
+    /// exit-code purposes but must not be reported to the user as "installed".
+    /// </remarks>
+    public static InstallOutcome Install(string workingDirectory, string? source = null, string? version = null)
     {
         var installed = GetInstalledVersion();
         var target = string.IsNullOrWhiteSpace(version) ? ResolveLatestVersion(source) : version!.Trim();
@@ -169,13 +189,15 @@ public static class WinAppSdkTemplates
                 Console.Error.WriteLine(
                     $"  warning: could not resolve a published version of {PackageId}; " +
                     $"keeping the installed {installed}. Re-run with network access, or pass an explicit version.");
-                return 0;
+                return InstallOutcome.KeptExisting;
             }
 
             // Nothing installed and nothing resolved — try a plain install (no
             // --force, so there is nothing to lose) and let NuGet report why.
             Console.WriteLine($"  dotnet new install {PackageId}");
-            return Run(workingDirectory, "new", "install", PackageId);
+            return Run(workingDirectory, "new", "install", PackageId) == 0
+                ? InstallOutcome.Installed
+                : InstallOutcome.Failed;
         }
 
         if (installed is not null &&
@@ -183,7 +205,7 @@ public static class WinAppSdkTemplates
             string.IsNullOrWhiteSpace(source))
         {
             Console.WriteLine($"  Already installed: {PackageId} {installed}");
-            return 0;
+            return InstallOutcome.AlreadyCurrent;
         }
 
         Console.WriteLine(installed is null
@@ -207,14 +229,18 @@ public static class WinAppSdkTemplates
 
         Console.WriteLine($"  dotnet {string.Join(' ', args)}");
         var rc = Run(workingDirectory, args.ToArray());
-        if (rc != 0 && installed is not null)
+        if (rc != 0)
         {
-            Console.Error.WriteLine(
-                $"  warning: the update failed and `dotnet new install --force` removes the old package first, " +
-                $"so {PackageId} may no longer be installed. Restore it with: " +
-                $"dotnet new install {PackageId}::{installed}");
+            if (installed is not null)
+            {
+                Console.Error.WriteLine(
+                    $"  warning: the update failed and `dotnet new install --force` removes the old package first, " +
+                    $"so {PackageId} may no longer be installed. Restore it with: " +
+                    $"dotnet new install {PackageId}::{installed}");
+            }
+            return InstallOutcome.Failed;
         }
-        return rc;
+        return installed is null ? InstallOutcome.Installed : InstallOutcome.Updated;
     }
 
     /// <summary>

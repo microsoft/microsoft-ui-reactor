@@ -58,20 +58,41 @@ public static class TemplatesCommand
         if (!string.IsNullOrWhiteSpace(source) && Directory.Exists(source))
             source = Path.GetFullPath(source!);
 
-        var rc = WinAppSdkTemplates.Install(Directory.GetCurrentDirectory(), source, version);
-        if (rc != 0)
+        var outcome = WinAppSdkTemplates.Install(Directory.GetCurrentDirectory(), source, version);
+        if (outcome == WinAppSdkTemplates.InstallOutcome.Failed)
         {
             Console.Error.WriteLine();
-            Console.Error.WriteLine($"mur templates install: `dotnet new install` failed (exit {rc}).");
+            Console.Error.WriteLine($"mur templates install: `dotnet new install` failed.");
             Console.Error.WriteLine("  To install an unpublished build, pass a folder of nupkgs:");
             Console.Error.WriteLine("    mur templates install --source <folder>");
             Console.Error.WriteLine("  To pin an explicit version:");
             Console.Error.WriteLine("    mur templates install --version <version>");
-            return rc;
+            Console.Error.WriteLine("  Note: `dotnet new install` does not use the NuGet credential provider, so an");
+            Console.Error.WriteLine("  authenticated feed reports \"the package does not exist\". Restore the package");
+            Console.Error.WriteLine("  first, then pass the cached .nupkg path to --source.");
+            return 1;
         }
 
+        // Don't claim an install happened when the existing pack was simply kept
+        // or was already current — the user needs to know whether anything moved.
         Console.WriteLine();
-        Console.WriteLine($"Installed. Scaffold an app with:");
+        switch (outcome)
+        {
+            case WinAppSdkTemplates.InstallOutcome.KeptExisting:
+                Console.WriteLine("Kept the existing install (could not resolve a published version).");
+                break;
+            case WinAppSdkTemplates.InstallOutcome.AlreadyCurrent:
+                Console.WriteLine("Already up to date.");
+                break;
+            case WinAppSdkTemplates.InstallOutcome.Updated:
+                Console.WriteLine("Updated.");
+                break;
+            default:
+                Console.WriteLine("Installed.");
+                break;
+        }
+
+        Console.WriteLine("Scaffold an app with:");
         foreach (var name in WinAppSdkTemplates.ShortNames)
             Console.WriteLine($"    dotnet new {name} -n MyApp");
         return 0;

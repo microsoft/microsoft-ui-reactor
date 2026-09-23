@@ -249,6 +249,42 @@ public sealed class WinAppSdkTemplatesTests
         Assert.Contains("AreTemplatesAvailable()", text, StringComparison.Ordinal);
     }
 
+    // ── Outcome-reporting guard ────────────────────────────────────────────
+    //
+    // Found by running `mur templates install` against the real published pack
+    // with NuGet unreachable: the guard correctly kept the installed pack and
+    // uninstalled nothing, but the command still printed "Installed." — telling
+    // the user an install had happened when none had. A bare exit code cannot
+    // express the difference, so Install returns an outcome instead.
+
+    [Fact]
+    public void InstallOutcome_distinguishes_keeping_an_existing_pack_from_installing()
+    {
+        // These four non-failure outcomes are not interchangeable: only two of
+        // them mean the machine actually changed. Collapsing them back to a
+        // bool/int is what produced the wrong "Installed." message.
+        var values = Enum.GetNames<WinAppSdkTemplates.InstallOutcome>();
+        foreach (var expected in new[] { "Installed", "Updated", "AlreadyCurrent", "KeptExisting", "Failed" })
+            Assert.Contains(expected, values);
+    }
+
+    [Fact]
+    public void TemplatesCommand_does_not_report_Installed_for_every_outcome()
+    {
+        // Source-level guard on the call site — the bug was in the reporting,
+        // not the install logic, so asserting on Install() alone would miss it.
+        var (path, text) = ReadRepoFile(global::System.IO.Path.Combine(
+            "src", "Reactor.Cli", "Templates", "TemplatesCommand.cs"));
+        var normalized = text.Replace("\r\n", "\n");
+
+        Assert.Contains("InstallOutcome.KeptExisting", normalized, StringComparison.Ordinal);
+        Assert.Contains("Kept the existing install", normalized, StringComparison.Ordinal);
+        Assert.False(
+            normalized.Contains("Console.WriteLine($\"Installed. Scaffold an app with:\")", StringComparison.Ordinal),
+            $"'{path}' must not unconditionally print \"Installed.\" — `mur templates install` reports success when it " +
+            "deliberately keeps an existing pack (nothing resolved), and claiming an install happened there is wrong.");
+    }
+
     static (string path, string text) ReadRepoFile(string repoRelativePath)
     {
         var path = global::System.IO.Path.Combine(FindRoot(), repoRelativePath);
