@@ -217,10 +217,11 @@ public class WinAppWorkflowIdTests
         if (present) return;
 
         var explanation = support == WinAppUi.UiVerbSupport.Unreadable
-            ? "The resolved winapp did not return a readable `ui --help` command list, so " +
-              "whether it implements `ui yield` was never established. This is not the same as " +
-              "the verb being absent: it means the probe itself failed, and treating it as " +
-              "absence would be reporting a measurement that was never taken."
+            ? "The resolved winapp returned neither a readable `ui --cli-schema` command set nor " +
+              "a readable `ui --help` command list, so whether it implements `ui yield` was never " +
+              "established. This is not the same as the verb being absent: it means the probe " +
+              "itself failed, and treating it as absence would be reporting a measurement that " +
+              "was never taken."
             : "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
               "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
               "(merged 2026-09-09); pin a winapp containing it to make this measurable.";
@@ -232,9 +233,14 @@ public class WinAppWorkflowIdTests
         // is also the switch to flip in CI the day a release carries the verb.
         if (StrictYieldRequested())
         {
+            // The resolved path belongs in the failure text itself, not only in the console line
+            // above it: the capability is a property of *that* binary, and a contributor reading
+            // a CI failure summary sees the assertion message without the surrounding log.
             Assert.Fail(
-                $"{explanation} {RequireYieldEnvVar} is set, so anything short of a confirmed " +
-                "verb is a failure: either pin a winapp containing #767 or unset the variable.");
+                $"{explanation} Probe result: {support}. Resolved winapp: " +
+                $"{WinAppUi.ResolvedWinAppExe}. {RequireYieldEnvVar} is set, so anything short " +
+                "of a confirmed verb is a failure: either pin a winapp containing #767 " +
+                $"(and point {WinAppUi.WinAppExeEnvVar} at it) or unset the variable.");
         }
 
         Assert.Inconclusive(
@@ -537,5 +543,140 @@ public class WinAppWorkflowIdTests
             WinAppUi.UiVerbSupport.Unreadable,
             WinAppUi.ParseUiVerbSupport(reshaped, "yield"),
             "A command list whose entries no longer parse was read as a definitive answer.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_DoesNotMistakeAWrappedDescriptionLineForACommandEntry()
+    {
+        // A help renderer wraps a long description onto continuation lines indented to the
+        // description column. Those lines are prose, but they are still indented, so a parser
+        // that classifies line-by-line takes their first word as a command name. Here `yield`
+        // begins a wrapped line while no `yield` command exists -- the exact false Present the
+        // section's shallowest-indent rule exists to prevent.
+        const string wrapped = """
+            Commands:
+              status                        Connect to a target app and display connection info.
+              inspect <selector>            View the UI element tree with semantic slugs.
+              invoke <selector>             Activate an element by slug or text search. Use
+                                            yield control to an exact operation on the element.
+            """;
+
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupport(wrapped, "yield"),
+            "A wrapped description line was parsed as a command entry, so description prose can " +
+            "report a verb as present. Command entries sit at the section's shallowest indent; " +
+            "anything deeper is a continuation.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_StillReadsEntriesWhenDescriptionsWrap()
+    {
+        // The positive control for the test above: the shallowest-indent rule must exclude
+        // continuations without also discarding the entries around them. Without this, making
+        // the previous test pass by returning Absent unconditionally would look like a fix.
+        const string wrapped = """
+            Commands:
+              status                        Connect to a target app and display connection info.
+              inspect <selector>            View the UI element tree with semantic slugs. Use
+                                            --depth to bound how far the walk descends.
+              invoke <selector>             Activate an element by slug or text search.
+              yield                         Release the current workflow's idle UI turn early.
+            """;
+
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Present,
+            WinAppUi.ParseUiVerbSupport(wrapped, "yield"),
+            "Excluding wrapped continuation lines also discarded the real command entries.");
+    }
+
+    // ── Machine-readable command schema ──────────────────────────────────────
+    //
+    // `winapp ui --cli-schema` answers the same question exactly rather than by inference, so it
+    // is asked first and the help parser above is only the fallback for builds that predate it.
+    //
+    // Provenance: the shape below is the real envelope emitted by winapp 0.6.3-prerelease.92,
+    // captured with `winapp ui --cli-schema` (exit 0, ~91 KB, 22 subcommands). Only the
+    // `subcommands` membership matters here, so the descriptions are abridged; the key names,
+    // nesting, and sibling fields are verbatim.
+
+    private const string SchemaWithYield = """
+        {
+          "name": "ui",
+          "version": "0.6.3",
+          "schemaVersion": "1.0",
+          "description": "Inspect and interact with any running Windows app using UI Automation.",
+          "hidden": false,
+          "subcommands": {
+            "status": { "description": "Connect to a target app and display connection info." },
+            "inspect": { "description": "View the UI element tree with semantic slugs." },
+            "invoke": { "description": "Activate an element by slug or text search." },
+            "yield": { "description": "Release the current workflow's idle UI turn early." }
+          }
+        }
+        """;
+
+    private const string SchemaWithoutYield = """
+        {
+          "name": "ui",
+          "version": "0.6.3",
+          "schemaVersion": "1.0",
+          "subcommands": {
+            "status": { "description": "Connect to a target app and display connection info." },
+            "inspect": { "description": "View the UI element tree with semantic slugs." },
+            "invoke": { "description": "Activate an element by slug or text search." }
+          }
+        }
+        """;
+
+    [TestMethod]
+    public void SchemaProbe_ReportsPresentWhenTheSubcommandMapNamesTheVerb()
+    {
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Present,
+            WinAppUi.ParseUiVerbSupportFromSchema(SchemaWithYield, "yield"),
+            "A schema listing `yield` must be reported as having it.");
+    }
+
+    [TestMethod]
+    public void SchemaProbe_ReportsAbsentWhenTheSubcommandMapOmitsTheVerb()
+    {
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupportFromSchema(SchemaWithoutYield, "yield"),
+            "A schema with no `yield` key was not reported as absent, so strict mode could not " +
+            "fail against a winapp predating winappCli#767.");
+    }
+
+    [TestMethod]
+    public void SchemaProbe_DoesNotMatchDescriptionProse()
+    {
+        // The schema's descriptions carry the same words the help text does. Only the
+        // `subcommands` keys are the command set.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupportFromSchema(SchemaWithYield, "Release"),
+            "A word appearing only in a description was reported as a subcommand, so the schema " +
+            "reader is matching raw JSON text rather than the key set.");
+    }
+
+    [TestMethod]
+    [DataRow("", DisplayName = "empty output")]
+    [DataRow("   ", DisplayName = "whitespace output")]
+    [DataRow("winapp: unrecognized option '--cli-schema'", DisplayName = "not JSON at all")]
+    [DataRow("[1, 2, 3]", DisplayName = "JSON, but not an object")]
+    [DataRow("""{"name":"ui","version":"0.6.3"}""", DisplayName = "object with no subcommands map")]
+    [DataRow("""{"name":"ui","subcommands":"none"}""", DisplayName = "subcommands is not an object")]
+    [DataRow("""{"subcommands":{"--status":{},"--inspect":{}}}""", DisplayName = "no long-standing verb")]
+    public void SchemaProbe_ReportsUnreadableRatherThanGuessing(string schemaJson)
+    {
+        // A winapp that predates `--cli-schema` answers with something other than a command
+        // schema, and the probe must fall through to the help parser rather than conclude the
+        // verb is missing. Reporting Absent here would resurrect the original defect in a new
+        // place: a confident answer drawn from a parse that never happened.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Unreadable,
+            WinAppUi.ParseUiVerbSupportFromSchema(schemaJson, "yield"),
+            "Unusable schema output was treated as a definitive answer about the verb.");
     }
 }

@@ -69,6 +69,11 @@ public sealed class WinAppUi
         HostHwnd = hostHwnd;
     }
 
+    /// <summary>
+    /// Absolute-path override for the winapp binary, honored ahead of every other candidate.
+    /// </summary>
+    internal const string WinAppExeEnvVar = "REACTOR_WINAPP_EXE";
+
     private static string ResolveWinAppExe()
     {
         // Explicit override — an absolute path to a winapp.exe, honored first.
@@ -77,7 +82,7 @@ public sealed class WinAppUi
         // winapp-dev package), while a newer ui-capable winapp is installed elsewhere
         // (e.g. %LOCALAPPDATA%\Microsoft\WindowsApps\winapp_8wekyb3d8bbwe\winapp.exe).
         // Also lets CI pin an exact winapp build. No effect unless the var is set.
-        var overridePath = Environment.GetEnvironmentVariable("REACTOR_WINAPP_EXE");
+        var overridePath = Environment.GetEnvironmentVariable(WinAppExeEnvVar);
         if (!string.IsNullOrEmpty(overridePath) && File.Exists(overridePath))
             return Path.GetFullPath(overridePath);
 
@@ -102,7 +107,7 @@ public sealed class WinAppUi
 
         throw new WinAppException(
             "Could not find winapp.exe. Install the winapp CLI (winget install Microsoft.WinAppCli) " +
-            "or ensure an absolute PATH entry contains winapp.exe, or set REACTOR_WINAPP_EXE to an " +
+            $"or ensure an absolute PATH entry contains winapp.exe, or set {WinAppExeEnvVar} to an " +
             "absolute path to a ui-capable winapp.exe.");
     }
 
@@ -218,22 +223,22 @@ public sealed class WinAppUi
     /// <summary>What a capability probe was able to establish about one <c>winapp ui</c> verb.</summary>
     internal enum UiVerbSupport
     {
-        /// <summary>The verb is listed by <c>winapp ui --help</c>.</summary>
+        /// <summary>The verb is listed in winapp's command set.</summary>
         Present,
 
-        /// <summary>The command list was read, and the verb is not in it.</summary>
+        /// <summary>The command set was read, and the verb is not in it.</summary>
         Absent,
 
         /// <summary>
-        /// No usable command list came back, so nothing was established either way. Distinct from
+        /// No usable command set came back, so nothing was established either way. Distinct from
         /// <see cref="Absent"/> on purpose: absence is a measurement, this is its failure.
         /// </summary>
         Unreadable,
     }
 
     /// <summary>
-    /// Asks the resolved winapp whether it understands <c>ui yield</c>, by reading the command
-    /// list out of <c>winapp ui --help</c>.
+    /// Asks the resolved winapp whether it understands <c>ui yield</c>, preferring its
+    /// machine-readable command schema and falling back to parsing <c>winapp ui --help</c>.
     /// </summary>
     /// <remarks>
     /// <para>This deliberately does not run <c>ui yield --help</c> and check the exit code, which
@@ -246,32 +251,37 @@ public sealed class WinAppUi
     /// made <c>REACTOR_E2E_REQUIRE_UI_YIELD</c> a gate that cannot fail.</para>
     /// <para>Grepping the output of <c>ui yield --help</c> for the word "yield" does not fix it
     /// either, and is the trap worth naming: the fallback help lists every subcommand with its
-    /// description, so the word is present whether or not the verb is. Only the parent command
-    /// list distinguishes them.</para>
+    /// description, so the word is present whether or not the verb is. Only a command *entry*
+    /// distinguishes them.</para>
+    /// <para><c>ui --cli-schema</c> is asked first because it answers the question exactly rather
+    /// than by inference: it emits a JSON object whose <c>subcommands</c> keys are the command
+    /// set, so no prose has to be interpreted and description text cannot be mistaken for a verb.
+    /// Measured against 0.6.3-prerelease.92 it exits <c>0</c> and reports 22 subcommands,
+    /// including <c>yield</c> and excluding an invented one. The help parser is kept as a
+    /// fallback rather than deleted because a winapp old enough to lack <c>yield</c> may also
+    /// predate <c>--cli-schema</c>, and that is precisely the case this probe exists to detect —
+    /// answering <see cref="UiVerbSupport.Unreadable"/> there would lose a measurement the older
+    /// path can still make.</para>
     /// </remarks>
     private static UiVerbSupport ProbeYieldVerb()
     {
         try
         {
-            var psi = CreateStartInfo("--help");
-
-            using var proc = Process.Start(psi);
-            if (proc is null) return UiVerbSupport.Unreadable;
-
-            // Read before waiting: winapp's command list is larger than a pipe buffer, and a
-            // child that fills stdout while we wait for exit deadlocks against its own output.
-            var stdout = proc.StandardOutput.ReadToEnd();
-
-            if (!proc.WaitForExit(YieldTimeoutMs))
+            // Exact first. Anything other than a confident Present/Absent falls through, so a
+            // winapp that predates the schema flag is still measured rather than written off.
+            var schema = TryRunBounded(YieldTimeoutMs, "--cli-schema");
+            if (schema is { ExitCode: 0 } s)
             {
-                TryKill(proc);
-                return UiVerbSupport.Unreadable;
+                var fromSchema = ParseUiVerbSupportFromSchema(s.StdOut, "yield");
+                if (fromSchema != UiVerbSupport.Unreadable) return fromSchema;
             }
+
+            var help = TryRunBounded(YieldTimeoutMs, "--help");
 
             // The exit code is not the signal here, but a non-zero one means the text that came
             // back is not a command list worth parsing.
-            return proc.ExitCode == 0
-                ? ParseUiVerbSupport(stdout, "yield")
+            return help is { ExitCode: 0 } h
+                ? ParseUiVerbSupport(h.StdOut, "yield")
                 : UiVerbSupport.Unreadable;
         }
         // Same narrow set as ReleaseUiTurn: these mean "winapp could not be run here". That is
@@ -294,14 +304,54 @@ public sealed class WinAppUi
     private static readonly string[] SentinelUiVerbs = ["status", "inspect", "invoke"];
 
     /// <summary>
+    /// Reports whether <paramref name="verb"/> is one of the <c>subcommands</c> keys in the JSON
+    /// emitted by <c>winapp ui --cli-schema</c>.
+    /// </summary>
+    /// <remarks>
+    /// Pure, so the discriminator is testable without a winapp on the machine. The same sentinel
+    /// rule as the help parser applies: a schema whose shape changed enough that no long-standing
+    /// verb is visible has not been understood, and reporting <see cref="UiVerbSupport.Absent"/>
+    /// from it would be a conclusion drawn from a failed parse.
+    /// </remarks>
+    internal static UiVerbSupport ParseUiVerbSupportFromSchema(string schemaJson, string verb)
+    {
+        if (string.IsNullOrWhiteSpace(schemaJson)) return UiVerbSupport.Unreadable;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(schemaJson);
+
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return UiVerbSupport.Unreadable;
+            if (!doc.RootElement.TryGetProperty("subcommands", out var subcommands)) return UiVerbSupport.Unreadable;
+            if (subcommands.ValueKind != JsonValueKind.Object) return UiVerbSupport.Unreadable;
+
+            var listed = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in subcommands.EnumerateObject()) listed.Add(entry.Name);
+
+            if (!SentinelUiVerbs.Any(listed.Contains)) return UiVerbSupport.Unreadable;
+
+            return listed.Contains(verb) ? UiVerbSupport.Present : UiVerbSupport.Absent;
+        }
+        catch (JsonException) { return UiVerbSupport.Unreadable; }
+    }
+
+    /// <summary>Whitespace a help entry's columns may be separated by.</summary>
+    private static readonly char[] HelpColumnSeparators = [' ', '\t'];
+
+    /// <summary>
     /// Extracts the <c>Commands:</c> section from <c>winapp ui --help</c> and reports whether
     /// <paramref name="verb"/> is listed in it.
     /// </summary>
     /// <remarks>
-    /// Pure, so the discriminator can be tested against captured help text without a winapp on
-    /// the machine. The sentinel check is what stops a format change from being read as "the
+    /// <para>Pure, so the discriminator can be tested against captured help text without a winapp
+    /// on the machine. The sentinel check is what stops a format change from being read as "the
     /// verb was removed": if not one long-standing verb can be found either, the parse failed
-    /// and the honest answer is <see cref="UiVerbSupport.Unreadable"/>.
+    /// and the honest answer is <see cref="UiVerbSupport.Unreadable"/>.</para>
+    /// <para>Which lines are entries cannot be decided one line at a time. Help renderers wrap a
+    /// long description onto continuation lines indented to the description column, and the first
+    /// word of one of those is prose, not a command — so a description wrapping before the word
+    /// "yield" would read as the verb being present. Entries are therefore the lines at the
+    /// section's *shallowest* indent, and anything deeper is a continuation.</para>
     /// </remarks>
     internal static UiVerbSupport ParseUiVerbSupport(string uiHelp, string verb)
     {
@@ -313,18 +363,28 @@ public sealed class WinAppUi
             lines, l => l.Trim().Equals("Commands:", StringComparison.Ordinal));
         if (header < 0) return UiVerbSupport.Unreadable;
 
-        var listed = new HashSet<string>(StringComparer.Ordinal);
+        var candidates = new List<(int Indent, string Name)>();
         for (var i = header + 1; i < lines.Length; i++)
         {
             var line = lines[i];
-            if (line.Length == 0 || string.IsNullOrWhiteSpace(line)) continue;
+            if (string.IsNullOrWhiteSpace(line)) continue;
 
             // The section ends at the next unindented line: entries are indented, headers are not.
             if (!char.IsWhiteSpace(line[0])) break;
 
-            var name = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
-            listed.Add(name);
+            var trimmed = line.TrimStart();
+            var name = trimmed.Split(HelpColumnSeparators, StringSplitOptions.RemoveEmptyEntries)[0];
+
+            // `verb, alias` listings hang a comma off the name that would defeat an exact match.
+            candidates.Add((line.Length - trimmed.Length, name.TrimEnd(',')));
         }
+
+        if (candidates.Count == 0) return UiVerbSupport.Unreadable;
+
+        var entryIndent = candidates.Min(c => c.Indent);
+        var listed = new HashSet<string>(
+            candidates.Where(c => c.Indent == entryIndent).Select(c => c.Name),
+            StringComparer.Ordinal);
 
         if (!SentinelUiVerbs.Any(listed.Contains)) return UiVerbSupport.Unreadable;
 
@@ -361,18 +421,11 @@ public sealed class WinAppUi
         {
             RecordInvocation();
 
-            var psi = CreateStartInfo("yield", "--json");
-
-            using var proc = Process.Start(psi);
-            if (proc is null) return null;
-
-            if (!proc.WaitForExit(YieldTimeoutMs))
-            {
-                TryKill(proc);
-                return null;
-            }
-
-            return proc.ExitCode;
+            // Bounded and fully drained: `yield --json` writes an envelope to stdout, and on a
+            // build that rejects the verb it writes to stderr as well. Leaving either redirected
+            // stream unread risks the child blocking on a full pipe until this call times out and
+            // kills it, turning a yield that actually worked into a phantom failure.
+            return TryRunBounded(YieldTimeoutMs, "yield", "--json")?.ExitCode;
         }
         // Narrow rather than bare: the contract is that yielding cannot redden a passing test, and
         // these are the failures that actually mean "winapp could not be run here" (missing or
@@ -491,6 +544,48 @@ public sealed class WinAppUi
     }
 
     private readonly record struct RunResult(int ExitCode, string StdOut, string StdErr);
+
+    /// <summary>
+    /// Runs one short-lived <c>winapp ui</c> child to completion under a timeout, draining both
+    /// output streams, and returns <see langword="null"/> if it could not be started or overran.
+    /// </summary>
+    /// <remarks>
+    /// <para>The static counterpart to <see cref="Run"/>, for the paths that must not throw: a
+    /// capability probe and a best-effort turn release both want "no answer" rather than an
+    /// exception.</para>
+    /// <para>Draining asynchronously is the load-bearing part, not a tidiness preference.
+    /// <see cref="CreateStartInfo"/> redirects stdout *and* stderr, and a redirected stream that
+    /// nobody reads is a fixed-size pipe buffer the child blocks on once it fills. Reading one
+    /// stream to EOF first — which is what this replaced — deadlocks against the other, and
+    /// because that read precedes the timed wait, the timeout it was paired with could never
+    /// fire: a child that stopped producing stdout hung the probe for the whole job rather than
+    /// for <see cref="YieldTimeoutMs"/>.</para>
+    /// </remarks>
+    private static RunResult? TryRunBounded(int timeoutMs, params string[] args)
+    {
+        using var proc = new Process { StartInfo = CreateStartInfo(args) };
+
+        var sbOut = new StringBuilder();
+        var sbErr = new StringBuilder();
+        proc.OutputDataReceived += (_, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
+        proc.ErrorDataReceived += (_, e) => { if (e.Data != null) sbErr.AppendLine(e.Data); };
+
+        if (!proc.Start()) return null;
+
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        if (!proc.WaitForExit(timeoutMs))
+        {
+            TryKill(proc);
+            return null;
+        }
+
+        // Ensure async buffers are flushed.
+        proc.WaitForExit();
+
+        return new RunResult(proc.ExitCode, sbOut.ToString(), sbErr.ToString());
+    }
 
     // Bumps the process-global spawn counter from a static scope, keeping the mutation off the
     // instance Run path while still aggregating across the many short-lived WinAppUi instances.

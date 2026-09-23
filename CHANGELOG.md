@@ -44,23 +44,38 @@ Conventions for contributors:
   published builds lacking the verb are old enough to still reject unmatched tokens, so the right
   answer came back for the wrong reason — but `REACTOR_E2E_REQUIRE_UI_YIELD` is meant to turn a
   missing verb into a failure, and a gate built on an oracle that cannot say "no" cannot fail.
-  The probe now parses the command list from `winapp ui --help`. Grepping that text for the verb
-  name would not have fixed it: the parent listing carries every verb's description, so the word
-  is present either way.
-- A capability probe that cannot read winapp's help no longer reports the verb as absent. The
-  result is a tri-state, and `Unreadable` fails under `REACTOR_E2E_REQUIRE_UI_YIELD` rather than
-  passing as a skip — "the probe broke" is not "the feature is missing". A command list with none
-  of the long-standing verbs in it counts as unreadable too, so a future reformat of winapp's help
-  surfaces as a failure to parse instead of reading as "yield was removed" on every run forever.
+  The probe now reads the command set from `winapp ui --cli-schema`, whose `subcommands` keys
+  answer the question exactly, and falls back to parsing `winapp ui --help` for builds that
+  predate that flag. Grepping the help text for the verb name would not have fixed it: the parent
+  listing carries every verb's description, so the word is present either way (PR #1272,
+  winappCli#767).
+- The help fallback no longer mistakes a wrapped description for a command. Renderers wrap long
+  descriptions onto continuation lines indented to the description column, and a parser that
+  classified one line at a time took the first word of one as a verb — so a description wrapping
+  before the word "yield" would have reported the verb as present. Command entries are now read as
+  the lines at the section's shallowest indent (PR #1272).
+- The capability probe's timeout works. It read stdout to EOF *before* its bounded wait, so a
+  winapp that stopped producing output hung the probe for the whole job rather than for its
+  10-second budget; `ui yield` had the mirror-image defect, leaving both redirected streams
+  undrained so a child could block on a full stderr pipe and be killed as a phantom timeout. Both
+  now drain stdout and stderr asynchronously ahead of the timed wait, as the harness's other
+  process runner already did (PR #1272).
+- A capability probe that cannot read winapp's command set no longer reports the verb as absent.
+  The result is a tri-state, and `Unreadable` fails under `REACTOR_E2E_REQUIRE_UI_YIELD` rather
+  than passing as a skip — "the probe broke" is not "the feature is missing". A command set with
+  none of the long-standing verbs in it counts as unreadable too, so a future reformat of winapp's
+  help surfaces as a failure to parse instead of reading as "yield was removed" on every run
+  forever (PR #1272).
 - CI's winapp capability step and the E2E suite now provably inspect the same binary. They
   disagreed inside a single job — the step reported the verb present while the suite reported it
   absent — because the step ran whatever `winapp` PATH resolved while
   `WinAppUi.ResolveWinAppExe()` prefers `$REACTOR_WINAPP_EXE`, then
   `%LOCALAPPDATA%\Microsoft\WindowsApps`, and only then PATH. The step now resolves in that same
-  order and exports the result, which also means the version CI installs is the version CI tests;
-  the suite logs the path it resolved beside the capability.
+  order and exports the result, which also means the winapp CI installs is the winapp CI tests;
+  the suite logs the path it resolved beside the capability, and the strict-mode failure names it
+  (PR #1272).
 - CI's recorded winapp version is a version again rather than the first line of an ASCII-art
-  banner, which is what `winapp --version` leads with on the runner.
+  banner, which is what `winapp --version` leads with on the runner (PR #1272).
 
 ### Security
 

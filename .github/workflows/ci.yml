@@ -293,11 +293,19 @@ jobs:
       # Install the `winapp` CLI (winapp ui drives the UIA automation that replaced
       # WinAppDriver/Appium). The action downloads it and adds it to PATH.
       #
+      # The pin here is the *action* revision, by commit SHA. The CLI payload it installs is not
+      # pinned: the action's `version` input defaults to 'latest', so the winapp build under test
+      # tracks upstream releases. That is deliberate for now — no published winapp carries
+      # winappCli#767 yet, so pinning would freeze the suite to a build that cannot exercise the
+      # continuity at all. The day a release ships the verb, add `with: version: <that release>`
+      # and set REACTOR_E2E_REQUIRE_UI_YIELD=1 on the E2E step together: a pinned version is what
+      # makes strict mode a stable gate rather than a bet on whatever 'latest' resolved to.
+      #
       # PATH alone does not decide what the tests use. WinAppUi.ResolveWinAppExe() prefers, in
       # order: $REACTOR_WINAPP_EXE, then %LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe, and only
-      # then PATH — so on a runner that happens to carry a winapp in LOCALAPPDATA, the version
-      # pinned here would be installed and then quietly not used. The step below resolves the same
-      # way and exports the result, which is what makes this pin actually govern the suite.
+      # then PATH — so on a runner that happens to carry a winapp in LOCALAPPDATA, the build
+      # installed here would be installed and then quietly not used. The step below resolves the
+      # same way and exports the result, which is what makes the installed CLI govern the suite.
       - name: Setup winapp CLI
         uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
@@ -346,34 +354,44 @@ jobs:
           $m = [regex]::Match($versionText, '\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?')
           $version = if ($m.Success) { $m.Value } else { '<unparsed>' }
 
-          # Presence is read from the command list, NOT from the exit code of
-          # `ui yield --help`. An unrecognized verb is not rejected: winapp prints the parent help
-          # and exits 0, so an exit-code probe reports every verb as present. Matching the help
-          # *text* is equally wrong, because the parent listing contains every verb's description
-          # — only a command-list entry distinguishes them. Mirrors WinAppUi.ParseUiVerbSupport.
-          $help = (& $exe ui --help 2>&1 | Out-String) -split "`r?`n"
-          $start = [Array]::FindIndex($help, [Predicate[string]] { $args[0].Trim() -ceq 'Commands:' })
-          $verbs = @()
-          if ($start -ge 0) {
-            for ($i = $start + 1; $i -lt $help.Length; $i++) {
-              $line = $help[$i]
-              if ([string]::IsNullOrWhiteSpace($line)) { continue }
-              if ($line[0] -notmatch '\s') { break }
-              $verbs += ($line.Trim() -split '\s+')[0]
+          # Read the command set from `winapp ui --cli-schema`, which answers the question
+          # exactly: it emits a JSON object whose `subcommands` keys ARE the command set, so no
+          # prose is interpreted and the C# harness and this step cannot drift apart over parsing
+          # rules. What this must NOT do is check the exit code of `ui yield --help`: an
+          # unrecognized verb is not rejected, winapp prints the parent help and exits 0, so an
+          # exit-code probe reports every verb as present. Matching the help *text* is equally
+          # wrong, because the parent listing contains every verb's description.
+          $state = '<unreadable>'
+          $schemaText = (& $exe ui --cli-schema 2>&1 | Out-String)
+          if ($LASTEXITCODE -eq 0) {
+            # try/catch, not -ErrorAction: GitHub's pwsh shell runs with
+            # $ErrorActionPreference='Stop', under which a ConvertFrom-Json parse failure aborts
+            # the step before it can report anything. A winapp predating --cli-schema answers
+            # with prose, so that path is reachable and must stay diagnosable.
+            try {
+              $schema = $schemaText | ConvertFrom-Json
+              $verbs = @($schema.subcommands.PSObject.Properties.Name)
+
+              # Same sentinel rule as WinAppUi: without a long-standing verb in the parsed set
+              # the parse failed, and "absent" would be a conclusion drawn from nothing.
+              $readable = @('status', 'inspect', 'invoke') | Where-Object { $verbs -ccontains $_ }
+              if ($readable) {
+                $state = if ($verbs -ccontains 'yield') { 'Present' } else { 'Absent' }
+              }
+            } catch {
+              Write-Host "Could not parse 'winapp ui --cli-schema' output: $($_.Exception.Message)"
             }
           }
 
-          # Same sentinel rule as the harness: without a long-standing verb in the parsed set, the
-          # parse failed and "absent" would be a conclusion drawn from nothing.
-          $readable = @('status', 'inspect', 'invoke') | Where-Object { $verbs -ccontains $_ }
-          $present = if ($readable) { $verbs -ccontains 'yield' } else { '<unreadable>' }
-
           Write-Host "winapp path: $exe"
           Write-Host "winapp version: $version"
-          Write-Host "winapp 'ui yield' verb present: $present"
+          Write-Host "winapp 'ui yield' support: $state"
           "winapp path: ``$exe``" >> $env:GITHUB_STEP_SUMMARY
           "winapp version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
-          "winapp ``ui yield`` verb present (winappCli#767): **$present**" >> $env:GITHUB_STEP_SUMMARY
+          "winapp ``ui yield`` support (winappCli#767): **$state**" >> $env:GITHUB_STEP_SUMMARY
+          if ($state -eq '<unreadable>') {
+            'Parsed no known subcommands from `winapp ui --cli-schema`. That is a probe failure, not evidence the verb is missing: inspect the output and update the parser. Strict mode (`REACTOR_E2E_REQUIRE_UI_YIELD`) treats this as a failure.' >> $env:GITHUB_STEP_SUMMARY
+          }
 
       # The E2E suite launches Reactor.AppTests.Host.exe and drives it cross-process.
       # The Host is a ProjectReference of the test project, so building the test

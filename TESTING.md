@@ -828,7 +828,7 @@ dotnet test tests/Reactor.AppTests
 dotnet test tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.AccessibilityTests"
 ```
 
-> **Requires:** the **winapp CLI** (`winapp ui`). Install it with `winget install Microsoft.WinAppCli` (or run `./bootstrap.ps1`, which installs it for you). The harness resolves it from `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe` or `winapp` on PATH. Unit and selftest runs don't need it.
+> **Requires:** the **winapp CLI** (`winapp ui`). Install it with `winget install Microsoft.WinAppCli` (or run `./bootstrap.ps1`, which installs it for you). The harness resolves it from `$REACTOR_WINAPP_EXE` (an absolute path, honored first), then `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe`, then `winapp` on PATH. Unit and selftest runs don't need it.
 >
 > **WinForms tests** also require `Reactor.WinFormsTests.Host` to build. It launches a separate WinForms app with a XAML Island.
 
@@ -887,10 +887,19 @@ An unrecognized verb is not rejected. winapp prints the *parent* help instead �
 byte-identical to `winapp ui --help`, never naming the token it did not understand — so an
 exit-code probe answers "present" for every verb, including invented ones. Searching that output
 for the verb name fails for the same reason: the parent listing carries every verb's description,
-so the word is there whether or not the verb is. Only a command-list entry separates them.
+so the word is there whether or not the verb is. Only a command entry separates them.
+
+The probe asks `winapp ui --cli-schema` first, which answers exactly rather than by inference: it
+emits a JSON object whose `subcommands` keys *are* the command set, so no prose is interpreted and
+a description can never be mistaken for a verb. Parsing `winapp ui --help` is kept as a fallback
+rather than deleted, because a winapp old enough to lack `yield` may also predate `--cli-schema` —
+and that is exactly the build this probe exists to detect, so answering `Unreadable` there would
+throw away a measurement the older path can still make. The help parser reads command entries as
+the lines at the section's *shallowest* indent: renderers wrap long descriptions onto more deeply
+indented continuation lines, whose first word is prose that would otherwise read as a command.
 
 The probe is a tri-state (`WinAppUi.UiVerbSupport`). `Unreadable` is deliberately not folded into
-`Absent`: if no command list comes back, or none of the long-standing verbs (`status`, `inspect`,
+`Absent`: if no command set comes back, or none of the long-standing verbs (`status`, `inspect`,
 `invoke`) appear in it, then the parse failed and nothing was established — reporting that as
 "the verb is missing" would be publishing a measurement that was never taken, and would also let
 a future reformat of winapp's help read as "yield was removed" forever. Under
@@ -905,9 +914,12 @@ suite rather than merely lose continuity, and the harness synthesizes an id inst
 > `$REACTOR_WINAPP_EXE`, then `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe`, and only then
 > `PATH`. Installing a specific winapp and putting it on `PATH` therefore does not guarantee the
 > suite uses it. CI's capability step resolves in that same order and exports
-> `REACTOR_WINAPP_EXE`, so its pin governs the tests rather than merely being present; the suite
-> logs the path it resolved beside the capability for the same reason. This was not hypothetical:
-> the step and the suite once reported opposite answers for the verb inside a single job.
+> `REACTOR_WINAPP_EXE`, so the winapp it installed governs the tests rather than merely being
+> present; the suite logs the path it resolved beside the capability for the same reason. This
+> was not hypothetical: the step and the suite once reported opposite answers for the verb
+> inside a single job. Note that CI pins the *setup action* by SHA but not the CLI version it
+> installs (the action's `version` input defaults to `latest`), so pinning a winapp build is a
+> separate step — and the one to take alongside setting `REACTOR_E2E_REQUIRE_UI_YIELD=1`.
 
 > **This does not stop a non-winapp window stealing the foreground.** Turn arbitration only
 > coordinates winapp callers. On a busy desktop, clicks still fail with
