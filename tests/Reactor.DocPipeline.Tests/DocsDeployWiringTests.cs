@@ -105,9 +105,11 @@ public sealed class DocsDeployWiringTests
     public void The_verifier_and_its_regression_suite_are_present()
     {
         var repoRoot = FindRepoRoot();
-        foreach (var name in new[] { "verify-docs-deployment.mjs", "verify-docs-deployment.test.mjs" })
+        var paths = new[] { "verify-docs-deployment.mjs", "verify-docs-deployment.test.mjs" }
+            .Select(name => Path.Join(repoRoot, ".github", "scripts", name));
+
+        foreach (var path in paths)
         {
-            var path = Path.Join(repoRoot, ".github", "scripts", name);
             Assert.True(File.Exists(path), $"Missing {path}, which docs.yml runs after every Pages deployment.");
         }
     }
@@ -126,8 +128,9 @@ public sealed class DocsDeployWiringTests
 
     private static YamlMappingNode Map(YamlMappingNode parent, string key)
     {
-        Assert.True(parent.Children.ContainsKey(new YamlScalarNode(key)), $"Expected a '{key}' mapping.");
-        return (YamlMappingNode)parent.Children[new YamlScalarNode(key)];
+        var found = parent.Children.TryGetValue(new YamlScalarNode(key), out var value);
+        Assert.True(found, $"Expected a '{key}' mapping.");
+        return (YamlMappingNode)value!;
     }
 
     private static string? Scalar(YamlMappingNode parent, string key) =>
@@ -137,7 +140,8 @@ public sealed class DocsDeployWiringTests
     {
         var path = Path.Join(FindRepoRoot(), ".github", "workflows", "docs.yml");
         var stream = new YamlStream();
-        stream.Load(new StringReader(File.ReadAllText(path)));
+        using var reader = new StringReader(File.ReadAllText(path));
+        stream.Load(reader);
         return (YamlMappingNode)stream.Documents[0].RootNode;
     }
 
