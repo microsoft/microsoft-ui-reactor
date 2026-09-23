@@ -62,16 +62,18 @@ public static class ValidationRuleDsl
     /// <summary>
     /// Evaluates the validation rule against a ValidationContext.
     /// Adds or clears messages based on the predicate result.
+    /// <para>
+    /// The result is applied as one diffed replacement rather than clear-then-add.
+    /// <c>Mount/UpdateValidationRule</c> calls this during reconcile — after the
+    /// component's render scope has closed — so with clear-then-add a failing rule
+    /// raised <see cref="ValidationContext.Changed"/> on every pass, each notification
+    /// drove another render, and the reconciler tripped its re-render re-entrancy limit.
+    /// Re-evaluating to the same verdict is now silent.
+    /// </para>
     /// </summary>
     public static void Evaluate(this ValidationRuleElement rule, ValidationContext ctx)
     {
-        // Clear any previous message from this rule (identified by field + message combo)
-        ctx.ClearInternal(rule.Field);
-
-        if (!rule.Predicate())
-        {
-            ctx.Add(new ValidationMessage(rule.Field, rule.Message, rule.Severity));
-        }
+        ctx.ReplaceInternal(rule.Field, BuildMessages(rule, rule.Predicate()));
     }
 
     /// <summary>
@@ -86,13 +88,15 @@ public static class ValidationRuleDsl
             return;
         }
 
-        ctx.ClearInternal(rule.Field);
+        // Drop the previous verdict while the check is in flight, then install the new
+        // one — both diffed, so an unchanged outcome stays silent.
+        ctx.ReplaceInternal(rule.Field, []);
         var result = await rule.AsyncPredicate();
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!result)
-        {
-            ctx.Add(new ValidationMessage(rule.Field, rule.Message, rule.Severity));
-        }
+        ctx.ReplaceInternal(rule.Field, BuildMessages(rule, result));
     }
+
+    private static List<ValidationMessage> BuildMessages(ValidationRuleElement rule, bool passed) =>
+        passed ? [] : [new ValidationMessage(rule.Field, rule.Message, rule.Severity)];
 }

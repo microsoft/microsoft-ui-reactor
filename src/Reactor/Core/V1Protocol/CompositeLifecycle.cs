@@ -85,7 +85,7 @@ internal static class CompositeLifecycle
         {
             ApplyFormFieldAutomation(contentControl, ff.Label);
             ApplyFormFieldErrorStyling(contentControl, valCtx, fieldName, ff.ShowWhen);
-            WireTouchedOnBlur(contentControl, valCtx, fieldName);
+            WireTouchedOnBlur(panel, contentControl, valCtx, fieldName);
             panel.Children.Add(contentControl);
         }
         else
@@ -157,7 +157,7 @@ internal static class CompositeLifecycle
 
         ApplyFormFieldAutomation(existingContent, newFf.Label);
         ApplyFormFieldErrorStyling(existingContent, valCtx, fieldName, newFf.ShowWhen);
-        WireTouchedOnBlur(existingContent, valCtx, fieldName);
+        WireTouchedOnBlur(panel, existingContent, valCtx, fieldName);
 
         // [2] Update description/error text
         if (panel.Children[2] is TextBlock descTb)
@@ -323,25 +323,69 @@ internal static class CompositeLifecycle
     /// whatever field it currently hosts rather than the one it was mounted with.
     /// </para>
     /// </summary>
-    private static void WireTouchedOnBlur(UIElement contentControl, ValidationContext? valCtx, string? fieldName)
+    private static void WireTouchedOnBlur(UIElement formFieldRoot, UIElement contentControl, ValidationContext? valCtx, string? fieldName)
     {
-        if (valCtx is null || string.IsNullOrEmpty(fieldName)) return;
         if (contentControl is not FrameworkElement fe) return;
+
+        // No context or field to report to — neutralize any binding this control still
+        // carries from a previous FormField rather than leaving it pointed at the old one.
+        if (valCtx is null || string.IsNullOrEmpty(fieldName))
+        {
+            ClearTouchBinding(fe);
+            return;
+        }
 
         if (_touchBindings.TryGetValue(fe, out var existing))
         {
             existing.Context = valCtx;
             existing.FieldName = fieldName;
+            _rootBindings.Remove(formFieldRoot);
+            _rootBindings.Add(formFieldRoot, existing);
             return;
         }
 
         var binding = new TouchBinding { Context = valCtx, FieldName = fieldName };
         _touchBindings.Add(fe, binding);
+        _rootBindings.Remove(formFieldRoot);
+        _rootBindings.Add(formFieldRoot, binding);
         fe.LostFocus += (_, _) =>
         {
             if (binding.Context is { } ctx && binding.FieldName is { Length: > 0 } field)
                 ctx.MarkTouched(field);
         };
+    }
+
+    /// <summary>
+    /// Neutralizes the blur binding on a <c>FormField</c>'s content control when the
+    /// field unmounts.
+    /// <para>
+    /// The <c>LostFocus</c> handler is attached once for the control's lifetime, and
+    /// controls such as <c>TextBox</c> are poolable. Without this, a control rented back
+    /// out for some non-FormField use would still mark the field it used to host on
+    /// every blur, and the pool would keep that <see cref="ValidationContext"/> alive.
+    /// Clearing the live state leaves the one-time handler harmless and lets a later
+    /// mount re-point the same binding.
+    /// </para>
+    /// </summary>
+    internal static void ClearFormFieldTouchBinding(UIElement formFieldRoot)
+    {
+        // Looked up by root rather than by walking Children: unmount runs while the
+        // subtree is being torn down, and reading a panel's visual children at that
+        // point is exactly the kind of teardown-state access worth not doing.
+        if (_rootBindings.TryGetValue(formFieldRoot, out var binding))
+        {
+            binding.Context = null;
+            binding.FieldName = null;
+        }
+    }
+
+    private static void ClearTouchBinding(UIElement contentControl)
+    {
+        if (contentControl is FrameworkElement fe && _touchBindings.TryGetValue(fe, out var binding))
+        {
+            binding.Context = null;
+            binding.FieldName = null;
+        }
     }
 
     private sealed class TouchBinding
@@ -351,6 +395,10 @@ internal static class CompositeLifecycle
     }
 
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, TouchBinding> _touchBindings = new();
+
+    // FormField root -> the binding of its current content control, so unmount can
+    // neutralize it without touching the visual tree mid-teardown.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, TouchBinding> _rootBindings = new();
 
     private static void ApplyFormFieldAutomation(UIElement contentControl, string? label)
     {

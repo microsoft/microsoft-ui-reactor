@@ -25,9 +25,7 @@ public static class ValidationReconciler
         object? value,
         params IValidator[] validators)
     {
-        ctx.RegisterField(fieldName);
-        ctx.NotifyValueChanged(fieldName, value);
-        ctx.ReplaceInternal(fieldName, Run(validators, value, fieldName));
+        ctx.ApplyValidation(fieldName, value, Run(validators, value, fieldName));
     }
 
     /// <summary>
@@ -38,9 +36,7 @@ public static class ValidationReconciler
         ValidationAttached attached,
         object? value)
     {
-        ctx.RegisterField(attached.FieldName);
-        ctx.NotifyValueChanged(attached.FieldName, value);
-        ctx.ReplaceInternal(attached.FieldName, Run(attached.Validators, value, attached.FieldName));
+        ctx.ApplyValidation(attached.FieldName, value, Run(attached.Validators, value, attached.FieldName));
     }
 
     private static List<ValidationMessage> Run(IValidator[] validators, object? value, string fieldName)

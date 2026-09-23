@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls.Validation;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Controls.Validation.ValidationRuleDsl;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
@@ -177,6 +178,79 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void A_First_Validation_Notifies_Exactly_Once_With_Results_Already_Installed()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        var messagesWhenNotified = -1;
+
+        // Registering the value and installing the verdict used to be three calls, so a
+        // subscriber woke up mid-update and re-rendered against the previous pass's
+        // messages. Observe what the context looks like at notification time.
+        ctx.Changed += () =>
+        {
+            notifications++;
+            messagesWhenNotified = ctx.GetMessages("email").Count;
+        };
+
+        ValidationReconciler.ValidateField(ctx, "email", "", Validate.Required(), Validate.MinLength(3));
+
+        Assert.Equal(1, notifications);
+        Assert.Equal(2, messagesWhenNotified);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Cross-field rules — the other reconcile-time writer
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void A_Failing_Rule_Re_Evaluated_Is_Silent()
+    {
+        var ctx = new ValidationContext();
+        var rule = ValidationRule(() => false, "Passwords must match", "confirm");
+
+        rule.Evaluate(ctx);
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionAfterFirst = ctx.Version;
+
+        // ValidationRule mounts/updates evaluate during reconcile, outside any render
+        // scope. Clear-then-add raised Changed on every pass, and each notification
+        // drove another render — the reconciler tripped its re-entrancy limit.
+        for (var i = 0; i < 5; i++)
+            rule.Evaluate(ctx);
+
+        Assert.Equal(0, notifications);
+        Assert.Equal(versionAfterFirst, ctx.Version);
+        Assert.Single(ctx.GetMessages("confirm"));
+    }
+
+    [Fact]
+    public void A_Rule_Flipping_Verdict_Notifies_Each_Way()
+    {
+        var ctx = new ValidationContext();
+        var passing = true;
+        var rule = ValidationRule(() => passing, "Passwords must match", "confirm");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        rule.Evaluate(ctx);
+        Assert.Equal(0, notifications);   // passing, nothing to record
+        Assert.True(ctx.IsValid());
+
+        passing = false;
+        rule.Evaluate(ctx);
+        Assert.Equal(1, notifications);
+        Assert.False(ctx.IsValid());
+
+        passing = true;
+        rule.Evaluate(ctx);
+        Assert.Equal(2, notifications);
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
     public void Changed_Is_Suppressed_While_A_Render_Pass_Is_In_Flight()
     {
         var ctx = new ValidationContext();
@@ -311,7 +385,7 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
-    public void An_Explicit_Provide_Wins_Over_The_Automatic_One()
+    public void An_Explicit_Provide_Reaches_Descendants_Not_The_Providers_Own_Eager_Validation()
     {
         var render = new RenderContext();
         var mine = new ValidationContext();
@@ -322,12 +396,46 @@ public class ValidationRenderScopeTests
         {
             render.BeginRender(() => { });
             resolved = render.UseValidationContext();
+
+            // A bare control — nothing re-validates it later, so where this lands is
+            // observable rather than masked by FormField's reconcile-time pass.
+            var body = TextBox("").Validate("email", "", Validate.Required());
             rendered = ValidationRenderScope.ApplyProvide(
-                TextBlock("body").Provide(ValidationContexts.Current, mine));
+                body.Provide(ValidationContexts.Current, mine));
         }
 
-        Assert.NotSame(resolved, mine);
+        // `.Provide` publishes to the SUBTREE. The providing component's own eager
+        // .Validate() already ran while the tree was being built, against the context
+        // its own hook resolved — matching how UseContext cannot see a value the same
+        // component provides.
+        Assert.False(resolved.IsValid());
+        Assert.Single(resolved.GetMessages("email"));
+        Assert.True(mine.IsValid());
+        Assert.Empty(mine.GetAllMessages());
+
+        // ...and the explicit value is what descendants will read.
         Assert.Same(mine, rendered.ContextValues![ValidationContexts.Current]);
+    }
+
+    [Fact]
+    public void An_Explicit_Provide_Is_What_A_Descendant_Resolves()
+    {
+        var mine = new ValidationContext();
+        var scope = new ContextScope();
+        scope.Push(new Dictionary<ContextBase, object?> { [ValidationContexts.Current] = mine });
+
+        // The descendant renders inside the provided scope, so its hook resolves `mine`
+        // and its eager .Validate() lands there.
+        var child = new RenderContext();
+        using (ValidationRenderScope.Begin(mine))
+        {
+            child.BeginRender(() => { }, scope);
+            Assert.Same(mine, child.UseValidationContext());
+            _ = TextBox("").Validate("email", "", Validate.Required());
+        }
+
+        Assert.False(mine.IsValid());
+        Assert.Single(mine.GetMessages("email"));
     }
 
     [Fact]

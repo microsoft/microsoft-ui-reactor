@@ -134,9 +134,11 @@ only attaches — `FormField` runs those when it mounts.
 
 You do not need `.Provide(ValidationContexts.Current, validation)`: a
 component-local context is published to the rendered subtree automatically, so
-`FormField`, `ValidationVisualizer`, and nested components find it. Write
-`.Provide(...)` explicitly only to share one context across sibling components
-that would otherwise each create their own — an explicit provide always wins.
+`FormField`, `ValidationVisualizer`, and nested components find it. Providing one
+explicitly is what *descendants* resolve, but it does not redirect the providing
+component's own `.Validate()` calls — those already ran while the tree was being
+built. To pool several components' fields into one context, provide it from a
+parent and let each child call `UseValidationContext()`.
 
 Mutating the context re-renders the component that created it. That is why
 `MarkAllTouched()` alone reveals the errors on a failed submit, even though no

@@ -46,7 +46,11 @@ internal sealed class FormFieldHandler : IDecoratorElementHandler<FormFieldEleme
             : ctx.Reconciler.Mount(newEl, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, FormFieldElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        // Issue #1262: drop the blur binding before the content control can be pooled.
+        CompositeLifecycle.ClearFormFieldTouchBinding(control);
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 }
 
 /// <summary>§14 — ValidationVisualizer (StackPanel; Update always remounts).</summary>

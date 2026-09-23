@@ -670,4 +670,143 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a failing ValidationRule must not drive a render loop.
+    //
+    //  ValidationRule evaluates during reconcile, after the component's render
+    //  scope has closed, so its notifications are NOT suppressed. Clear-then-add
+    //  made every pass look like a change, each change requested another render,
+    //  and the reconciler's re-entrancy guard would throw "Render loop detected".
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_FailingRuleDoesNotLoop(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static ValidationContext? s_captured;
+        private static int s_renders;
+
+        // Must be a child Component, not the host's root render func: a child's
+        // re-render callback runs INLINE (CreateComponentRerender), which is what turns
+        // a notification raised during reconcile into unbounded re-entrancy. The root's
+        // callback merely schedules, so mounting this at the root would hide the bug.
+        private sealed class RuleOwner : Component
+        {
+            public override Element Render()
+            {
+                var valCtx = this.UseValidationContext();
+                s_captured = valCtx;
+                s_renders++;
+
+                return VStack(12,
+                    ValidationRule(() => false, "Passwords must match", "confirm"),
+                    TextBlock($"valid:{valCtx.IsValid()}"));
+            }
+        }
+
+        public override async Task RunAsync()
+        {
+            s_captured = null;
+            s_renders = 0;
+
+            var host = H.CreateHost();
+            host.Mount(_ => Component<RuleOwner>());
+
+            // If the loop were still present this throws "Render loop detected".
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_Rule_NoLoopThrown", s_captured is not null);
+            H.Check("Issue1262_Rule_MessageRecorded",
+                s_captured!.GetMessages("confirm").Count == 1);
+            H.Check("Issue1262_Rule_NoAccumulation",
+                s_captured.GetAllMessages().Count == 1);
+            H.Check("Issue1262_Rule_RenderCountBounded", s_renders < 10, $"renders={s_renders}");
+
+            var settledVersion = s_captured.Version;
+            var settledRenders = s_renders;
+            await Harness.Render();
+
+            H.Check("Issue1262_Rule_VersionStableOnReRender", s_captured.Version == settledVersion,
+                $"before={settledVersion} after={s_captured.Version}");
+            H.Check("Issue1262_Rule_RendersSettle", s_renders - settledRenders <= 2,
+                $"delta={s_renders - settledRenders}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 rule done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — the blur binding must not outlive its FormField.
+    //
+    //  The LostFocus handler is attached once for the control's lifetime and
+    //  TextBox is poolable, so a control that stops being a FormField's content
+    //  must stop reporting to the old context/field.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_TouchBindingClearedWhenContextGoes(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            var (provide, setProvide) = (true, (Action<bool>?)null);
+
+            host.Mount(c =>
+            {
+                var (provided, setProvided) = c.UseState(true);
+                setProvide = setProvided;
+                provide = provided;
+
+                var tree = VStack(12,
+                    FormField(
+                        TextBox("").Validate("name", "", Validate.Required("Name is required")),
+                        label: "Full Name",
+                        showWhen: ShowWhen.Always),
+                    Button("Elsewhere", () => { }));
+
+                return provided ? tree.Provide(ValidationContexts.Current, ctx) : tree;
+            });
+
+            await Harness.Render();
+            var box = H.FindControl<TextBox>(_ => true);
+            var elsewhere = H.FindButton("Elsewhere");
+            H.Check("Issue1262_Binding_ControlsFound", box is not null && elsewhere is not null);
+
+            // While the context is reachable, blur marks the field.
+            box!.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            elsewhere!.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            H.Check("Issue1262_Binding_MarksWhileBound", ctx.IsTouched("name"));
+
+            // Drop the provider. The same control is patched in place, so the binding
+            // has to be cleared rather than left pointing at the old context.
+            var stillSameControl = ReferenceEquals(box, H.FindControl<TextBox>(_ => true));
+            setProvide!(false);
+            await Harness.Render();
+            H.Check("Issue1262_Binding_ControlPreserved",
+                stillSameControl && ReferenceEquals(box, H.FindControl<TextBox>(_ => true)));
+
+            var freshCtx = new ValidationContext();
+            freshCtx.RegisterField("name");
+            var touchedBefore = ctx.IsTouched("name");
+
+            // Re-blur now that nothing provides a context.
+            ctx.Reset("name");
+            H.Check("Issue1262_Binding_ResetClearedTouched", !ctx.IsTouched("name"));
+            box.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            elsewhere.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+
+            H.Check("Issue1262_Binding_SilentAfterContextGone", !ctx.IsTouched("name"),
+                $"touchedBefore={touchedBefore}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 binding done"));
+            await Harness.Render();
+        }
+    }
 }

@@ -362,10 +362,15 @@ error display after the field it describes and it will never lag a render behind
 **The context is provided to the subtree for you.** When
 `UseValidationContext()` creates a component-local context (nothing up the tree
 provided one), that context is published to whatever the component returns, so
-`FormField`, `ValidationVisualizer`, and nested components find it. Writing
-`.Provide(ValidationContexts.Current, ctx)` yourself still works and wins over
-the automatic one — reach for it when you want a context to span siblings that
-each create their own.
+`FormField`, `ValidationVisualizer`, and nested components find it.
+
+Writing `.Provide(ValidationContexts.Current, ctx)` yourself still works, and the
+value you provide is what descendants resolve. It does **not** redirect the
+providing component's own `.Validate()` calls: those already ran while the
+element tree was being built, against the context `UseValidationContext()`
+returned — the same reason `UseContext` can't observe a value the same component
+provides. To collect several components' fields into one context, provide it from
+a parent and let each child call `UseValidationContext()`.
 
 **Mutating the context repaints the form.** `ctx.MarkAllTouched()` changes no
 component state, so nothing else would schedule a render; the component that

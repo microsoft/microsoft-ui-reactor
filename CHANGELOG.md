@@ -61,6 +61,11 @@ Conventions for contributors:
   control was wrapped in a `FormField`, so a form built from the documented
   "Validation Context" example registered no fields, produced no messages,
   reported `IsValid() == true`, and submitted while empty (issue #1262).
+- A failing `ValidationRule` could drive the reconciler into its re-render
+  re-entrancy limit: rules evaluate during reconcile, outside the render scope,
+  and cleared-then-re-added their message every pass, so each pass looked like a
+  change and requested another render. Rule results are now applied as one diffed
+  replacement (issue #1262).
 - `ValidationContext.NotifyValueChanged` discarded external messages on every
   call rather than only when the value actually changed, so a server-side error
   added with `AddExternal` was wiped by the next render (issue #1262).

@@ -216,6 +216,51 @@ public sealed class ValidationContext
     }
 
     /// <summary>
+    /// Registers a field, records its value, and installs its validator results as one
+    /// atomic step — a single lock, a single version bump, and at most one
+    /// <see cref="Changed"/> notification raised only after everything is in place.
+    /// <para>
+    /// Doing this as three calls let a subscriber observe the context mid-update: on a
+    /// first mount, <see cref="NotifyValueChanged"/> would see an unknown field, raise,
+    /// and synchronously drive a re-render that read the *previous* pass's messages
+    /// because the replacement had not happened yet. The reconcile-time <c>FormField</c>
+    /// path reaches this code after the render scope has closed, so that notification
+    /// was not suppressed.
+    /// </para>
+    /// </summary>
+    internal void ApplyValidation(string field, object? value, List<ValidationMessage> messages)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            _registeredFields.Add(field);
+
+            var known = _currentValues.TryGetValue(field, out var previous);
+            var valueChanged = !known || !Equals(previous, value);
+            if (valueChanged)
+            {
+                _currentValues[field] = value;
+                // A server verdict about the old value says nothing about the new one.
+                _externalMessages.Remove(field);
+            }
+
+            _messages.TryGetValue(field, out var existing);
+            var messagesChanged = !SameMessages(existing, messages);
+            if (messagesChanged)
+            {
+                if (messages.Count == 0)
+                    _messages.Remove(field);
+                else
+                    _messages[field] = messages;
+            }
+
+            changed = valueChanged || messagesChanged;
+            if (changed) _version++;
+        }
+        if (changed) RaiseChanged();
+    }
+
+    /// <summary>
     /// Clears only external messages for the specified field.
     /// </summary>
     public void ClearExternal(string field)

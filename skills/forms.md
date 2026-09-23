@@ -114,9 +114,11 @@ result in the same pass. The validator-only overload
 
 You do not need `.Provide(ValidationContexts.Current, validation)`: a
 component-local context is published to the subtree automatically, so
-`FormField` and the visualizers find it. Write `.Provide(...)` explicitly only
-to share one context across sibling components that would otherwise each make
-their own — an explicit provide always wins.
+`FormField` and the visualizers find it. Providing one explicitly is what
+*descendants* resolve, but it does not redirect the providing component's own
+`.Validate()` calls — those already ran while the tree was being built. To pool
+several components' fields into one context, provide it from a parent and let
+each child call `UseValidationContext()`.
 
 Mutating the context re-renders the component that created it, which is why
 `MarkAllTouched()` on an invalid submit is enough to reveal the errors even
