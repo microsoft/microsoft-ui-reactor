@@ -64,6 +64,12 @@ public sealed class DocsDeployWiringTests
         Assert.Contains("git tag --points-at", run, StringComparison.Ordinal);
         Assert.Contains("deploy=false", run, StringComparison.Ordinal);
         Assert.Contains("deploy=true", run, StringComparison.Ordinal);
+
+        // The gate must not fail open. Deciding on stale tag data would answer
+        // "no tag here" and deploy, which is the collision it exists to
+        // prevent — and it would do so with no signal at all.
+        Assert.Contains("::error::", run, StringComparison.Ordinal);
+        Assert.Matches(@"exit 1", run);
     }
 
     [Fact]

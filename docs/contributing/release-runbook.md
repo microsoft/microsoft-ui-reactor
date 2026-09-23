@@ -273,7 +273,11 @@ Two things now prevent it:
 - The `publish` job checks whether the pushed commit already carries a `v*` tag and, if so,
   **stands down from deploying** — the tag run owns the deployment. `publish` itself still
   runs, because it is what writes the `main` version to `gh-pages`; only the serving step is
-  skipped, and the tag run's artifact is the whole branch, so nothing is lost.
+  skipped, and the tag run's artifact is the whole branch, so nothing is lost. If the tag
+  list cannot be refreshed from `origin` (three attempts), the job **fails** rather than
+  deciding on stale data: answering "no tag here" from a stale checkout would deploy and
+  collide, silently, which is the outcome the gate exists to prevent. `gh-pages` is already
+  written by that point, so the cost is a re-run, not a lost publish.
 - The `verify` job then polls the live site and asserts that the artifact being served is
   the one **this run** produced. That is the part that carries correctness: a tag pushed
   after `publish` has already looked is invisible to the check above, so the race is

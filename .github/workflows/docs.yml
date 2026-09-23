@@ -250,7 +250,26 @@ jobs:
             # Checked as late as possible, against the freshest tag list, so the
             # window between "main's run looked" and "the tag was pushed" is as
             # small as the job length allows.
-            git fetch --tags --force --quiet origin || echo "Could not refresh tags; falling back to the fetched set."
+            #
+            # A failed refresh must not be shrugged off. Stale tag data makes
+            # this step answer "no tag here" and deploy, which is exactly the
+            # collision the gate exists to prevent — and it would do so with no
+            # signal at all. Retry, then fail: gh-pages is already written by
+            # this point, so failing costs a re-run, not a lost publish.
+            refreshed=''
+            for attempt in 1 2 3; do
+              if git fetch --tags --force --quiet origin; then
+                refreshed=yes
+                break
+              fi
+              echo "Tag refresh attempt $attempt failed; retrying."
+              sleep 5
+            done
+            if [ -z "$refreshed" ]; then
+              echo "::error::Could not refresh tags from origin after 3 attempts, so this run cannot tell whether $GITHUB_SHA is already tagged. Refusing to guess: deploying on stale tag data risks colliding with the release tag's own deployment (issue #1268). Re-run this job once connectivity is restored."
+              exit 1
+            fi
+
             tags="$(git tag --points-at "$GITHUB_SHA" --list 'v*' | tr '\n' ' ')"
             if [ -n "$tags" ]; then
               echo "::notice::$GITHUB_SHA is already tagged ($tags) — leaving the deployment to the tag run so the two cannot collide (issue #1268)."

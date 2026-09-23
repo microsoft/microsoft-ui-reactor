@@ -13,8 +13,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   evaluate,
   expectedRootTarget,
+  parseRootRedirect,
   probe,
   report,
   selectProbeTargets,
@@ -45,8 +47,12 @@ function unreachable() {
   return { ok: false, status: null, body: null, error: "getaddrinfo ENOTFOUND" };
 }
 
-// The real mike root stub, which forwards to whichever version is default.
-const ROOT_STUB = '<script>window.location.replace("latest/" + window.location.search);</script>';
+// The real mike root stub: a script redirect, a noscript meta refresh, and a
+// human-visible link, all naming the same target.
+const ROOT_STUB = `<!DOCTYPE html><html><head>
+  <noscript><meta http-equiv="refresh" content="1; url=latest/" /></noscript>
+  <script>window.location.replace("latest/" + window.location.search + window.location.hash);</script>
+</head><body>Redirecting to <a href="latest/">latest/</a>...</body></html>`;
 
 /** A healthy live site: this run's stamp, the full version list, every page. */
 function healthy(overrides = {}, published = PUBLISHED_RELEASE) {
@@ -131,10 +137,44 @@ test("a site root that 404s is stranded", () => {
 });
 
 test("a site root redirecting to the wrong version is stranded", () => {
-  const stale = '<script>window.location.replace("main/" + window.location.search);</script>';
+  const stale = ROOT_STUB.replace(/latest\//g, "main/");
   const verdict = verdictFor(healthy({ root: { probe: ok(stale) } }));
   assert.equal(verdict.status, "stranded");
   assert.ok(verdict.failures.some((f) => f.kind === "root-mistargeted"));
+});
+
+test("the root redirect target is parsed, not substring-matched", () => {
+  assert.equal(parseRootRedirect(ROOT_STUB), "latest");
+  assert.equal(parseRootRedirect('<script>window.location.replace("0.1.0-preview.16/")</script>'), "0.1.0-preview.16");
+  assert.equal(parseRootRedirect('<noscript><meta http-equiv="refresh" content="1; url=main/" /></noscript>'), "main");
+  assert.equal(parseRootRedirect("<html>no redirect here</html>"), null);
+});
+
+// `not-latest/` contains `latest/`, so a contains() check accepted it.
+test("a root redirecting to a name containing the target is stranded", () => {
+  const impostor = ROOT_STUB.replace(/latest\//g, "not-latest/");
+  const verdict = verdictFor(healthy({ root: { probe: ok(impostor) } }));
+  assert.equal(verdict.status, "stranded");
+  const failure = verdict.failures.find((f) => f.kind === "root-mistargeted");
+  assert.ok(failure);
+  assert.match(failure.message, /not-latest\//);
+});
+
+// The expected target present only in decoration, while the real redirect
+// points elsewhere.
+test("a root whose only mention of the target is an unrelated link is stranded", () => {
+  const misleading =
+    '<script>window.location.replace("main/" + window.location.search);</script>' +
+    '<body>See also <a href="latest/">latest/</a></body>';
+  const verdict = verdictFor(healthy({ root: { probe: ok(misleading) } }));
+  assert.equal(verdict.status, "stranded");
+  assert.ok(verdict.failures.some((f) => f.kind === "root-mistargeted"));
+});
+
+test("a root with no recognisable redirect at all is stranded", () => {
+  const verdict = verdictFor(healthy({ root: { probe: ok("<html><body>hello</body></html>") } }));
+  assert.equal(verdict.status, "stranded");
+  assert.ok(verdict.failures.some((f) => f.kind === "root-unparseable"));
 });
 
 // `--alias-type copy` makes `latest/` a separate tree from the version it
@@ -434,6 +474,59 @@ test("a transport failure becomes a probe result rather than a throw", async () 
     uuid: () => "fixed",
   });
   assert.deepEqual(result, { ok: false, status: null, body: null, error: "socket hang up" });
+});
+
+// Neither fetch nor response.text() times out on its own, and observe() awaits
+// every probe together, so one stalled connection would hold the polling loop
+// past its deadline and swallow the diagnostic the job exists to print.
+test("a stalled request is bounded rather than hanging forever", async () => {
+  const started = Date.now();
+  const result = await probe("https://example.test/docs/", "versions.json", {
+    // Settles only when the abort signal fires, as a real socket would.
+    fetchImpl: (url, options) =>
+      new Promise((_, reject) => {
+        options.signal.addEventListener("abort", () => reject(new Error("The operation was aborted")));
+      }),
+    uuid: () => "fixed",
+    requestTimeoutMs: 25,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, null);
+  assert.match(result.error, /abort/i);
+  assert.ok(Date.now() - started < 5_000, "the probe should give up quickly, not hang");
+});
+
+test("a body that never finishes streaming is bounded too", async () => {
+  const result = await probe("https://example.test/docs/", "versions.json", {
+    fetchImpl: async (url, options) => ({
+      status: 200,
+      text: () =>
+        new Promise((_, reject) => {
+          options.signal.addEventListener("abort", () => reject(new Error("terminated")));
+        }),
+    }),
+    uuid: () => "fixed",
+    requestTimeoutMs: 25,
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /terminated/);
+});
+
+test("every probe carries an abort signal and a sane default ceiling", async () => {
+  let seenOptions = null;
+  await probe("https://example.test/docs/", "versions.json", {
+    fetchImpl: async (url, options) => {
+      seenOptions = options;
+      return { status: 200, text: async () => "{}" };
+    },
+    uuid: () => "fixed",
+  });
+  assert.ok(seenOptions.signal, "no abort signal was passed to fetch");
+  assert.ok(
+    DEFAULT_REQUEST_TIMEOUT_MS < 15_000 * 2,
+    "the per-request ceiling must stay well under the polling window",
+  );
 });
 
 test("exit codes separate a stranded deploy from a broken probe", () => {

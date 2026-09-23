@@ -32,6 +32,16 @@ export const ROOT_INDEX_PATH = "index.html";
 export const LATEST_ALIAS = "latest";
 
 /**
+ * Per-request ceiling. Deliberately well under the polling window so a stalled
+ * connection costs one round rather than the whole budget, and under the job's
+ * own timeout so the failure is this gate's diagnostic rather than a silent
+ * runner kill.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+
+const defaultAbortSignal = (ms) => AbortSignal.timeout(ms);
+
+/**
  * The page a version probe fetches.
  *
  * Explicitly `index.html` rather than the bare directory: a bare directory is
@@ -113,6 +123,34 @@ export function selectProbeTargets(expectedVersions, publishedVersions = []) {
     entries.map((entry) => entry?.version).find((version) => version && !targets.includes(version)) ?? null;
 
   return { targets, control };
+}
+
+/**
+ * The version or alias a mike-generated site root forwards to, or null when the
+ * document does not look like one.
+ *
+ * Parsed rather than substring-matched. `set-default` writes the target into a
+ * `location.replace(...)` call and a `<noscript>` meta refresh, but the same
+ * document also contains a human-visible `<a href="...">`. A contains() check
+ * would accept a root that redirects to `not-latest/` (which contains
+ * `latest/`), or one whose only mention of the expected target is that link
+ * while the actual redirect points somewhere else.
+ */
+export function parseRootRedirect(html) {
+  const text = typeof html === "string" ? html : "";
+
+  // What a browser with scripting actually follows.
+  const script = text.match(/location\s*\.\s*replace\(\s*["']([^"']+)["']/);
+  if (script) return normaliseTarget(script[1]);
+
+  const meta = text.match(/http-equiv=["']refresh["'][^>]*content=["'][^"']*url=\s*([^"'\s]+)/i);
+  if (meta) return normaliseTarget(meta[1]);
+
+  return null;
+}
+
+function normaliseTarget(target) {
+  return target.replace(/^\.?\//, "").replace(/\/+$/, "");
 }
 
 /**
@@ -246,13 +284,23 @@ export function evaluate({ expectedRunId, expectedVersions, publishedVersions = 
       });
     } else {
       evidence.push("the site root responded 200");
-      if (rootTarget && !(root.probe.body ?? "").includes(`${rootTarget}/`)) {
-        failures.push({
-          kind: "root-mistargeted",
-          message:
-            `The site root does not redirect to '${rootTarget}/'. Readers landing on the bare URL ` +
-            "would be sent somewhere other than the version this run made default.",
-        });
+      if (rootTarget) {
+        const actual = parseRootRedirect(root.probe.body);
+        if (actual === null) {
+          failures.push({
+            kind: "root-unparseable",
+            message:
+              "The site root responded 200 but carries no recognisable redirect. " +
+              "`mike set-default` writes one, so a root without it sends readers nowhere.",
+          });
+        } else if (actual !== rootTarget) {
+          failures.push({
+            kind: "root-mistargeted",
+            message:
+              `The site root redirects to '${actual}/', not '${rootTarget}/'. Readers landing on the ` +
+              "bare URL would be sent somewhere other than the version this run made default.",
+          });
+        }
       }
     }
   }
@@ -309,12 +357,24 @@ export function evaluate({ expectedRunId, expectedVersions, publishedVersions = 
  * `https://owner.github.io/repo` would send every probe to
  * `https://owner.github.io/versions.json` and report the whole site missing.
  */
-export async function probe(baseUrl, path, { fetchImpl = fetch, uuid = randomUUID } = {}) {
+export async function probe(
+  baseUrl,
+  path,
+  { fetchImpl = fetch, uuid = randomUUID, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, abortSignal = defaultAbortSignal } = {},
+) {
   const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   const url = new URL(path, base);
   url.searchParams.set("nc", uuid());
   try {
-    const response = await fetchImpl(url.toString(), { cache: "no-store", redirect: "follow" });
+    // Bounded: neither fetch nor response.text() times out on its own, and
+    // observe() awaits every probe together, so one stalled connection would
+    // otherwise hold the whole polling loop past its deadline and swallow the
+    // diagnostic the job exists to print.
+    const response = await fetchImpl(url.toString(), {
+      cache: "no-store",
+      redirect: "follow",
+      signal: abortSignal(requestTimeoutMs),
+    });
     const body = await response.text();
     return { ok: response.status === 200, status: response.status, body, error: null };
   } catch (err) {
@@ -370,8 +430,10 @@ export async function verifyDeployment({
   publishedVersions = [],
   timeoutMs = 600_000,
   intervalMs = 15_000,
+  requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   fetchImpl = fetch,
   uuid = randomUUID,
+  abortSignal = defaultAbortSignal,
   now = () => Date.now(),
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   log = console.log,
@@ -382,7 +444,12 @@ export async function verifyDeployment({
 
   for (;;) {
     attempt += 1;
-    const observations = await observe(baseUrl, expectedVersions, publishedVersions, { fetchImpl, uuid });
+    const observations = await observe(baseUrl, expectedVersions, publishedVersions, {
+      fetchImpl,
+      uuid,
+      requestTimeoutMs,
+      abortSignal,
+    });
     verdict = { ...evaluate({ expectedRunId, expectedVersions, publishedVersions, observations }), attempt };
 
     if (verdict.status === "pass") return verdict;
