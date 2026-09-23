@@ -38,11 +38,12 @@ Conventions for contributors:
 
 ### Changed
 
-- A push to `main` no longer deploys the docs when the pushed commit already carries a `v*`
-  tag; the release tag's own run owns the deployment. Both runs previously handed
-  `actions/deploy-pages` the same `pages_build_version` (it is `github.sha`, with no input
-  to override it), so the two deployments collided under one identity and one was silently
-  stranded. `publish` still runs on both, so `gh-pages` is unaffected. (issue #1268)
+- A push to `main` and the release tag's own run both deploy the docs, as before. Standing
+  one of them down was tried and removed: every version of that check has to predict that
+  the other run will deploy, and each way the prediction fails (an evicted pending run, a
+  stale or deleted local tag, an unreachable `origin`, or the two runs entering the
+  concurrency group out of event order) skips the deployment *and* its verification, which
+  is worse than a duplicate the new `verify` job catches. (issue #1268)
 - The `Publish docs` concurrency group now sets `queue: max`. The Actions default keeps at
   most one *pending* run per group and cancels the previous one when a new run queues, so a
   docs push landing while a release tag's run waited behind `main` would evict the tag run

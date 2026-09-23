@@ -40,10 +40,9 @@ permissions: {}
 # new run queues. During a release that is reachable and costly: the merge's
 # `main` run holds the group, the release tag's run waits behind it, and any
 # further docs push to `main` would evict the tag run before it ever ran. The
-# release version would then never be written to gh-pages at all, and the
-# "Decide whether this run owns the deployment" step below would have already
-# stood `main` down in favour of a run that no longer exists. Queuing makes the
-# tag run wait its turn instead (FIFO, up to 100 pending).
+# release version would then never be written to gh-pages at all, and nothing
+# would fail. Queuing makes the tag run wait its turn instead (FIFO, up to 100
+# pending).
 #
 # `cancel-in-progress` is deliberately absent: it defaults to false, and
 # `queue: max` with `cancel-in-progress: true` is a workflow validation error.
@@ -69,10 +68,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     outputs:
-      # Whether this run owns the Pages deployment, and the exact version list
-      # the verify job must find on the live site. See the two steps that set
-      # them for why each exists.
-      deploy: ${{ steps.deploy-gate.outputs.deploy }}
+      # The exact version list the verify job must find on the live site, and
+      # the subset this run actually wrote. See the artifact step for why each
+      # exists.
       versions: ${{ steps.artifact.outputs.versions }}
       published: ${{ steps.artifact.outputs.published }}
     permissions:
@@ -219,66 +217,6 @@ jobs:
             mike set-default --branch "$MIKE_BRANCH" --push "${highest_backfilled#v}"
           fi
 
-      - name: Decide whether this run owns the deployment
-        id: deploy-gate
-        run: |
-          # A release PR always edits docs/guide/** (the {{reactorVersion}}
-          # substitutions), so the push that merges it matches this workflow's
-          # path filter — and the release tag then points at that same merge
-          # commit. Both runs hand actions/deploy-pages the same
-          # `pages_build_version`: it is github.sha, and the action exposes no
-          # input to override it. So the two deployments collide under one
-          # identity and one of them is silently stranded (issue #1268).
-          #
-          # The tag run is the one that publishes the release and moves the
-          # `latest` alias, so it keeps the deployment and the branch push
-          # stands down. `publish` still runs either way — it is what writes the
-          # `main` version to gh-pages, and the tag run's artifact is the whole
-          # branch, so nothing is lost by not serving it from here.
-          #
-          # Standing down is only safe because the concurrency block above sets
-          # `queue: max`. Under the default `single`, a later docs push could
-          # evict the still-pending tag run, and this step would have deferred
-          # to a run that never happens — losing the release deployment and its
-          # verification together. Do not remove one without the other.
-          #
-          # This narrows the window rather than closing it: a tag pushed after
-          # this step has already looked is invisible to it, and both runs
-          # deploy again. That residual race is what the verify job below is
-          # for — it turns a stranded deployment from silent into red.
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "branch" ]; then
-            # Checked as late as possible, against the freshest tag list, so the
-            # window between "main's run looked" and "the tag was pushed" is as
-            # small as the job length allows.
-            #
-            # A failed refresh must not be shrugged off. Stale tag data makes
-            # this step answer "no tag here" and deploy, which is exactly the
-            # collision the gate exists to prevent — and it would do so with no
-            # signal at all. Retry, then fail: gh-pages is already written by
-            # this point, so failing costs a re-run, not a lost publish.
-            refreshed=''
-            for attempt in 1 2 3; do
-              if git fetch --tags --force --quiet origin; then
-                refreshed=yes
-                break
-              fi
-              echo "Tag refresh attempt $attempt failed; retrying."
-              sleep 5
-            done
-            if [ -z "$refreshed" ]; then
-              echo "::error::Could not refresh tags from origin after 3 attempts, so this run cannot tell whether $GITHUB_SHA is already tagged. Refusing to guess: deploying on stale tag data risks colliding with the release tag's own deployment (issue #1268). Re-run this job once connectivity is restored."
-              exit 1
-            fi
-
-            tags="$(git tag --points-at "$GITHUB_SHA" --list 'v*' | tr '\n' ' ')"
-            if [ -n "$tags" ]; then
-              echo "::notice::$GITHUB_SHA is already tagged ($tags) — leaving the deployment to the tag run so the two cannot collide (issue #1268)."
-              echo "deploy=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-          echo "deploy=true" >> "$GITHUB_OUTPUT"
-
       - name: Assemble the Pages artifact from every published version
         id: artifact
         # `git archive` rather than a checkout: it materialises the branch
@@ -367,11 +305,19 @@ jobs:
 
   deploy:
     needs: publish
-    # Skipped when the pushed commit already carries a release tag: the tag run
-    # owns the deployment, so the two cannot collide under one
-    # pages_build_version. See the "Decide whether this run owns the
-    # deployment" step above (issue #1268).
-    if: needs.publish.outputs.deploy == 'true'
+    # A release commit produces two runs that hand actions/deploy-pages the
+    # same `pages_build_version` — it is github.sha, with no input to override
+    # it — so both deployments land under one identity and Pages may strand one
+    # of them (issue #1268).
+    #
+    # That duplicate is tolerated rather than avoided. Standing one run down
+    # requires predicting that the other will deploy, and every form of that
+    # prediction fails silently in the direction that matters: a pending tag
+    # run can be evicted, a stale local tag can name a release that no longer
+    # exists, an unreachable `origin` makes the check answer "no tag here", and
+    # the two runs are not guaranteed to enter the concurrency group in event
+    # order. Each of those skips the deployment *and* the verification below,
+    # which is strictly worse than a duplicate that `verify` can catch.
     runs-on: ubuntu-latest
     permissions:
       pages: write

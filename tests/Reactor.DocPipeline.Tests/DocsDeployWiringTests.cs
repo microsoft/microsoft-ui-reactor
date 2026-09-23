@@ -28,12 +28,26 @@ public sealed class DocsDeployWiringTests
     private static readonly YamlMappingNode Jobs = Map(Workflow, "jobs");
 
     [Fact]
-    public void Publish_exposes_the_deploy_decision_and_the_published_version_list()
+    public void Publish_exposes_the_published_version_list()
     {
         var outputs = Map(Map(Jobs, "publish"), "outputs");
 
-        Assert.Equal("${{ steps.deploy-gate.outputs.deploy }}", Scalar(outputs, "deploy"));
         Assert.Equal("${{ steps.artifact.outputs.versions }}", Scalar(outputs, "versions"));
+        Assert.Equal("${{ steps.artifact.outputs.published }}", Scalar(outputs, "published"));
+    }
+
+    [Fact]
+    public void Every_deployment_is_verified()
+    {
+        var deploy = Map(Jobs, "deploy");
+
+        // The duplicate deployment a release commit produces is tolerated on
+        // purpose. Every way of standing one run down requires predicting that
+        // the other will deploy, and each form of that prediction fails
+        // silently — skipping the verification below along with the
+        // deployment, which is worse than a duplicate `verify` can catch.
+        Assert.Null(Scalar(deploy, "if"));
+        Assert.Equal("${{ steps.deployment.outputs.page_url }}", Scalar(Map(deploy, "outputs"), "page_url"));
     }
 
     [Fact]
@@ -51,25 +65,6 @@ public sealed class DocsDeployWiringTests
         // error, which would take the whole workflow offline rather than fail
         // one job.
         Assert.NotEqual("true", Scalar(concurrency, "cancel-in-progress"));
-    }
-
-    [Fact]
-    public void Publish_decides_whether_this_run_owns_the_deployment()
-    {
-        var run = StepRun("publish", "deploy-gate");
-
-        // The whole point of the step: a merge commit that already carries a
-        // release tag must leave the deployment to the tag run, so the two
-        // cannot collide under one pages_build_version.
-        Assert.Contains("git tag --points-at", run, StringComparison.Ordinal);
-        Assert.Contains("deploy=false", run, StringComparison.Ordinal);
-        Assert.Contains("deploy=true", run, StringComparison.Ordinal);
-
-        // The gate must not fail open. Deciding on stale tag data would answer
-        // "no tag here" and deploy, which is the collision it exists to
-        // prevent — and it would do so with no signal at all.
-        Assert.Contains("::error::", run, StringComparison.Ordinal);
-        Assert.Matches(@"exit 1", run);
     }
 
     [Fact]
@@ -121,15 +116,6 @@ public sealed class DocsDeployWiringTests
         // recording turns into a red run rather than a quieter gate — but only
         // if every step records in the first place.
         Assert.Contains("$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE", run, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Deploy_stands_down_when_publish_says_the_tag_run_owns_it()
-    {
-        var deploy = Map(Jobs, "deploy");
-
-        Assert.Equal("needs.publish.outputs.deploy == 'true'", Scalar(deploy, "if"));
-        Assert.Equal("${{ steps.deployment.outputs.page_url }}", Scalar(Map(deploy, "outputs"), "page_url"));
     }
 
     [Fact]

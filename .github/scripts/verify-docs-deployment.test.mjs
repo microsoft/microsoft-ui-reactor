@@ -529,6 +529,65 @@ test("every probe carries an abort signal and a sane default ceiling", async () 
   );
 });
 
+// AbortSignal.timeout() is unref'd, so it never fires when nothing else holds
+// the event loop open. Real traffic hides that because the socket keeps the
+// loop alive; the regression suite does not, and a probe that cannot time out
+// hangs the whole file. The default must own a timer that actually fires.
+test("the default request timeout fires with nothing else on the event loop", async () => {
+  const started = Date.now();
+  const result = await probe("https://example.test/docs/", "versions.json", {
+    fetchImpl: (url, options) =>
+      new Promise((_, reject) => {
+        options.signal.addEventListener("abort", () => reject(options.signal.reason ?? new Error("aborted")));
+      }),
+    uuid: () => "fixed",
+    requestTimeoutMs: 30,
+    // No createTimeout override: this exercises the shipped default.
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /timed out after 30ms/);
+  assert.ok(Date.now() - started < 5_000, "the default timeout must fire, not hang");
+});
+
+test("a settled request cancels its timer instead of leaving it pending", async () => {
+  let cancelled = false;
+  const result = await probe("https://example.test/docs/", "versions.json", {
+    fetchImpl: async () => ({ status: 200, redirected: false, text: async () => "{}" }),
+    uuid: () => "fixed",
+    createTimeout: () => ({ signal: new AbortController().signal, cancel: () => { cancelled = true; } }),
+  });
+  assert.equal(result.ok, true);
+  assert.ok(cancelled, "a fast response must not leave a 20s timer behind");
+});
+
+test("a probe that was redirected elsewhere is not accepted as served", async () => {
+  // `redirect: "follow"` reports the *final* status, so a missing version
+  // directory that bounces to a healthy page would otherwise look like a 200
+  // for the path that does not exist.
+  const result = await probe("https://example.test/docs/", "0.1.0-preview.14/index.html", {
+    fetchImpl: async () => ({
+      status: 200,
+      redirected: true,
+      url: "https://example.test/docs/latest/index.html",
+      text: async () => "<html>the latest page</html>",
+    }),
+    uuid: () => "fixed",
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /redirected to https:\/\/example\.test\/docs\/latest\/index\.html/);
+});
+
+test("a direct 200 is still accepted", async () => {
+  const result = await probe("https://example.test/docs/", "versions.json", {
+    fetchImpl: async () => ({ status: 200, redirected: false, text: async () => "[]" }),
+    uuid: () => "fixed",
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.error, null);
+});
+
 test("exit codes separate a stranded deploy from a broken probe", () => {
   const silence = () => {};
   assert.equal(report({ ...verdictFor(healthy()), attempt: 1 }, { log: silence, err: silence }), 0);

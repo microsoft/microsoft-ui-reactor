@@ -39,7 +39,21 @@ export const LATEST_ALIAS = "latest";
  */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 
-const defaultAbortSignal = (ms) => AbortSignal.timeout(ms);
+/**
+ * Timeout signal for one request, plus the handle to cancel it.
+ *
+ * Deliberately not `AbortSignal.timeout()`: that timer is unref'd, so it does
+ * not hold the event loop open and never fires when nothing else is pending.
+ * Real traffic hides this because the socket keeps the loop alive, but it made
+ * the regression suite hang and take the rest of the file down with it. A
+ * plain `setTimeout` fires reliably, and cancelling it after the request
+ * settles stops a fast response from leaving a 20s timer behind.
+ */
+function defaultCreateTimeout(ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`timed out after ${ms}ms`)), ms);
+  return { signal: controller.signal, cancel: () => clearTimeout(timer) };
+}
 
 /**
  * The page a version probe fetches.
@@ -360,25 +374,47 @@ export function evaluate({ expectedRunId, expectedVersions, publishedVersions = 
 export async function probe(
   baseUrl,
   path,
-  { fetchImpl = fetch, uuid = randomUUID, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, abortSignal = defaultAbortSignal } = {},
+  {
+    fetchImpl = fetch,
+    uuid = randomUUID,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    createTimeout = defaultCreateTimeout,
+  } = {},
 ) {
   const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   const url = new URL(path, base);
   url.searchParams.set("nc", uuid());
+
+  // Bounded: neither fetch nor response.text() times out on its own, and
+  // observe() awaits every probe together, so one stalled connection would
+  // otherwise hold the whole polling loop past its deadline and swallow the
+  // diagnostic the job exists to print.
+  const timeout = createTimeout(requestTimeoutMs);
   try {
-    // Bounded: neither fetch nor response.text() times out on its own, and
-    // observe() awaits every probe together, so one stalled connection would
-    // otherwise hold the whole polling loop past its deadline and swallow the
-    // diagnostic the job exists to print.
     const response = await fetchImpl(url.toString(), {
       cache: "no-store",
       redirect: "follow",
-      signal: abortSignal(requestTimeoutMs),
+      signal: timeout.signal,
     });
     const body = await response.text();
+
+    // A followed redirect means the requested path is *not* what served this
+    // response, so accepting on the final status alone would let a missing
+    // version directory pass by bouncing to a healthy page.
+    if (response.redirected) {
+      return {
+        ok: false,
+        status: response.status,
+        body,
+        error: `redirected to ${response.url ?? "an unknown location"}`,
+      };
+    }
+
     return { ok: response.status === 200, status: response.status, body, error: null };
   } catch (err) {
     return { ok: false, status: null, body: null, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    timeout.cancel();
   }
 }
 
@@ -433,7 +469,7 @@ export async function verifyDeployment({
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   fetchImpl = fetch,
   uuid = randomUUID,
-  abortSignal = defaultAbortSignal,
+  createTimeout = defaultCreateTimeout,
   now = () => Date.now(),
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   log = console.log,
@@ -448,7 +484,7 @@ export async function verifyDeployment({
       fetchImpl,
       uuid,
       requestTimeoutMs,
-      abortSignal,
+      createTimeout,
     });
     verdict = { ...evaluate({ expectedRunId, expectedVersions, publishedVersions, observations }), attempt };
 

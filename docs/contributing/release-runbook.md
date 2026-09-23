@@ -181,7 +181,7 @@ After pushing the tag:
 2. Confirm the OneBranch official pipeline starts for the tag.
 3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)). Check **all three** of its jobs:
    - a green `publish` beside a red `deploy` means the environment refused the tag ref, and the site stays stale even though `gh-pages` is already correct — see [Which refs may deploy](#which-refs-may-deploy);
-   - a green `deploy` beside a red `verify` means the deployment reported success but the live site is serving something else — see [Why a release commit deploys only once](#why-a-release-commit-deploys-only-once).
+   - a green `deploy` beside a red `verify` means the deployment reported success but the live site is serving something else — see [Why a release commit deploys twice](#why-a-release-commit-deploys-twice).
 4. Approve the `Production_PublishNuGet` stage when ready to publish to NuGet.org.
 5. Verify the packages appear on NuGet.org.
 6. Install the released template package or a locally packed template and create a smoke app that restores against NuGet.org.
@@ -203,8 +203,8 @@ Nothing about this is manual on the happy path. `.github/workflows/docs.yml` han
 | Push to `main` touching the docs | Republishes the `main (development)` version |
 | Push of a `v*` tag | Publishes `<version>`, moves the `latest` alias to it, and repoints the site root |
 
-Both write to `gh-pages`, but only one of them *serves* a release commit — see
-[Why a release commit deploys only once](#why-a-release-commit-deploys-only-once).
+A release commit triggers both, and both deploy — see
+[Why a release commit deploys twice](#why-a-release-commit-deploys-twice).
 
 The site root redirects to whichever version holds the `latest` alias, so readers landing
 on the bare URL always get the newest release rather than unreleased `main`. Every version
@@ -254,7 +254,7 @@ Once the policy admits the ref, dispatch `Publish docs` on `main` to serve the s
 release: the artifact is the whole `gh-pages` branch, so a deploy from any allowed ref
 publishes every version already committed to it.
 
-### Why a release commit deploys only once
+### Why a release commit deploys twice
 
 A release PR always edits `docs/guide/**` — the `{{reactorVersion}}` substitutions — so the
 push that merges it matches the workflow's path filter, and the release tag then points at
@@ -268,30 +268,35 @@ reporting `success`, `gh-pages` byte-correct — and the live site still showing
 release. That is exactly what happened cutting 0.1.0-preview.16, and it went unnoticed for
 2h25m (issue #1268).
 
-Two things now prevent it:
+What prevents it now:
 
-- The `publish` job checks whether the pushed commit already carries a `v*` tag and, if so,
-  **stands down from deploying** — the tag run owns the deployment. `publish` itself still
-  runs, because it is what writes the `main` version to `gh-pages`; only the serving step is
-  skipped, and the tag run's artifact is the whole branch, so nothing is lost. If the tag
-  list cannot be refreshed from `origin` (three attempts), the job **fails** rather than
-  deciding on stale data: answering "no tag here" from a stale checkout would deploy and
-  collide, silently, which is the outcome the gate exists to prevent. `gh-pages` is already
-  written by that point, so the cost is a re-run, not a lost publish.
-- The `verify` job then polls the live site and asserts that the artifact being served is
-  the one **this run** produced. That is the part that carries correctness: a tag pushed
-  after `publish` has already looked is invisible to the check above, so the race is
-  narrowed rather than closed.
+- The `verify` job polls the live site after every deployment and asserts that the artifact
+  being served is the one **that run** produced. This is the part that carries correctness,
+  and it is the only thing in the pipeline that looks at the live site at all.
 
-**The stand-down depends on the concurrency queue.** The workflow's concurrency block sets
-`queue: max`. Under the Actions default (`queue: single`) only one run may be *pending* per
-group, and a newly queued run cancels the previous pending one. During a release that is
-reachable: the merge's `main` run holds the group, the tag run waits behind it, and any
-further docs push to `main` evicts the tag run before it ever starts. The release version
-would then never reach `gh-pages` at all, and `main` would already have deferred its own
-deployment to a run that no longer exists — losing the release and its verification
-together. `queue: max` makes runs wait in FIFO order instead. Removing it silently
-re-arms that failure, which is why `DocsDeployWiringTests` asserts it.
+**The duplicate deployment is tolerated, not avoided.** Standing one of the two runs down
+sounds obvious, and it was tried; every form of it requires *predicting* that the other run
+will deploy, and each way that prediction can fail is silent in the direction that matters:
+
+- a still-pending tag run can be cancelled by a later docs push, so the run deferred to
+  never happens;
+- a tag deleted or re-cut on `origin` after checkout leaves a stale local tag that still
+  points at the commit;
+- an unreachable `origin` makes the check answer "no tag here" from stale data;
+- the two runs are not guaranteed to enter the concurrency group in the order their events
+  fired, so the tag run can deploy an artifact that predates the branch run's `main`.
+
+Each of those skips the deployment **and** its verification together, leaving the site stale
+with every job green — strictly worse than a duplicate deployment that `verify` catches and
+reports. So both runs deploy, and a stranded one turns red.
+
+**The concurrency queue still matters.** The workflow's concurrency block sets `queue: max`.
+Under the Actions default (`queue: single`) only one run may be *pending* per group, and a
+newly queued run cancels the previous pending one. During a release that is reachable: the
+merge's `main` run holds the group, the tag run waits behind it, and any further docs push
+to `main` evicts the tag run before it ever starts — so the release version never reaches
+`gh-pages` at all, with nothing failing. `queue: max` makes runs wait in FIFO order instead.
+Removing it silently re-arms that failure, which is why `DocsDeployWiringTests` asserts it.
 
 `verify` distinguishes two failures, and they call for different responses:
 
