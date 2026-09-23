@@ -640,6 +640,26 @@ test("a direct 200 is still accepted", async () => {
   assert.equal(result.error, null);
 });
 
+// `process.exit()` tears the process down without draining a piped stdout or
+// stderr, which on POSIX are written asynchronously. A failing run's whole
+// value is the annotations naming what the live site was serving, so losing
+// them loses the gate's output. Not reproducible on Windows, where those pipes
+// are synchronous — hence a source assertion rather than a behavioural one.
+test("the script never exits in a way that can truncate its diagnostics", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("./verify-docs-deployment.mjs", import.meta.url), "utf8");
+
+  // Comments stripped: the reasoning for avoiding process.exit() names it.
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .join("\n");
+
+  assert.doesNotMatch(code, /process\.exit\s*\(/, "use process.exitCode so node flushes before exiting");
+  assert.match(code, /process\.exitCode\s*=/);
+});
+
 test("exit codes separate a stranded deploy from a broken probe", () => {
   const silence = () => {};
   assert.equal(report({ ...verdictFor(healthy()), attempt: 1 }, { log: silence, err: silence }), 0);

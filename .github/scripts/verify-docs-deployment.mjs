@@ -551,20 +551,19 @@ export function report(verdict, { baseUrl, expectedRunId, expectedRunAttempt, lo
   return verdict.status === "probe-broken" ? 2 : 1;
 }
 
+/** Signals a bad invocation, so the CLI block can exit 3 without a stack trace. */
+class UsageError extends Error {}
+
 function requireEnv(name) {
   const value = process.env[name];
-  if (!value) {
-    console.error(`::error::${name} is required.`);
-    process.exit(3);
-  }
+  if (!value) throw new UsageError(`${name} is required.`);
   return value;
 }
 
 function requireJsonArrayEnv(name) {
   const parsed = parseJson(requireEnv(name));
   if (parsed.error !== null || !Array.isArray(parsed.value)) {
-    console.error(`::error::${name} is not a JSON array: ${parsed.error ?? "parsed to a non-array"}`);
-    process.exit(3);
+    throw new UsageError(`${name} is not a JSON array: ${parsed.error ?? "parsed to a non-array"}`);
   }
   return parsed.value;
 }
@@ -574,29 +573,44 @@ function requireJsonArrayEnv(name) {
 // otherwise parse as the URL host and never match.
 const invokedDirectly = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
-  const baseUrl = requireEnv("DOCS_BASE_URL");
-  const expectedRunId = requireEnv("DOCS_EXPECTED_RUN_ID");
+  try {
+    const baseUrl = requireEnv("DOCS_BASE_URL");
+    const expectedRunId = requireEnv("DOCS_EXPECTED_RUN_ID");
 
-  // The attempt that produced the artifact, not this job's own counter. See
-  // the stamp comparison in evaluate() for why the two differ on a partial
-  // re-run, and why an id-only check goes false-green on a full one.
-  const expectedRunAttempt = requireEnv("DOCS_EXPECTED_RUN_ATTEMPT");
-  const expectedVersions = requireJsonArrayEnv("DOCS_EXPECTED_VERSIONS");
+    // The attempt that produced the artifact, not this job's own counter. See
+    // the stamp comparison in evaluate() for why the two differ on a partial
+    // re-run, and why an id-only check goes false-green on a full one.
+    const expectedRunAttempt = requireEnv("DOCS_EXPECTED_RUN_ATTEMPT");
+    const expectedVersions = requireJsonArrayEnv("DOCS_EXPECTED_VERSIONS");
 
-  // Required rather than defaulted: without it the probe silently falls back to
-  // the `latest` holder, which is exactly the blind spot that lets a broken
-  // backported-tag or `main` directory pass. A wiring mistake should be loud.
-  const publishedVersions = requireJsonArrayEnv("DOCS_PUBLISHED_VERSIONS");
+    // Required rather than defaulted: without it the probe silently falls back
+    // to the `latest` holder, which is exactly the blind spot that lets a
+    // broken backported-tag or `main` directory pass. A wiring mistake should
+    // be loud.
+    const publishedVersions = requireJsonArrayEnv("DOCS_PUBLISHED_VERSIONS");
 
-  const verdict = await verifyDeployment({
-    baseUrl,
-    expectedRunId,
-    expectedRunAttempt,
-    expectedVersions,
-    publishedVersions,
-    timeoutMs: Number(process.env.DOCS_VERIFY_TIMEOUT_SECONDS ?? 600) * 1000,
-    intervalMs: Number(process.env.DOCS_VERIFY_INTERVAL_SECONDS ?? 15) * 1000,
-  });
+    const verdict = await verifyDeployment({
+      baseUrl,
+      expectedRunId,
+      expectedRunAttempt,
+      expectedVersions,
+      publishedVersions,
+      timeoutMs: Number(process.env.DOCS_VERIFY_TIMEOUT_SECONDS ?? 600) * 1000,
+      intervalMs: Number(process.env.DOCS_VERIFY_INTERVAL_SECONDS ?? 15) * 1000,
+    });
 
-  process.exit(report(verdict, { baseUrl, expectedRunId, expectedRunAttempt }));
+    // `process.exitCode` rather than `process.exit()`. On POSIX — which is
+    // where this runs — writes to a piped stdout/stderr are asynchronous, and
+    // `process.exit()` tears the process down without draining them. The whole
+    // value of a failing run here is the annotations explaining *what* the live
+    // site was serving, so truncating them loses exactly the output the gate
+    // exists to produce. Setting the code lets node exit once the loop drains,
+    // which flushes. (Not reproducible on Windows, where those pipes are
+    // synchronous.)
+    process.exitCode = report(verdict, { baseUrl, expectedRunId, expectedRunAttempt });
+  } catch (err) {
+    if (!(err instanceof UsageError)) throw err;
+    console.error(`::error::${err.message}`);
+    process.exitCode = 3;
+  }
 }

@@ -32,7 +32,7 @@ public sealed class DocsDeploymentVerifierTests
     /// quietly reduced to one passing case while the xUnit gate stays green.
     /// Raising it as cases are added is optional; lowering it is a decision.
     /// </summary>
-    private const int MinimumCases = 44;
+    private const int MinimumCases = 45;
 
     /// <summary>
     /// Ceiling for the node subprocess. The suite runs in well under a second,
