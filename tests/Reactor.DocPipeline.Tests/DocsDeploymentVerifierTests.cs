@@ -46,10 +46,12 @@ public sealed class DocsDeploymentVerifierTests
         using var process = Process.Start(new ProcessStartInfo
         {
             FileName = "node",
-            // TAP explicitly: node's default reporter varies with the node
-            // version and whether stdout is a TTY, and the completeness check
-            // below reads the summary counters it emits.
-            ArgumentList = { "--test-reporter=tap", testScript },
+            // `--test` is redundant when the file registers tests on import,
+            // but it makes the invocation canonical rather than relying on
+            // that. TAP explicitly because node's default reporter varies with
+            // the node version and whether stdout is a TTY, and the
+            // completeness check below reads the summary counters it emits.
+            ArgumentList = { "--test", "--test-reporter=tap", testScript },
             WorkingDirectory = repoRoot,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

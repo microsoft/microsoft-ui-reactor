@@ -55,10 +55,11 @@ public sealed class DocsDeployWiringTests
     {
         var concurrency = Map(Workflow, "concurrency");
 
-        // Paired with the stand-down below, and unsafe without it. Under the
-        // default `queue: single` a later docs push evicts a still-pending tag
-        // run, so `publish` would defer the deployment to a run that never
-        // happens and the release would be lost with nothing going red.
+        // Under the Actions default (`queue: single`) a later docs push evicts
+        // a still-pending tag run, so that run never publishes its version to
+        // `gh-pages` at all. The release is then lost outright with no job
+        // failing anywhere, which is why this setting is asserted rather than
+        // left to a comment.
         Assert.Equal("max", Scalar(concurrency, "queue"));
 
         // `queue: max` plus `cancel-in-progress: true` is a workflow validation
