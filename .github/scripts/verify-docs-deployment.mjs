@@ -28,6 +28,7 @@ import { pathToFileURL } from "node:url";
 
 export const STAMP_PATH = "deploy-stamp.json";
 export const VERSIONS_PATH = "versions.json";
+export const ROOT_INDEX_PATH = "index.html";
 export const LATEST_ALIAS = "latest";
 
 /**
@@ -86,10 +87,13 @@ function aliasHolder(entries, alias) {
  */
 export function selectProbeTargets(expectedVersions, publishedVersions = []) {
   const entries = Array.isArray(expectedVersions) ? expectedVersions : [];
-  const known = new Set(entries.map((entry) => entry?.version).filter(Boolean));
-  const published = (Array.isArray(publishedVersions) ? publishedVersions : []).filter((v) => known.has(v));
+  const published = Array.isArray(publishedVersions) ? publishedVersions.filter(Boolean) : [];
   const latest = aliasHolder(entries, LATEST_ALIAS);
 
+  // Deliberately not intersected with `expectedVersions`. A recorded version
+  // that the site does not list is a real inconsistency, and dropping it here
+  // would shrink the probe set on exactly the run that needs it most; evaluate()
+  // reports it instead.
   const targets = [];
   for (const version of published) {
     if (!targets.includes(version)) targets.push(version);
@@ -112,12 +116,28 @@ export function selectProbeTargets(expectedVersions, publishedVersions = []) {
 }
 
 /**
+ * The version or alias the site root should redirect to.
+ *
+ * mike's `set-default` writes a root index.html that forwards to whichever
+ * version or alias is default — `latest` once any release exists, and `main`
+ * during the window before the first one. Returns null when neither is
+ * published, because the workflow's own fallback is ambiguous there and a
+ * guessed expectation would be worse than none.
+ */
+export function expectedRootTarget(expectedVersions) {
+  const entries = Array.isArray(expectedVersions) ? expectedVersions : [];
+  if (aliasHolder(entries, LATEST_ALIAS)) return LATEST_ALIAS;
+  if (entries.some((entry) => entry?.version === "main")) return "main";
+  return null;
+}
+
+/**
  * Classifies one round of observations. Pure — no clock, no network.
  *
  * @returns {{ status: "pass"|"stranded"|"probe-broken", failures: {kind: string, message: string}[], evidence: string[], liveRunId: string|null }}
  */
-export function evaluate({ expectedRunId, expectedVersions, observations }) {
-  const { stamp, versions, control } = observations;
+export function evaluate({ expectedRunId, expectedVersions, publishedVersions = [], observations }) {
+  const { stamp, versions, control, root } = observations;
   const failures = [];
   const evidence = [];
   let liveRunId = null;
@@ -149,7 +169,7 @@ export function evaluate({ expectedRunId, expectedVersions, observations }) {
           message:
             `The live site is serving run ${liveRunId ?? "(no run_id)"} ` +
             `(sha ${parsed.value?.sha ?? "unknown"}), not this run ${expectedRunId}. ` +
-            "Two deployments collided under one pages_build_version and this one lost — see issue #1268.",
+            "Whatever stranded it, the bytes this run published are not the bytes being served.",
         });
       }
     }
@@ -194,6 +214,44 @@ export function evaluate({ expectedRunId, expectedVersions, observations }) {
           message:
             `The live '${LATEST_ALIAS}' alias points at ${liveLatest ?? "nothing"}, ` +
             `but this run published it on ${expectedLatest}.`,
+        });
+      }
+    }
+  }
+
+  // The publishing steps and mike produce these two lists independently, so a
+  // name in one and not the other means the run does not know what it wrote.
+  // The workflow fails earlier on this, which makes reaching it here a sign
+  // that the earlier guard was bypassed rather than a routine outcome.
+  const declared = new Set((expectedVersions ?? []).map((entry) => entry?.version));
+  const unlisted = (publishedVersions ?? []).filter((version) => version && !declared.has(version));
+  if (unlisted.length > 0) {
+    failures.push({
+      kind: "published-version-unlisted",
+      message:
+        `This run reported publishing ${unlisted.join(", ")}, but the artifact's version list does not contain ` +
+        `${unlisted.length === 1 ? "it" : "them"}. The two are produced independently, so they must agree.`,
+    });
+  }
+
+  // The URL readers actually land on. mike writes it only via `set-default`,
+  // and it is the one page no version directory covers, so a stale or broken
+  // root is invisible to every other check here.
+  const rootTarget = expectedRootTarget(expectedVersions);
+  if (root) {
+    if (!root.probe?.ok) {
+      failures.push({
+        kind: "root-unreachable",
+        message: `The site root did not respond 200 (${describeProbe(root.probe)}).`,
+      });
+    } else {
+      evidence.push("the site root responded 200");
+      if (rootTarget && !(root.probe.body ?? "").includes(`${rootTarget}/`)) {
+        failures.push({
+          kind: "root-mistargeted",
+          message:
+            `The site root does not redirect to '${rootTarget}/'. Readers landing on the bare URL ` +
+            "would be sent somewhere other than the version this run made default.",
         });
       }
     }
@@ -250,15 +308,17 @@ export async function probe(baseUrl, path, { fetchImpl = fetch, uuid = randomUUI
 
 async function observe(baseUrl, expectedVersions, publishedVersions, deps) {
   const { targets, control } = selectProbeTargets(expectedVersions, publishedVersions);
-  const [stamp, versions, ...rest] = await Promise.all([
+  const [stamp, versions, rootProbe, ...rest] = await Promise.all([
     probe(baseUrl, STAMP_PATH, deps),
     probe(baseUrl, VERSIONS_PATH, deps),
+    probe(baseUrl, ROOT_INDEX_PATH, deps),
     ...targets.map((version) => probe(baseUrl, versionIndex(version), deps)),
     ...(control ? [probe(baseUrl, versionIndex(control), deps)] : []),
   ]);
   return {
     stamp,
     versions,
+    root: { probe: rootProbe },
     targets: targets.map((version, i) => ({ version, probe: rest[i] })),
     control: control ? { version: control, probe: rest[targets.length] } : null,
   };
@@ -291,7 +351,7 @@ export async function verifyDeployment({
   for (;;) {
     attempt += 1;
     const observations = await observe(baseUrl, expectedVersions, publishedVersions, { fetchImpl, uuid });
-    verdict = { ...evaluate({ expectedRunId, expectedVersions, observations }), attempt };
+    verdict = { ...evaluate({ expectedRunId, expectedVersions, publishedVersions, observations }), attempt };
 
     if (verdict.status === "pass") return verdict;
 

@@ -94,6 +94,12 @@ public sealed class DocsDeployWiringTests
         // holder, which never covers a backported tag or a `main` push.
         Assert.Matches(@"published=", run);
         Assert.Contains("PUBLISHED_VERSIONS_FILE", run, StringComparison.Ordinal);
+
+        // The recorded list and mike's versions.json are produced
+        // independently. Without this cross-check a divergence would quietly
+        // shrink what verify probes instead of failing.
+        Assert.Contains("site/versions.json", run, StringComparison.Ordinal);
+        Assert.Matches(@"missing\b", run);
     }
 
     [Theory]

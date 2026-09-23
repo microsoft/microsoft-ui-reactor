@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 
 import {
   evaluate,
+  expectedRootTarget,
   probe,
   report,
   selectProbeTargets,
@@ -44,20 +45,24 @@ function unreachable() {
   return { ok: false, status: null, body: null, error: "getaddrinfo ENOTFOUND" };
 }
 
+// The real mike root stub, which forwards to whichever version is default.
+const ROOT_STUB = '<script>window.location.replace("latest/" + window.location.search);</script>';
+
 /** A healthy live site: this run's stamp, the full version list, every page. */
 function healthy(overrides = {}, published = PUBLISHED_RELEASE) {
   const { targets, control } = selectProbeTargets(EXPECTED_VERSIONS, published);
   return {
     stamp: ok(JSON.stringify({ run_id: THIS_RUN, sha: "459f7234" })),
     versions: ok(JSON.stringify(EXPECTED_VERSIONS)),
+    root: { probe: ok(ROOT_STUB) },
     targets: targets.map((version) => ({ version, probe: ok("<html>") })),
     control: control ? { version: control, probe: ok("<html>") } : null,
     ...overrides,
   };
 }
 
-function verdictFor(observations, expectedVersions = EXPECTED_VERSIONS) {
-  return evaluate({ expectedRunId: THIS_RUN, expectedVersions, observations });
+function verdictFor(observations, expectedVersions = EXPECTED_VERSIONS, publishedVersions = PUBLISHED_RELEASE) {
+  return evaluate({ expectedRunId: THIS_RUN, expectedVersions, publishedVersions, observations });
 }
 
 test("probe targets cover the published version and the latest holder", () => {
@@ -94,11 +99,58 @@ test("probe targets fall back to main when nothing holds latest", () => {
   assert.deepEqual(selectProbeTargets(unreleased, []), { targets: ["main"], control: null });
 });
 
-test("a published version the live site never listed is not probed blindly", () => {
-  // Guards the set intersection: probing a name absent from versions.json would
-  // report a 404 that the versions-missing check already explains better.
-  const { targets } = selectProbeTargets(EXPECTED_VERSIONS, ["0.9.9-never-published"]);
-  assert.deepEqual(targets, ["0.1.0-preview.16"]);
+test("a published version the live site never listed is reported, not silently dropped", () => {
+  // The recorded list and versions.json are produced independently, so a name
+  // in one and not the other means the run does not know what it wrote.
+  const published = ["0.9.9-never-published"];
+  const { targets } = selectProbeTargets(EXPECTED_VERSIONS, published);
+  assert.deepEqual(targets, ["0.9.9-never-published", "0.1.0-preview.16"]);
+
+  const verdict = verdictFor(healthy({}, published), EXPECTED_VERSIONS, published);
+  assert.equal(verdict.status, "stranded");
+  assert.ok(verdict.failures.some((f) => f.kind === "published-version-unlisted"));
+  assert.match(
+    verdict.failures.find((f) => f.kind === "published-version-unlisted").message,
+    /0\.9\.9-never-published/,
+  );
+});
+
+test("the expected site-root target follows latest, then main", () => {
+  assert.equal(expectedRootTarget(EXPECTED_VERSIONS), "latest");
+  assert.equal(expectedRootTarget([{ version: "main", aliases: [] }]), "main");
+  assert.equal(expectedRootTarget([{ version: "0.1.0", aliases: [] }]), null);
+});
+
+// The URL readers land on. mike writes it only via `set-default`, so no version
+// directory covers it and a stale root is invisible to every other check.
+test("a site root that 404s is stranded", () => {
+  const verdict = verdictFor(healthy({ root: { probe: notFound() } }));
+  assert.equal(verdict.status, "stranded");
+  assert.ok(verdict.failures.some((f) => f.kind === "root-unreachable"));
+});
+
+test("a site root redirecting to the wrong version is stranded", () => {
+  const stale = '<script>window.location.replace("main/" + window.location.search);</script>';
+  const verdict = verdictFor(healthy({ root: { probe: ok(stale) } }));
+  assert.equal(verdict.status, "stranded");
+  assert.ok(verdict.failures.some((f) => f.kind === "root-mistargeted"));
+});
+
+test("the site root is not judged when no default can be determined", () => {
+  const unknown = [{ version: "0.1.0", aliases: [] }];
+  const verdict = evaluate({
+    expectedRunId: THIS_RUN,
+    expectedVersions: unknown,
+    publishedVersions: ["0.1.0"],
+    observations: {
+      stamp: ok(JSON.stringify({ run_id: THIS_RUN })),
+      versions: ok(JSON.stringify(unknown)),
+      root: { probe: ok("<html>nothing recognisable</html>") },
+      targets: [{ version: "0.1.0", probe: ok("<html>") }],
+      control: null,
+    },
+  });
+  assert.equal(verdict.status, "pass");
 });
 
 test("a live site serving this run passes", () => {
@@ -251,6 +303,9 @@ test("the poll loop returns as soon as the deployment propagates", async () => {
     if (url.includes("versions.json")) {
       return { status: 200, text: async () => JSON.stringify(EXPECTED_VERSIONS) };
     }
+    if (url.includes("/docs/index.html")) {
+      return { status: 200, text: async () => ROOT_STUB };
+    }
     return { status: 200, text: async () => "<html>" };
   };
 
@@ -273,9 +328,9 @@ test("the poll loop returns as soon as the deployment propagates", async () => {
   assert.equal(verdict.status, "pass");
   assert.equal(verdict.attempt, 2);
 
-  // The driver must actually request the version this run published, not just
-  // decide it should have.
+  // The driver must actually request these, not just decide it should.
   assert.ok(requested.some((url) => url.includes("/0.1.0-preview.16/index.html?nc=")));
+  assert.ok(requested.some((url) => url.includes("/docs/index.html?nc=")));
 });
 
 test("the poll loop gives up once the window closes", async () => {
@@ -286,6 +341,9 @@ test("the poll loop gives up once the window closes", async () => {
     }
     if (url.includes("versions.json")) {
       return { status: 200, text: async () => JSON.stringify(EXPECTED_VERSIONS) };
+    }
+    if (url.includes("/docs/index.html")) {
+      return { status: 200, text: async () => ROOT_STUB };
     }
     return { status: 200, text: async () => "<html>" };
   };

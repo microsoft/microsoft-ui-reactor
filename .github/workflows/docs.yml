@@ -131,7 +131,6 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           newest="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
-          echo "$version" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
 
           if [ "$GITHUB_REF_NAME" = "$newest" ]; then
             mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy \
@@ -143,6 +142,11 @@ jobs:
             echo "$GITHUB_REF_NAME is older than $newest — publishing without moving $LATEST_ALIAS."
             mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy "$version"
           fi
+
+          # Recorded only after mike has actually written the version, so the
+          # list the verify job probes never claims something that was not
+          # published.
+          echo "$version" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
 
       - name: Backfill release versions
         if: inputs.backfill_tags
@@ -323,6 +327,18 @@ jobs:
           fi
 
           published="$(jq -R -s -c 'split("\n") | map(select(length > 0)) | unique' < "$published_file")"
+
+          # The two lists are produced independently — one by the publishing
+          # steps, one by mike — so a divergence means the run does not actually
+          # know what it published. Fail here rather than letting the verify job
+          # quietly probe fewer directories than it should.
+          missing="$(jq -c --argjson published "$published" \
+            '(map(.version)) as $known | $published - $known' site/versions.json)"
+          if [ "$missing" != "[]" ]; then
+            echo "::error::These versions were recorded as published but are absent from site/versions.json: $missing. The publishing steps and mike disagree, so the verify job cannot be trusted to probe the right directories."
+            exit 1
+          fi
+
           echo "This run published: $published"
           echo "published=$published" >> "$GITHUB_OUTPUT"
 

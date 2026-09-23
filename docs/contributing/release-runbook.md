@@ -300,6 +300,15 @@ Every probe uses a unique `?nc=` query key, so a pass cannot come from a cached 
 and an already-published version is fetched with the identical request shape as a positive
 control — a no-match is not a measurement until the same probe is shown able to match.
 
+What `verify` actually asserts, beyond the stamp: that the live `versions.json` contains
+every version the artifact declared and puts `latest` where this run put it; that each
+version **this run published** serves its own `index.html` (not just the `latest` holder,
+which a backported tag deliberately does not move and a `main` push never touches); and
+that the site root — the URL readers land on, written only by `mike set-default` — responds
+and still forwards to the expected default. The list of versions a run published is
+recorded by the publishing steps and cross-checked against mike's own `versions.json`
+before the artifact is uploaded, so the two cannot drift apart unnoticed.
+
 **The remedy, verified.** Dispatch `Publish docs` on `main`. The `publish` job assembles the
 artifact from the whole `gh-pages` branch, so any allowed ref re-serves every published
 version. With no `backfill_tags` the release step is skipped, and `mike set-default` runs
