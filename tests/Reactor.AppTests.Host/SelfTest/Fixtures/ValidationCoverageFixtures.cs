@@ -682,20 +682,25 @@ internal static class ValidationCoverageFixtures
 
     internal class Issue1262_FailingRuleDoesNotLoop(Harness h) : SelfTestFixtureBase(h)
     {
-        private static ValidationContext? s_captured;
-        private static int s_renders;
+        private sealed class RuleProbe
+        {
+            internal ValidationContext? Context;
+            internal int Renders;
+        }
+
+        private sealed record RuleOwnerProps(RuleProbe Probe);
 
         // Must be a child Component, not the host's root render func: a child's
         // re-render callback runs INLINE (CreateComponentRerender), which is what turns
         // a notification raised during reconcile into unbounded re-entrancy. The root's
         // callback merely schedules, so mounting this at the root would hide the bug.
-        private sealed class RuleOwner : Component
+        private sealed class RuleOwner : Component<RuleOwnerProps>
         {
             public override Element Render()
             {
                 var valCtx = this.UseValidationContext();
-                s_captured = valCtx;
-                s_renders++;
+                Props.Probe.Context = valCtx;
+                Props.Probe.Renders++;
 
                 return VStack(12,
                     ValidationRule(() => false, "Passwords must match", "confirm"),
@@ -705,31 +710,30 @@ internal static class ValidationCoverageFixtures
 
         public override async Task RunAsync()
         {
-            s_captured = null;
-            s_renders = 0;
-
+            var probe = new RuleProbe();
             var host = H.CreateHost();
-            host.Mount(_ => Component<RuleOwner>());
+            host.Mount(_ => Component<RuleOwner, RuleOwnerProps>(new RuleOwnerProps(probe)));
 
             // If the loop were still present this throws "Render loop detected".
             await Harness.Render();
             await Harness.Render();
 
-            H.Check("Issue1262_Rule_NoLoopThrown", s_captured is not null);
-            H.Check("Issue1262_Rule_MessageRecorded",
-                s_captured!.GetMessages("confirm").Count == 1);
-            H.Check("Issue1262_Rule_NoAccumulation",
-                s_captured.GetAllMessages().Count == 1);
-            H.Check("Issue1262_Rule_RenderCountBounded", s_renders < 10, $"renders={s_renders}");
+            var captured = probe.Context;
+            H.Check("Issue1262_Rule_NoLoopThrown", captured is not null);
+            if (captured is null) return;
 
-            var settledVersion = s_captured.Version;
-            var settledRenders = s_renders;
+            H.Check("Issue1262_Rule_MessageRecorded", captured.GetMessages("confirm").Count == 1);
+            H.Check("Issue1262_Rule_NoAccumulation", captured.GetAllMessages().Count == 1);
+            H.Check("Issue1262_Rule_RenderCountBounded", probe.Renders < 10, $"renders={probe.Renders}");
+
+            var settledVersion = captured.Version;
+            var settledRenders = probe.Renders;
             await Harness.Render();
 
-            H.Check("Issue1262_Rule_VersionStableOnReRender", s_captured.Version == settledVersion,
-                $"before={settledVersion} after={s_captured.Version}");
-            H.Check("Issue1262_Rule_RendersSettle", s_renders - settledRenders <= 2,
-                $"delta={s_renders - settledRenders}");
+            H.Check("Issue1262_Rule_VersionStableOnReRender", captured.Version == settledVersion,
+                $"before={settledVersion} after={captured.Version}");
+            H.Check("Issue1262_Rule_RendersSettle", probe.Renders - settledRenders <= 2,
+                $"delta={probe.Renders - settledRenders}");
 
             var done = H.CreateHost();
             done.Mount(c => TextBlock("Issue1262 rule done"));
@@ -773,11 +777,12 @@ internal static class ValidationCoverageFixtures
             var box = H.FindControl<TextBox>(_ => true);
             var elsewhere = H.FindButton("Elsewhere");
             H.Check("Issue1262_Binding_ControlsFound", box is not null && elsewhere is not null);
+            if (box is null || elsewhere is null) return;
 
             // While the context is reachable, blur marks the field.
-            box!.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            box.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
             await Harness.Render();
-            elsewhere!.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            elsewhere.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
             await Harness.Render();
             H.Check("Issue1262_Binding_MarksWhileBound", ctx.IsTouched("name"));
 
@@ -789,8 +794,6 @@ internal static class ValidationCoverageFixtures
             H.Check("Issue1262_Binding_ControlPreserved",
                 stillSameControl && ReferenceEquals(box, H.FindControl<TextBox>(_ => true)));
 
-            var freshCtx = new ValidationContext();
-            freshCtx.RegisterField("name");
             var touchedBefore = ctx.IsTouched("name");
 
             // Re-blur now that nothing provides a context.
