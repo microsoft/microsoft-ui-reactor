@@ -41,6 +41,14 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS8305;REACTOR_DOC_001</NoWarn>
+    <!-- Keep Reactor.Advanced.pri OUT of lib/ (issue #1271). This library's generated
+         .pri is EMPTY — `makepri dump` shows a resource map with no NamedResource at
+         all — but NuGet packs it beside Reactor.Advanced.dll, where
+         ResolveAssemblyReference relates it by base name and the Windows App SDK runs
+         `makepri.exe Dump` on it into $(IntermediateOutputPath). That output path
+         breaks past MAX_PATH on deep trees, so an empty file was failing consumer
+         builds. See the matching comment in src/Reactor/Reactor.csproj. -->
+    <DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>.dll; .exe; .winmd; .json; .xml</DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
 
   <ItemGroup>

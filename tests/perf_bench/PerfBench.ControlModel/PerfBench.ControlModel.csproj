@@ -77,26 +77,6 @@
     <PublishAot>true</PublishAot>
   </PropertyGroup>
 
-  <!--
-    WindowsAppSDK#6394 — an unpackaged (WindowsPackageType=None) WinUI 3 app published
-    with PublishAot=true generates $(AssemblyName).pri and the XAML .xbf files into the
-    intermediate output but never copies them into the publish directory (the MakePRI
-    stage is gated on AppxPackage=true). Without the .pri, Application.Current.Resources
-    loads empty and framework control styles / theme resources go missing at runtime.
-    Copy them verbatim per docs/aot-support.md — remove once #6394 ships a fix.
-  -->
-  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
-          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
-    <ItemGroup>
-      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
-      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri"
-                             Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_WinUIResourcesForAot)"
-          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
-  </Target>
-
   <ItemGroup>
     <ProjectReference Include="..\PerfBench.Shared\PerfBench.Shared.csproj" />
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />

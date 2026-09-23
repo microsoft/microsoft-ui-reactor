@@ -141,9 +141,12 @@ The `<EmbeddedResource Include="..\..\SKILL.md">` line stays — `mur --skill` s
 
 ```
 Microsoft.UI.Reactor.1.0.0-preview.42.nupkg
-├── lib/net10.0-windows10.0.22621.0/
+├── lib/net10.0-windows10.0.22621/         # ONE lib group — see "Exactly one lib folder"
 │   ├── Reactor.dll
-│   └── Reactor.xml                        # XML doc comments
+│   ├── Reactor.xml                        # XML doc comments
+│   └── Reactor/Hosting/
+│       ├── ReactorApplication.xaml        # Application-level XamlControlsResources
+│       └── ReactorApplication.xbf         # compiled form; see "No .pri in lib/" below
 ├── analyzers/dotnet/cs/
 │   ├── Reactor.Analyzers.dll
 │   └── Reactor.Localization.Generator.dll
@@ -153,6 +156,61 @@ Microsoft.UI.Reactor.1.0.0-preview.42.nupkg
 ├── LICENSE
 └── Microsoft.UI.Reactor.nuspec
 ```
+
+Note the folder is `net10.0-windows10.0.22621`, **not** `…22621.0`: NuGet shortens the
+build-output folder name, while `$(TargetFramework)` keeps the trailing `.0`.
+
+### No `.pri` in `lib/` (issue #1271)
+
+None of `Microsoft.UI.Reactor`, `.Advanced` or `.Devtools` ships its generated `.pri`,
+and none ever should. NuGet packs a project's resource index into the build-output
+folder by default, which puts it beside the assembly — and `ResolveAssemblyReference`
+treats a same-base-name `.pri` as a *reference-related file*
+(`AllowedReferenceRelatedFileExtensions` defaults to `.pdb;.xml;.pri;…`). Once it is in
+`_ReferenceRelatedPaths` / `ReferenceCopyLocalPaths`, the Windows App SDK's
+`AddPriPayloadFilesToCopyToOutputDirectoryItems` runs `makepri.exe Dump` on it into
+`$(IntermediateOutputPath)`, and that output path breaks past `MAX_PATH` — failing
+consumer builds with `PRI175` / `PRI222` / `APPX0002` at depths where an equivalent XAML
+app builds fine.
+
+Relocating the file is *not* a fix: a `.pri` that reaches the consumer's layout by any
+route — including a `CopyToOutputDirectory` item from a non-reference folder — also lands
+in `@(PackagingOutputs)`, where `_ExpandPriFiles` hands it to the same task. It has to be
+absent.
+
+Each of the three csproj files therefore narrows the allow-list that decides what may sit
+in the build-output folder:
+
+```xml
+<!-- core; .Advanced / .Devtools use the same list without .xbf -->
+<DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>.dll; .exe; .winmd; .json; .xml; .xbf</DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>
+```
+
+This is deliberately the **pack**-side knob. `.pri` *generation* is untouched, so
+`ProjectReference` consumers (in-repo samples, selftests, AOT proofs) are unaffected.
+
+What consumers need instead is the loose `ReactorApplication.xbf`, which
+`ReactorApplication.InitializeComponent()` resolves from the app directory. It is packed
+by the `_PackReactorApplicationXbf` target rather than a `<None>` item, because a `<None>`
+guarded with `Exists()` is evaluated before the build produces the file and silently
+shipped a package without it.
+
+### Exactly one `lib/` folder
+
+`_PackReactorApplicationXbf` emits the sidecar as **build output** with a `TargetPath`
+(the mechanism satellite assemblies use for `lib/<tfm>/<culture>/`), never as a
+`TfmSpecificPackageFile` with a literal `lib\$(TargetFramework)\…` path.
+
+That literal form is a trap. `$(TargetFramework)` is `net10.0-windows10.0.22621.0` while
+NuGet shortens the build-output folder to `net10.0-windows10.0.22621`, so the package
+grew **two sibling `lib` groups for the same framework** — one with the assemblies, one
+holding nothing but the stray sidecar. NuGet picked the right one by ordering rather than
+by rule. Shipped in 0.1.0-preview.16 and earlier; fixed by letting NuGet place the file.
+
+`tests/Reactor.IntegrationTests/Packaging/PriPackagingTests.cs` asserts all of it — no
+`.pri`, the sidecars present, exactly one `lib/` folder per package, a real consumer build
+logging zero `makepri.exe Dump` calls for Reactor packages, and the app `.pri` reaching
+the consumer's publish output.
 
 ### Packaging configuration
 
