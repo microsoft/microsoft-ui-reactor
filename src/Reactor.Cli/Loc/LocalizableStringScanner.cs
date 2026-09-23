@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -217,10 +219,14 @@ internal static class LocalizableStringScanner
             }
         }
 
-        private void ProcessStringLiteral(LiteralExpressionSyntax literal, string className, string context)
+        private void ProcessStringLiteral(
+            LiteralExpressionSyntax literal,
+            string className,
+            string context,
+            int? ternaryBranch = null)
         {
             var value = literal.Token.ValueText;
-            if (string.IsNullOrWhiteSpace(value)) return;
+            if (IsNonLocalizable(value)) return;
 
             _results.Add(new LocalizableString
             {
@@ -230,14 +236,26 @@ internal static class LocalizableStringScanner
                 Value = value,
                 SpanStart = literal.SpanStart,
                 SpanLength = literal.Span.Length,
+                TernaryBranch = ternaryBranch,
             });
         }
 
-        private void ProcessInterpolatedString(InterpolatedStringExpressionSyntax interpolated, string className, string context)
+        private static bool IsNonLocalizable(string value)
+            => string.IsNullOrWhiteSpace(value) || IsPrivateUseOnly(value);
+
+        private static bool IsPrivateUseOnly(string value)
+            => value.Length > 0
+                && value.EnumerateRunes().All(rune => Rune.GetUnicodeCategory(rune) == UnicodeCategory.PrivateUse);
+
+        private void ProcessInterpolatedString(
+            InterpolatedStringExpressionSyntax interpolated,
+            string className,
+            string context,
+            int? ternaryBranch = null)
         {
             var (icuMessage, argumentMap, warnings) = InterpolationConverter.Convert(interpolated);
 
-            if (icuMessage == null) return;
+            if (icuMessage == null || IsNonLocalizable(icuMessage)) return;
 
             var ls = new LocalizableString
             {
@@ -249,6 +267,7 @@ internal static class LocalizableStringScanner
                 SpanLength = interpolated.Span.Length,
                 IsInterpolation = true,
                 ArgumentMap = argumentMap,
+                TernaryBranch = ternaryBranch,
             };
 
             if (warnings.Count > 0)
@@ -260,46 +279,20 @@ internal static class LocalizableStringScanner
         private void ProcessTernary(ConditionalExpressionSyntax ternary, string className, string context)
         {
             // Extract both branches as separate keys
-            ProcessTernaryBranch(ternary.WhenTrue, className, context, 0, ternary);
-            ProcessTernaryBranch(ternary.WhenFalse, className, context, 1, ternary);
+            ProcessTernaryBranch(ternary.WhenTrue, className, context, 0);
+            ProcessTernaryBranch(ternary.WhenFalse, className, context, 1);
         }
 
-        private void ProcessTernaryBranch(ExpressionSyntax branch, string className, string context, int branchIndex, ConditionalExpressionSyntax parent)
+        private void ProcessTernaryBranch(ExpressionSyntax branch, string className, string context, int branchIndex)
         {
             switch (branch)
             {
                 case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression):
-                    var value = literal.Token.ValueText;
-                    if (string.IsNullOrWhiteSpace(value)) return;
-                    _results.Add(new LocalizableString
-                    {
-                        FilePath = _filePath,
-                        ClassName = className,
-                        Context = context,
-                        Value = value,
-                        SpanStart = literal.SpanStart,
-                        SpanLength = literal.Span.Length,
-                        TernaryBranch = branchIndex,
-                    });
+                    ProcessStringLiteral(literal, className, context, branchIndex);
                     break;
 
                 case InterpolatedStringExpressionSyntax interpolated:
-                    var (icuMessage, argumentMap, warnings) = InterpolationConverter.Convert(interpolated);
-                    if (icuMessage != null)
-                    {
-                        _results.Add(new LocalizableString
-                        {
-                            FilePath = _filePath,
-                            ClassName = className,
-                            Context = context,
-                            Value = icuMessage,
-                            SpanStart = interpolated.SpanStart,
-                            SpanLength = interpolated.Span.Length,
-                            IsInterpolation = true,
-                            ArgumentMap = argumentMap,
-                            TernaryBranch = branchIndex,
-                        });
-                    }
+                    ProcessInterpolatedString(interpolated, className, context, branchIndex);
                     break;
             }
         }
