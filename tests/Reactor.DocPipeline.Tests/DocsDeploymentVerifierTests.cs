@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -33,6 +34,13 @@ public sealed class DocsDeploymentVerifierTests
     /// </summary>
     private const int MinimumCases = 44;
 
+    /// <summary>
+    /// Ceiling for the node subprocess. The suite runs in well under a second,
+    /// so this only ever fires on a hang; generous enough that a slow cold
+    /// start on a loaded runner is not mistaken for one.
+    /// </summary>
+    private static readonly TimeSpan SubprocessTimeout = TimeSpan.FromMinutes(3);
+
     [Fact]
     public async Task Deployment_verifier_cases_pass()
     {
@@ -59,13 +67,40 @@ public sealed class DocsDeploymentVerifierTests
             CreateNoWindow = true,
         })!;
 
-        var cancellationToken = TestContext.Current.CancellationToken;
+        // Bounded and killed on expiry. A hung `node` — which this suite has
+        // already produced once, when an unref'd abort timer left a probe
+        // pending — would otherwise sit here until the CI job's own timeout,
+        // reporting nothing useful and leaving the process behind.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(SubprocessTimeout);
+        var cancellationToken = timeout.Token;
 
         // Start both reads before awaiting exit: a child that fills one pipe
         // buffer blocks on the write while the parent waits for it to exit.
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // Already exited between the timeout firing and the kill.
+            }
+
+            Assert.Fail(
+                $"node did not finish within {SubprocessTimeout.TotalSeconds:0} seconds running "
+                    + "verify-docs-deployment.test.mjs. A case is hanging — most likely a probe whose "
+                    + "timeout never fires, which is not observable from the TAP summary because the "
+                    + "runner cancels the remaining cases instead of failing them.");
+        }
 
         var stdout = await stdoutTask;
         var output = string.Join(
