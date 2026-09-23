@@ -921,13 +921,16 @@ suite rather than merely lose continuity, and the harness synthesizes an id inst
 > **Which winapp is "the resolved winapp" matters.** `WinAppUi.ResolveWinAppExe()` prefers
 > `$REACTOR_WINAPP_EXE`, then `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe`, and only then
 > `PATH`. Installing a specific winapp and putting it on `PATH` therefore does not guarantee the
-> suite uses it. CI's capability step resolves in that same order and exports
-> `REACTOR_WINAPP_EXE`, so the winapp it installed governs the tests rather than merely being
-> present; the suite logs the path it resolved beside the capability for the same reason. This
-> was not hypothetical: the step and the suite once reported opposite answers for the verb
-> inside a single job. Note that CI pins the *setup action* by SHA but not the CLI version it
-> installs (the action's `version` input defaults to `latest`), so pinning a winapp build is a
-> separate step — and the one to take alongside setting `REACTOR_E2E_REQUIRE_UI_YIELD=1`.
+> suite uses it. CI's capability step resolves *`PATH` ahead of the alias* — deliberately not the
+> harness's order, because `setup-WinAppCli` installs into a tool directory it prepends to `PATH`
+> and never touches LocalAppData, so preferring the alias would mean the build CI just installed
+> is never the one tested — and exports the winner as `REACTOR_WINAPP_EXE`. Since that is the
+> harness's *first* candidate, the two still agree: CI picks, the harness follows. The suite logs
+> the path it resolved beside the capability for the same reason. This was not hypothetical: the
+> step and the suite once reported opposite answers for the verb inside a single job. Note that
+> CI pins the *setup action* by SHA but not the CLI version it installs (the action's `version`
+> input defaults to `latest`), so pinning a winapp build is a separate step — and the one to take
+> alongside setting `REACTOR_E2E_REQUIRE_UI_YIELD=1`.
 
 > **This does not stop a non-winapp window stealing the foreground.** Turn arbitration only
 > coordinates winapp callers. On a busy desktop, clicks still fail with

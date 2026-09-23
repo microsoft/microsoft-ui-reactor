@@ -648,7 +648,14 @@ public sealed class WinAppUi
         if (!proc.WaitForExit(timeoutMs))
         {
             TryKill(proc);
-            return new BoundedRun(BoundedRunOutcome.TimedOut, 0, sbOut.ToString(), sbErr.ToString());
+
+            // Deliberately empty rather than the builders' current contents. WaitForExit(int)
+            // does not wait for the asynchronous output handlers to finish — only the
+            // parameterless overload does — so a child that emitted output before it hung can
+            // still be firing OutputDataReceived/ErrorDataReceived while these are read. No
+            // caller uses a timed-out run's output, so reporting none is both honest and
+            // race-free; the alternative is a torn read nobody consumes.
+            return new BoundedRun(BoundedRunOutcome.TimedOut, 0, "", "");
         }
 
         // Ensure async buffers are flushed.

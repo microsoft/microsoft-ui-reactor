@@ -72,13 +72,16 @@ Conventions for contributors:
   none of the long-standing verbs in it counts as unreadable too, so a future reformat of winapp's
   help surfaces as a failure to parse instead of reading as "yield was removed" on every run
   forever (PR #1272).
-- CI's winapp capability step and the E2E suite now provably inspect the same binary. They
-  disagreed inside a single job — the step reported the verb present while the suite reported it
-  absent — because the step ran whatever `winapp` PATH resolved while
-  `WinAppUi.ResolveWinAppExe()` prefers `$REACTOR_WINAPP_EXE`, then
-  `%LOCALAPPDATA%\Microsoft\WindowsApps`, and only then PATH. The step now resolves in that same
-  order and exports the result, which also means the winapp CI installs is the winapp CI tests;
-  the suite logs the path it resolved beside the capability, and the strict-mode failure names it
+- CI's winapp capability step and the E2E suite now provably inspect the same binary, and it is
+  the one this job installed. They disagreed inside a single job — the step reported the verb
+  present while the suite reported it absent — because the step ran whatever `winapp` PATH
+  resolved while `WinAppUi.ResolveWinAppExe()` prefers `$REACTOR_WINAPP_EXE`, then
+  `%LOCALAPPDATA%\Microsoft\WindowsApps`, and only then PATH. The step now resolves PATH *ahead*
+  of that alias — `setup-WinAppCli` installs into a tool directory it prepends to PATH and never
+  touches LocalAppData, so mirroring the harness's order would have meant a runner carrying the
+  alias silently tests a stale sideloaded build instead of the installed one — and exports the
+  winner as `REACTOR_WINAPP_EXE`, the harness's own first candidate, so the two still agree. The
+  suite logs the path it resolved beside the capability, and the strict-mode failure names it
   (PR #1272).
 - CI's winapp capability step cannot hang the E2E job. It shells out to `winapp --version` and
   `winapp ui --cli-schema` for diagnostics, and `continue-on-error` only forgives a step that

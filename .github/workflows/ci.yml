@@ -303,9 +303,11 @@ jobs:
       #
       # PATH alone does not decide what the tests use. WinAppUi.ResolveWinAppExe() prefers, in
       # order: $REACTOR_WINAPP_EXE, then %LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe, and only
-      # then PATH — so on a runner that happens to carry a winapp in LOCALAPPDATA, the build
-      # installed here would be installed and then quietly not used. The step below resolves the
-      # same way and exports the result, which is what makes the installed CLI govern the suite.
+      # then PATH — so on a runner that happens to carry that alias, the build installed here
+      # would be installed and then quietly not used. The step below therefore resolves PATH
+      # ahead of the alias (the action installs to a tool directory it prepends to PATH, not to
+      # LocalAppData) and exports the result as $REACTOR_WINAPP_EXE, which is the harness's own
+      # first candidate. CI picks the binary; the harness follows it.
       - name: Setup winapp CLI
         uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
@@ -334,16 +336,24 @@ jobs:
         timeout-minutes: 3
         shell: pwsh
         run: |
-          # Resolve the same binary the tests will, in the same order as
-          # WinAppUi.ResolveWinAppExe(), then export it so the two provably agree. This step and
-          # the suite previously disagreed inside one job — the step reported the verb present
-          # while the gate reported it absent — which is only possible if they asked different
-          # winapps. Pinning the path removes the ambiguity rather than explaining it.
+          # Resolve the winapp this job should actually test, then export it so the suite uses
+          # the same one. This step and the suite previously disagreed inside one job — the step
+          # reported the verb present while the gate reported it absent — which is only possible
+          # if they asked different winapps.
+          #
+          # The order here is deliberately NOT ResolveWinAppExe()'s. The setup action above
+          # installs winapp.exe into its own tool directory and prepends that to PATH; it does
+          # not touch %LOCALAPPDATA%\Microsoft\WindowsApps. Preferring the LocalAppData alias —
+          # as the harness does, to route around a stale alias on a dev box — would mean that on
+          # any runner carrying that alias, the build this job just installed is never the one
+          # tested. So PATH is preferred here and the alias is only a fallback. Exporting the
+          # result still keeps the two in agreement, because $REACTOR_WINAPP_EXE is the harness's
+          # own first candidate: CI picks, and the harness follows.
           $candidates = @(
             $env:REACTOR_WINAPP_EXE,
-            (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winapp.exe'),
             (Get-Command winapp -CommandType Application -ErrorAction SilentlyContinue |
-              Select-Object -First 1 -ExpandProperty Source)
+              Select-Object -First 1 -ExpandProperty Source),
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winapp.exe')
           )
           $exe = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 

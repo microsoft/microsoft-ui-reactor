@@ -848,10 +848,15 @@ public class WinAppWorkflowIdTests
     [TestMethod]
     public void RunBounded_ReturnsTimedOutWithinTheBudgetForAChildThatOutlivesIt()
     {
-        // The bound has to hold against a child that simply never exits. `timeout /t` with
-        // redirected stdin errors out immediately, so sleep via ping's interval instead.
+        // The bound has to hold against a child that simply never exits. It writes to both
+        // streams *before* hanging, so the timeout path runs with async handlers that have
+        // genuinely fired -- redirecting the child's output to nul would leave the race between
+        // WaitForExit(int) and those callbacks unexercised. `timeout /t` errors out immediately
+        // when stdin is redirected, so sleep via ping's interval instead.
         var clock = Stopwatch.StartNew();
-        var run = WinAppUi.RunBounded(Cmd("ping -n 30 127.0.0.1 > nul"), timeoutMs: 1_000);
+        var run = WinAppUi.RunBounded(
+            Cmd("echo OUT-BEFORE-HANG& echo ERR-BEFORE-HANG 1>&2& ping -n 30 127.0.0.1 > nul"),
+            timeoutMs: 1_000);
         clock.Stop();
 
         Assert.AreEqual(
@@ -865,5 +870,10 @@ public class WinAppWorkflowIdTests
             clock.Elapsed < TimeSpan.FromSeconds(20),
             $"The bounded wait took {clock.Elapsed.TotalSeconds:F1}s against a 1s budget, so it " +
             "was bounded by the child rather than by the timeout.");
+
+        // WaitForExit(int) does not wait for the async output handlers, so anything read from
+        // the builders on this path is a torn read. Reporting none of it is the contract.
+        Assert.AreEqual("", run.StdOut, "A timed-out run reported stdout read without draining.");
+        Assert.AreEqual("", run.StdErr, "A timed-out run reported stderr read without draining.");
     }
 }
