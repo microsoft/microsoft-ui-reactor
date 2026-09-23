@@ -112,12 +112,33 @@ public sealed class DocsDeployWiringTests
     public void Every_publishing_step_records_what_it_published(string stepName)
     {
         var step = Steps("publish").Single(s => Scalar(s, "name") == stepName);
-        var run = Scalar(step, "run")!;
+
+        // Comments stripped first: these steps explain themselves in prose that
+        // names the very commands being located, and a comment mentioning
+        // `mike deploy` after the write would invert the ordering check.
+        var run = string.Join(
+            "\n",
+            Scalar(step, "run")!
+                .Split('\n')
+                .Where(line => !line.TrimStart().StartsWith("#", StringComparison.Ordinal)));
 
         // The artifact step hard-fails on an empty list, so a step that stops
         // recording turns into a red run rather than a quieter gate — but only
         // if every step records in the first place.
-        Assert.Contains("$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE", run, StringComparison.Ordinal);
+        var write = run.LastIndexOf("$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE", StringComparison.Ordinal);
+        Assert.True(write >= 0, $"'{stepName}' records nothing, so verify cannot know what to probe.");
+
+        // And only if it records *after* publishing. Recording first means a
+        // failed `mike deploy` still names a version as published, so verify
+        // would go looking for a directory that was never written and blame the
+        // deployment for it. Asserting the mention alone would not notice the
+        // write moving back above the deploy.
+        var deployed = run.LastIndexOf("mike deploy", StringComparison.Ordinal);
+        Assert.True(deployed >= 0, $"'{stepName}' does not deploy anything.");
+        Assert.True(
+            write > deployed,
+            $"'{stepName}' records the version it published before `mike deploy` runs, so a failed "
+                + "publish would still be reported to the verify job as a directory to probe.");
     }
 
     [Fact]
