@@ -137,7 +137,7 @@ export function expectedRootTarget(expectedVersions) {
  * @returns {{ status: "pass"|"stranded"|"probe-broken", failures: {kind: string, message: string}[], evidence: string[], liveRunId: string|null }}
  */
 export function evaluate({ expectedRunId, expectedVersions, publishedVersions = [], observations }) {
-  const { stamp, versions, control, root } = observations;
+  const { stamp, versions, control, root, alias } = observations;
   const failures = [];
   const evidence = [];
   let liveRunId = null;
@@ -272,6 +272,22 @@ export function evaluate({ expectedRunId, expectedVersions, publishedVersions = 
     evidence.push(`the positive control ${control.version}/ responded 200`);
   }
 
+  // The `latest` alias is its own copied tree, and the site root forwards to
+  // it, so a broken `latest/` 404s every reader arriving at the bare URL even
+  // when the version it aliases is perfectly healthy.
+  if (alias) {
+    if (!alias.probe?.ok) {
+      failures.push({
+        kind: "alias-unreachable",
+        message:
+          `${alias.version}/ did not respond 200 (${describeProbe(alias.probe)}). ` +
+          "The site root forwards there, so readers landing on the bare URL would get nothing.",
+      });
+    } else {
+      evidence.push(`${alias.version}/ responded 200`);
+    }
+  }
+
   if (failures.length === 0) {
     return { status: "pass", failures, evidence, liveRunId };
   }
@@ -308,20 +324,36 @@ export async function probe(baseUrl, path, { fetchImpl = fetch, uuid = randomUUI
 
 async function observe(baseUrl, expectedVersions, publishedVersions, deps) {
   const { targets, control } = selectProbeTargets(expectedVersions, publishedVersions);
-  const [stamp, versions, rootProbe, ...rest] = await Promise.all([
-    probe(baseUrl, STAMP_PATH, deps),
-    probe(baseUrl, VERSIONS_PATH, deps),
-    probe(baseUrl, ROOT_INDEX_PATH, deps),
-    ...targets.map((version) => probe(baseUrl, versionIndex(version), deps)),
-    ...(control ? [probe(baseUrl, versionIndex(control), deps)] : []),
-  ]);
-  return {
-    stamp,
-    versions,
-    root: { probe: rootProbe },
-    targets: targets.map((version, i) => ({ version, probe: rest[i] })),
-    control: control ? { version: control, probe: rest[targets.length] } : null,
-  };
+  const latest = aliasHolder(expectedVersions ?? [], LATEST_ALIAS);
+
+  // Built as a labelled list rather than positional destructuring: the probe
+  // set is conditional, and an off-by-one there would silently swap two
+  // results instead of failing.
+  const jobs = [
+    { key: "stamp", path: STAMP_PATH },
+    { key: "versions", path: VERSIONS_PATH },
+    { key: "root", path: ROOT_INDEX_PATH },
+    // `mike deploy --alias-type copy` publishes `latest/` as its own tree, and
+    // the site root forwards there, so a missing `latest/index.html` 404s every
+    // reader arriving at the bare URL. Probing the version that *owns* the
+    // alias does not cover it: they are separate directories.
+    ...(latest ? [{ key: "alias", path: versionIndex(LATEST_ALIAS) }] : []),
+    ...targets.map((version) => ({ key: "target", version, path: versionIndex(version) })),
+    ...(control ? [{ key: "control", version: control, path: versionIndex(control) }] : []),
+  ];
+
+  const results = await Promise.all(jobs.map((job) => probe(baseUrl, job.path, deps)));
+
+  const observations = { stamp: null, versions: null, root: null, alias: null, targets: [], control: null };
+  jobs.forEach((job, i) => {
+    const result = results[i];
+    if (job.key === "target") observations.targets.push({ version: job.version, probe: result });
+    else if (job.key === "control") observations.control = { version: job.version, probe: result };
+    else if (job.key === "alias") observations.alias = { version: LATEST_ALIAS, probe: result };
+    else if (job.key === "root") observations.root = { probe: result };
+    else observations[job.key] = result;
+  });
+  return observations;
 }
 
 /**

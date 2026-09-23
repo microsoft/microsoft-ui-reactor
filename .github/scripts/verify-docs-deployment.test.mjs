@@ -55,6 +55,7 @@ function healthy(overrides = {}, published = PUBLISHED_RELEASE) {
     stamp: ok(JSON.stringify({ run_id: THIS_RUN, sha: "459f7234" })),
     versions: ok(JSON.stringify(EXPECTED_VERSIONS)),
     root: { probe: ok(ROOT_STUB) },
+    alias: { version: "latest", probe: ok("<html>") },
     targets: targets.map((version) => ({ version, probe: ok("<html>") })),
     control: control ? { version: control, probe: ok("<html>") } : null,
     ...overrides,
@@ -134,6 +135,18 @@ test("a site root redirecting to the wrong version is stranded", () => {
   const verdict = verdictFor(healthy({ root: { probe: ok(stale) } }));
   assert.equal(verdict.status, "stranded");
   assert.ok(verdict.failures.some((f) => f.kind === "root-mistargeted"));
+});
+
+// `--alias-type copy` makes `latest/` a separate tree from the version it
+// aliases, and the site root forwards to it, so it needs its own probe.
+test("a broken latest alias is stranded even when its version is healthy", () => {
+  const verdict = verdictFor(healthy({ alias: { version: "latest", probe: notFound() } }));
+  assert.equal(verdict.status, "stranded");
+  assert.deepEqual(
+    verdict.failures.map((f) => f.kind),
+    ["alias-unreachable"],
+  );
+  assert.match(verdict.failures[0].message, /site root forwards there/);
 });
 
 test("the site root is not judged when no default can be determined", () => {
@@ -331,6 +344,7 @@ test("the poll loop returns as soon as the deployment propagates", async () => {
   // The driver must actually request these, not just decide it should.
   assert.ok(requested.some((url) => url.includes("/0.1.0-preview.16/index.html?nc=")));
   assert.ok(requested.some((url) => url.includes("/docs/index.html?nc=")));
+  assert.ok(requested.some((url) => url.includes("/latest/index.html?nc=")));
 });
 
 test("the poll loop gives up once the window closes", async () => {

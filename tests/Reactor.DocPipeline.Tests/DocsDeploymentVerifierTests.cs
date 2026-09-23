@@ -1,7 +1,9 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -24,6 +26,13 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 /// </summary>
 public sealed class DocsDeploymentVerifierTests
 {
+    /// <summary>
+    /// Floor for the number of cases the node suite must run, so it cannot be
+    /// quietly reduced to one passing case while the xUnit gate stays green.
+    /// Raising it as cases are added is optional; lowering it is a decision.
+    /// </summary>
+    private const int MinimumCases = 30;
+
     [Fact]
     public async Task Deployment_verifier_cases_pass()
     {
@@ -70,10 +79,19 @@ public sealed class DocsDeploymentVerifierTests
             $".github/scripts/verify-docs-deployment.test.mjs failed (exit {process.ExitCode}):{Environment.NewLine}{output}");
 
         // An exit code of zero is also what `node` returns for a file that
-        // registered no tests at all, so assert the suite actually ran. Without
-        // this, renaming the cases out from under the runner would read green.
-        Assert.Contains("# pass ", stdout, StringComparison.Ordinal);
-        Assert.DoesNotContain("# pass 0", stdout, StringComparison.Ordinal);
+        // registered no tests at all, and a positive pass count alone would
+        // still be satisfied by a suite gutted to a single case. Assert a floor
+        // instead: growth is fine, silent shrinkage is not.
+        var match = Regex.Match(stdout, @"^# pass (\d+)$", RegexOptions.Multiline);
+        Assert.True(match.Success, $"No TAP pass count in the runner output:{Environment.NewLine}{output}");
+
+        var passed = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+        Assert.True(
+            passed >= MinimumCases,
+            $"Only {passed} cases ran, below the {MinimumCases} this suite is expected to carry. "
+                + "The live-site verifier is the only check that can catch a stranded deployment, so its "
+                + "regression suite must not shrink. If cases were deliberately removed or merged, lower "
+                + $"{nameof(MinimumCases)} in this file with the reason in the commit message.");
     }
 
     private static string FindRepoRoot()
