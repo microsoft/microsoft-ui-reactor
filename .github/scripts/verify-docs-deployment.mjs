@@ -16,7 +16,8 @@
 //
 // Run it locally against a deployed site with:
 //   DOCS_BASE_URL=https://microsoft.github.io/microsoft-ui-reactor/ \
-//   DOCS_EXPECTED_RUN_ID=123 DOCS_EXPECTED_VERSIONS='[{"version":"main","aliases":[]}]' \
+//   DOCS_EXPECTED_RUN_ID=123 DOCS_EXPECTED_RUN_ATTEMPT=1 \
+//   DOCS_EXPECTED_VERSIONS='[{"version":"main","aliases":[]}]' \
 //   DOCS_PUBLISHED_VERSIONS='["main"]' \
 //   node .github/scripts/verify-docs-deployment.mjs
 //
@@ -188,7 +189,13 @@ export function expectedRootTarget(expectedVersions) {
  *
  * @returns {{ status: "pass"|"stranded"|"probe-broken", failures: {kind: string, message: string}[], evidence: string[], liveRunId: string|null }}
  */
-export function evaluate({ expectedRunId, expectedVersions, publishedVersions = [], observations }) {
+export function evaluate({
+  expectedRunId,
+  expectedRunAttempt,
+  expectedVersions,
+  publishedVersions = [],
+  observations,
+}) {
   const { stamp, versions, control, root, alias } = observations;
   const failures = [];
   const evidence = [];
@@ -215,12 +222,27 @@ export function evaluate({ expectedRunId, expectedVersions, publishedVersions = 
     } else {
       evidence.push(`${STAMP_PATH} responded 200 with parseable JSON`);
       liveRunId = parsed.value?.run_id == null ? null : String(parsed.value.run_id);
-      if (liveRunId !== String(expectedRunId)) {
+      const liveAttempt = parsed.value?.run_attempt == null ? null : String(parsed.value.run_attempt);
+      const live = `${liveRunId ?? "(no run_id)"} attempt ${liveAttempt ?? "(unknown)"}`;
+      const expected = `${expectedRunId} attempt ${expectedRunAttempt}`;
+
+      // The attempt is part of the identity, not decoration. `run_id` is stable
+      // across re-runs, so a full "Re-run all jobs" republishes under the same
+      // id — and if that deployment is stranded while the previous attempt's
+      // artifact stays live, an id-only comparison passes on someone else's
+      // bytes.
+      //
+      // Compared against the attempt that produced *the artifact*, exported by
+      // the publish job, rather than this job's own `github.run_attempt`.
+      // Re-running only the failed `deploy` job reuses the original publish, so
+      // the stamp legitimately carries the older attempt and the verify job's
+      // own counter would disagree with it on every partial re-run.
+      if (liveRunId !== String(expectedRunId) || liveAttempt !== String(expectedRunAttempt)) {
         failures.push({
           kind: "stamp-stale",
           message:
-            `The live site is serving run ${liveRunId ?? "(no run_id)"} ` +
-            `(sha ${parsed.value?.sha ?? "unknown"}), not this run ${expectedRunId}. ` +
+            `The live site is serving run ${live} (sha ${parsed.value?.sha ?? "unknown"}), ` +
+            `not the artifact this run published (${expected}). ` +
             "Whatever stranded it, the bytes this run published are not the bytes being served.",
         });
       }
@@ -462,6 +484,7 @@ async function observe(baseUrl, expectedVersions, publishedVersions, deps) {
 export async function verifyDeployment({
   baseUrl,
   expectedRunId,
+  expectedRunAttempt,
   expectedVersions,
   publishedVersions = [],
   timeoutMs = 600_000,
@@ -486,7 +509,10 @@ export async function verifyDeployment({
       requestTimeoutMs,
       createTimeout,
     });
-    verdict = { ...evaluate({ expectedRunId, expectedVersions, publishedVersions, observations }), attempt };
+    verdict = {
+      ...evaluate({ expectedRunId, expectedRunAttempt, expectedVersions, publishedVersions, observations }),
+      attempt,
+    };
 
     if (verdict.status === "pass") return verdict;
 
@@ -501,9 +527,9 @@ export async function verifyDeployment({
 }
 
 /** Renders a verdict as GitHub Actions annotations. Returns the process exit code. */
-export function report(verdict, { baseUrl, expectedRunId, log = console.log, err = console.error } = {}) {
+export function report(verdict, { baseUrl, expectedRunId, expectedRunAttempt, log = console.log, err = console.error } = {}) {
   if (verdict.status === "pass") {
-    log(`The live site at ${baseUrl} is serving run ${expectedRunId}.`);
+    log(`The live site at ${baseUrl} is serving run ${expectedRunId} attempt ${expectedRunAttempt}.`);
     for (const line of verdict.evidence) log(`  ✓ ${line}`);
     return 0;
   }
@@ -550,6 +576,11 @@ const invokedDirectly = Boolean(process.argv[1]) && import.meta.url === pathToFi
 if (invokedDirectly) {
   const baseUrl = requireEnv("DOCS_BASE_URL");
   const expectedRunId = requireEnv("DOCS_EXPECTED_RUN_ID");
+
+  // The attempt that produced the artifact, not this job's own counter. See
+  // the stamp comparison in evaluate() for why the two differ on a partial
+  // re-run, and why an id-only check goes false-green on a full one.
+  const expectedRunAttempt = requireEnv("DOCS_EXPECTED_RUN_ATTEMPT");
   const expectedVersions = requireJsonArrayEnv("DOCS_EXPECTED_VERSIONS");
 
   // Required rather than defaulted: without it the probe silently falls back to
@@ -560,11 +591,12 @@ if (invokedDirectly) {
   const verdict = await verifyDeployment({
     baseUrl,
     expectedRunId,
+    expectedRunAttempt,
     expectedVersions,
     publishedVersions,
     timeoutMs: Number(process.env.DOCS_VERIFY_TIMEOUT_SECONDS ?? 600) * 1000,
     intervalMs: Number(process.env.DOCS_VERIFY_INTERVAL_SECONDS ?? 15) * 1000,
   });
 
-  process.exit(report(verdict, { baseUrl, expectedRunId }));
+  process.exit(report(verdict, { baseUrl, expectedRunId, expectedRunAttempt }));
 }

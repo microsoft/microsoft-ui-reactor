@@ -73,6 +73,10 @@ jobs:
       # exists.
       versions: ${{ steps.artifact.outputs.versions }}
       published: ${{ steps.artifact.outputs.published }}
+      # The attempt that produced the artifact. `github.run_attempt` read in
+      # the verify job would be wrong: re-running only the failed `deploy` job
+      # reuses this artifact, so its attempt legitimately trails the re-run's.
+      run_attempt: ${{ steps.artifact.outputs.run_attempt }}
     permissions:
       contents: write # mike commits the rendered site to gh-pages
     steps:
@@ -299,6 +303,12 @@ jobs:
           echo "This run published: $published"
           echo "published=$published" >> "$GITHUB_OUTPUT"
 
+          # Exported so verify compares against the attempt that built these
+          # bytes. `run_id` alone is stable across re-runs, so a full "Re-run
+          # all jobs" would republish under the same identity and a stranded
+          # deployment could still match the previous attempt's live artifact.
+          echo "run_attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
@@ -358,6 +368,7 @@ jobs:
         env:
           DOCS_BASE_URL: ${{ needs.deploy.outputs.page_url }}
           DOCS_EXPECTED_RUN_ID: ${{ github.run_id }}
+          DOCS_EXPECTED_RUN_ATTEMPT: ${{ needs.publish.outputs.run_attempt }}
           DOCS_EXPECTED_VERSIONS: ${{ needs.publish.outputs.versions }}
           DOCS_PUBLISHED_VERSIONS: ${{ needs.publish.outputs.published }}
           DOCS_VERIFY_TIMEOUT_SECONDS: '600'

@@ -26,6 +26,10 @@ import {
 const THIS_RUN = "35774072302";
 const OTHER_RUN = "35773982188";
 
+// `run_id` is stable across re-run attempts, so the attempt is part of the
+// identity: a full "Re-run all jobs" republishes under the same id.
+const THIS_ATTEMPT = "1";
+
 const EXPECTED_VERSIONS = [
   { version: "main", title: "main (development)", aliases: [] },
   { version: "0.1.0-preview.16", title: "0.1.0-preview.16", aliases: ["latest"] },
@@ -58,7 +62,7 @@ const ROOT_STUB = `<!DOCTYPE html><html><head>
 function healthy(overrides = {}, published = PUBLISHED_RELEASE) {
   const { targets, control } = selectProbeTargets(EXPECTED_VERSIONS, published);
   return {
-    stamp: ok(JSON.stringify({ run_id: THIS_RUN, sha: "459f7234" })),
+    stamp: ok(JSON.stringify({ run_id: THIS_RUN, run_attempt: THIS_ATTEMPT, sha: "459f7234" })),
     versions: ok(JSON.stringify(EXPECTED_VERSIONS)),
     root: { probe: ok(ROOT_STUB) },
     alias: { version: "latest", probe: ok("<html>") },
@@ -69,7 +73,13 @@ function healthy(overrides = {}, published = PUBLISHED_RELEASE) {
 }
 
 function verdictFor(observations, expectedVersions = EXPECTED_VERSIONS, publishedVersions = PUBLISHED_RELEASE) {
-  return evaluate({ expectedRunId: THIS_RUN, expectedVersions, publishedVersions, observations });
+  return evaluate({
+    expectedRunId: THIS_RUN,
+    expectedRunAttempt: THIS_ATTEMPT,
+    expectedVersions,
+    publishedVersions,
+    observations,
+  });
 }
 
 test("probe targets cover the published version and the latest holder", () => {
@@ -193,10 +203,11 @@ test("the site root is not judged when no default can be determined", () => {
   const unknown = [{ version: "0.1.0", aliases: [] }];
   const verdict = evaluate({
     expectedRunId: THIS_RUN,
+    expectedRunAttempt: THIS_ATTEMPT,
     expectedVersions: unknown,
     publishedVersions: ["0.1.0"],
     observations: {
-      stamp: ok(JSON.stringify({ run_id: THIS_RUN })),
+      stamp: ok(JSON.stringify({ run_id: THIS_RUN, run_attempt: THIS_ATTEMPT })),
       versions: ok(JSON.stringify(unknown)),
       root: { probe: ok("<html>nothing recognisable</html>") },
       targets: [{ version: "0.1.0", probe: ok("<html>") }],
@@ -217,7 +228,7 @@ test("a live site serving this run passes", () => {
 // success, and the live site was serving the *other* run's artifact.
 test("a stamp from another run is stranded and names both runs", () => {
   const verdict = verdictFor(
-    healthy({ stamp: ok(JSON.stringify({ run_id: OTHER_RUN, sha: "459f7234" })) }),
+    healthy({ stamp: ok(JSON.stringify({ run_id: OTHER_RUN, run_attempt: THIS_ATTEMPT, sha: "459f7234" })) }),
   );
   assert.equal(verdict.status, "stranded");
   assert.deepEqual(
@@ -228,9 +239,49 @@ test("a stamp from another run is stranded and names both runs", () => {
   assert.match(verdict.failures[0].message, new RegExp(THIS_RUN));
 });
 
-test("a numeric run_id still matches the string this run is identified by", () => {
-  const verdict = verdictFor(healthy({ stamp: ok(JSON.stringify({ run_id: Number(THIS_RUN) })) }));
+test("a numeric run_id still matches the string this run is identified by", () => {  const verdict = verdictFor(healthy({ stamp: ok(JSON.stringify({ run_id: Number(THIS_RUN), run_attempt: Number(THIS_ATTEMPT) })) }));
   assert.equal(verdict.status, "pass");
+});
+
+// "Re-run all jobs" keeps the same run_id and increments the attempt, so an
+// id-only comparison would accept the *previous* attempt's artifact if the
+// new deployment were stranded — a false green on exactly the recovery path
+// an operator reaches for after a failure.
+test("a full re-run is not satisfied by the previous attempt's artifact", () => {
+  const verdict = evaluate({
+    expectedRunId: THIS_RUN,
+    expectedRunAttempt: "2",
+    expectedVersions: EXPECTED_VERSIONS,
+    publishedVersions: PUBLISHED_RELEASE,
+    observations: healthy(), // still serving attempt 1
+  });
+  assert.equal(verdict.status, "stranded");
+  const failure = verdict.failures.find((f) => f.kind === "stamp-stale");
+  assert.ok(failure);
+  assert.match(failure.message, /attempt 1/);
+  assert.match(failure.message, /attempt 2/);
+});
+
+// Re-running only the failed `deploy` job reuses the original publish artifact,
+// so the live stamp legitimately carries the older attempt. Comparing against
+// this job's own github.run_attempt would redden every partial re-run.
+test("a deploy-only re-run still matches the artifact that publish built", () => {
+  const verdict = evaluate({
+    expectedRunId: THIS_RUN,
+    expectedRunAttempt: THIS_ATTEMPT, // from needs.publish.outputs, not this job
+    expectedVersions: EXPECTED_VERSIONS,
+    publishedVersions: PUBLISHED_RELEASE,
+    observations: healthy(),
+  });
+  assert.equal(verdict.status, "pass");
+});
+
+test("a missing run_attempt in the stamp is stranded rather than assumed", () => {
+  const verdict = verdictFor(
+    healthy({ stamp: ok(JSON.stringify({ run_id: THIS_RUN, sha: "459f7234" })) }),
+  );
+  assert.equal(verdict.status, "stranded");
+  assert.ok(verdict.failures.some((f) => f.kind === "stamp-stale"));
 });
 
 test("a site that has never served a stamp is stranded, not passing", () => {
@@ -298,7 +349,7 @@ test("a broken backported directory is stranded even though latest is fine", () 
   const published = ["0.1.0-preview.15"];
   const { targets, control } = selectProbeTargets(EXPECTED_VERSIONS, published);
   const verdict = verdictFor({
-    stamp: ok(JSON.stringify({ run_id: THIS_RUN })),
+    stamp: ok(JSON.stringify({ run_id: THIS_RUN, run_attempt: THIS_ATTEMPT })),
     versions: ok(JSON.stringify(EXPECTED_VERSIONS)),
     targets: targets.map((version) => ({
       version,
@@ -351,7 +402,7 @@ test("the poll loop returns as soon as the deployment propagates", async () => {
       // The first round still serves the other run; the second serves this one.
       stampFetches += 1;
       const servedRun = stampFetches === 1 ? OTHER_RUN : THIS_RUN;
-      return { status: 200, text: async () => JSON.stringify({ run_id: servedRun }) };
+      return { status: 200, text: async () => JSON.stringify({ run_id: servedRun, run_attempt: THIS_ATTEMPT }) };
     }
     if (url.includes("versions.json")) {
       return { status: 200, text: async () => JSON.stringify(EXPECTED_VERSIONS) };
@@ -365,6 +416,7 @@ test("the poll loop returns as soon as the deployment propagates", async () => {
   const verdict = await verifyDeployment({
     baseUrl: "https://example.test/docs/",
     expectedRunId: THIS_RUN,
+    expectedRunAttempt: THIS_ATTEMPT,
     expectedVersions: EXPECTED_VERSIONS,
     publishedVersions: PUBLISHED_RELEASE,
     timeoutMs: 60_000,
@@ -391,7 +443,7 @@ test("the poll loop gives up once the window closes", async () => {
   let clock = 0;
   const fetchImpl = async (url) => {
     if (url.includes("deploy-stamp.json")) {
-      return { status: 200, text: async () => JSON.stringify({ run_id: OTHER_RUN }) };
+      return { status: 200, text: async () => JSON.stringify({ run_id: OTHER_RUN, run_attempt: THIS_ATTEMPT }) };
     }
     if (url.includes("versions.json")) {
       return { status: 200, text: async () => JSON.stringify(EXPECTED_VERSIONS) };

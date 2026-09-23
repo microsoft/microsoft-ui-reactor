@@ -34,6 +34,7 @@ public sealed class DocsDeployWiringTests
 
         Assert.Equal("${{ steps.artifact.outputs.versions }}", Scalar(outputs, "versions"));
         Assert.Equal("${{ steps.artifact.outputs.published }}", Scalar(outputs, "published"));
+        Assert.Equal("${{ steps.artifact.outputs.run_attempt }}", Scalar(outputs, "run_attempt"));
     }
 
     [Fact]
@@ -135,6 +136,11 @@ public sealed class DocsDeployWiringTests
 
         Assert.Equal("${{ needs.deploy.outputs.page_url }}", Scalar(env, "DOCS_BASE_URL"));
         Assert.Equal("${{ github.run_id }}", Scalar(env, "DOCS_EXPECTED_RUN_ID"));
+
+        // The attempt that built the artifact, not this job's own counter:
+        // re-running only `deploy` reuses the artifact, so `github.run_attempt`
+        // here would disagree with the stamp on every partial re-run.
+        Assert.Equal("${{ needs.publish.outputs.run_attempt }}", Scalar(env, "DOCS_EXPECTED_RUN_ATTEMPT"));
         Assert.Equal("${{ needs.publish.outputs.versions }}", Scalar(env, "DOCS_EXPECTED_VERSIONS"));
         Assert.Equal("${{ needs.publish.outputs.published }}", Scalar(env, "DOCS_PUBLISHED_VERSIONS"));
     }
