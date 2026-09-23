@@ -49,11 +49,41 @@ public sealed class ValidationContext
     /// Announces a real change. Must be called *outside* <see cref="_lock"/> — a
     /// subscriber re-entering the context (for example a re-render that immediately
     /// re-reads messages) would otherwise take the lock recursively from the handler.
+    /// <para>
+    /// A change made while a render is in flight is deferred rather than dropped. The
+    /// component doing the rendering needs no notification — it observes the new state
+    /// later in the same pass — but other subscribers do: a parent that renders
+    /// <c>ctx.IsValid()</c> and provides the context would otherwise never learn that a
+    /// child's eager <c>.Validate()</c> invalidated it, leaving its summary or submit
+    /// state stale.
+    /// </para>
     /// </summary>
     private void RaiseChanged()
     {
-        if (ValidationRenderScope.InRender) return;
+        if (ValidationRenderScope.InRender)
+        {
+            ValidationRenderScope.DeferNotification(this);
+            return;
+        }
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Delivers a notification that was deferred because it happened mid-render.
+    /// Posted through the UI dispatcher when one is available so it lands after the
+    /// in-flight reconcile rather than re-entering it; falls back to an inline raise in
+    /// headless hosts, which keeps unit tests deterministic.
+    /// </summary>
+    internal void NotifyDeferred()
+    {
+        var handler = Changed;
+        if (handler is null) return;
+
+        var dispatcher = global::Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
+        if (dispatcher is not null && dispatcher.TryEnqueue(() => handler.Invoke()))
+            return;
+
+        handler.Invoke();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -544,16 +574,27 @@ public sealed class ValidationContext
     public object? Reset(string field)
     {
         object? initial;
+        bool changed;
         lock (_lock)
         {
-            _touchedFields.Remove(field);
-            _messages.Remove(field);
-            _externalMessages.Remove(field);
+            changed = _touchedFields.Remove(field);
+            if (_messages.Remove(field)) changed = true;
+            if (_externalMessages.Remove(field)) changed = true;
+
             _initialValues.TryGetValue(field, out initial);
-            _currentValues[field] = initial;
-            _version++;
+            // Only rewind a value the context is actually tracking. Creating an entry
+            // for a field it has never seen is not observable (IsDirty needs both an
+            // initial and a current value) but would make Reset("unknown") look like a
+            // change and notify.
+            if (_currentValues.TryGetValue(field, out var current) && !Equals(current, initial))
+            {
+                _currentValues[field] = initial;
+                changed = true;
+            }
+
+            if (changed) _version++;
         }
-        RaiseChanged();
+        if (changed) RaiseChanged();
         return initial;
     }
 
@@ -564,20 +605,28 @@ public sealed class ValidationContext
     public IReadOnlyDictionary<string, object?> ResetAll()
     {
         Dictionary<string, object?> result;
+        bool changed;
         lock (_lock)
         {
+            changed = _touchedFields.Count > 0 || _messages.Count > 0 || _externalMessages.Count > 0;
             _touchedFields.Clear();
             _messages.Clear();
             _externalMessages.Clear();
+
             result = new Dictionary<string, object?>();
             foreach (var (field, initial) in _initialValues)
             {
-                _currentValues[field] = initial;
+                if (_currentValues.TryGetValue(field, out var current) && !Equals(current, initial))
+                {
+                    _currentValues[field] = initial;
+                    changed = true;
+                }
                 result[field] = initial;
             }
-            _version++;
+
+            if (changed) _version++;
         }
-        RaiseChanged();
+        if (changed) RaiseChanged();
         return result;
     }
 

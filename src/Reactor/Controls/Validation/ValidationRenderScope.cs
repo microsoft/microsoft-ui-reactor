@@ -33,6 +33,7 @@ internal static class ValidationRenderScope
     [ThreadStatic] private static ValidationContext? t_context;
     [ThreadStatic] private static ValidationContext? t_pendingProvide;
     [ThreadStatic] private static int t_depth;
+    [ThreadStatic] private static List<ValidationContext>? t_deferred;
 
     /// <summary>
     /// The context <c>.Validate()</c> should push results into, or <c>null</c> when no
@@ -43,14 +44,38 @@ internal static class ValidationRenderScope
     /// <summary>
     /// True while a component render is in flight on this thread.
     /// <para>
-    /// <see cref="ValidationContext"/> uses this to suppress its change notification:
-    /// a mutation made *during* a render needs no re-render, because the component doing
-    /// the rendering observes the new value later in the very same pass. Notifying
-    /// anyway would re-enter <c>requestRerender</c> from inside <c>Render()</c>, which
-    /// the reconciler treats as a render loop.
+    /// <see cref="ValidationContext"/> uses this to defer its change notification: the
+    /// component doing the rendering observes the new value later in the same pass, and
+    /// notifying inline would re-enter <c>requestRerender</c> from inside
+    /// <c>Render()</c>, which the reconciler treats as a render loop. The notification
+    /// is delivered once the outermost render frame closes.
     /// </para>
     /// </summary>
     internal static bool InRender => t_depth > 0;
+
+    /// <summary>
+    /// Records a context whose change was raised mid-render, to be announced once the
+    /// outermost frame closes.
+    /// </summary>
+    internal static void DeferNotification(ValidationContext context)
+    {
+        var pending = t_deferred ??= new List<ValidationContext>(2);
+        foreach (var existing in pending)
+        {
+            if (ReferenceEquals(existing, context)) return;
+        }
+        pending.Add(context);
+    }
+
+    private static void FlushDeferredNotifications()
+    {
+        var pending = t_deferred;
+        if (pending is null || pending.Count == 0) return;
+
+        t_deferred = null;
+        foreach (var context in pending)
+            context.NotifyDeferred();
+    }
 
     /// <summary>
     /// Opens a frame for one component render. <paramref name="inherited"/> is the
@@ -121,6 +146,7 @@ internal static class ValidationRenderScope
             t_context = _previousContext;
             t_pendingProvide = _previousPendingProvide;
             if (t_depth > 0) t_depth--;
+            if (t_depth == 0) FlushDeferredNotifications();
         }
     }
 }

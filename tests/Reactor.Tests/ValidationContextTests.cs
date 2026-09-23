@@ -632,7 +632,14 @@ public class ValidationContextTests
         ctx.Reset("f");
         Assert.True(ctx.Version > v1);
 
+        // Reset/ResetAll bump only on a real state delta (issue #1262 review): an
+        // effect that resets every render must not repaint forever.
+        var vNoop = ctx.Version;
+        ctx.ResetAll();
+        Assert.Equal(vNoop, ctx.Version);
+
         ctx.SetInitialValue("f", "v2");
+        ctx.MarkTouched("f");
         var v2 = ctx.Version;
         ctx.ResetAll();
         Assert.True(ctx.Version > v2);

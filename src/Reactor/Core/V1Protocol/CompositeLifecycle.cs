@@ -339,20 +339,42 @@ internal static class CompositeLifecycle
         {
             existing.Context = valCtx;
             existing.FieldName = fieldName;
-            _rootBindings.Remove(formFieldRoot);
-            _rootBindings.Add(formFieldRoot, existing);
+            ReplaceRootBinding(formFieldRoot, existing);
             return;
         }
 
         var binding = new TouchBinding { Context = valCtx, FieldName = fieldName };
         _touchBindings.Add(fe, binding);
-        _rootBindings.Remove(formFieldRoot);
-        _rootBindings.Add(formFieldRoot, binding);
+        ReplaceRootBinding(formFieldRoot, binding);
         fe.LostFocus += (_, _) =>
         {
             if (binding.Context is { } ctx && binding.FieldName is { Length: > 0 } field)
                 ctx.MarkTouched(field);
         };
+    }
+
+    /// <summary>
+    /// Points a FormField root at its current content control's binding, neutralizing
+    /// whichever binding it pointed at before.
+    /// <para>
+    /// An update that swaps the content control unmounts the old editor into the pool
+    /// and maps the root to the new one. Without clearing the displaced binding, that
+    /// pooled editor would keep marking the old field when rented out elsewhere — the
+    /// same leak as an unmounted FormField, reached by a different route.
+    /// </para>
+    /// </summary>
+    private static void ReplaceRootBinding(UIElement formFieldRoot, TouchBinding binding)
+    {
+        if (_rootBindings.TryGetValue(formFieldRoot, out var previous))
+        {
+            if (ReferenceEquals(previous, binding)) return;
+
+            previous.Context = null;
+            previous.FieldName = null;
+            _rootBindings.Remove(formFieldRoot);
+        }
+
+        _rootBindings.Add(formFieldRoot, binding);
     }
 
     /// <summary>

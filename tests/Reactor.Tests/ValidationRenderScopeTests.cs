@@ -144,6 +144,7 @@ public class ValidationRenderScopeTests
             _ = TextBox("").Validate("email", "", Validate.Required());
 
         var versionAfterFirstPass = ctx.Version;
+        var notificationsAfterFirstPass = notifications;
 
         // Five more render passes over the same value. Because .Validate() now runs on
         // every pass, a version bump or a notification here would feed the re-render
@@ -155,7 +156,7 @@ public class ValidationRenderScopeTests
         }
 
         Assert.Equal(versionAfterFirstPass, ctx.Version);
-        Assert.Equal(0, notifications); // suppressed during render anyway
+        Assert.Equal(notificationsAfterFirstPass, notifications);
         Assert.Single(ctx.GetMessages("email")); // and not accumulated
     }
 
@@ -251,7 +252,7 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
-    public void Changed_Is_Suppressed_While_A_Render_Pass_Is_In_Flight()
+    public void Changed_Is_Deferred_Until_The_Render_Pass_Ends()
     {
         var ctx = new ValidationContext();
         var notifications = 0;
@@ -261,14 +262,120 @@ public class ValidationRenderScopeTests
         {
             ctx.Add("email", "boom");
             ctx.MarkTouched("email");
+
+            // Nothing is announced mid-pass: the rendering component reads the new
+            // state later in the same pass, and notifying here would re-enter
+            // requestRerender from inside Render().
+            Assert.Equal(0, notifications);
         }
 
-        // The rendering component reads the new state later in the same pass, so
-        // notifying would only re-enter requestRerender from inside Render().
-        Assert.Equal(0, notifications);
+        // ...but the change is not dropped — other subscribers still need it. Two
+        // mutations, one delivery.
+        Assert.Equal(1, notifications);
 
         ctx.MarkTouched("password");
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
+    public void A_Deferred_Notification_Reaches_A_Subscriber_That_Is_Not_The_Rendering_Component()
+    {
+        // The parent/child shape: a parent renders ctx.IsValid() and provides the
+        // context; the child's eager .Validate() invalidates it during the child's own
+        // render. Dropping that notification left the parent's summary stale forever.
+        var shared = new ValidationContext();
+        var parentRerenders = 0;
+
+        var parent = new RenderContext();
+        parent.BeginRender(() => parentRerenders++);
+        var parentScope = new ContextScope();
+        parentScope.Push(new Dictionary<ContextBase, object?> { [ValidationContexts.Current] = shared });
+        parent.BeginRender(() => parentRerenders++, parentScope);
+        Assert.Same(shared, parent.UseValidationContext());
+        parent.FlushEffects();
+        Assert.True(shared.IsValid());
+
+        var before = parentRerenders;
+
+        using (ValidationRenderScope.Begin(shared))
+        {
+            _ = TextBox("").Validate("email", "", Validate.Required());
+            Assert.Equal(before, parentRerenders); // not mid-pass
+        }
+
+        Assert.False(shared.IsValid());
+        Assert.True(parentRerenders > before);
+    }
+
+    [Fact]
+    public void Nested_Frames_Defer_To_The_Outermost_Exit()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            using (ValidationRenderScope.Begin(ctx))
+            {
+                ctx.Add("email", "boom");
+            }
+            Assert.Equal(0, notifications);
+        }
+
         Assert.Equal(1, notifications);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Reset — must not notify when there is nothing to reset
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Resetting_An_Untouched_Unknown_Field_Is_Silent()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ctx.Reset("never-seen");
+
+        // An effect that resets on every render would otherwise repaint forever.
+        Assert.Equal(0, notifications);
+        Assert.Equal(0, ctx.Version);
+    }
+
+    [Fact]
+    public void Resetting_Real_State_Notifies_Once_Then_Goes_Quiet()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("email", "start@example.com");
+        ctx.Add("email", "boom");
+        ctx.MarkTouched("email");
+        ctx.NotifyValueChanged("email", "changed@example.com");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ctx.Reset("email");
+        Assert.Equal(1, notifications);
+        Assert.True(ctx.IsValid());
+        Assert.False(ctx.IsTouched("email"));
+
+        ctx.Reset("email");
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void ResetAll_With_Nothing_To_Reset_Is_Silent()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ctx.ResetAll();
+
+        Assert.Equal(0, notifications);
+        Assert.Equal(0, ctx.Version);
     }
 
     // ════════════════════════════════════════════════════════════════

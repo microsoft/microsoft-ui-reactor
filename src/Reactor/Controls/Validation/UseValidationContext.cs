@@ -82,8 +82,13 @@ public static class ValidationContextHookExtensions
         // schedules a repaint when the new value differs from the old, so the ticket has
         // to keep climbing — feeding it a counter captured from render scope would go
         // stale and silently drop notifications.
+        //
+        // The setter is deliberately the default (marshaling) one rather than
+        // threadSafe: Interlocked already makes the counter safe, while threadSafe would
+        // invoke the re-render callback on whatever thread raised Changed — which an
+        // async validator can do from a worker.
         var (ticket, _) = ctx.UseState(new global::System.Runtime.CompilerServices.StrongBox<int>(0));
-        var (revision, setRevision) = ctx.UseState(0, threadSafe: true);
+        var (revision, setRevision) = ctx.UseState(0);
         _ = revision;
 
         ctx.UseEffect(() =>
