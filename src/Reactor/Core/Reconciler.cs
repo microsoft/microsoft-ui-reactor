@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hosting;
@@ -1850,19 +1851,28 @@ public sealed partial class Reconciler : IDisposable
                     }
 
                     node.Component.Context.BeginRender(componentRerender, _contextScope);
-                    newChildElement = node.Component.Render();
+                    using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+                    {
+                        newChildElement = ValidationRenderScope.ApplyProvide(node.Component.Render());
+                    }
                     FlushEffectsTraced(node.Component.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is FuncElement func)
                 {
                     node.Context.BeginRender(componentRerender, _contextScope);
-                    newChildElement = func.RenderFunc(node.Context);
+                    using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+                    {
+                        newChildElement = ValidationRenderScope.ApplyProvide(func.RenderFunc(node.Context));
+                    }
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is MemoElement memo)
                 {
                     node.Context.BeginRender(componentRerender, _contextScope);
-                    newChildElement = memo.RenderFunc(node.Context);
+                    using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+                    {
+                        newChildElement = ValidationRenderScope.ApplyProvide(memo.RenderFunc(node.Context));
+                    }
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else

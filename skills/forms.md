@@ -87,34 +87,55 @@ var (email, setEmail) = UseState("");
 
 return VStack(12,
     TextBox(name, setName, placeholderText: "Name")
-        .Validate(validation, "name",
+        .Validate("name", name,
             Validate.Required("Name is required"),
             Validate.MinLength(2, "Name too short")),
 
     TextBox(email, setEmail, placeholderText: "Email")
-        .Validate(validation, "email",
+        .Validate("email", email,
             Validate.Required("Email is required"),
             Validate.Email("Invalid email")),
 
     Button("Submit", () =>
     {
-        validation.ValidateAll();
-        if (validation.IsValid)
+        validation.MarkAllTouched();
+        if (validation.IsValid())
             Submit(name, email);
     })
 );
 ```
 
+`.Validate(fieldName, value, ...)` finds the surrounding `ValidationContext`
+itself — you never pass `validation` as an argument. Passing the current value
+runs the validators right away, during the render, so a
+`When(validation.HasError("email"), ...)` placed *after* the field observes the
+result in the same pass. The validator-only overload
+`.Validate(fieldName, validators...)` has no value to check and only attaches.
+
+You do not need `.Provide(ValidationContexts.Current, validation)`: a
+component-local context is published to the subtree automatically, so
+`FormField` and the visualizers find it. Write `.Provide(...)` explicitly only
+to share one context across sibling components that would otherwise each make
+their own — an explicit provide always wins.
+
+Mutating the context re-renders the component that created it, which is why
+`MarkAllTouched()` on an invalid submit is enough to reveal the errors even
+though no component state changed.
+
 ### ValidationContext API
 
 | Member | Purpose |
 |--------|---------|
-| `.IsValid` | `true` when no field has errors |
-| `.IsDirty` | `true` when any field differs from initial value |
-| `.ValidateAll()` | Force validation on all registered fields |
-| `.Reset()` | Clear all messages and touched/dirty flags |
-| `.GetMessages("field")` | Get error messages for a specific field |
+| `.IsValid()` | `true` when no field has Error-severity messages |
+| `.IsDirty()` | `true` when any registered field differs from initial value |
+| `.MarkAllTouched()` | Mark every registered field touched (typical on submit) |
+| `.MarkTouched("field")` | Mark a single field touched |
+| `.Reset("field")` | Reset one field to its initial value, returns that value |
+| `.ResetAll()` | Reset every field, returns field → initial value |
+| `.ClearAll()` | Drop all messages |
+| `.GetMessages("field")` | Get messages for a specific field |
 | `.IsTouched("field")` | Whether the user has interacted with a field |
+| `.Changed` | Event raised when the context's observable state changes |
 
 ## 4. Built-in validators
 
@@ -142,12 +163,13 @@ text, and error display:
 var validation = this.UseValidationContext();
 var (name, setName) = UseState("");
 
-return FormField("Full Name",
+return FormField(
     TextBox(name, setName, placeholderText: "Enter your name")
-        .Validate(validation, "name", Validate.Required("Required")),
+        .Validate("name", name, Validate.Required("Required")),
+    label: "Full Name",
     required: true,
     description: "As it appears on your ID",
-    showWhen: ShowWhen.WhenTouched  // or Always, WhenDirty, AfterFirstSubmit
+    showWhen: ShowWhen.WhenTouched  // or Always, WhenDirty, AfterFirstSubmit, Never
 );
 ```
 
@@ -209,9 +231,10 @@ return TextBox(amount,
 
 1. **Always use controlled inputs** — `(value, setter)` pair. There is no
    uncontrolled / two-way binding in Reactor.
-2. **Call `validation.ValidateAll()` before submit** — individual fields
-   validate on blur/change, but you must trigger all-field validation
-   before acting on the form.
+2. **Call `validation.MarkAllTouched()` before submit** — validators run on
+   every render, so the verdict is always current, but errors stay hidden
+   until their field is touched. Marking all fields touched on a failed
+   submit is what reveals them.
 3. **Use `ShowWhen.WhenTouched`** (default) — showing errors immediately on
    page load is hostile UX.
 4. **MaskEngine and InputFormatter are different** — masks restrict what

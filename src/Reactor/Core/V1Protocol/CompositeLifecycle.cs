@@ -85,6 +85,7 @@ internal static class CompositeLifecycle
         {
             ApplyFormFieldAutomation(contentControl, ff.Label);
             ApplyFormFieldErrorStyling(contentControl, valCtx, fieldName, ff.ShowWhen);
+            WireTouchedOnBlur(contentControl, valCtx, fieldName);
             panel.Children.Add(contentControl);
         }
         else
@@ -156,6 +157,7 @@ internal static class CompositeLifecycle
 
         ApplyFormFieldAutomation(existingContent, newFf.Label);
         ApplyFormFieldErrorStyling(existingContent, valCtx, fieldName, newFf.ShowWhen);
+        WireTouchedOnBlur(existingContent, valCtx, fieldName);
 
         // [2] Update description/error text
         if (panel.Children[2] is TextBlock descTb)
@@ -302,6 +304,53 @@ internal static class CompositeLifecycle
             rule.Evaluate(valCtx);
         return null; // keep existing collapsed placeholder
     }
+
+    /// <summary>
+    /// Marks a field touched when its editor loses focus.
+    /// <para>
+    /// <c>FormField</c> defaults to <see cref="ShowWhen.WhenTouched"/> and the guide
+    /// promises "errors appear below the field after the field is touched (focus then
+    /// blur)" — but nothing in the framework ever called
+    /// <see cref="ValidationContext.MarkTouched"/>, so that default could only ever
+    /// reveal an error in apps that marked fields by hand. The documented FormField
+    /// example does not, which left its error display permanently unreachable
+    /// (issue #1262).
+    /// </para>
+    /// <para>
+    /// The handler is attached once per control and reads the field name and context
+    /// from a mutable binding at invocation time, so a control recycled through the
+    /// element pool — or re-targeted at a different field by an update — reports for
+    /// whatever field it currently hosts rather than the one it was mounted with.
+    /// </para>
+    /// </summary>
+    private static void WireTouchedOnBlur(UIElement contentControl, ValidationContext? valCtx, string? fieldName)
+    {
+        if (valCtx is null || string.IsNullOrEmpty(fieldName)) return;
+        if (contentControl is not FrameworkElement fe) return;
+
+        if (_touchBindings.TryGetValue(fe, out var existing))
+        {
+            existing.Context = valCtx;
+            existing.FieldName = fieldName;
+            return;
+        }
+
+        var binding = new TouchBinding { Context = valCtx, FieldName = fieldName };
+        _touchBindings.Add(fe, binding);
+        fe.LostFocus += (_, _) =>
+        {
+            if (binding.Context is { } ctx && binding.FieldName is { Length: > 0 } field)
+                ctx.MarkTouched(field);
+        };
+    }
+
+    private sealed class TouchBinding
+    {
+        internal ValidationContext? Context;
+        internal string? FieldName;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, TouchBinding> _touchBindings = new();
 
     private static void ApplyFormFieldAutomation(UIElement contentControl, string? label)
     {

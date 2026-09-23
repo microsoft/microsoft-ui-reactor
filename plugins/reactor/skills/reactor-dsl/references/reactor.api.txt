@@ -6123,6 +6123,7 @@ RegisterField(string field) → void
 Reset(string field) → object
 ResetAll() → IReadOnlyDictionary<string, object>
 SetInitialValue(string field, object value) → void
+event Action Changed
 
 ### static class ValidationContextComponentExtensions
 Component.UseChildValidationContext() → ValueTuple<ValidationContext, ValidationContext>

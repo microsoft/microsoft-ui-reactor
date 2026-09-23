@@ -28,13 +28,50 @@ Conventions for contributors:
 
 ### Added
 
+- `ValidationContext.Changed` — raised when the context's observable state
+  changes (a message appearing or disappearing, a field becoming touched, a
+  reset). `UseValidationContext()` subscribes to it, so mutating the context
+  from an event handler repaints the form (issue #1262).
+- `FormField` now marks its field touched when the editor loses focus, so the
+  default `ShowWhen.WhenTouched` reveals errors on blur as the guide describes.
+  Previously nothing in the framework ever called `MarkTouched`, leaving the
+  default unreachable unless the app marked fields by hand (spec 011 §1E.1,
+  issue #1262).
+
 ### Changed
+
+- `.Validate(fieldName, value, validators…)` now runs its validators during the
+  render that calls it, instead of only when a `FormField` or visualizer mounts
+  the element. Results are therefore readable by the same `Render()` that
+  produced them. The validator-only `.Validate(fieldName, validators…)` overload
+  is unchanged and still attach-only (spec 011 §1A.5, issue #1262).
+- `UseValidationContext()` publishes a component-local context to the rendered
+  subtree automatically, so `FormField`, `ValidationVisualizer`, and nested
+  components no longer require an explicit
+  `.Provide(ValidationContexts.Current, ctx)`. An explicit provide still takes
+  precedence (issue #1262).
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+
+- Validators attached to a plain control with `.Validate()` never ran unless the
+  control was wrapped in a `FormField`, so a form built from the documented
+  "Validation Context" example registered no fields, produced no messages,
+  reported `IsValid() == true`, and submitted while empty (issue #1262).
+- `ValidationContext.NotifyValueChanged` discarded external messages on every
+  call rather than only when the value actually changed, so a server-side error
+  added with `AddExternal` was wiped by the next render (issue #1262).
+- `ValidationContext.MarkAllTouched` bumped `Version` even when every registered
+  field was already touched, and re-running validators over an unchanged value
+  bumped it twice per pass; both are now silent when nothing changed (issue #1262).
+- `FormField`'s default `ShowWhen.WhenTouched` could never display an error: the
+  guide promises errors appear "after the field is touched (focus then blur)",
+  but no focus or blur handler existed and `MarkTouched` was reachable only from
+  app code, so the documented `FormField` example stayed silent forever
+  (issue #1262).
 
 ### Security
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -555,7 +556,10 @@ public sealed class ReactorHost : IDisposable
                 _rootComponent.Context.BeginRender(rerender);
                 try
                 {
-                    newTree = _rootComponent.Render();
+                    using (ValidationRenderScope.Begin(null))
+                    {
+                        newTree = ValidationRenderScope.ApplyProvide(_rootComponent.Render());
+                    }
                 }
                 catch (HookOrderException ex) when (hotReloadRender)
                 {
@@ -575,7 +579,10 @@ public sealed class ReactorHost : IDisposable
                 _funcContext.BeginRender(rerender);
                 try
                 {
-                    newTree = _rootRenderFunc(_funcContext);
+                    using (ValidationRenderScope.Begin(null))
+                    {
+                        newTree = ValidationRenderScope.ApplyProvide(_rootRenderFunc(_funcContext));
+                    }
                 }
                 catch (HookOrderException ex) when (hotReloadRender)
                 {

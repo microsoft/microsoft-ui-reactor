@@ -806,6 +806,10 @@ internal static class SelfTestFixtureRegistry
         "ValCov_ValidationCompositeLifecycleUpdateAndCleanup",
         "ValCov_ValidationRule",
         "ValCov_FormFieldHelpers",
+        "ValCov_Issue1262_BareValidate",
+        "ValCov_Issue1262_FormFieldAutoProvide",
+        "ValCov_Issue1262_ExplicitProvideWins",
+        "ValCov_Issue1262_FormFieldTouchedOnBlur",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
         "ControlsCov_MaskEngineBasic",
         "ControlsCov_MaskEngineNavigation",
@@ -2706,6 +2710,10 @@ internal static class SelfTestFixtureRegistry
         "ValCov_ValidationCompositeLifecycleUpdateAndCleanup" => new ValidationCoverageFixtures.CompositeLifecycleUpdateAndCleanup(harness),
         "ValCov_ValidationRule" => new ValidationCoverageFixtures.ValidationRuleExercise(harness),
         "ValCov_FormFieldHelpers" => new ValidationCoverageFixtures.FormFieldHelpersExercise(harness),
+        "ValCov_Issue1262_BareValidate" => new ValidationCoverageFixtures.Issue1262_BareValidateOnControls(harness),
+        "ValCov_Issue1262_FormFieldAutoProvide" => new ValidationCoverageFixtures.Issue1262_FormFieldWithoutExplicitProvide(harness),
+        "ValCov_Issue1262_ExplicitProvideWins" => new ValidationCoverageFixtures.Issue1262_ExplicitProvideStillWins(harness),
+        "ValCov_Issue1262_FormFieldTouchedOnBlur" => new ValidationCoverageFixtures.Issue1262_FormFieldTouchedOnBlur(harness),
         // Controls coverage
         "ControlsCov_MaskEngineBasic" => new ControlsCoverageFixtures.MaskEngineBasic(harness),
         "ControlsCov_MaskEngineNavigation" => new ControlsCoverageFixtures.MaskEngineNavigation(harness),

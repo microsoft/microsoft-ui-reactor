@@ -347,6 +347,44 @@ Key pieces:
 - **`ctx.IsValid()`** returns `true` when no error-severity messages exist.
 - **`ctx.MarkAllTouched()`** reveals all errors on submit attempt.
 
+### How validation runs
+
+Three behaviours make the example above work without any extra wiring. They are
+worth knowing because they explain *when* a result becomes visible.
+
+**Validators run during render, not after it.** The value-carrying
+`.Validate(fieldName, value, …)` overload evaluates its validators immediately
+and writes the result into the enclosing context. C# evaluates arguments left to
+right, so the `.Validate(…)` call above produces the verdict that the later
+`When(ctx.HasError("email"), …)` sibling reads — in the *same* pass. Put your
+error display after the field it describes and it will never lag a render behind.
+
+**The context is provided to the subtree for you.** When
+`UseValidationContext()` creates a component-local context (nothing up the tree
+provided one), that context is published to whatever the component returns, so
+`FormField`, `ValidationVisualizer`, and nested components find it. Writing
+`.Provide(ValidationContexts.Current, ctx)` yourself still works and wins over
+the automatic one — reach for it when you want a context to span siblings that
+each create their own.
+
+**Mutating the context repaints the form.** `ctx.MarkAllTouched()` changes no
+component state, so nothing else would schedule a render; the component that
+called `UseValidationContext()` re-renders when the context changes. Re-running
+the same validators over an unchanged value is silent, so this does not loop.
+
+**`FormField` marks its field touched on blur.** That is what makes the default
+`ShowWhen.WhenTouched` work: focus the editor, move away, and the error replaces
+the description. Outside `FormField` — the hand-rolled example above — decide for
+yourself when a field counts as touched, typically `ctx.MarkAllTouched()` on a
+failed submit.
+
+> **Attach-only cases.** `.Validate(fieldName, validators…)` without a value has
+> nothing to check, and validators attached to an element built outside a render
+> pass — cached in a field, assembled inside an event handler — have no context
+> to reach. In both cases `.Validate()` only records the validators, and
+> `FormField` runs them when it mounts. Pass the value if you want the eager
+> behaviour.
+
 ## FormField Helper
 
 `FormField()` wraps a control with a label, required indicator, description

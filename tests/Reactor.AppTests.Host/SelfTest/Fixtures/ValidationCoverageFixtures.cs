@@ -440,4 +440,234 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 — the docs' "Validation Context" example, verbatim.
+    //
+    //  Bare .Validate() controls: no FormField wrapper, no explicit
+    //  .Provide(ValidationContexts.Current, …), and the context queried inline
+    //  during Render(). Every one of those was silently inert before the fix, so
+    //  an empty form reported IsValid() == true and submitted.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_BareValidateOnControls(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? captured = null;
+            var submissions = 0;
+
+            host.Mount(ctx =>
+            {
+                var valCtx = ctx.UseValidationContext();
+                captured = valCtx;
+                var (email, setEmail) = ctx.UseState("");
+                var (password, setPassword) = ctx.UseState("");
+                var (submitted, setSubmitted) = ctx.UseState(false);
+
+                return VStack(12,
+                    TextBox(email, v => { setEmail(v); valCtx.NotifyValueChanged("email", v); },
+                        placeholderText: "user@example.com", header: "Email")
+                        .Validate("email", email,
+                            Validate.Required("Email is required"),
+                            Validate.Email()),
+                    When(valCtx.IsTouched("email") && valCtx.HasError("email"), () =>
+                        TextBlock(valCtx.GetMessages("email")[0].Text)),
+                    PasswordBox(password, v => { setPassword(v); valCtx.NotifyValueChanged("password", v); })
+                        .Validate("password", password,
+                            Validate.Required("Password is required"),
+                            Validate.MinLength(8, "Password is too short")),
+                    When(valCtx.IsTouched("password") && valCtx.HasError("password"), () =>
+                        TextBlock(valCtx.GetMessages("password")[0].Text)),
+                    Button("Register", () =>
+                    {
+                        valCtx.MarkAllTouched();
+                        if (valCtx.IsValid()) { setSubmitted(true); submissions++; }
+                    }),
+                    When(submitted, () => TextBlock("Registration successful!")));
+            });
+
+            await Harness.Render();
+
+            // Validators ran during Render(), so the verdict exists before any click.
+            H.Check("Issue1262_ValidatorsRanOnMount", captured is not null && !captured.IsValid());
+            H.Check("Issue1262_FieldsRegistered",
+                captured!.RegisteredFields.Contains("email") && captured.RegisteredFields.Contains("password"));
+
+            // ...but stays hidden until the field is touched.
+            H.Check("Issue1262_ErrorsHiddenBeforeTouch", H.FindText("Email is required") is null);
+
+            H.ClickButton("Register");
+            await Harness.Render();
+
+            // The reported symptom: this used to submit an empty form.
+            H.Check("Issue1262_SubmitBlocked", submissions == 0);
+            H.Check("Issue1262_NoSuccessMessage", H.FindText("Registration successful!") is null);
+
+            // MarkAllTouched() mutates only the context — nothing else schedules a
+            // repaint, so without the change notification the errors stayed invisible.
+            H.Check("Issue1262_ErrorTextVisibleAfterSubmit", H.FindText("Email is required") is not null);
+            H.Check("Issue1262_SecondFieldErrorVisible", H.FindText("Password is required") is not null);
+
+            // An empty password trips Required *and* MinLength — both validators ran.
+            H.Check("Issue1262_AllValidatorsRan", captured.GetMessages("password").Count == 2);
+
+            // Re-clicking must stay stable rather than accumulating messages.
+            H.ClickButton("Register");
+            await Harness.Render();
+            H.Check("Issue1262_NoMessageAccumulation", captured.GetMessages("email").Count == 1);
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 bare validate done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 — the docs' "FormField Helper" example, verbatim.
+    //
+    //  FormField finds the ValidationContext through the provider the hook now
+    //  installs on the component's own output; the snippet never wrote
+    //  .Provide(...) itself, so nothing validated and no error chrome appeared.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_FormFieldWithoutExplicitProvide(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? captured = null;
+
+            host.Mount(ctx =>
+            {
+                var valCtx = ctx.UseValidationContext();
+                captured = valCtx;
+                var (name, setName) = ctx.UseState("");
+
+                return VStack(12,
+                    FormField(
+                        TextBox(name, v => { setName(v); valCtx.NotifyValueChanged("name", v); })
+                            .Validate("name", name, Validate.Required("Name is required")),
+                        label: "Full Name",
+                        required: true,
+                        description: "As it appears on your ID",
+                        showWhen: ShowWhen.Always),
+                    Button("SubmitForm", () => valCtx.MarkAllTouched()));
+            });
+
+            await Harness.Render();
+
+            H.Check("Issue1262_FormField_ContextReached", captured is not null && !captured.IsValid());
+            H.Check("Issue1262_FormField_ErrorRendered", H.FindText("Name is required") is not null);
+            // The error text replaces the description in FormField's third slot.
+            H.Check("Issue1262_FormField_DescriptionSwapped", H.FindText("As it appears on your ID") is null);
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 formfield done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 — an explicit .Provide() must still win over the automatic one.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_ExplicitProvideStillWins(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            var mine = new ValidationContext();
+            ValidationContext? hookResult = null;
+
+            host.Mount(ctx =>
+            {
+                var valCtx = ctx.UseValidationContext();
+                hookResult = valCtx;
+
+                return VStack(
+                    FormField(
+                        TextBox("").Validate("name", "", Validate.Required("Explicit-ctx error")),
+                        label: "Name",
+                        showWhen: ShowWhen.Always))
+                    .Provide(ValidationContexts.Current, mine);
+            });
+
+            await Harness.Render();
+
+            // FormField validated against the caller's context, not the hook's local one.
+            H.Check("Issue1262_ExplicitProvide_Wins", !mine.IsValid());
+            H.Check("Issue1262_ExplicitProvide_HookCtxDistinct",
+                hookResult is not null && !ReferenceEquals(hookResult, mine));
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 explicit provide done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 — FormField's default ShowWhen.WhenTouched must be reachable.
+    //
+    //  The guide promises "errors appear below the field after the field is
+    //  touched (focus then blur)". Nothing in the framework ever called
+    //  MarkTouched, so with the default ShowWhen an app that did not mark fields
+    //  by hand — including the documented FormField snippet — could never show an
+    //  error at all.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_FormFieldTouchedOnBlur(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? captured = null;
+
+            host.Mount(ctx =>
+            {
+                var valCtx = ctx.UseValidationContext();
+                captured = valCtx;
+                var (name, setName) = ctx.UseState("");
+
+                return VStack(12,
+                    FormField(
+                        TextBox(name, v => { setName(v); valCtx.NotifyValueChanged("name", v); })
+                            .Validate("name", name, Validate.Required("Name is required")),
+                        label: "Full Name",
+                        required: true,
+                        description: "As it appears on your ID"),
+                    Button("Elsewhere", () => { }));
+            });
+
+            await Harness.Render();
+
+            // Invalid from the first pass, but untouched — so the description shows.
+            H.Check("Issue1262_Blur_InvalidButQuiet",
+                captured is not null && !captured.IsValid());
+            H.Check("Issue1262_Blur_NotTouchedInitially", !captured!.IsTouched("name"));
+            H.Check("Issue1262_Blur_DescriptionShown", H.FindText("As it appears on your ID") is not null);
+            H.Check("Issue1262_Blur_NoErrorBeforeBlur", H.FindText("Name is required") is null);
+
+            var box = H.FindControl<TextBox>(_ => true);
+            var elsewhere = H.FindButton("Elsewhere");
+            H.Check("Issue1262_Blur_ControlsFound", box is not null && elsewhere is not null);
+
+            // Focus the editor, then move focus away — the blur is what marks it.
+            box!.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            H.Check("Issue1262_Blur_StillQuietWhileFocused", !captured.IsTouched("name"));
+
+            elsewhere!.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+
+            H.Check("Issue1262_Blur_TouchedAfterBlur", captured.IsTouched("name"));
+            H.Check("Issue1262_Blur_ErrorShownAfterBlur", H.FindText("Name is required") is not null);
+            H.Check("Issue1262_Blur_DescriptionSwapped", H.FindText("As it appears on your ID") is null);
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 blur done"));
+            await Harness.Render();
+        }
+    }
 }

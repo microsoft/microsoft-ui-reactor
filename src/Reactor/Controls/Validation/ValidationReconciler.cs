@@ -13,6 +13,11 @@ public static class ValidationReconciler
     /// <summary>
     /// Runs all synchronous validators for a field and pushes results to the context.
     /// Call this from a component's Render() method after state is finalized.
+    /// <para>
+    /// Results are applied as a single diffed replacement, so calling this repeatedly
+    /// with an unchanged value is a no-op: no version bump, no change notification, no
+    /// re-render. That is what lets <c>.Validate()</c> run on every render pass.
+    /// </para>
     /// </summary>
     public static void ValidateField(
         ValidationContext ctx,
@@ -21,15 +26,8 @@ public static class ValidationReconciler
         params IValidator[] validators)
     {
         ctx.RegisterField(fieldName);
-        ctx.ClearInternal(fieldName);
         ctx.NotifyValueChanged(fieldName, value);
-
-        foreach (var validator in validators)
-        {
-            var result = validator.Validate(value, fieldName);
-            if (result is not null)
-                ctx.Add(result);
-        }
+        ctx.ReplaceInternal(fieldName, Run(validators, value, fieldName));
     }
 
     /// <summary>
@@ -41,15 +39,20 @@ public static class ValidationReconciler
         object? value)
     {
         ctx.RegisterField(attached.FieldName);
-        ctx.ClearInternal(attached.FieldName);
         ctx.NotifyValueChanged(attached.FieldName, value);
+        ctx.ReplaceInternal(attached.FieldName, Run(attached.Validators, value, attached.FieldName));
+    }
 
-        foreach (var validator in attached.Validators)
+    private static List<ValidationMessage> Run(IValidator[] validators, object? value, string fieldName)
+    {
+        var messages = new List<ValidationMessage>(validators.Length);
+        foreach (var validator in validators)
         {
-            var result = validator.Validate(value, attached.FieldName);
+            var result = validator.Validate(value, fieldName);
             if (result is not null)
-                ctx.Add(result);
+                messages.Add(result);
         }
+        return messages;
     }
 
     /// <summary>

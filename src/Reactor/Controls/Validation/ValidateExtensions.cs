@@ -46,9 +46,20 @@ public static class ValidateExtensions
     }
 
     /// <summary>
-    /// Attaches validators to this element along with the current field value.
-    /// When placed inside a FormFieldElement, validators run automatically — no manual
-    /// ValidationReconciler.ValidateField() call needed.
+    /// Attaches validators to this element along with the current field value, and —
+    /// when called from inside a component's <c>Render()</c> — runs them immediately
+    /// against the enclosing <see cref="ValidationContext"/>.
+    /// <para>
+    /// Running during render rather than during reconcile is what makes the results
+    /// readable by the same <c>Render()</c> that produced them, so
+    /// <c>When(ctx.IsTouched(f) &amp;&amp; ctx.HasError(f), …)</c> placed after this call
+    /// sees the current verdict instead of the previous pass's.
+    /// </para>
+    /// <para>
+    /// The validators are still attached, so <c>FormField</c> and the visualizers keep
+    /// working for elements built outside a render pass. Re-running them is harmless:
+    /// results are applied with a structural diff.
+    /// </para>
     /// </summary>
     public static T Validate<T>(this T el, string fieldName, object? value, params IValidator[] validators) where T : Element
     {
@@ -61,6 +72,8 @@ public static class ValidateExtensions
                 Validators = [.. existing.Validators, .. validators]
             }
             : new ValidationAttached(fieldName, validators, []) { Value = value };
+
+        RunDuringRender(merged, value);
         return (T)el.SetAttached(merged);
     }
 
@@ -94,7 +107,25 @@ public static class ValidateExtensions
                 AsyncValidators = [.. existing.AsyncValidators, .. asyncValidators]
             }
             : new ValidationAttached(fieldName, [], asyncValidators) { Value = value };
+
+        // Async validators cannot resolve inside a synchronous render, but the field
+        // still has to be registered or MarkAllTouched() would skip it.
+        ValidationRenderScope.Current?.RegisterField(fieldName);
         return (T)el.SetAttached(merged);
+    }
+
+    /// <summary>
+    /// Pushes a freshly-attached field's verdict into the context that is rendering, if
+    /// any. Outside a render pass — an element assembled in an event handler, a cached
+    /// element, a headless unit test — there is no context to reach and this is a no-op,
+    /// leaving <c>.Validate()</c> purely declarative as it has always been.
+    /// </summary>
+    private static void RunDuringRender(ValidationAttached attached, object? value)
+    {
+        if (attached.Validators.Length == 0) return;
+        var ctx = ValidationRenderScope.Current;
+        if (ctx is null) return;
+        ValidationReconciler.ValidateAttached(ctx, attached, value);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hooks;
@@ -800,7 +801,10 @@ public sealed partial class Reconciler
         try
         {
             component.Context.BeginRender(componentRerender, _contextScope);
-            childElement = component.Render();
+            using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+            {
+                childElement = ValidationRenderScope.ApplyProvide(component.Render());
+            }
             component.Context.FlushEffects();
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
@@ -836,7 +840,10 @@ public sealed partial class Reconciler
         try
         {
             ctx.BeginRender(componentRerender, _contextScope);
-            childElement = funcElement.RenderFunc(ctx);
+            using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+            {
+                childElement = ValidationRenderScope.ApplyProvide(funcElement.RenderFunc(ctx));
+            }
             ctx.FlushEffects();
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
@@ -873,7 +880,10 @@ public sealed partial class Reconciler
         try
         {
             ctx.BeginRender(componentRerender, _contextScope);
-            childElement = memoElement.RenderFunc(ctx);
+            using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+            {
+                childElement = ValidationRenderScope.ApplyProvide(memoElement.RenderFunc(ctx));
+            }
             ctx.FlushEffects();
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)

@@ -17,12 +17,43 @@ public sealed class ValidationContext
     private int _version;
 
     /// <summary>
+    /// Raised after any mutation that actually changed observable state — a message
+    /// appearing or disappearing, a field becoming touched, a reset.
+    /// <para>
+    /// <c>UseValidationContext()</c> subscribes to this so that mutating the context
+    /// from an event handler (the canonical case being <see cref="MarkAllTouched"/> on a
+    /// submit attempt) repaints the form. Without it, an invalid submit changes nothing
+    /// the user can see.
+    /// </para>
+    /// <para>
+    /// Two rules keep this from driving a render loop. First, re-running the same
+    /// validators over an unchanged value is silent: results are applied with a
+    /// structural diff, so an idempotent re-validation raises nothing. Second,
+    /// mutations made while a render is in flight are not announced — the rendering
+    /// component reads the new state later in the same pass, and notifying would
+    /// re-enter the reconciler's re-render path from inside <c>Render()</c>.
+    /// </para>
+    /// </summary>
+    public event Action? Changed;
+
+    /// <summary>
     /// Monotonically increasing version number, bumped on every mutation.
     /// Useful for change detection in hooks/memos.
     /// </summary>
     public int Version
     {
         get { lock (_lock) return _version; }
+    }
+
+    /// <summary>
+    /// Announces a real change. Must be called *outside* <see cref="_lock"/> — a
+    /// subscriber re-entering the context (for example a re-render that immediately
+    /// re-reads messages) would otherwise take the lock recursively from the handler.
+    /// </summary>
+    private void RaiseChanged()
+    {
+        if (ValidationRenderScope.InRender) return;
+        Changed?.Invoke();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -76,6 +107,7 @@ public sealed class ValidationContext
             list.Add(message);
             _version++;
         }
+        RaiseChanged();
     }
 
     /// <summary>
@@ -102,6 +134,7 @@ public sealed class ValidationContext
             list.Add(message);
             _version++;
         }
+        RaiseChanged();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -113,13 +146,15 @@ public sealed class ValidationContext
     /// </summary>
     public void Clear(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            var changed = false;
+            changed = false;
             if (_messages.Remove(field)) changed = true;
             if (_externalMessages.Remove(field)) changed = true;
             if (changed) _version++;
         }
+        if (changed) RaiseChanged();
     }
 
     /// <summary>
@@ -128,11 +163,56 @@ public sealed class ValidationContext
     /// </summary>
     internal void ClearInternal(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            if (_messages.Remove(field))
-                _version++;
+            changed = _messages.Remove(field);
+            if (changed) _version++;
         }
+        if (changed) RaiseChanged();
+    }
+
+    /// <summary>
+    /// Replaces the internal (validator-produced) messages for a field in one step,
+    /// bumping <see cref="Version"/> and raising <see cref="Changed"/> only when the new
+    /// set actually differs from the old one.
+    /// <para>
+    /// This is what makes per-render validation safe. The previous
+    /// <c>ClearInternal</c> + N&#215;<c>Add</c> sequence bumped the version two or more
+    /// times on *every* pass even when the value and its verdict were unchanged, so once
+    /// validators run on every render a change-notification built on that signal would
+    /// re-render forever. <see cref="ValidationMessage"/> is a record, so the comparison
+    /// below is ordinary structural equality.
+    /// </para>
+    /// </summary>
+    internal void ReplaceInternal(string field, List<ValidationMessage> messages)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            _messages.TryGetValue(field, out var existing);
+            changed = !SameMessages(existing, messages);
+            if (changed)
+            {
+                if (messages.Count == 0)
+                    _messages.Remove(field);
+                else
+                    _messages[field] = messages;
+                _version++;
+            }
+        }
+        if (changed) RaiseChanged();
+    }
+
+    private static bool SameMessages(List<ValidationMessage>? a, List<ValidationMessage> b)
+    {
+        var countA = a?.Count ?? 0;
+        if (countA != b.Count) return false;
+        for (var i = 0; i < b.Count; i++)
+        {
+            if (a![i] != b[i]) return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -140,11 +220,13 @@ public sealed class ValidationContext
     /// </summary>
     public void ClearExternal(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            if (_externalMessages.Remove(field))
-                _version++;
+            changed = _externalMessages.Remove(field);
+            if (changed) _version++;
         }
+        if (changed) RaiseChanged();
     }
 
     /// <summary>
@@ -152,12 +234,15 @@ public sealed class ValidationContext
     /// </summary>
     public void ClearAll()
     {
+        bool changed;
         lock (_lock)
         {
+            changed = _messages.Count > 0 || _externalMessages.Count > 0;
             _messages.Clear();
             _externalMessages.Clear();
-            _version++;
+            if (changed) _version++;
         }
+        if (changed) RaiseChanged();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -295,11 +380,13 @@ public sealed class ValidationContext
     /// </summary>
     public void MarkTouched(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            if (_touchedFields.Add(field))
-                _version++;
+            changed = _touchedFields.Add(field);
+            if (changed) _version++;
         }
+        if (changed) RaiseChanged();
     }
 
     /// <summary>
@@ -307,12 +394,16 @@ public sealed class ValidationContext
     /// </summary>
     public void MarkAllTouched()
     {
+        bool changed = false;
         lock (_lock)
         {
             foreach (var field in _registeredFields)
-                _touchedFields.Add(field);
-            _version++;
+            {
+                if (_touchedFields.Add(field)) changed = true;
+            }
+            if (changed) _version++;
         }
+        if (changed) RaiseChanged();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -332,17 +423,31 @@ public sealed class ValidationContext
     }
 
     /// <summary>
-    /// Notifies the context of a field value change. Clears external messages for this field.
+    /// Notifies the context of a field value change. Clears external messages for the
+    /// field, because a server-side verdict about the old value says nothing about the
+    /// new one.
+    /// <para>
+    /// The clear is conditional on the value actually having moved. It used to be
+    /// unconditional, which was survivable only while validation ran rarely: now that
+    /// validators run on every render, an unconditional clear here would destroy any
+    /// <see cref="AddExternal(string, string, Severity)"/> message on the very next
+    /// repaint, before the user could read it.
+    /// </para>
     /// </summary>
     public void NotifyValueChanged(string field, object? value)
     {
+        bool changed;
         lock (_lock)
         {
+            var known = _currentValues.TryGetValue(field, out var previous);
+            changed = !known || !Equals(previous, value);
+            if (!changed) return;
+
             _currentValues[field] = value;
-            // External messages clear on field value change
-            if (_externalMessages.Remove(field))
-                _version++;
+            _externalMessages.Remove(field);
+            _version++;
         }
+        RaiseChanged();
     }
 
     /// <summary>
@@ -388,16 +493,18 @@ public sealed class ValidationContext
     /// </summary>
     public object? Reset(string field)
     {
+        object? initial;
         lock (_lock)
         {
             _touchedFields.Remove(field);
             _messages.Remove(field);
             _externalMessages.Remove(field);
-            _initialValues.TryGetValue(field, out var initial);
+            _initialValues.TryGetValue(field, out initial);
             _currentValues[field] = initial;
             _version++;
-            return initial;
         }
+        RaiseChanged();
+        return initial;
     }
 
     /// <summary>
@@ -406,20 +513,22 @@ public sealed class ValidationContext
     /// </summary>
     public IReadOnlyDictionary<string, object?> ResetAll()
     {
+        Dictionary<string, object?> result;
         lock (_lock)
         {
             _touchedFields.Clear();
             _messages.Clear();
             _externalMessages.Clear();
-            var result = new Dictionary<string, object?>();
+            result = new Dictionary<string, object?>();
             foreach (var (field, initial) in _initialValues)
             {
                 _currentValues[field] = initial;
                 result[field] = initial;
             }
             _version++;
-            return result;
         }
+        RaiseChanged();
+        return result;
     }
 
     // ════════════════════════════════════════════════════════════════

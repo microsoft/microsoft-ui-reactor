@@ -126,9 +126,21 @@ return VStack(12,
 
 `.Validate(fieldName, value, ...)` resolves the surrounding `ValidationContext`
 through React-style ambient context — you do not pass `validation` explicitly.
-Passing the current value (the second arg) opts in to auto-validation as the
-component re-renders; the validator-only overload `.Validate(fieldName, ...)`
-is for cases where you trigger validation manually.
+Passing the current value (the second arg) runs the validators right there,
+during the render, so a `When(validation.HasError("email"), ...)` placed *after*
+the field reads the result in the same pass rather than one render late. The
+validator-only overload `.Validate(fieldName, ...)` has no value to check and
+only attaches — `FormField` runs those when it mounts.
+
+You do not need `.Provide(ValidationContexts.Current, validation)`: a
+component-local context is published to the rendered subtree automatically, so
+`FormField`, `ValidationVisualizer`, and nested components find it. Write
+`.Provide(...)` explicitly only to share one context across sibling components
+that would otherwise each create their own — an explicit provide always wins.
+
+Mutating the context re-renders the component that created it. That is why
+`MarkAllTouched()` alone reveals the errors on a failed submit, even though no
+component state changed.
 
 ### ValidationContext API
 
@@ -144,6 +156,7 @@ is for cases where you trigger validation manually.
 | `.ClearAll()` | Clear all messages (preserve touched/initial state) |
 | `.GetMessages("field")` | Get error messages for a specific field |
 | `.IsTouched("field")` | Whether the user has interacted with a field |
+| `.Changed` | Event raised when the context's observable state changes |
 
 ## 4. Built-in validators
 
