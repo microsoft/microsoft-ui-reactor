@@ -226,12 +226,7 @@ public class WinAppWorkflowIdTests
               "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
               "(merged 2026-09-09); pin a winapp containing it to make this measurable.";
 
-        // Opt-in enforcement. The verb cannot be required by default without turning every run
-        // red against a dependency that has not shipped it, but a caller that *has* pinned a
-        // build containing #767 needs a way to prove the continuity is live rather than take
-        // the silent skip. Setting the variable converts this gate into a hard failure, which
-        // is also the switch to flip in CI the day a release carries the verb.
-        if (StrictYieldRequested())
+        if (DecideYieldGate(support, StrictYieldRequested()) == YieldGateDecision.Fail)
         {
             // The resolved path belongs in the failure text itself, not only in the console line
             // above it: the capability is a property of *that* binary, and a contributor reading
@@ -246,6 +241,43 @@ public class WinAppWorkflowIdTests
         Assert.Inconclusive(
             $"{explanation} Once a release ships with it, pin that version and set " +
             $"{RequireYieldEnvVar}=1 to make this an assertion.");
+    }
+
+    /// <summary>What the `ui yield` gate should do about a probe result.</summary>
+    internal enum YieldGateDecision
+    {
+        /// <summary>The verb is confirmed; run the differential.</summary>
+        Proceed,
+
+        /// <summary>Strict enforcement is on and the verb was not confirmed.</summary>
+        Fail,
+
+        /// <summary>Not confirmed, but enforcement is off, so the differential is skipped.</summary>
+        Inconclusive,
+    }
+
+    /// <summary>
+    /// Whether an unconfirmed verb is a failure or a skip, split out so the rule is testable.
+    /// </summary>
+    /// <remarks>
+    /// <para>Opt-in enforcement. The verb cannot be required by default without turning every run
+    /// red against a dependency that has not shipped it, but a caller that *has* pinned a build
+    /// containing winappCli#767 needs a way to prove the continuity is live rather than take the
+    /// silent skip. Setting the variable converts the gate into a hard failure, which is also the
+    /// switch to flip in CI the day a release carries the verb.</para>
+    /// <para>A seam rather than an inline condition because this is the one rule that makes
+    /// <c>REACTOR_E2E_REQUIRE_UI_YIELD</c> mean anything, and it was previously reachable only by
+    /// running the suite against a winapp that lacks the verb — which is to say, not reachable in
+    /// any automated run. Softening the strict arm to a skip would have restored exactly the
+    /// gate-that-cannot-fail this PR exists to remove, and nothing would have gone red.</para>
+    /// </remarks>
+    internal static YieldGateDecision DecideYieldGate(WinAppUi.UiVerbSupport support, bool strict)
+    {
+        if (support == WinAppUi.UiVerbSupport.Present) return YieldGateDecision.Proceed;
+
+        // Unreadable is deliberately on the failing side alongside Absent: "the probe broke" is
+        // not "the feature is missing", and a caller who asked for strictness asked to be told.
+        return strict ? YieldGateDecision.Fail : YieldGateDecision.Inconclusive;
     }
 
     /// <summary>Opt-in switch that turns a missing <c>ui yield</c> verb into a failure.</summary>
@@ -695,12 +727,20 @@ public class WinAppWorkflowIdTests
         new(outcome, 0, "", "");
 
     /// <summary>Records each spawn so the orchestration's decisions are observable.</summary>
+    /// <remarks>
+    /// Captures the timeout as well as the arguments. Discarding it would make the shared-budget
+    /// rule untestable in the one case that matters: with the timeout unrecorded, handing the
+    /// fallback a fresh full-length budget is indistinguishable from handing it the remainder.
+    /// </remarks>
     private static WinAppUi.UiProbeRunner Runner(
-        List<string> calls, Func<string, WinAppUi.BoundedRun> respond) =>
-        (_, args) =>
+        List<string> calls,
+        Func<string, WinAppUi.BoundedRun> respond,
+        List<int>? timeouts = null) =>
+        (timeoutMs, args) =>
         {
             var joined = string.Join(' ', args);
             calls.Add(joined);
+            timeouts?.Add(timeoutMs);
             return respond(joined);
         };
 
@@ -797,6 +837,114 @@ public class WinAppWorkflowIdTests
             new[] { "--cli-schema" }, calls,
             "The fallback was started after the shared budget was already spent.");
         Assert.AreEqual(WinAppUi.UiVerbSupport.Unreadable, support);
+    }
+
+    [TestMethod]
+    public void Probe_HandsTheFallbackOnlyWhatIsLeftOfTheBudget()
+    {
+        // The partial-budget handoff, which the "no budget left" case above cannot detect: if the
+        // fallback were passed the full budget again, that test still passes because its schema
+        // attempt overruns the whole thing either way. Asserting on the timeout actually handed
+        // over is what separates `run(remainingMs, ...)` from `run(budgetMs, ...)`.
+        const int budgetMs = 5_000;
+        const int schemaCostMs = 300;
+
+        var calls = new List<string>();
+        var timeouts = new List<int>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, a =>
+            {
+                if (a != "--cli-schema") return Completed(HelpWithYield);
+                Thread.Sleep(schemaCostMs);
+                return Completed("not json");
+            }, timeouts),
+            "yield",
+            budgetMs);
+
+        CollectionAssert.AreEqual(new[] { "--cli-schema", "--help" }, calls);
+        Assert.AreEqual(WinAppUi.UiVerbSupport.Present, support);
+
+        Assert.AreEqual(
+            budgetMs, timeouts[0],
+            "The first attempt should be given the whole budget.");
+        Assert.IsTrue(
+            timeouts[1] <= budgetMs - schemaCostMs,
+            $"The fallback was handed {timeouts[1]}ms of a {budgetMs}ms budget after the schema " +
+            $"attempt had already spent ~{schemaCostMs}ms, so the two waits are not sharing a " +
+            "deadline and an unresponsive winapp can exceed the advertised probe time.");
+        Assert.IsTrue(
+            timeouts[1] > 0,
+            "The fallback was started with no budget, which would kill it immediately.");
+    }
+
+    // ── Strict-mode gate ─────────────────────────────────────────────────────
+    //
+    // Written as explicit cases rather than [DataRow] because `UiVerbSupport` is internal and a
+    // public MSTest method cannot take it as a parameter (CS0051).
+
+    [TestMethod]
+    public void StrictMode_FailsWhenTheVerbIsAbsent()
+    {
+        // The rule that gives REACTOR_E2E_REQUIRE_UI_YIELD its meaning, and the one this whole
+        // PR is about: before this seam existed it could only be reached by running the suite
+        // against a winapp lacking the verb, so softening the strict arm to a skip would have
+        // reinstated a gate incapable of failing without reddening anything.
+        Assert.AreEqual(
+            YieldGateDecision.Fail,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Absent, strict: true),
+            "Strict mode did not fail on a winapp with no `ui yield` verb.");
+    }
+
+    [TestMethod]
+    public void StrictMode_FailsWhenTheProbeCouldNotRead()
+    {
+        // `Unreadable` is on the failing side deliberately. "The probe broke" is not "the feature
+        // is missing", and a caller who asked for strictness asked to be told either way --
+        // folding this into the skip arm is the subtler way to get a gate that cannot fail.
+        Assert.AreEqual(
+            YieldGateDecision.Fail,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Unreadable, strict: true),
+            "Strict mode treated an unreadable probe as an acceptable skip, so a broken probe " +
+            "would pass a gate whose entire purpose is to refuse unconfirmed capability.");
+    }
+
+    [TestMethod]
+    public void NonStrictMode_SkipsWhenTheVerbIsAbsent()
+    {
+        // The other half, so "fails under strict" is a discrimination rather than a constant.
+        // Requiring the verb by default would redden every run against a dependency that has
+        // not shipped it.
+        Assert.AreEqual(
+            YieldGateDecision.Inconclusive,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Absent, strict: false),
+            "Without strict mode an absent verb must skip rather than fail.");
+    }
+
+    [TestMethod]
+    public void NonStrictMode_SkipsWhenTheProbeCouldNotRead()
+    {
+        Assert.AreEqual(
+            YieldGateDecision.Inconclusive,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Unreadable, strict: false),
+            "Without strict mode an unreadable probe must skip rather than fail.");
+    }
+
+    [TestMethod]
+    public void ConfirmedVerb_ProceedsUnderStrictMode()
+    {
+        Assert.AreEqual(
+            YieldGateDecision.Proceed,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Present, strict: true),
+            "A confirmed verb must run the differential rather than skip or fail it.");
+    }
+
+    [TestMethod]
+    public void ConfirmedVerb_ProceedsWithoutStrictMode()
+    {
+        Assert.AreEqual(
+            YieldGateDecision.Proceed,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Present, strict: false),
+            "A confirmed verb must run the differential rather than skip or fail it.");
     }
 
     // ── Bounded process runner ───────────────────────────────────────────────

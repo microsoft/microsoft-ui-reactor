@@ -372,12 +372,21 @@ jobs:
 
           # Read the command set from `winapp ui --cli-schema`, which answers the question
           # exactly: it emits a JSON object whose `subcommands` keys ARE the command set, so no
-          # prose is interpreted and the C# harness and this step cannot drift apart over parsing
-          # rules. What this must NOT do is check the exit code of `ui yield --help`: an
-          # unrecognized verb is not rejected, winapp prints the parent help and exits 0, so an
-          # exit-code probe reports every verb as present. Matching the help *text* is equally
-          # wrong, because the parent listing contains every verb's description.
-          $state = '<unreadable>'
+          # prose is interpreted. What this must NOT do is check the exit code of
+          # `ui yield --help`: an unrecognized verb is not rejected, winapp prints the parent help
+          # and exits 0, so an exit-code probe reports every verb as present. Matching the help
+          # *text* is equally wrong, because the parent listing contains every verb's description.
+          #
+          # This stops where the schema does. The harness additionally falls back to parsing
+          # `ui --help` for builds predating `--cli-schema`, and that fallback is deliberately not
+          # mirrored here: reimplementing its indentation rules in PowerShell is exactly the
+          # second implementation this step was rewritten to remove. The consequence is worth
+          # stating plainly rather than glossing -- against a pre-schema winapp this reports
+          # `<schema-unavailable>` while the suite still reaches a definitive answer, so the
+          # suite's own capability line is authoritative and this one is a diagnostic. What this
+          # step uniquely establishes is *which binary* was used, which the suite cannot report
+          # if it never runs.
+          $state = '<schema-unavailable>'
           $schemaText = (& $exe ui --cli-schema 2>&1 | Out-String)
           if ($LASTEXITCODE -eq 0) {
             # try/catch, not -ErrorAction: GitHub's pwsh shell runs with
@@ -405,8 +414,8 @@ jobs:
           "winapp path: ``$exe``" >> $env:GITHUB_STEP_SUMMARY
           "winapp version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
           "winapp ``ui yield`` support (winappCli#767): **$state**" >> $env:GITHUB_STEP_SUMMARY
-          if ($state -eq '<unreadable>') {
-            'Parsed no known subcommands from `winapp ui --cli-schema`. That is a probe failure, not evidence the verb is missing: inspect the output and update the parser. Strict mode (`REACTOR_E2E_REQUIRE_UI_YIELD`) treats this as a failure.' >> $env:GITHUB_STEP_SUMMARY
+          if ($state -eq '<schema-unavailable>') {
+            'Read no usable command set from `winapp ui --cli-schema`. This does not mean the verb is missing: the harness falls back to parsing `winapp ui --help`, which this step deliberately does not mirror, so the suite''s own `ui yield` support line is authoritative here. If the schema flag *is* supported, this is a probe failure worth inspecting.' >> $env:GITHUB_STEP_SUMMARY
           }
 
       # The E2E suite launches Reactor.AppTests.Host.exe and drives it cross-process.
