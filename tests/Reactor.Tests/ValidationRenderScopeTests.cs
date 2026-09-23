@@ -346,6 +346,118 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task Repeated_Async_Validation_Stays_Single_Across_Many_Passes()
+    {
+        var ctx = new ValidationContext();
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+        };
+
+        // The duplicate only surfaced on the *third* pass: pass two produced an equal
+        // result, so the diff said "unchanged" and left the original instance installed
+        // while ownership had already been repointed at the discarded copy.
+        for (var i = 0; i < 4; i++)
+        {
+            await ValidationReconciler.ValidateFieldAsync(
+                ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Single(ctx.GetMessages("username"));
+    }
+
+    [Fact]
+    public async Task A_Late_Async_Result_For_An_Older_Value_Is_Discarded()
+    {
+        var ctx = new ValidationContext();
+        var older = new global::System.Threading.Tasks.TaskCompletionSource<bool>();
+        var newer = new global::System.Threading.Tasks.TaskCompletionSource<bool>();
+
+        var staleValidators = new[]
+        {
+            Validate.MustAsync<string>(async _ => await older.Task, "stale verdict"),
+        };
+        var freshValidators = new[]
+        {
+            Validate.MustAsync<string>(async _ => await newer.Task, "fresh verdict"),
+        };
+
+        var stale = ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "old", staleValidators, TestContext.Current.CancellationToken);
+        var fresh = ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "new", freshValidators, TestContext.Current.CancellationToken);
+
+        // The newer value's check resolves first and passes.
+        newer.SetResult(true);
+        await fresh;
+        Assert.True(ctx.IsValid());
+
+        // The older value's check then resolves and fails. Applying it would show an
+        // error that belongs to a value the user has already replaced.
+        older.SetResult(false);
+        await stale;
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("username"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Several producers on one field
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void A_Cross_Field_Rule_Does_Not_Erase_Field_Level_Errors()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "confirm", "", Validate.Required("Confirmation is required"));
+        Assert.Single(ctx.GetMessages("confirm"));
+
+        ValidationRule(() => false, "Passwords must match", "confirm").Evaluate(ctx);
+
+        var texts = ctx.GetMessages("confirm").Select(m => m.Text).ToList();
+        Assert.Equal(2, texts.Count);
+        Assert.Contains("Confirmation is required", texts);
+        Assert.Contains("Passwords must match", texts);
+    }
+
+    [Fact]
+    public void A_Passing_Rule_Retracts_Only_Its_Own_Message()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "confirm", "", Validate.Required("Confirmation is required"));
+        ValidationRule(() => false, "Passwords must match", "confirm").Evaluate(ctx);
+
+        // Whole-field replacement made a passing rule wipe the required error and report
+        // the form valid.
+        ValidationRule(() => true, "Passwords must match", "confirm").Evaluate(ctx);
+
+        var texts = ctx.GetMessages("confirm").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("Confirmation is required", texts);
+        Assert.False(ctx.IsValid());
+    }
+
+    [Fact]
+    public void Interleaved_Producers_On_One_Field_Settle()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Sync runs during render, the rule during reconcile — every pass, forever.
+        // Retract-and-append would swap their order each time, and an order change is a
+        // structural change, which would notify on every pass.
+        for (var i = 0; i < 5; i++)
+        {
+            ValidationReconciler.ValidateField(ctx, "confirm", "", Validate.Required("Confirmation is required"));
+            ValidationRule(() => false, "Passwords must match", "confirm").Evaluate(ctx);
+        }
+
+        Assert.Equal(2, ctx.GetMessages("confirm").Count);
+        Assert.Equal(2, notifications); // one per producer's first real change, then silence
+    }
+
+    [Fact]
     public async Task Async_Validation_Leaves_Synchronous_Messages_Alone()
     {
         var ctx = new ValidationContext();

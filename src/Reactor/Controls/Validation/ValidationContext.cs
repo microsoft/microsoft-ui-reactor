@@ -9,9 +9,11 @@ public sealed class ValidationContext
     private readonly object _lock = new();
     private readonly Dictionary<string, List<ValidationMessage>> _messages = new();
     private readonly Dictionary<string, List<ValidationMessage>> _externalMessages = new();
-    // Tracks the exact message instances the last async pass contributed per field, so a
-    // later pass can retract them without clearing synchronous results too.
-    private readonly Dictionary<string, List<ValidationMessage>> _asyncOwned = new();
+    // field -> producer -> the exact instances that producer last contributed, so each
+    // producer can retract its own messages without disturbing the others on that field.
+    private readonly Dictionary<string, Dictionary<string, List<ValidationMessage>>> _owned = new();
+    // field -> newest async pass token; older passes that resolve late are discarded.
+    private readonly Dictionary<string, int> _asyncGeneration = new();
     private readonly HashSet<string> _registeredFields = new();
     private readonly HashSet<string> _touchedFields = new();
     private readonly Dictionary<string, object?> _initialValues = new();
@@ -185,6 +187,7 @@ public sealed class ValidationContext
             changed = false;
             if (_messages.Remove(field)) changed = true;
             if (_externalMessages.Remove(field)) changed = true;
+            _owned.Remove(field);
             if (changed) _version++;
         }
         if (changed) RaiseChanged();
@@ -200,6 +203,7 @@ public sealed class ValidationContext
         lock (_lock)
         {
             changed = _messages.Remove(field);
+            _owned.Remove(field);
             if (changed) _version++;
         }
         if (changed) RaiseChanged();
@@ -225,6 +229,8 @@ public sealed class ValidationContext
         {
             _messages.TryGetValue(field, out var existing);
             changed = !SameMessages(existing, messages);
+            // Wholesale replacement invalidates every producer's claim on this field.
+            _owned.Remove(field);
             if (changed)
             {
                 if (messages.Count == 0)
@@ -235,6 +241,104 @@ public sealed class ValidationContext
             }
         }
         if (changed) RaiseChanged();
+    }
+
+    /// <summary>
+    /// Installs one producer's contribution to a field's internal messages, leaving
+    /// every other producer's messages on that field untouched.
+    /// <para>
+    /// A field is written by several independent producers: the synchronous
+    /// <c>.Validate()</c> chain, each cross-field <c>ValidationRule</c>, and the async
+    /// validator pass. Replacing the whole field — which both the original
+    /// clear-then-add and a plain <see cref="ReplaceInternal"/> do — means the last
+    /// writer wins, so a passing rule could erase a required-field error and make
+    /// <see cref="IsValid"/> true. Each producer now retracts only the exact instances
+    /// it contributed last time.
+    /// </para>
+    /// <para>
+    /// Replacements happen in place rather than by removing and appending, which keeps
+    /// message order stable across passes. Appending would let two producers on the same
+    /// field swap positions every render — a structural difference on every pass, and so
+    /// a notification on every pass, which is precisely the loop this design exists to
+    /// avoid.
+    /// </para>
+    /// </summary>
+    internal void ApplyOwned(string field, string producer, List<ValidationMessage> messages)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            changed = ApplyOwnedLocked(field, producer, messages);
+            if (changed) _version++;
+        }
+        if (changed) RaiseChanged();
+    }
+
+    private bool ApplyOwnedLocked(string field, string producer, List<ValidationMessage> messages)
+    {
+        _messages.TryGetValue(field, out var current);
+        List<ValidationMessage>? previous = null;
+        if (_owned.TryGetValue(field, out var byProducer))
+            byProducer.TryGetValue(producer, out previous);
+
+        var next = new List<ValidationMessage>(
+            (current?.Count ?? 0) + messages.Count);
+        var taken = 0;
+
+        if (current is not null)
+        {
+            foreach (var message in current)
+            {
+                if (previous is not null && ContainsReference(previous, message))
+                {
+                    // Substitute this producer's next message at the same position.
+                    if (taken < messages.Count) next.Add(messages[taken++]);
+                    continue;
+                }
+                next.Add(message);
+            }
+        }
+
+        for (; taken < messages.Count; taken++)
+            next.Add(messages[taken]);
+
+        var changed = !SameMessages(current, next);
+        if (changed)
+        {
+            if (next.Count == 0)
+                _messages.Remove(field);
+            else
+                _messages[field] = next;
+        }
+
+        // Ownership must name instances that are actually installed. When the diff came
+        // back unchanged the stored list is still in _messages, so keeping it is not a
+        // micro-optimisation: overwriting it with the freshly allocated (equal but
+        // distinct) instances would leave nothing to retract next time, and the pass
+        // after that would append a duplicate.
+        if (changed)
+        {
+            if (messages.Count == 0)
+            {
+                if (byProducer is not null)
+                {
+                    byProducer.Remove(producer);
+                    if (byProducer.Count == 0) _owned.Remove(field);
+                }
+            }
+            else
+            {
+                byProducer ??= _owned[field] = new Dictionary<string, List<ValidationMessage>>(StringComparer.Ordinal);
+                byProducer[producer] = messages;
+            }
+        }
+        else if (messages.Count == 0 && byProducer is not null)
+        {
+            byProducer.Remove(producer);
+            if (byProducer.Count == 0) _owned.Remove(field);
+        }
+
+        return changed;
     }
 
     private static bool SameMessages(List<ValidationMessage>? a, List<ValidationMessage> b)
@@ -249,54 +353,46 @@ public sealed class ValidationContext
     }
 
     /// <summary>
-    /// Installs the complete result of an async validation pass for a field in one step,
-    /// replacing whatever the previous async pass contributed while leaving synchronous
-    /// validator messages in place.
+    /// Installs the complete result of an async validation pass for a field in one step.
     /// <para>
-    /// The async path used to <c>Add</c> each result as it resolved, which exposed a
-    /// partial verdict, repainted between messages, and appended duplicates on every
-    /// re-run because nothing retracted the previous pass. The instances contributed by
-    /// the last pass are tracked so they can be removed precisely, rather than by
-    /// clearing the field — which would also discard sync results.
+    /// <paramref name="generation"/> is the token handed out by
+    /// <see cref="BeginAsyncValidation"/> when the pass started. Passes for successive
+    /// values race — an older value's checks can resolve after a newer value's — so a
+    /// result that is no longer the newest is discarded rather than overwriting the
+    /// current verdict with a stale one.
     /// </para>
     /// </summary>
-    internal void ApplyAsyncValidation(string field, List<ValidationMessage> messages)
+    internal void ApplyAsyncValidation(string field, int generation, List<ValidationMessage> messages)
     {
         bool changed;
         lock (_lock)
         {
-            _messages.TryGetValue(field, out var current);
-            _asyncOwned.TryGetValue(field, out var previouslyOwned);
+            if (!_asyncGeneration.TryGetValue(field, out var newest) || newest != generation)
+                return;
 
-            var next = new List<ValidationMessage>();
-            if (current is not null)
-            {
-                foreach (var message in current)
-                {
-                    if (previouslyOwned is not null && ContainsReference(previouslyOwned, message))
-                        continue;
-                    next.Add(message);
-                }
-            }
-            next.AddRange(messages);
-
-            changed = !SameMessages(current, next);
-            if (changed)
-            {
-                if (next.Count == 0)
-                    _messages.Remove(field);
-                else
-                    _messages[field] = next;
-                _version++;
-            }
-
-            if (messages.Count == 0)
-                _asyncOwned.Remove(field);
-            else
-                _asyncOwned[field] = messages;
+            changed = ApplyOwnedLocked(field, AsyncProducer, messages);
+            if (changed) _version++;
         }
         if (changed) RaiseChanged();
     }
+
+    /// <summary>
+    /// Opens an async validation pass for a field and returns the token that identifies
+    /// it. Only the most recently opened pass is allowed to install a result.
+    /// </summary>
+    internal int BeginAsyncValidation(string field)
+    {
+        lock (_lock)
+        {
+            _asyncGeneration.TryGetValue(field, out var current);
+            var next = unchecked(current + 1);
+            _asyncGeneration[field] = next;
+            return next;
+        }
+    }
+
+    internal const string SyncProducer = "sync";
+    internal const string AsyncProducer = "async";
 
     private static bool ContainsReference(List<ValidationMessage> list, ValidationMessage message)
     {
@@ -336,15 +432,9 @@ public sealed class ValidationContext
                 _externalMessages.Remove(field);
             }
 
-            _messages.TryGetValue(field, out var existing);
-            var messagesChanged = !SameMessages(existing, messages);
-            if (messagesChanged)
-            {
-                if (messages.Count == 0)
-                    _messages.Remove(field);
-                else
-                    _messages[field] = messages;
-            }
+            // Owned rather than wholesale: a cross-field ValidationRule may also be
+            // writing this field, and it must survive the sync pass.
+            var messagesChanged = ApplyOwnedLocked(field, SyncProducer, messages);
 
             changed = valueChanged || messagesChanged;
             if (changed) _version++;
@@ -377,6 +467,7 @@ public sealed class ValidationContext
             changed = _messages.Count > 0 || _externalMessages.Count > 0;
             _messages.Clear();
             _externalMessages.Clear();
+            _owned.Clear();
             if (changed) _version++;
         }
         if (changed) RaiseChanged();
@@ -667,6 +758,8 @@ public sealed class ValidationContext
             changed = _touchedFields.Remove(field);
             if (_messages.Remove(field)) changed = true;
             if (_externalMessages.Remove(field)) changed = true;
+            _owned.Remove(field);
+            _asyncGeneration.Remove(field);
 
             _initialValues.TryGetValue(field, out initial);
             // Only rewind a value the context is actually tracking. Creating an entry
@@ -699,6 +792,8 @@ public sealed class ValidationContext
             _touchedFields.Clear();
             _messages.Clear();
             _externalMessages.Clear();
+            _owned.Clear();
+            _asyncGeneration.Clear();
 
             result = new Dictionary<string, object?>();
             foreach (var (field, initial) in _initialValues)

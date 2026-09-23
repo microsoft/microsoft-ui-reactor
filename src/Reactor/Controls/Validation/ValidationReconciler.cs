@@ -61,6 +61,8 @@ public static class ValidationReconciler
         IAsyncValidator[] asyncValidators,
         CancellationToken cancellationToken = default)
     {
+        var generation = ctx.BeginAsyncValidation(fieldName);
+
         var messages = new List<ValidationMessage>(asyncValidators.Length);
         foreach (var validator in asyncValidators)
         {
@@ -70,9 +72,10 @@ public static class ValidationReconciler
         }
 
         // One atomic install once every validator has resolved: no partial verdict, one
-        // notification, and re-running replaces the previous async result instead of
-        // appending a duplicate.
-        ctx.ApplyAsyncValidation(fieldName, messages);
+        // notification, and re-running replaces this producer's previous result instead
+        // of appending a duplicate. The generation token drops a result that a newer
+        // pass has already superseded.
+        ctx.ApplyAsyncValidation(fieldName, generation, messages);
     }
 
     /// <summary>

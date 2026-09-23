@@ -371,12 +371,27 @@ internal static class ValidationCoverageFixtures
             await asyncRule.EvaluateAsync(ctx);
             H.Check("ValRule_AsyncFail", ctx.HasError("field2"));
 
-            // Async rule — passes
+            // Async rule — the same rule (same message, so the same producer) now
+            // passes and retracts its own message. Using a *different* rule here would
+            // assert the old whole-field-replace behaviour, where any passing rule
+            // erased every other producer's errors on the field (issue #1262 review).
             var asyncRule2 = ValidationRuleAsync(
                 async () => { await Task.Delay(1); return true; },
-                "Async pass", "field2");
+                "Async fail", "field2");
             await asyncRule2.EvaluateAsync(ctx);
             H.Check("ValRule_AsyncPass", !ctx.HasError("field2"));
+
+            // A different passing rule must leave another producer's error alone.
+            var asyncFail2 = ValidationRuleAsync(
+                async () => { await Task.Delay(1); return false; },
+                "Async fail", "field2");
+            await asyncFail2.EvaluateAsync(ctx);
+            var unrelatedPass = ValidationRuleAsync(
+                async () => { await Task.Delay(1); return true; },
+                "Unrelated rule", "field2");
+            await unrelatedPass.EvaluateAsync(ctx);
+            H.Check("ValRule_AsyncPassKeepsOtherProducers", ctx.HasError("field2"));
+            ctx.Clear("field2");
 
             // Sync fallback when AsyncPredicate is null
             var syncFallback = ValidationRule(() => false, "Sync fallback", "field3");

@@ -73,7 +73,7 @@ public static class ValidationRuleDsl
     /// </summary>
     public static void Evaluate(this ValidationRuleElement rule, ValidationContext ctx)
     {
-        ctx.ReplaceInternal(rule.Field, BuildMessages(rule, rule.Predicate()));
+        ctx.ApplyOwned(rule.Field, ProducerKey(rule), BuildMessages(rule, rule.Predicate()));
     }
 
     /// <summary>
@@ -97,8 +97,16 @@ public static class ValidationRuleDsl
         var result = await rule.AsyncPredicate();
         cancellationToken.ThrowIfCancellationRequested();
 
-        ctx.ReplaceInternal(rule.Field, BuildMessages(rule, result));
+        ctx.ApplyOwned(rule.Field, ProducerKey(rule), BuildMessages(rule, result));
     }
+
+    /// <summary>
+    /// Identifies a rule as a message producer on its field. Rule elements are records
+    /// rebuilt every render, so identity has to come from what the rule contributes —
+    /// its message and severity — rather than from the instance.
+    /// </summary>
+    private static string ProducerKey(ValidationRuleElement rule) =>
+        $"rule:{(int)rule.Severity}:{rule.Message}";
 
     private static List<ValidationMessage> BuildMessages(ValidationRuleElement rule, bool passed) =>
         passed ? [] : [new ValidationMessage(rule.Field, rule.Message, rule.Severity)];
