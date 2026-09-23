@@ -65,8 +65,7 @@ produced.** Reactor works in both shapes:
 
 - **Unpackaged** — `<WindowsPackageType>None</WindowsPackageType>`, no `Package.appxmanifest`.
   `None` wins over `EnableMsixTooling`, so a project carrying both still builds unpackaged. Runs
-  from any folder, no MSIX registration. This is what the legacy `dotnet new reactorapp` template
-  produces.
+  from any folder, no MSIX registration. Scaffold with `dotnet new reactor` and set this property.
 - **Packaged** — has a `Package.appxmanifest`. Either omit `WindowsPackageType` entirely (the
   default produces a packaged app) or set it to `MSIX`; pair it with `EnableMsixTooling=true` for
   the single-project MSIX tooling. Launches with package identity, which is what identity-gated

@@ -1,7 +1,7 @@
 // `mur upgrade` — refresh a Reactor developer install after `git pull`.
 //
 // Re-runs the source-side steps of bootstrap.ps1:
-//   1. Re-pack the framework + ProjectTemplates into local-nupkgs/
+//   1. Re-pack the framework packages into local-nupkgs/
 //      (delegates to `mur pack-local`).
 //   2. Make sure the Windows App SDK `dotnet new` template pack (which ships
 //      `dotnet new reactor`) is installed — self-healing for a checkout that
@@ -37,8 +37,8 @@ public static class UpgradeCommand
             return 1;
         }
 
-        // 1. Re-pack framework + templates.
-        Console.WriteLine("==> Repacking Microsoft.UI.Reactor + ProjectTemplates");
+        // 1. Re-pack framework packages.
+        Console.WriteLine("==> Repacking Microsoft.UI.Reactor packages");
         var rc = PackLocalCommand.Run(Array.Empty<string>());
         if (rc != 0)
         {
@@ -51,11 +51,6 @@ public static class UpgradeCommand
         //    checkout, so `git pull` never invalidates them — this is a self-healing
         //    install-if-missing, not a reinstall. Best-effort: a developer who
         //    scaffolds by hand shouldn't have `mur upgrade` fail on a NuGet hiccup.
-        //
-        //    The legacy in-repo `Microsoft.UI.Reactor.ProjectTemplates` pack
-        //    (`dotnet new reactorapp`) is still repacked by step 1, but is
-        //    deliberately not installed. Install it manually if you want it:
-        //      dotnet new install local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
         Console.WriteLine();
         var templateSource = ParseFlag(args, "--templates-source");
         var templateVersion = ParseFlag(args, "--templates-version");

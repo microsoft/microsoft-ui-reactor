@@ -126,24 +126,4 @@ public sealed class PackLocalFrameworkVersionTests
 
         Assert.Equal("0.1.0-preview.11", latest);
     }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void ResolveTemplateFrameworkVersion_returns_null_for_no_flag(string? arg)
-    {
-        // No --framework-version → leave the csproj default in place (no network).
-        Assert.Null(PackLocalCommand.ResolveTemplateFrameworkVersion(arg));
-    }
-
-    [Fact]
-    public void ResolveTemplateFrameworkVersion_passes_explicit_version_through()
-    {
-        // An explicit version is used verbatim and must not trigger a NuGet lookup.
-        Assert.Equal("0.1.0-preview.7",
-            PackLocalCommand.ResolveTemplateFrameworkVersion("0.1.0-preview.7"));
-        Assert.Equal("0.1.0-preview.7",
-            PackLocalCommand.ResolveTemplateFrameworkVersion("  0.1.0-preview.7  "));
-    }
 }

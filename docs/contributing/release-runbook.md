@@ -65,7 +65,6 @@ Also check NuGet.org for already-published packages:
 - `Microsoft.UI.Reactor`
 - `Microsoft.UI.Reactor.Advanced`
 - `Microsoft.UI.Reactor.Devtools`
-- `Microsoft.UI.Reactor.ProjectTemplates`
 
 ## Prepare the release PR
 
@@ -90,19 +89,15 @@ per-file bump**:
 
 - **Guide docs** — `docs/_pipeline/templates/*.md.dt` reference the version through the
   `{{reactorVersion}}` token, which `mur docs compile` substitutes from this property.
-- **Template fallback** — `tools/Templates/Microsoft.UI.Reactor.Templates.csproj` derives its
-  `MicrosoftUIReactorVersion` fallback default from `$(ReactorPublicVersion)`.
 - **README** — is deliberately version-agnostic (it names no version and links to NuGet /
   Releases), so it needs no edit at all and `mur docs compile` never touches it.
 
-The template's framework reference is *also* stamped automatically for the published package:
-the release workflow's *Pack Templates* step passes `-p:MicrosoftUIReactorVersion=<resolved
-version>` (guarded by `TemplateMetadataTests`), so the published `ProjectTemplates` package
-always references the framework version shipped in the same run. `bootstrap.ps1` runs `mur
-pack-local --framework-version latest`, which resolves the newest published package from NuGet
-for local scaffolds. The `$(ReactorPublicVersion)`-derived value is therefore only a *fallback*
-(a bare `mur pack-local`, or when the `latest` lookup can't reach NuGet) — but keeping it
-current is free now, since you bump the one property anyway.
+Project scaffolding is **not** released from this repo. The `dotnet new reactor` templates ship
+in the Windows App SDK template pack (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), versioned
+and published by the WindowsAppSDK repo. When a release changes the framework version those
+templates should reference, that bump happens there — see
+[microsoft/WindowsAppSDK#6786](https://github.com/microsoft/WindowsAppSDK/pull/6786) for the shape
+of that change. The in-repo `Microsoft.UI.Reactor.ProjectTemplates` package was removed.
 
 Two guards keep the bump honest so it can't silently go stale:
 
@@ -125,38 +120,30 @@ mur docs compile --skip-screenshots --skip-diagrams
 
 ## Validate the release PR
 
-Run the focused template tests:
+Run the focused version-consistency tests:
 
 ```powershell
 dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
   -p:Platform=x64 `
-  --filter FullyQualifiedName~TemplateMetadataTests
+  --filter FullyQualifiedName~VersionSingleSourceTests
 ```
 
-Pack the template locally and inspect the generated default. Pass
-`-p:MicrosoftUIReactorVersion=$version` to mirror what the release workflow stamps, so the
-generated app references the version being released:
+Scaffolding is validated against the **published** Windows App SDK template pack rather than a
+locally packed one. After the tag is published and the framework package is live on NuGet.org,
+confirm a scaffold picks it up:
 
 ```powershell
-dotnet pack tools/Templates/Microsoft.UI.Reactor.Templates.csproj `
-  --configuration Release `
-  -p:Version=0.0.0-local `
-  -p:MicrosoftUIReactorVersion=$version `
-  -p:Platform=AnyCPU `
-  -o local-nupkgs
-```
-
-Create a throwaway app from the packed **legacy** template (`Microsoft.UI.Reactor.ProjectTemplates`, `dotnet new reactorapp`) and verify its `.csproj` references the chosen public version. This package is still published even though `bootstrap.ps1` no longer installs it — the supported scaffolding path is now `dotnet new reactor` from the Windows App SDK template pack, which is versioned and released by the WindowsAppSDK repo, not here. Skip restore before the tag is published because the new package version will not exist on NuGet.org yet:
-
-```powershell
-dotnet new uninstall Microsoft.UI.Reactor.ProjectTemplates
-dotnet new install local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
 
 $scratch = Join-Path $env:TEMP "reactor-template-smoke"
 Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue
-dotnet new reactorapp -n ReactorTemplateSmoke -o $scratch --no-restore
+dotnet new reactor -n ReactorTemplateSmoke -o $scratch --no-restore --reactor-version $version
 Select-String "$scratch\ReactorTemplateSmoke.csproj" -Pattern $version
 ```
+
+Note the templates' *default* Reactor version is owned by the WindowsAppSDK repo and only changes
+when a PR there bumps it, so a fresh release is not reflected in the default until that lands —
+`--reactor-version` is how you check the new version scaffolds and restores cleanly in the meantime.
 
 Open the PR and wait for CI. Do not tag until the release PR is merged.
 

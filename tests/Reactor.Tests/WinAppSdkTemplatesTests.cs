@@ -285,6 +285,78 @@ public sealed class WinAppSdkTemplatesTests
             "deliberately keeps an existing pack (nothing resolved), and claiming an install happened there is wrong.");
     }
 
+    // ── Bootstrap wiring guards ────────────────────────────────────────────
+    //
+    // Reactor's app templates live in the Windows App SDK `dotnet new` pack
+    // (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`, short name `reactor`).
+    // The in-repo `Microsoft.UI.Reactor.ProjectTemplates` pack that used to
+    // provide `dotnet new reactorapp` has been deleted. These two tests pin both
+    // halves of that contract — the regression they guard is silent, since a
+    // bootstrap that quietly re-registered `reactorapp` would hand new
+    // developers an unpackaged template the docs no longer describe.
+
+    [Fact]
+    public void Bootstrap_installs_the_windows_app_sdk_template_pack()
+    {
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        Assert.Contains("Microsoft.WindowsAppSDK.WinUI.CSharp.Templates", text, StringComparison.Ordinal);
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(
+                text.Replace("\r\n", "\n"), @"templates',\s*'install'"),
+            $"'{path}' must install the Reactor templates via `mur templates install`, which resolves the " +
+            "newest published version of the Windows App SDK template pack. `dotnet new install` has no " +
+            "--prerelease switch and resolves stable-only, so installing the bare package id fails while " +
+            "the pack is prerelease-only.");
+    }
+
+    [Fact]
+    public void Bootstrap_does_not_install_the_removed_reactorapp_template()
+    {
+        // The in-repo ProjectTemplates pack was deleted; nothing in bootstrap may
+        // resurrect it by handing the id to `dotnet new install`.
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        var normalized = text.Replace("\r\n", "\n");
+
+        // Strip comment lines: the step documents the migration in prose, and
+        // those mentions must not trip this guard.
+        var code = string.Join('\n', normalized
+            .Split('\n')
+            .Where(line => !line.TrimStart().StartsWith("#", StringComparison.Ordinal)));
+
+        Assert.False(
+            global::System.Text.RegularExpressions.Regex.IsMatch(
+                code, @"new\s+install.*Microsoft\.UI\.Reactor\.ProjectTemplates"),
+            $"'{path}' must not `dotnet new install` Microsoft.UI.Reactor.ProjectTemplates — that package was " +
+            "removed from this repo. Scaffolding goes through the Windows App SDK pack (`dotnet new reactor`).");
+    }
+
+    [Fact]
+    public void Repo_no_longer_ships_the_in_repo_template_package()
+    {
+        // The deletion itself. Assert on the tracked *source* rather than the
+        // directory: bin/obj under tools/Templates are gitignored, so a
+        // contributor who built the project before pulling this change still has
+        // the folder on disk. Checking Directory.Exists would fail for them while
+        // nothing is actually wrong.
+        var root = FindRoot();
+        foreach (var relative in new[]
+                 {
+                     global::System.IO.Path.Combine("tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"),
+                     global::System.IO.Path.Combine("tools", "Templates", "templates", "WinUIApp-CSharp", ".template.config", "template.json"),
+                 })
+        {
+            Assert.False(
+                global::System.IO.File.Exists(global::System.IO.Path.Combine(root, relative)),
+                $"'{relative}' is back. The in-repo Microsoft.UI.Reactor.ProjectTemplates package was removed " +
+                "in favour of the Windows App SDK `dotnet new reactor` templates.");
+        }
+
+        var (relPath, release) = ReadRepoFile(global::System.IO.Path.Combine(".github", "workflows", "release.yml"));
+        Assert.False(
+            release.Contains("Microsoft.UI.Reactor.Templates.csproj", StringComparison.Ordinal),
+            $"'{relPath}' packs the removed template project again.");
+    }
+
     static (string path, string text) ReadRepoFile(string repoRelativePath)
     {
         var path = global::System.IO.Path.Combine(FindRoot(), repoRelativePath);

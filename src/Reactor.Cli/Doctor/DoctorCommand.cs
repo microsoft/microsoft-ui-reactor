@@ -16,13 +16,10 @@
 //   4. local-nupkgs/Microsoft.UI.Reactor.<ver>.nupkg present (framework)
 //   5. local-nupkgs/Microsoft.UI.Reactor.Advanced.<ver>.nupkg present
 //      (warn-only — opt-in Win2D canvas package)
-//   6. local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.<ver>.nupkg present
-//      (warn-only — the legacy `dotnet new reactorapp` pack is still built and
-//      published, but nothing installs it automatically any more)
-//   7. The Windows App SDK `dotnet new` template pack is registered, which is
+//   6. The Windows App SDK `dotnet new` template pack is registered, which is
 //      what provides `dotnet new reactor` (always runs — does not depend on
 //      the repo checkout being found)
-//   8. Claude plugin at ~/.claude/plugins/reactor (informational only; not
+//   7. Claude plugin at ~/.claude/plugins/reactor (informational only; not
 //      every developer uses Claude Code)
 
 using System.Diagnostics;
@@ -102,7 +99,6 @@ public static class DoctorCommand
             // DefaultLocalVersion is the literal "0.0.0-local" so this is purely defensive.
             var advancedFileName = $"Microsoft.UI.Reactor.Advanced.{PackLocalCommand.DefaultLocalVersion}.nupkg";
             var advancedNupkg = Path.Combine(feed, Path.GetFileName(advancedFileName));
-            var templateNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{PackLocalCommand.DefaultLocalVersion}.nupkg");
 
             if (!File.Exists(frameworkNupkg))
             {
@@ -127,20 +123,6 @@ public static class DoctorCommand
             else
             {
                 Pass("local Advanced nupkg", $"{Path.GetFileName(advancedNupkg)} ({FormatAge(File.GetLastWriteTimeUtc(advancedNupkg))})");
-            }
-
-            // The legacy `dotnet new reactorapp` pack. `mur pack-local` still
-            // produces it and the release workflow still publishes it, but
-            // bootstrap no longer installs it — so a missing nupkg here means an
-            // incomplete pack-local, not a broken scaffolding story. Warn, don't fail.
-            if (!File.Exists(templateNupkg))
-            {
-                Warn("local template nupkg", $"missing {templateNupkg}. Run `mur pack-local` if you need the legacy `dotnet new reactorapp` package.");
-                warnings++;
-            }
-            else
-            {
-                Pass("local template nupkg", $"{Path.GetFileName(templateNupkg)}");
             }
         }
 

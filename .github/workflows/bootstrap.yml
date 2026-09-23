@@ -13,7 +13,6 @@ on:
       - 'bootstrap.ps1'
       - 'tools/BootstrapFeedResolver.ps1'
       - 'src/Reactor.Cli/**'
-      - 'tools/Templates/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
@@ -24,7 +23,6 @@ on:
       - 'bootstrap.ps1'
       - 'tools/BootstrapFeedResolver.ps1'
       - 'src/Reactor.Cli/**'
-      - 'tools/Templates/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
@@ -144,7 +142,6 @@ jobs:
         run: |
           $expected = @(
               'local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg',
-              'local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg',
               'local-nupkgs/Microsoft.UI.Reactor.Cli.1.0.0.nupkg'
           )
           $missing = @()
@@ -188,20 +185,19 @@ jobs:
               }
               Write-Host "  [ok] $shortName"
           }
-          # The pack itself must be the Windows App SDK one, not our legacy
-          # in-repo ProjectTemplates package.
+          # The pack itself must be the Windows App SDK one.
           $packages = dotnet new uninstall 2>&1 | Out-String
           if ($packages -notmatch 'Microsoft\.WindowsAppSDK\.WinUI\.CSharp\.Templates') {
               throw "Microsoft.WindowsAppSDK.WinUI.CSharp.Templates is not installed"
           }
           Write-Host "  [ok] Microsoft.WindowsAppSDK.WinUI.CSharp.Templates registered"
-          # bootstrap must NOT install the legacy pack any more. A stray install
-          # would silently hand new developers the unpackaged `reactorapp`
-          # template the docs no longer describe.
+          # The in-repo Microsoft.UI.Reactor.ProjectTemplates pack was deleted.
+          # Nothing may resurrect it: a stray install would hand new developers
+          # the unpackaged `reactorapp` template the docs no longer describe.
           if ($packages -match 'Microsoft\.UI\.Reactor\.ProjectTemplates') {
-              throw "bootstrap installed the legacy Microsoft.UI.Reactor.ProjectTemplates pack; it should only be packed, not installed"
+              throw "the removed Microsoft.UI.Reactor.ProjectTemplates pack is installed; it should no longer exist"
           }
-          Write-Host "  [ok] legacy Microsoft.UI.Reactor.ProjectTemplates not installed"
+          Write-Host "  [ok] removed Microsoft.UI.Reactor.ProjectTemplates not installed"
 
       - name: Scaffold a TestApp and restore against the local feed
         shell: pwsh
@@ -223,8 +219,6 @@ jobs:
               # mur pack-local. The template's normal default may point at a
               # not-yet-published public preview while a release-prep PR is in
               # flight, so opt into the local package version explicitly here
-              # (`--reactor-version` is the Windows App SDK template's knob;
-              # the legacy `reactorapp` template called it --MSUIReactorVersion).
               dotnet new reactor -n TestApp --reactor-version 0.0.0-local
               if ($LASTEXITCODE -ne 0) { throw "dotnet new reactor exited $LASTEXITCODE" }
               if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced" }

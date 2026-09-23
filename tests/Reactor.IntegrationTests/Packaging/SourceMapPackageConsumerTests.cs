@@ -25,10 +25,10 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 [Collection(LocalPackageFeedCollection.Name)]
 public sealed class SourceMapPackageConsumerTests : IDisposable
 {
-    private readonly TemplatePackageTestFixture _fixture;
+    private readonly LocalPackageFeedFixture _fixture;
     private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"reactor-sourcemap-pkg-{Guid.NewGuid():N}");
 
-    public SourceMapPackageConsumerTests(TemplatePackageTestFixture fixture)
+    public SourceMapPackageConsumerTests(LocalPackageFeedFixture fixture)
     {
         _fixture = fixture;
         Directory.CreateDirectory(_tempRoot);

@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Builds the `mur` CLI, installs it as a dotnet global tool, packs the
-    framework + ProjectTemplates into local-nupkgs/, installs the Windows
+    framework packages into local-nupkgs/, installs the Windows
     App SDK `dotnet new` template pack (which ships `dotnet new reactor`),
     and (optionally) drops the Claude Code plugin under
     ~/.claude/plugins/reactor.
@@ -302,8 +302,7 @@ function Get-VsExtensionSkipReason {
 # The repo defaults WindowsAppSDKSelfContained=false (see
 # Directory.Build.props) so samples and perf benches share a single
 # machine-wide Microsoft.WindowsAppRuntime install rather than bundling a
-# copy of the runtime into every build output. The legacy in-repo template
-# (tools/Templates/templates/WinUIApp-CSharp) and the AOT-publish trim
+# copy of the runtime into every build output. The AOT-publish trim
 # proofs (tests/aot_trim_proof/*) keep =true explicitly so their build
 # output stays a standalone deployable.
 #
@@ -622,20 +621,16 @@ if ($SkipMurInstall) {
 }
 
 # ---------------------------------------------------------------------------
-# 4. Pack the in-source framework + templates via the freshly-installed mur
+# 4. Pack the in-source framework packages via the freshly-installed mur
 # ---------------------------------------------------------------------------
-Write-Step 'Packing local Microsoft.UI.Reactor + ProjectTemplates (`mur pack-local`)'
+Write-Step 'Packing local Microsoft.UI.Reactor packages (`mur pack-local`)'
 
 # Use the freshly-installed `mur` if available; otherwise call the source
 # project directly (works for -SkipMurInstall too).
 #
-# `--framework-version latest` stamps the newest *published* Microsoft.UI.Reactor
-# into the legacy `reactorapp` template's <PackageReference>, so the
-# ProjectTemplates nupkg this produces tracks the current release automatically
-# instead of a hand-maintained default. (Bootstrap no longer installs that
-# template — step 5 installs the Windows App SDK pack instead — but the nupkg is
-# still built here and published from the release workflow.) Best-effort: if
-# NuGet is unreachable it falls back to the template's built-in default.
+# Produces the source-built 0.0.0-local framework, Advanced and Devtools nupkgs
+# so recipes, samples and scaffolded apps in this clone can resolve the working
+# tree instead of the published package.
 $packLocalExit = 0
 Invoke-ReactorWithRestoreEnvironment `
     -NuGetConfig $effectiveNuGetConfig `
@@ -645,7 +640,7 @@ Invoke-ReactorWithRestoreEnvironment `
     $murResolved = Get-Command mur -ErrorAction SilentlyContinue
     if ($murResolved) {
         Write-Dbg "Using installed mur at $($murResolved.Source)"
-        & mur pack-local --framework-version latest
+        & mur pack-local
     } else {
         Write-Dbg "mur not on PATH; falling back to 'dotnet run' against Reactor.Cli source"
         $murRestoreArgs = Get-ReactorRestoreArguments `
@@ -658,7 +653,7 @@ Invoke-ReactorWithRestoreEnvironment `
             "-p:Platform=$hostArch" `
             --nologo `
             @murRestoreArgs `
-            -- pack-local --framework-version latest
+            -- pack-local
     }
 }
 if ($packLocalExit -ne 0) { Fail 'mur pack-local failed' }
@@ -673,13 +668,12 @@ if ($packLocalExit -ne 0) { Fail 'mur pack-local failed' }
 # (single-project MSIX) — so `dotnet run` launches them with package identity,
 # equivalent to F5 in Visual Studio.
 #
-# This repo still builds and publishes its own legacy
-# `Microsoft.UI.Reactor.ProjectTemplates` pack (`dotnet new reactorapp`,
-# unpackaged) from tools/Templates/ — `mur pack-local` above just packed it
-# into local-nupkgs/ — but bootstrap deliberately no longer *installs* it, so a
-# fresh clone gets the officially supported templates by default. To opt back
-# into the legacy unpackaged shape, install it by hand:
-#     dotnet new install local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
+# This repo used to ship its own `Microsoft.UI.Reactor.ProjectTemplates` pack
+# (`dotnet new reactorapp`, unpackaged). It was removed once the Windows App SDK
+# pack shipped the Reactor templates; the published versions are deprecated on
+# NuGet.org with a pointer here. For an unpackaged app, scaffold with
+# `dotnet new reactor` and set `<WindowsPackageType>None</WindowsPackageType>`
+# (see docs/guide/packaging.md).
 if ($SkipTemplates) {
     Write-Host ''
     Write-Host '    Skipping `dotnet new` template install (per -SkipTemplates).' -ForegroundColor Yellow
