@@ -75,7 +75,7 @@ internal sealed class ValidationRuleHandler : IDecoratorElementHandler<Validatio
         => CompositeLifecycle.MountValidationRule(ctx.Reconciler, el);
 
     public UIElement Update(UpdateContext ctx, ValidationRuleElement oldEl, ValidationRuleElement newEl, UIElement control)
-        => CompositeLifecycle.UpdateValidationRule(ctx.Reconciler, newEl) ?? control;
+        => CompositeLifecycle.UpdateValidationRule(ctx.Reconciler, newEl, control) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, ValidationRuleElement? element, UIElement control)
         => V1UnmountDisposition.ContinueDefaultTraversal;

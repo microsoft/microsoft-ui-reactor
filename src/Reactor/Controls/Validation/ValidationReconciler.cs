@@ -80,14 +80,19 @@ public static class ValidationReconciler
 
     /// <summary>
     /// Evaluates all ValidationRuleElements in a list and pushes results to the context.
+    /// <para>
+    /// Each rule is keyed by its position in the list, so re-running the same set
+    /// replaces each rule's previous verdict rather than accumulating — and two rules on
+    /// one field stay independent even if they carry the same message.
+    /// </para>
     /// </summary>
     public static void EvaluateRules(
         ValidationContext ctx,
         params ValidationRuleElement[] rules)
     {
-        foreach (var rule in rules)
+        for (var i = 0; i < rules.Length; i++)
         {
-            rule.Evaluate(ctx);
+            rules[i].Evaluate(ctx, "rules[" + i.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]");
         }
     }
 }

@@ -73,7 +73,17 @@ public static class ValidationRuleDsl
     /// </summary>
     public static void Evaluate(this ValidationRuleElement rule, ValidationContext ctx)
     {
-        ctx.ApplyOwned(rule.Field, ProducerKey(rule), BuildMessages(rule, rule.Predicate()));
+        rule.Evaluate(ctx, FallbackProducerKey(rule));
+    }
+
+    /// <summary>
+    /// Evaluates the rule as a named producer on its field. The reconciler passes an
+    /// identity tied to the rule's mounted placeholder, which survives re-renders and
+    /// distinguishes two rules that happen to share a message.
+    /// </summary>
+    internal static void Evaluate(this ValidationRuleElement rule, ValidationContext ctx, string producer)
+    {
+        ctx.ApplyOwned(rule.Field, producer, BuildMessages(rule, rule.Predicate()));
     }
 
     /// <summary>
@@ -85,27 +95,39 @@ public static class ValidationRuleDsl
     /// field as valid in between.
     /// </para>
     /// </summary>
-    public static async Task EvaluateAsync(this ValidationRuleElement rule, ValidationContext ctx,
+    public static Task EvaluateAsync(this ValidationRuleElement rule, ValidationContext ctx,
         CancellationToken cancellationToken = default)
+        => rule.EvaluateAsync(ctx, FallbackProducerKey(rule), cancellationToken);
+
+    internal static async Task EvaluateAsync(this ValidationRuleElement rule, ValidationContext ctx,
+        string producer, CancellationToken cancellationToken = default)
     {
         if (rule.AsyncPredicate is null)
         {
-            rule.Evaluate(ctx);
+            rule.Evaluate(ctx, producer);
             return;
         }
 
         var result = await rule.AsyncPredicate();
         cancellationToken.ThrowIfCancellationRequested();
 
-        ctx.ApplyOwned(rule.Field, ProducerKey(rule), BuildMessages(rule, result));
+        ctx.ApplyOwned(rule.Field, producer, BuildMessages(rule, result));
     }
 
     /// <summary>
-    /// Identifies a rule as a message producer on its field. Rule elements are records
-    /// rebuilt every render, so identity has to come from what the rule contributes —
-    /// its message and severity — rather than from the instance.
+    /// Identity of last resort for a rule evaluated outside the reconciler, where there
+    /// is no mounted instance to key on.
+    /// <para>
+    /// It is derived from the message and severity, which is stable for the overwhelmingly
+    /// common case of a fixed message, but not for an interpolated one
+    /// (<c>$"Must be after {start}"</c>) — a changed message reads as a different
+    /// producer, orphaning the previous one. Rules mounted through the element tree get
+    /// a real per-instance identity instead and are unaffected;
+    /// <see cref="ValidationReconciler.EvaluateRules"/> keys by position. Prefer either
+    /// over calling <c>Evaluate</c> directly in a render loop.
+    /// </para>
     /// </summary>
-    private static string ProducerKey(ValidationRuleElement rule) =>
+    internal static string FallbackProducerKey(ValidationRuleElement rule) =>
         $"rule:{(int)rule.Severity}:{rule.Message}";
 
     private static List<ValidationMessage> BuildMessages(ValidationRuleElement rule, bool passed) =>

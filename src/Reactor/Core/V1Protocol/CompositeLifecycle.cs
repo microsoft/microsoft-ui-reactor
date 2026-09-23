@@ -286,23 +286,42 @@ internal static class CompositeLifecycle
 
     internal static UIElement MountValidationRule(Reconciler reconciler, ValidationRuleElement rule)
     {
-        // Evaluate the rule against the nearest ValidationContext
+        // The collapsed placeholder is this rule's durable identity: the reconciler keeps
+        // it across re-renders, so it can name the rule as a message producer even though
+        // the element record itself is rebuilt every pass. Keying on the message instead
+        // would break for an interpolated one and would conflate two rules that happen to
+        // share text (issue #1262 review).
+        var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
+        var producer = RuleProducerKey(placeholder);
+
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
         if (valCtx is not null)
-            rule.Evaluate(valCtx);
+            rule.Evaluate(valCtx, producer);
 
-        // Return a collapsed placeholder — validation rules produce no UI
-        var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
         Reconciler.SetElementTag(placeholder, rule);
         return placeholder;
     }
 
-    internal static UIElement? UpdateValidationRule(Reconciler reconciler, ValidationRuleElement rule)
+    internal static UIElement? UpdateValidationRule(Reconciler reconciler, ValidationRuleElement rule, UIElement control)
     {
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
         if (valCtx is not null)
-            rule.Evaluate(valCtx);
+            rule.Evaluate(valCtx, RuleProducerKey(control));
         return null; // keep existing collapsed placeholder
+    }
+
+    private static long s_ruleProducerSeed;
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, string> _ruleProducers = new();
+
+    private static string RuleProducerKey(UIElement placeholder)
+    {
+        if (_ruleProducers.TryGetValue(placeholder, out var existing)) return existing;
+
+        var key = "rule#" + global::System.Threading.Interlocked
+            .Increment(ref s_ruleProducerSeed)
+            .ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+        _ruleProducers.Add(placeholder, key);
+        return key;
     }
 
     /// <summary>
