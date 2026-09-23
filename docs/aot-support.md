@@ -119,6 +119,12 @@ Opt out — for example if you drive the copy yourself — with:
 <ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>
 ```
 
+**Alternative: `<EnableMsixTooling>true</EnableMsixTooling>`.** Suggested on the upstream issue, and it does work — measured: the app `.pri` lands in the publish output and the published app runs. It fixes the symptom as a side effect of importing the MSIX packaging targets (which also stops the reference-path arm of the PRI expansion from running, halving the `makepri.exe Dump` count on a normal build).
+
+Reactor does **not** set it for you. Whether an app wants MSIX packaging tooling is the app's decision, not a framework's, and this is a community workaround on an open issue rather than a documented contract. The shipped target is narrower, explicit, and works whichever way an app sets `EnableMsixTooling`. The two compose cleanly if you do enable it — verified: no errors, no duplicated files, app runs.
+
+**It does not fix issue #1271.** Measured against pre-fix packages at the failing geometry: with and without `EnableMsixTooling=true` the build fails identically with `PRI175` / `PRI222` on `Microsoft.UI.Reactor.Devtools.pri.xml`. Library `.pri` files still get expanded; keeping them out of `lib/` is a separate and still-necessary fix.
+
 Remove the shipped target once #6394 closes.
 
 ## Debugging an AOT selftest hang
