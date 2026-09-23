@@ -249,8 +249,10 @@ public sealed class ValidationContext
     private bool ApplyOwnedLocked(string field, string producer, List<ValidationMessage> messages)
     {
         _messages.TryGetValue(field, out var current);
+        _owned.TryGetValue(field, out var byProducer);
+
         List<ValidationMessage>? previous = null;
-        if (_owned.TryGetValue(field, out var byProducer))
+        if (byProducer is not null)
             byProducer.TryGetValue(producer, out previous);
 
         var next = new List<ValidationMessage>(
