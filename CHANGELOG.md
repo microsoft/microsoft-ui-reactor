@@ -28,7 +28,21 @@ Conventions for contributors:
 
 ### Added
 
+- `Publish docs` now verifies the live site after deploying. The `publish` job stamps the
+  Pages artifact with the run that built it, and a new `verify` job polls
+  <https://microsoft.github.io/microsoft-ui-reactor/> until it is serving *that* run —
+  failing the workflow otherwise. Every probe carries a unique query key so a pass cannot
+  come from cached content, and an already-published version fetched with the same request
+  shape acts as a positive control, so a broken probe is reported as unverified rather than
+  blamed on the deployment. (issue #1268)
+
 ### Changed
+
+- A push to `main` no longer deploys the docs when the pushed commit already carries a `v*`
+  tag; the release tag's own run owns the deployment. Both runs previously handed
+  `actions/deploy-pages` the same `pages_build_version` (it is `github.sha`, with no input
+  to override it), so the two deployments collided under one identity and one was silently
+  stranded. `publish` still runs on both, so `gh-pages` is unaffected. (issue #1268)
 
 ### Deprecated
 
