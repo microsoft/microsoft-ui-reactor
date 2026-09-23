@@ -579,12 +579,18 @@ public sealed class WinAppUi
 
     /// <summary>
     /// Runs one short-lived <c>winapp ui</c> child to completion under a timeout, draining both
-    /// output streams, and returns <see langword="null"/> if it could not be started or overran.
+    /// output streams, and reports how it ended on
+    /// <see cref="BoundedRun.Outcome"/> — <see cref="BoundedRunOutcome.Completed"/>,
+    /// <see cref="BoundedRunOutcome.TimedOut"/>, or <see cref="BoundedRunOutcome.NotStarted"/>.
     /// </summary>
     /// <remarks>
     /// <para>The static counterpart to <see cref="Run"/>, for the paths that must not throw: a
     /// capability probe and a best-effort turn release both want "no answer" rather than an
-    /// exception.</para>
+    /// exception. The outcome is reported rather than collapsed into a null result so those
+    /// callers can separate the two kinds of "no answer" — a killed child and a child that
+    /// exited normally with a code of <c>0</c> are not the same event, and
+    /// <see cref="BoundedRun.ExitCode"/> is only meaningful for
+    /// <see cref="BoundedRunOutcome.Completed"/>.</para>
     /// <para>Draining asynchronously is the load-bearing part, not a tidiness preference.
     /// <see cref="CreateStartInfo"/> redirects stdout *and* stderr, and a redirected stream that
     /// nobody reads is a fixed-size pipe buffer the child blocks on once it fills. Reading one
