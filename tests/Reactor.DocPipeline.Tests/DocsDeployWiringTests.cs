@@ -37,6 +37,23 @@ public sealed class DocsDeployWiringTests
     }
 
     [Fact]
+    public void Pending_runs_queue_instead_of_evicting_each_other()
+    {
+        var concurrency = Map(Workflow, "concurrency");
+
+        // Paired with the stand-down below, and unsafe without it. Under the
+        // default `queue: single` a later docs push evicts a still-pending tag
+        // run, so `publish` would defer the deployment to a run that never
+        // happens and the release would be lost with nothing going red.
+        Assert.Equal("max", Scalar(concurrency, "queue"));
+
+        // `queue: max` plus `cancel-in-progress: true` is a workflow validation
+        // error, which would take the whole workflow offline rather than fail
+        // one job.
+        Assert.NotEqual("true", Scalar(concurrency, "cancel-in-progress"));
+    }
+
+    [Fact]
     public void Publish_decides_whether_this_run_owns_the_deployment()
     {
         var run = StepRun("publish", "deploy-gate");

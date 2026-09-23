@@ -34,9 +34,22 @@ permissions: {}
 
 # Serialises Pages deployments *and* the gh-pages pushes below, so two runs can
 # never race for the same branch.
+#
+# `queue: max` is load-bearing, not a tidiness knob. The default (`single`)
+# keeps at most one *pending* run per group and cancels the previous one when a
+# new run queues. During a release that is reachable and costly: the merge's
+# `main` run holds the group, the release tag's run waits behind it, and any
+# further docs push to `main` would evict the tag run before it ever ran. The
+# release version would then never be written to gh-pages at all, and the
+# "Decide whether this run owns the deployment" step below would have already
+# stood `main` down in favour of a run that no longer exists. Queuing makes the
+# tag run wait its turn instead (FIFO, up to 100 pending).
+#
+# `cancel-in-progress` is deliberately absent: it defaults to false, and
+# `queue: max` with `cancel-in-progress: true` is a workflow validation error.
 concurrency:
   group: pages
-  cancel-in-progress: false
+  queue: max
 
 env:
   MIKE_BRANCH: gh-pages
@@ -205,6 +218,12 @@ jobs:
           # stands down. `publish` still runs either way — it is what writes the
           # `main` version to gh-pages, and the tag run's artifact is the whole
           # branch, so nothing is lost by not serving it from here.
+          #
+          # Standing down is only safe because the concurrency block above sets
+          # `queue: max`. Under the default `single`, a later docs push could
+          # evict the still-pending tag run, and this step would have deferred
+          # to a run that never happens — losing the release deployment and its
+          # verification together. Do not remove one without the other.
           #
           # This narrows the window rather than closing it: a tag pushed after
           # this step has already looked is invisible to it, and both runs

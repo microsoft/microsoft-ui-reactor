@@ -43,6 +43,11 @@ Conventions for contributors:
   `actions/deploy-pages` the same `pages_build_version` (it is `github.sha`, with no input
   to override it), so the two deployments collided under one identity and one was silently
   stranded. `publish` still runs on both, so `gh-pages` is unaffected. (issue #1268)
+- The `Publish docs` concurrency group now sets `queue: max`. The Actions default keeps at
+  most one *pending* run per group and cancels the previous one when a new run queues, so a
+  docs push landing while a release tag's run waited behind `main` would evict the tag run
+  before it started — leaving the release unpublished. Runs now wait in FIFO order.
+  (issue #1268)
 
 ### Deprecated
 

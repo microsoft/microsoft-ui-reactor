@@ -279,6 +279,16 @@ Two things now prevent it:
   after `publish` has already looked is invisible to the check above, so the race is
   narrowed rather than closed.
 
+**The stand-down depends on the concurrency queue.** The workflow's concurrency block sets
+`queue: max`. Under the Actions default (`queue: single`) only one run may be *pending* per
+group, and a newly queued run cancels the previous pending one. During a release that is
+reachable: the merge's `main` run holds the group, the tag run waits behind it, and any
+further docs push to `main` evicts the tag run before it ever starts. The release version
+would then never reach `gh-pages` at all, and `main` would already have deferred its own
+deployment to a run that no longer exists — losing the release and its verification
+together. `queue: max` makes runs wait in FIFO order instead. Removing it silently
+re-arms that failure, which is why `DocsDeployWiringTests` asserts it.
+
 `verify` distinguishes two failures, and they call for different responses:
 
 | Annotation | Meaning | What to do |
