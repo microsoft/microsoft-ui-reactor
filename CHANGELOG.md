@@ -60,6 +60,12 @@ Conventions for contributors:
   undrained so a child could block on a full stderr pipe and be killed as a phantom timeout. Both
   now drain stdout and stderr asynchronously ahead of the timed wait, as the harness's other
   process runner already did (PR #1272).
+- The probe cannot exceed the budget it advertises. The schema attempt and the help fallback
+  share one 10-second deadline instead of each getting their own, and a schema attempt that
+  *times out* now stops the probe rather than falling through — a binary that hangs has not
+  reported that `--cli-schema` is unsupported, so a second spawn would spend the remaining budget
+  to learn nothing. Previously an unresponsive winapp could cost two 10-second waits plus two
+  5-second kill graces (PR #1272).
 - A capability probe that cannot read winapp's command set no longer reports the verb as absent.
   The result is a tri-state, and `Unreadable` fails under `REACTOR_E2E_REQUIRE_UI_YIELD` rather
   than passing as a skip — "the probe broke" is not "the feature is missing". A command set with

@@ -679,4 +679,191 @@ public class WinAppWorkflowIdTests
             WinAppUi.ParseUiVerbSupportFromSchema(schemaJson, "yield"),
             "Unusable schema output was treated as a definitive answer about the verb.");
     }
+
+    // ── Probe orchestration ──────────────────────────────────────────────────
+    //
+    // Both parsers can be correct while the sequencing around them is wrong, and the parser tests
+    // above would stay green either way. These drive `ProbeYieldVerb` through its injected runner
+    // so the schema-first/help-fallback decision is measured directly, and record which argument
+    // lists were actually spawned -- "did not run the second child" is the assertion for the
+    // budget rules, and it is invisible to a test that only inspects the return value.
+
+    private static WinAppUi.BoundedRun Completed(string stdout) =>
+        new(WinAppUi.BoundedRunOutcome.Completed, 0, stdout, "");
+
+    private static WinAppUi.BoundedRun Failed(WinAppUi.BoundedRunOutcome outcome) =>
+        new(outcome, 0, "", "");
+
+    /// <summary>Records each spawn so the orchestration's decisions are observable.</summary>
+    private static WinAppUi.UiProbeRunner Runner(
+        List<string> calls, Func<string, WinAppUi.BoundedRun> respond) =>
+        (_, args) =>
+        {
+            var joined = string.Join(' ', args);
+            calls.Add(joined);
+            return respond(joined);
+        };
+
+    [TestMethod]
+    public void Probe_FallsBackToHelpWhenTheSchemaIsUnreadable()
+    {
+        // The pre-`--cli-schema` winapp. Returning Unreadable the moment the schema is unusable
+        // would silently drop support for exactly the builds this probe exists to identify.
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, a => a == "--cli-schema"
+                ? Completed("winapp: unrecognized option '--cli-schema'")
+                : Completed(HelpWithoutYield)),
+            "yield",
+            budgetMs: 10_000);
+
+        CollectionAssert.AreEqual(
+            new[] { "--cli-schema", "--help" }, calls,
+            "The probe did not fall back to `ui --help` after an unreadable schema.");
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent, support,
+            "An unreadable schema masked a readable help listing, losing a measurement the " +
+            "fallback path could still make.");
+    }
+
+    [TestMethod]
+    public void Probe_FallsBackToHelpAndReportsPresent()
+    {
+        // The positive control for the test above: the fallback must be able to report either
+        // answer, or "falls back" would just mean "always says Absent".
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, a => a == "--cli-schema" ? Completed("not json") : Completed(HelpWithYield)),
+            "yield",
+            budgetMs: 10_000);
+
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Present, support,
+            "The help fallback could not report Present, so its verdict carries no information.");
+    }
+
+    [TestMethod]
+    public void Probe_DoesNotConsultHelpWhenTheSchemaAnswers()
+    {
+        // The schema is authoritative. Asking twice would double the probe's process cost on
+        // every run for an answer already in hand.
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, _ => Completed(SchemaWithYield)), "yield", budgetMs: 10_000);
+
+        CollectionAssert.AreEqual(
+            new[] { "--cli-schema" }, calls,
+            "The probe ran `ui --help` even though the schema had already answered.");
+        Assert.AreEqual(WinAppUi.UiVerbSupport.Present, support);
+    }
+
+    [TestMethod]
+    public void Probe_StopsAtAHungSchemaAttemptInsteadOfSpendingTheRestOfTheBudget()
+    {
+        // A timeout is not a report that `--cli-schema` is unsupported, and the budget is nearly
+        // gone by the time it fires. Treating it like an unrecognized flag would spawn a second
+        // child of an already-unresponsive binary -- two 10s waits plus two 5s kill graces
+        // against an advertised 10s probe.
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, _ => Failed(WinAppUi.BoundedRunOutcome.TimedOut)),
+            "yield",
+            budgetMs: 10_000);
+
+        CollectionAssert.AreEqual(
+            new[] { "--cli-schema" }, calls,
+            "A hung schema attempt was followed by a second spawn, so an unresponsive winapp " +
+            "costs more than the probe's stated budget.");
+        Assert.AreEqual(WinAppUi.UiVerbSupport.Unreadable, support);
+    }
+
+    [TestMethod]
+    public void Probe_DoesNotStartTheFallbackWithNoBudgetLeft()
+    {
+        // The shared deadline. A slow-but-completing schema attempt must not hand the fallback a
+        // fresh full-length budget.
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, a =>
+            {
+                if (a != "--cli-schema") return Completed(HelpWithYield);
+                Thread.Sleep(120);
+                return Completed("not json");
+            }),
+            "yield",
+            budgetMs: 50);
+
+        CollectionAssert.AreEqual(
+            new[] { "--cli-schema" }, calls,
+            "The fallback was started after the shared budget was already spent.");
+        Assert.AreEqual(WinAppUi.UiVerbSupport.Unreadable, support);
+    }
+
+    // ── Bounded process runner ───────────────────────────────────────────────
+    //
+    // The parser tests feed captured strings and never start a process, so they would stay green
+    // against a runner that read one stream to EOF before its timed wait -- the original defect.
+    // These drive real children whose output volume and lifetime the test controls, which a
+    // winapp cannot be made to do on demand.
+
+    /// <summary>A `cmd.exe` child, so the test owns how much it writes and how long it lives.</summary>
+    private static ProcessStartInfo Cmd(string command)
+    {
+        var psi = new ProcessStartInfo("cmd.exe")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("/c");
+        psi.ArgumentList.Add(command);
+        return psi;
+    }
+
+    [TestMethod]
+    public void RunBounded_DrainsBothPipesWhenTheChildFloodsThem()
+    {
+        // A redirected stream nobody reads is a fixed-size pipe buffer (~4 KB) the child blocks
+        // on once it fills. Reading stdout to EOF first deadlocks against a full stderr; because
+        // that read preceded the timed wait, the timeout could not fire either. Far more than one
+        // buffer goes to each stream here, so a regression hangs rather than merely truncating.
+        const int lines = 2_000;
+        var run = WinAppUi.RunBounded(
+            Cmd($"for /L %i in (1,1,{lines}) do @(echo OUT-%i& echo ERR-%i 1>&2)"),
+            timeoutMs: 60_000);
+
+        Assert.AreEqual(
+            WinAppUi.BoundedRunOutcome.Completed, run.Outcome,
+            "A child that floods both redirected pipes did not complete, which is the deadlock " +
+            "this runner exists to avoid.");
+
+        var outLines = run.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+        var errLines = run.StdErr.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+
+        Assert.AreEqual(lines, outLines, "stdout was truncated, so it was not drained throughout.");
+        Assert.AreEqual(lines, errLines, "stderr was truncated, so it was not drained throughout.");
+    }
+
+    [TestMethod]
+    public void RunBounded_ReturnsTimedOutWithinTheBudgetForAChildThatOutlivesIt()
+    {
+        // The bound has to hold against a child that simply never exits. `timeout /t` with
+        // redirected stdin errors out immediately, so sleep via ping's interval instead.
+        var clock = Stopwatch.StartNew();
+        var run = WinAppUi.RunBounded(Cmd("ping -n 30 127.0.0.1 > nul"), timeoutMs: 1_000);
+        clock.Stop();
+
+        Assert.AreEqual(
+            WinAppUi.BoundedRunOutcome.TimedOut, run.Outcome,
+            "A child that outlived the budget was not reported as a timeout, so 'no answer' " +
+            "would be indistinguishable from a real exit code.");
+
+        // Generous against CI scheduling, but far below the child's own ~29s lifetime: the point
+        // is that the wait is bounded by the budget rather than by the process.
+        Assert.IsTrue(
+            clock.Elapsed < TimeSpan.FromSeconds(20),
+            $"The bounded wait took {clock.Elapsed.TotalSeconds:F1}s against a 1s budget, so it " +
+            "was bounded by the child rather than by the timeout.");
+    }
 }

@@ -872,10 +872,11 @@ test process and cached on `WinAppUi.SupportsUiYield`. Against a pre-#767 build 
 to release, so the handoff would spawn a `winapp.exe` per UI test only to have it exit on an
 unknown verb.
 
-**The probe reads the command list, not an exit code.** It runs `winapp ui --help` and looks for
-`yield` among the parsed command names. The obvious cheaper probe does not work, and the way it
-fails is worth knowing, because it looks like it works. Measured against winapp
-0.6.3-prerelease.92:
+**The probe reads the command set, not an exit code.** It asks `winapp ui --cli-schema` for the
+command set and looks for `yield` among the subcommand names, falling back to parsing
+`winapp ui --help` on builds that predate that flag (both described below). The obvious cheaper
+probe does not work, and the way it fails is worth knowing, because it looks like it works.
+Measured against winapp 0.6.3-prerelease.92:
 
 ```text
 winapp ui yield        --help  -> exit 0   (verb exists)
@@ -904,6 +905,12 @@ The probe is a tri-state (`WinAppUi.UiVerbSupport`). `Unreadable` is deliberatel
 "the verb is missing" would be publishing a measurement that was never taken, and would also let
 a future reformat of winapp's help read as "yield was removed" forever. Under
 `REACTOR_E2E_REQUIRE_UI_YIELD`, anything short of `Present` fails.
+
+Both attempts share a single 10-second budget, and a schema attempt that *times out* stops the
+probe rather than falling through. A binary that hangs has not reported that `--cli-schema` is
+unsupported, so spawning a second child to hang again would spend the rest of the budget to learn
+nothing — and two independently bounded waits would let an unresponsive winapp cost twice the
+advertised probe time.
 
 An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
 own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp

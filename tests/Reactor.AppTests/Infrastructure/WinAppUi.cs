@@ -262,27 +262,17 @@ public sealed class WinAppUi
     /// predate <c>--cli-schema</c>, and that is precisely the case this probe exists to detect —
     /// answering <see cref="UiVerbSupport.Unreadable"/> there would lose a measurement the older
     /// path can still make.</para>
+    /// <para>Both attempts share one <see cref="YieldTimeoutMs"/> budget. Two independently
+    /// bounded waits would let a generally unresponsive binary cost twice the advertised probe
+    /// time, and a timed-out first attempt stops the probe outright: a winapp that hangs on
+    /// <c>--cli-schema</c> has not told us the flag is unsupported, so spawning a second child to
+    /// hang again would spend the remaining budget to learn nothing.</para>
     /// </remarks>
     private static UiVerbSupport ProbeYieldVerb()
     {
         try
         {
-            // Exact first. Anything other than a confident Present/Absent falls through, so a
-            // winapp that predates the schema flag is still measured rather than written off.
-            var schema = TryRunBounded(YieldTimeoutMs, "--cli-schema");
-            if (schema is { ExitCode: 0 } s)
-            {
-                var fromSchema = ParseUiVerbSupportFromSchema(s.StdOut, "yield");
-                if (fromSchema != UiVerbSupport.Unreadable) return fromSchema;
-            }
-
-            var help = TryRunBounded(YieldTimeoutMs, "--help");
-
-            // The exit code is not the signal here, but a non-zero one means the text that came
-            // back is not a command list worth parsing.
-            return help is { ExitCode: 0 } h
-                ? ParseUiVerbSupport(h.StdOut, "yield")
-                : UiVerbSupport.Unreadable;
+            return ProbeYieldVerb(TryRunBounded, "yield", YieldTimeoutMs);
         }
         // Same narrow set as ReleaseUiTurn: these mean "winapp could not be run here". That is
         // not the verb being absent, and saying so would be claiming a measurement never taken.
@@ -290,6 +280,47 @@ public sealed class WinAppUi
         catch (InvalidOperationException) { return UiVerbSupport.Unreadable; }
         catch (NotSupportedException) { return UiVerbSupport.Unreadable; }
         catch (TypeInitializationException) { return UiVerbSupport.Unreadable; }
+    }
+
+    /// <summary>Runs one bounded <c>winapp ui</c> child; the seam the probe orchestration uses.</summary>
+    internal delegate BoundedRun UiProbeRunner(int timeoutMs, params string[] args);
+
+    /// <summary>
+    /// The schema-first / help-fallback decision, separated from process launching so the
+    /// orchestration itself is testable.
+    /// </summary>
+    /// <remarks>
+    /// Worth a seam rather than testing the two parsers alone: each parser can be correct while
+    /// the sequencing around them is wrong. A regression that returned
+    /// <see cref="UiVerbSupport.Unreadable"/> the moment the schema was unusable would silently
+    /// drop support for every pre-<c>--cli-schema</c> winapp — exactly the builds this probe
+    /// exists to identify — and would leave every parser test green.
+    /// </remarks>
+    internal static UiVerbSupport ProbeYieldVerb(UiProbeRunner run, string verb, int budgetMs)
+    {
+        var clock = Stopwatch.StartNew();
+
+        var schema = run(budgetMs, "--cli-schema");
+
+        // A hang is not a verdict about the flag, and the budget is nearly spent regardless.
+        if (schema.Outcome == BoundedRunOutcome.TimedOut) return UiVerbSupport.Unreadable;
+
+        if (schema.Outcome == BoundedRunOutcome.Completed && schema.ExitCode == 0)
+        {
+            var fromSchema = ParseUiVerbSupportFromSchema(schema.StdOut, verb);
+            if (fromSchema != UiVerbSupport.Unreadable) return fromSchema;
+        }
+
+        var remainingMs = budgetMs - (int)clock.ElapsedMilliseconds;
+        if (remainingMs <= 0) return UiVerbSupport.Unreadable;
+
+        var help = run(remainingMs, "--help");
+
+        // The exit code is not the signal here, but a non-zero one means the text that came
+        // back is not a command list worth parsing.
+        return help is { Outcome: BoundedRunOutcome.Completed, ExitCode: 0 }
+            ? ParseUiVerbSupport(help.StdOut, verb)
+            : UiVerbSupport.Unreadable;
     }
 
     /// <summary>
@@ -425,7 +456,8 @@ public sealed class WinAppUi
             // build that rejects the verb it writes to stderr as well. Leaving either redirected
             // stream unread risks the child blocking on a full pipe until this call times out and
             // kills it, turning a yield that actually worked into a phantom failure.
-            return TryRunBounded(YieldTimeoutMs, "yield", "--json")?.ExitCode;
+            var run = TryRunBounded(YieldTimeoutMs, "yield", "--json");
+            return run.Outcome == BoundedRunOutcome.Completed ? run.ExitCode : null;
         }
         // Narrow rather than bare: the contract is that yielding cannot redden a passing test, and
         // these are the failures that actually mean "winapp could not be run here" (missing or
@@ -561,16 +593,46 @@ public sealed class WinAppUi
     /// fire: a child that stopped producing stdout hung the probe for the whole job rather than
     /// for <see cref="YieldTimeoutMs"/>.</para>
     /// </remarks>
-    private static RunResult? TryRunBounded(int timeoutMs, params string[] args)
+    private static BoundedRun TryRunBounded(int timeoutMs, params string[] args)
+        => RunBounded(CreateStartInfo(args), timeoutMs);
+
+    /// <summary>Why a <see cref="BoundedRun"/> ended, so callers can tell "no" from "no answer".</summary>
+    internal enum BoundedRunOutcome
     {
-        using var proc = new Process { StartInfo = CreateStartInfo(args) };
+        /// <summary>The child exited on its own inside the budget; <c>ExitCode</c> is meaningful.</summary>
+        Completed,
+
+        /// <summary>The child overran the budget and was killed. Nothing was established.</summary>
+        TimedOut,
+
+        /// <summary>No process was created, so there was nothing to wait for.</summary>
+        NotStarted,
+    }
+
+    internal readonly record struct BoundedRun(
+        BoundedRunOutcome Outcome, int ExitCode, string StdOut, string StdErr);
+
+    /// <summary>
+    /// Runs one child to completion under <paramref name="timeoutMs"/>, draining both redirected
+    /// streams throughout, and reports how it ended rather than collapsing every failure to null.
+    /// </summary>
+    /// <remarks>
+    /// Takes a <see cref="ProcessStartInfo"/> rather than winapp arguments so the draining and
+    /// the timeout — the two behaviours this exists for — can be regression-tested against a
+    /// child whose output volume and lifetime the test controls. A winapp cannot be made to flood
+    /// a pipe or hang on demand, so a test that could only go through <see cref="CreateStartInfo"/>
+    /// would be asserting against whatever the installed CLI happened to do.
+    /// </remarks>
+    internal static BoundedRun RunBounded(ProcessStartInfo psi, int timeoutMs)
+    {
+        using var proc = new Process { StartInfo = psi };
 
         var sbOut = new StringBuilder();
         var sbErr = new StringBuilder();
         proc.OutputDataReceived += (_, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
         proc.ErrorDataReceived += (_, e) => { if (e.Data != null) sbErr.AppendLine(e.Data); };
 
-        if (!proc.Start()) return null;
+        if (!proc.Start()) return new BoundedRun(BoundedRunOutcome.NotStarted, 0, "", "");
 
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
@@ -578,13 +640,14 @@ public sealed class WinAppUi
         if (!proc.WaitForExit(timeoutMs))
         {
             TryKill(proc);
-            return null;
+            return new BoundedRun(BoundedRunOutcome.TimedOut, 0, sbOut.ToString(), sbErr.ToString());
         }
 
         // Ensure async buffers are flushed.
         proc.WaitForExit();
 
-        return new RunResult(proc.ExitCode, sbOut.ToString(), sbErr.ToString());
+        return new BoundedRun(
+            BoundedRunOutcome.Completed, proc.ExitCode, sbOut.ToString(), sbErr.ToString());
     }
 
     // Bumps the process-global spawn counter from a static scope, keeping the mutation off the
