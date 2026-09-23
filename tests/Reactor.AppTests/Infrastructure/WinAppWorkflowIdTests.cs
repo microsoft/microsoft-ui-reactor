@@ -195,38 +195,35 @@ public class WinAppWorkflowIdTests
     // worse, because it reads as a working differential while measuring nothing. `ReleaseUiTurn`
     // itself is best-effort in production and is unaffected either way.
 
-    /// <summary>
-    /// Whether the resolved winapp understands <c>ui yield</c> at all, as opposed to
-    /// understanding it and refusing this caller.
-    /// </summary>
-    /// <remarks>
-    /// Delegates to the harness rather than probing separately: production now skips the yield
-    /// on a winapp without the verb, so a second probe here could disagree with the one that
-    /// actually governs behaviour, and these gates would then describe a capability the suite
-    /// was not using. Sharing the cache also keeps the whole run to a single probe process.
-    /// </remarks>
-    private static bool YieldVerbExists() => WinAppUi.SupportsUiYield;
-
     private static void RequireYieldVerb()
     {
-        var present = YieldVerbExists();
+        var support = WinAppUi.UiYieldSupport;
+        var present = support == WinAppUi.UiVerbSupport.Present;
 
         // Unconditional, so the capability is a recorded fact rather than an inference from a
         // test that quietly did not run. MTP reports `Assert.Inconclusive` as *passed with zero
         // skipped*, so without this line a run where winapp lacks the verb is indistinguishable
         // in every report from one where the differential was measured and held.
+        //
+        // The resolved path is logged beside it because the capability is a property of *that*
+        // binary: CI's own diagnostic step once reported the verb present while this gate
+        // reported it absent in the same job, which is only explicable if the two were asking
+        // different winapps. Printing the path turns that from a guess into a comparison.
         Console.WriteLine(
-            $"[Reactor.AppTests] winapp `ui yield` verb present: {present}. " +
+            $"[Reactor.AppTests] winapp `ui yield` support: {support} (present: {present}). " +
+            $"Resolved winapp: {WinAppUi.ResolvedWinAppExe}. " +
             $"Strict mode ({RequireYieldEnvVar}): {StrictYieldRequested()}.");
 
         if (present) return;
 
-        var explanation =
-            "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
-            "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
-            "(merged 2026-09-09) and no published winapp contains it yet — v0.6.0 is the " +
-            "newest stable and v0.6.1 the newest prerelease, both from August 2026 — so " +
-            "there is no version to pin `setup-WinAppCli` to.";
+        var explanation = support == WinAppUi.UiVerbSupport.Unreadable
+            ? "The resolved winapp did not return a readable `ui --help` command list, so " +
+              "whether it implements `ui yield` was never established. This is not the same as " +
+              "the verb being absent: it means the probe itself failed, and treating it as " +
+              "absence would be reporting a measurement that was never taken."
+            : "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
+              "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
+              "(merged 2026-09-09); pin a winapp containing it to make this measurable.";
 
         // Opt-in enforcement. The verb cannot be required by default without turning every run
         // red against a dependency that has not shipped it, but a caller that *has* pinned a
@@ -236,8 +233,8 @@ public class WinAppWorkflowIdTests
         if (StrictYieldRequested())
         {
             Assert.Fail(
-                $"{explanation} {RequireYieldEnvVar} is set, so its absence is being treated as " +
-                "a failure: either pin a winapp containing #767 or unset the variable.");
+                $"{explanation} {RequireYieldEnvVar} is set, so anything short of a confirmed " +
+                "verb is a failure: either pin a winapp containing #767 or unset the variable.");
         }
 
         Assert.Inconclusive(
@@ -424,5 +421,121 @@ public class WinAppWorkflowIdTests
             WinAppWorkflowIdTests.IsStrictYieldValue(value),
             $"'{value}' did not enable strict mode, so pinning a winapp with the verb still " +
             "could not turn the silent skip into a measurement.");
+    }
+
+    // ── Verb capability probe ────────────────────────────────────────────────
+    //
+    // The probe this covers replaced one that asked `winapp ui yield --help` and read the exit
+    // code. Measured against winapp 0.6.3-prerelease.92, that oracle cannot discriminate:
+    //
+    //     winapp ui yield        --help  -> exit 0   (verb exists)
+    //     winapp ui bogusverbxyz --help  -> exit 0   (verb does NOT exist)
+    //     winapp ui bogusverbxyz         -> exit 1   (control: the non-help path still errors)
+    //
+    // An unrecognized verb is not rejected; winapp prints the *parent* help instead, output
+    // byte-identical to `winapp ui --help`, never naming the token it did not understand. The old
+    // probe therefore answered "present" for every verb. It still returned the right answer in
+    // practice — the published builds lacking `yield` are old enough to reject unmatched tokens —
+    // so nothing misbehaved, but it had stopped measuring, which would have made
+    // REACTOR_E2E_REQUIRE_UI_YIELD a gate incapable of failing.
+    //
+    // The fixtures below are shaped after real `winapp ui --help` output.
+
+    private const string HelpWithYield = """
+        Description:
+          Inspect and interact with any running Windows app using UI Automation (UIA).
+
+        Usage:
+          winapp ui [command] [options]
+
+        Options:
+          -?, -h, --help  Show help and usage information
+
+        Commands:
+          status                        Connect to a target app and display connection info.
+          inspect <selector>            View the UI element tree with semantic slugs and bounds.
+          invoke <selector>             Activate an element by slug or text search.
+          yield                         Release the current workflow's idle UI turn early. A
+        """;
+
+    private const string HelpWithoutYield = """
+        Description:
+          Inspect and interact with any running Windows app using UI Automation (UIA).
+
+        Usage:
+          winapp ui [command] [options]
+
+        Commands:
+          status                        Connect to a target app and display connection info.
+          inspect <selector>            View the UI element tree with semantic slugs and bounds.
+          invoke <selector>             Activate an element by slug or text search.
+        """;
+
+    [TestMethod]
+    public void VerbProbe_ReportsPresentWhenTheCommandListNamesTheVerb()
+    {
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Present,
+            WinAppUi.ParseUiVerbSupport(HelpWithYield, "yield"),
+            "A winapp that lists `yield` must be reported as having it, or the suite skips the " +
+            "continuity it is able to exercise.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_ReportsAbsentWhenTheCommandListOmitsTheVerb()
+    {
+        // The case the old exit-code probe could not see. `HelpWithoutYield` is what an older
+        // winapp lists, and is exactly the text the previous implementation would have received a
+        // `0` alongside.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupport(HelpWithoutYield, "yield"),
+            "A winapp with no `yield` verb was reported as having it. That is the vacuous " +
+            "oracle this probe exists to replace: strict mode would then be unable to fail.");
+    }
+
+    [TestMethod]
+    [DataRow("workflow", DisplayName = "word from a description")]
+    [DataRow("Release", DisplayName = "first word of a description")]
+    [DataRow("element", DisplayName = "word from another description")]
+    public void VerbProbe_DoesNotMistakeDescriptionProseForAVerb(string word)
+    {
+        // Guards the obvious wrong fix. Searching the help *text* for a verb name looks like it
+        // works and does not: the parent listing carries every verb's description, so prose
+        // matches read as capabilities. Only the command names in the section count.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupport(HelpWithYield, word),
+            $"'{word}' appears only in description prose, so reporting it as a verb means the " +
+            "probe is matching text rather than parsing the command list.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_ReportsUnreadableWhenThereIsNoCommandList()
+    {
+        // An error page, a pager, or a truncated read. Distinct from Absent on purpose: calling
+        // this "the verb is missing" would report a measurement that never happened.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Unreadable,
+            WinAppUi.ParseUiVerbSupport("winapp: unknown option '--help'", "yield"),
+            "Output with no command list was treated as proof the verb is absent.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_ReportsUnreadableWhenNoLongStandingVerbIsListed()
+    {
+        // The format-change guard. A `Commands:` section that contains none of the verbs that have
+        // always existed means the parse is wrong, not that winapp lost its entire surface --
+        // without this, a reformat would silently read as "yield was removed" forever.
+        const string reshaped = """
+            Commands:
+              --status                      Connect to a target app.
+              --inspect                     View the UI element tree.
+            """;
+
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Unreadable,
+            WinAppUi.ParseUiVerbSupport(reshaped, "yield"),
+            "A command list whose entries no longer parse was read as a definitive answer.");
     }
 }

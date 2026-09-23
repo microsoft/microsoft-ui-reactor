@@ -291,8 +291,13 @@ jobs:
           dotnet-version: 10.0.x
 
       # Install the `winapp` CLI (winapp ui drives the UIA automation that replaced
-      # WinAppDriver/Appium). The action downloads it and adds it to PATH, which
-      # WinAppUi.ResolveWinAppExe() picks up via its PATH fallback.
+      # WinAppDriver/Appium). The action downloads it and adds it to PATH.
+      #
+      # PATH alone does not decide what the tests use. WinAppUi.ResolveWinAppExe() prefers, in
+      # order: $REACTOR_WINAPP_EXE, then %LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe, and only
+      # then PATH — so on a runner that happens to carry a winapp in LOCALAPPDATA, the version
+      # pinned here would be installed and then quietly not used. The step below resolves the same
+      # way and exports the result, which is what makes this pin actually govern the suite.
       - name: Setup winapp CLI
         uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
@@ -315,17 +320,58 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          # $LASTEXITCODE must be read with no pipeline-stopping cmdlet in between: piping a
-          # native command into `Select-Object -First 1` stops the pipeline early and leaves
-          # $LASTEXITCODE *empty*, which compares unequal to 0 and would report a winapp that
-          # resolved perfectly well as missing.
-          $versionLines = winapp --version 2>&1
-          $version = if ($LASTEXITCODE -eq 0) { $versionLines | Select-Object -First 1 }
-                     else { "<winapp did not resolve>" }
-          winapp ui yield --help *> $null
-          $present = ($LASTEXITCODE -eq 0)
+          # Resolve the same binary the tests will, in the same order as
+          # WinAppUi.ResolveWinAppExe(), then export it so the two provably agree. This step and
+          # the suite previously disagreed inside one job — the step reported the verb present
+          # while the gate reported it absent — which is only possible if they asked different
+          # winapps. Pinning the path removes the ambiguity rather than explaining it.
+          $candidates = @(
+            $env:REACTOR_WINAPP_EXE,
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winapp.exe'),
+            (Get-Command winapp -CommandType Application -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty Source)
+          )
+          $exe = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+          if (-not $exe) {
+            Write-Host 'winapp did not resolve on this runner.'
+            'winapp: **did not resolve**' >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          "REACTOR_WINAPP_EXE=$exe" >> $env:GITHUB_ENV
+
+          # `winapp --version` prints an ASCII-art banner before the version, so the first line is
+          # the top of a logo rather than a number. Take the first semver-shaped token instead.
+          $versionText = (& $exe --version 2>&1 | Out-String)
+          $m = [regex]::Match($versionText, '\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?')
+          $version = if ($m.Success) { $m.Value } else { '<unparsed>' }
+
+          # Presence is read from the command list, NOT from the exit code of
+          # `ui yield --help`. An unrecognized verb is not rejected: winapp prints the parent help
+          # and exits 0, so an exit-code probe reports every verb as present. Matching the help
+          # *text* is equally wrong, because the parent listing contains every verb's description
+          # — only a command-list entry distinguishes them. Mirrors WinAppUi.ParseUiVerbSupport.
+          $help = (& $exe ui --help 2>&1 | Out-String) -split "`r?`n"
+          $start = [Array]::FindIndex($help, [Predicate[string]] { $args[0].Trim() -ceq 'Commands:' })
+          $verbs = @()
+          if ($start -ge 0) {
+            for ($i = $start + 1; $i -lt $help.Length; $i++) {
+              $line = $help[$i]
+              if ([string]::IsNullOrWhiteSpace($line)) { continue }
+              if ($line[0] -notmatch '\s') { break }
+              $verbs += ($line.Trim() -split '\s+')[0]
+            }
+          }
+
+          # Same sentinel rule as the harness: without a long-standing verb in the parsed set, the
+          # parse failed and "absent" would be a conclusion drawn from nothing.
+          $readable = @('status', 'inspect', 'invoke') | Where-Object { $verbs -ccontains $_ }
+          $present = if ($readable) { $verbs -ccontains 'yield' } else { '<unreadable>' }
+
+          Write-Host "winapp path: $exe"
           Write-Host "winapp version: $version"
           Write-Host "winapp 'ui yield' verb present: $present"
+          "winapp path: ``$exe``" >> $env:GITHUB_STEP_SUMMARY
           "winapp version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
           "winapp ``ui yield`` verb present (winappCli#767): **$present**" >> $env:GITHUB_STEP_SUMMARY
 

@@ -36,6 +36,32 @@ Conventions for contributors:
 
 ### Fixed
 
+- The E2E suite's `winapp ui yield` capability probe measures something again. It asked
+  `winapp ui yield --help` and read the exit code, but an unrecognized verb is not rejected:
+  measured against winapp 0.6.3-prerelease.92, `ui bogusverbxyz --help` exits `0` and prints
+  output byte-identical to `ui --help`, never naming the token it did not understand. The probe
+  therefore answered "present" for every verb, invented ones included. Nothing misbehaved — the
+  published builds lacking the verb are old enough to still reject unmatched tokens, so the right
+  answer came back for the wrong reason — but `REACTOR_E2E_REQUIRE_UI_YIELD` is meant to turn a
+  missing verb into a failure, and a gate built on an oracle that cannot say "no" cannot fail.
+  The probe now parses the command list from `winapp ui --help`. Grepping that text for the verb
+  name would not have fixed it: the parent listing carries every verb's description, so the word
+  is present either way.
+- A capability probe that cannot read winapp's help no longer reports the verb as absent. The
+  result is a tri-state, and `Unreadable` fails under `REACTOR_E2E_REQUIRE_UI_YIELD` rather than
+  passing as a skip — "the probe broke" is not "the feature is missing". A command list with none
+  of the long-standing verbs in it counts as unreadable too, so a future reformat of winapp's help
+  surfaces as a failure to parse instead of reading as "yield was removed" on every run forever.
+- CI's winapp capability step and the E2E suite now provably inspect the same binary. They
+  disagreed inside a single job — the step reported the verb present while the suite reported it
+  absent — because the step ran whatever `winapp` PATH resolved while
+  `WinAppUi.ResolveWinAppExe()` prefers `$REACTOR_WINAPP_EXE`, then
+  `%LOCALAPPDATA%\Microsoft\WindowsApps`, and only then PATH. The step now resolves in that same
+  order and exports the result, which also means the version CI installs is the version CI tests;
+  the suite logs the path it resolved beside the capability.
+- CI's recorded winapp version is a version again rather than the first line of an ASCII-art
+  banner, which is what `winapp --version` leads with on the runner.
+
 ### Security
 
 ## [0.1.0-preview.16] — 2026-09-22

@@ -868,17 +868,46 @@ the turn in `[TestCleanup]` once a test has actually used winapp — holding it 
 longer gaps *between* tests would block a waiting agent for the idle grace after every test.
 
 The yield is also gated on the resolved winapp implementing `ui yield` at all, probed once per
-test process via `winapp ui yield --help` and cached on `WinAppUi.SupportsUiYield`. Against a
-pre-#767 build there is no turn to release, so the handoff would spawn a `winapp.exe` per UI test
-only to have it exit on an unknown verb. `--help` is the probe rather than a real yield because a
-yield's exit code is non-zero both for "no such verb" and for "verb present, no workflow id
-arrived", and caching the second as the first would silently disable continuity exactly when the
-wiring had broken.
+test process and cached on `WinAppUi.SupportsUiYield`. Against a pre-#767 build there is no turn
+to release, so the handoff would spawn a `winapp.exe` per UI test only to have it exit on an
+unknown verb.
+
+**The probe reads the command list, not an exit code.** It runs `winapp ui --help` and looks for
+`yield` among the parsed command names. The obvious cheaper probe does not work, and the way it
+fails is worth knowing, because it looks like it works. Measured against winapp
+0.6.3-prerelease.92:
+
+```text
+winapp ui yield        --help  -> exit 0   (verb exists)
+winapp ui bogusverbxyz --help  -> exit 0   (verb does NOT exist)
+winapp ui bogusverbxyz         -> exit 1   (control: the non-help path still errors)
+```
+
+An unrecognized verb is not rejected. winapp prints the *parent* help instead — output
+byte-identical to `winapp ui --help`, never naming the token it did not understand — so an
+exit-code probe answers "present" for every verb, including invented ones. Searching that output
+for the verb name fails for the same reason: the parent listing carries every verb's description,
+so the word is there whether or not the verb is. Only a command-list entry separates them.
+
+The probe is a tri-state (`WinAppUi.UiVerbSupport`). `Unreadable` is deliberately not folded into
+`Absent`: if no command list comes back, or none of the long-standing verbs (`status`, `inspect`,
+`invoke`) appear in it, then the parse failed and nothing was established — reporting that as
+"the verb is missing" would be publishing a measurement that was never taken, and would also let
+a future reformat of winapp's help read as "yield was removed" forever. Under
+`REACTOR_E2E_REQUIRE_UI_YIELD`, anything short of `Present` fails.
 
 An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
 own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp
 rejects an empty or over-long id on every single command, so one of those would fail the entire
 suite rather than merely lose continuity, and the harness synthesizes an id instead.
+
+> **Which winapp is "the resolved winapp" matters.** `WinAppUi.ResolveWinAppExe()` prefers
+> `$REACTOR_WINAPP_EXE`, then `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe`, and only then
+> `PATH`. Installing a specific winapp and putting it on `PATH` therefore does not guarantee the
+> suite uses it. CI's capability step resolves in that same order and exports
+> `REACTOR_WINAPP_EXE`, so its pin governs the tests rather than merely being present; the suite
+> logs the path it resolved beside the capability for the same reason. This was not hypothetical:
+> the step and the suite once reported opposite answers for the verb inside a single job.
 
 > **This does not stop a non-winapp window stealing the foreground.** Turn arbitration only
 > coordinates winapp callers. On a busy desktop, clicks still fail with

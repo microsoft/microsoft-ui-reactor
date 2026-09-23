@@ -46,6 +46,18 @@ public sealed class WinAppUi
 {
     private static readonly string WinAppExe = ResolveWinAppExe();
 
+    /// <summary>
+    /// The winapp binary this process resolved, for diagnostics.
+    /// </summary>
+    /// <remarks>
+    /// Worth recording rather than inferring. <see cref="ResolveWinAppExe"/> prefers an explicit
+    /// override, then <c>%LOCALAPPDATA%\Microsoft\WindowsApps</c>, and only then <c>PATH</c> — so
+    /// a caller that installs a specific winapp and puts it on <c>PATH</c> can still be running a
+    /// different one, and a bare <c>winapp</c> on the command line is not necessarily the binary
+    /// these tests use. Printing the path is what makes those two facts comparable.
+    /// </remarks>
+    internal static string ResolvedWinAppExe => WinAppExe;
+
     private readonly int _pid;
 
     /// <summary>HWND of the primary Host window, captured at session start.</summary>
@@ -193,44 +205,130 @@ public sealed class WinAppUi
     /// threads reach it together, which is the difference between one extra <c>winapp.exe</c> and
     /// one per worker.</para>
     /// </remarks>
-    internal static bool SupportsUiYield => YieldVerb.Value;
-
-    private static readonly Lazy<bool> YieldVerb = new(ProbeYieldVerb);
+    internal static bool SupportsUiYield => YieldVerb.Value == UiVerbSupport.Present;
 
     /// <summary>
-    /// Asks the resolved winapp whether it understands <c>ui yield</c>, as opposed to
-    /// understanding it and refusing this caller.
+    /// The raw tri-state behind <see cref="SupportsUiYield"/>, so a caller that must not proceed
+    /// on a guess can tell "winapp says no" from "winapp did not answer".
+    /// </summary>
+    internal static UiVerbSupport UiYieldSupport => YieldVerb.Value;
+
+    private static readonly Lazy<UiVerbSupport> YieldVerb = new(ProbeYieldVerb);
+
+    /// <summary>What a capability probe was able to establish about one <c>winapp ui</c> verb.</summary>
+    internal enum UiVerbSupport
+    {
+        /// <summary>The verb is listed by <c>winapp ui --help</c>.</summary>
+        Present,
+
+        /// <summary>The command list was read, and the verb is not in it.</summary>
+        Absent,
+
+        /// <summary>
+        /// No usable command list came back, so nothing was established either way. Distinct from
+        /// <see cref="Absent"/> on purpose: absence is a measurement, this is its failure.
+        /// </summary>
+        Unreadable,
+    }
+
+    /// <summary>
+    /// Asks the resolved winapp whether it understands <c>ui yield</c>, by reading the command
+    /// list out of <c>winapp ui --help</c>.
     /// </summary>
     /// <remarks>
-    /// <c>--help</c> for a verb that exists succeeds and never consults the environment, which is
-    /// what makes it a capability probe rather than a yield attempt. The exit code of a real
-    /// <c>ui yield</c> cannot be used here: it is non-zero both for "no such verb" and for "verb
-    /// present, no workflow id reached me", and caching the second as the first would silently
-    /// disable yielding for a whole run precisely when the continuity wiring had broken.
+    /// <para>This deliberately does not run <c>ui yield --help</c> and check the exit code, which
+    /// is what it used to do. Measured against winapp 0.6.3-prerelease.92, an unrecognized verb
+    /// does not error: <c>ui bogusverbxyz --help</c> exits <c>0</c> and prints output
+    /// byte-identical to <c>ui --help</c>, never mentioning the unrecognized token. The old probe
+    /// therefore answered "yes" for every verb, including ones that do not exist. It happened to
+    /// return the right answer — the published builds that lack <c>yield</c> are old enough to
+    /// still reject unmatched tokens — but it was no longer measuring anything, which would have
+    /// made <c>REACTOR_E2E_REQUIRE_UI_YIELD</c> a gate that cannot fail.</para>
+    /// <para>Grepping the output of <c>ui yield --help</c> for the word "yield" does not fix it
+    /// either, and is the trap worth naming: the fallback help lists every subcommand with its
+    /// description, so the word is present whether or not the verb is. Only the parent command
+    /// list distinguishes them.</para>
     /// </remarks>
-    private static bool ProbeYieldVerb()
+    private static UiVerbSupport ProbeYieldVerb()
     {
         try
         {
-            var psi = CreateStartInfo("yield", "--help");
+            var psi = CreateStartInfo("--help");
 
             using var proc = Process.Start(psi);
-            if (proc is null) return false;
+            if (proc is null) return UiVerbSupport.Unreadable;
+
+            // Read before waiting: winapp's command list is larger than a pipe buffer, and a
+            // child that fills stdout while we wait for exit deadlocks against its own output.
+            var stdout = proc.StandardOutput.ReadToEnd();
 
             if (!proc.WaitForExit(YieldTimeoutMs))
             {
                 TryKill(proc);
-                return false;
+                return UiVerbSupport.Unreadable;
             }
 
-            return proc.ExitCode == 0;
+            // The exit code is not the signal here, but a non-zero one means the text that came
+            // back is not a command list worth parsing.
+            return proc.ExitCode == 0
+                ? ParseUiVerbSupport(stdout, "yield")
+                : UiVerbSupport.Unreadable;
         }
-        // Same narrow set as ReleaseUiTurn: these mean "winapp could not be run here", which is
-        // indistinguishable from the verb being absent as far as the caller is concerned.
-        catch (System.ComponentModel.Win32Exception) { return false; }
-        catch (InvalidOperationException) { return false; }
-        catch (NotSupportedException) { return false; }
-        catch (TypeInitializationException) { return false; }
+        // Same narrow set as ReleaseUiTurn: these mean "winapp could not be run here". That is
+        // not the verb being absent, and saying so would be claiming a measurement never taken.
+        catch (System.ComponentModel.Win32Exception) { return UiVerbSupport.Unreadable; }
+        catch (InvalidOperationException) { return UiVerbSupport.Unreadable; }
+        catch (NotSupportedException) { return UiVerbSupport.Unreadable; }
+        catch (TypeInitializationException) { return UiVerbSupport.Unreadable; }
+    }
+
+    /// <summary>
+    /// Verbs that have existed for as long as <c>winapp ui</c> has, used to prove the command
+    /// list was actually parsed before concluding anything from a verb's absence.
+    /// </summary>
+    /// <remarks>
+    /// Several rather than one so a single rename does not turn every run
+    /// <see cref="UiVerbSupport.Unreadable"/>; any one of them is enough to establish that the
+    /// section was found and understood.
+    /// </remarks>
+    private static readonly string[] SentinelUiVerbs = ["status", "inspect", "invoke"];
+
+    /// <summary>
+    /// Extracts the <c>Commands:</c> section from <c>winapp ui --help</c> and reports whether
+    /// <paramref name="verb"/> is listed in it.
+    /// </summary>
+    /// <remarks>
+    /// Pure, so the discriminator can be tested against captured help text without a winapp on
+    /// the machine. The sentinel check is what stops a format change from being read as "the
+    /// verb was removed": if not one long-standing verb can be found either, the parse failed
+    /// and the honest answer is <see cref="UiVerbSupport.Unreadable"/>.
+    /// </remarks>
+    internal static UiVerbSupport ParseUiVerbSupport(string uiHelp, string verb)
+    {
+        if (string.IsNullOrWhiteSpace(uiHelp)) return UiVerbSupport.Unreadable;
+
+        var lines = uiHelp.Replace("\r\n", "\n").Split('\n');
+
+        var header = Array.FindIndex(
+            lines, l => l.Trim().Equals("Commands:", StringComparison.Ordinal));
+        if (header < 0) return UiVerbSupport.Unreadable;
+
+        var listed = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = header + 1; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (line.Length == 0 || string.IsNullOrWhiteSpace(line)) continue;
+
+            // The section ends at the next unindented line: entries are indented, headers are not.
+            if (!char.IsWhiteSpace(line[0])) break;
+
+            var name = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+            listed.Add(name);
+        }
+
+        if (!SentinelUiVerbs.Any(listed.Contains)) return UiVerbSupport.Unreadable;
+
+        return listed.Contains(verb) ? UiVerbSupport.Present : UiVerbSupport.Absent;
     }
 
     /// <summary>
