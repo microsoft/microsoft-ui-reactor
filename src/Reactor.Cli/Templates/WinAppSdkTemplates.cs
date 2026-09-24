@@ -400,9 +400,13 @@ public static class WinAppSdkTemplates
     /// </param>
     /// <param name="version">Explicit version to pin. When omitted the newest published version is resolved.</param>
     /// <param name="feed">
-    /// NuGet v3 service-index URL used for version *resolution* only (never passed
-    /// to `dotnet new install`). bootstrap supplies the clone's configured feed so
-    /// a machine that cannot reach nuget.org still resolves a version.
+    /// NuGet v3 service-index URL for the mirror this clone is configured against.
+    /// Used for version resolution *and* added to the install as a supplementary
+    /// source: `dotnet new install` runs its own restore and ignores the MSBuild
+    /// restore environment, so a mirror-only machine would otherwise resolve a
+    /// version and then fail to download it. Ignored unless it passes
+    /// <see cref="IsAllowedFeedUrl"/>, which also forbids credentials — so nothing
+    /// secret reaches the child process command line.
     /// </param>
     /// <remarks>
     /// Returns what actually happened rather than a bare exit code: "kept the
@@ -413,6 +417,8 @@ public static class WinAppSdkTemplates
     {
         var hasSource = !string.IsNullOrWhiteSpace(source);
         var pinned = !string.IsNullOrWhiteSpace(version);
+        // Only a policy-passing feed may be handed to `dotnet new install`.
+        var installFeed = !string.IsNullOrWhiteSpace(feed) && IsAllowedFeedUrl(feed) ? feed : null;
         // `--source` must be a local folder of nupkgs.
         //
         // `dotnet new install` has no feed-isolation switch: `--add-source` only
@@ -495,19 +501,29 @@ public static class WinAppSdkTemplates
                 return InstallOutcome.Failed;
 
             case InstallAction.PlainInstall:
-                return RunInstall(workingDirectory, target, source, force: false, installed);
+                return RunInstall(workingDirectory, target, source, installFeed, force: false, installed);
 
             default: // ForcedReplace
-                return RunInstall(workingDirectory, target, source, force: true, installed);
+                return RunInstall(workingDirectory, target, source, installFeed, force: true, installed);
         }
     }
 
-    static InstallOutcome RunInstall(string workingDirectory, string? target, string? source, bool force, string? installed)
+    /// <summary>
+    /// Argument list for `dotnet new install`. Pure, so the source wiring is
+    /// testable without launching a process.
+    /// </summary>
+    /// <remarks>
+    /// Both sources are <c>--add-source</c>, but they mean different things.
+    /// <paramref name="source"/> is a local folder the caller said to install
+    /// *from*; <paramref name="feed"/> is the mirror this clone is configured
+    /// against, and it has to be here as well as in version resolution —
+    /// `dotnet new install` runs its own restore and ignores the MSBuild
+    /// <c>RestoreSources</c>/<c>RestoreConfigFile</c> that
+    /// <c>Invoke-ReactorWithRestoreEnvironment</c> sets, so a mirror-only machine
+    /// would resolve a version and then fail to download it.
+    /// </remarks>
+    internal static IReadOnlyList<string> BuildInstallArgs(string? target, string? source, string? feed, bool force)
     {
-        Console.WriteLine(installed is null
-            ? $"  Installing {PackageId} {target ?? "(latest stable)"}"
-            : $"  Updating {PackageId} {installed} → {target}");
-
         // `<id>::<version>` is `dotnet new install`'s explicit-version syntax and
         // the only way to reach a prerelease — a bare id resolves stable-only.
         var spec = target is null ? PackageId : $"{PackageId}::{target}";
@@ -518,10 +534,29 @@ public static class WinAppSdkTemplates
             args.Add("--add-source");
             args.Add(source!);
         }
+        if (!string.IsNullOrWhiteSpace(feed))
+        {
+            args.Add("--add-source");
+            args.Add(feed!);
+        }
+        return args;
+    }
 
-        // Echo with the source redacted — a feed URL can carry a PAT, and this line
-        // lands in console output and CI logs.
-        var echo = args.Select(a => string.Equals(a, source, StringComparison.Ordinal) ? RedactSource(a) : a);
+    static InstallOutcome RunInstall(string workingDirectory, string? target, string? source, string? feed, bool force, string? installed)
+    {
+        Console.WriteLine(installed is null
+            ? $"  Installing {PackageId} {target ?? "(latest stable)"}"
+            : $"  Updating {PackageId} {installed} → {target}");
+
+        var args = BuildInstallArgs(target, source, feed, force).ToList();
+
+        // Echo with every source redacted — redact by *position* (the value after
+        // each --add-source) rather than by comparing against one variable, so a
+        // second source can't slip through unredacted.
+        var echo = args.Select((a, i) =>
+            i > 0 && string.Equals(args[i - 1], "--add-source", StringComparison.Ordinal)
+                ? RedactSource(a)
+                : a);
         Console.WriteLine($"  dotnet {string.Join(' ', echo)}");
 
         var rc = Run(workingDirectory, args.ToArray());

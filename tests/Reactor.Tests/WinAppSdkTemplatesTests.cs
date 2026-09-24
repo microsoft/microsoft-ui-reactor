@@ -726,6 +726,41 @@ public sealed class WinAppSdkTemplatesTests
         Assert.Contains("Could not enumerate", block, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BuildInstallArgs_adds_both_the_folder_source_and_the_mirror_feed()
+    {
+        // `dotnet new install` runs its own restore and ignores the MSBuild
+        // RestoreSources/RestoreConfigFile that Invoke-ReactorWithRestoreEnvironment
+        // sets, so the configured mirror has to appear here too. Resolving a version
+        // from the mirror and then downloading it from nowhere is the failure mode.
+        var args = WinAppSdkTemplates.BuildInstallArgs(
+            "0.0.7-alpha", @"C:\pkgs", "https://mirror.example.com/v3/index.json", force: true);
+
+        Assert.Equal(
+            new[]
+            {
+                "new", "install", $"{WinAppSdkTemplates.PackageId}::0.0.7-alpha", "--force",
+                "--add-source", @"C:\pkgs",
+                "--add-source", "https://mirror.example.com/v3/index.json",
+            },
+            args);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(@"C:\pkgs", null)]
+    [InlineData(null, "https://mirror.example.com/v3/index.json")]
+    public void BuildInstallArgs_emits_a_source_flag_only_when_it_has_a_value(string? source, string? feed)
+    {
+        var args = WinAppSdkTemplates.BuildInstallArgs("1.0.0", source, feed, force: false);
+
+        var expected = new[] { source, feed }.Count(v => !string.IsNullOrWhiteSpace(v));
+        Assert.Equal(expected, args.Count(a => a == "--add-source"));
+        // A dangling `--add-source` with no value would make `dotnet new install`
+        // swallow the next token, so the flag must never outnumber the values.
+        Assert.DoesNotContain("--force", args);
+    }
+
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
     //
     // Observed live during the de-stale merge: the machine had
