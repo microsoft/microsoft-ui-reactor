@@ -1304,6 +1304,90 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void A_Message_Whose_Text_Contains_The_Snapshot_Separators_Is_Still_Distinguished()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "",
+                Validate.Must<string>(_ => false, "a"),
+                Validate.Must<string>(_ => false, "b"));
+
+        var two = ctx.GetMessages("email");
+        Assert.Equal(2, two.Count);
+        Assert.Equal(1, notifications);
+
+        // One message crafted to serialize exactly like those two under a
+        // separator-only encoding: it embeds the record separator and a second
+        // message header. Derived from the real metadata so it cannot drift.
+        var collider = $"a\u0003i\u0001{two[0].Severity}\u0001{two[0].Code}\u0001b";
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Must<string>(_ => false, collider));
+
+        Assert.Single(ctx.GetMessages("email"));
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
+    public async Task The_Async_Field_Path_Registers_Its_Field()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "email", "",
+            [Validate.MustAsync<string>(_ => Task.FromResult(false), "Already registered")],
+            TestContext.Current.CancellationToken);
+
+        Assert.Contains("email", ctx.RegisteredFields);
+
+        // The point of registering: MarkAllTouched() has to cover it.
+        ctx.MarkAllTouched();
+        Assert.True(ctx.IsTouched("email"));
+    }
+
+    [Fact]
+    public void The_Batch_Rule_Path_Registers_Every_Rule_Field()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.EvaluateRules(
+            ctx,
+            ValidationRule(() => false, "Range is closed", "start"),
+            ValidationRule(() => true, "Range is too long", "end"));
+
+        Assert.Contains("start", ctx.RegisteredFields);
+        Assert.Contains("end", ctx.RegisteredFields);
+    }
+
+    [Fact]
+    public async Task An_Overtaken_Async_Batch_Stands_Down_Instead_Of_Overwriting()
+    {
+        var ctx = new ValidationContext();
+        var slow = new TaskCompletionSource<bool>();
+
+        // Older batch: blocks on field "a".
+        var older = ValidationReconciler.EvaluateRulesAsync(
+            ctx, ValidationRuleAsync(() => slow.Task, "Stale verdict", "a"));
+
+        // Newer batch, requested while the older one is still out.
+        var newer = ValidationReconciler.EvaluateRulesAsync(
+            ctx, ValidationRuleAsync(() => Task.FromResult(false), "Current verdict", "b"));
+
+        slow.SetResult(false);
+        await older;
+        await newer;
+
+        // The older batch stood down: it neither installed its own verdict nor retired
+        // the newer batch's producer.
+        Assert.Empty(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.Equal("Current verdict", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

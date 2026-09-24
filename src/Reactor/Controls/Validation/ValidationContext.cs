@@ -182,6 +182,12 @@ public sealed class ValidationContext
     /// iteration order cannot matter, but each field's list keeps its own order:
     /// <see cref="GetMessages"/> exposes that order and callers read the first message,
     /// so a reordering is a real change subscribers have to hear about.
+    /// <para>
+    /// Every value is length-prefixed rather than delimiter-separated. Field names, codes
+    /// and message text are arbitrary strings, so a separator-only encoding lets one
+    /// message whose text happens to contain the separators serialize identically to two
+    /// — and a real change would then be mistaken for net-zero and suppressed.
+    /// </para>
     /// </summary>
     private string MessageSnapshotLocked()
     {
@@ -192,22 +198,38 @@ public sealed class ValidationContext
         var sb = new global::System.Text.StringBuilder();
         foreach (var field in fields)
         {
-            sb.Append(field).Append('\u0002');
-            if (_messages.TryGetValue(field, out var owned))
+            AppendCounted(sb, field);
+            _messages.TryGetValue(field, out var owned);
+            _externalMessages.TryGetValue(field, out var external);
+            sb.Append(owned?.Count ?? 0).Append('/').Append(external?.Count ?? 0).Append('|');
+
+            if (owned is not null)
             {
-                foreach (var m in owned)
-                    sb.Append('i').Append('\u0001').Append(m.Severity).Append('\u0001')
-                      .Append(m.Code).Append('\u0001').Append(m.Text).Append('\u0003');
+                foreach (var m in owned) AppendMessage(sb, 'i', m);
             }
-            if (_externalMessages.TryGetValue(field, out var external))
+            if (external is not null)
             {
-                foreach (var m in external)
-                    sb.Append('e').Append('\u0001').Append(m.Severity).Append('\u0001')
-                      .Append(m.Code).Append('\u0001').Append(m.Text).Append('\u0003');
+                foreach (var m in external) AppendMessage(sb, 'e', m);
             }
-            sb.Append('\u0004');
         }
         return sb.ToString();
+    }
+
+    private static void AppendMessage(global::System.Text.StringBuilder sb, char kind, ValidationMessage message)
+    {
+        sb.Append(kind).Append((int)message.Severity).Append(':');
+        AppendCounted(sb, message.Code);
+        AppendCounted(sb, message.Text);
+    }
+
+    private static void AppendCounted(global::System.Text.StringBuilder sb, string? value)
+    {
+        if (value is null)
+        {
+            sb.Append("n|");
+            return;
+        }
+        sb.Append(value.Length).Append('|').Append(value);
     }
 
     private string? _lastNotifiedMessages;
@@ -870,6 +892,26 @@ public sealed class ValidationContext
             BumpVersionLocked(messagesOnly: false);
         }
         RaiseChanged();
+    }
+
+    /// <summary>
+    /// Drops a producer's async generation entry without touching its messages, for a
+    /// producer that has stopped being asynchronous.
+    /// <para>
+    /// A mounted rule keeps its identity across a swap from <c>ValidationRuleAsync</c> to
+    /// <c>ValidationRule</c>. Leaving the stale entry behind would make the next value
+    /// change treat that producer as async and retract a synchronous verdict that is
+    /// still current.
+    /// </para>
+    /// </summary>
+    internal void ClearAsyncGeneration(string field, string producer)
+    {
+        lock (_lock)
+        {
+            if (!_asyncGeneration.TryGetValue(field, out var byProducer)) return;
+            byProducer.Remove(producer);
+            if (byProducer.Count == 0) _asyncGeneration.Remove(field);
+        }
     }
 
     /// <summary>

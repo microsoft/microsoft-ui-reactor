@@ -122,6 +122,12 @@ Conventions for contributors:
   the net state never moved, but each write announced a change that scheduled
   another identical pass. A render that ends with the same messages it started
   with is now silent (issue #1262).
+- `ValidationReconciler.ValidateFieldAsync` and the rule batch paths did not register
+  the fields they validated, so `MarkAllTouched()` and the validity summary skipped a
+  field validated only through them (issue #1262).
+- A mounted rule swapped from `ValidationRuleAsync` to `ValidationRule` kept its async
+  generation entry, so the next value change treated it as async and retracted a
+  synchronous verdict that was still current (issue #1262).
 - An async `ValidationRule` evaluated synchronously — `.Evaluate(ctx)` or
   `EvaluateRules(...)` — recorded a passing verdict without ever running its
   predicate, reporting an invalid field as valid. Those paths now throw, and

@@ -1294,4 +1294,61 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a mounted rule that stops being async.
+    //
+    //  The placeholder, and therefore the producer identity, survives the swap.
+    //  Leaving the old async generation entry behind made the next value change
+    //  treat that producer as async and retract a synchronous verdict that was
+    //  still current.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_AsyncRuleBecomesSync(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            Action<bool>? setUseAsync = null;
+
+            host.Mount(c =>
+            {
+                var (useAsync, set) = c.UseState(true);
+                setUseAsync = set;
+
+                return VStack(12,
+                    useAsync
+                        ? ValidationRuleAsync(() => Task.FromResult(false), "Rule failed", "name")
+                        : ValidationRule(() => false, "Rule failed", "name"),
+                    TextBlock("body"))
+                    .Provide(ValidationContexts.Current, ctx);
+            });
+
+            await Harness.Render();
+            for (var i = 0; i < 4 && ctx.GetMessages("name").Count == 0; i++)
+                await Harness.Render();
+            H.Check("Issue1262_RuleSwap_AsyncVerdictInstalled", ctx.GetMessages("name").Count == 1,
+                $"messages={ctx.GetMessages("name").Count}");
+
+            // Same placeholder, now a synchronous rule.
+            setUseAsync!(false);
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_RuleSwap_SyncVerdictInstalled", ctx.GetMessages("name").Count == 1,
+                $"messages={ctx.GetMessages("name").Count}");
+
+            // A value change retires async producers. The swapped rule is no longer one,
+            // so its verdict has to survive — checked before any re-render could
+            // reinstall it.
+            ctx.NotifyValueChanged("name", "anything");
+            H.Check("Issue1262_RuleSwap_SyncVerdictSurvivesValueChange",
+                ctx.GetMessages("name").Count == 1,
+                $"messages={ctx.GetMessages("name").Count}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 rule swap done"));
+            await Harness.Render();
+        }
+    }
 }

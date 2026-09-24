@@ -819,6 +819,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_ChainedValueOverloads",
         "ValCov_Issue1262_MountedAsyncRule",
         "ValCov_Issue1262_AsyncRuleProviderRemoved",
+        "ValCov_Issue1262_AsyncRuleBecomesSync",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
         "ControlsCov_MaskEngineBasic",
         "ControlsCov_MaskEngineNavigation",
@@ -2732,6 +2733,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_ChainedValueOverloads" => new ValidationCoverageFixtures.Issue1262_ChainedValueOverloadsDoNotLoop(harness),
         "ValCov_Issue1262_MountedAsyncRule" => new ValidationCoverageFixtures.Issue1262_MountedAsyncRuleRuns(harness),
         "ValCov_Issue1262_AsyncRuleProviderRemoved" => new ValidationCoverageFixtures.Issue1262_AsyncRuleProviderRemovedMidFlight(harness),
+        "ValCov_Issue1262_AsyncRuleBecomesSync" => new ValidationCoverageFixtures.Issue1262_AsyncRuleBecomesSync(harness),
         // Controls coverage
         "ControlsCov_MaskEngineBasic" => new ControlsCoverageFixtures.MaskEngineBasic(harness),
         "ControlsCov_MaskEngineNavigation" => new ControlsCoverageFixtures.MaskEngineNavigation(harness),
