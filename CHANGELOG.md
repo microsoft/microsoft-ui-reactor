@@ -32,6 +32,11 @@ Conventions for contributors:
   `EvaluateRules`, for rule sets containing rules built with `ValidationRuleAsync`.
   Rules run in order, so the resulting message order matches the order given
   (issue #1262).
+- `EvaluateRules(ctx, setId, …)` and `EvaluateRulesAsync(ctx, setId, …)` — named rule
+  sets. The call owns that set, so a rule that disappears from it has its message
+  withdrawn. The identity is explicit because ownership is destructive: two unrelated
+  callers sharing one context must not silently retract each other's rules
+  (issue #1262).
 - `ValidationContext.Changed` — raised when the context's observable state
   changes (a message appearing or disappearing, a field becoming touched, a
   reset). `UseValidationContext()` subscribes to it, so mutating the context
@@ -124,7 +129,9 @@ Conventions for contributors:
   with is now silent (issue #1262).
 - `ValidationReconciler.ValidateFieldAsync` and the rule batch paths did not register
   the fields they validated, so `MarkAllTouched()` and the validity summary skipped a
-  field validated only through them (issue #1262).
+  field validated only through them. Directly evaluated rules
+  (`rule.Evaluate(ctx)` / `rule.EvaluateAsync(ctx)`) register their field too
+  (issue #1262).
 - A mounted rule swapped from `ValidationRuleAsync` to `ValidationRule` kept its async
   generation entry, so the next value change treated it as async and retracted a
   synchronous verdict that was still current (issue #1262).

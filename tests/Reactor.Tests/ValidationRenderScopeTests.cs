@@ -447,14 +447,14 @@ public class ValidationRenderScopeTests
     {
         var ctx = new ValidationContext();
 
-        ValidationReconciler.EvaluateRules(ctx,
+        ValidationReconciler.EvaluateRules(ctx, "form-rules",
             ValidationRule(() => false, "First rule failed", "form"),
             ValidationRule(() => false, "Second rule failed", "form"));
         Assert.Equal(2, ctx.GetMessages("form").Count);
 
         // The second rule is gone this time. Its message would otherwise keep the form
         // invalid forever, because nothing re-evaluates a rule that no longer exists.
-        ValidationReconciler.EvaluateRules(ctx,
+        ValidationReconciler.EvaluateRules(ctx, "form-rules",
             ValidationRule(() => false, "First rule failed", "form"));
 
         var texts = ctx.GetMessages("form").Select(m => m.Text).ToList();
@@ -467,11 +467,11 @@ public class ValidationRenderScopeTests
     {
         var ctx = new ValidationContext();
 
-        ValidationReconciler.EvaluateRules(ctx,
+        ValidationReconciler.EvaluateRules(ctx, "form-rules",
             ValidationRule(() => false, "Rule failed", "form"));
         Assert.False(ctx.IsValid());
 
-        ValidationReconciler.EvaluateRules(ctx);
+        ValidationReconciler.EvaluateRules(ctx, "form-rules");
 
         Assert.True(ctx.IsValid());
         Assert.Empty(ctx.GetMessages("form"));
@@ -482,11 +482,11 @@ public class ValidationRenderScopeTests
     {
         var ctx = new ValidationContext();
 
-        ValidationReconciler.EvaluateRules(ctx,
+        ValidationReconciler.EvaluateRules(ctx, "range-rules",
             ValidationRule(() => false, "Rule failed", "start"));
         Assert.Single(ctx.GetMessages("start"));
 
-        ValidationReconciler.EvaluateRules(ctx,
+        ValidationReconciler.EvaluateRules(ctx, "range-rules",
             ValidationRule(() => false, "Rule failed", "end"));
 
         Assert.Empty(ctx.GetMessages("start"));
@@ -499,12 +499,12 @@ public class ValidationRenderScopeTests
         var ctx = new ValidationContext();
         ValidationReconciler.ValidateField(ctx, "form", "", Validate.Required("Field is required"));
 
-        ValidationReconciler.EvaluateRules(ctx,
+        ValidationReconciler.EvaluateRules(ctx, "form-rules",
             ValidationRule(() => false, "Rule failed", "form"));
         Assert.Equal(2, ctx.GetMessages("form").Count);
 
         // Withdrawing the whole rule set must not take the sync verdict with it.
-        ValidationReconciler.EvaluateRules(ctx);
+        ValidationReconciler.EvaluateRules(ctx, "form-rules");
 
         var texts = ctx.GetMessages("form").Select(m => m.Text).ToList();
         Assert.Single(texts);
@@ -1370,23 +1370,46 @@ public class ValidationRenderScopeTests
         var ctx = new ValidationContext();
         var slow = new TaskCompletionSource<bool>();
 
-        // Older batch: blocks on field "a".
+        // Older call for this set: blocks on field "a".
         var older = ValidationReconciler.EvaluateRulesAsync(
-            ctx, ValidationRuleAsync(() => slow.Task, "Stale verdict", "a"));
+            ctx, "range-rules", ValidationRuleAsync(() => slow.Task, "Stale verdict", "a"));
 
-        // Newer batch, requested while the older one is still out.
+        // Newer call for the same set, made while the older one is still out.
         var newer = ValidationReconciler.EvaluateRulesAsync(
-            ctx, ValidationRuleAsync(() => Task.FromResult(false), "Current verdict", "b"));
+            ctx, "range-rules", ValidationRuleAsync(() => Task.FromResult(false), "Current verdict", "b"));
 
         slow.SetResult(false);
         await older;
         await newer;
 
-        // The older batch stood down: it neither installed its own verdict nor retired
-        // the newer batch's producer.
+        // The older call stood down: it neither installed its own verdict nor retired
+        // the newer call's producer.
         Assert.Empty(ctx.GetMessages("a"));
         Assert.Single(ctx.GetMessages("b"));
         Assert.Equal("Current verdict", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
+    public async Task Independent_Rule_Sets_Do_Not_Retract_Each_Other()
+    {
+        var ctx = new ValidationContext();
+
+        // Two unrelated callers sharing one context. Neither owns the other's rules.
+        ValidationReconciler.EvaluateRules(ctx, ValidationRule(() => false, "A failed", "a"));
+        ValidationReconciler.EvaluateRules(ctx, ValidationRule(() => false, "B failed", "b"));
+
+        Assert.Single(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+
+        // Named sets are scoped to their own id, so they are independent too.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "set-one", ValidationRuleAsync(() => Task.FromResult(false), "C failed", "c"));
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "set-two", ValidationRuleAsync(() => Task.FromResult(false), "D failed", "d"));
+
+        Assert.Single(ctx.GetMessages("c"));
+        Assert.Single(ctx.GetMessages("d"));
+        Assert.Single(ctx.GetMessages("a"));
     }
 
     [Fact]
@@ -1417,18 +1440,18 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
-    public async Task A_Sync_Batch_Overtakes_A_Running_Async_Batch()
+    public async Task A_Sync_Call_Overtakes_A_Running_Async_Call_For_The_Same_Set()
     {
         var ctx = new ValidationContext();
         var slow = new TaskCompletionSource<bool>();
 
         var older = ValidationReconciler.EvaluateRulesAsync(
-            ctx, ValidationRuleAsync(() => slow.Task, "Stale verdict", "a"));
+            ctx, "range-rules", ValidationRuleAsync(() => slow.Task, "Stale verdict", "a"));
 
-        // A synchronous batch requested while the async one is still out. It advances
-        // the same generation counter, so the async batch must stand down.
+        // A synchronous call for the same set while the async one is still out. It
+        // advances that set's generation, so the async call must stand down.
         ValidationReconciler.EvaluateRules(
-            ctx, ValidationRule(() => false, "Current verdict", "b"));
+            ctx, "range-rules", ValidationRule(() => false, "Current verdict", "b"));
 
         slow.SetResult(false);
         await older;
@@ -1446,28 +1469,28 @@ public class ValidationRenderScopeTests
 
         // Deliberately never completed: a caller's predicate can hang.
         var stuck = ValidationReconciler.EvaluateRulesAsync(
-            ctx, ValidationRuleAsync(() => never.Task, "Never resolves", "a"));
+            ctx, "range-rules", ValidationRuleAsync(() => never.Task, "Never resolves", "a"));
 
-        // A later batch has to make progress regardless.
+        // A later evaluation has to make progress regardless.
         await ValidationReconciler.EvaluateRulesAsync(
-            ctx, ValidationRuleAsync(() => Task.FromResult(false), "Current verdict", "b"));
+            ctx, "other-rules", ValidationRuleAsync(() => Task.FromResult(false), "Current verdict", "b"));
 
         Assert.Single(ctx.GetMessages("b"));
         Assert.False(stuck.IsCompleted);
     }
 
     [Fact]
-    public async Task A_Batch_Producer_That_Turns_Synchronous_Keeps_Its_Verdict()
+    public async Task A_Set_Producer_That_Turns_Synchronous_Keeps_Its_Verdict()
     {
         var ctx = new ValidationContext();
 
         await ValidationReconciler.EvaluateRulesAsync(
-            ctx, ValidationRuleAsync(() => Task.FromResult(false), "Rule failed", "name"));
+            ctx, "name-rules", ValidationRuleAsync(() => Task.FromResult(false), "Rule failed", "name"));
         Assert.Single(ctx.GetMessages("name"));
 
-        // Same position, now a synchronous rule — so the same producer key.
+        // Same position in the same set, now a synchronous rule — so the same producer.
         await ValidationReconciler.EvaluateRulesAsync(
-            ctx, ValidationRule(() => false, "Rule failed", "name"));
+            ctx, "name-rules", ValidationRule(() => false, "Rule failed", "name"));
         Assert.Single(ctx.GetMessages("name"));
 
         // A value change retires async producers; this one is no longer async.
@@ -1487,21 +1510,21 @@ public class ValidationRenderScopeTests
             if (reentered) return;
             reentered = true;
 
-            // A subscriber woken mid-commit starts its own evaluation. The outer call
+            // A subscriber woken mid-commit re-evaluates the same set. The outer call
             // must not go on installing producers it no longer owns.
             ValidationReconciler.EvaluateRules(
-                ctx, ValidationRule(() => true, "Inner rule", "a"));
+                ctx, "form-rules", ValidationRule(() => true, "Inner rule", "a"));
         };
 
         ValidationReconciler.EvaluateRules(
-            ctx,
+            ctx, "form-rules",
             ValidationRule(() => false, "Outer first", "a"),
             ValidationRule(() => false, "Outer second", "b"));
 
         Assert.True(reentered);
 
-        // The inner set is the newest, and it owns the whole context: nothing from the
-        // outer set may be left orphaned.
+        // The inner call is the newest for this set, and it owns the set: nothing from
+        // the outer call may be left orphaned.
         Assert.Empty(ctx.GetMessages("a"));
         Assert.Empty(ctx.GetMessages("b"));
         Assert.True(ctx.IsValid());

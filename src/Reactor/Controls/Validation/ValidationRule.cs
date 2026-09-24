@@ -95,6 +95,7 @@ public static class ValidationRuleDsl
     /// </summary>
     internal static void Evaluate(this ValidationRuleElement rule, ValidationContext ctx, string producer)
     {
+        ctx.RegisterField(rule.Field);
         ctx.ClearAsyncGeneration(rule.Field, producer);
         ctx.ApplyOwned(rule.Field, producer, rule.ComputeSync());
     }
@@ -127,6 +128,7 @@ public static class ValidationRuleDsl
             return;
         }
 
+        ctx.RegisterField(rule.Field);
         var generation = ctx.BeginAsyncProducer(rule.Field, producer);
 
         var result = await rule.AsyncPredicate();
