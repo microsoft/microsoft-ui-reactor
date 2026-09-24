@@ -17,8 +17,8 @@ INPC walker).
 
 | Publish shape | Key properties | Runtime identifier | What you get |
 |---|---|---|---|
-| Unpackaged (template default) | `WindowsPackageType=None`, `WindowsAppSDKSelfContained=true` | `win-x64` / `win-arm64` | A folder with `MyApp.exe` and the WinUI 3 runtime alongside it. Run from anywhere; ship as a zip. |
-| MSIX | `WindowsPackageType=MSIX`, `GenerateAppxPackageOnBuild=true`, signed via `PackageCertificateThumbprint` or `PackageCertificateKeyFile` | `win-x64` / `win-arm64` | A signed `.msix`. Required for Microsoft Store; the cleanest sideload story for enterprise. |
+| Unpackaged | `WindowsPackageType=None`, `WindowsAppSDKSelfContained=true` | `win-x64` / `win-arm64` | A folder with `MyApp.exe` and the WinUI 3 runtime alongside it. Run from anywhere; ship as a zip. |
+| MSIX (template default) | `WindowsPackageType=MSIX`, `GenerateAppxPackageOnBuild=true`, signed via `PackageCertificateThumbprint` or `PackageCertificateKeyFile` | `win-x64` / `win-arm64` | A signed `.msix`. Required for Microsoft Store; the cleanest sideload story for enterprise. |
 | Single-file | `PublishSingleFile=true`, `IncludeNativeLibrariesForSelfExtract=true` | `win-x64` / `win-arm64` (must be set) | One `.exe` that self-extracts the WinUI runtime to `%TEMP%/.net/` on first launch. |
 | Native AOT | `PublishAot=true`, `InvariantGlobalization=true` (recommended) | `win-x64` / `win-arm64` (required) | A native binary with no JIT, no `Assembly.GetTypes()`, no `Reflection.Emit`. Fastest cold start; trim-only. |
 
@@ -106,7 +106,30 @@ shape adds three properties on top of the unpackaged CSPROJ:
 ```
 
 `Package.appxmanifest` declares the package identity (Publisher,
-PackageFamilyName, capabilities, file-type associations). The
+PackageFamilyName, capabilities, file-type associations). Here is the
+identity block from this repo's own packaged selftest host, which is a
+real single-project MSIX app:
+
+```xml
+<Identity
+  Name="Microsoft.UI.Reactor.PackagedTests.Host"
+  Publisher="CN=Microsoft.UI.Reactor.PackagedTests.Host"
+  Version="1.0.0.0" />
+
+<Properties>
+  <DisplayName>Reactor Packaged Test Host</DisplayName>
+  <PublisherDisplayName>Microsoft.UI.Reactor</PublisherDisplayName>
+  <Logo>Images\StoreLogo.png</Logo>
+</Properties>
+
+<Dependencies>
+  <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+</Dependencies>
+```
+
+`Publisher` must match the subject of the signing certificate, and
+`Name` plus `Publisher` together derive the PackageFamilyName that
+Windows uses to identify the app. The
 [WinUI 3 packaging docs](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/packaging/)
 cover the manifest surface in full. The signing certificate is
 either a Microsoft Store-issued cert (for Store submissions) or a
