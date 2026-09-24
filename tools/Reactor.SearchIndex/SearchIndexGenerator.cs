@@ -624,7 +624,7 @@ public static partial class SearchIndexGenerator
 
         return MarkdownLinkRegex().Replace(body, m =>
         {
-            var target = m.Groups[1].Value;
+            var target = m.Groups["target"].Value;
             if (target.Length == 0 || target[0] == '#' || target.Contains("://", StringComparison.Ordinal)
                 || target.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
             {
@@ -672,7 +672,11 @@ public static partial class SearchIndexGenerator
 
     // Inline markdown links only — `](target)` with an optional title. Reference-style links and
     // bare autolinks are left alone; neither appears in the marked blocks.
-    [GeneratedRegex(@"(?<pre>\])\((?!\s)([^)\s]+)(?:\s+""[^""]*"")?\)")]
+    //
+    // Both groups are NAMED deliberately. .NET numbers unnamed groups before named ones, so with
+    // a bare `([^)\s]+)` the target is group 1 even though `(?<pre>\])` is written first — correct,
+    // but it reads like a bug. Naming both removes the trap.
+    [GeneratedRegex(@"(?<pre>\])\((?!\s)(?<target>[^)\s]+)(?:\s+""[^""]*"")?\)")]
     private static partial Regex MarkdownLinkRegex();
 
     // ── Internal parse models ──────────────────────────────────────────────

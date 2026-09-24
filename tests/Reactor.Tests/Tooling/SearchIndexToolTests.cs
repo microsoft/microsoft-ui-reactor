@@ -396,6 +396,12 @@ class AlphaPage
 
         Assert.Contains("(https://github.com/microsoft/microsoft-ui-reactor/blob/main/skills/sibling.md)", details);
         Assert.Contains("(https://github.com/microsoft/microsoft-ui-reactor/blob/main/skills/sibling.md#part)", details);
+
+        // Guards the capture-group semantics of MarkdownLinkRegex: if the rewriter ever read the
+        // `]` group instead of the target, it would resolve a file literally named "]" and throw
+        // "points at nothing" rather than producing these URLs. The file name in the assertions
+        // above is what makes that distinguishable.
+        Assert.DoesNotContain("blob/main/skills/]", details);
     }
 
     [Fact]
