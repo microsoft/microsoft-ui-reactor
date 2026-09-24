@@ -92,7 +92,7 @@ class GalleryShell : Component
             .Select(GalleryRoutes.CategorySlug)
             .ToHashSet();
 
-        var nonControlCategories = new HashSet<string> { "Design", "Fundamentals" };
+        var nonControlCategories = new HashSet<string>(ControlRegistry.NonControlCategories, StringComparer.Ordinal);
 
         // Design and Fundamentals are not control categories — they sit above the "Controls"
         // header as their own top-level entries rather than inside it.
@@ -130,7 +130,7 @@ class GalleryShell : Component
         {
             content = VStack(16,
                 GalleryControls.PageHeader("Search Results",
-                    $"{searchResults.Length} controls matching \"{searchQuery}\"")
+                    $"{searchResults.Length} matching \"{searchQuery}\"")
                     .Margin(36, 24, 36, 0),
                 GalleryControls.ControlCardGrid(searchResults, navigate.Current)
                     .Margin(36, 0, 0, 36)
@@ -154,9 +154,9 @@ class GalleryShell : Component
 
             content = VStack(16,
                 GalleryControls.PageHeader(categoryName,
-                    categoryName == "Fundamentals"
-                        ? $"{controls.Length} framework topics"
-                        : $"{controls.Length} controls in this category")
+                    ControlRegistry.IsControlCategory(categoryName)
+                        ? $"{controls.Length} controls in this category"
+                        : $"{controls.Length} topics in this category")
                     .Margin(36, 24, 36, 0),
                 GalleryControls.ControlCardGrid(controls, navigate.Current)
                     .Margin(36, 0, 0, 36)

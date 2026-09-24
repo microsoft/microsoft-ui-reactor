@@ -178,6 +178,16 @@ public static class ControlRegistry
         "Styles",
     };
 
+    /// <summary>
+    /// Categories that hold framework topics and design guidance rather than controls.
+    /// Single source of truth so the shell nav, the category header, and the home page cannot
+    /// disagree about whether "9 controls" is an honest label.
+    /// </summary>
+    public static string[] NonControlCategories { get; } = new[] { "Fundamentals", "Design" };
+
+    public static bool IsControlCategory(string category) =>
+        !NonControlCategories.Contains(category, StringComparer.Ordinal);
+
     public static ControlInfo[] Search(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
