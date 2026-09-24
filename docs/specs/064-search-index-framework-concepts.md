@@ -204,9 +204,22 @@ objects, arrays, and lambdas. That is false at runtime:
   `REACTOR_HOOKS_004` rejects a tuple dep and fails the build.
 
 The prose now states the analyzer reason rather than a false runtime one.
-Reference types are still described as genuinely unequal, because they are. This
-is exactly the defect class the change exists to prevent: prose that ships into a
-retrieval corpus as authoritative is worse than no prose when it is wrong.
+Reference types are described precisely rather than as a single class: a fresh
+object or lambda genuinely is unequal every render, but a **lone reference-type
+array dep is unwrapped and compared element-wise** (`AsParamsArrayDep`, with
+`RenderContext.cs:720-724` spelling out why), so equal contents stay stable — and
+a `record` is value-equal by construction. Getting that qualification wrong in the
+first fix is itself instructive: this is exactly the defect class the change
+exists to prevent, and prose that ships into a retrieval corpus as authoritative
+is worse than no prose when it is wrong.
+
+A related inaccuracy was found in `docs/guide/effects.md:31-32`, which says to
+"pass no values for 'run every commit'". Deps are `params`, so `UseEffect(fn)`
+hands in an empty array; `SnapshotDeps` stores `Array.Empty<object>()` and
+`DepsEqual` returns true for two empty arrays, so the effect runs **once**,
+identically to passing `Array.Empty<object>()`. That file is generated from
+`docs/_pipeline/templates/`, so correcting it is left as a follow-up; the marked
+blocks in this change state the actual behaviour.
 
 ## 5. Result
 

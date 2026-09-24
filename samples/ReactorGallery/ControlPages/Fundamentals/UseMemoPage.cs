@@ -75,7 +75,7 @@ Button(""Reset"", resetClicks)
                         Button("Wider", () => setWidth(width + 1)),
                         Button("Taller", () => setHeight(height + 1))),
                     TextBlock($"{width} x {height} = {area}").Foreground(Theme.SecondaryText),
-                    Caption("A tuple expression is rejected by REACTOR_HOOKS_004 even though a ValueTuple is value-equal at runtime. A freshly allocated array or lambda genuinely does compare unequal every render, because reference deps go through Equals. Either way: use a scalar key, or pass the values as separate dependencies.")
+                    Caption("A tuple expression is rejected by REACTOR_HOOKS_004 even though a ValueTuple is value-equal at runtime. A fresh object or lambda genuinely does compare unequal every render; a lone reference-type array does not, because it is compared element-wise as a dependency list. Either way: use a scalar key, or pass the values as separate dependencies.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 var (width, setWidth) = UseState(3.0);

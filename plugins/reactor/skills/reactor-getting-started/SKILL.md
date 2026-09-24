@@ -232,20 +232,21 @@ UseEffect(() =>
 
 Dependency rules:
 
-- No deps argument → the effect runs after **every** render.
-- `Array.Empty<object>()` → runs **once**, on mount.
-- One or more deps → runs whenever any of them changes.
-- **Never pass a freshly allocated object, array, or lambda as a dep.** Deps go
-  through `EqualityComparer<T>.Default`, which for a reference type means
-  `Equals` — so a new `new[] { … }` or lambda each render is never equal to the
-  last and the effect never reaches its stable path. (A type with value-based
-  `Equals`, such as a `record`, is the exception: two fresh instances carrying
-  the same values do compare equal.) Use a string key such as `$"{x}|{y}"`, or
-  pass the values as separate deps: `UseEffect(fn, x, y)`.
-- **Tuple deps are rejected by the analyzer, not by the runtime.** A
-  `ValueTuple` of value types does compare by value, so `(x, y)` would work —
-  but `REACTOR_HOOKS_004` classifies every tuple expression as an unstable dep
-  and fails the build. Use a string key or separate deps here too.
+- Deps are a `params` argument, so `UseEffect(fn)` and
+  `UseEffect(fn, Array.Empty<object>())` are the same call: empty deps compare
+  equal on every later render, so the effect runs **once, on mount**.
+- One or more deps → re-runs whenever any of them compares unequal.
+- **A freshly allocated object or lambda is never equal to the previous one**, so
+  it defeats the comparison and the effect re-runs every commit. (A type with
+  value-based `Equals`, such as a `record`, is the exception.)
+- **A lone reference-type array is the other exception** — it is treated as a
+  dependency *list* and compared element-wise, so `new[] { a, b }` re-allocated
+  each render with equal contents is stable.
+- **Tuple deps are rejected by the analyzer, not by the runtime.** A `ValueTuple`
+  of value types compares by value, so `(x, y)` would work — but
+  `REACTOR_HOOKS_004` classifies every tuple expression as an unstable dep and
+  fails the build. Use a string key such as `$"{x}|{y}"`, or separate deps:
+  `UseEffect(fn, x, y)`.
 <!-- /index:use-effect -->
 
 ### UseMemo and UseCallback
@@ -261,11 +262,12 @@ var sorted = UseMemo(() => items.OrderBy(i => i.Name).ToList(), items);
 var onReset = UseCallback(() => setQuery(""), Array.Empty<object>());
 ```
 
-Both obey the same dependency rule as `UseEffect`: a **reference type** allocated
-during render is compared with `Equals`, so a fresh array or lambda is never equal
-to the previous one and defeats the cache entirely (a `record` or other value-based
-`Equals` is the exception). A tuple expression — though value-equal at runtime — is
-rejected outright by `REACTOR_HOOKS_004`. Memoize the computation, not the render —
+Both obey the same dependency rule as `UseEffect`: a fresh **object** or
+**lambda** allocated during render is never equal to the previous one and defeats
+the cache entirely (a `record` is the exception, and a lone reference-type array
+is treated as a dependency *list* and compared element-wise, so equal contents
+stay stable). A tuple expression — though value-equal at runtime — is rejected
+outright by `REACTOR_HOOKS_004`. Memoize the computation, not the render —
 `UseMemo` is for work that is measurably expensive, not for every projection.
 <!-- /index:use-memo -->
 

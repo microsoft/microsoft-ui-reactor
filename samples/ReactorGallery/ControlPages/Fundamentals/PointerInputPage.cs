@@ -16,11 +16,11 @@ class PointerInputPage : Component
 
         var (tapLog, setTapLog) = UseState("Tap, double-tap, or right-tap the card.");
 
-        var (offsetX, setOffsetX) = UseState(0.0);
-        var (offsetY, setOffsetY) = UseState(0.0);
+        var (offsetX, moveX) = UseReducer(0.0);
+        var (offsetY, moveY) = UseReducer(0.0);
 
-        var (scale, setScale) = UseState(1.0f);
-        var (angle, setAngle) = UseState(0f);
+        var (scale, scaleBy) = UseReducer(1.0f);
+        var (angle, rotateBy) = UseReducer(0f);
 
         var (resting, setResting) = UseState("Drag the card, then let go.");
         var smoothRef = this.UseElementRef<FrameworkElement>();
@@ -98,29 +98,31 @@ Border(TextBlock(tapLog))
                         .OnPan(
                             onChanged: e =>
                             {
-                                setOffsetX(offsetX + e.Delta.X);
-                                setOffsetY(offsetY + e.Delta.Y);
+                                moveX(x => x + e.Delta.X);
+                                moveY(y => y + e.Delta.Y);
                             },
                             minimumDistance: 4)
                         .Translation((float)offsetX, (float)offsetY, 0),
                     Button("Recentre", () =>
                     {
-                        setOffsetX(0);
-                        setOffsetY(0);
+                        moveX(_ => 0);
+                        moveY(_ => 0);
                     }),
-                    Caption("Gestures run Began then Changed (repeatedly) then Ended or Cancelled. PanGesture.Delta is a flat Point — Reactor does not surface WinUI's nested ManipulationDelta. For 60Hz dragging, write Translation through a ref during the gesture and set state only in onEnded.")
+                    Caption("Gestures run Began then Changed (repeatedly) then Ended or Cancelled. PanGesture.Delta is a flat Point — Reactor does not surface WinUI's nested ManipulationDelta. Note the functional updaters: onChanged fires far faster than the component re-renders, so a setter reading the render's captured offset would drop every delta that arrived before the next commit.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
-var (offsetX, setOffsetX) = UseState(0.0);
-var (offsetY, setOffsetY) = UseState(0.0);
+var (offsetX, moveX) = UseReducer(0.0);
+var (offsetY, moveY) = UseReducer(0.0);
 
 Border(TextBlock(""Drag me""))
     .OnPan(
         onChanged: e =>
         {
-            // PanGesture.Delta is a Point — NOT e.Delta.Translation.
-            setOffsetX(offsetX + e.Delta.X);
-            setOffsetY(offsetY + e.Delta.Y);
+            // Functional updaters, NOT setOffsetX(offsetX + ...): several onChanged
+            // callbacks can land between two renders, and each would read the same
+            // stale captured value and overwrite the one before it.
+            moveX(x => x + e.Delta.X);
+            moveY(y => y + e.Delta.Y);
         },
         minimumDistance: 4)
     .Translation((float)offsetX, (float)offsetY, 0)
@@ -133,23 +135,23 @@ Border(TextBlock(""Drag me""))
                         .WithBorder(Theme.SurfaceStroke)
                         .Padding(24)
                         .Width(180)
-                        .OnPinch(onChanged: e => setScale(scale * (float)e.ScaleDelta))
-                        .OnRotate(onChanged: e => setAngle(angle + (float)e.AngleDelta))
+                        .OnPinch(onChanged: e => scaleBy(s => s * (float)e.ScaleDelta))
+                        .OnRotate(onChanged: e => rotateBy(a => a + (float)e.AngleDelta))
                         .Scale(scale)
                         .Rotation(angle),
                     HStack(8,
-                        Button("Reset scale", () => setScale(1.0f)),
-                        Button("Reset angle", () => setAngle(0f))),
+                        Button("Reset scale", () => scaleBy(_ => 1.0f)),
+                        Button("Reset angle", () => rotateBy(_ => 0f))),
                     TextBlock($"Scale: {scale:F2} — angle: {angle:F0}°").Foreground(Theme.SecondaryText),
-                    Caption("Both gestures carry an absolute value and a per-event delta as flat doubles: Scale/ScaleDelta and Angle/AngleDelta. Neither has a nested e.Delta object.")
+                    Caption("Both gestures carry an absolute value and a per-event delta as flat doubles: Scale/ScaleDelta and Angle/AngleDelta. Neither has a nested e.Delta object. Deltas are folded in with functional updaters for the same reason as the pan card.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
-var (scale, setScale) = UseState(1.0f);
-var (angle, setAngle) = UseState(0f);
+var (scale, scaleBy) = UseReducer(1.0f);
+var (angle, rotateBy) = UseReducer(0f);
 
 Border(TextBlock(""Pinch or rotate me""))
-    .OnPinch(onChanged: e => setScale(scale * (float)e.ScaleDelta))
-    .OnRotate(onChanged: e => setAngle(angle + (float)e.AngleDelta))
+    .OnPinch(onChanged: e => scaleBy(s => s * (float)e.ScaleDelta))
+    .OnRotate(onChanged: e => rotateBy(a => a + (float)e.AngleDelta))
     .Scale(scale)
     .Rotation(angle)
 "),
