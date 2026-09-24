@@ -26,22 +26,6 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
-    <!--
-      Defence-in-depth pin on System.Formats.Asn1, kept deliberately.
-      Originally added to escape the vulnerable transitive 5.0.0
-      (GHSA-447r-wph3-92pm, High). That version is no longer anywhere in
-      this project's graph: on net8.0 the only transitive source is
-      Microsoft.CodeAnalysis.CSharp.Analyzer.Testing -> Microsoft.CodeAnalysis.Analyzer.Testing,
-      which requests 9.0.6 both directly and via NuGet.Packaging ->
-      System.Security.Cryptography.Pkcs -> Microsoft.Bcl.Cryptography
-      (verified with `dotnet nuget why`; dropping the pin resolves 9.0.6
-      with no NuGet audit warning). Microsoft.CodeAnalysis.CSharp and
-      .Workspaces contribute no path at all. The pin stays so a future
-      transitive regression cannot silently reintroduce an old version;
-      it resolves to the Directory.Packages.props version, which is
-      forward of the net8.0 in-box runtime.
-    -->
-    <PackageReference Include="System.Formats.Asn1" />
   </ItemGroup>
 
   <ItemGroup>
