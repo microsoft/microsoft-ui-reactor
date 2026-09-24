@@ -972,6 +972,91 @@ public sealed class ValidationContext
     }
 
     /// <summary>
+    /// Opens a named rule set's evaluation and returns the generation identifying it.
+    /// The bookkeeping lives on the context, under the same lock as the messages, so a
+    /// set's generation, its membership and its verdicts are all decided together —
+    /// and so no second lock is held while <see cref="Changed"/> is raised.
+    /// </summary>
+    internal int BeginRuleSet(string setId)
+    {
+        lock (_lock)
+        {
+            if (!_ruleSetTickets.TryGetValue(setId, out var generation)) generation = 0;
+            generation = unchecked(generation + 1);
+            _ruleSetTickets[setId] = generation;
+            return generation;
+        }
+    }
+
+    /// <summary>
+    /// Installs a named rule set's verdicts, retires the producers that disappeared from
+    /// it, and records the new membership — as one transaction, and only if this
+    /// evaluation still owns the set.
+    /// <para>
+    /// <paramref name="asyncTokens"/> carries the per-producer async generation each rule
+    /// opened before its predicate ran. They are verified here, at the moment of
+    /// application: a field's value changing in the meantime retires those tokens, so a
+    /// verdict computed from the superseded value is discarded instead of installed.
+    /// The whole set stands down together, because a partially-applied set is exactly
+    /// the state this transaction exists to prevent.
+    /// </para>
+    /// </summary>
+    internal void CommitRuleSet(
+        string setId,
+        int generation,
+        List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts,
+        List<(string Field, string Producer, int Token)>? asyncTokens)
+    {
+        var changed = false;
+        lock (_lock)
+        {
+            if (!_ruleSetTickets.TryGetValue(setId, out var newest) || newest != generation) return;
+
+            if (asyncTokens is not null)
+            {
+                foreach (var (field, producer, token) in asyncTokens)
+                {
+                    if (!_asyncGeneration.TryGetValue(field, out var byProducer)
+                        || !byProducer.TryGetValue(producer, out var current)
+                        || current != token)
+                        return;
+                }
+            }
+
+            var applied = new List<(string Field, string Producer)>(verdicts.Count);
+            foreach (var verdict in verdicts)
+                applied.Add((verdict.Field, verdict.Producer));
+
+            if (_ruleSetMembership.TryGetValue(setId, out var previous))
+            {
+                foreach (var entry in previous)
+                {
+                    if (applied.Contains(entry)) continue;
+                    if (_asyncGeneration.TryGetValue(entry.Field, out var byProducer))
+                    {
+                        byProducer.Remove(entry.Producer);
+                        if (byProducer.Count == 0) _asyncGeneration.Remove(entry.Field);
+                    }
+                    if (ApplyOwnedLocked(entry.Field, entry.Producer, [])) changed = true;
+                }
+            }
+            _ruleSetMembership[setId] = applied;
+
+            foreach (var (field, producer, messages) in verdicts)
+            {
+                _registeredFields.Add(field);
+                if (ApplyOwnedLocked(field, producer, messages)) changed = true;
+            }
+
+            if (changed) BumpVersionLocked(messagesOnly: true);
+        }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    private readonly Dictionary<string, int> _ruleSetTickets = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<(string Field, string Producer)>> _ruleSetMembership = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Drops a producer's async generation entry without touching its messages, for a
     /// producer that has stopped being asynchronous.
     /// <para>

@@ -1720,6 +1720,51 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task A_Value_Change_Discards_A_Pending_Rule_Set_Verdict()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", ValidationRuleAsync(() => pending.Task, "Range is invalid", "dates"));
+
+        // The field moves on while the predicate is still out, so the verdict it is
+        // about to produce describes a value that no longer exists.
+        ctx.NotifyValueChanged("dates", "2026-02-02");
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Empty(ctx.GetMessages("dates"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task A_Rule_Set_Notification_Can_Re_Enter_Evaluation()
+    {
+        var ctx = new ValidationContext();
+        var reentered = false;
+
+        ctx.Changed += () =>
+        {
+            if (reentered) return;
+            reentered = true;
+
+            // A handler that evaluates another named set must not be blocked by a lock
+            // the committing call is still holding.
+            ValidationReconciler.EvaluateRules(
+                ctx, "other-rules", ValidationRule(() => false, "Other failed", "b"));
+        };
+
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", ValidationRuleAsync(() => Task.FromResult(false), "Range failed", "a"));
+
+        Assert.True(reentered);
+        Assert.Single(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

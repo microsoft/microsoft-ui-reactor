@@ -133,7 +133,7 @@ public static class ValidationReconciler
         string setId,
         params ValidationRuleElement[] rules)
     {
-        var generation = NextRuleSetGeneration(ctx, setId);
+        var generation = ctx.BeginRuleSet(setId);
 
         // Compute every verdict before installing any: a mid-set notification could
         // otherwise re-enter and take ownership of the set out from under this call.
@@ -141,7 +141,7 @@ public static class ValidationReconciler
         for (var i = 0; i < rules.Length; i++)
             verdicts.Add((rules[i].Field, RuleProducer(setId, i), rules[i].ComputeSync()));
 
-        CommitRuleSet(ctx, setId, generation, verdicts);
+        ctx.CommitRuleSet(setId, generation, verdicts, asyncTokens: null);
     }
 
     /// <summary>
@@ -183,11 +183,10 @@ public static class ValidationReconciler
     /// The asynchronous counterpart to
     /// <see cref="EvaluateRules(ValidationContext, string, ValidationRuleElement[])"/>.
     /// <para>
-    /// Every verdict is computed before any is installed, and nothing is installed if
-    /// another call has been made for the same <paramref name="setId"/> in the meantime.
-    /// Both overloads of the named form advance one generation per set, so an overtaken
-    /// call stands down with nothing to unwind. No lock is held across a caller's
-    /// predicate, so one that never completes cannot block later evaluations.
+    /// Every verdict is computed before any is installed, and nothing is installed if the
+    /// set has been re-evaluated in the meantime, or if a field's value changed while a
+    /// predicate was running — each rule opens a per-producer async generation before its
+    /// predicate runs, and those are verified at the moment of application.
     /// </para>
     /// </summary>
     public static Task EvaluateRulesAsync(
@@ -207,93 +206,34 @@ public static class ValidationReconciler
         CancellationToken cancellationToken,
         params ValidationRuleElement[] rules)
     {
-        var generation = NextRuleSetGeneration(ctx, setId);
+        var generation = ctx.BeginRuleSet(setId);
+
+        // Open an async generation for each rule that actually runs asynchronously. A
+        // value change retires these, which is how a verdict computed from a superseded
+        // value is recognised as stale when the set tries to commit. A synchronous rule
+        // in the set is computed at call time and cannot go stale that way, so it gets
+        // no token — and any token it carries from a previous async incarnation is
+        // cleared, or the next value change would retract a verdict that is current.
+        var tokens = new List<(string Field, string Producer, int Token)>(rules.Length);
+        var producers = new string[rules.Length];
+        for (var i = 0; i < rules.Length; i++)
+        {
+            var producer = producers[i] = RuleProducer(setId, i);
+            ctx.RegisterField(rules[i].Field);
+
+            if (rules[i].AsyncPredicate is null)
+                ctx.ClearAsyncGeneration(rules[i].Field, producer);
+            else
+                tokens.Add((rules[i].Field, producer, ctx.BeginAsyncProducer(rules[i].Field, producer)));
+        }
 
         var verdicts = new List<(string Field, string Producer, List<ValidationMessage> Messages)>(rules.Length);
         for (var i = 0; i < rules.Length; i++)
-            verdicts.Add((rules[i].Field, RuleProducer(setId, i), await rules[i].ComputeAsync(cancellationToken)));
+            verdicts.Add((rules[i].Field, producers[i], await rules[i].ComputeAsync(cancellationToken)));
 
-        CommitRuleSet(ctx, setId, generation, verdicts);
+        ctx.CommitRuleSet(setId, generation, verdicts, tokens);
     }
 
     private static string RuleProducer(string setId, int index) =>
         "ruleset:" + setId + "[" + index.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]";
-
-    /// <summary>
-    /// Installs a computed rule set, if this call still owns it.
-    /// <para>
-    /// The generation check, every producer replacement, and the retirement of producers
-    /// that have disappeared are one transaction against the context, emitting a single
-    /// notification. Installing producer by producer was observable mid-set: a subscriber
-    /// woken by the first verdict could start a new evaluation, and this call would carry
-    /// on installing the rest of a set it no longer owned.
-    /// </para>
-    /// <para>
-    /// No per-producer async generation is involved: a set computes every verdict before
-    /// installing any of them and orders itself by its own generation, so
-    /// <c>ComputeAsync</c> deliberately never opens one. That is what keeps a set producer
-    /// that switches from asynchronous to synchronous from leaving a stale token behind
-    /// for the next value change to act on.
-    /// </para>
-    /// </summary>
-    private static void CommitRuleSet(
-        ValidationContext ctx, string setId, int generation,
-        List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts)
-    {
-        // The generation check, the recorded-set swap and the context transaction are one
-        // critical section, and generation advancement takes the same lock — so no
-        // concurrent call can overtake this one between its check and its apply. Nothing
-        // inside runs caller code, so this cannot be blocked by a predicate.
-        lock (RuleSetLock(ctx))
-        {
-            if (!IsNewestRuleSet(ctx, setId, generation)) return;
-
-            var applied = new List<(string Field, string Producer)>(verdicts.Count);
-            foreach (var verdict in verdicts)
-                applied.Add((verdict.Field, verdict.Producer));
-
-            var sets = _ruleSets.GetValue(ctx, static _ => new Dictionary<string, List<(string Field, string Producer)>>(StringComparer.Ordinal));
-
-            var retired = new List<(string Field, string Producer)>();
-            if (sets.TryGetValue(setId, out var previous))
-                retired.AddRange(previous.Where(entry => !applied.Contains(entry)));
-            sets[setId] = applied;
-
-            ctx.ApplyRuleSet(verdicts, retired);
-        }
-    }
-
-    private static int NextRuleSetGeneration(ValidationContext ctx, string setId)
-    {
-        // Advancing the generation takes the same lock as the commit, so a concurrent
-        // call cannot slip an increment between another call's check and its apply —
-        // which would let that call commit a verdict it had already been overtaken on.
-        // Monitor is reentrant, so a commit-triggered notification that re-enters here
-        // on the same thread is fine.
-        lock (RuleSetLock(ctx))
-        {
-            var tickets = _ruleSetTickets.GetValue(ctx, static _ => new Dictionary<string, global::System.Runtime.CompilerServices.StrongBox<int>>(StringComparer.Ordinal));
-            if (!tickets.TryGetValue(setId, out var box))
-                tickets[setId] = box = new global::System.Runtime.CompilerServices.StrongBox<int>(0);
-            return ++box.Value;
-        }
-    }
-
-    private static bool IsNewestRuleSet(ValidationContext ctx, string setId, int generation)
-    {
-        lock (RuleSetLock(ctx))
-        {
-            var tickets = _ruleSetTickets.GetValue(ctx, static _ => new Dictionary<string, global::System.Runtime.CompilerServices.StrongBox<int>>(StringComparer.Ordinal));
-            return tickets.TryGetValue(setId, out var box) && box.Value == generation;
-        }
-    }
-
-    private static object RuleSetLock(ValidationContext ctx) =>
-        _ruleSetCommitLocks.GetValue(ctx, static _ => new object());
-
-    // Per-context, per-set bookkeeping: the last recorded membership of each named set,
-    // the generation naming its most recent call, and the lock that makes a commit
-    // atomic. All weak on the context so none of them holds it alive.
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, Dictionary<string, List<(string Field, string Producer)>>> _ruleSets = new();
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, Dictionary<string, global::System.Runtime.CompilerServices.StrongBox<int>>> _ruleSetTickets = new();
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, object> _ruleSetCommitLocks = new();}
+}
