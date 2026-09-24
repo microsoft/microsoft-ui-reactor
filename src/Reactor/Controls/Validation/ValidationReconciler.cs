@@ -153,12 +153,24 @@ public static class ValidationReconciler
     /// of each other. No lock is held across a caller's predicate.
     /// </para>
     /// </summary>
+    public static Task EvaluateRulesAsync(
+        ValidationContext ctx,
+        params ValidationRuleElement[] rules)
+        => EvaluateRulesAsync(ctx, CancellationToken.None, rules);
+
+    /// <summary>
+    /// As <see cref="EvaluateRulesAsync(ValidationContext, ValidationRuleElement[])"/>,
+    /// with cancellation. A rule predicate takes no token of its own, so this is the only
+    /// way to stop waiting on one that never completes — and with it, to release the
+    /// evaluation's hold on the context.
+    /// </summary>
     public static async Task EvaluateRulesAsync(
         ValidationContext ctx,
+        CancellationToken cancellationToken,
         params ValidationRuleElement[] rules)
     {
         for (var i = 0; i < rules.Length; i++)
-            await rules[i].EvaluateAsync(ctx, ValidationRuleDsl.DirectProducerKey(rules[i], i));
+            await rules[i].EvaluateAsync(ctx, ValidationRuleDsl.DirectProducerKey(rules[i], i), cancellationToken);
     }
 
     /// <summary>
@@ -172,16 +184,28 @@ public static class ValidationReconciler
     /// predicate, so one that never completes cannot block later evaluations.
     /// </para>
     /// </summary>
+    public static Task EvaluateRulesAsync(
+        ValidationContext ctx,
+        string setId,
+        params ValidationRuleElement[] rules)
+        => EvaluateRulesAsync(ctx, setId, CancellationToken.None, rules);
+
+    /// <summary>
+    /// As <see cref="EvaluateRulesAsync(ValidationContext, string, ValidationRuleElement[])"/>,
+    /// with cancellation. A cancelled call installs nothing: the verdicts are computed
+    /// before any of them is committed, so there is no partial set to unwind.
+    /// </summary>
     public static async Task EvaluateRulesAsync(
         ValidationContext ctx,
         string setId,
+        CancellationToken cancellationToken,
         params ValidationRuleElement[] rules)
     {
         var generation = NextRuleSetGeneration(ctx, setId);
 
         var verdicts = new List<(string Field, string Producer, List<ValidationMessage> Messages)>(rules.Length);
         for (var i = 0; i < rules.Length; i++)
-            verdicts.Add((rules[i].Field, RuleProducer(setId, i), await rules[i].ComputeAsync()));
+            verdicts.Add((rules[i].Field, RuleProducer(setId, i), await rules[i].ComputeAsync(cancellationToken)));
 
         CommitRuleSet(ctx, setId, generation, verdicts);
     }

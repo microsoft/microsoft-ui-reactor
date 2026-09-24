@@ -6144,7 +6144,9 @@ ToString() → string
 ### static class ValidationReconciler
 EvaluateRules(ValidationContext ctx, ValidationRuleElement[] rules) → void
 EvaluateRules(ValidationContext ctx, string setId, ValidationRuleElement[] rules) → void
+EvaluateRulesAsync(ValidationContext ctx, CancellationToken cancellationToken, ValidationRuleElement[] rules) → Task
 EvaluateRulesAsync(ValidationContext ctx, ValidationRuleElement[] rules) → Task
+EvaluateRulesAsync(ValidationContext ctx, string setId, CancellationToken cancellationToken, ValidationRuleElement[] rules) → Task
 EvaluateRulesAsync(ValidationContext ctx, string setId, ValidationRuleElement[] rules) → Task
 ValidateAttached(ValidationContext ctx, ValidationAttached attached, object value) → void
 ValidateField(ValidationContext ctx, string fieldName, object value, IValidator[] validators) → void

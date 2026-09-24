@@ -1655,6 +1655,45 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task A_Hung_Batch_Releases_Its_Evaluation_When_Cancelled()
+    {
+        var ctx = new ValidationContext();
+        var never = new TaskCompletionSource<bool>();
+        using var cts = new global::System.Threading.CancellationTokenSource();
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, cts.Token, ValidationRuleAsync(() => never.Task, "Never resolves", "a"));
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<global::System.OperationCanceledException>(() => running);
+        Assert.False(never.Task.IsCompleted);
+        Assert.Empty(ctx.GetMessages("a"));
+    }
+
+    [Fact]
+    public async Task A_Hung_Named_Set_Releases_Its_Evaluation_And_Installs_Nothing()
+    {
+        var ctx = new ValidationContext();
+        var never = new TaskCompletionSource<bool>();
+        using var cts = new global::System.Threading.CancellationTokenSource();
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", cts.Token,
+            ValidationRuleAsync(() => Task.FromResult(false), "Resolved verdict", "a"),
+            ValidationRuleAsync(() => never.Task, "Never resolves", "b"));
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<global::System.OperationCanceledException>(() => running);
+
+        // Verdicts are computed before any is committed, so a cancelled set installs
+        // nothing at all — not even the rule that had already resolved.
+        Assert.Empty(ctx.GetMessages("a"));
+        Assert.Empty(ctx.GetMessages("b"));
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

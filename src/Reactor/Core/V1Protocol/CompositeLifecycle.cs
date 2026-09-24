@@ -453,15 +453,17 @@ internal static class CompositeLifecycle
                 Diagnostics.LogCategory.Reactor, "ValidationRuleAsync.Evaluate", ex);
         }
 
-        if (ReferenceEquals(binding.Pending, cts)) binding.Pending = null;
+        // Compare-exchange, not check-then-assign: an update can install a newer source
+        // between the two, and a plain assignment would then clear *its* slot — leaving
+        // the newer pass uncancellable on the next update or unmount.
+        global::System.Threading.Interlocked.CompareExchange(ref binding.Pending, null, cts);
     }
 
     private static void CancelPendingRule(RuleBinding binding)
     {
-        var pending = binding.Pending;
+        var pending = global::System.Threading.Interlocked.Exchange(ref binding.Pending, null);
         if (pending is null) return;
 
-        binding.Pending = null;
         try
         {
             pending.Cancel();
