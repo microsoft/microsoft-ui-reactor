@@ -95,9 +95,15 @@ public static class ValidationRuleDsl
     /// </summary>
     internal static void Evaluate(this ValidationRuleElement rule, ValidationContext ctx, string producer)
     {
+        // Compute before touching the context. ComputeSync throws for a rule that
+        // carries an async predicate, and mutating first left the previous verdict
+        // installed with its generation already gone — so nothing could retract it
+        // and the stale error survived forever (issue #1262 review).
+        var messages = rule.ComputeSync();
+
         ctx.RegisterField(rule.Field);
         ctx.ClearAsyncGeneration(rule.Field, producer);
-        ctx.ApplyOwned(rule.Field, producer, rule.ComputeSync());
+        ctx.ApplyOwned(rule.Field, producer, messages);
     }
 
     /// <summary>

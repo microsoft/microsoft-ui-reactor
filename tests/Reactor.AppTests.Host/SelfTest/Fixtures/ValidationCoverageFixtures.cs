@@ -1492,4 +1492,92 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a context mutated from a worker thread.
+    //
+    //  UseValidationContext re-renders through the *default* (marshalling)
+    //  UseState setter rather than threadSafe: threadSafe would invoke the
+    //  re-render callback on whatever thread raised Changed, and an async
+    //  validator raises it from a worker — entering the reconciler off the UI
+    //  thread. This fixture is what makes that choice falsifiable.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal sealed record OffThreadProps(Action<ValidationContext> OnContext, Action<int> OnRender);
+
+    internal sealed class OffThreadValidationOwner : Component<OffThreadProps>
+    {
+        public override Element Render()
+        {
+            var props = Props;
+            var ctx = this.UseValidationContext();
+            props.OnContext(ctx);
+            props.OnRender(global::System.Environment.CurrentManagedThreadId);
+
+            return VStack(8,
+                When(ctx.HasError("email"), () => TextBlock("Email is taken")),
+                TextBlock("body"));
+        }
+    }
+
+    internal class Issue1262_OffThreadContextMutationMarshals(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            var uiThreadId = global::System.Environment.CurrentManagedThreadId;
+            var renderThreads = new List<int>();
+            ValidationContext? captured = null;
+
+            host.Mount(c => VStack(12,
+                Component<OffThreadValidationOwner, OffThreadProps>(
+                    new OffThreadProps(ctx => captured = ctx, id => renderThreads.Add(id))),
+                TextBlock("host")));
+
+            await Harness.Render();
+            H.Check("Issue1262_OffThread_ContextResolved", captured is not null);
+            if (captured is null) return;
+
+            H.Check("Issue1262_OffThread_NoErrorInitially", H.FindText("Email is taken") is null);
+            var rendersBefore = renderThreads.Count;
+
+            // Exactly what a background async validator does when it resolves.
+            global::System.Exception? thrown = null;
+            var rendersSeenInsideWorker = -1;
+            await Task.Run(() =>
+            {
+                try { captured.Add("email", "Email is taken"); }
+                catch (global::System.Exception ex) { thrown = ex; }
+                rendersSeenInsideWorker = renderThreads.Count;
+            });
+
+            H.Check("Issue1262_OffThread_MutationDidNotThrow", thrown is null,
+                thrown is null ? "" : $"{thrown.GetType().Name}: {thrown.Message}");
+
+            // The load-bearing assertion: the mutation must not have driven a render
+            // before it returned. A threadSafe state setter invokes the re-render
+            // callback on the raising thread, which for a child component renders
+            // inline — on the worker.
+            H.Check("Issue1262_OffThread_NoSynchronousRenderFromWorker",
+                rendersSeenInsideWorker == rendersBefore,
+                $"before={rendersBefore} insideWorker={rendersSeenInsideWorker}");
+
+            for (var i = 0; i < 6 && H.FindText("Email is taken") is null; i++)
+                await Harness.Render();
+
+            H.Check("Issue1262_OffThread_Repainted", H.FindText("Email is taken") is not null);
+            H.Check("Issue1262_OffThread_RenderedAgain", renderThreads.Count > rendersBefore,
+                $"renders={renderThreads.Count - rendersBefore}");
+
+            // The point: every render ran on the UI thread, including the one the
+            // worker-thread mutation caused.
+            var offThread = renderThreads.Where(id => id != uiThreadId).ToList();
+            H.Check("Issue1262_OffThread_AllRendersOnUiThread", offThread.Count == 0,
+                $"ui={uiThreadId} offThread={string.Join("|", offThread)}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 off-thread done"));
+            await Harness.Render();
+        }
+    }
 }

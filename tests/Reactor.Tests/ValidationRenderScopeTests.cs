@@ -1836,6 +1836,27 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task A_Failed_Sync_Evaluation_Leaves_The_Async_Generation_Intact()
+    {
+        var ctx = new ValidationContext();
+
+        // A verdict installed asynchronously under this producer.
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "Name is taken", "name");
+        await rule.EvaluateAsync(ctx, "rule#5", TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("name"));
+
+        // Evaluating the same async rule synchronously is a caller error and throws.
+        Assert.Throws<global::System.InvalidOperationException>(() => rule.Evaluate(ctx, "rule#5"));
+
+        // The throw must not have stripped the generation, or nothing could ever
+        // retract the message it left behind.
+        ctx.NotifyValueChanged("name", "someone-else");
+
+        Assert.Empty(ctx.GetMessages("name"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();
