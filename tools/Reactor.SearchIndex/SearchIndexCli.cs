@@ -49,13 +49,6 @@ public static class SearchIndexCli
                     var value = arg[AgentKitOption.Length..];
                     if (value.Length == 0) return Usage(log, "--agent-kit= requires a directory");
                     agentKitArg = Path.GetFullPath(value);
-                    // An INFERRED root is allowed to be absent — that is how a synthetic gallery
-                    // opts out. An EXPLICIT one that is not a directory is a typo, and Generate
-                    // would quietly treat it as "no markers" and write a details-free index.
-                    if (File.Exists(agentKitArg))
-                        return Usage(log, $"--agent-kit must be a directory, not a file: {agentKitArg}");
-                    if (!Directory.Exists(agentKitArg))
-                        return Usage(log, $"--agent-kit directory does not exist: {agentKitArg}");
                 }
                 else if (arg.StartsWith("--", StringComparison.Ordinal)) return Usage(log, $"unknown option '{arg}'");
                 else positional.Add(arg);
@@ -64,6 +57,25 @@ public static class SearchIndexCli
                 return Usage(log, $"too many arguments ({positional.Count}); expected at most [galleryDir] [editorialPath] [outPath]");
             if (noAgentKit && agentKitArg is not null)
                 return Usage(log, "--no-agent-kit and --agent-kit= are mutually exclusive");
+
+            // Validate the explicit override only after the combination is known to be sane, so
+            // a bad pairing reports the pairing rather than whatever the path happens to be.
+            //
+            // An INFERRED root is allowed to be absent — that is how a synthetic gallery opts
+            // out. An EXPLICIT one has to be a real kit, because Generate treats "no markdown
+            // found" identically to "no markers" and would write a details-free index and report
+            // success. --no-agent-kit is how to mean that on purpose.
+            if (agentKitArg is not null)
+            {
+                if (File.Exists(agentKitArg))
+                    return Usage(log, $"--agent-kit must be a directory, not a file: {agentKitArg}");
+                if (!Directory.Exists(agentKitArg))
+                    return Usage(log, $"--agent-kit directory does not exist: {agentKitArg}");
+                if (!LooksLikeAgentKit(agentKitArg))
+                    return Usage(log,
+                        $"--agent-kit does not look like an agent kit (no SKILL.md, plugins/ or skills/): {agentKitArg}" +
+                        " — use --no-agent-kit to skip marker extraction deliberately");
+            }
 
             // Canonicalize explicit paths (resolves '..'); defaults derive from the repo root.
             string? repoRoot = null;
@@ -127,6 +139,16 @@ public static class SearchIndexCli
         log.WriteLine("  --no-agent-kit   skip marker extraction entirely");
         return 2;
     }
+
+    /// <summary>
+    /// The three inputs <see cref="SearchIndexGenerator"/> scans for markers. Requiring at least
+    /// one keeps an existing-but-unrelated directory from passing validation and then silently
+    /// producing an index with no <c>details</c> at all.
+    /// </summary>
+    static bool LooksLikeAgentKit(string dir) =>
+        File.Exists(Path.Join(dir, "SKILL.md"))
+        || Directory.Exists(Path.Join(dir, "plugins"))
+        || Directory.Exists(Path.Join(dir, "skills"));
 
     static string FindRepoRoot() =>
         TryFindRepoRootFrom(AppContext.BaseDirectory)

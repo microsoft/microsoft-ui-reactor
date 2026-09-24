@@ -544,6 +544,17 @@ public sealed class SearchIndexCliTests
         Assert.Contains("must be a directory, not a file", fileLog.ToString());
         Assert.False(File.Exists(outPath), "a rejected run must not write an index");
 
+        // An existing but UNRELATED directory is the subtlest form: it passes an existence
+        // check, contributes no markdown, and would write a details-free index reporting
+        // success — the exact silent loss this option exists to prevent.
+        using var strayLog = new StringWriter();
+        var stray = Path.Join(g.Root, "not-a-kit");
+        Directory.CreateDirectory(stray);
+        Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={stray}", g.GalleryDir, ed, outPath }, strayLog));
+        Assert.Contains("does not look like an agent kit", strayLog.ToString());
+        Assert.Contains("--no-agent-kit", strayLog.ToString());
+        Assert.False(File.Exists(outPath), "a rejected run must not write an index");
+
         // Positive control: the same invocation against a real directory succeeds, so the
         // assertion above is about the missing path and not about the argument shape.
         var kit = g.WriteAgentKit("<!-- index:alpha -->\nAlpha prose.\n<!-- /index:alpha -->");
