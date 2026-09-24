@@ -359,6 +359,11 @@ class AlphaPage
     [InlineData("<!-- /index:alpha -->\n", "never opened")]
     [InlineData("<!-- index:alpha -->\nmismatched\n<!-- /index:beta -->", "closes the wrong block")]
     [InlineData("<!-- index:alpha -->\n\n   \n<!-- /index:alpha -->", "wraps no prose")]
+    // A marker id that is not lower-kebab must be REJECTED, not skipped. Matching only
+    // well-formed ids would make each of these invisible, silently costing the entry its prose.
+    [InlineData("<!-- index:Alpha -->\nwrong case\n<!-- /index:Alpha -->", "invalid id")]
+    [InlineData("<!-- index:use_state -->\nunderscore\n<!-- /index:use_state -->", "invalid id")]
+    [InlineData("<!-- index: -->\nempty\n<!-- /index: -->", "invalid id")]
     public void MalformedMarker_FailsGeneration(string markdown, string expected)
     {
         using var g = new MiniGallery(betaRouted: true);
@@ -544,26 +549,24 @@ public sealed class SearchIndexCliTests
         Assert.Contains("must be a directory, not a file", fileLog.ToString());
         Assert.False(File.Exists(outPath), "a rejected run must not write an index");
 
-        // An existing but UNRELATED directory is the subtlest form: it passes an existence
-        // check, contributes no markdown, and would write a details-free index reporting
-        // success — the exact silent loss this option exists to prevent.
-        using var strayLog = new StringWriter();
-        var stray = Path.Join(g.Root, "not-a-kit");
-        Directory.CreateDirectory(stray);
-        Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={stray}", g.GalleryDir, ed, outPath }, strayLog));
-        Assert.Contains("contains no markdown to scan", strayLog.ToString());
-        Assert.Contains("--no-agent-kit", strayLog.ToString());
-        Assert.False(File.Exists(outPath), "a rejected run must not write an index");
-
-        // ...and a directory that has the right SHAPE but no content is the same failure
-        // wearing a disguise, which is why the check asserts the outcome instead.
-        using var emptyLog = new StringWriter();
-        var shaped = Path.Join(g.Root, "shaped-kit");
-        Directory.CreateDirectory(Path.Join(shaped, "skills"));
-        Directory.CreateDirectory(Path.Join(shaped, "plugins"));
-        Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={shaped}", g.GalleryDir, ed, outPath }, emptyLog));
-        Assert.Contains("contains no markdown to scan", emptyLog.ToString());
-        Assert.False(File.Exists(outPath), "a rejected run must not write an index");
+        // An existing directory that contributes nothing is the subtlest form. It can be
+        // unrelated, correctly shaped but empty, or full of markdown that simply carries no
+        // markers — all three end the same way, so the check is on the OUTCOME, not the shape.
+        foreach (var (name, build) in new (string, Action<string>)[]
+        {
+            ("not-a-kit", static d => Directory.CreateDirectory(d)),
+            ("shaped-kit", static d => { Directory.CreateDirectory(Path.Join(d, "skills")); Directory.CreateDirectory(Path.Join(d, "plugins")); }),
+            ("markdown-no-markers", static d => { Directory.CreateDirectory(Path.Join(d, "skills")); File.WriteAllText(Path.Join(d, "skills", "readme.md"), "# Just prose, no markers\n"); }),
+        })
+        {
+            using var strayLog = new StringWriter();
+            var dir = Path.Join(g.Root, name);
+            build(dir);
+            Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={dir}", g.GalleryDir, ed, outPath }, strayLog));
+            Assert.Contains("produced no `details`", strayLog.ToString());
+            Assert.Contains("--no-agent-kit", strayLog.ToString());
+            Assert.False(File.Exists(outPath), $"a rejected run must not write an index ({name})");
+        }
 
         // Positive control: the same invocation against a real directory succeeds, so the
         // assertion above is about the missing path and not about the argument shape.

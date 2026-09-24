@@ -61,20 +61,16 @@ public static class SearchIndexCli
             // Validate the explicit override only after the combination is known to be sane, so
             // a bad pairing reports the pairing rather than whatever the path happens to be.
             //
-            // An INFERRED root is allowed to be absent — that is how a synthetic gallery opts
-            // out. An EXPLICIT one has to be a real kit, because Generate treats "no markdown
-            // found" identically to "no markers" and would write a details-free index and report
-            // success. --no-agent-kit is how to mean that on purpose.
+            // An INFERRED root is allowed to yield nothing — that is how a synthetic gallery opts
+            // out without a flag. An EXPLICIT one is checked against the OUTCOME after generation
+            // below, which is the only predicate that cannot drift: a directory can exist, have
+            // the right shape, and contain markdown, and still carry no markers.
             if (agentKitArg is not null)
             {
                 if (File.Exists(agentKitArg))
                     return Usage(log, $"--agent-kit must be a directory, not a file: {agentKitArg}");
                 if (!Directory.Exists(agentKitArg))
                     return Usage(log, $"--agent-kit directory does not exist: {agentKitArg}");
-                if (!AgentKitHasMarkdown(agentKitArg))
-                    return Usage(log,
-                        $"--agent-kit contains no markdown to scan (SKILL.md, plugins/**.md, skills/**.md): {agentKitArg}" +
-                        " — use --no-agent-kit to skip marker extraction deliberately");
             }
 
             // Canonicalize explicit paths (resolves '..'); defaults derive from the repo root.
@@ -98,7 +94,16 @@ public static class SearchIndexCli
             var agentKitRoot = noAgentKit ? null : agentKitArg ?? TryFindRepoRootFrom(galleryDir);
 
             var result = SearchIndexGenerator.Generate(galleryDir, editorialPath, agentKitRoot);
-            log.WriteLine($"[search-index] {result.ControlCount} controls, {result.Skipped.Count} skipped.");
+
+            // The outcome check that subsumes every shape heuristic: if a kit was named
+            // explicitly, it has to have contributed something. A directory can exist, look
+            // exactly like a kit, hold markdown, and still carry no `<!-- index:id -->` blocks.
+            if (agentKitArg is not null && result.DetailsCount == 0)
+                return Usage(log,
+                    $"--agent-kit produced no `details` — no `<!-- index:id -->` blocks were found under {agentKitArg}" +
+                    " — use --no-agent-kit to skip marker extraction deliberately");
+
+            log.WriteLine($"[search-index] {result.ControlCount} controls, {result.DetailsCount} with details, {result.Skipped.Count} skipped.");
             foreach (var s in result.Skipped)
                 log.WriteLine($"[search-index]   skip {s.Id} — {s.Reason}");
 
@@ -138,22 +143,6 @@ public static class SearchIndexCli
         log.WriteLine("                   contains galleryDir; a gallery outside a repo contributes no details.");
         log.WriteLine("  --no-agent-kit   skip marker extraction entirely");
         return 2;
-    }
-
-    /// <summary>
-    /// True when the directory actually yields markdown for the generator to scan. Checking the
-    /// OUTCOME rather than the shape is what makes this airtight: an empty <c>plugins/</c> or
-    /// <c>skills/</c> directory looks like a kit but contributes nothing, and would still produce
-    /// a details-free index reporting success.
-    /// </summary>
-    static bool AgentKitHasMarkdown(string dir)
-    {
-        if (File.Exists(Path.Join(dir, "SKILL.md"))) return true;
-
-        return new[] { "plugins", "skills" }
-            .Select(sub => Path.Join(dir, sub))
-            .Where(Directory.Exists)
-            .Any(sub => Directory.EnumerateFiles(sub, "*.md", SearchOption.AllDirectories).Any());
     }
 
     static string FindRepoRoot() =>

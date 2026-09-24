@@ -145,7 +145,7 @@ public static partial class SearchIndexGenerator
             Controls = entries,
         };
 
-        return new SearchIndexResult(Serialize(root), entries.Count, skipped);
+        return new SearchIndexResult(Serialize(root), entries.Count, skipped, entries.Count(e => e.Details is not null));
     }
 
     // ── Serialization ──────────────────────────────────────────────────────
@@ -574,6 +574,13 @@ public static partial class SearchIndexGenerator
             var id = m.Groups[2].Value;
             var line = LineAt(markdown, m.Index);
 
+            // A marker id is a control id, which is always lower-kebab. Anything else is a typo
+            // that would otherwise be skipped silently, taking the entry's prose with it.
+            if (!ValidMarkerIdRegex().IsMatch(id))
+                throw new InvalidOperationException(
+                    $"{where}({line}): `<!-- {(isClose ? "/" : "")}index:{id} -->` has an invalid id — " +
+                    "marker ids are control ids: lowercase letters, digits and hyphens only.");
+
             if (!isClose)
             {
                 if (openId is not null)
@@ -668,8 +675,15 @@ public static partial class SearchIndexGenerator
         });
     }
 
-    [GeneratedRegex(@"<!--\s*(/?)index:([a-z0-9][a-z0-9-]*)\s*-->")]
+    // Permissive DETECTION, strict VALIDATION. Matching only well-formed ids would make
+    // `<!-- index:UseState -->` or `<!-- index:use_state -->` invisible rather than wrong —
+    // the entry would quietly lose its prose, which is the failure mode this scanner exists
+    // to make impossible. So match anything marker-shaped and reject a bad id by name.
+    [GeneratedRegex(@"<!--\s*(/?)index:([^\s>]*)\s*-->")]
     private static partial Regex IndexMarkerRegex();
+
+    [GeneratedRegex(@"^[a-z0-9][a-z0-9-]*$")]
+    private static partial Regex ValidMarkerIdRegex();
 
     // Inline markdown links only — `](target)` with an optional title. Reference-style links and
     // bare autolinks are left alone; neither appears in the marked blocks.
@@ -732,7 +746,7 @@ public sealed class Sample
     public string Code { get; set; } = "";
 }
 
-public sealed record SearchIndexResult(string Json, int ControlCount, IReadOnlyList<SkippedControl> Skipped);
+public sealed record SearchIndexResult(string Json, int ControlCount, IReadOnlyList<SkippedControl> Skipped, int DetailsCount = 0);
 
 public sealed record SkippedControl(string Id, string Name, string Reason);
 
