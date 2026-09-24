@@ -70,6 +70,20 @@ public static class WinAppSdkTemplates
     /// </remarks>
     internal static string? ParsePackageBaseAddress(string serviceIndexJson)
     {
+        // The version suffix has moved across service-index revisions (3.0.0,
+        // 3.0.0-beta), so match the family rather than one literal.
+        static string? BaseAddressOf(JsonElement resource)
+        {
+            if (!resource.TryGetProperty("@type", out var type) || type.ValueKind != JsonValueKind.String)
+                return null;
+            if (!(type.GetString() ?? string.Empty)
+                    .StartsWith("PackageBaseAddress", StringComparison.OrdinalIgnoreCase))
+                return null;
+            if (!resource.TryGetProperty("@id", out var id) || id.ValueKind != JsonValueKind.String)
+                return null;
+            return id.GetString();
+        }
+
         try
         {
             using var doc = JsonDocument.Parse(serviceIndexJson);
@@ -78,27 +92,19 @@ public static class WinAppSdkTemplates
                 resources.ValueKind != JsonValueKind.Array)
                 return null;
 
-            foreach (var resource in resources.EnumerateArray().Where(r => r.ValueKind == JsonValueKind.Object))
-            {
-                if (!resource.TryGetProperty("@type", out var type) ||
-                    type.ValueKind != JsonValueKind.String) continue;
-                // The version suffix has moved across service-index revisions
-                // (3.0.0, 3.0.0-beta), so match the family rather than one literal.
-                if (!(type.GetString() ?? string.Empty)
-                        .StartsWith("PackageBaseAddress", StringComparison.OrdinalIgnoreCase)) continue;
-                if (!resource.TryGetProperty("@id", out var id) ||
-                    id.ValueKind != JsonValueKind.String) continue;
+            var value = resources.EnumerateArray()
+                .Where(resource => resource.ValueKind == JsonValueKind.Object)
+                .Select(BaseAddressOf)
+                .FirstOrDefault(address => !string.IsNullOrWhiteSpace(address));
 
-                var value = id.GetString();
-                if (string.IsNullOrWhiteSpace(value)) continue;
-                return value!.EndsWith('/') ? value : value + "/";
-            }
+            if (value is null) return null;
+            return value.EndsWith('/') ? value : value + "/";
         }
         catch (JsonException)
         {
             // Not a service index — fall back to the public flat container.
+            return null;
         }
-        return null;
     }
 
     /// <summary>
