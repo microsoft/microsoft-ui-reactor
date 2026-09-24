@@ -398,6 +398,12 @@ internal static class CompositeLifecycle
         // carries from a previous FormField rather than leaving it pointed at the old one.
         if (valCtx is null || string.IsNullOrEmpty(fieldName))
         {
+            // An update can drop the context *and* swap the content control in one pass.
+            // The root still points at the old editor's binding, and that editor is on
+            // its way to the pool with a live context — so neutralize what the root
+            // points at, not just the incoming control.
+            ClearFormFieldTouchBinding(formFieldRoot);
+            _rootBindings.Remove(formFieldRoot);
             ClearTouchBinding(fe);
             return;
         }
@@ -476,6 +482,17 @@ internal static class CompositeLifecycle
             binding.FieldName = null;
         }
     }
+
+    // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host):
+    // reports whether a control's once-per-lifetime LostFocus handler would still
+    // mark a field. The leak this guards — a displaced editor keeping the old
+    // context alive — is otherwise observable only through element-pool reuse,
+    // which is not deterministic enough to assert on.
+    internal static bool HasLiveTouchBindingForTests(UIElement contentControl) =>
+        contentControl is FrameworkElement fe
+        && _touchBindings.TryGetValue(fe, out var binding)
+        && binding.Context is not null
+        && !string.IsNullOrEmpty(binding.FieldName);
 
     private sealed class TouchBinding
     {

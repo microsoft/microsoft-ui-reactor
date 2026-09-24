@@ -93,6 +93,24 @@ internal static class ValidationRenderScope
     }
 
     /// <summary>
+    /// Opens a deferral-only frame around a whole reconcile pass.
+    /// <para>
+    /// Mounting, updating, and unmounting <c>ValidationRule</c> and <c>FormField</c>
+    /// happen *between* component renders, so they used to fall outside every frame and
+    /// announce their changes synchronously. A rule leaving the tree retracts its
+    /// contribution during unmount; if the owning <c>UseValidationContext()</c> lives in
+    /// a child component, that notification re-entered the reconciler's inline re-render
+    /// path while the subtree was still being torn down. Holding a frame for the
+    /// duration of the pass defers every such notification to the end of it.
+    /// </para>
+    /// <para>
+    /// The frame carries no context: no component is rendering, so <c>.Validate()</c>
+    /// reached from reconcile code stays attach-only exactly as before.
+    /// </para>
+    /// </summary>
+    internal static Frame BeginReconcile() => Begin(null);
+
+    /// <summary>
     /// Called by <c>UseValidationContext()</c> with the context it resolved.
     /// <paramref name="autoProvide"/> is true when the hook fell back to a
     /// component-local context, meaning nothing up the tree has provided one and the

@@ -873,4 +873,191 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a rule removed from a *child* component.
+    //
+    //  Retraction runs during unmount, which sits between renders and so used
+    //  to fall outside every validation frame. When the context is owned by a
+    //  child via UseValidationContext(), announcing that change inline drove
+    //  CreateComponentRerender back into the reconciler while the subtree was
+    //  still being torn down. The root-host fixture above cannot see this: a
+    //  root re-render only schedules.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal sealed record ChildRuleProps(bool ShowRule, Action<ValidationContext> OnContext, Action OnRender);
+
+    internal sealed class ChildRuleOwner : Component<ChildRuleProps>
+    {
+        public override Element Render()
+        {
+            var props = Props;
+            var ctx = this.UseValidationContext();
+            props.OnContext(ctx);
+            props.OnRender();
+
+            return VStack(8,
+                When(props.ShowRule, () => ValidationRule(() => false, "Rule failed", "form")),
+                // Structural: the removal's retraction notification re-renders this
+                // component, and the re-render changes the very subtree the reconciler
+                // is still walking to unmount the rule.
+                When(!ctx.IsValid(), () => TextBlock("child-invalid")),
+                When(ctx.IsValid(), () => VStack(4, TextBlock("child-valid"), TextBlock("ok"))),
+                TextBlock("tail"));
+        }
+    }
+
+    internal class Issue1262_RuleRetractsFromChildComponent(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            Action<bool>? setShowRule = null;
+            ValidationContext? childCtx = null;
+            var childRenders = 0;
+
+            host.Mount(c =>
+            {
+                var (showRule, setShow) = c.UseState(true);
+                setShowRule = setShow;
+
+                return VStack(12,
+                    Component<ChildRuleOwner, ChildRuleProps>(
+                        new ChildRuleProps(showRule, ctx => childCtx = ctx, () => childRenders++)),
+                    TextBlock("host"));
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_ChildRule_ContextResolved", childCtx is not null);
+            if (childCtx is null) return;
+
+            H.Check("Issue1262_ChildRule_InvalidWhileMounted", !childCtx.IsValid());
+            H.Check("Issue1262_ChildRule_MessageRecorded", childCtx.GetMessages("form").Count == 1);
+
+            var rendersBefore = childRenders;
+
+            // The removal itself: unmount retracts, and that retraction is a real
+            // change, so it notifies the child that owns the context.
+            setShowRule!(false);
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_ChildRule_RetractedOnRemoval", childCtx.GetMessages("form").Count == 0,
+                $"remaining={string.Join("|", childCtx.GetMessages("form").Select(m => m.Text))}");
+            H.Check("Issue1262_ChildRule_ValidAfterRemoval", childCtx.IsValid());
+
+            // A handful of renders is the removal plus its notification settling; an
+            // inline re-entrant notification shows up as a storm. The reconcile-wide
+            // deferral frame is what keeps this bounded for direct ctx.Changed
+            // subscribers, which do not get UseState's marshalling.
+            var delta = childRenders - rendersBefore;
+            H.Check("Issue1262_ChildRule_NoRenderStorm", delta <= 6, $"childRenders={delta}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 child rule done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a FormField that loses its context *and* swaps its
+    //  content control in one update.
+    //
+    //  Only the incoming control's binding used to be neutralized; the root
+    //  still pointed at the outgoing editor's live binding, and that editor was
+    //  already on its way to the pool. Rented back for a non-FormField use — the
+    //  one path that never re-points the binding — it kept marking the old field.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_DisplacedRootBindingCleared(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            Action<int>? setMode = null;
+
+            host.Mount(c =>
+            {
+                var (mode, set) = c.UseState(0);
+                setMode = set;
+
+                if (mode == 0)
+                {
+                    return VStack(12,
+                        FormField(
+                            TextBox("").Validate("name", "", Validate.Required("Name is required")),
+                            label: "Full Name",
+                            showWhen: ShowWhen.Always),
+                        Button("Away", () => { }))
+                        .Provide(ValidationContexts.Current, ctx);
+                }
+
+                if (mode == 1)
+                {
+                    // Context dropped and the content control swapped in the same pass.
+                    return VStack(12,
+                        FormField(
+                            TextBlock("swapped"),
+                            label: "Full Name",
+                            showWhen: ShowWhen.Always),
+                        Button("Away", () => { }));
+                }
+
+                // The displaced editor is rented back for a plain, non-FormField use.
+                return VStack(12,
+                    TextBox(""),
+                    Button("Away", () => { }));
+            });
+
+            await Harness.Render();
+            var original = H.FindControl<TextBox>(_ => true);
+            var away = H.FindButton("Away");
+            H.Check("Issue1262_Displaced_ControlsFound", original is not null && away is not null);
+            if (original is null || away is null) return;
+
+            original.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            away.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            H.Check("Issue1262_Displaced_MarksWhileBound", ctx.IsTouched("name"));
+
+            ctx.Reset("name");
+            H.Check("Issue1262_Displaced_ResetClearedTouched", !ctx.IsTouched("name"));
+
+            setMode!(1);
+            await Harness.Render();
+
+            // The editor is out of the tree and on its way to the pool. Its binding
+            // must be neutralized, or a later non-FormField use of the same control
+            // keeps marking this field — and keeps this context alive.
+            H.Check("Issue1262_Displaced_BindingNeutralized",
+                !global::Microsoft.UI.Reactor.Core.V1Protocol.CompositeLifecycle
+                    .HasLiveTouchBindingForTests(original),
+                "the displaced editor still carries a live blur binding");
+
+            setMode!(2);
+            await Harness.Render();
+
+            var rented = H.FindControl<TextBox>(_ => true);
+            if (rented is null) { H.Check("Issue1262_Displaced_PlainBoxRendered", false); return; }
+
+            // Whether or not the pool handed back the same instance, nothing in the
+            // plain, non-FormField slot may report to the old context.
+            var awayAgain = H.FindButton("Away");
+            if (awayAgain is null) { H.Check("Issue1262_Displaced_AwayFound", false); return; }
+
+            rented.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            awayAgain.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+
+            H.Check("Issue1262_Displaced_SilentAfterDisplacement", !ctx.IsTouched("name"),
+                $"reused={ReferenceEquals(original, rented)}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 displaced binding done"));
+            await Harness.Render();
+        }
+    }
 }

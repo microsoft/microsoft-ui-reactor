@@ -1479,6 +1479,9 @@ public sealed partial class Reconciler : IDisposable
         UIElement? existingControl,
         Action requestRerender)
     {
+        // Declared first so it is disposed last: validation changes raised by mount,
+        // update, or unmount are announced only once the whole pass has finished.
+        using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
         ReferenceDirtySet.BeginCommit();
         try
         {

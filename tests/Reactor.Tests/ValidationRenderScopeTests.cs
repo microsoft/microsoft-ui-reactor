@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls.Validation;
+using System.Threading.Tasks;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationRuleDsl;
 using Xunit;
@@ -1127,5 +1128,117 @@ public class ValidationRenderScopeTests
 
         Assert.Single(ctx.GetMessages("email"));
         Assert.Equal("REQUIRED", ctx.GetMessages("email")[0].Code);
+    }
+
+    [Fact]
+    public void A_Reconcile_Frame_Defers_Notifications_Raised_Between_Renders()
+    {
+        var ctx = new ValidationContext();
+        var notified = 0;
+        ctx.Changed += () => notified++;
+
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            // No component is rendering, so .Validate() must still be attach-only.
+            Assert.Null(ValidationRenderScope.Current);
+
+            // This is what a rule unmounting mid-reconcile does.
+            ctx.Add("dates", "End must follow start");
+            Assert.Equal(0, notified);
+        }
+
+        Assert.Equal(1, notified);
+    }
+
+    [Fact]
+    public void A_Deferred_Notification_Reaches_A_Subscriber_That_Arrives_After_The_Flush()
+    {
+        var ctx = new ValidationContext();
+        var notified = 0;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+
+        // The frame has closed and the deferral already flushed — a host flushes root
+        // effects only after reconciliation, so the parent subscribes at about here.
+        ctx.Changed += () => notified++;
+
+        Assert.Equal(1, notified);
+    }
+
+    [Fact]
+    public void A_Held_Notification_Is_Delivered_Once_Not_Per_Subscriber()
+    {
+        var ctx = new ValidationContext();
+        int first = 0, second = 0;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+
+        ctx.Changed += () => first++;
+        ctx.Changed += () => second++;
+
+        Assert.Equal(1, first);
+        Assert.Equal(0, second);
+    }
+
+    [Fact]
+    public async Task Overlapping_Async_Rule_Evaluations_Discard_The_Older_Result()
+    {
+        var ctx = new ValidationContext();
+        var slow = new TaskCompletionSource<bool>();
+        var quick = new TaskCompletionSource<bool>();
+
+        var failing = ValidationRuleAsync(() => slow.Task, "End must follow start", "dates");
+        var passing = failing with { AsyncPredicate = () => quick.Task };
+
+        // Same producer: two evaluations of one mounted rule, overlapping.
+        var older = failing.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+        var newer = passing.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+
+        quick.SetResult(true);
+        await newer;
+        Assert.Empty(ctx.GetMessages("dates"));
+
+        // The older run resolves last and must not reinstate its verdict.
+        slow.SetResult(false);
+        await older;
+
+        Assert.Empty(ctx.GetMessages("dates"));
+    }
+
+    [Fact]
+    public async Task An_Async_Rule_Still_Applies_Its_Own_Newest_Result()
+    {
+        var ctx = new ValidationContext();
+
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "End must follow start", "dates");
+        await rule.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+
+        Assert.Single(ctx.GetMessages("dates"));
+        Assert.Equal("End must follow start", ctx.GetMessages("dates")[0].Text);
+    }
+
+    [Fact]
+    public async Task Async_Producers_On_One_Field_Do_Not_Cancel_Each_Other()
+    {
+        var ctx = new ValidationContext();
+        var closed = new TaskCompletionSource<bool>();
+        var tooLong = new TaskCompletionSource<bool>();
+
+        var ruleA = ValidationRuleAsync(() => closed.Task, "Range is closed", "dates");
+        var ruleB = ValidationRuleAsync(() => tooLong.Task, "Range is too long", "dates");
+
+        // Both passes are open before either applies — a token shared across the field
+        // would let B's Begin retire A's still-pending pass.
+        var a = ruleA.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+        var b = ruleB.EvaluateAsync(ctx, "rule#2", TestContext.Current.CancellationToken);
+
+        closed.SetResult(false);
+        await a;
+        tooLong.SetResult(false);
+        await b;
+
+        Assert.Equal(2, ctx.GetMessages("dates").Count);
     }
 }

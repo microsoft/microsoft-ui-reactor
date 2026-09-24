@@ -94,6 +94,12 @@ public static class ValidationRuleDsl
     /// twice per evaluation for an already-failing rule, and would briefly report the
     /// field as valid in between.
     /// </para>
+    /// <para>
+    /// Overlapping evaluations are ordered by a generation token taken before the
+    /// predicate is awaited. Without it, a slow failing check started first could
+    /// resolve after a fast passing one and reinstate an error the newer run had
+    /// already cleared.
+    /// </para>
     /// </summary>
     public static Task EvaluateAsync(this ValidationRuleElement rule, ValidationContext ctx,
         CancellationToken cancellationToken = default)
@@ -108,10 +114,12 @@ public static class ValidationRuleDsl
             return;
         }
 
+        var generation = ctx.BeginAsyncProducer(rule.Field, producer);
+
         var result = await rule.AsyncPredicate();
         cancellationToken.ThrowIfCancellationRequested();
 
-        ctx.ApplyOwned(rule.Field, producer, BuildMessages(rule, result));
+        ctx.ApplyAsyncOwned(rule.Field, producer, generation, BuildMessages(rule, result));
     }
 
     /// <summary>

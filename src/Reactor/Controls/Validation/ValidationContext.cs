@@ -13,7 +13,7 @@ public sealed class ValidationContext
     // producer can retract its own messages without disturbing the others on that field.
     private readonly Dictionary<string, Dictionary<string, List<ValidationMessage>>> _owned = new();
     // field -> newest async pass token; older passes that resolve late are discarded.
-    private readonly Dictionary<string, int> _asyncGeneration = new();
+    private readonly Dictionary<string, Dictionary<string, int>> _asyncGeneration = new();
     // Context-wide token source. Never reset, so a token retired by a clear can never be
     // handed out again while the pass holding it is still in flight.
     private int _asyncTicket;
@@ -42,7 +42,35 @@ public sealed class ValidationContext
     /// re-enter the reconciler's re-render path from inside <c>Render()</c>.
     /// </para>
     /// </summary>
-    public event Action? Changed;
+    public event Action? Changed
+    {
+        add
+        {
+            if (value is null) return;
+            bool deliverNow;
+            lock (_lock)
+            {
+                _changed += value;
+                deliverNow = _notificationPending;
+                _notificationPending = false;
+            }
+
+            // A deferred notification that found no subscriber is held rather than
+            // dropped: during an initial root render the reconciler flushes the
+            // deferral before root effects run, so a parent that is about to
+            // subscribe would otherwise never hear that a child invalidated the
+            // shared context, and its rendered IsValid()/summary would stay stale.
+            if (deliverNow) value();
+        }
+        remove
+        {
+            if (value is null) return;
+            lock (_lock) _changed -= value;
+        }
+    }
+
+    private Action? _changed;
+    private bool _notificationPending;
 
     /// <summary>
     /// Monotonically increasing version number, bumped on every mutation.
@@ -73,7 +101,7 @@ public sealed class ValidationContext
             ValidationRenderScope.DeferNotification(this);
             return;
         }
-        Changed?.Invoke();
+        _changed?.Invoke();
     }
 
     /// <summary>
@@ -81,16 +109,37 @@ public sealed class ValidationContext
     /// Posted through the UI dispatcher when one is available so it lands after the
     /// in-flight reconcile rather than re-entering it; falls back to an inline raise in
     /// headless hosts, which keeps unit tests deterministic.
+    /// <para>
+    /// The subscriber list is read when the callback runs, not when it is queued. A
+    /// host flushes root effects after reconciliation, so a parent's
+    /// <c>UseValidationContext()</c> subscription may not exist yet at queue time;
+    /// snapshotting there dropped the notification the parent was waiting for. If
+    /// there is still no subscriber at delivery time the notification is held for the
+    /// first one to arrive.
+    /// </para>
     /// </summary>
     internal void NotifyDeferred()
     {
-        var handler = Changed;
-        if (handler is null) return;
-
         var dispatcher = global::Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
-        if (dispatcher is not null && dispatcher.TryEnqueue(() => handler.Invoke()))
+        if (dispatcher is not null && dispatcher.TryEnqueue(DeliverDeferred))
             return;
 
+        DeliverDeferred();
+    }
+
+    private void DeliverDeferred()
+    {
+        Action? handler;
+        lock (_lock)
+        {
+            handler = _changed;
+            if (handler is null)
+            {
+                _notificationPending = true;
+                return;
+            }
+            _notificationPending = false;
+        }
         handler.Invoke();
     }
 
@@ -340,14 +389,26 @@ public sealed class ValidationContext
     /// </para>
     /// </summary>
     internal void ApplyAsyncValidation(string field, int generation, List<ValidationMessage> messages)
+        => ApplyAsyncOwned(field, AsyncProducer, generation, messages);
+
+    /// <summary>
+    /// Installs an async producer's result for a field, but only if it is still the
+    /// newest pass that producer opened. Generations are tracked per producer because
+    /// several can write the same field — an async <c>ValidationRule</c> alongside the
+    /// field's own <c>.ValidateAsync(...)</c> — and a shared token would let whichever
+    /// finished last cancel the other.
+    /// </summary>
+    internal void ApplyAsyncOwned(string field, string producer, int generation, List<ValidationMessage> messages)
     {
         bool changed;
         lock (_lock)
         {
-            if (!_asyncGeneration.TryGetValue(field, out var newest) || newest != generation)
+            if (!_asyncGeneration.TryGetValue(field, out var byProducer)
+                || !byProducer.TryGetValue(producer, out var newest)
+                || newest != generation)
                 return;
 
-            changed = ApplyOwnedLocked(field, AsyncProducer, messages);
+            changed = ApplyOwnedLocked(field, producer, messages);
             if (changed) _version++;
         }
         if (changed) RaiseChanged();
@@ -364,12 +425,22 @@ public sealed class ValidationContext
     /// holding, and the stale result would pass the equality check.
     /// </para>
     /// </summary>
-    internal int BeginAsyncValidation(string field)
+    internal int BeginAsyncValidation(string field) => BeginAsyncProducer(field, AsyncProducer);
+
+    /// <summary>
+    /// Opens an async pass for one producer on a field. Overlapping evaluations of the
+    /// same producer are ordered by this token: an older one that resolves last is
+    /// discarded instead of reinstating a verdict about a value or predicate input that
+    /// has already been superseded.
+    /// </summary>
+    internal int BeginAsyncProducer(string field, string producer)
     {
         lock (_lock)
         {
             var token = unchecked(++_asyncTicket);
-            _asyncGeneration[field] = token;
+            if (!_asyncGeneration.TryGetValue(field, out var byProducer))
+                _asyncGeneration[field] = byProducer = new Dictionary<string, int>(StringComparer.Ordinal);
+            byProducer[producer] = token;
             return token;
         }
     }
