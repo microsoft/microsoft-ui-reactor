@@ -289,6 +289,51 @@ public sealed class WinAppSdkTemplatesTests
         Assert.Null(WinAppSdkTemplates.InterpretInstalledVersionOutput(listing));
     }
 
+    [Fact]
+    public void InterpretTemplateListOutput_requires_the_exact_short_name()
+    {
+        // Two traps in one fixture:
+        //   • '-' is a word boundary, so `\breactor\b` / Contains("reactor") also
+        //     matches `reactor-mvu` and `winui-reactor`;
+        //   • the Template Name column carries the capitalised prose word
+        //     "Reactor" as a standalone token, so a case-insensitive token match
+        //     passes too.
+        // Neither means the blank `reactor` template is installed.
+        const string withoutBlank = """
+            These templates matched your input: 'reactor'
+
+            Template Name                      Short Name                     Language
+            ---------------------------------  -----------------------------  --------
+            Reactor MVU App (Experimental)     reactor-mvu,winui-reactor-mvu  [C#]
+            """;
+
+        Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(withoutBlank));
+    }
+
+    [Fact]
+    public void InterpretTemplateListOutput_accepts_the_short_name_in_a_comma_list()
+    {
+        // Real listings put the blank template's aliases in one comma-separated
+        // column, so the token match must survive commas on both sides.
+        const string withBlank = """
+            These templates matched your input: 'reactor'
+
+            Template Name                      Short Name                     Language
+            ---------------------------------  -----------------------------  --------
+            Reactor Blank App (Experimental)   reactor,reactor-blank          [C#]
+            """;
+
+        Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(withBlank));
+    }
+
+    [Fact]
+    public void RedactSource_strips_a_credential_bearing_fragment()
+    {
+        // UriBuilder preserves the fragment, so it has to be masked explicitly.
+        var redacted = WinAppSdkTemplates.RedactSource("https://feed.example.com/v3/index.json#PAT");
+        Assert.DoesNotContain("PAT", redacted, StringComparison.Ordinal);
+    }
+
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
     //
     // Observed live during the de-stale merge: the machine had

@@ -30,6 +30,7 @@
 
 using System.Diagnostics;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Cli.Pack;
 
 namespace Microsoft.UI.Reactor.Cli.Templates;
@@ -114,8 +115,27 @@ public static class WinAppSdkTemplates
         // precisely when it is absent. Check the negative marker first.
         if (output.Contains("No templates found", StringComparison.OrdinalIgnoreCase))
             return false;
-        return output.Contains(BlankShortName, StringComparison.OrdinalIgnoreCase);
+
+        // Match the short name as a whole token. A plain Contains (or a \b regex)
+        // also matches `reactor-mvu` and `winui-reactor`, because '-' is a word
+        // boundary — so a listing that has the richer shells but not the blank
+        // template would be read as success. Short names are comma-separated
+        // within a whitespace-delimited column, so require one of those delimiters
+        // on each side.
+        //
+        // Deliberately case-sensitive: the Template Name column carries the
+        // capitalised prose word ("Reactor MVU App"), which is a standalone token
+        // and would match case-insensitively even when the blank template is
+        // absent. Short names are lowercase and BlankShortName is a constant.
+        return Regex.IsMatch(output, BlankShortNameTokenPattern);
     }
+
+    /// <summary>
+    /// <see cref="BlankShortName"/> as a whole token: preceded and followed by a
+    /// comma, whitespace, or the edge of the text.
+    /// </summary>
+    private static readonly string BlankShortNameTokenPattern =
+        @"(?<![^\s,])" + Regex.Escape(BlankShortName) + @"(?![^\s,])";
 
     /// <summary>
     /// The installed version of the template pack, or null when it isn't
@@ -241,6 +261,7 @@ public static class WinAppSdkTemplates
             UserName = string.IsNullOrEmpty(uri.UserInfo) ? string.Empty : "***",
             Password = string.Empty,
             Query = string.IsNullOrEmpty(uri.Query) ? string.Empty : "***",
+            Fragment = string.IsNullOrEmpty(uri.Fragment) ? string.Empty : "***",
         };
         return builder.Uri.ToString();
     }
@@ -282,15 +303,18 @@ public static class WinAppSdkTemplates
 
             // Redacting the echo is not enough: the source becomes a child-process
             // argument, and on Windows any process can read another's command line.
-            // A PAT in user-info or the query string would be readable there, so
-            // refuse it outright and point at the supported ways to authenticate.
-            if (!string.IsNullOrEmpty(sourceUri.UserInfo) || !string.IsNullOrEmpty(sourceUri.Query))
+            // A PAT in user-info, the query string or the fragment would be readable
+            // there, so refuse it outright and point at the supported ways to
+            // authenticate.
+            if (!string.IsNullOrEmpty(sourceUri.UserInfo) ||
+                !string.IsNullOrEmpty(sourceUri.Query) ||
+                !string.IsNullOrEmpty(sourceUri.Fragment))
             {
                 Console.Error.WriteLine(
-                    "  error: refusing a --source URL that carries credentials in its user-info or query " +
-                    "string — it would be visible in this process's command line to any other process. " +
-                    "Configure the feed in NuGet.config (credential provider) and pass a local folder of " +
-                    "nupkgs instead.");
+                    "  error: refusing a --source URL that carries credentials in its user-info, query " +
+                    "string or fragment — it would be visible in this process's command line to any other " +
+                    "process. Configure the feed in NuGet.config (credential provider) and pass a local " +
+                    "folder of nupkgs instead.");
                 return InstallOutcome.Failed;
             }
 

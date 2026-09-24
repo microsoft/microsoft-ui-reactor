@@ -744,11 +744,28 @@ if ($SkipTemplates) {
     # an already-installed pack because nothing newer could be resolved. That pack
     # can predate the Reactor templates (0.0.6-alpha shipped without them), so
     # confirm the short name actually resolves before claiming success.
+    #
+    # Reuse the CLI probe rather than grepping the listing here: `mur templates
+    # status` matches the short name as a whole token, which a naive regex does
+    # not — `\breactor\b` also matches `reactor-mvu` and `winui-reactor`, so a
+    # listing without the blank template would read as success.
     $templatesVerified = $false
-    $listing = & dotnet new list reactor 2>&1 | Out-String
-    if ($listing -notmatch 'No templates found' -and $listing -match '\breactor\b') {
-        $templatesVerified = $true
+    $statusExit = 0
+    Invoke-ReactorWithRestoreEnvironment `
+        -NuGetConfig $effectiveNuGetConfig `
+        -NuGetSource $effectiveNuGetSource `
+        -ExitCode ([ref]$statusExit) `
+        -Action {
+        $murResolved = Get-Command mur -ErrorAction SilentlyContinue
+        if ($murResolved) { & mur templates status | Out-Null }
+        else {
+            & dotnet run `
+                --project (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj') `
+                -c $Configuration "-p:Platform=$hostArch" --nologo `
+                -- templates status | Out-Null
+        }
     }
+    $templatesVerified = ($statusExit -eq 0)
 
     if ($templatesVerified) {
         Write-Ok '`dotnet new reactor` templates registered'
