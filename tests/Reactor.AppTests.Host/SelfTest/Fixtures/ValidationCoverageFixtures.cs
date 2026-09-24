@@ -1547,7 +1547,15 @@ internal static class ValidationCoverageFixtures
             await Task.Run(() =>
             {
                 try { captured.Add("email", "Email is taken"); }
-                catch (global::System.Exception ex) { thrown = ex; }
+                catch (global::System.Exception ex)
+                    when (ex is not global::System.OutOfMemoryException
+                          and not global::System.StackOverflowException)
+                {
+                    // Deliberately broad: the assertion below is "any failure at all",
+                    // since the defect this guards against is an off-thread reconcile
+                    // surfacing as a COM or invalid-operation exception.
+                    thrown = ex;
+                }
                 rendersSeenInsideWorker = renderThreads.Count;
             });
 
