@@ -295,11 +295,11 @@ jobs:
       #
       # The pin here is the *action* revision, by commit SHA. The CLI payload it installs is not
       # pinned: the action's `version` input defaults to 'latest', so the winapp build under test
-      # tracks upstream releases. That is deliberate for now — no published winapp carries
-      # winappCli#767 yet, so pinning would freeze the suite to a build that cannot exercise the
-      # continuity at all. The day a release ships the verb, add `with: version: <that release>`
-      # and set REACTOR_E2E_REQUIRE_UI_YIELD=1 on the E2E step together: a pinned version is what
-      # makes strict mode a stable gate rather than a bet on whatever 'latest' resolved to.
+      # tracks upstream releases. That is load-bearing rather than incidental — v0.7.0 (2026-09-24)
+      # is the first release carrying winappCli#767, and CI picked it up within hours with no
+      # change here, flipping the capability from Absent to Present between two runs of this very
+      # PR. Pinning `with: version:` is what would make REACTOR_E2E_REQUIRE_UI_YIELD a stable gate
+      # rather than a bet on whatever 'latest' resolved to, so the two belong in the same change.
       #
       # PATH alone does not decide what the tests use. WinAppUi.ResolveWinAppExe() prefers, in
       # order: $REACTOR_WINAPP_EXE, then %LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe, and only
@@ -315,11 +315,12 @@ jobs:
       # cooperative-UI-turn verb (winappCli#767). The E2E suite's continuity tests skip when
       # `ui yield` is absent, and Microsoft.Testing.Platform reports a skip as *passed with
       # zero skipped* — so without this step a run against a winapp that predates #767 looks
-      # identical to one where the continuity was measured. Never gates the job: no published
-      # winapp contains #767 yet (v0.6.0 2026-08-12 stable / v0.6.1 2026-08-19 prerelease, both
-      # older than the 2026-09-09 merge), and continuity only matters where several agents share
-      # a desktop, which a single-checkout runner never does. When a release does ship the verb,
-      # pin it above and set REACTOR_E2E_REQUIRE_UI_YIELD=1 to turn the skip into an assertion.
+      # identical to one where the continuity was measured. Never gates the job by itself; the
+      # step below turns the recorded verdict into an assertion. Since v0.7.0 (2026-09-24) the
+      # runner's `latest` does carry the verb, so the continuity tests now execute rather than
+      # skip; setting REACTOR_E2E_REQUIRE_UI_YIELD=1 here (together with pinning that version
+      # above) is what would additionally make a regression *back* to a verb-less winapp a
+      # failure rather than a silent return to skipping.
       #
       # `ui yield` is a sound sentinel for the whole mechanism rather than one verb of it: #767 is
       # what added UiYieldCommand, alongside the desktop lock, scheduler and participant registry
@@ -464,11 +465,11 @@ jobs:
       # turning the verdict into a failing run only happens in a real test process.
       #
       # Deliberately a DIFFERENTIAL rather than "expect failure". `setup-WinAppCli` installs
-      # `latest`, so the runner's winapp moves without anyone editing this file — 0.6.0 today,
-      # which has no `ui yield`. Hardcoding "this must fail" would turn the day winappCli#767
-      # ships into a red build for entirely the wrong reason, and hardcoding "this must pass" is
-      # unsatisfiable until then. Asserting that the gate AGREES WITH THE PROBE holds under both
-      # worlds and needs no edit when the dependency moves.
+      # `latest`, so the runner's winapp moves without anyone editing this file — and it did
+      # exactly that mid-PR: v0.7.0 published 2026-09-24 and CI went from 0.6.0/Absent to
+      # 0.7.0/Present between two runs. A hardcoded "this must fail" would have reddened the
+      # build at that moment for entirely the wrong reason. Asserting that the gate AGREES WITH
+      # THE PROBE holds under both worlds and needed no edit when the dependency moved.
       #
       # Both arms were verified locally before this step was written: against a winapp carrying
       # the verb the same two tests exit 0, and against a resolved binary that is not winapp at

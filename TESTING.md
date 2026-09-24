@@ -843,13 +843,13 @@ runs as evidence.
 > **This section describes a winapp that carries [winappCli#767][winapp767], and nothing in it is
 > in force without one.** That PR *introduced* interactive-desktop coordination wholesale — the
 > lock, the scheduler, the participant registry, the `ui yield` verb, and the coordination call in
-> every `ui` verb. It merged **2026-09-09**, and the newest published release is **v0.6.1
-> (2026-08-19)**, so every release to date predates it. `setup-WinAppCli` downloads
-> `releases/download/<tag>/winappcli-<arch>.zip`, which means CI's `latest` resolves to a build
-> with **no turn arbitration at all** — not merely one missing `ui yield`. Against such a build
-> the stamped variable is simply an unread environment variable: inert, harmless, and
-> forward-compatible, so this wiring starts working the day a release carries #767 with no change
-> here. The E2E job records which winapp it resolved and whether the verb is present in its step
+> every `ui` verb. It merged **2026-09-09** and first shipped in **v0.7.0 (2026-09-24)**; every
+> earlier release (v0.6.0, v0.6.1) predates it and has **no turn arbitration at all** — not merely
+> a missing `ui yield`. `setup-WinAppCli` downloads `releases/download/<tag>/winappcli-<arch>.zip`
+> and defaults to `latest`, so CI picked v0.7.0 up automatically. Against an older build the
+> stamped variable is simply an unread environment variable: inert, harmless, and
+> forward-compatible, which is why this wiring started working the day a release carried #767 with
+> no change here. The E2E job records which winapp it resolved and whether the verb is present in its step
 > summary, so this is an observed fact per run rather than an assumption; `ui yield` is a sound
 > sentinel for the whole subsystem precisely because #767 is what added it.
 
@@ -920,9 +920,10 @@ re-runs the two gated tests with the variable set and asserts the result **agree
 probe**: `Present` must pass, `Absent`/`Unreadable` must fail *and* carry the gate's own message
 (a bare non-zero exit would also match an invalid command line or a zero-test run). It is
 deliberately a differential rather than "expect failure", because `setup-WinAppCli` installs
-`latest` and the runner's winapp therefore moves without anyone editing the workflow — 0.6.0
-today, which has no `ui yield`. Hardcoding either outcome would redden the build for the wrong
-reason the day winappCli#767 ships.
+`latest` and the runner's winapp therefore moves without anyone editing the workflow. That is not
+hypothetical: **v0.7.0 published 2026-09-24** — the first release carrying #767 — and CI went from
+`0.6.0`/`Absent` to `0.7.0`/`Present` between two runs of the PR that added this step. A hardcoded
+expectation would have reddened the build at that moment for the wrong reason.
 
 An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
 own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp
