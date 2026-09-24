@@ -50,8 +50,10 @@ public static class SearchIndexCli
                     if (value.Length == 0) return Usage(log, "--agent-kit= requires a directory");
                     agentKitArg = Path.GetFullPath(value);
                     // An INFERRED root is allowed to be absent — that is how a synthetic gallery
-                    // opts out. An EXPLICIT one that does not exist is a typo, and Generate would
-                    // quietly treat it as "no markers" and write a details-free index.
+                    // opts out. An EXPLICIT one that is not a directory is a typo, and Generate
+                    // would quietly treat it as "no markers" and write a details-free index.
+                    if (File.Exists(agentKitArg))
+                        return Usage(log, $"--agent-kit must be a directory, not a file: {agentKitArg}");
                     if (!Directory.Exists(agentKitArg))
                         return Usage(log, $"--agent-kit directory does not exist: {agentKitArg}");
                 }

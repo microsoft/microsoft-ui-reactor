@@ -537,6 +537,13 @@ public sealed class SearchIndexCliTests
         Assert.Contains("does not exist", log.ToString());
         Assert.False(File.Exists(outPath), "a rejected run must not write an index");
 
+        // A path that exists but is a FILE is the other half of the same mistake, and gets its
+        // own message rather than the misleading "does not exist".
+        using var fileLog = new StringWriter();
+        Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={ed}", g.GalleryDir, ed, outPath }, fileLog));
+        Assert.Contains("must be a directory, not a file", fileLog.ToString());
+        Assert.False(File.Exists(outPath), "a rejected run must not write an index");
+
         // Positive control: the same invocation against a real directory succeeds, so the
         // assertion above is about the missing path and not about the argument shape.
         var kit = g.WriteAgentKit("<!-- index:alpha -->\nAlpha prose.\n<!-- /index:alpha -->");
