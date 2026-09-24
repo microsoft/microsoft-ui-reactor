@@ -138,9 +138,9 @@ void ShowHelp()
     Console.WriteLine("  check [path]     Build and emit one-line diagnostics with skill-file pointers");
     Console.WriteLine("  pack-local       Pack the in-source framework to <repo>/local-nupkgs/ as 0.0.0-local");
     Console.WriteLine("  clean-local      Remove local packages, NuGet cache entries, and templates");
-    Console.WriteLine("  templates        Install the `dotnet new reactor` template pack (Windows App SDK)");
+    Console.WriteLine("  templates        Report whether `dotnet new reactor` resolves (install: `winapp new`)");
     Console.WriteLine("  doctor           Verify the install (SDK, mur, local feed, templates, plugin)");
-    Console.WriteLine("  upgrade          Re-pack the framework and refresh templates + plugin after `git pull`");
+    Console.WriteLine("  upgrade          Re-pack the framework and refresh the plugin after `git pull`");
     Console.WriteLine("  figma watch      Poll a Figma file for design changes");
 }
 

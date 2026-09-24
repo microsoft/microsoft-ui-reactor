@@ -161,7 +161,7 @@ subcommands map one-to-one to the workflows below.
 | `mur devtools` | Launch the project with `--devtools run`, supervise reloads, and host the MCP endpoint | `mur devtools` |
 | `mur check` | Repo-health checks (cref validity, namespace policy, "did you mean" suggestions) | `mur check` |
 | `mur doctor` | Verify the install — SDK, `mur`, local feed, templates, plugin | `mur doctor` |
-| `mur upgrade` | Re-pack the framework and refresh templates + plugin after a `git pull` | `mur upgrade` |
+| `mur upgrade` | Re-pack the framework and refresh the plugin after a `git pull`; checks template availability but does not install the pack (that's `winapp new`) | `mur upgrade` |
 | `mur figma watch` | Poll a Figma file for design changes | `mur figma watch` |
 | `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for source-built framework smoke tests; scaffolded apps default to the public Reactor preview unless `--reactor-version` is supplied | `mur pack-local` |
 | `mur templates status` | Report whether `dotnet new reactor` resolves (exit `0` available, `1` probe failed, `2` pack too old, `3` pack missing) | `mur templates status` |

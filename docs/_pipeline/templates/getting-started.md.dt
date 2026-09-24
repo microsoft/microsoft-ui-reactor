@@ -105,12 +105,17 @@ The source checkout changes — your local framework snapshots, CLI and plugin
 do not, unless you repack them. Two options:
 
 ```powershell
-mur upgrade           # repacks the framework and refreshes templates + plugin
-./bootstrap.ps1       # same, plus updates the `mur` global tool itself
+mur upgrade           # repacks the framework and refreshes the plugin
+./bootstrap.ps1       # same, plus the `mur` global tool and the template pack
 ```
 
 `mur upgrade` is the lightweight path. Re-run `bootstrap.ps1` when you want to
 pick up CLI changes (a `mur` process can't replace its own binary mid-run).
+
+The `dotnet new reactor` templates are not repacked by either: they ship in the
+Windows App SDK pack, so `git pull` never invalidates them. `mur upgrade` only
+*checks* that they still resolve; `bootstrap.ps1` installs the pack when it is
+missing, and `winapp new --list --template-version latest` updates it.
 
 ### Verify the install
 

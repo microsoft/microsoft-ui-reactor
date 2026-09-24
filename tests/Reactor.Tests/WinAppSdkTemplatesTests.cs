@@ -130,7 +130,7 @@ public sealed class WinAppSdkTemplatesTests
             Reactor MVU App (Experimental)             reactor-mvu,winui-reactor-mvu          [C#]      Windows/WinUI/Desktop/Reactor/Experimental
             """;
 
-        Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(withoutBlank));
+        Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(withoutBlank, exitCode: 0));
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public sealed class WinAppSdkTemplatesTests
             Reactor MVU App (Experimental)             reactor-mvu,winui-reactor-mvu          [C#]      Windows/WinUI/Desktop/Reactor/Experimental
             """;
 
-        Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(withBlank));
+        Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(withBlank, exitCode: 0));
     }
 
 
@@ -272,6 +272,41 @@ public sealed class WinAppSdkTemplatesTests
         Assert.True(WinAppSdkTemplates.InterpretPackageInstalledOutput(thisPack));
     }
 
+    [Fact]
+    public void Doctor_treats_an_unreadable_package_list_as_a_warning_not_a_missing_pack()
+    {
+        // `IsPackageInstalled()` returns null when the installed-package list
+        // could not be read. Comparing it to `true` alone sent that case to the
+        // "not registered" FAIL, telling the developer to reinstall a pack that
+        // may be perfectly fine — the same ProbeFailed distinction StatusExitCode
+        // already draws.
+        var (path, text) = ReadRepoFile(global::System.IO.Path.Join(
+            "src", "Reactor.Cli", "Doctor", "DoctorCommand.cs"));
+        Assert.True(
+            text.Contains("packageInstalled is null", StringComparison.Ordinal),
+            $"'{path}' must handle an unreadable installed-package list separately from a missing pack.");
+        Assert.False(
+            text.Contains("IsPackageInstalled() == true", StringComparison.Ordinal),
+            $"'{path}' must not collapse null (couldn't tell) into false (not installed).");
+    }
+
+    [Fact]
+    public void Bootstrap_invokes_the_resolved_winapp_path_not_a_bare_command()
+    {
+        // The CLI is also accepted via its app-execution alias, which exists on
+        // disk without always being resolvable through this process's PATH. A
+        // bare `winapp` therefore fails on exactly the machines the alias
+        // fallback exists to support.
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        var normalized = text.Replace("\r\n", "\n");
+        Assert.True(
+            normalized.Contains("function Get-WinAppCliPath", StringComparison.Ordinal),
+            $"'{path}' must resolve the winapp CLI to a concrete path.");
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(normalized, @"&\s*\$winAppExe\s+@winAppNewArgs"),
+            $"'{path}' must invoke the resolved winapp path, not a bare `winapp`.");
+    }
+
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
     //
     // Observed live during the de-stale merge: the machine had
@@ -285,6 +320,36 @@ public sealed class WinAppSdkTemplatesTests
     // ("...matching: 'reactor'" plus a "dotnet new search reactor" hint), so a
     // naive `output.Contains("reactor")` returns true exactly when the template
     // is missing. These pin the negative-marker-first rule.
+
+    [Fact]
+    public void InterpretTemplateListOutput_reports_unknown_for_an_engine_failure()
+    {
+        // `dotnet new list` exits 103 for "no templates matched" — an answer. Any
+        // other non-zero exit is an SDK/engine failure, and there is no reason to
+        // believe its stderr describes the template state. Reporting `false` there
+        // makes `mur doctor` fail and bootstrap advise a reinstall on the strength
+        // of an error it never parsed.
+        const string engineError = """
+            The command could not be loaded, possibly because of a missing SDK.
+            """;
+
+        Assert.Null(WinAppSdkTemplates.InterpretTemplateListOutput(engineError, exitCode: 1));
+
+        // The two interpretable outcomes still answer definitively.
+        Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(
+            "No templates found matching: 'reactor'.", WinAppSdkTemplates.NoTemplatesFoundExitCode));
+        Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(
+            "Reactor Blank App   reactor,reactor-blank   [C#]", exitCode: 0));
+    }
+
+    [Fact]
+    public void InterpretTemplateListOutput_trusts_the_not_found_marker_over_the_exit_code()
+    {
+        // The marker is authoritative when present: some SDKs have reported the
+        // no-match message with a non-103 exit, and that is still a real answer.
+        Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(
+            "No templates found matching: 'reactor'.", exitCode: 1));
+    }
 
     [Fact]
     public void InterpretTemplateListOutput_reports_missing_for_the_not_found_message()
@@ -301,7 +366,7 @@ public sealed class WinAppSdkTemplatesTests
             For details on the exit code, refer to https://aka.ms/templating-exit-codes#103
             """;
 
-        Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(notFound));
+        Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(notFound, WinAppSdkTemplates.NoTemplatesFoundExitCode));
     }
 
     [Fact]
@@ -317,7 +382,7 @@ public sealed class WinAppSdkTemplatesTests
             Reactor MVU App (Experimental)     reactor-mvu                    [C#]      Windows/WinUI
             """;
 
-        Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(listing));
+        Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(listing, exitCode: 0));
     }
 
     [Fact]

@@ -144,20 +144,36 @@ public static class DoctorCommand
                 : $"`dotnet new {WinAppSdkTemplates.BlankShortName}` available ({WinAppSdkTemplates.PackageId} {ver})";
             Pass("dotnet new template", detail);
         }
-        else if (WinAppSdkTemplates.IsPackageInstalled() == true)
-        {
-            // Installed, but this version doesn't carry the Reactor templates.
-            // Distinct remediation from "not installed", so say so explicitly.
-            var ver = WinAppSdkTemplates.GetInstalledVersion() ?? "(unknown)";
-            Fail("dotnet new template",
-                $"{WinAppSdkTemplates.PackageId} {ver} is installed but does not provide `dotnet new {WinAppSdkTemplates.BlankShortName}`. " +
-                $"Update to a version that ships the Reactor templates: `winapp new --list --template-version latest`.");
-            failures++;
-        }
         else
         {
-            Fail("dotnet new template", $"{WinAppSdkTemplates.PackageId} not registered, so `dotnet new {WinAppSdkTemplates.BlankShortName}` is unavailable. Run `./bootstrap.ps1`, or install the pack with `winapp new --list`.");
-            failures++;
+            // The short name is absent — but is the pack there at all? A null
+            // here means the installed-package list could not be read, which is a
+            // probe failure, not evidence the pack is missing. Reporting "not
+            // registered" then sends the developer to reinstall something that
+            // may already be fine. Mirrors TemplatesCommand.StatusExitCode.
+            var packageInstalled = WinAppSdkTemplates.IsPackageInstalled();
+            if (packageInstalled is null)
+            {
+                Warn("dotnet new template",
+                    $"`dotnet new {WinAppSdkTemplates.BlankShortName}` did not resolve, and the installed-package " +
+                    "list could not be read — so whether the pack is present is unknown. Check with `mur templates status`.");
+                warnings++;
+            }
+            else if (packageInstalled.Value)
+            {
+                // Installed, but this version doesn't carry the Reactor templates.
+                // Distinct remediation from "not installed", so say so explicitly.
+                var ver = WinAppSdkTemplates.GetInstalledVersion() ?? "(unknown)";
+                Fail("dotnet new template",
+                    $"{WinAppSdkTemplates.PackageId} {ver} is installed but does not provide `dotnet new {WinAppSdkTemplates.BlankShortName}`. " +
+                    $"Update to a version that ships the Reactor templates: `winapp new --list --template-version latest`.");
+                failures++;
+            }
+            else
+            {
+                Fail("dotnet new template", $"{WinAppSdkTemplates.PackageId} not registered, so `dotnet new {WinAppSdkTemplates.BlankShortName}` is unavailable. Run `./bootstrap.ps1`, or install the pack with `winapp new --list`.");
+                failures++;
+            }
         }
 
         // 5. Claude plugin (informational only — many devs don't use it)

@@ -109,28 +109,52 @@ public static class WinAppSdkTemplates
     /// </remarks>
     public static bool? AreTemplatesAvailable()
     {
-        // `dotnet new list <name>` exits non-zero (103) and prints
-        // "No templates found matching" when nothing matches. Match on the
-        // short name in the output rather than the exit code alone so an
-        // unrelated non-zero exit doesn't read as a definitive "missing".
-        var output = RunCapture("new", "list", BlankShortName);
+        // `dotnet new list <name>` exits 103 and prints "No templates found
+        // matching" when nothing matches. Any *other* non-zero exit is an engine
+        // or SDK failure, not an answer — reporting it as "definitely missing"
+        // sends `mur doctor` and bootstrap to the wrong remediation.
+        var (output, exitCode) = RunCaptureWithExit("new", "list", BlankShortName);
         if (output is null) return null;
-        return InterpretTemplateListOutput(output);
+        return InterpretTemplateListOutput(output, exitCode);
     }
 
     /// <summary>
     /// Interprets `dotnet new list reactor` output. Split out (and internal) so
     /// the rule is unit-testable without shelling out to the template engine.
     /// </summary>
-    internal static bool InterpretTemplateListOutput(string output)
+    /// <param name="exitCode">
+    /// The template engine's exit code. 0 is a listing; 103 is its documented
+    /// "no templates matched". Anything else is a failure we cannot interpret,
+    /// so the answer is null ("couldn't tell") rather than false.
+    /// </param>
+    internal static bool? InterpretTemplateListOutput(string output, int exitCode)
     {
-        // The "not found" message also contains the search term ("No templates
-        // found matching: 'reactor'." plus a "dotnet new search reactor" hint),
-        // so a naive short-name substring match reports the template as present
-        // precisely when it is absent. Check the negative marker first.
+        // The negative marker is authoritative when the engine reported a
+        // no-match, and is checked first because the message repeats the search
+        // term (and prints a `dotnet new search reactor` hint), so a naive
+        // short-name match reports the template as present exactly when absent.
         if (output.Contains("No templates found", StringComparison.OrdinalIgnoreCase))
             return false;
 
+        // A non-zero exit without that marker is an engine/SDK error: say
+        // "couldn't tell" instead of inventing a definite answer from its stderr.
+        if (exitCode != 0 && exitCode != NoTemplatesFoundExitCode)
+            return null;
+
+        return MatchesBlankShortName(output);
+    }
+
+    /// <summary>
+    /// `dotnet new list` exit code for "no templates matched the input" — the one
+    /// non-zero result that is an answer rather than a failure.
+    /// </summary>
+    internal const int NoTemplatesFoundExitCode = 103;
+
+    /// <summary>
+    /// Whether the listing registers <see cref="BlankShortName"/> as a short name.
+    /// </summary>
+    internal static bool MatchesBlankShortName(string output)
+    {
         // Match the short name as a whole token. A plain Contains (or a \b regex)
         // also matches `reactor-mvu` and `winui-reactor`, because '-' is a word
         // boundary — so a listing that has the richer shells but not the blank
@@ -191,7 +215,21 @@ public static class WinAppSdkTemplates
         return null;
     }
 
-    static string? RunCapture(params string[] arguments)
+    static string? RunCapture(params string[] arguments) => RunCaptureWithExit(arguments).Output;
+
+    /// <summary>
+    /// Runs `dotnet <paramref name="arguments"/>` and returns its combined output
+    /// plus exit code. Output is null when the process could not be started.
+    /// </summary>
+    /// <remarks>
+    /// The exit code is returned rather than swallowed because `dotnet new list`
+    /// uses it to distinguish "no templates matched" (103) from an engine
+    /// failure, and collapsing the two turns a probe failure into a confident
+    /// wrong answer. `dotnet new uninstall` meanwhile exits non-zero when nothing
+    /// is installed while still printing a usable listing, so callers that only
+    /// want the text keep ignoring it.
+    /// </remarks>
+    static (string? Output, int ExitCode) RunCaptureWithExit(params string[] arguments)
     {
         var psi = new ProcessStartInfo("dotnet")
         {
@@ -204,7 +242,7 @@ public static class WinAppSdkTemplates
         try
         {
             using var proc = Process.Start(psi);
-            if (proc is null) return null;
+            if (proc is null) return (null, -1);
             // Drain both pipes concurrently. Reading stdout to the end first lets
             // `dotnet new` fill the unread stderr pipe and block before it exits —
             // a deadlock, not a slow path. CheckCommand documents the same hazard.
@@ -212,13 +250,11 @@ public static class WinAppSdkTemplates
             var stderrTask = proc.StandardError.ReadToEndAsync();
             global::System.Threading.Tasks.Task.WaitAll(stdoutTask, stderrTask);
             proc.WaitForExit();
-            // `dotnet new uninstall` exits non-zero when nothing is installed
-            // while still printing a usable listing, so don't gate on ExitCode.
-            return stdoutTask.Result + stderrTask.Result;
+            return (stdoutTask.Result + stderrTask.Result, proc.ExitCode);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            return null;
+            return (null, -1);
         }
     }
 }

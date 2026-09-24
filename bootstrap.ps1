@@ -438,11 +438,27 @@ if (-not $winAppRuntimeId) {
 # works out of the box — a missing winget only warns, it never fails bootstrap.
 Write-Step 'Checking winapp CLI (E2E UI test driver)'
 
-function Test-WinAppCli {
-    if (Get-Command winapp -ErrorAction SilentlyContinue) { return $true }
+function Get-WinAppCliPath {
+    <#
+    .SYNOPSIS
+        Path to the winapp CLI, or $null when it isn't installed.
+
+    .DESCRIPTION
+        Prefers PATH, then the app-execution alias winget's MSIX install drops.
+        Callers must invoke *this* result rather than a bare `winapp`: the alias
+        exists on disk without necessarily being resolvable through the current
+        process's PATH, which is the whole reason the fallback exists.
+    #>
+    $onPath = Get-Command winapp -ErrorAction SilentlyContinue
+    if ($onPath) { return $onPath.Source }
     $alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winapp.exe'
     Write-Dbg "winapp not on PATH; probing alias $alias"
-    return (Test-Path $alias)
+    if (Test-Path $alias) { return $alias }
+    return $null
+}
+
+function Test-WinAppCli {
+    return $null -ne (Get-WinAppCliPath)
 }
 
 if ($SkipWinAppCli) {
@@ -697,7 +713,8 @@ if ($SkipTemplates) {
     }
 
     $templatesExit = 0
-    if (-not (Test-WinAppCli)) {
+    $winAppExe = Get-WinAppCliPath
+    if (-not $winAppExe) {
         # winapp is installed in step 4; it can legitimately be absent when that
         # step was skipped or winget is unavailable. Don't fail the whole
         # bootstrap over it — say what to run and let the verification below
@@ -708,8 +725,11 @@ if ($SkipTemplates) {
         Write-Host '               winapp new --list'
         $templatesExit = 2
     } else {
-        Write-Dbg "winapp $($winAppNewArgs -join ' ')"
-        & winapp @winAppNewArgs | Out-Null
+        # Invoke the resolved path, not a bare `winapp`: Get-WinAppCliPath also
+        # accepts the app-execution alias, which exists on disk without always
+        # being resolvable through this process's PATH.
+        Write-Dbg "$winAppExe $($winAppNewArgs -join ' ')"
+        & $winAppExe @winAppNewArgs | Out-Null
         $templatesExit = $LASTEXITCODE
     }
     # Exit 2 is bootstrap's own "winapp unavailable" marker above. Treat it the
