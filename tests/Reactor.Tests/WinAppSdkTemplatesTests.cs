@@ -517,6 +517,15 @@ public sealed class WinAppSdkTemplatesTests
         Assert.True(
             text.Contains("AreTemplatesAvailable() == false", StringComparison.Ordinal),
             $"'{path}' must check template availability after Install, not just the install outcome.");
+
+        // Install() runs `dotnet new install --add-source` with repoRoot as the
+        // working directory, so a relative --templates-source resolved there would
+        // name a different folder than the one the caller typed.
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(
+                text.Replace("\r\n", "\n"),
+                @"templateSource\s*=\s*Path\.GetFullPath\(templateSource!\)"),
+            $"'{path}' must resolve a relative --templates-source against the caller's CWD.");
     }
 
     // ── Redirect policy on the version-metadata fetch ─────────────────────

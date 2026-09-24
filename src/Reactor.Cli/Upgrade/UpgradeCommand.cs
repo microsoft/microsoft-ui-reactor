@@ -64,6 +64,13 @@ public static class UpgradeCommand
             return 1;
         }
         Console.WriteLine($"==> Checking `dotnet new {WinAppSdkTemplates.BlankShortName}` templates ({WinAppSdkTemplates.PackageId})");
+        // Resolve a relative folder against the caller's CWD before handing it on.
+        // Install() runs `dotnet new install --add-source` with repoRoot as the
+        // working directory, so an unqualified path would be resolved there
+        // instead — pointing at a different folder, or none. TemplatesCommand and
+        // bootstrap.ps1 already normalize for the same reason.
+        if (!string.IsNullOrWhiteSpace(templateSource) && Directory.Exists(templateSource))
+            templateSource = Path.GetFullPath(templateSource!);
         // Install() is a no-op when the resolved version is already installed, and
         // deliberately leaves an existing install alone when it can't resolve a
         // newer one — so this is safe to run on every upgrade.
