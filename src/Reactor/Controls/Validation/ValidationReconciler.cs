@@ -108,11 +108,8 @@ public static class ValidationReconciler
 
         if (_ruleSets.TryGetValue(ctx, out var previous))
         {
-            foreach (var entry in previous)
-            {
-                if (!applied.Contains(entry))
-                    ctx.ApplyOwned(entry.Field, entry.Producer, []);
-            }
+            foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
+                ctx.ApplyOwned(entry.Field, entry.Producer, []);
             _ruleSets.Remove(ctx);
         }
 
