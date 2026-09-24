@@ -119,13 +119,19 @@ Opt out — for example if you drive the copy yourself — with:
 <ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>
 ```
 
-**Alternative: `<EnableMsixTooling>true</EnableMsixTooling>`.** Suggested on the upstream issue, and it does work — measured: the app `.pri` lands in the publish output and the published app runs. It fixes the symptom as a side effect of importing the MSIX packaging targets (which also stops the reference-path arm of the PRI expansion from running, halving the `makepri.exe Dump` count on a normal build).
+**Alternative: `<EnableMsixTooling>true</EnableMsixTooling>`.** Suggested on the upstream issue, and it does work — measured: the app `.pri` lands in the publish output and the published app runs.
 
-Reactor does **not** set it for you. Whether an app wants MSIX packaging tooling is the app's decision, not a framework's, and this is a community workaround on an open issue rather than a documented contract. The shipped target is narrower, explicit, and works whichever way an app sets `EnableMsixTooling`. The two compose cleanly if you do enable it — verified: no errors, no duplicated files, app runs.
+It is worth knowing exactly *why*, because it tells you when this workaround can finally be deleted. **A first-party fix already exists**: `Microsoft.Windows.SDK.BuildTools.MSIX.Pri.targets` defines `AddProjectPriToResolvedFileToPublish` and `AddXbfFilesToResolvedFileToPublish`, which add the project `.pri` and the `.xbf` files to `@(ResolvedFileToPublish)` — precisely the gap. But that file is reached only through
+`EnableMsixTooling` → `MsixPackageSupport` → `ShouldImportMsixCommonTargets` → `MsixCommonTargets` → `Packaging.targets` → `Pri.targets`.
+With the flag off, the build takes the `MrtCore.targets` branch instead, which has no publish step at all.
+
+**So this is not version-gated, and upgrading the SDK will not remove the need for a workaround.** Measured across the whole chain: the fix targets are present in *both* the MSIX build tools a current app resolves (1.7.251221100) and the newest published (1.7.260903100); `MsixPackageSupport` is assigned in exactly one place, conditioned solely on `EnableMsixTooling`; and no `Microsoft.WindowsAppSDK*` package sets that property. Publishing the stock template on the newest stable SDK (metapackage 2.5.1, WinUI 2.3.9, Foundation 2.3.12) with Reactor's target disabled still produces no app `.pri` and still crashes with `0xC000027B`.
+
+Reactor does **not** set the flag for you. Whether an app wants MSIX packaging tooling is the app's decision, not a framework's, and it pulls in the whole single-project MSIX pipeline to fix one missing copy. The shipped target is narrower, explicit, and works whichever way an app sets `EnableMsixTooling`. The two compose cleanly if you do enable it — verified: no errors, no duplicated files, app runs.
 
 **It does not fix issue #1271.** Measured against pre-fix packages at the failing geometry: with and without `EnableMsixTooling=true` the build fails identically with `PRI175` / `PRI222` on `Microsoft.UI.Reactor.Devtools.pri.xml`. Library `.pri` files still get expanded; keeping them out of `lib/` is a separate and still-necessary fix.
 
-Remove the shipped target once #6394 closes.
+**When to delete the shipped target.** Not "when #6394 closes" — the issue can close on the grounds that the fix already exists. Delete it when `AddProjectPriToResolvedFileToPublish` runs for an unpackaged app that has *not* set `EnableMsixTooling`, i.e. when the MSIX build tools import that target outside the `MsixPackageSupport` gate. The `ConsumerPublishIncludesTheAppPriAndXbfSidecars` test in `tests/Reactor.IntegrationTests/Packaging/PriPackagingTests.cs` will tell you: its opt-out control asserts the `.pri` is *absent* when Reactor's target is disabled, so it starts failing the moment the platform begins doing this itself.
 
 ## Debugging an AOT selftest hang
 
