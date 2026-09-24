@@ -1029,9 +1029,8 @@ public sealed class ValidationContext
 
             if (_ruleSetMembership.TryGetValue(setId, out var previous))
             {
-                foreach (var entry in previous)
+                foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
                 {
-                    if (applied.Contains(entry)) continue;
                     if (_asyncGeneration.TryGetValue(entry.Field, out var byProducer))
                     {
                         byProducer.Remove(entry.Producer);
