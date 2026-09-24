@@ -1076,4 +1076,56 @@ public class ValidationRenderScopeTests
 
         Assert.Equal(after, rerenders);
     }
+
+    [Fact]
+    public void A_Value_Change_Retracts_The_Async_Verdict_For_The_Old_Value()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+
+        var generation = ctx.BeginAsyncValidation("email");
+        ctx.ApplyAsyncValidation("email", generation, [new ValidationMessage("email", "Already registered", Severity.Error, "TAKEN")]);
+        Assert.Single(ctx.GetMessages("email"));
+
+        // The verdict was about the old value; it says nothing about the new one.
+        ctx.NotifyValueChanged("email", "someone-else@example.com");
+
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    [Fact]
+    public void A_Value_Change_Retires_An_In_Flight_Async_Pass()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+
+        // Pass opened against the old value, still running.
+        var stale = ctx.BeginAsyncValidation("email");
+
+        ctx.NotifyValueChanged("email", "someone-else@example.com");
+
+        // It resolves afterwards and must not install a verdict about a value that
+        // is no longer on screen.
+        ctx.ApplyAsyncValidation("email", stale, [new ValidationMessage("email", "Already registered", Severity.Error, "TAKEN")]);
+
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    [Fact]
+    public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+
+        Assert.Single(ctx.GetMessages("email"));
+
+        // Retiring the async producer must not take the sync verdict with it.
+        ctx.NotifyValueChanged("email", "");
+        ctx.NotifyValueChanged("email", "  ");
+
+        Assert.Single(ctx.GetMessages("email"));
+        Assert.Equal("REQUIRED", ctx.GetMessages("email")[0].Code);
+    }
 }

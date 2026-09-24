@@ -684,6 +684,13 @@ public sealed class ValidationContext
     /// <see cref="AddExternal(string, string, Severity)"/> message on the very next
     /// repaint, before the user could read it.
     /// </para>
+    /// <para>
+    /// An async verdict is retired for the same reason, mirroring
+    /// <see cref="ApplyValidation"/>. A field validated only through
+    /// <c>.ValidateAsync(...)</c> never reaches that method, so without this an error
+    /// computed for a value the user has already replaced would stay on screen, and a
+    /// pass opened against the old value could still install its result afterwards.
+    /// </para>
     /// </summary>
     public void NotifyValueChanged(string field, object? value)
     {
@@ -696,6 +703,8 @@ public sealed class ValidationContext
 
             _currentValues[field] = value;
             _externalMessages.Remove(field);
+            _asyncGeneration.Remove(field);
+            ApplyOwnedLocked(field, AsyncProducer, []);
             _version++;
         }
         RaiseChanged();

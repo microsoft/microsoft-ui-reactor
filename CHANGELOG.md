@@ -69,6 +69,12 @@ Conventions for contributors:
 - `ValidationContext.NotifyValueChanged` discarded external messages on every
   call rather than only when the value actually changed, so a server-side error
   added with `AddExternal` was wiped by the next render (issue #1262).
+- `ValidationContext.NotifyValueChanged` left an async verdict about the previous
+  value installed, and let an already-running async pass install its result after
+  the value had moved on. A field validated only with `.ValidateAsync(...)` never
+  reaches the synchronous path that retires those, so the stale error stayed on
+  screen. The async producer is now retracted and its generation retired whenever
+  the value changes (issue #1262).
 - `ValidationContext.MarkAllTouched` bumped `Version` even when every registered
   field was already touched, and re-running validators over an unchanged value
   bumped it twice per pass; both are now silent when nothing changed (issue #1262).
