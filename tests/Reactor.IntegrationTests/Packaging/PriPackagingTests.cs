@@ -29,7 +29,7 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 public sealed class PriPackagingTests : IDisposable
 {
     private readonly TemplatePackageTestFixture _fixture;
-    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"reactor-pri-pkg-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"rpri-{Guid.NewGuid():N}");
 
     private static readonly string[] PackageIds =
     [
@@ -191,21 +191,38 @@ public sealed class PriPackagingTests : IDisposable
     /// <para>The opt-out property doubles as the control: it must reproduce the missing file.
     /// Without that half, a publish that happened to include the <c>.pri</c> for some unrelated
     /// reason would let this pass while the target did nothing.</para>
+    ///
+    /// <para>The two publishes deliberately run from SEPARATE project directories. Publishing the
+    /// same project twice with a different global property forces a full re-evaluation that reuses
+    /// the same <c>obj/</c>, and the second XAML compile then failed on CI with
+    /// <c>WMC1006: Cannot resolve Assembly or Windows Metadata file</c> — the reference path under
+    /// the fixture's package folder is ~258 characters, and the XAML compiler is not long-path
+    /// aware. One publish per directory stays clear of both.</para>
     /// </summary>
     [Fact]
     public void ConsumerPublishIncludesTheAppPriAndXbfSidecars()
     {
-        var appDir = Path.Join(_tempRoot, "publish-consumer");
-        Directory.CreateDirectory(appDir);
+        // Short directory names on purpose: these paths feed the XAML compiler, which fails
+        // around MAX_PATH, and the fixture's package folder already consumes most of the budget.
+        var onDir = Path.Join(_tempRoot, "on");
+        var offDir = Path.Join(_tempRoot, "off");
+        Directory.CreateDirectory(onDir);
+        Directory.CreateDirectory(offDir);
 
-        WriteConsumerProject(appDir);
-        WriteConsumerProgram(appDir);
-        CreateNuGetConfig(appDir);
+        foreach (var dir in new[] { onDir, offDir })
+        {
+            // Core package only. The publish path is the one that runs the XAML compiler against
+            // the full reference closure, and dragging in Advanced (Win2D) and Devtools adds
+            // references without adding coverage — the target under test is in the core package.
+            WriteConsumerProject(dir, coreOnly: true);
+            WriteConsumerProgram(dir);
+            CreateNuGetConfig(dir);
+        }
 
-        var publishDir = Path.Join(appDir, "out-default");
+        var publishDir = Path.Join(onDir, "pub");
         RunHelpers.RunDotnet(
             $"publish -c Release -a {_fixture.RunArchitecture} -o \"{publishDir}\"",
-            appDir,
+            onDir,
             _fixture.CommandEnvironment,
             timeoutMs: 600_000);
 
@@ -222,10 +239,10 @@ public sealed class PriPackagingTests : IDisposable
 
         // Control: with the target disabled the file must disappear again. If it does not,
         // something else is supplying it and the assertions above prove nothing about the target.
-        var optOutDir = Path.Join(appDir, "out-optout");
+        var optOutDir = Path.Join(offDir, "pub");
         RunHelpers.RunDotnet(
             $"publish -c Release -a {_fixture.RunArchitecture} -o \"{optOutDir}\" -p:ReactorCopyWinUIResourcesToPublish=false",
-            appDir,
+            offDir,
             _fixture.CommandEnvironment,
             timeoutMs: 600_000);
 
@@ -245,13 +262,22 @@ public sealed class PriPackagingTests : IDisposable
     }
 
     /// <summary>
-    /// References all three packages explicitly. Before the fix each contributed its own
+    /// References all three packages by default. Before the fix each contributed its own
     /// <c>makepri.exe Dump</c>, so covering only the core package would leave the two whose PRIs
     /// were empty — including the Devtools one with the longest, build-breaking file name —
-    /// untested.
+    /// untested. <paramref name="coreOnly"/> trims that down for the publish test, which does not
+    /// need them and is sensitive to how many references the XAML compiler has to resolve.
     /// </summary>
-    private void WriteConsumerProject(string appDir)
+    private void WriteConsumerProject(string appDir, bool coreOnly = false)
     {
+        var extraPackages = coreOnly
+            ? string.Empty
+            : $"""
+
+                    <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="{_fixture.PackageVersion}" />
+                    <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="{_fixture.PackageVersion}" />
+              """;
+
         var csproj = $"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
@@ -265,9 +291,7 @@ public sealed class PriPackagingTests : IDisposable
                 <RuntimeIdentifier>win-{_fixture.RunArchitecture}</RuntimeIdentifier>
               </PropertyGroup>
               <ItemGroup>
-                <PackageReference Include="Microsoft.UI.Reactor" Version="{_fixture.PackageVersion}" />
-                <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="{_fixture.PackageVersion}" />
-                <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="{_fixture.PackageVersion}" />
+                <PackageReference Include="Microsoft.UI.Reactor" Version="{_fixture.PackageVersion}" />{extraPackages}
               </ItemGroup>
             </Project>
             """;
@@ -320,9 +344,12 @@ public sealed class PriPackagingTests : IDisposable
                 Directory.Delete(_tempRoot, recursive: true);
             }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Best-effort cleanup for temporary test artifacts.
+            // Best-effort cleanup for temporary test artifacts. These two cover what
+            // Directory.Delete realistically throws here (a file still held by a just-exited
+            // build process, or a read-only artifact); anything else is a real bug and
+            // should not be swallowed.
         }
     }
 }
