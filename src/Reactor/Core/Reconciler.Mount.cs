@@ -153,10 +153,13 @@ public sealed partial class Reconciler
         if (control is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, element.GetAttached<DragAttached>());
         // Issue #1262 — bind a `.Validate(field, value, …)` verdict to the control's
-        // lifetime so it is withdrawn when the control leaves the tree.
-        if (element.Attached is not null && control is FrameworkElement valFe)
-            V1Protocol.CompositeLifecycle.TrackElementValidation(
-                valFe, element.GetAttached<ValidationAttached>());
+        // lifetime so it is withdrawn when the control leaves the tree. Gated on the
+        // validation attachment specifically, not on `Attached is not null`: every
+        // Grid/Canvas/Flex-positioned element carries attached metadata, and routing
+        // those through here cost an attached-state DP read per mount for nothing.
+        if (element.GetAttached<ValidationAttached>() is { } mountValidation
+            && control is FrameworkElement valFe)
+            V1Protocol.CompositeLifecycle.TrackElementValidation(valFe, mountValidation);
 
         // Re-apply the TitleBar's caption-derived height after modifiers so a
         // .Tall() without an explicit .Height(...) still sizes the control.

@@ -88,6 +88,24 @@ internal static class ValidationRenderScope
     }
 
     /// <summary>
+    /// Whether an attachment already has a claim from this render pass <em>against
+    /// <paramref name="context"/></em> — a verdict <c>.Validate()</c> installed while the
+    /// tree was being built, which a control is about to take ownership of. Does not
+    /// consume the claim.
+    /// <para>
+    /// The context has to match. An explicit
+    /// <c>.Provide(ValidationContexts.Current, other)</c> written inside a component that
+    /// also owns a hook-local context separates the two: the eager write went to the
+    /// hook's context, while <c>FormField</c> resolves the provided one. A claim against
+    /// the wrong context says nothing about whether this context has been validated.
+    /// </para>
+    /// </summary>
+    internal static bool HasOwnership(ValidationAttached attached, ValidationContext context)
+        => t_owned is not null
+            && t_owned.TryGetValue(attached, out var owned)
+            && ReferenceEquals(owned.Context, context);
+
+    /// <summary>
     /// Records that a mounted control has taken over a field's synchronous slot, so an
     /// unconsumed claim on that same slot is not withdrawn at the end of the pass.
     /// <para>

@@ -2397,4 +2397,63 @@ public class ValidationRenderScopeTests
         Assert.Empty(ctx.GetMessages("form"));
         Assert.True(ctx.IsValid());
     }
+    // ════════════════════════════════════════════════════════════════
+    //  Baseline moves (issue #1262 review)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ReBaseliningAStillDirtyFieldIsObservable()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("f", "a");
+        ctx.NotifyValueChanged("f", "b");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionBefore = ctx.Version;
+
+        // Dirty before and after — the flag alone cannot see this — but Reset now hands
+        // back "c" instead of "a", which is a real change to observable state.
+        ctx.SetInitialValue("f", "c");
+
+        Assert.True(ctx.IsDirty("f"));
+        Assert.True(ctx.Version > versionBefore, $"before={versionBefore} after={ctx.Version}");
+        Assert.Equal(1, notifications);
+        Assert.Equal("c", ctx.Reset("f"));
+    }
+
+    [Fact]
+    public void IdenticalReBaselineStaysSilent()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("f", "a");
+        ctx.NotifyValueChanged("f", "b");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionBefore = ctx.Version;
+
+        // The per-render re-seed a component does on every pass. Announcing this is the
+        // repaint loop SetInitialValue's remarks warn about.
+        for (var i = 0; i < 5; i++) ctx.SetInitialValue("f", "a");
+
+        Assert.Equal(versionBefore, ctx.Version);
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
+    public void FirstBaselineSeedStaysSilent()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionBefore = ctx.Version;
+
+        // Registration is not a change: nothing was dirty before and nothing is now.
+        ctx.SetInitialValue("fresh", "a");
+
+        Assert.Equal(versionBefore, ctx.Version);
+        Assert.Equal(0, notifications);
+        Assert.False(ctx.IsDirty("fresh"));
+    }
 }

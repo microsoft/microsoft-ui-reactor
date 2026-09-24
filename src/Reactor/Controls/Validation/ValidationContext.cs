@@ -1016,13 +1016,22 @@ public sealed class ValidationContext
         lock (_lock)
         {
             var wasDirty = IsDirtyLocked(field);
+            var hadBaseline = _initialValues.TryGetValue(field, out var previousBaseline);
             _initialValues[field] = value;
             if (!_currentValues.ContainsKey(field))
                 _currentValues[field] = value;
 
-            // Re-baselining an edited field flips IsDirty without touching messages or
-            // touched state, so subscribers have to hear about it too.
-            changed = IsDirtyLocked(field) != wasDirty;
+            // Two ways this is observable, and the dirty flag only catches one of them.
+            // Re-baselining an edited field can flip IsDirty without touching messages or
+            // touched state. It can also leave IsDirty alone — baseline `a`, current `b`,
+            // new baseline `c` stays dirty throughout — while still changing what
+            // Reset(field) will hand back, so the move itself counts (issue #1262 review).
+            //
+            // Scoped to a baseline that already existed and actually moved. Seeding a
+            // field for the first time stays silent, as does the identical re-seed that
+            // components run on every render — the loop this method's remarks warn about.
+            var baselineMoved = hadBaseline && !Equals(previousBaseline, value);
+            changed = baselineMoved || IsDirtyLocked(field) != wasDirty;
             if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged();

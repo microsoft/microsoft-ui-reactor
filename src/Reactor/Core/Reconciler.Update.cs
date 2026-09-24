@@ -265,11 +265,14 @@ public sealed partial class Reconciler
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
         // consulted too: dropping `.Validate()` from a control that stays mounted has to
-        // retract just as surely as the control going away.
-        if ((newEl.Attached is not null || oldEl.Attached is not null)
+        // retract just as surely as the control going away. Both sides are tested for the
+        // validation attachment specifically rather than for any attached metadata, so a
+        // Grid/Canvas/Flex-positioned element does not pay an attached-state DP read on
+        // every update for a verdict it never had.
+        var newValidation = newEl.GetAttached<ValidationAttached>();
+        if ((newValidation is not null || oldEl.GetAttached<ValidationAttached>() is not null)
             && target is FrameworkElement valFe)
-            V1Protocol.CompositeLifecycle.TrackElementValidation(
-                valFe, newEl.GetAttached<ValidationAttached>());
+            V1Protocol.CompositeLifecycle.TrackElementValidation(valFe, newValidation);
 
         // Re-apply the TitleBar's caption-derived height after modifiers so
         // removing an explicit .Height(...) from a still-tall TitleBar falls

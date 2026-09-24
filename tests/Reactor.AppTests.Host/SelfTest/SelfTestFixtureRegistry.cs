@@ -827,6 +827,8 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_FormFieldNameMigration",
         "ValCov_Issue1262_AttachedValidationStops",
         "ValCov_Issue1262_UnmountWithdrawsVerdict",
+        "ValCov_Issue1262_ValidatorsRunOnce",
+        "ValCov_Issue1262_PredicateCancellationReported",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
         "ControlsCov_MaskEngineBasic",
         "ControlsCov_MaskEngineNavigation",
@@ -2748,6 +2750,8 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_FormFieldNameMigration" => new ValidationCoverageFixtures.Issue1262_FormFieldNameMigration(harness),
         "ValCov_Issue1262_AttachedValidationStops" => new ValidationCoverageFixtures.Issue1262_AttachedValidationWithdrawnWhenItStops(harness),
         "ValCov_Issue1262_UnmountWithdrawsVerdict" => new ValidationCoverageFixtures.Issue1262_ValidatedControlUnmountWithdraws(harness),
+        "ValCov_Issue1262_ValidatorsRunOnce" => new ValidationCoverageFixtures.Issue1262_ValidatorsRunOncePerRender(harness),
+        "ValCov_Issue1262_PredicateCancellationReported" => new ValidationCoverageFixtures.Issue1262_PredicateCancellationIsReported(harness),
         // Controls coverage
         "ControlsCov_MaskEngineBasic" => new ControlsCoverageFixtures.MaskEngineBasic(harness),
         "ControlsCov_MaskEngineNavigation" => new ControlsCoverageFixtures.MaskEngineNavigation(harness),

@@ -265,6 +265,25 @@ internal static class CompositeLifecycle
 
         if (produces)
         {
+            // Skip when the render pass already judged this exact attachment. `.Validate()`
+            // runs eagerly while the tree is built, and this reconcile-time pass used to
+            // run every validator a second time for an ordinary
+            // `FormField(TextBox(…).Validate(f, v, …))`. The structural diff suppressed the
+            // duplicate *notification* but not the work, so an expensive or custom
+            // validator paid twice on every render (issue #1262 review).
+            //
+            // The claim is left for the content control to take: it is the thing whose
+            // lifetime the verdict is tied to, and it reaches TrackElementValidation
+            // moments later when this method's caller reconciles it. Recording here as
+            // well would have two bindings owning one slot.
+            //
+            // The fallback below still runs for an element assembled outside a render
+            // pass — cached in a field, built in an event handler, produced by a memo —
+            // which is the only chance those ever get to be validated. It also runs when
+            // the claim names a *different* context than the one resolved here, which an
+            // explicit `.Provide(...)` inside a hook-owning component produces.
+            if (ValidationRenderScope.HasOwnership(attached, valCtx)) return;
+
             ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
             binding.Record(valCtx, attached.FieldName);
             return;
@@ -600,9 +619,19 @@ internal static class CompositeLifecycle
         {
             await rule.EvaluateAsync(valCtx, binding.Producer, cts.Token);
         }
-        catch (global::System.OperationCanceledException)
+        catch (global::System.OperationCanceledException ex)
+            when (ex.CancellationToken == cts.Token || cts.IsCancellationRequested)
         {
-            // Superseded by a newer pass, or the rule left the tree.
+            // Our own token: the pass was superseded by a newer one, or the rule left
+            // the tree. Expected, and the caller that cancelled owns what happens next.
+            //
+            // Matched narrowly rather than catching every OperationCanceledException,
+            // because the predicate takes no token of its own — anything it cancels is
+            // the app's own business and a fault we are hiding if we treat it as
+            // lifecycle churn (issue #1262 review). Those fall through to the diagnostic
+            // arm below. `IsCancellationRequested` is checked as well as the token,
+            // since a predicate that observes our token indirectly can surface a
+            // cancellation that carries `CancellationToken.None`.
         }
         catch (global::System.Exception ex)
             when (ex is not global::System.OutOfMemoryException

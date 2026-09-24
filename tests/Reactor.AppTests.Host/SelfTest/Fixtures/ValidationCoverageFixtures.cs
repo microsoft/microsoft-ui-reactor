@@ -2250,4 +2250,167 @@ internal static class ValidationCoverageFixtures
                 $"messages={string.Join("|", texts)}");
         }
     }
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — validators must not run twice per render.
+    //
+    //  `.Validate()` evaluates eagerly while the tree is built, and FormField's
+    //  reconcile-time pass used to evaluate the same attachment again. The
+    //  structural diff hid the duplicate notification but not the work, so a
+    //  custom or expensive validator paid twice on every render.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal sealed record CountingValidatorProps(
+        Action<ValidationContext> OnContext, Action Bump, Action OnRender);
+
+    internal sealed class CountingValidatorOwner : Component<CountingValidatorProps>
+    {
+        public override Element Render()
+        {
+            var props = Props;
+            var ctx = this.UseValidationContext();
+            props.OnContext(ctx);
+            props.OnRender();
+
+            return VStack(8,
+                FormField(
+                    TextBox("").Validate("email", "",
+                        Validate.Must<string>(_ => { props.Bump(); return false; }, "Email is required")),
+                    label: "Email",
+                    showWhen: ShowWhen.Always));
+        }
+    }
+
+    internal class Issue1262_ValidatorsRunOncePerRender(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? ctx = null;
+            var runs = 0;
+            var ownerRenders = 0;
+
+            host.Mount(c => VStack(12,
+                Component<CountingValidatorOwner, CountingValidatorProps>(
+                    new CountingValidatorProps(found => ctx = found, () => runs++, () => ownerRenders++)),
+                TextBlock("host")));
+
+            await Harness.Render();
+            H.Check("Issue1262_RunOnce_ContextResolved", ctx is not null);
+            if (ctx is null) return;
+
+            // Positive control: the validator must actually be reached, or "ran once"
+            // would be satisfied by never running at all.
+            H.Check("Issue1262_RunOnce_ValidatorReached", runs > 0, $"runs={runs}");
+            H.Check("Issue1262_RunOnce_VerdictInstalled", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+
+            // One evaluation per render of the owning component, whatever that count
+            // happens to be. Asserting a bare `runs == 1` would fail for a second render
+            // that legitimately re-validates, and would pass for a double evaluation
+            // inside a single render if only one render occurred — neither is the
+            // property under test.
+            H.Check("Issue1262_RunOnce_NotDoubled", runs == ownerRenders,
+                $"runs={runs} ownerRenders={ownerRenders}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 run-once done"));
+            await Harness.Render();
+        }
+    }
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — whose cancellation was it?
+    //
+    //  A mounted async rule is cancelled on update and unmount, and that is
+    //  routine. But the predicate takes no token of its own, so anything IT
+    //  cancels is the app's business — treating that as lifecycle churn hides a
+    //  real fault and silently leaves the stale verdict in place. The two are
+    //  told apart by the token, not by the exception type.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_PredicateCancellationIsReported(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static IDisposable SubscribeToRuleErrors(List<string> sink)
+            => Microsoft.UI.Reactor.Diagnostics.ReactorTrace.Subscribe(
+                e =>
+                {
+                    if (e.EventName != nameof(Core.Diagnostics.ReactorEventSource.SwallowedError)) return;
+                    if (e.Payload.Count < 3) return;
+                    if (e.Payload[1] as string != "ValidationRuleAsync.Evaluate") return;
+                    lock (sink) sink.Add(e.Payload[2] as string ?? "<unknown>");
+                },
+                global::System.Diagnostics.Tracing.EventLevel.Warning,
+                Core.Diagnostics.ReactorEventSource.Keywords.Errors);
+
+        public override async Task RunAsync()
+        {
+            var reported = new List<string>();
+            using var sub = SubscribeToRuleErrors(reported);
+
+            // The predicate cancels itself, with a token that is not the rule's.
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            host.Mount(c => VStack(12,
+                ValidationRuleAsync(
+                    async () =>
+                    {
+                        await Task.Yield();
+                        using var foreign = new global::System.Threading.CancellationTokenSource();
+                        foreign.Cancel();
+                        foreign.Token.ThrowIfCancellationRequested();
+                        return true;
+                    },
+                    "never reached", "form"),
+                TextBlock("rule host"))
+                .Provide(ValidationContexts.Current, ctx));
+
+            for (var i = 0; i < 10; i++)
+            {
+                await Task.Delay(25);
+                await Harness.Render();
+                lock (reported) { if (reported.Count > 0) break; }
+            }
+
+            int seen; string names;
+            lock (reported) { seen = reported.Count; names = string.Join("|", reported); }
+
+            H.Check("Issue1262_Cancel_ForeignCancellationReported", seen > 0,
+                $"reported={seen} names={names}");
+
+            // Positive control: the same subscription, same operation name, must stay
+            // silent for the lifecycle cancellation it is supposed to ignore. A sink
+            // that reports everything would satisfy the check above for the wrong
+            // reason.
+            var quiet = new List<string>();
+            using var sub2 = SubscribeToRuleErrors(quiet);
+
+            var ctx2 = new ValidationContext();
+            var host2 = H.CreateHost();
+            Action<bool>? setShow = null;
+            host2.Mount(c =>
+            {
+                var (show, set) = c.UseState(true);
+                setShow = set;
+                return VStack(12,
+                    When(show, () => ValidationRuleAsync(
+                        async () => { await Task.Delay(5000); return true; },
+                        "slow", "form")),
+                    TextBlock("cancel host"))
+                    .Provide(ValidationContexts.Current, ctx2);
+            });
+
+            await Harness.Render();
+            setShow!(false);          // unmount cancels the in-flight pass
+            await Harness.Render();
+            for (var i = 0; i < 6; i++) { await Task.Delay(25); await Harness.Render(); }
+
+            int quietCount; string quietNames;
+            lock (quiet) { quietCount = quiet.Count; quietNames = string.Join("|", quiet); }
+            H.Check("Issue1262_Cancel_LifecycleCancellationSilent", quietCount == 0,
+                $"reported={quietCount} names={quietNames}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 cancellation done"));
+            await Harness.Render();
+        }
+    }
 }
