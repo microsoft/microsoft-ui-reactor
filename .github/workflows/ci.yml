@@ -291,20 +291,29 @@ jobs:
           dotnet-version: 10.0.x
 
       # Install the `winapp` CLI (winapp ui drives the UIA automation that replaced
-      # WinAppDriver/Appium). The action downloads it and adds it to PATH, which
-      # WinAppUi.ResolveWinAppExe() picks up via its PATH fallback.
+      # WinAppDriver/Appium). The action downloads it and adds it to PATH.
+      #
+      # The pin here is the *action* revision, by commit SHA. The CLI payload it installs is not
+      # pinned: the action's `version` input defaults to 'latest'. That is deliberate. Releases
+      # only move forward and v0.7.0 (2026-09-24) is the first carrying winappCli#767, so `latest`
+      # carries the verb the E2E job now requires — and a future release that dropped it *should*
+      # redden this job rather than be papered over by a pin. Staying on `latest` also keeps the
+      # suite testing the winapp contributors actually have.
+      #
+      # PATH alone does not decide what the tests use. WinAppUi.ResolveWinAppExe() prefers, in
+      # order: $REACTOR_WINAPP_EXE, then %LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe, and only
+      # then PATH — so on a runner that happens to carry that alias, the build installed here
+      # would be installed and then quietly not used. The step below therefore resolves PATH
+      # ahead of the alias (the action installs to a tool directory it prepends to PATH, not to
+      # LocalAppData) and exports the result as $REACTOR_WINAPP_EXE, which is the harness's own
+      # first candidate. CI picks the binary; the harness follows it.
       - name: Setup winapp CLI
         uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
       # Records which winapp this job actually resolved, and whether it carries the
-      # cooperative-UI-turn verb (winappCli#767). The E2E suite's continuity tests skip when
-      # `ui yield` is absent, and Microsoft.Testing.Platform reports a skip as *passed with
-      # zero skipped* — so without this step a run against a winapp that predates #767 looks
-      # identical to one where the continuity was measured. Never gates the job: no published
-      # winapp contains #767 yet (v0.6.0 2026-08-12 stable / v0.6.1 2026-08-19 prerelease, both
-      # older than the 2026-09-09 merge), and continuity only matters where several agents share
-      # a desktop, which a single-checkout runner never does. When a release does ship the verb,
-      # pin it above and set REACTOR_E2E_REQUIRE_UI_YIELD=1 to turn the skip into an assertion.
+      # cooperative-UI-turn verb (winappCli#767). Diagnostics only — the Test step's
+      # REACTOR_E2E_REQUIRE_UI_YIELD=1 is what actually enforces the verb. This line is still
+      # worth keeping because it names the binary and version, which a failing suite cannot.
       #
       # `ui yield` is a sound sentinel for the whole mechanism rather than one verb of it: #767 is
       # what added UiYieldCommand, alongside the desktop lock, scheduler and participant registry
@@ -313,21 +322,95 @@ jobs:
       # yield?".
       - name: Record winapp UI-turn capability
         continue-on-error: true
+        # Bounds a hang, which `continue-on-error` does not: that only forgives a step that
+        # *fails*, so a winapp wedged in `--version` or `ui --cli-schema` would sit here
+        # consuming the job's 45-minute budget and the E2E tests would never start. This step is
+        # pure diagnostics and finishes in seconds, so a short ceiling costs nothing and converts
+        # "the whole job died before testing anything" into "the capability line is missing".
+        timeout-minutes: 3
         shell: pwsh
         run: |
-          # $LASTEXITCODE must be read with no pipeline-stopping cmdlet in between: piping a
-          # native command into `Select-Object -First 1` stops the pipeline early and leaves
-          # $LASTEXITCODE *empty*, which compares unequal to 0 and would report a winapp that
-          # resolved perfectly well as missing.
-          $versionLines = winapp --version 2>&1
-          $version = if ($LASTEXITCODE -eq 0) { $versionLines | Select-Object -First 1 }
-                     else { "<winapp did not resolve>" }
-          winapp ui yield --help *> $null
-          $present = ($LASTEXITCODE -eq 0)
+          # Resolve the winapp this job should actually test, then export it so the suite uses
+          # the same one. This step and the suite previously disagreed inside one job — the step
+          # reported the verb present while the gate reported it absent — which is only possible
+          # if they asked different winapps.
+          #
+          # The order here is deliberately NOT ResolveWinAppExe()'s. The setup action above
+          # installs winapp.exe into its own tool directory and prepends that to PATH; it does
+          # not touch %LOCALAPPDATA%\Microsoft\WindowsApps. Preferring the LocalAppData alias —
+          # as the harness does, to route around a stale alias on a dev box — would mean that on
+          # any runner carrying that alias, the build this job just installed is never the one
+          # tested. So PATH is preferred here and the alias is only a fallback. Exporting the
+          # result still keeps the two in agreement, because $REACTOR_WINAPP_EXE is the harness's
+          # own first candidate: CI picks, and the harness follows.
+          $candidates = @(
+            $env:REACTOR_WINAPP_EXE,
+            (Get-Command winapp -CommandType Application -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty Source),
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winapp.exe')
+          )
+          $exe = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+          if (-not $exe) {
+            Write-Host 'winapp did not resolve on this runner.'
+            'winapp: **did not resolve**' >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          "REACTOR_WINAPP_EXE=$exe" >> $env:GITHUB_ENV
+
+          # `winapp --version` prints an ASCII-art banner before the version, so the first line is
+          # the top of a logo rather than a number. Take the first semver-shaped token instead.
+          $versionText = (& $exe --version 2>&1 | Out-String)
+          $m = [regex]::Match($versionText, '\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?')
+          $version = if ($m.Success) { $m.Value } else { '<unparsed>' }
+
+          # Read the command set from `winapp ui --cli-schema`, which answers the question
+          # exactly: it emits a JSON object whose `subcommands` keys ARE the command set, so no
+          # prose is interpreted. What this must NOT do is check the exit code of
+          # `ui yield --help`: an unrecognized verb is not rejected, winapp prints the parent help
+          # and exits 0, so an exit-code probe reports every verb as present. Matching the help
+          # *text* is equally wrong, because the parent listing contains every verb's description.
+          #
+          # This stops where the schema does. The harness additionally falls back to parsing
+          # `ui --help` for builds predating `--cli-schema`, and that fallback is deliberately not
+          # mirrored here: reimplementing its indentation rules in PowerShell is exactly the
+          # second implementation this step was rewritten to remove. The consequence is worth
+          # stating plainly rather than glossing -- against a pre-schema winapp this reports
+          # `<schema-unavailable>` while the suite still reaches a definitive answer, so the
+          # suite's own capability line is authoritative and this one is a diagnostic. What this
+          # step uniquely establishes is *which binary* was used, which the suite cannot report
+          # if it never runs.
+          $state = '<schema-unavailable>'
+          $schemaText = (& $exe ui --cli-schema 2>&1 | Out-String)
+          if ($LASTEXITCODE -eq 0) {
+            # try/catch, not -ErrorAction: GitHub's pwsh shell runs with
+            # $ErrorActionPreference='Stop', under which a ConvertFrom-Json parse failure aborts
+            # the step before it can report anything. A winapp predating --cli-schema answers
+            # with prose, so that path is reachable and must stay diagnosable.
+            try {
+              $schema = $schemaText | ConvertFrom-Json
+              $verbs = @($schema.subcommands.PSObject.Properties.Name)
+
+              # Same sentinel rule as WinAppUi: without a long-standing verb in the parsed set
+              # the parse failed, and "absent" would be a conclusion drawn from nothing.
+              $readable = @('status', 'inspect', 'invoke') | Where-Object { $verbs -ccontains $_ }
+              if ($readable) {
+                $state = if ($verbs -ccontains 'yield') { 'Present' } else { 'Absent' }
+              }
+            } catch {
+              Write-Host "Could not parse 'winapp ui --cli-schema' output: $($_.Exception.Message)"
+            }
+          }
+
+          Write-Host "winapp path: $exe"
           Write-Host "winapp version: $version"
-          Write-Host "winapp 'ui yield' verb present: $present"
+          Write-Host "winapp 'ui yield' support: $state"
+          "winapp path: ``$exe``" >> $env:GITHUB_STEP_SUMMARY
           "winapp version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
-          "winapp ``ui yield`` verb present (winappCli#767): **$present**" >> $env:GITHUB_STEP_SUMMARY
+          "winapp ``ui yield`` support (winappCli#767): **$state**" >> $env:GITHUB_STEP_SUMMARY
+          if ($state -eq '<schema-unavailable>') {
+            'Read no usable command set from `winapp ui --cli-schema`. This does not mean the verb is missing: the harness falls back to parsing `winapp ui --help`, which this step deliberately does not mirror, so the suite''s own `ui yield` support line is authoritative here. If the schema flag *is* supported, this is a probe failure worth inspecting.' >> $env:GITHUB_STEP_SUMMARY
+          }
 
       # The E2E suite launches Reactor.AppTests.Host.exe and drives it cross-process.
       # The Host is a ProjectReference of the test project, so building the test
@@ -342,6 +425,14 @@ jobs:
         # --report-trx is the Microsoft.Testing.Platform equivalent of the old
         # `--logger "trx;LogFileName=..."`; it needs Microsoft.Testing.Extensions.TrxReport,
         # which Reactor.AppTests references.
+        env:
+          # Turns an unconfirmed `ui yield` verb from a skip into a failure. Safe to require now
+          # that winapp v0.7.0 (2026-09-24) ships winappCli#767, and left unpinned deliberately:
+          # releases only move forward, so `latest` carries the verb, and a future release that
+          # dropped it *should* redden this job rather than quietly return to skipping. Without
+          # this the continuity tests report Assert.Inconclusive, which MTP prints as "passed,
+          # zero skipped" — indistinguishable from having actually measured the differential.
+          REACTOR_E2E_REQUIRE_UI_YIELD: '1'
         run: dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --report-trx --report-trx-filename app-tests.trx --results-directory TestResults
 
       - name: Fail on skipped input-injection E2Es
@@ -365,6 +456,46 @@ jobs:
           if ($blocked.Count -gt 0) {
             throw "Input-injection E2Es were Inconclusive instead of executed: $($blocked -join ', ')"
           }
+
+      # Proves the strict gate can actually FAIL. The Test step above covers the passing arm for
+      # real — it runs the whole suite with REACTOR_E2E_REQUIRE_UI_YIELD=1 against the installed
+      # winapp — but a gate only ever observed passing is the same unfalsifiable oracle this
+      # change set exists to remove. The unit tests cover the decision rule; only a real test
+      # process covers the plumbing that turns an unconfirmed verb into a non-zero exit.
+      #
+      # Deterministic rather than dependent on which winapp is installed: point the resolver at a
+      # binary that is not winapp, so the probe cannot confirm the verb no matter what upstream
+      # ships. That keeps this meaningful after `latest` moves.
+      - name: Prove the strict `ui yield` gate can fail
+        shell: pwsh
+        env:
+          REACTOR_E2E_REQUIRE_UI_YIELD: '1'
+          REACTOR_WINAPP_EXE: C:\Windows\System32\cmd.exe
+        run: |
+          # Only the two gated tests. MSTest accepts `--filter` and rejects `--filter-method`.
+          $output = dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build `
+            --filter "FullyQualifiedName~ReleaseUiTurn_IsAcceptedBecauseTheWorkflowIdReachesWinApp|FullyQualifiedName~WinAppRejectsAYieldWithNoWorkflowId" 2>&1 | Out-String
+          $exit = $LASTEXITCODE
+          Write-Host $output
+
+          if ($exit -eq 0) {
+            throw "The gated tests passed against a binary that is not winapp, under REACTOR_E2E_REQUIRE_UI_YIELD. Strict mode cannot fail, which is the defect this gate exists to prevent."
+          }
+
+          # A non-zero exit alone proves nothing: 5 is an invalid command line and 8 is zero tests
+          # ran, and either would masquerade as the gate firing. Require the gate's own message so
+          # the failure is attributable to the rule under test rather than to the runner.
+          if ($output -notmatch 'REACTOR_E2E_REQUIRE_UI_YIELD is set') {
+            throw "The gated tests failed (exit $exit), but not via the strict-mode gate -- its message is absent from the output, so this run does not demonstrate the gate fired."
+          }
+
+          Write-Host 'Strict mode refused an unconfirmed verb, as required.'
+
+          # Explicit, and load-bearing. A deliberately-failing `dotnet test` leaves $LASTEXITCODE
+          # at 2, and GitHub's pwsh wrapper propagates whatever it finds there — so without this
+          # the step reports the exact failure it was written to assert. Measured: the step
+          # printed its success line and still exited 2.
+          exit 0
 
   build-solution:
     name: Build solution

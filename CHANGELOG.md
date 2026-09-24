@@ -78,6 +78,16 @@ Conventions for contributors:
   tuple and array rules to the runtime rather than to `REACTOR_HOOKS_004`, which
   is what actually rejects them. Found by requiring a compiled gallery card for
   every API the skills demonstrate.
+- The E2E suite's `winapp ui yield` capability probe measures something again. It ran
+  `winapp ui yield --help` and checked for exit `0`, but an unrecognized verb is not rejected —
+  `ui bogusverbxyz --help` also exits `0` and prints the parent help — so the probe reported
+  every verb as present, invented ones included. It now reads the command set from
+  `winapp ui --cli-schema`, falling back to parsing `winapp ui --help` on builds predating that
+  flag, and distinguishes a command set it could not read from one that genuinely lacks the verb.
+  With winapp v0.7.0 shipping winappCli#767, the E2E job sets `REACTOR_E2E_REQUIRE_UI_YIELD=1`,
+  so the UI-turn continuity tests are enforced rather than skipped — they previously reported
+  `Assert.Inconclusive`, which Microsoft.Testing.Platform prints as "passed, zero skipped"
+  (PR #1272).
 
 ### Security
 
