@@ -51,10 +51,6 @@
     <!-- Supplies the MTP report-trx option; the internal OneBranch pipeline publishes a
          TRX from this suite via PublishTestResults. -->
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
-    <PackageReference Include="coverlet.collector">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
