@@ -1588,4 +1588,53 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a FormField whose field name moves between passes.
+    //
+    //  The verdict is installed under the field's own sync producer, so without
+    //  withdrawing the old one its messages stay owned by a field nothing
+    //  validates any more — keeping the form invalid forever.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_FormFieldNameMigration(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            Action<bool>? setUsePhone = null;
+
+            host.Mount(c =>
+            {
+                var (usePhone, set) = c.UseState(false);
+                setUsePhone = set;
+                var field = usePhone ? "phone" : "email";
+
+                return VStack(12,
+                    FormField(
+                        TextBox("").Validate(field, "", Validate.Required($"{field} is required")),
+                        label: "Contact",
+                        showWhen: ShowWhen.Always))
+                    .Provide(ValidationContexts.Current, ctx);
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_FieldMove_InitialError", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+
+            setUsePhone!(true);
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_FieldMove_NewFieldValidated", ctx.GetMessages("phone").Count == 1,
+                $"phone={ctx.GetMessages("phone").Count}");
+            H.Check("Issue1262_FieldMove_OldFieldWithdrawn", ctx.GetMessages("email").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 field move done"));
+            await Harness.Render();
+        }
+    }
 }

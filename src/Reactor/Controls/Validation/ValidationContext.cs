@@ -567,6 +567,7 @@ public sealed class ValidationContext
                 _currentValues[field] = value;
                 _externalMessages.Remove(field);
                 RetractAsyncProducersLocked(field);
+                InvalidateRuleSetsLocked(field);
                 BumpVersionLocked(messagesOnly: false);
             }
 
@@ -639,6 +640,9 @@ public sealed class ValidationContext
                 _currentValues[field] = value;
                 // A server verdict about the old value says nothing about the new one.
                 _externalMessages.Remove(field);
+                // Nor does a named rule set still being evaluated: its verdicts were
+                // computed from the value that has just been replaced.
+                InvalidateRuleSetsLocked(field);
 
                 // Neither does an async verdict. Retire the in-flight passes so their
                 // results are discarded on arrival, and withdraw whatever the last ones
@@ -929,6 +933,7 @@ public sealed class ValidationContext
             _currentValues[field] = value;
             _externalMessages.Remove(field);
             RetractAsyncProducersLocked(field);
+            InvalidateRuleSetsLocked(field);
             BumpVersionLocked(messagesOnly: false);
         }
         RaiseChanged();

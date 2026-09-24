@@ -148,6 +148,20 @@ internal static class CompositeLifecycle
         // Auto-validate
         var attached = newFf.Content.GetAttached<ValidationAttached>();
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
+
+        // A conditional field name can move between passes. The verdict is installed
+        // under the field's own sync producer, so without withdrawing the old one its
+        // messages stay owned by a field nothing validates any more — keeping the form
+        // invalid, or showing an error against a control that moved on (issue #1262
+        // review).
+        var previousField = FormFieldHelpers.ResolveFieldName(oldFf.FieldName, oldFf.Content);
+        if (valCtx is not null
+            && !string.IsNullOrEmpty(previousField)
+            && !string.Equals(previousField, fieldName, StringComparison.Ordinal))
+        {
+            valCtx.RetireProducer(previousField, ValidationContext.SyncProducer);
+        }
+
         ApplyAttachedValidation(valCtx, attached);
 
         // [0] Update label

@@ -1932,6 +1932,38 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task A_Value_Change_Retires_A_Pending_Set_With_A_Sync_Rule_On_That_Field()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        // Membership first, so the field filter has something to match on.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "form-rules",
+            ValidationRule(() => false, "B failed (first pass)", "b"),
+            ValidationRuleAsync(() => Task.FromResult(false), "A failed", "a"));
+        Assert.Equal("B failed (first pass)", ctx.GetMessages("b")[0].Text);
+
+        // Sync rule first, blocked async rule second — the sync verdict for "b" is
+        // computed before the await and carries no generation of its own.
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "form-rules",
+            ValidationRule(() => false, "B failed (second pass)", "b"),
+            ValidationRuleAsync(() => pending.Task, "A failed", "a"));
+
+        // "b" moves on while the second rule is still out, so the verdict already
+        // computed for it describes a value that no longer exists.
+        ctx.NotifyValueChanged("b", "new value");
+
+        pending.SetResult(false);
+        await running;
+
+        // The set stood down: the second pass's verdict was never installed.
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.Equal("B failed (first pass)", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

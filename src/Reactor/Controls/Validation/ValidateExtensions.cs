@@ -13,7 +13,8 @@ public sealed record ValidationAttached(
 {
     /// <summary>
     /// The current field value, used for automatic validation when the element is
-    /// mounted inside a FormFieldElement or ValidationVisualizerElement.
+    /// mounted inside a <c>FormFieldElement</c>. The visualizers are display-only: they
+    /// render what a context already holds and never run attached validators.
     /// </summary>
     public object? Value { get; init; }
 
