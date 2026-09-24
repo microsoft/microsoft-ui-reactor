@@ -166,28 +166,127 @@ public sealed class WinAppSdkTemplatesTests
         }
     }
 
-    [Fact]
-    public void Install_never_pairs_force_with_an_unresolved_package_spec()
+    // ── Destructive-install decision table ─────────────────────────────────
+    //
+    // `dotnet new install --force` uninstalls the existing package BEFORE
+    // downloading the replacement, so a failed install leaves the machine with no
+    // templates at all. Observed for real: `--force` with a spec that did not
+    // resolve uninstalled a working prerelease and then failed with exit 103.
+    //
+    // `PlanInstall` is the pure decision that governs when `--force` is used, so
+    // these drive the real behaviour rather than grepping the source for a string.
+
+    [Theory]
+    // No target resolved: keep whatever is installed; never force.
+    [InlineData("0.0.6-alpha", null, false, false, "KeepExisting")]
+    // Nothing installed and nothing resolved: a plain install can't destroy anything.
+    [InlineData(null, null, false, false, "PlainInstall")]
+    // Nothing installed: plain install even for a confirmed target (no --force needed).
+    [InlineData(null, "0.0.7-alpha", true, false, "PlainInstall")]
+    // Same version already installed, no source: no-op.
+    [InlineData("0.0.7-alpha", "0.0.7-alpha", true, false, "AlreadyCurrent")]
+    // Replacing an install with a CONFIRMED version is the only forced path.
+    [InlineData("0.0.6-alpha", "0.0.7-alpha", true, false, "ForcedReplace")]
+    // THE REGRESSION: a pin that could not be confirmed must NOT force.
+    [InlineData("0.0.6-alpha", "0.0.9-nope", false, false, "RefuseUnverifiedPin")]
+    // An explicit source means "install from here", so an equal version still installs.
+    [InlineData("0.0.7-alpha", "0.0.7-alpha", true, true, "ForcedReplace")]
+    public void PlanInstall_only_forces_for_a_confirmed_target(
+        string? installed, string? target, bool targetExists, bool hasSource, string expected)
     {
-        // Source-level guard. Install() shells out to `dotnet new`, so driving it
-        // for real would mutate the developer's machine — exactly the damage being
-        // guarded against. Instead assert the invariant on the source: every
-        // "--force" must be added on a path that has a concrete version, and the
-        // bare-id install (the `target is null` fallback) must not add --force.
-        var (path, text) = ReadCliSource();
+        var actual = WinAppSdkTemplates.PlanInstall(installed, target, targetExists, hasSource);
+        Assert.Equal(expected, actual.ToString());
+    }
 
-        // The bare-id fallback line — the one that runs when no version resolved.
-        Assert.Contains("\"new\", \"install\", PackageId)", text.Replace("\r\n", "\n"));
-        Assert.DoesNotContain("\"new\", \"install\", PackageId, \"--force\"", text);
+    [Fact]
+    public void PlanInstall_never_forces_an_unconfirmed_target()
+    {
+        // Property form of the row above: across every combination, ForcedReplace
+        // must imply targetExists. This is the invariant that keeps a bad pin from
+        // uninstalling a working pack.
+        foreach (var installed in new[] { null, "0.0.6-alpha" })
+        foreach (var target in new[] { null, "0.0.7-alpha" })
+        foreach (var exists in new[] { true, false })
+        foreach (var hasSource in new[] { true, false })
+        {
+            var action = WinAppSdkTemplates.PlanInstall(installed, target, exists, hasSource);
+            if (action == WinAppSdkTemplates.InstallAction.ForcedReplace)
+            {
+                Assert.True(exists, $"PlanInstall forced a replace for an unconfirmed target " +
+                                    $"(installed={installed ?? "null"}, target={target ?? "null"}, hasSource={hasSource}).");
+                Assert.NotNull(installed);
+            }
+        }
+    }
 
-        // --force must be conditional on something already being installed.
-        Assert.True(
-            global::System.Text.RegularExpressions.Regex.IsMatch(
-                text.Replace("\r\n", "\n"),
-                @"if \(installed is not null\)\s*\n\s*args\.Add\(""--force""\);"),
-            $"'{path}' must only add --force when replacing an existing install. " +
-            "`dotnet new install --force` uninstalls before downloading, so pairing it with a spec " +
-            "that may not resolve destroys a working template install (exit 103).");
+    // ── Credential redaction in the echoed command line ────────────────────
+
+    [Theory]
+    [InlineData("https://user:pat@pkgs.example.com/v3/index.json", "pat")]
+    [InlineData("https://pkgs.example.com/v3/index.json?api-key=SECRET", "SECRET")]
+    public void RedactSource_strips_credentials_from_feed_urls(string url, string secret)
+    {
+        // The install command line is echoed to the console and into CI logs.
+        var redacted = WinAppSdkTemplates.RedactSource(url);
+        Assert.DoesNotContain(secret, redacted, StringComparison.Ordinal);
+        Assert.Contains("pkgs.example.com", redacted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RedactSource_leaves_local_folder_paths_alone()
+    {
+        // A folder path carries nothing secret and must stay readable in the echo.
+        const string folder = @"C:\src\WindowsAppSDK\localpackages";
+        Assert.Equal(folder, WinAppSdkTemplates.RedactSource(folder));
+    }
+
+    // ── Installed-version parsing ──────────────────────────────────────────
+
+    [Fact]
+    public void InterpretInstalledVersionOutput_reads_the_version_for_this_pack()
+    {
+        // Verbatim shape of `dotnet new uninstall` with two packs installed — the
+        // other pack's id is a PREFIX-adjacent name, which a substring match would
+        // confuse with ours.
+        const string listing = """
+            Currently installed items:
+               Microsoft.WindowsAppSDK.Templates
+                  Version: 0.1.11-prerelease.100
+                  Details:
+                     Author: Microsoft
+               Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+                  Version: 0.0.7-alpha
+                  Details:
+                     Author: Microsoft
+            """;
+
+        Assert.Equal("0.0.7-alpha", WinAppSdkTemplates.InterpretInstalledVersionOutput(listing));
+    }
+
+    [Fact]
+    public void InterpretInstalledVersionOutput_returns_null_when_this_pack_is_absent()
+    {
+        const string listing = """
+            Currently installed items:
+               Microsoft.WindowsAppSDK.Templates
+                  Version: 0.1.11-prerelease.100
+            """;
+
+        Assert.Null(WinAppSdkTemplates.InterpretInstalledVersionOutput(listing));
+    }
+
+    [Fact]
+    public void InterpretInstalledVersionOutput_returns_null_when_no_version_line_follows()
+    {
+        // Malformed / truncated listing must not return a neighbouring package's version.
+        const string listing = """
+            Currently installed items:
+               Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+                  Details:
+                     Author: Microsoft
+            """;
+
+        Assert.Null(WinAppSdkTemplates.InterpretInstalledVersionOutput(listing));
     }
 
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
@@ -258,31 +357,28 @@ public sealed class WinAppSdkTemplatesTests
     // express the difference, so Install returns an outcome instead.
 
     [Fact]
-    public void InstallOutcome_distinguishes_keeping_an_existing_pack_from_installing()
+    public void DescribeOutcome_never_claims_an_install_that_did_not_happen()
     {
-        // These four non-failure outcomes are not interchangeable: only two of
-        // them mean the machine actually changed. Collapsing them back to a
-        // bool/int is what produced the wrong "Installed." message.
-        var values = Enum.GetNames<WinAppSdkTemplates.InstallOutcome>();
-        foreach (var expected in new[] { "Installed", "Updated", "AlreadyCurrent", "KeptExisting", "Failed" })
-            Assert.Contains(expected, values);
-    }
+        // Behavioural form of the reporting bug: `mur templates install` printed
+        // "Installed." while deliberately keeping an existing pack (nothing
+        // resolvable). Only the two outcomes that actually changed the machine may
+        // be described as an install/update.
+        Assert.Equal("Installed.", TemplatesCommand.DescribeOutcome(WinAppSdkTemplates.InstallOutcome.Installed));
+        Assert.Equal("Updated.", TemplatesCommand.DescribeOutcome(WinAppSdkTemplates.InstallOutcome.Updated));
 
-    [Fact]
-    public void TemplatesCommand_does_not_report_Installed_for_every_outcome()
-    {
-        // Source-level guard on the call site — the bug was in the reporting,
-        // not the install logic, so asserting on Install() alone would miss it.
-        var (path, text) = ReadRepoFile(global::System.IO.Path.Combine(
-            "src", "Reactor.Cli", "Templates", "TemplatesCommand.cs"));
-        var normalized = text.Replace("\r\n", "\n");
-
-        Assert.Contains("InstallOutcome.KeptExisting", normalized, StringComparison.Ordinal);
-        Assert.Contains("Kept the existing install", normalized, StringComparison.Ordinal);
-        Assert.False(
-            normalized.Contains("Console.WriteLine($\"Installed. Scaffold an app with:\")", StringComparison.Ordinal),
-            $"'{path}' must not unconditionally print \"Installed.\" — `mur templates install` reports success when it " +
-            "deliberately keeps an existing pack (nothing resolved), and claiming an install happened there is wrong.");
+        foreach (var unchanged in new[]
+                 {
+                     WinAppSdkTemplates.InstallOutcome.KeptExisting,
+                     WinAppSdkTemplates.InstallOutcome.AlreadyCurrent,
+                     WinAppSdkTemplates.InstallOutcome.Failed,
+                 })
+        {
+            var message = TemplatesCommand.DescribeOutcome(unchanged);
+            Assert.False(
+                message.Contains("Installed.", StringComparison.Ordinal) ||
+                message.Contains("Updated.", StringComparison.Ordinal),
+                $"{unchanged} did not change the machine but is reported as \"{message}\".");
+        }
     }
 
     // ── Bootstrap wiring guards ────────────────────────────────────────────
@@ -371,18 +467,5 @@ public sealed class WinAppSdkTemplatesTests
             dir = global::System.IO.Path.GetDirectoryName(dir);
         Assert.NotNull(dir);
         return dir!;
-    }
-
-    static (string path, string text) ReadCliSource()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir != null && !global::System.IO.File.Exists(global::System.IO.Path.Combine(dir, "Reactor.slnx")))
-            dir = global::System.IO.Path.GetDirectoryName(dir);
-        Assert.NotNull(dir);
-
-        var path = global::System.IO.Path.Combine(
-            dir!, "src", "Reactor.Cli", "Templates", "WinAppSdkTemplates.cs");
-        Assert.True(global::System.IO.File.Exists(path), $"Expected '{path}' to exist; file moved or renamed?");
-        return (path, global::System.IO.File.ReadAllText(path));
     }
 }

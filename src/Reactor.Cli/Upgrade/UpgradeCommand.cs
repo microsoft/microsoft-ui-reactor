@@ -61,6 +61,14 @@ public static class UpgradeCommand
         var templateOutcome = WinAppSdkTemplates.Install(repoRoot, templateSource, templateVersion);
         if (templateOutcome == WinAppSdkTemplates.InstallOutcome.Failed)
         {
+            // Best-effort when it's the routine refresh — a NuGet hiccup shouldn't fail
+            // the whole upgrade. But if the user explicitly asked for a specific source
+            // or version, silently returning 0 would report success for work not done.
+            if (templateSource is not null || templateVersion is not null)
+            {
+                Console.Error.WriteLine($"mur upgrade: could not install {WinAppSdkTemplates.PackageId} as requested.");
+                return 1;
+            }
             Console.Error.WriteLine($"  Could not install {WinAppSdkTemplates.PackageId}; the rest of the upgrade completed.");
         }
 

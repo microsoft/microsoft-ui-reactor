@@ -48,8 +48,23 @@ public static class TemplatesCommand
 
     static int Install(string[] args)
     {
-        var source = ParseFlag(args, "--source");
-        var version = ParseFlag(args, "--version");
+        // Help must never mutate the machine: `mur templates install --help`
+        // previously fell straight through to a real install.
+        if (args.Any(a => a is "--help" or "-h"))
+        {
+            ShowInstallHelp();
+            return 0;
+        }
+
+        // Reject anything we don't understand rather than silently ignoring it —
+        // a typo like `--sorce ./pkgs` would otherwise install from the wrong place.
+        if (!TryParseInstallArgs(args, out var source, out var version, out var error))
+        {
+            Console.Error.WriteLine($"mur templates install: {error}");
+            Console.Error.WriteLine();
+            ShowInstallHelp();
+            return 1;
+        }
 
         Console.WriteLine($"Installing {WinAppSdkTemplates.PackageId} (`dotnet new {WinAppSdkTemplates.BlankShortName}`)");
 
@@ -76,21 +91,7 @@ public static class TemplatesCommand
         // Don't claim an install happened when the existing pack was simply kept
         // or was already current — the user needs to know whether anything moved.
         Console.WriteLine();
-        switch (outcome)
-        {
-            case WinAppSdkTemplates.InstallOutcome.KeptExisting:
-                Console.WriteLine("Kept the existing install (could not resolve a published version).");
-                break;
-            case WinAppSdkTemplates.InstallOutcome.AlreadyCurrent:
-                Console.WriteLine("Already up to date.");
-                break;
-            case WinAppSdkTemplates.InstallOutcome.Updated:
-                Console.WriteLine("Updated.");
-                break;
-            default:
-                Console.WriteLine("Installed.");
-                break;
-        }
+        Console.WriteLine(DescribeOutcome(outcome));
 
         Console.WriteLine("Scaffold an app with:");
         foreach (var name in WinAppSdkTemplates.ShortNames)
@@ -130,6 +131,21 @@ public static class TemplatesCommand
         return 1;
     }
 
+    /// <summary>
+    /// Human-readable summary of what an install actually did. Split out (and
+    /// internal) so the mapping is testable: the bug this guards is reporting
+    /// "Installed." when the command deliberately kept an existing pack.
+    /// </summary>
+    internal static string DescribeOutcome(WinAppSdkTemplates.InstallOutcome outcome) => outcome switch
+    {
+        WinAppSdkTemplates.InstallOutcome.KeptExisting =>
+            "Kept the existing install (could not resolve a published version).",
+        WinAppSdkTemplates.InstallOutcome.AlreadyCurrent => "Already up to date.",
+        WinAppSdkTemplates.InstallOutcome.Updated => "Updated.",
+        WinAppSdkTemplates.InstallOutcome.Installed => "Installed.",
+        _ => "Install failed.",
+    };
+
     static void ShowHelp()
     {
         Console.WriteLine("Usage: mur templates <install|status> [options]");
@@ -141,18 +157,57 @@ public static class TemplatesCommand
         Console.WriteLine("  install    Install or reinstall the template pack");
         Console.WriteLine("  status     Report whether the pack is registered");
         Console.WriteLine();
-        Console.WriteLine("Options (install):");
-        Console.WriteLine("  --source <path|url>   Extra NuGet source; use a folder of nupkgs to test an unpublished build");
-        Console.WriteLine("  --version <version>   Pin an explicit version instead of resolving the newest published one");
+        Console.WriteLine("Run `mur templates install --help` for install options.");
     }
 
-    static string? ParseFlag(string[] args, string name)
+    static void ShowInstallHelp()
     {
-        for (var i = 0; i < args.Length - 1; i++)
+        Console.WriteLine("Usage: mur templates install [--source <path>] [--version <version>]");
+        Console.WriteLine();
+        Console.WriteLine($"Installs {WinAppSdkTemplates.PackageId}. With no options it resolves the");
+        Console.WriteLine("newest published version (newest stable, else newest prerelease).");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --source <path>       Folder of .nupkg files, to install an unpublished build.");
+        Console.WriteLine("                        A feed URL also works but cannot be enumerated, so it");
+        Console.WriteLine("                        requires --version.");
+        Console.WriteLine("  --version <version>   Pin an explicit version instead of resolving.");
+        Console.WriteLine("  --help, -h            Show this help.");
+    }
+
+    /// <summary>
+    /// Strict argv parsing for `install`. Rejects unknown flags, bare positional
+    /// arguments, and flags with a missing value, so a typo cannot silently change
+    /// what gets installed.
+    /// </summary>
+    static bool TryParseInstallArgs(string[] args, out string? source, out string? version, out string? error)
+    {
+        source = null;
+        version = null;
+        error = null;
+
+        for (var i = 0; i < args.Length; i++)
         {
-            if (string.Equals(args[i], name, StringComparison.Ordinal))
-                return args[i + 1];
+            var arg = args[i];
+            switch (arg)
+            {
+                case "--source":
+                case "--version":
+                    if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                    {
+                        error = $"'{arg}' requires a value.";
+                        return false;
+                    }
+                    if (arg == "--source") source = args[++i];
+                    else version = args[++i];
+                    break;
+                default:
+                    error = arg.StartsWith("-", StringComparison.Ordinal)
+                        ? $"unknown option '{arg}'."
+                        : $"unexpected argument '{arg}'.";
+                    return false;
+            }
         }
-        return null;
+        return true;
     }
 }

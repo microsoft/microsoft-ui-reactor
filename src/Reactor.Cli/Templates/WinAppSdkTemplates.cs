@@ -124,11 +124,21 @@ public static class WinAppSdkTemplates
     public static string? GetInstalledVersion()
     {
         var output = RunCapture("new", "uninstall");
-        if (output is null) return null;
+        return output is null ? null : InterpretInstalledVersionOutput(output);
+    }
 
+    /// <summary>
+    /// Pulls this pack's version out of `dotnet new uninstall` output. Split out
+    /// (and internal) so the parser is testable against captured CLI text without
+    /// invoking the template engine.
+    /// </summary>
+    internal static string? InterpretInstalledVersionOutput(string output)
+    {
         // The listing indents each package id, then its metadata:
         //     Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
         //        Version: 0.0.6-alpha
+        // Several packages can be listed, so match the id line exactly rather than
+        // by substring — other ids legitimately contain this one as a prefix.
         var lines = output.Replace("\r\n", "\n").Split('\n');
         for (var i = 0; i < lines.Length; i++)
         {
@@ -161,11 +171,89 @@ public static class WinAppSdkTemplates
         Failed,
     }
 
+    /// <summary>What an <see cref="Install"/> call should do, decided from inputs alone.</summary>
+    /// <remarks>
+    /// Split out from <see cref="Install"/> so the decision table is unit-testable
+    /// without shelling out to the template engine or touching the machine. The
+    /// destructive case is <see cref="InstallAction.ForcedReplace"/>: it is the only
+    /// path that passes `--force`, which uninstalls before downloading.
+    /// </remarks>
+    internal enum InstallAction
+    {
+        /// <summary>Leave the existing install alone (nothing resolvable to move to).</summary>
+        KeepExisting,
+        /// <summary>Install without `--force` — nothing is installed, so there is nothing to lose.</summary>
+        PlainInstall,
+        /// <summary>Replace an existing install with a version known to exist.</summary>
+        ForcedReplace,
+        /// <summary>The resolved target is already installed; do nothing.</summary>
+        AlreadyCurrent,
+        /// <summary>
+        /// An explicit version was pinned but could not be confirmed to exist. Refuse
+        /// rather than `--force`, which would uninstall the working pack and then fail.
+        /// </summary>
+        RefuseUnverifiedPin,
+    }
+
+    /// <summary>
+    /// Pure decision table for <see cref="Install"/>.
+    /// </summary>
+    /// <param name="installed">Currently installed version, or null.</param>
+    /// <param name="target">Version we want, or null when none could be resolved.</param>
+    /// <param name="targetExists">
+    /// True only when <paramref name="target"/> was confirmed present in the feed or
+    /// folder. A pinned version that could not be confirmed must never be forced.
+    /// </param>
+    /// <param name="hasSource">True when an extra NuGet source was supplied.</param>
+    internal static InstallAction PlanInstall(string? installed, string? target, bool targetExists, bool hasSource)
+    {
+        if (target is null)
+            return installed is not null ? InstallAction.KeepExisting : InstallAction.PlainInstall;
+
+        // An explicit source means "get it from here even if the id/version matches",
+        // so don't short-circuit on an equal version string in that case.
+        if (installed is not null && !hasSource &&
+            string.Equals(installed, target, StringComparison.OrdinalIgnoreCase))
+            return InstallAction.AlreadyCurrent;
+
+        // Nothing installed: a plain install cannot destroy anything.
+        if (installed is null)
+            return InstallAction.PlainInstall;
+
+        // Replacing an existing install requires --force, which uninstalls first.
+        // Only take that path for a version we know is actually there.
+        return targetExists ? InstallAction.ForcedReplace : InstallAction.RefuseUnverifiedPin;
+    }
+
+    /// <summary>
+    /// Masks credentials in a NuGet source before it is echoed. Feed URLs can carry a
+    /// PAT in the user-info or query segment, and this command line is printed to the
+    /// console and into CI logs.
+    /// </summary>
+    internal static string RedactSource(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source)) return source;
+        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri) || uri.IsFile)
+            return source; // local folder path — nothing secret in it
+
+        var builder = new UriBuilder(uri)
+        {
+            UserName = string.IsNullOrEmpty(uri.UserInfo) ? string.Empty : "***",
+            Password = string.Empty,
+            Query = string.IsNullOrEmpty(uri.Query) ? string.Empty : "***",
+        };
+        return builder.Uri.ToString();
+    }
+
     /// <summary>
     /// Installs (or updates) the template pack.
     /// </summary>
     /// <param name="workingDirectory">Working directory for the `dotnet` process.</param>
-    /// <param name="source">Extra NuGet source — a local folder holding the nupkg, or a feed URL. This is how an unpublished build gets tested.</param>
+    /// <param name="source">
+    /// Extra NuGet source. A local folder holding the nupkg is fully supported. A feed
+    /// URL is passed to `dotnet new install --add-source`, but version *resolution* only
+    /// reads local folders, so a URL source requires an explicit <paramref name="version"/>.
+    /// </param>
     /// <param name="version">Explicit version to pin. When omitted the newest published version is resolved.</param>
     /// <remarks>
     /// Returns what actually happened rather than a bare exit code: "kept the
@@ -174,73 +262,147 @@ public static class WinAppSdkTemplates
     /// </remarks>
     public static InstallOutcome Install(string workingDirectory, string? source = null, string? version = null)
     {
-        var installed = GetInstalledVersion();
-        var target = string.IsNullOrWhiteSpace(version) ? ResolveLatestVersion(source) : version!.Trim();
+        var hasSource = !string.IsNullOrWhiteSpace(source);
+        var pinned = !string.IsNullOrWhiteSpace(version);
 
-        // `dotnet new install --force` uninstalls the existing package *before*
-        // downloading the replacement, so a failed install leaves the machine
-        // with no templates at all. Never take that path unless we have a
-        // concrete version we know exists (resolved from the live NuGet index or
-        // from a nupkg filename on disk). Without one, keep what's installed.
-        if (target is null)
+        // A template pack generates code, so refuse to fetch one over plaintext
+        // http:// — a MITM could swap the scaffold. Local folders and https are fine.
+        if (hasSource &&
+            Uri.TryCreate(source, UriKind.Absolute, out var sourceUri) &&
+            !sourceUri.IsFile &&
+            !string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
-            if (installed is not null)
-            {
+            Console.Error.WriteLine(
+                $"  error: refusing to install a template package from an insecure source " +
+                $"('{sourceUri.Scheme}'). Use https:// or a local folder.");
+            return InstallOutcome.Failed;
+        }
+
+        // A URL source cannot be enumerated here (only folders and the public index
+        // are), so without a pin we would silently resolve a version from nuget.org
+        // and then install it from the user's feed — a different package than asked for.
+        if (hasSource && !pinned && !Directory.Exists(source))
+        {
+            Console.Error.WriteLine(
+                $"  error: --source '{RedactSource(source!)}' is not a local folder, and versions cannot be " +
+                $"enumerated from a feed URL here. Pass an explicit --version to install from it.");
+            return InstallOutcome.Failed;
+        }
+
+        var installed = GetInstalledVersion();
+
+        string? target;
+        bool targetExists;
+        if (pinned)
+        {
+            target = version!.Trim();
+            // Confirm the pin before considering --force. Null means "couldn't tell",
+            // which is treated as unverified — never destructive on a maybe.
+            var available = ResolveAvailableVersions(source);
+            targetExists = available is not null &&
+                           available.Any(v => string.Equals(v, target, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            target = ResolveLatestVersion(source);
+            // A resolved target came out of the feed listing, so it exists by construction.
+            targetExists = target is not null;
+        }
+
+        switch (PlanInstall(installed, target, targetExists, hasSource))
+        {
+            case InstallAction.KeepExisting:
                 Console.Error.WriteLine(
                     $"  warning: could not resolve a published version of {PackageId}; " +
                     $"keeping the installed {installed}. Re-run with network access, or pass an explicit version.");
                 return InstallOutcome.KeptExisting;
-            }
 
-            // Nothing installed and nothing resolved — try a plain install (no
-            // --force, so there is nothing to lose) and let NuGet report why.
-            Console.WriteLine($"  dotnet new install {PackageId}");
-            return Run(workingDirectory, "new", "install", PackageId) == 0
-                ? InstallOutcome.Installed
-                : InstallOutcome.Failed;
+            case InstallAction.AlreadyCurrent:
+                Console.WriteLine($"  Already installed: {PackageId} {installed}");
+                return InstallOutcome.AlreadyCurrent;
+
+            case InstallAction.RefuseUnverifiedPin:
+                Console.Error.WriteLine(
+                    $"  error: {PackageId} {target} could not be found in the configured sources, and " +
+                    $"replacing an install requires `--force`, which uninstalls the current {installed} " +
+                    $"before downloading. Refusing, so your working install survives. " +
+                    $"Check the version, or pass --source with the folder that has it.");
+                return InstallOutcome.Failed;
+
+            case InstallAction.PlainInstall:
+                return RunInstall(workingDirectory, target, source, force: false, installed);
+
+            default: // ForcedReplace
+                return RunInstall(workingDirectory, target, source, force: true, installed);
         }
+    }
 
-        if (installed is not null &&
-            string.Equals(installed, target, StringComparison.OrdinalIgnoreCase) &&
-            string.IsNullOrWhiteSpace(source))
-        {
-            Console.WriteLine($"  Already installed: {PackageId} {installed}");
-            return InstallOutcome.AlreadyCurrent;
-        }
-
+    static InstallOutcome RunInstall(string workingDirectory, string? target, string? source, bool force, string? installed)
+    {
         Console.WriteLine(installed is null
-            ? $"  Installing {PackageId} {target}"
+            ? $"  Installing {PackageId} {target ?? "(latest stable)"}"
             : $"  Updating {PackageId} {installed} → {target}");
 
         // `<id>::<version>` is `dotnet new install`'s explicit-version syntax and
         // the only way to reach a prerelease — a bare id resolves stable-only.
-        var args = new List<string> { "new", "install", $"{PackageId}::{target}" };
-
-        // --force is required to replace an existing install; skip it otherwise
-        // so a first-time install can never uninstall anything.
-        if (installed is not null)
-            args.Add("--force");
-
+        var spec = target is null ? PackageId : $"{PackageId}::{target}";
+        var args = new List<string> { "new", "install", spec };
+        if (force) args.Add("--force");
         if (!string.IsNullOrWhiteSpace(source))
         {
             args.Add("--add-source");
             args.Add(source!);
         }
 
-        Console.WriteLine($"  dotnet {string.Join(' ', args)}");
+        // Echo with the source redacted — a feed URL can carry a PAT, and this line
+        // lands in console output and CI logs.
+        var echo = args.Select(a => string.Equals(a, source, StringComparison.Ordinal) ? RedactSource(a) : a);
+        Console.WriteLine($"  dotnet {string.Join(' ', echo)}");
+
         var rc = Run(workingDirectory, args.ToArray());
         if (rc != 0)
         {
-            if (installed is not null)
+            if (force && installed is not null)
             {
                 Console.Error.WriteLine(
                     $"  warning: the update failed and `dotnet new install --force` removes the old package first, " +
                     $"so {PackageId} may no longer be installed. Restore it with: " +
                     $"dotnet new install {PackageId}::{installed}");
             }
+            Console.Error.WriteLine(
+                "  note: `dotnet new install` does not use the NuGet credential provider, so an authenticated " +
+                "feed reports \"the package does not exist\". Restore the package first, then pass the cached " +
+                ".nupkg folder to --source.");
             return InstallOutcome.Failed;
         }
         return installed is null ? InstallOutcome.Installed : InstallOutcome.Updated;
+    }
+
+    /// <summary>
+    /// Every version the configured source offers, or null when the listing could
+    /// not be obtained (offline, unreachable feed). Null means "couldn't tell" and
+    /// must never be read as "the version is absent".
+    /// </summary>
+    internal static IReadOnlyList<string>? ResolveAvailableVersions(string? source = null)
+    {
+        // A local folder source is the unpublished-build test path: read the
+        // versions straight off the nupkg filenames rather than hitting NuGet.
+        if (!string.IsNullOrWhiteSpace(source) && Directory.Exists(source))
+            return EnumerateLocalVersions(source!);
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            var json = http.GetStringAsync(FlatContainerIndexUrl).GetAwaiter().GetResult();
+            return PackLocalCommand.ParseFlatContainerVersions(json);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"  warning: could not query NuGet for {PackageId} versions " +
+                $"({ex.GetType().Name}: {ex.Message}).");
+            return null;
+        }
     }
 
     /// <summary>
@@ -250,24 +412,8 @@ public static class WinAppSdkTemplates
     /// </summary>
     public static string? ResolveLatestVersion(string? source = null)
     {
-        // A local folder source is the unpublished-build test path: read the
-        // versions straight off the nupkg filenames rather than hitting NuGet.
-        if (!string.IsNullOrWhiteSpace(source) && Directory.Exists(source))
-            return SelectPreferStable(EnumerateLocalVersions(source!));
-
-        try
-        {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-            var json = http.GetStringAsync(FlatContainerIndexUrl).GetAwaiter().GetResult();
-            return SelectPreferStable(PackLocalCommand.ParseFlatContainerVersions(json));
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine(
-                $"  warning: could not query NuGet for {PackageId} versions " +
-                $"({ex.GetType().Name}: {ex.Message}); falling back to the default resolution.");
-            return null;
-        }
+        var versions = ResolveAvailableVersions(source);
+        return versions is null ? null : SelectPreferStable(versions);
     }
 
     /// <summary>

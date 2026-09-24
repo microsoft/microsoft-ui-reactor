@@ -4,9 +4,9 @@
 A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK executable —
 `dotnet publish` produces the deployable artifact and the framework
 itself adds nothing exotic to the project file. What you choose at
-publish time is the **shape** of that artifact: an unpackaged folder
-(the [`dotnet new reactorapp`](getting-started.md) default), a signed
-MSIX, a single-file bundle, or a Native AOT native binary — each
+publish time is the **shape** of that artifact: a packaged MSIX
+(the [`dotnet new reactor`](getting-started.md) default), an unpackaged
+folder, a single-file bundle, or a Native AOT native binary — each
 combined with a `win-x64` or `win-arm64` runtime identifier. The
 trade-offs are the same ones any WinUI 3 app faces; the
 Reactor-specific notes on this page cover what changes when your
@@ -31,8 +31,8 @@ folder or an MSIX. The decision is usually distribution-channel-first
 
 ## The unpackaged shape
 
-`dotnet new reactorapp` scaffolds an unpackaged WinUI 3 project — the
-shape every sample in this repo also uses:
+Prefer a zip-and-go folder over an MSIX? Set `WindowsPackageType=None`
+on a scaffolded project — the shape every sample in this repo uses:
 
 ```xml
 <PropertyGroup>
@@ -164,8 +164,8 @@ and any `System.Drawing.Common` / `TraceEvent` natives transitively
 pulled in by Reactor) ship per-RID, which is why the runtime
 identifier matters even for managed-only Reactor code. The repo's
 sample apps default to `<Platforms>x64;ARM64</Platforms>`; the
-`reactorapp` template uses `<Platforms>x64;ARM64;X86</Platforms>`
-(X86 retained for parity with the WinUI 3 templates), but Reactor
+`dotnet new reactor` templates use `<Platforms>x86;x64;ARM64</Platforms>`
+(x86 retained for parity with the WinUI 3 templates), but Reactor
 itself is only tested on x64 / ARM64.
 
 ## Native AOT
@@ -192,64 +192,21 @@ and a runtime identifier:
 
 `dotnet publish -c Release -r win-x64` produces a native binary —
 no `coreclr.dll`, no JIT, ~50 ms cold start versus ~250 ms for the
-JIT-based build on the same hardware. The project template gates
-the same shape behind a `NativeAot` parameter:
+JIT-based build on the same hardware.
+
+The `dotnet new reactor` templates do **not** enable AOT — they ship
+`PublishReadyToRun` + `PublishTrimmed` for non-Debug configurations
+instead. To go all the way to AOT, add the properties to the scaffolded
+CSPROJ yourself:
 
 ```xml
-<PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework Condition="'$(TargetFrameworkOverride)' == ''">net10.0-windows10.0.22621.0</TargetFramework>
-    <TargetFramework Condition="'$(TargetFrameworkOverride)' != ''">TargetFrameworkOverride-windows10.0.22621.0</TargetFramework>
-    <!--
-        x64 first so an unqualified `dotnet build` / F5 picks the right default on the
-        majority of dev machines. ARM64 second for Snapdragon X. X86 retained for parity
-        with the WinUI 3 templates even though Reactor itself is only tested on x64 / ARM64.
-    -->
-    <Platforms>x64;ARM64;X86</Platforms>
-    <UseWinUI>true</UseWinUI>
-    <WindowsPackageType>None</WindowsPackageType>
-    <!--
-        WindowsAppSDKSelfContained bundles the Windows App SDK runtime alongside the
-        published exe so the app:
-          (a) runs from any folder without a separate Windows App Runtime install, and
-          (b) survives `dotnet watch run` hot reload (used by the Reactor Visual Studio
-              embedded-preview extension — spec 056). Incremental rebuilds otherwise
-              double-count transitive Microsoft.WindowsAppSDK.* references and trip
-              Microsoft.WindowsAppSDK.ComponentReference.targets' strict version check
-              ("version 2.0.20;2.0.20 was referenced"). Self-contained bundling
-              sidesteps that check.
-        Tradeoff: ~30 MB extra in the publish output. To ship framework-dependent
-        (smaller publish, requires the user to install Microsoft.WindowsAppRuntime
-        separately) flip this to false and ensure your install instructions tell users
-        to install the runtime first.
-    -->
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-    <Nullable>enable</Nullable>
-    <!--
-        Embeds the app icon in the .exe so File Explorer and shortcuts show it.
-        The ReactorApp.Run(icon:) call in App.cs sets the *window* icon (taskbar /
-        Alt-Tab / Task Manager); without either, Reactor falls back to
-        Assets\AppIcon.ico and then to this embedded icon.
-    -->
-    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
-    <!--
-        Auto-resolve RuntimeIdentifier from the host SDK when the caller hasn't pinned
-        Platform / RuntimeIdentifier explicitly. Lets `dotnet build` / `dotnet run`
-        succeed without forcing -p:Platform=x64 on every invocation — WindowsAppSDK's
-        self-contained build path requires a concrete RID.
-    -->
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
-    <!--#if (NativeAot) -->
-    <PublishAot>true</PublishAot>
-    <InvariantGlobalization>true</InvariantGlobalization>
-    <!--#endif -->
+<PropertyGroup Condition="'$(Configuration)' != 'Debug'">
+  <PublishAot>true</PublishAot>
+  <InvariantGlobalization>true</InvariantGlobalization>
 </PropertyGroup>
 ```
 
-Pass `dotnet new reactorapp --NativeAot true` to get the AOT-enabled
-variant. `InvariantGlobalization=true` is paired with `PublishAot`
+`InvariantGlobalization=true` is paired with `PublishAot`
 because the alternative — shipping the full ICU data — pulls in
 trim warnings that the AOT analyzer flags as actionable.
 
@@ -356,7 +313,7 @@ in Release too.
 ## Next Steps
 
 - **[Dev Tooling](dev-tooling.md)** — Previous: the inner-loop side of the build pipeline (`mur pack-local`, `dotnet watch`, hot reload).
-- **[Getting Started](getting-started.md)** — Where the `dotnet new reactorapp` template that produces the unpackaged shape comes from.
+- **[Getting Started](getting-started.md)** — Where the `dotnet new reactor` templates that produce the packaged shape come from.
 - **[Performance](performance.md)** — When you should reach for AOT (cold-start budgets, startup-perf benchmarks).
 - **[Perf Instrumentation](perf-instrumentation.md)** — The ETW / EventPipe pipeline that survives AOT publish unchanged.
 - **[Dev Tooling](dev-tooling.md)** — How the `Reactor.DevtoolsSupport` capability switch combines with `--devtools` activation.
