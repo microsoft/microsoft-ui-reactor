@@ -28,6 +28,23 @@ Conventions for contributors:
 
 ### Added
 
+- **Framework mechanics are searchable — `find-ui --source reactor` now answers
+  "how does X work", not only "what is control X" (spec 064, issue #1275).** The
+  published search index was control-keyed end to end, so `UseState hook`,
+  `UseEffect lifecycle`, `element ref focus` and `key down event handler` all
+  returned nothing, while `state management` returned CheckBox. Nine
+  **Fundamentals** gallery pages — `UseState`, `UseEffect`, `UseReducer`,
+  `UseMemo`, `UseRef`, `Context`, element refs, keyboard input, and pointer and
+  gestures — are now indexed alongside the controls. They are ordinary gallery
+  pages, so every snippet an agent retrieves is code that compiles in CI.
+
+  The index also carries three fields the consumer contract always defined but
+  Reactor never emitted: `curatedKeywords` (the higher-weighted intent slot that
+  lets a topic outrank a control merely sharing a token), `docs` links, and
+  `details` prose. `details` is **lifted verbatim** out of the shipped agent-kit
+  skills by an `<!-- index:… -->` marker, so the index and the skills say the same
+  thing by construction rather than by discipline.
+
 - `Publish docs` now verifies the live site after deploying. The `publish` job stamps the
   Pages artifact with the run that built it, and a new `verify` job polls
   <https://microsoft.github.io/microsoft-ui-reactor/> until it is serving *that* run —
@@ -37,6 +54,12 @@ Conventions for contributors:
   blamed on the deployment. (issue #1268)
 
 ### Changed
+
+- **The search index emits every clean `SampleCard` on a page, not just the first
+  (spec 064 §3.2, issue #1275).** A mechanics topic does not fit one snippet, and
+  the consumer contract's `samples` was always an array. An editorial
+  `sampleOverride` still defines the first sample; the page's remaining clean cards
+  follow it. Regenerate after changing *any* card, not only the opening one.
 
 - A push to `main` and the release tag's own run both deploy the docs, as before. Standing
   one of them down was tried and removed: every version of that check has to predict that
@@ -55,6 +78,27 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- **Three wrong gesture snippets in the `reactor-input` agent-kit skill (issue
+  #1275).** They used WinUI's nested `ManipulationDelta` shape rather than
+  Reactor's flat gesture structs: `e.Delta.Translation.X` is `e.Delta.X`
+  (`PanGesture.Delta` is a `Point`), `e.Delta.Scale` is `e.ScaleDelta`
+  (`PinchGesture`), and `e.Delta.Rotation` is `e.AngleDelta` (`RotateGesture`).
+  The 60Hz pan pattern also bound its cell with `UseRef<UIElement>()` and passed
+  it to `.Ref(...)`, which takes an `ElementRef` — `Ref<T>` is a different type
+  and would not compile; it now uses `UseElementRef<FrameworkElement>()`. All
+  four had shipped to agents as copy-ready code. Found by requiring a compiled
+  gallery card for every API the skills demonstrate (spec 064 §4).
+
+- **The hook-dependency guidance wrongly blamed the runtime for rejecting tuple
+  deps (spec 064 §4.1, issue #1275).** `reactor-getting-started/SKILL.md` grouped
+  tuples with freshly allocated objects, arrays, and lambdas as deps that
+  "compare unequal on every render". They do not: `RenderContext.DepEquals<T>`
+  compares value-type deps with `EqualityComparer<T>.Default`, so a `ValueTuple`
+  of value types is value-equal when its fields are unchanged. The advice still
+  holds, for a different reason — `REACTOR_HOOKS_004` classifies every tuple
+  expression as an unstable dep and fails the build — and the prose now says so.
+  Reference-type deps are still described as genuinely unequal, because they are.
 
 ### Security
 

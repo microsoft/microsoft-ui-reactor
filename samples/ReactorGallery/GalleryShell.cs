@@ -16,6 +16,7 @@ class GalleryShell : Component
         ["Data"] = "\uE7C3",
         ["Date and Time"] = "\uE787",
         ["Dialogs and Flyouts"] = "\uE8BD",
+        ["Fundamentals"] = "\uE8F1",
         ["Layout"] = "\uE8A1",
         ["Media"] = "\uE8B9",
         ["Menus and Toolbars"] = "\uE700",
@@ -91,33 +92,30 @@ class GalleryShell : Component
             .Select(GalleryRoutes.CategorySlug)
             .ToHashSet();
 
-        var designCategories = new HashSet<string> { "Design" };
+        var nonControlCategories = new HashSet<string> { "Design", "Fundamentals" };
+
+        // Design and Fundamentals are not control categories — they sit above the "Controls"
+        // header as their own top-level entries rather than inside it.
+        NavigationViewItemData CategoryNavItem(string category, string glyph) =>
+            NavItem(category, tag: GalleryRoutes.CategorySlug(category)) with
+            {
+                IconElement = FontIcon(glyph),
+                Children = ControlRegistry.All
+                    .Where(c => c.Category == category)
+                    .Select(c => NavItem(c.Title, tag: c.Tag))
+                    .ToArray()
+            };
 
         var controlNavItems = ControlRegistry.Categories
-            .Where(cat => !designCategories.Contains(cat))
-            .Select(cat =>
-                NavItem(cat,
-                    tag: GalleryRoutes.CategorySlug(cat)) with
-                {
-                    IconElement = FontIcon(CategoryIcons.GetValueOrDefault(cat, "\uE71D")),
-                    Children = ControlRegistry.All
-                        .Where(c => c.Category == cat)
-                        .Select(c => NavItem(c.Title, tag: c.Tag))
-                        .ToArray()
-                })
+            .Where(cat => !nonControlCategories.Contains(cat))
+            .Select(cat => CategoryNavItem(cat, CategoryIcons.GetValueOrDefault(cat, "\uE71D")))
             .ToArray();
 
         var navItems = new[]
         {
             NavItem("Home", tag: GalleryRoutes.HomeTag) with { IconElement = FontIcon("\uE80F") },
-            NavItem("Design", tag: GalleryRoutes.CategorySlug("Design")) with
-            {
-                IconElement = FontIcon("\uE790"),
-                Children = ControlRegistry.All
-                    .Where(c => c.Category == "Design")
-                    .Select(c => NavItem(c.Title, tag: c.Tag))
-                    .ToArray()
-            },
+            CategoryNavItem("Fundamentals", "\uE8F1"),
+            CategoryNavItem("Design", "\uE790"),
             NavItemHeader("Controls"),
         }
         .Concat(controlNavItems)
@@ -156,7 +154,9 @@ class GalleryShell : Component
 
             content = VStack(16,
                 GalleryControls.PageHeader(categoryName,
-                    $"{controls.Length} controls in this category")
+                    categoryName == "Fundamentals"
+                        ? $"{controls.Length} framework topics"
+                        : $"{controls.Length} controls in this category")
                     .Margin(36, 24, 36, 0),
                 GalleryControls.ControlCardGrid(controls, navigate.Current)
                     .Margin(36, 0, 0, 36)

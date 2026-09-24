@@ -122,6 +122,17 @@ static class PageRouter
         // Patterns
         "commands" => Component<ControlPages.Patterns.CommandsPage>(),
 
+        // Fundamentals — framework mechanics (issue #1275)
+        "use-state" => Component<ControlPages.Fundamentals.UseStatePage>(),
+        "use-effect" => Component<ControlPages.Fundamentals.UseEffectPage>(),
+        "use-reducer" => Component<ControlPages.Fundamentals.UseReducerPage>(),
+        "use-memo" => Component<ControlPages.Fundamentals.UseMemoPage>(),
+        "use-ref" => Component<ControlPages.Fundamentals.UseRefPage>(),
+        "context" => Component<ControlPages.Fundamentals.ContextPage>(),
+        "element-refs" => Component<ControlPages.Fundamentals.ElementRefsPage>(),
+        "keyboard-input" => Component<ControlPages.Fundamentals.KeyboardInputPage>(),
+        "pointer-input" => Component<ControlPages.Fundamentals.PointerInputPage>(),
+
         // Motion
         "connected-animation" => Component<ControlPages.Motion.ConnectedAnimationPage>(),
         "transitions" => Component<ControlPages.Motion.TransitionsPage>(),

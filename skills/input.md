@@ -86,6 +86,48 @@ TextBox(text, setText)
     })
 ```
 
+**`e.Key` is `Windows.System.VirtualKey` — WinRT, not WPF.** It is not
+`System.Windows.Input.Key`, and the member names differ: `VirtualKey` has **no**
+`OemPeriod`, `OemPlus`, `OemMinus` or `Equal`. Punctuation and OEM keys simply
+have no named member. Two ways to handle them:
+
+```csharp
+// 1. Compare the numeric virtual-key code for OEM keys.
+.OnKeyDown((s, e) =>
+{
+    if ((int)e.Key == 190) AppendDecimalPoint();   // VK_OEM_PERIOD '.'
+    if ((int)e.Key == 187) Evaluate();             // VK_OEM_PLUS   '='
+})
+
+// 2. Better for text: let WinUI resolve the character for you.
+.OnCharacterReceived((s, e) =>
+{
+    if (e.Character == '.') AppendDecimalPoint();
+    if (e.Character == '=') Evaluate();
+})
+```
+
+Named members you *can* rely on are the letters (`VirtualKey.A`), digits
+(`VirtualKey.Number0`, `VirtualKey.NumberPad0`), the numpad operators
+(`Add`, `Subtract`, `Multiply`, `Divide`, `Decimal`), and the editing and
+navigation keys (`Enter`, `Space`, `Back`, `Escape`, `Tab`, `Delete`,
+`Left`, `Right`, `Up`, `Down`).
+
+**Ctrl/Alt chords do not belong on `.OnKeyDown`.** A handler on a `TextBox`
+only fires while that field has focus, so an app-wide shortcut written that way
+silently does nothing elsewhere. Use a `Command` with an `Accelerator` — it
+registers with WinUI's accelerator infrastructure and fires regardless of focus.
+The `REACTOR_INPUT_001` analyzer flags the mistake.
+
+```csharp
+new Command
+{
+    Label = "Save",
+    Execute = Save,
+    Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
+}
+```
+
 ## 4. Continuous gestures (Pan, Pinch, Rotate)
 
 Gestures follow a **phase lifecycle**: `Began → Changed (repeat) → Ended | Cancelled`.
@@ -103,9 +145,9 @@ return Border(child)
         onBegan: (e) => { /* pan began */ },
         onChanged: (e) =>
         {
-            setOffset(new Point(
-                offset.X + e.Delta.Translation.X,
-                offset.Y + e.Delta.Translation.Y));
+            // PanGesture.Delta is the per-event movement, a Point — Reactor flattens
+            // WinUI's ManipulationDelta, so there is no e.Delta.Translation here.
+            setOffset(new Point(offset.X + e.Delta.X, offset.Y + e.Delta.Y));
         },
         onEnded: (e) => { /* pan ended */ })
     .Translation((float)offset.X, (float)offset.Y, 0);
@@ -114,10 +156,12 @@ return Border(child)
 ### 60Hz pan pattern (performance-critical)
 
 For smooth dragging, write `Translation` directly via ref during the
-gesture and only `setState` at the end:
+gesture and only `setState` at the end. The cell must be an **`ElementRef`**
+from `UseElementRef<T>` — that is what the reconciler populates. A `UseRef`
+box is not accepted by `.Ref(...)` and would never point at anything.
 
 ```csharp
-var itemRef = UseRef<UIElement>();
+var itemRef = this.UseElementRef<FrameworkElement>();
 var (finalPos, setFinalPos) = UseState(new Point(0, 0));
 
 return Border(child)
@@ -130,8 +174,8 @@ return Border(child)
             {
                 var t = el.Translation;
                 el.Translation = new System.Numerics.Vector3(
-                    t.X + (float)e.Delta.Translation.X,
-                    t.Y + (float)e.Delta.Translation.Y,
+                    t.X + (float)e.Delta.X,
+                    t.Y + (float)e.Delta.Y,
                     t.Z);
             }
         },
@@ -145,12 +189,16 @@ return Border(child)
 
 ### Pinch and Rotate
 
+Both gestures carry an absolute value and a per-event delta as flat doubles —
+`Scale`/`ScaleDelta` and `Angle`/`AngleDelta`. There is no nested `e.Delta`
+object on these two.
+
 ```csharp
 var (scale, setScale) = UseState(1.0f);
 
 return Border(child)
     .OnPinch(
-        onChanged: (e) => setScale(scale * (float)e.Delta.Scale),
+        onChanged: (e) => setScale(scale * (float)e.ScaleDelta),
         onEnded: (e) => { })
     .Scale(scale);
 
@@ -159,7 +207,7 @@ var (angle, setAngle) = UseState(0f);
 
 return Border(child)
     .OnRotate(
-        onChanged: (e) => setAngle(angle + (float)e.Delta.Rotation),
+        onChanged: (e) => setAngle(angle + (float)e.AngleDelta),
         onEnded: (e) => { })
     .Rotation(angle);
 ```

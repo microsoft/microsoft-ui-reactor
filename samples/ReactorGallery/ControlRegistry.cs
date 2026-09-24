@@ -143,12 +143,24 @@ public static class ControlRegistry
         // Motion
         new("Connected Animation", "Carries an element's visual from one view into another across a state change.", "Motion", "\uE945", "connected-animation"),
         new("Transitions", "Implicit opacity, scale, and translation transitions that run on value change, plus layout animation for layout-driven position changes.", "Motion", "\uE945", "transitions"),
+
+        // ── Fundamentals — framework mechanics, not controls (issue #1275) ──
+        new("UseState", "Component state \u2014 a value plus a setter that schedules a re-render.", "Fundamentals", "\uE8F1", "use-state"),
+        new("UseEffect", "Side effects and lifecycle \u2014 run after render, clean up on unmount.", "Fundamentals", "\uE8F1", "use-effect"),
+        new("UseReducer", "State derived from the previous value \u2014 the hook collections need.", "Fundamentals", "\uE8F1", "use-reducer"),
+        new("UseMemo", "Memoized computations and stable callbacks, via UseMemo and UseCallback.", "Fundamentals", "\uE8F1", "use-memo"),
+        new("UseRef", "A mutable box that survives re-renders without triggering one.", "Fundamentals", "\uE8F1", "use-ref"),
+        new("Context", "Tree-scoped ambient state, read without threading it through every component.", "Fundamentals", "\uE8F1", "context"),
+        new("Element refs", "Refs to realized WinUI elements \u2014 imperative focus and reference props.", "Fundamentals", "\uE8F1", "element-refs"),
+        new("Keyboard input", "Key events and VirtualKey, and where a Command accelerator belongs instead.", "Fundamentals", "\uE8F1", "keyboard-input"),
+        new("Pointer and gestures", "Pointer and tap events plus continuous pan, pinch, and rotate gestures.", "Fundamentals", "\uE8F1", "pointer-input"),
     }
     .OrderBy(c => c.Title, StringComparer.OrdinalIgnoreCase)
     .ToArray();
 
     public static string[] Categories { get; } = new[]
     {
+        "Fundamentals",
         "Basic Input",
         "Collections",
         "Data",

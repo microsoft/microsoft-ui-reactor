@@ -84,6 +84,15 @@
     "keywords": ["modal", "dialog box", "confirm", "alert", "prompt", "popup window"],
     "relatedControls": ["Flyout", "TeachingTip", "Popup"]
   },
+  "context": {
+    "keywords": ["ambient state", "usecontext", "provide", "provider", "prop drilling", "tree scoped", "shared state", "default value"],
+    "curatedKeywords": ["context", "share state without passing props", "pass state down the tree", "usecontext hook"],
+    "relatedControls": ["UseState", "UseReducer"],
+    "docs": [
+      { "title": "Context guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/context.md" },
+      { "title": "reactor-getting-started skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md" }
+    ]
+  },
   "data-grid": {
     "keywords": ["table", "spreadsheet", "rows and columns", "sortable", "virtualized grid", "inline edit", "select"],
     "relatedControls": ["ListView", "PropertyGrid", "ItemsView"],
@@ -103,6 +112,17 @@
   "drop-down-button": {
     "keywords": ["dropdown menu", "flyout button", "choices", "split options"],
     "relatedControls": ["SplitButton", "MenuFlyout", "Button"]
+  },
+  "element-refs": {
+    "keywords": ["element ref", "useelementref", "useelementfocus", "request focus", "autofocus", "underlying control", "selectall", "teachingtip target", "xyfocus", "reference prop"],
+    "curatedKeywords": ["element ref focus", "focus a text box", "focus on mount", "call a method on the control", "get the winui element"],
+    "relatedControls": ["TeachingTip", "UseRef", "Keyboard input"],
+    "usings": ["Microsoft.UI.Reactor.Hooks", "Microsoft.UI.Xaml", "Microsoft.UI.Xaml.Controls"],
+    "docs": [
+      { "title": "Input and gestures guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/input-and-gestures.md" },
+      { "title": "Element refs reference", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-dsl/references/element-refs.md" },
+      { "title": "reactor-input skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md" }
+    ]
   },
   "expander": {
     "keywords": ["collapsible", "accordion", "show hide", "disclosure", "fold"],
@@ -169,6 +189,17 @@
     "keywords": ["collection view", "selectable items", "select", "data list", "flexible items"],
     "relatedControls": ["ListView", "GridView", "ItemsRepeater"]
   },
+  "keyboard-input": {
+    "keywords": ["onkeydown", "onkeyup", "virtualkey", "key down", "key press", "oncharacterreceived", "enter key", "escape key", "onpreviewkeydown", "oem key"],
+    "curatedKeywords": ["keyboard input", "key down event handler", "handle a key press", "enter submits the form", "keyboard shortcut", "virtualkey member names"],
+    "relatedControls": ["Commands", "Element refs", "Pointer and gestures"],
+    "usings": ["Windows.System"],
+    "docs": [
+      { "title": "Input and gestures guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/input-and-gestures.md" },
+      { "title": "reactor-input skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md" },
+      { "title": "Commanding guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/commanding.md" }
+    ]
+  },
   "list-box": {
     "keywords": ["inline list", "selectable list", "select", "options", "multi-select list"],
     "relatedControls": ["ComboBox", "ListView"]
@@ -232,6 +263,16 @@
   "pivot": {
     "keywords": ["tabs", "tabbed view", "sections", "swipe tabs", "headers"],
     "relatedControls": ["TabView", "SelectorBar"]
+  },
+  "pointer-input": {
+    "keywords": ["onpointerentered", "onpointerexited", "ontapped", "ondoubletap", "onrighttapped", "onpan", "onpinch", "onlongpress", "hover", "hit testing"],
+    "curatedKeywords": ["pointer input", "mouse events", "hover effect", "tap handler", "drag with a gesture", "pinch to zoom", "press and hold"],
+    "relatedControls": ["Keyboard input", "Element refs"],
+    "usings": ["Microsoft.UI.Xaml"],
+    "docs": [
+      { "title": "Input and gestures guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/input-and-gestures.md" },
+      { "title": "reactor-input skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md" }
+    ]
   },
   "popup": {
     "keywords": ["overlay", "floating content", "custom popup", "light-dismiss", "dismiss", "layer"],
@@ -387,6 +428,57 @@
   "uniform-grid": {
     "keywords": ["equal cells", "grid of equal size", "tiles", "matrix layout"],
     "relatedControls": ["WrapGrid", "Grid"]
+  },
+  "use-effect": {
+    "keywords": ["side effect", "on mount", "cleanup", "unmount", "dependencies", "deps", "timer", "subscription", "dispose", "after render"],
+    "curatedKeywords": ["useeffect lifecycle", "lifecycle", "run code on mount", "clean up on unmount", "effect dependencies", "component lifecycle"],
+    "relatedControls": ["UseState", "UseRef", "UseMemo"],
+    "usings": ["Microsoft.UI.Xaml"],
+    "docs": [
+      { "title": "Effects guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/effects.md" },
+      { "title": "Hooks guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md" },
+      { "title": "reactor-getting-started skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md" }
+    ]
+  },
+  "use-memo": {
+    "keywords": ["usecallback", "memoize", "cache", "expensive computation", "stable delegate", "dependencies", "recompute"],
+    "curatedKeywords": ["memoize a computation", "stable callback", "avoid recomputing", "performance hook"],
+    "relatedControls": ["UseState", "UseEffect"],
+    "docs": [
+      { "title": "Performance guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/performance.md" },
+      { "title": "Hooks guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md" },
+      { "title": "reactor-getting-started skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md" }
+    ]
+  },
+  "use-reducer": {
+    "keywords": ["reducer", "dispatch", "action", "previous state", "add item", "remove item", "updater", "immutable update"],
+    "curatedKeywords": ["update a list", "state from the previous value", "reducer", "add to a collection", "list does not re-render"],
+    "relatedControls": ["UseState", "ListView"],
+    "docs": [
+      { "title": "Hooks guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md" },
+      { "title": "Reactivity model", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/reactivity-model.md" },
+      { "title": "reactor-getting-started skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md" }
+    ]
+  },
+  "use-ref": {
+    "keywords": ["mutable box", "current", "no re-render", "timer handle", "persist across renders", "instance field", "guard flag"],
+    "curatedKeywords": ["value that survives renders", "mutable ref", "store something without re-rendering", "hold a handle"],
+    "relatedControls": ["Element refs", "UseState", "UseEffect"],
+    "usings": ["Microsoft.UI.Xaml"],
+    "docs": [
+      { "title": "Hooks guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md" },
+      { "title": "reactor-getting-started skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md" }
+    ]
+  },
+  "use-state": {
+    "keywords": ["setstate", "re-render", "counter", "local state", "controlled input", "hook", "component state", "hook order", "threadsafe"],
+    "curatedKeywords": ["state management", "usestate hook", "component state", "make the ui update", "hold a value between renders"],
+    "relatedControls": ["UseReducer", "UseEffect", "Context"],
+    "docs": [
+      { "title": "Hooks guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md" },
+      { "title": "Reactivity model", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/reactivity-model.md" },
+      { "title": "reactor-getting-started skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md" }
+    ]
   },
   "viewbox": {
     "keywords": ["scale to fit", "stretch content", "zoom fit", "proportional scaling"]

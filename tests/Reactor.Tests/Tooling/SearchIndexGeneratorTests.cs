@@ -39,7 +39,7 @@ public sealed class SearchIndexGeneratorTests
     static string EditorialPath() => Path.Join(RepoRoot(), "tools", "Reactor.SearchIndex", "editorial.json");
     static string CommittedPath() => Path.Join(GalleryDir(), "reactor-search-index.json");
 
-    static SearchIndexResult Generate() => SearchIndexGenerator.Generate(GalleryDir(), EditorialPath());
+    static SearchIndexResult Generate() => SearchIndexGenerator.Generate(GalleryDir(), EditorialPath(), RepoRoot());
 
     static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json deserialization of the generated search index into the concrete IndexRoot record (no source-gen context). Standard `dotnet test` is JIT (never trimmed). Behaviour-neutral.")]
@@ -128,18 +128,21 @@ public sealed class SearchIndexGeneratorTests
             Assert.Equal(c.Id, c.GalleryRoute);
 
             Assert.NotEmpty(c.Samples);
-            var s = c.Samples[0];
-            Assert.Equal("csharp", s.Language);
-            Assert.False(string.IsNullOrWhiteSpace(s.Header), $"header for {c.Id}");
-            Assert.False(string.IsNullOrWhiteSpace(s.Code), $"code for {c.Id}");
-            // At least one line of real code (not blank / not a pure // comment).
-            Assert.Contains(s.Code.Split('\n'), line =>
+            // Every emitted card, not just the first — the generator now ships them all.
+            foreach (var s in c.Samples)
             {
-                var t = line.Trim();
-                return t.Length > 0 && !t.StartsWith("//", StringComparison.Ordinal);
-            });
-            // No unresolved template tokens (invariant #2, REAL CODE ONLY).
-            Assert.DoesNotContain("{{", s.Code);
+                Assert.Equal("csharp", s.Language);
+                Assert.False(string.IsNullOrWhiteSpace(s.Header), $"header for {c.Id}");
+                Assert.False(string.IsNullOrWhiteSpace(s.Code), $"code for {c.Id}");
+                // At least one line of real code (not blank / not a pure // comment).
+                Assert.Contains(s.Code.Split('\n'), line =>
+                {
+                    var t = line.Trim();
+                    return t.Length > 0 && !t.StartsWith("//", StringComparison.Ordinal);
+                });
+                // No unresolved template tokens (invariant #2, REAL CODE ONLY).
+                Assert.DoesNotContain("{{", s.Code);
+            }
         }
     }
 
@@ -220,9 +223,11 @@ public sealed class SearchIndexGeneratorTests
         var placeholder = new Regex(@",\s*\.\.\.|\.\.\.\s*\)|\(\s*\.\.\.|^\s*\.\.\.\s*$|\.\.\./|<your", RegexOptions.Multiline);
         foreach (var c in Parse(Generate().Json).Controls)
         {
-            var code = c.Samples[0].Code;
-            Assert.False(placeholder.IsMatch(code), $"{c.Id} sample has a placeholder token:\n{code}");
-            Assert.DoesNotContain("{{", code);
+            foreach (var code in c.Samples.Select(s => s.Code))
+            {
+                Assert.False(placeholder.IsMatch(code), $"{c.Id} sample has a placeholder token:\n{code}");
+                Assert.DoesNotContain("{{", code);
+            }
         }
     }
 
@@ -260,28 +265,50 @@ public sealed class SearchIndexGeneratorTests
     {
         foreach (var c in Parse(Generate().Json).Controls)
         {
-            var h = c.Samples[0].Header;
-            Assert.False(string.IsNullOrWhiteSpace(h));
-            Assert.NotEqual(c.Name, h, StringComparer.OrdinalIgnoreCase);
-            Assert.NotEqual(c.Id, h, StringComparer.OrdinalIgnoreCase);
+            foreach (var h in c.Samples.Select(s => s.Header))
+            {
+                Assert.False(string.IsNullOrWhiteSpace(h));
+                Assert.NotEqual(c.Name, h, StringComparer.OrdinalIgnoreCase);
+                Assert.NotEqual(c.Id, h, StringComparer.OrdinalIgnoreCase);
+            }
         }
     }
 
     // ── headers within one control's samples[] must be distinct (near-dupes collapse
-    //    into redundant scenarios). Moot at 1 sample/control today; a cheap future guard. ──
+    //    into redundant scenarios), and every control carries at least one. ──
 
     [Fact]
     public void Samples_HaveDistinctHeadersWithinEachControl()
     {
+        // The generator emits EVERY clean SampleCard on a page (issue #1275), so a page with
+        // two same-titled cards would ship two indistinguishable scenarios. QualifyingSamples
+        // drops the later duplicate; this is the gate that says so.
         foreach (var c in Parse(Generate().Json).Controls)
         {
-            // v1 contract: exactly one sample per control — non-vacuous, fails if the
-            // generator ever emits multiple samples without this guard being revisited...
-            Assert.Single(c.Samples);
-            // ...and whenever it does, their headers must stay distinct (no redundant scenarios).
+            Assert.NotEmpty(c.Samples);
             var headers = c.Samples.Select(s => s.Header).ToList();
             Assert.Equal(headers.Count, headers.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         }
+    }
+
+    // ── multi-sample emission is load-bearing for the Fundamentals topics, whose lesson
+    //    does not fit one card. Pin that the array is genuinely plural somewhere. ──
+
+    [Fact]
+    public void MultiCardPages_EmitEveryCleanCard()
+    {
+        var root = Parse(Generate().Json);
+
+        // use-state has four cards; if ResolveSamples regressed to first-card-only this is 1.
+        var useState = Find(root, "use-state");
+        Assert.True(useState.Samples.Count >= 4,
+            $"use-state should carry every clean card, got {useState.Samples.Count}");
+
+        // ...and the extra cards are the page's later ones, not repeats of the first.
+        Assert.Contains(useState.Samples, s => s.Code.Contains("ToggleSwitch(", StringComparison.Ordinal));
+
+        // A control whose page has a single card still emits exactly that one.
+        Assert.All(root.Controls, c => Assert.NotEmpty(c.Samples));
     }
 
     // ── sampleOverride escape hatch replaces a control whose only card is a
@@ -323,6 +350,108 @@ public sealed class SearchIndexGeneratorTests
         // loses its route/sample (Generate would throw) or an exclude is added — either way
         // forcing an intentional review of index coverage.
         Assert.Empty(Generate().Skipped);
+    }
+
+    // ══ Issue #1275 — framework-mechanics coverage ═══════════════════════════
+
+    /// <summary>
+    /// The consumer pins the contract at version 1 and treats anything else as "nothing I
+    /// understand": <c>SampleIndexParser.IsSupportedVersion</c> returns an EMPTY scenario list
+    /// rather than throwing, so bumping this constant would silently blank the whole Reactor
+    /// corpus in <c>winapp find-ui</c> with no error anywhere. Everything we have added is
+    /// additive and schema-legal, so there has never been a reason to bump it.
+    /// </summary>
+    [Fact]
+    public void SchemaVersion_StaysAtOne()
+    {
+        Assert.Equal(1, SearchIndexGenerator.SchemaVersion);
+        Assert.Equal(1, Parse(Generate().Json).SchemaVersion);
+    }
+
+    /// <summary>
+    /// The nine framework-mechanics topics the issue reported as unreachable. Each must be a
+    /// real entry with the curated 5.0-weight terms that let it outrank a control whose name
+    /// merely shares a token (<c>state management</c> returned CheckBox before this).
+    /// </summary>
+    [Theory]
+    [InlineData("use-state", "state management")]
+    [InlineData("use-effect", "lifecycle")]
+    [InlineData("use-reducer", "reducer")]
+    [InlineData("use-memo", "stable callback")]
+    [InlineData("use-ref", "mutable ref")]
+    [InlineData("context", "context")]
+    [InlineData("element-refs", "element ref focus")]
+    [InlineData("keyboard-input", "keyboard input")]
+    [InlineData("pointer-input", "pointer input")]
+    public void FrameworkMechanics_AreIndexedWithCuratedIntentTerms(string id, string curatedTerm)
+    {
+        var entry = Find(Parse(Generate().Json), id);
+
+        Assert.Equal("Fundamentals", entry.Category);
+        Assert.NotNull(entry.CuratedKeywords);
+        Assert.Contains(curatedTerm, entry.CuratedKeywords!);
+        Assert.NotEmpty(entry.Samples);
+    }
+
+    /// <summary>
+    /// <c>curatedKeywords</c> feeds the consumer's highest-weighted BM25 slot (5.0, above
+    /// <c>keywords</c> at 3.0), so the same canonicalization and signal bar applies. Unlike
+    /// <c>keywords</c> it MAY restate the entry name: "keyboard input" in the 5.0 slot is
+    /// precisely what lifts the topic above DatePicker on that query.
+    /// </summary>
+    [Fact]
+    public void CuratedKeywords_AreCanonicalAndHighSignal()
+    {
+        var curated = Parse(Generate().Json).Controls.Where(c => c.CuratedKeywords is not null).ToList();
+        Assert.NotEmpty(curated);
+
+        foreach (var c in curated)
+        {
+            Assert.InRange(c.CuratedKeywords!.Count, 2, 8);
+            Assert.Equal(c.CuratedKeywords.Count, c.CuratedKeywords.Distinct(StringComparer.Ordinal).Count());
+            foreach (var k in c.CuratedKeywords)
+            {
+                Assert.Equal(k.ToLowerInvariant(), k);
+                Assert.Equal(k.Trim(), k);
+                Assert.DoesNotContain("  ", k);
+                Assert.False(k.EndsWith('.'), $"{c.Id}: curated keyword '{k}' looks like a sentence");
+                Assert.InRange(k.Split(' ').Length, 1, 6);
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>docs</c> links are display-only for the consumer, which is exactly why nothing else
+    /// would notice them rotting. Every link that points into this repository is resolved
+    /// against the working tree.
+    /// </summary>
+    [Fact]
+    public void DocLinks_ResolveToFilesThatExist()
+    {
+        const string Blob = "https://github.com/microsoft/microsoft-ui-reactor/blob/main/";
+        var withDocs = Parse(Generate().Json).Controls.Where(c => c.Docs is not null).ToList();
+        Assert.NotEmpty(withDocs);
+
+        var checkedAny = false;
+        foreach (var c in withDocs)
+        {
+            Assert.NotEmpty(c.Docs!);
+            foreach (var link in c.Docs!)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(link.Title), $"{c.Id} doc link has no title");
+                Assert.StartsWith("https://", link.Uri, StringComparison.Ordinal);
+
+                if (!link.Uri.StartsWith(Blob, StringComparison.Ordinal)) continue;
+                var relative = link.Uri[Blob.Length..].Split('#')[0];
+                var path = Path.Join(RepoRoot(), relative.Replace('/', Path.DirectorySeparatorChar));
+                Assert.True(File.Exists(path), $"{c.Id} doc link points at a missing file: {relative}");
+                checkedAny = true;
+            }
+        }
+
+        // Positive control: if the Blob prefix ever changes, the loop above would silently
+        // check nothing and pass. This is the assertion that says it actually measured.
+        Assert.True(checkedAny, "no in-repo doc link was resolved — the link check measured nothing");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

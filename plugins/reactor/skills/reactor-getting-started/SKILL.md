@@ -157,36 +157,156 @@ Memo(ctx => TextBlock($"Hi, {name}"), name)    // re-render when deps change
 | `UseValidationContext()` | `ValidationContext` | (see `reactor-forms`) |
 | `UseNavigation<TRoute>(initial)` | `NavigationHandle<TRoute>` | (see `reactor-navigation`) |
 
+### UseState
+
+<!-- index:use-state -->
+`UseState<T>(initial)` returns `(value, setValue)`. Calling the setter with a
+value that differs from the current one schedules a re-render; the new value is
+visible on the *next* render, not on the line after the call.
+
 ```csharp
-// UseState
 var (count, setCount) = UseState(0);
 
-// UseReducer for lists (UseState won't re-render on .Add — same reference!)
-var (items, updateItems) = UseReducer(new List<Todo>());
-updateItems(list => [.. list, new Todo("New", false)]);
+return VStack(8,
+    TextBlock($"Count: {count}"),
+    Button("Increment", () => setCount(count + 1)));
+```
 
-// Action-style reducer
+Two rules decide whether `UseState` is the right hook:
+
+- **Hook order is constant.** Never call a hook inside `if`, `for`, or a
+  nested lambda — call them all unconditionally and use the result
+  conditionally. `REACTOR_HOOKS_001` enforces this.
+- **Reference types need a new instance.** `UseState(new List<T>())` followed
+  by `list.Add(item)` will not re-render: the reference is unchanged, so the
+  setter never sees a difference. Reach for `UseReducer` instead.
+
+Pass `threadSafe: true` when the setter is called from a background thread.
+<!-- /index:use-state -->
+
+### UseReducer
+
+<!-- index:use-reducer -->
+`UseReducer` is the hook for state derived from the previous value — above all
+collections, where `UseState` silently fails to re-render because the mutated
+list is the same reference.
+
+```csharp
+var (items, updateItems) = UseReducer(new List<string>());
+
+updateItems(list => [.. list, "New item"]);   // always a NEW list
+```
+
+The updater receives the current value and returns the next one, so it is
+correct even when several updates are queued in one tick — unlike
+`setItems(items.Concat(...))`, which reads a captured `items` that may
+already be stale.
+
+The two-type-parameter overload takes an explicit reducer for action-style
+state machines:
+
+```csharp
 var (state, dispatch) = UseReducer<BoardState, BoardAction>(Board.Reduce, BoardState.Initial);
+```
+<!-- /index:use-reducer -->
 
-// UseEffect
-UseEffect(() => { /* mount */ });                      // empty deps → once
-UseEffect(() => { /* on count change */ }, count);
+### UseEffect
+
+<!-- index:use-effect -->
+`UseEffect(action, deps)` runs *after* the render commits. Return an `Action`
+to register cleanup — it runs before the next execution of the effect and once
+more on unmount, which is what makes timers, subscriptions, and event handlers
+safe to own from a component.
+
+```csharp
+var (ticks, bumpTicks) = UseReducer(0);
+
 UseEffect(() =>
 {
-    var timer = new Timer(...);
-    return () => timer.Dispose();                      // cleanup
-}, deps);
+    var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+    timer.Tick += (_, _) => bumpTicks(t => t + 1);
+    timer.Start();
+    return () => timer.Stop();     // cleanup on dep change and on unmount
+}, Array.Empty<object>());
+```
 
-// UseContext
-public static readonly Context<string> ThemeCtx = new("light");
-VStack(...).Provide(ThemeCtx, "dark")                  // provide
-var theme = UseContext(ThemeCtx);                      // consume
+Dependency rules:
 
-// UseRef — mutable value that persists across renders without triggering re-render
+- No deps argument → the effect runs after **every** render.
+- `Array.Empty<object>()` → runs **once**, on mount.
+- One or more deps → runs whenever any of them changes.
+- **Never pass a freshly allocated object, array, or lambda as a dep.** Deps are
+  compared with `EqualityComparer<T>.Default`, which for a reference type is
+  `Equals` — so a new instance each render is never equal to the last and the
+  effect never reaches its stable path. Use a string key such as `$"{x}|{y}"`,
+  or pass the values as separate deps: `UseEffect(fn, x, y)`.
+- **Tuple deps are rejected by the analyzer, not by the runtime.** A
+  `ValueTuple` of value types does compare by value, so `(x, y)` would work —
+  but `REACTOR_HOOKS_004` classifies every tuple expression as an unstable dep
+  and fails the build. Use a string key or separate deps here too.
+<!-- /index:use-effect -->
+
+### UseMemo and UseCallback
+
+<!-- index:use-memo -->
+`UseMemo<T>(factory, deps)` caches the result of an expensive computation and
+recomputes it only when a dependency changes. `UseCallback(action, deps)` does
+the same for a delegate, so a child that compares handlers by reference is not
+re-rendered by a freshly allocated lambda.
+
+```csharp
+var sorted = UseMemo(() => items.OrderBy(i => i.Name).ToList(), items);
+var onReset = UseCallback(() => setQuery(""), Array.Empty<object>());
+```
+
+Both obey the same dependency rule as `UseEffect`: a **reference type** allocated
+during render is never equal to the previous one and defeats the cache entirely,
+and a tuple expression — though value-equal at runtime — is rejected outright by
+`REACTOR_HOOKS_004`. Memoize the computation, not the render — `UseMemo` is for
+work that is measurably expensive, not for every projection.
+<!-- /index:use-memo -->
+
+### UseRef
+
+<!-- index:use-ref -->
+`UseRef<T>(initial)` returns a `Ref<T>` — a mutable box that survives re-renders
+and, unlike `UseState`, **never triggers one**. Use it for values a render does
+not read: a timer handle, a subscription token, a "did I already do this" flag,
+or a high-frequency value written during a gesture.
+
+```csharp
 var timerRef = UseRef<DispatcherTimer?>(null);
-timerRef.Current = new DispatcherTimer();              // .Current is the property (NOT .Value)
+
+timerRef.Current = new DispatcherTimer();   // .Current is the property — NOT .Value
 timerRef.Current.Start();
 ```
+
+`Ref<T>` is Reactor's own box and exposes `.Current`. Do not confuse it with
+`ElementRef` / `UseElementRef<T>`, which points at a realized WinUI element and
+is populated by the reconciler rather than by you.
+<!-- /index:use-ref -->
+
+### UseContext
+
+<!-- index:context -->
+A `Context<T>` passes ambient state down the tree without threading it through
+every intermediate component. Declare the context once as a static, provide a
+value on an ancestor with `.Provide(...)`, and read it with `UseContext`.
+
+```csharp
+public static readonly Context<string> ThemeCtx = new("light");
+
+// Provide — every descendant sees "dark"
+VStack(8, Component<Toolbar>(), Component<Body>()).Provide(ThemeCtx, "dark")
+
+// Consume, anywhere below
+var theme = UseContext(ThemeCtx);
+```
+
+The value passed to `new Context<T>(...)` is the default a consumer reads when
+no ancestor provides one, so `UseContext` never returns an unexpected `null`.
+Providing a new value re-renders the consumers below it, not the whole tree.
+<!-- /index:context -->
 
 ## Common factories — the 90% cases
 
@@ -292,7 +412,7 @@ TextBlock("Saved").Foreground(Theme.SystemSuccess)         // NOT Theme.Success
 6. **`.WithKey("id")` on dynamic list items.** Without keys, the reconciler matches by position and re-mounts everything on insert/reorder — losing focus, animation state, ElementRef identity. The `REACTOR_DSL_001` analyzer catches this in `.csproj` builds.
 7. **Memoize expensive computations.** `UseMemo(() => items.OrderBy(...).ToList(), items)`.
 8. **`.Flex(grow: 1)` is `flex-grow`, not the CSS `flex: 1` shorthand.** Default basis is `auto` (content size), so a growing child with large intrinsic content overflows the container. Pass `.Flex(grow: 1, basis: 0)` (matches CSS `flex: 1`) or add `.Flex(shrink: 0)` to each fixed-size sibling.
-9. **Don't pass freshly-allocated objects/arrays/lambdas as hook deps.** They compare unequal every render → hook never hits its stable path. The `REACTOR_HOOKS_004` analyzer catches this. **Tuples also trigger this** — `(x, y)` allocates a new `ValueTuple` each render. Instead, use a string key: `$"{x}|{y}"`, or pass individual values as separate deps: `UseEffect(fn, x, y)`.
+9. **Don't pass freshly-allocated objects/arrays/lambdas as hook deps.** They compare unequal every render → hook never hits its stable path. The `REACTOR_HOOKS_004` analyzer catches this. **Tuples are also rejected** — not because `(x, y)` compares unequal (a `ValueTuple` of value types is value-equal), but because the analyzer classifies every tuple expression as an unstable dep. Instead, use a string key: `$"{x}|{y}"`, or pass individual values as separate deps: `UseEffect(fn, x, y)`.
 10. **`UseResource` is reads-only.** Never call `Post*`/`Create*`/`Delete*`/`Save*` from a `UseResource` fetcher — it can re-run on deps change, retry, and focus revalidation. Use `UseMutation` for writes.
 
 ### Element refs and reference props
