@@ -384,11 +384,13 @@ yourself when a field counts as touched, typically `ctx.MarkAllTouched()` on a
 failed submit.
 
 > **Attach-only cases.** `.Validate(fieldName, validators…)` without a value has
-> nothing to check, and validators attached to an element built outside a render
-> pass — cached in a field, assembled inside an event handler — have no context
-> to reach. In both cases `.Validate()` only records the validators, and
-> `FormField` runs them when it mounts. Pass the value if you want the eager
-> behaviour.
+> nothing to check: it records the validators and registers the field, so
+> `MarkAllTouched()` still covers it, but nothing runs them — not even
+> `FormField`, which would otherwise be checking `null` against a control that
+> has a value. A *value-carrying* attachment built outside a render pass — cached
+> in a field, assembled inside an event handler — has no context to reach at
+> attach time, and that one `FormField` does run when it mounts. Pass the value
+> if you want validators to run.
 
 ## FormField Helper
 
