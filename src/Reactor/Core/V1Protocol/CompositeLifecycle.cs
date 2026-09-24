@@ -108,15 +108,46 @@ internal static class CompositeLifecycle
     {
         internal ValidationContext? Context;
         internal string? Field;
+        internal long Stamp;
 
         public void Reset()
         {
             if (Context is { } ctx && Field is { } field)
-                ctx.RetireProducer(field, ValidationContext.SyncProducer);
+                ctx.RetireProducer(field, ValidationContext.SyncProducer, Stamp);
             Context = null;
             Field = null;
+            Stamp = 0;
+        }
+
+        /// <summary>
+        /// Withdraws the recorded contribution unless it is still the one
+        /// <paramref name="nextField"/> under <paramref name="nextCtx"/> will re-install.
+        /// </summary>
+        internal void WithdrawIfMoved(ValidationContext? nextCtx, string? nextField)
+        {
+            if (Context is not { } ctx || Field is not { } field) return;
+            if (ReferenceEquals(ctx, nextCtx) && string.Equals(field, nextField, StringComparison.Ordinal))
+                return;
+
+            ctx.RetireProducer(field, ValidationContext.SyncProducer, Stamp);
+            Context = null;
+            Field = null;
+            Stamp = 0;
+        }
+
+        internal void Record(ValidationContext ctx, string field)
+        {
+            Context = ctx;
+            Field = field;
+            Stamp = ctx.GetProducerStamp(field, ValidationContext.SyncProducer);
         }
     }
+
+    private static AttachedValidationBinding? TryGetAttachedBinding(UIElement control)
+        => control is FrameworkElement fe
+            && fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
+            ? state.ValidationAttachedBinding as AttachedValidationBinding
+            : null;
 
     private static AttachedValidationBinding GetOrCreateAttachedBinding(UIElement formFieldRoot)
     {
@@ -128,6 +159,53 @@ internal static class CompositeLifecycle
         var binding = new AttachedValidationBinding();
         state.ValidationAttachedBinding = binding;
         return binding;
+    }
+
+    /// <summary>
+    /// Decides whether an attachment contributes a synchronous verdict at all: it needs a
+    /// field, a value to judge, and something to judge it with.
+    /// </summary>
+    private static bool Produces(ValidationAttached? attached)
+        => attached is not null
+            && !string.IsNullOrEmpty(attached.FieldName)
+            && attached.HasValue
+            && attached.Validators.Length > 0;
+
+    /// <summary>
+    /// Ties a plain (non-<c>FormField</c>) validated element's verdict to the lifetime of
+    /// the control it produced.
+    /// <para>
+    /// <c>.Validate(field, value, …)</c> installs its verdict while the owning component
+    /// renders, which is what lets the same <c>Render()</c> read it back. Nothing was
+    /// watching what happened to that verdict afterwards: a control behind a condition
+    /// installed an error on the pass that showed it and then simply stopped being
+    /// rendered, leaving the context invalid over a field with no control, forever. The
+    /// mounted control is the only thing whose lifetime tracks the attachment, so the
+    /// contribution is recorded against it here and withdrawn when the field moves, when
+    /// the attachment stops producing, or when the control is unmounted.
+    /// </para>
+    /// <para>
+    /// This records the render-time verdict rather than re-running the validators:
+    /// reconcile-time evaluation is <c>FormField</c>'s job, and doing it here too would
+    /// start judging elements that were deliberately left declarative — those assembled
+    /// outside a render pass. The stamp makes the recording safe even then, because a
+    /// contribution nobody made matches no live write.
+    /// </para>
+    /// </summary>
+    internal static void TrackElementValidation(
+        Reconciler reconciler, FrameworkElement fe, ValidationAttached? attached)
+    {
+        var produces = Produces(attached);
+
+        // Never materialize state for an element that has nothing to withdraw and nothing
+        // to record — every element in the tree reaches this, not just validated ones.
+        var binding = produces ? GetOrCreateAttachedBinding(fe) : TryGetAttachedBinding(fe);
+        if (binding is null) return;
+
+        var valCtx = produces ? reconciler.ReadContext(ValidationContexts.Current) : null;
+        binding.WithdrawIfMoved(valCtx, produces ? attached!.FieldName : null);
+
+        if (produces && valCtx is not null) binding.Record(valCtx, attached!.FieldName);
     }
 
     /// <summary>
@@ -162,29 +240,15 @@ internal static class CompositeLifecycle
     {
         var binding = GetOrCreateAttachedBinding(formFieldRoot);
 
-        var produces = valCtx is not null
-            && attached is not null
-            && !string.IsNullOrEmpty(attached.FieldName)
-            && attached.HasValue
-            && attached.Validators.Length > 0;
-        var nextField = produces ? attached!.FieldName : null;
-
-        if (binding.Context is { } previousCtx && binding.Field is { } previousField
-            && (!ReferenceEquals(previousCtx, valCtx)
-                || !string.Equals(previousField, nextField, StringComparison.Ordinal)))
-        {
-            previousCtx.RetireProducer(previousField, ValidationContext.SyncProducer);
-            binding.Context = null;
-            binding.Field = null;
-        }
+        var produces = valCtx is not null && Produces(attached);
+        binding.WithdrawIfMoved(valCtx, produces ? attached!.FieldName : null);
 
         if (valCtx is null || attached is null || string.IsNullOrEmpty(attached.FieldName)) return;
 
         if (produces)
         {
             ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
-            binding.Context = valCtx;
-            binding.Field = attached.FieldName;
+            binding.Record(valCtx, attached.FieldName);
             return;
         }
 

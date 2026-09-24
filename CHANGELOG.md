@@ -182,6 +182,18 @@ Conventions for contributors:
   but no focus or blur handler existed and `MarkTouched` was reachable only from
   app code, so the documented `FormField` example stayed silent forever
   (issue #1262).
+- A validated control leaving the tree left its verdict behind. `.Validate(field,
+  value, …)` installs its message while the owning component renders, and nothing
+  tracked what became of it: a control behind a condition installed an error on the
+  pass that showed it and then simply stopped being rendered, so the context stayed
+  invalid over a field with no control — permanently, with no way to clear it short
+  of `ClearAll()`. The same held for a whole `FormField`, whose unmount cleared only
+  its blur binding. The contribution is now recorded against the mounted control and
+  withdrawn when it is unmounted, when the field moves, or when the attachment stops
+  producing. Withdrawal is conditional on still owning the slot, so replacing a
+  `FormField`'s content — which installs the incoming verdict before unmounting the
+  outgoing control — no longer lets the departing control erase the verdict that
+  replaced it (issue #1262).
 
 ### Security
 

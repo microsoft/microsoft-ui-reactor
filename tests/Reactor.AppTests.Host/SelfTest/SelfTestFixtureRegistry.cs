@@ -826,6 +826,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_OffThreadMutationMarshals",
         "ValCov_Issue1262_FormFieldNameMigration",
         "ValCov_Issue1262_AttachedValidationStops",
+        "ValCov_Issue1262_UnmountWithdrawsVerdict",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
         "ControlsCov_MaskEngineBasic",
         "ControlsCov_MaskEngineNavigation",
@@ -2746,6 +2747,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_OffThreadMutationMarshals" => new ValidationCoverageFixtures.Issue1262_OffThreadContextMutationMarshals(harness),
         "ValCov_Issue1262_FormFieldNameMigration" => new ValidationCoverageFixtures.Issue1262_FormFieldNameMigration(harness),
         "ValCov_Issue1262_AttachedValidationStops" => new ValidationCoverageFixtures.Issue1262_AttachedValidationWithdrawnWhenItStops(harness),
+        "ValCov_Issue1262_UnmountWithdrawsVerdict" => new ValidationCoverageFixtures.Issue1262_ValidatedControlUnmountWithdraws(harness),
         // Controls coverage
         "ControlsCov_MaskEngineBasic" => new ControlsCoverageFixtures.MaskEngineBasic(harness),
         "ControlsCov_MaskEngineNavigation" => new ControlsCoverageFixtures.MaskEngineNavigation(harness),

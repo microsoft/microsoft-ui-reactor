@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.Extensions.Logging;
@@ -257,6 +258,13 @@ public sealed partial class Reconciler
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
+        // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
+        // consulted too: dropping `.Validate()` from a control that stays mounted has to
+        // retract just as surely as the control going away.
+        if ((newEl.Attached is not null || oldEl.Attached is not null)
+            && target is FrameworkElement valFe)
+            V1Protocol.CompositeLifecycle.TrackElementValidation(
+                this, valFe, newEl.GetAttached<ValidationAttached>());
 
         // Re-apply the TitleBar's caption-derived height after modifiers so
         // removing an explicit .Height(...) from a still-tall TitleBar falls

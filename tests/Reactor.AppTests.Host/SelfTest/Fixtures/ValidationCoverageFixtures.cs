@@ -1698,4 +1698,160 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a validated control leaving the tree.
+    //
+    //  `.Validate(field, value, …)` installs its verdict while the owning
+    //  component renders. Nothing watched what became of that verdict: a
+    //  control behind a condition installed an error on the pass that showed
+    //  it and then simply stopped being rendered, leaving the context invalid
+    //  over a field with no control — forever, and with no way to clear it
+    //  short of ClearAll(). The same held for a whole FormField, whose unmount
+    //  cleared only the blur binding.
+    //
+    //  The third case is the guard: replacing a FormField's content installs
+    //  the incoming control's verdict *before* the outgoing one is unmounted,
+    //  so an unconditional retraction on the way out would erase the verdict
+    //  that had just replaced it and report the form valid.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal sealed record BareValidateProps(bool Show, Action<ValidationContext> OnContext);
+
+    internal sealed class BareValidateOwner : Component<BareValidateProps>
+    {
+        public override Element Render()
+        {
+            var props = Props;
+            var ctx = this.UseValidationContext();
+            props.OnContext(ctx);
+
+            // No FormField anywhere: the verdict exists only because `.Validate()`
+            // ran inside this component's render scope.
+            return VStack(8,
+                props.Show
+                    ? TextBox("").Validate("email", "", Validate.Required("Email is required"))
+                    : TextBlock("hidden"),
+                TextBlock("bare-tail"));
+        }
+    }
+
+    internal class Issue1262_ValidatedControlUnmountWithdraws(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await BareControlAsync();
+            await WholeFormFieldAsync();
+            await ContentReplacedAsync();
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 unmount withdraw done"));
+            await Harness.Render();
+        }
+
+        // A bare `.Validate()` — no FormField anywhere — behind a condition.
+        private async Task BareControlAsync()
+        {
+            var host = H.CreateHost();
+            Action<bool>? setShow = null;
+            ValidationContext? ctx = null;
+
+            host.Mount(c =>
+            {
+                var (show, set) = c.UseState(true);
+                setShow = set;
+
+                return VStack(12,
+                    Component<BareValidateOwner, BareValidateProps>(
+                        new BareValidateProps(show, found => ctx = found)),
+                    TextBlock("host"));
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_Unmount_BareContextResolved", ctx is not null);
+            if (ctx is null) return;
+
+            H.Check("Issue1262_Unmount_BareInitialError", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+
+            setShow!(false);
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_Unmount_BareWithdrawn", ctx.GetMessages("email").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
+            H.Check("Issue1262_Unmount_BareContextValid", ctx.IsValid(),
+                $"valid={ctx.IsValid()}");
+        }
+
+        // The whole FormField behind a condition: its own unmount has to
+        // withdraw, not just its content's.
+        private async Task WholeFormFieldAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            Action<bool>? setShow = null;
+
+            host.Mount(c =>
+            {
+                var (show, set) = c.UseState(true);
+                setShow = set;
+
+                return VStack(12,
+                    show
+                        ? FormField(
+                            TextBox("").Validate("email", "", Validate.Required("Email is required")),
+                            label: "Email",
+                            showWhen: ShowWhen.Always)
+                        : TextBlock("hidden"))
+                    .Provide(ValidationContexts.Current, ctx);
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_Unmount_FieldInitialError", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+
+            setShow!(false);
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_Unmount_FieldWithdrawn", ctx.GetMessages("email").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
+        }
+
+        // Guard: the outgoing control must not take the incoming one's verdict
+        // with it. Swapping the content element type forces a replace-then-
+        // unmount rather than an in-place update.
+        private async Task ContentReplacedAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            Action<bool>? setAlt = null;
+
+            host.Mount(c =>
+            {
+                var (alt, set) = c.UseState(false);
+                setAlt = set;
+
+                Element content = alt
+                    ? PasswordBox("").Validate("email", "", Validate.Required("Email is required"))
+                    : TextBox("").Validate("email", "", Validate.Required("Email is required"));
+
+                return VStack(12,
+                    FormField(content, label: "Email", showWhen: ShowWhen.Always))
+                    .Provide(ValidationContexts.Current, ctx);
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_Unmount_ReplaceInitialError", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+
+            setAlt!(true);
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_Unmount_ReplaceKeepsVerdict", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+        }
+    }
 }

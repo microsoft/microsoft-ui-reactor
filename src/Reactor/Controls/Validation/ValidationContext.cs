@@ -14,6 +14,12 @@ public sealed class ValidationContext
     private readonly Dictionary<string, Dictionary<string, List<ValidationMessage>>> _owned = new();
     // field -> newest async pass token; older passes that resolve late are discarded.
     private readonly Dictionary<string, Dictionary<string, int>> _asyncGeneration = new();
+    // field -> producer -> the token issued the last time anything wrote that slot.
+    // A mounted control records the token its own contribution got, and retracts on
+    // unmount only while it still matches — so a control leaving the tree withdraws its
+    // own verdict but never one a later writer installed in the same slot.
+    private readonly Dictionary<string, Dictionary<string, long>> _producerStamp = new(StringComparer.Ordinal);
+    private long _producerTicket;
     // Context-wide token source. Never reset, so a token retired by a clear can never be
     // handed out again while the pass holding it is still in flight.
     private int _asyncTicket;
@@ -479,7 +485,34 @@ public sealed class ValidationContext
             if (byProducer.Count == 0) _owned.Remove(field);
         }
 
+        // Stamped on every write, not only the ones that changed something: the stamp
+        // answers "who wrote this slot last", and a writer that happened to reproduce the
+        // previous verdict is still the current owner.
+        StampProducerLocked(field, producer);
+
         return changed;
+    }
+
+    private long StampProducerLocked(string field, string producer)
+    {
+        var token = unchecked(++_producerTicket);
+        if (!_producerStamp.TryGetValue(field, out var byProducer))
+            _producerStamp[field] = byProducer = new Dictionary<string, long>(StringComparer.Ordinal);
+        byProducer[producer] = token;
+        return token;
+    }
+
+    /// <summary>
+    /// The token issued by the most recent write to a producer slot. Callers hold it to
+    /// make a later retraction conditional on still owning the slot.
+    /// </summary>
+    internal long GetProducerStamp(string field, string producer)
+    {
+        lock (_lock)
+        {
+            return _producerStamp.TryGetValue(field, out var byProducer)
+                && byProducer.TryGetValue(producer, out var stamp) ? stamp : 0;
+        }
     }
 
     private static bool SameMessages(List<ValidationMessage>? a, List<ValidationMessage> b)
@@ -688,6 +721,7 @@ public sealed class ValidationContext
             _messages.Clear();
             _externalMessages.Clear();
             _owned.Clear();
+            _producerStamp.Clear();
             _asyncGeneration.Clear();
             InvalidateRuleSetsLocked(null);
             if (changed) BumpVersionLocked(messagesOnly: true);
@@ -1150,6 +1184,31 @@ public sealed class ValidationContext
     }
 
     /// <summary>
+    /// Withdraws a producer's contribution only while <paramref name="expectedStamp"/> is
+    /// still the token of the last write to that slot.
+    /// <para>
+    /// A control that leaves the tree has to take its verdict with it, but it is not
+    /// necessarily the last thing to have written the slot it wrote. Replacing a
+    /// <c>FormField</c>'s content installs the incoming control's verdict before the
+    /// outgoing one is unmounted, and both write the same field under the same producer;
+    /// an unconditional retraction on the way out would erase the verdict that had just
+    /// replaced it, leaving the form spuriously valid. Comparing stamps makes "withdraw
+    /// what I installed" exact without comparing message instances, which
+    /// <see cref="ApplyOwnedLocked"/> deliberately keeps stable across an unchanged pass.
+    /// </para>
+    /// </summary>
+    internal void RetireProducer(string field, string producer, long expectedStamp)
+    {
+        lock (_lock)
+        {
+            var current = _producerStamp.TryGetValue(field, out var stamps)
+                && stamps.TryGetValue(producer, out var stamp) ? stamp : 0;
+            if (current != expectedStamp) return;
+        }
+        RetireProducer(field, producer);
+    }
+
+    /// <summary>
     /// Withdraws every async contribution to a field and retires its in-flight passes.
     /// <para>
     /// Producer-aware rather than just <see cref="AsyncProducer"/>: an async
@@ -1266,6 +1325,7 @@ public sealed class ValidationContext
             _messages.Clear();
             _externalMessages.Clear();
             _owned.Clear();
+            _producerStamp.Clear();
             _asyncGeneration.Clear();
             InvalidateRuleSetsLocked(null);
 

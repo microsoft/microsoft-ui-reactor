@@ -2214,6 +2214,18 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement refFe)
             CleanupReferenceStateForUnmount(refFe, GetElementTag(refFe));
 
+        // Issue #1262 — a control that carried an attached verdict takes it with it.
+        // Nothing else does this: DetachReactorState runs only on a full detach, so a
+        // conditionally rendered validated control (or a whole FormField) leaving the
+        // tree otherwise left the context invalid over a field that no longer exists.
+        // The binding retracts only while it still owns the slot, so an incoming control
+        // that already replaced the verdict is not disturbed by the outgoing one.
+        if (control is FrameworkElement valFe
+            && valFe.GetValue(ReactorAttached.StateProperty) is ReactorState valState)
+        {
+            (valState.ValidationAttachedBinding as IValidationBindingReset)?.Reset();
+        }
+
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
         {
