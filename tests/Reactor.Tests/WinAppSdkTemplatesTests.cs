@@ -479,14 +479,122 @@ public sealed class WinAppSdkTemplatesTests
     [Fact]
     public void Bootstrap_does_not_advertise_dotnet_new_reactor_when_templates_are_skipped()
     {
-        // -SkipTemplates deliberately leaves the pack uninstalled, so printing the
-        // scaffold command unconditionally promises something that may not resolve.
+        // Two false promises to avoid: -SkipTemplates leaves the pack uninstalled,
+        // and a *verified-unavailable* pack (0.0.6-alpha predates the Reactor
+        // templates) is installed but cannot scaffold. Printing the command in
+        // either case hands the user something that fails immediately.
         var (path, text) = ReadRepoFile("bootstrap.ps1");
         var normalized = text.Replace("\r\n", "\n");
         var next = normalized[normalized.LastIndexOf("Write-Host 'Next:'", StringComparison.Ordinal)..];
         Assert.True(
             next.Contains("if ($SkipTemplates)", StringComparison.Ordinal),
             $"'{path}' must gate the `dotnet new reactor` next-step guidance on -SkipTemplates.");
+        Assert.True(
+            next.Contains("elseif (-not $templatesVerified)", StringComparison.Ordinal),
+            $"'{path}' must also gate that guidance on the step-5 verification result.");
+    }
+
+    [Fact]
+    public void Upgrade_verifies_template_availability_after_installing()
+    {
+        // `mur upgrade` reporting success on an installed-but-unusable pack is the
+        // same false PASS bootstrap and `mur templates install` already guard.
+        var (path, text) = ReadRepoFile(global::System.IO.Path.Join("src", "Reactor.Cli", "Upgrade", "UpgradeCommand.cs"));
+        Assert.True(
+            text.Contains("AreTemplatesAvailable() == false", StringComparison.Ordinal),
+            $"'{path}' must check template availability after Install, not just the install outcome.");
+    }
+
+    // ── Redirect policy on the version-metadata fetch ─────────────────────
+    //
+    // HttpClient follows redirects by default, which would defeat
+    // IsAllowedFeedUrl entirely: a validated HTTPS service index can 302 to
+    // plaintext HTTP and the body would be accepted without the policy ever
+    // seeing that address. The version list is what selects the package to
+    // install, so that is a real downgrade vector.
+
+    sealed class StubHandler : global::System.Net.Http.HttpMessageHandler
+    {
+        readonly global::System.Collections.Generic.Queue<global::System.Net.Http.HttpResponseMessage> _responses;
+
+        public global::System.Collections.Generic.List<string> Requested { get; } = new();
+
+        public StubHandler(params global::System.Net.Http.HttpResponseMessage[] responses) =>
+            _responses = new global::System.Collections.Generic.Queue<global::System.Net.Http.HttpResponseMessage>(responses);
+
+        protected override global::System.Threading.Tasks.Task<global::System.Net.Http.HttpResponseMessage> SendAsync(
+            global::System.Net.Http.HttpRequestMessage request,
+            global::System.Threading.CancellationToken cancellationToken)
+        {
+            Requested.Add(request.RequestUri!.AbsoluteUri);
+            return global::System.Threading.Tasks.Task.FromResult(
+                _responses.Count > 0
+                    ? _responses.Dequeue()
+                    : new global::System.Net.Http.HttpResponseMessage(global::System.Net.HttpStatusCode.NotFound));
+        }
+    }
+
+    static global::System.Net.Http.HttpResponseMessage Redirect(string location)
+    {
+        var response = new global::System.Net.Http.HttpResponseMessage(global::System.Net.HttpStatusCode.Found);
+        response.Headers.Location = new Uri(location);
+        return response;
+    }
+
+    [Fact]
+    public void GetStringPolicyChecked_refuses_a_redirect_that_downgrades_to_plaintext()
+    {
+        var handler = new StubHandler(Redirect("http://evil.example.com/flat2/index.json"));
+        using var http = new global::System.Net.Http.HttpClient(handler);
+
+        var body = WinAppSdkTemplates.GetStringPolicyChecked(http, "https://feed.example.com/v3/index.json");
+
+        Assert.Null(body);
+        // The load-bearing half: the plaintext hop must never be requested at all.
+        Assert.Equal(new[] { "https://feed.example.com/v3/index.json" }, handler.Requested);
+    }
+
+    [Fact]
+    public void GetStringPolicyChecked_refuses_a_redirect_that_carries_credentials()
+    {
+        var handler = new StubHandler(Redirect("https://user:pat@feed.example.com/flat2/index.json"));
+        using var http = new global::System.Net.Http.HttpClient(handler);
+
+        Assert.Null(WinAppSdkTemplates.GetStringPolicyChecked(http, "https://feed.example.com/v3/index.json"));
+        Assert.Single(handler.Requested);
+    }
+
+    [Fact]
+    public void GetStringPolicyChecked_follows_a_compliant_redirect()
+    {
+        // The negative cases above prove nothing unless redirects otherwise work:
+        // a method that always returned null would pass them.
+        var ok = new global::System.Net.Http.HttpResponseMessage(global::System.Net.HttpStatusCode.OK)
+        {
+            Content = new global::System.Net.Http.StringContent("{\"versions\":[\"1.0.0\"]}"),
+        };
+        var handler = new StubHandler(Redirect("https://cdn.example.com/flat2/index.json"), ok);
+        using var http = new global::System.Net.Http.HttpClient(handler);
+
+        var body = WinAppSdkTemplates.GetStringPolicyChecked(http, "https://feed.example.com/v3/index.json");
+
+        Assert.Equal("{\"versions\":[\"1.0.0\"]}", body);
+        Assert.Equal(
+            new[] { "https://feed.example.com/v3/index.json", "https://cdn.example.com/flat2/index.json" },
+            handler.Requested);
+    }
+
+    [Fact]
+    public void GetStringPolicyChecked_stops_a_redirect_loop()
+    {
+        var handler = new StubHandler(
+            Redirect("https://a.example.com/1"), Redirect("https://a.example.com/2"),
+            Redirect("https://a.example.com/3"), Redirect("https://a.example.com/4"),
+            Redirect("https://a.example.com/5"), Redirect("https://a.example.com/6"));
+        using var http = new global::System.Net.Http.HttpClient(handler);
+
+        Assert.Null(WinAppSdkTemplates.GetStringPolicyChecked(http, "https://a.example.com/0"));
+        Assert.Equal(5, handler.Requested.Count);
     }
 
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────

@@ -680,6 +680,11 @@ if ($packLocalExit -ne 0) { Fail 'mur pack-local failed' }
 # NuGet.org with a pointer here. For an unpackaged app, scaffold with
 # `dotnet new reactor` and set `<WindowsPackageType>None</WindowsPackageType>`
 # (see docs/guide/packaging.md).
+#
+# Hoisted so the closing "Next:" guidance can gate on it: printing
+# `dotnet new reactor` after verification failed would hand the user the exact
+# command bootstrap just proved unavailable.
+$templatesVerified = $false
 if ($SkipTemplates) {
     Write-Host ''
     Write-Host '    Skipping `dotnet new` template install (per -SkipTemplates).' -ForegroundColor Yellow
@@ -772,7 +777,6 @@ if ($SkipTemplates) {
     # status` matches the short name as a whole token, which a naive regex does
     # not — `\breactor\b` also matches `reactor-mvu` and `winui-reactor`, so a
     # listing without the blank template would read as success.
-    $templatesVerified = $false
     $statusExit = 0
     Invoke-ReactorWithRestoreEnvironment `
         -NuGetConfig $effectiveNuGetConfig `
@@ -950,6 +954,14 @@ if ($SkipTemplates) {
     Write-Host '    Template install was skipped (-SkipTemplates).'
     Write-Host '    To scaffold an app, install the pack first:'
     Write-Host '        mur templates install'
+    Write-Host '        dotnet new reactor -n MyApp'
+} elseif (-not $templatesVerified) {
+    # Same false promise, for the harder case: the pack is installed but step 5
+    # proved `dotnet new reactor` does not resolve from it (an older pack such as
+    # 0.0.6-alpha predates the Reactor templates).
+    Write-Host '    `dotnet new reactor` is not available — see the warning above.'
+    Write-Host '    Install a version that provides it, then scaffold:'
+    Write-Host '        mur templates install --version <version>'
     Write-Host '        dotnet new reactor -n MyApp'
 } else {
     Write-Host '    dotnet new reactor -n MyApp'

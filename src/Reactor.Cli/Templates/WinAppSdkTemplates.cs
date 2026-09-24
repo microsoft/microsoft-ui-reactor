@@ -533,7 +533,7 @@ public static class WinAppSdkTemplates
         if (!string.IsNullOrWhiteSpace(source) && Directory.Exists(source))
             return EnumerateLocalVersions(source!);
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        using var http = CreateFeedHttpClient();
 
         if (!string.IsNullOrWhiteSpace(feed))
         {
@@ -557,6 +557,64 @@ public static class WinAppSdkTemplates
     }
 
     /// <summary>
+    /// An <see cref="HttpClient"/> that does <em>not</em> follow redirects on its own.
+    /// </summary>
+    /// <remarks>
+    /// Automatic redirects would defeat <see cref="IsAllowedFeedUrl"/>: a validated
+    /// HTTPS URL can redirect to plaintext HTTP, or to a host carrying credentials in
+    /// the URL, and the body would be accepted without the policy ever seeing that
+    /// address. <see cref="GetStringPolicyChecked"/> follows them itself and re-applies
+    /// the policy at every hop.
+    /// </remarks>
+    static HttpClient CreateFeedHttpClient() =>
+        new(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            Timeout = TimeSpan.FromSeconds(15),
+        };
+
+    /// <summary>
+    /// GETs <paramref name="url"/>, re-applying <see cref="IsAllowedFeedUrl"/> to every
+    /// redirect hop. Returns null when the policy rejects a hop, the chain is too long,
+    /// or the request fails.
+    /// </summary>
+    internal static string? GetStringPolicyChecked(HttpClient http, string url)
+    {
+        // Enough for the CDN/vanity-host hops real feeds use, few enough to stop a loop.
+        const int MaxHops = 5;
+
+        var current = url;
+        for (var hop = 0; hop < MaxHops; hop++)
+        {
+            if (!IsAllowedFeedUrl(current))
+            {
+                Console.Error.WriteLine(
+                    $"  warning: refusing to follow '{RedactSource(current)}' — a version feed must be an " +
+                    $"HTTPS URL (or loopback HTTP) with no credentials in its user-info, query string or fragment.");
+                return null;
+            }
+
+            using var response = http.GetAsync(current).GetAwaiter().GetResult();
+            if ((int)response.StatusCode is >= 300 and < 400)
+            {
+                var location = response.Headers.Location;
+                if (location is null) return null;
+                // A relative Location is resolved against the hop it came from, then
+                // re-checked at the top of the next iteration.
+                current = location.IsAbsoluteUri
+                    ? location.AbsoluteUri
+                    : new Uri(new Uri(current), location).AbsoluteUri;
+                continue;
+            }
+
+            response.EnsureSuccessStatusCode();
+            return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        }
+
+        Console.Error.WriteLine($"  warning: too many redirects following '{RedactSource(url)}'.");
+        return null;
+    }
+
+    /// <summary>
     /// Resolves a service index to its flat container and lists the pack's versions
     /// there. Null on any failure, so the caller can fall back.
     /// </summary>
@@ -565,12 +623,13 @@ public static class WinAppSdkTemplates
         string? indexJson;
         try
         {
-            indexJson = http.GetStringAsync(serviceIndexUrl).GetAwaiter().GetResult();
+            indexJson = GetStringPolicyChecked(http, serviceIndexUrl);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException or InvalidOperationException)
         {
             return null;
         }
+        if (indexJson is null) return null;
 
         var baseAddress = ParsePackageBaseAddress(indexJson);
         if (baseAddress is null) return null;
@@ -596,8 +655,8 @@ public static class WinAppSdkTemplates
     {
         try
         {
-            var json = http.GetStringAsync(flatContainerIndexUrl).GetAwaiter().GetResult();
-            return PackLocalCommand.ParseFlatContainerVersions(json);
+            var json = GetStringPolicyChecked(http, flatContainerIndexUrl);
+            return json is null ? null : PackLocalCommand.ParseFlatContainerVersions(json);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or UriFormatException or InvalidOperationException)
         {

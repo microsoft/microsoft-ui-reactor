@@ -80,6 +80,18 @@ public static class UpgradeCommand
             }
             Console.Error.WriteLine($"  Could not install {WinAppSdkTemplates.PackageId}; the rest of the upgrade completed.");
         }
+        else if (WinAppSdkTemplates.AreTemplatesAvailable() == false)
+        {
+            // A successful install is not a usable one: an older pack (0.0.6-alpha
+            // shipped before the Reactor templates existed) installs cleanly and
+            // still leaves `dotnet new reactor` unresolvable. Reporting "upgrade
+            // complete" there hands the user a scaffold command that fails.
+            Console.Error.WriteLine(
+                $"  {WinAppSdkTemplates.PackageId} is installed but does not provide " +
+                $"`dotnet new {WinAppSdkTemplates.BlankShortName}` — that version predates the Reactor " +
+                $"templates. Pin a newer one with `mur templates install --version <version>`.");
+            if (templateSource is not null || templateVersion is not null) return 1;
+        }
 
         // 3. Refresh Claude plugin (best-effort; not every user has Claude Code).
         if (!skipPlugin)
