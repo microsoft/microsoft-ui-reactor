@@ -39,11 +39,12 @@ Conventions for contributors:
   pages, so every snippet an agent retrieves is code that compiles in CI.
 
   The index also carries three fields the consumer contract always defined but
-  Reactor never emitted: `curatedKeywords` (the higher-weighted intent slot that
-  lets a topic outrank a control merely sharing a token), `docs` links, and
-  `details` prose. `details` is **lifted verbatim** out of the shipped agent-kit
-  skills by an `<!-- index:… -->` marker, so the index and the skills say the same
-  thing by construction rather than by discipline.
+  Reactor never emitted: `curatedKeywords`, `docs` links, and `details` prose.
+  `details` is **lifted verbatim** out of the shipped agent-kit skills by an
+  `<!-- index:… -->` marker, so the index and the skills say the same thing by
+  construction rather than by discipline. (`curatedKeywords` is forward-looking:
+  the consumer parses it but its Reactor path currently discards it, so no
+  ranking claim here depends on it — see spec 064 §2.1.)
 
 - `Publish docs` now verifies the live site after deploying. The `publish` job stamps the
   Pages artifact with the run that built it, and a new `verify` job polls

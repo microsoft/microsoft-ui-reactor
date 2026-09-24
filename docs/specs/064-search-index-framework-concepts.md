@@ -43,12 +43,37 @@ existed) and `VirtualKey.OemPeriod` / `.Equal` (WPF member names that WinRT's
    the consumer side; it is purely gallery navigation.
 4. **BM25 field weights** (`SearchEngine.SearchGrouped`): `curatedKeywords` 5.0,
    `keywords` 3.0, `name` 3.0, `id` 3.0, camel-split name 2.5, sample headers 0.8.
+   These are the weights the engine applies; see §2.1 for which of them actually
+   receive Reactor data today.
 5. **`samples` is an array the CLI iterates**, and `curatedKeywords`, `details`
    and `docs` are control-level contract fields Reactor did not emit. All are
    additive — no version bump.
 
 The fetch cap is 16 MB (`ControlsHttpHelper.MaxResponseBytes`) against an index
 that was 89 KB, so plural samples were never a size concern.
+
+### 2.1 `curatedKeywords` is emitted but currently inert
+
+`SampleIndexParser` parses `curatedKeywords` into a third dictionary, but the
+Reactor path drops it before it reaches the search engine:
+
+- `ReactorFetcher.FetchAsync` and `.Parse` both destructure as
+  `var (scenarios, tags, _)`.
+- `ReactorProvider.FetchAsync` builds `new ProviderData(scenarios, tags, new())`
+  — an empty curated dictionary.
+
+Both are deliberate on the consumer side and say so in their own XML docs:
+*"Reactor publishes no `curatedKeywords`, so that slot is empty here and the
+tuple stays two-wide."* That assumption is exactly what this change invalidates,
+and widening those two tuples is a one-line change in each — but it is theirs to
+make, not ours.
+
+**No retrieval claim in this spec rests on the 5.0 slot.** The field is emitted
+because the published contract defines it, it costs nothing, and it activates the
+moment the consumer wires it through. Measured differentially against the
+regenerated index, the top-ranked result for every query in §1 is **identical
+with and without** `curatedKeywords` contributing: the improvement comes from
+`keywords` (3.0) plus the `id`, `name`, and camel-split-name fields.
 
 ## 3. Design
 
@@ -186,7 +211,10 @@ retrieval corpus as authoritative is worse than no prose when it is wrong.
 ## 5. Result
 
 104 entries (95 controls + 9 concepts), 235 samples, 166 KB — comfortably inside
-the consumer's 16 MB cap. The nine concepts carry lifted prose, curated 5.0-weight
-intent terms, doc links, and `usings` that name the right namespace
-(`keyboard-input` ships `Windows.System`, which is the fact the agent was missing
-about `VirtualKey`).
+the consumer's 16 MB cap. The nine concepts carry lifted prose, doc links,
+curated intent terms (dormant until the consumer wires the 5.0 slot through, per
+§2.1), and `usings` that name the right namespaces — `keyboard-input` ships
+`Windows.System`, which is the fact the agent was missing about `VirtualKey`.
+
+Every query in §1 now returns its topic as the top hit, and does so using only
+the fields the consumer reads today.

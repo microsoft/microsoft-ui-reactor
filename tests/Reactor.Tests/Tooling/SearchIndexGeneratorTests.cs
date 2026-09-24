@@ -370,8 +370,10 @@ public sealed class SearchIndexGeneratorTests
 
     /// <summary>
     /// The nine framework-mechanics topics the issue reported as unreachable. Each must be a
-    /// real entry with the curated 5.0-weight terms that let it outrank a control whose name
-    /// merely shares a token (<c>state management</c> returned CheckBox before this).
+    /// real entry carrying the curated intent terms. Note those terms are currently dormant:
+    /// the consumer parses <c>curatedKeywords</c> but its Reactor path discards it
+    /// (<c>ReactorFetcher</c> destructures <c>var (scenarios, tags, _)</c>), so this test pins
+    /// the emitted contract, NOT a ranking outcome. Spec 064 §2.1.
     /// </summary>
     [Theory]
     [InlineData("use-state", "state management")]
@@ -394,10 +396,10 @@ public sealed class SearchIndexGeneratorTests
     }
 
     /// <summary>
-    /// <c>curatedKeywords</c> feeds the consumer's highest-weighted BM25 slot (5.0, above
-    /// <c>keywords</c> at 3.0), so the same canonicalization and signal bar applies. Unlike
-    /// <c>keywords</c> it MAY restate the entry name: "keyboard input" in the 5.0 slot is
-    /// precisely what lifts the topic above DatePicker on that query.
+    /// <c>curatedKeywords</c> maps to the consumer's highest-weighted BM25 slot (5.0, above
+    /// <c>keywords</c> at 3.0) once it is wired through, so the same canonicalization and signal
+    /// bar applies. Unlike <c>keywords</c> it MAY restate the entry name: "keyboard input" in
+    /// that slot is what would lift the topic above DatePicker on that query.
     /// </summary>
     [Fact]
     public void CuratedKeywords_AreCanonicalAndHighSignal()
