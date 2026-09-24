@@ -1733,6 +1733,11 @@ internal static class ValidationCoverageFixtures
         Replaced,
         /// <summary>Validated element built and then dropped without being rendered.</summary>
         Discarded,
+        /// <summary>
+        /// Validated control rendered, plus a second validated element naming the *same*
+        /// field built and dropped afterwards — the shared-slot collision.
+        /// </summary>
+        DiscardedSameField,
     }
 
     internal sealed record BareValidateProps(
@@ -1762,6 +1767,7 @@ internal static class ValidationCoverageFixtures
                 BareValidateShape.Hidden => VStack(8, TextBlock("bare-head"), TextBlock("hidden")),
                 BareValidateShape.Removed => VStack(8, TextBlock("bare-head")),
                 BareValidateShape.Discarded => DiscardedTree(),
+                BareValidateShape.DiscardedSameField => DiscardedSameFieldTree(),
                 _ => VStack(8,
                     TextBlock("bare-head"),
                     PasswordBox("").Validate("email", "", Validate.Required("Email is required"))),
@@ -1777,6 +1783,19 @@ internal static class ValidationCoverageFixtures
         {
             _ = TextBox("").Validate("ghost", "", Validate.Required("ghost is required"));
             return VStack(8, TextBlock("bare-head"));
+        }
+
+        /// <summary>
+        /// Renders a validated control and then builds and drops a second validated
+        /// element naming the same field. Both write the one shared sync slot, and the
+        /// dropped element holds the newer stamp — so retiring its unconsumed claim
+        /// would clear the slot the mounted control depends on.
+        /// </summary>
+        private static Element DiscardedSameFieldTree()
+        {
+            var mounted = TextBox("").Validate("email", "", Validate.Required("Email is required"));
+            _ = TextBox("").Validate("email", "", Validate.Required("Email is required"));
+            return VStack(8, TextBlock("bare-head"), mounted);
         }
     }
 
@@ -1818,6 +1837,7 @@ internal static class ValidationCoverageFixtures
             await BareAsync(BareValidateShape.Hidden, "Skipped", nudge: true);
             await RootHostAsync();
             await DiscardedElementAsync();
+            await DiscardedSameFieldAsync();
             await SyncThenAsyncChainAsync();
             await AbortedRootRenderAsync();
             await BareReplacedAsync();
@@ -2044,6 +2064,31 @@ internal static class ValidationCoverageFixtures
 
             H.Check("Issue1262_Aborted_ClaimSettled", ctx.GetMessages("aborted").Count == 0,
                 $"remaining={string.Join("|", ctx.GetMessages("aborted").Select(m => m.Text))}");
+        }
+
+        // Two elements naming one field, one mounted and one dropped. The dropped one
+        // wrote last, so its claim holds the current stamp — retiring it unconditionally
+        // clears the verdict the mounted control is relying on and reports an invalid
+        // field as valid.
+        private async Task DiscardedSameFieldAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? ctx = null;
+
+            host.Mount(c => VStack(12,
+                Component<BareValidateOwner, BareValidateProps>(
+                    new BareValidateProps(BareValidateShape.DiscardedSameField, 0, found => ctx = found)),
+                TextBlock("host")));
+
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_SameField_Resolved", ctx is not null);
+            if (ctx is null) return;
+
+            H.Check("Issue1262_SameField_VerdictSurvives", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+            H.Check("Issue1262_SameField_ReportsInvalid", !ctx.IsValid(),
+                $"valid={ctx.IsValid()}");
         }
 
         // Guard: the outgoing control must not take the incoming one's verdict with

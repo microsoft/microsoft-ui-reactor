@@ -235,6 +235,25 @@ Conventions for contributors:
   describes the real contract — attach-only, run it yourself through
   `ValidationReconciler.ValidateFieldAsync` — and points at `ValidationRuleAsync`
   for the cross-field case that *is* run for you (issue #1262).
+- `Version` advanced on every render for a net-zero pass that churned a field's
+  *value*. Only message-only writes were held during a render, so a chain such as
+  `.Validate("f", "", …).Validate("f", "bb", …)` left `Changed` correctly silent
+  while `Version` grew without bound — breaking a `UseMemo` or `UseEffect` keyed
+  on it, which is the signal most likely to be used that way. Every render-frame
+  bump is now held and committed once, only if the pass ended somewhere different
+  from where it started (issue #1262).
+- `ValidationReconciler.EvaluateRules(ctx, rules…)` mutated the context rule by
+  rule, so a batch containing an async rule installed the earlier verdicts before
+  throwing — a partial batch from a call that reported failure. The batch is now
+  rejected before anything is installed (issue #1262).
+- A render that returned one validated control and also built and dropped another
+  naming the same field reported the mounted, invalid field as **valid**. Both
+  share one synchronous producer slot, and the dropped element held the newer
+  stamp, so withdrawing its unconsumed claim cleared the slot the mounted control
+  depended on. A slot a mounted control has adopted is now left alone. (Two
+  elements naming one field still share the slot, so the last writer's verdict
+  wins its contents — that is pre-existing, and only the erasure is fixed.)
+  (issue #1262)
 
 ### Security
 

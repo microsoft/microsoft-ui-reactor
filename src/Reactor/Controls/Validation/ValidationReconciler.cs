@@ -109,6 +109,17 @@ public static class ValidationReconciler
         ValidationContext ctx,
         params ValidationRuleElement[] rules)
     {
+        // Reject the whole call before installing any of it. Evaluating rule by rule
+        // meant a sync-then-async batch threw only once it reached the async rule, with
+        // the earlier verdicts already in the context — a partial batch from a call that
+        // reported failure, which is exactly the state a caller cannot reason about
+        // (issue #1262 review). Each rule's own Evaluate still rejects an async
+        // predicate; this makes the batch atomic rather than the individual rule safe.
+        foreach (var rule in rules)
+        {
+            if (rule.AsyncPredicate is not null) rule.ComputeSync();
+        }
+
         for (var i = 0; i < rules.Length; i++)
             rules[i].Evaluate(ctx, ValidationRuleDsl.DirectProducerKey(rules[i], i));
     }

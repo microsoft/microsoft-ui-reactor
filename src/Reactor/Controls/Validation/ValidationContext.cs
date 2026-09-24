@@ -304,20 +304,32 @@ public sealed class ValidationContext
     }
 
     /// <summary>
-    /// Bumps <see cref="Version"/>, except for a message-only change made while a render
-    /// is in flight: those are held until the frame closes and bumped once, and only if
-    /// the frame ended with different messages than it started with.
+    /// Bumps <see cref="Version"/>, except during a render: those are held until the
+    /// frame closes and bumped once, and only if the frame ended with different state
+    /// than it started with.
     /// <para>
     /// Bumping eagerly made a net-zero pass — the chained value overloads above —
     /// increment <c>Version</c> on every render forever, so a <c>UseMemo</c> or
     /// <c>UseEffect</c> keyed on it re-ran for a context that had not actually moved.
     /// </para>
+    /// <para>
+    /// Value changes are held too, not just message-only ones. A chain such as
+    /// <c>.Validate("f", "", …).Validate("f", "bb", …)</c> rewrites the current value
+    /// twice per render and lands where it started, so <see cref="Changed"/> was
+    /// correctly silent while <c>Version</c> grew without bound — the same defect the
+    /// suppression exists to prevent, surviving in the one signal a memo is most likely
+    /// to be keyed on (issue #1262 review).
+    /// </para>
     /// </summary>
-    private void BumpVersionLocked(bool messagesOnly)
+    private void BumpVersionLocked()
     {
-        if (messagesOnly && ValidationRenderScope.InRender)
+        if (ValidationRenderScope.InRender)
         {
             _frameVersionPending = true;
+            // Guarantee the held bump is settled. Not every bump is paired with a
+            // notification — BeginAsyncValidation bumps and stays quiet — and a pending
+            // bump that no deliver ever reaches would leave Version silently lagging.
+            ValidationRenderScope.DeferNotification(this);
             return;
         }
         _version++;
@@ -372,7 +384,7 @@ public sealed class ValidationContext
                 _messages[message.Field] = list;
             }
             list.Add(message);
-            BumpVersionLocked(messagesOnly: true);
+            BumpVersionLocked();
         }
         RaiseChanged(messagesOnly: true);
     }
@@ -399,7 +411,7 @@ public sealed class ValidationContext
                 _externalMessages[message.Field] = list;
             }
             list.Add(message);
-            BumpVersionLocked(messagesOnly: true);
+            BumpVersionLocked();
         }
         RaiseChanged(messagesOnly: true);
     }
@@ -424,7 +436,7 @@ public sealed class ValidationContext
             // cleared: dropping the token makes its result stale on arrival.
             _asyncGeneration.Remove(field);
             InvalidateRuleSetsLocked(field);
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -443,7 +455,7 @@ public sealed class ValidationContext
             // As in Clear: a pending async pass must not repopulate what this dropped.
             _asyncGeneration.Remove(field);
             InvalidateRuleSetsLocked(field);
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -475,7 +487,7 @@ public sealed class ValidationContext
         lock (_lock)
         {
             changed = ApplyOwnedLocked(field, producer, messages);
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -644,7 +656,7 @@ public sealed class ValidationContext
                 return;
 
             changed = ApplyOwnedLocked(field, producer, messages);
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -688,7 +700,7 @@ public sealed class ValidationContext
                 _externalMessages.Remove(field);
                 RetractAsyncProducersLocked(field);
                 InvalidateRuleSetsLocked(field);
-                BumpVersionLocked(messagesOnly: false);
+                BumpVersionLocked();
             }
 
             token = unchecked(++_asyncTicket);
@@ -777,7 +789,7 @@ public sealed class ValidationContext
 
             changed = valueChanged || messagesChanged;
             valueChangedForNotify = valueChanged || newField;
-            if (changed) BumpVersionLocked(messagesOnly: !valueChangedForNotify);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: !valueChangedForNotify);
     }
@@ -791,7 +803,7 @@ public sealed class ValidationContext
         lock (_lock)
         {
             changed = _externalMessages.Remove(field);
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -811,7 +823,7 @@ public sealed class ValidationContext
             _producerStamp.Clear();
             _asyncGeneration.Clear();
             InvalidateRuleSetsLocked(null);
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -955,7 +967,7 @@ public sealed class ValidationContext
         lock (_lock)
         {
             changed = _touchedFields.Add(field);
-            if (changed) _version++;
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged();
     }
@@ -977,7 +989,7 @@ public sealed class ValidationContext
                 _touchedFields.Add(field);
 
             changed = _touchedFields.Count != touchedBefore;
-            if (changed) _version++;
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged();
     }
@@ -1011,7 +1023,7 @@ public sealed class ValidationContext
             // Re-baselining an edited field flips IsDirty without touching messages or
             // touched state, so subscribers have to hear about it too.
             changed = IsDirtyLocked(field) != wasDirty;
-            if (changed) _version++;
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged();
     }
@@ -1055,7 +1067,7 @@ public sealed class ValidationContext
             _externalMessages.Remove(field);
             RetractAsyncProducersLocked(field);
             InvalidateRuleSetsLocked(field);
-            BumpVersionLocked(messagesOnly: false);
+            BumpVersionLocked();
         }
         RaiseChanged();
     }
@@ -1095,7 +1107,7 @@ public sealed class ValidationContext
                 if (ApplyOwnedLocked(field, producer, messages)) changed = true;
             }
 
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -1186,7 +1198,7 @@ public sealed class ValidationContext
                 if (ApplyOwnedLocked(field, producer, messages)) changed = true;
             }
 
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -1259,7 +1271,7 @@ public sealed class ValidationContext
         lock (_lock)
         {
             changed = RetireProducerLocked(field, producer);
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -1304,7 +1316,7 @@ public sealed class ValidationContext
             if (current != expectedStamp) return;
 
             changed = RetireProducerLocked(field, producer);
-            if (changed) BumpVersionLocked(messagesOnly: true);
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -1405,7 +1417,7 @@ public sealed class ValidationContext
                 changed = true;
             }
 
-            if (changed) _version++;
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged();
         return initial;
@@ -1441,7 +1453,7 @@ public sealed class ValidationContext
                 result[field] = initial;
             }
 
-            if (changed) _version++;
+            if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged();
         return result;

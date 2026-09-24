@@ -2328,4 +2328,73 @@ public class ValidationRenderScopeTests
         Assert.False(ctx.IsDirty("f"));
         Assert.True(notifications > afterSeed, $"afterSeed={afterSeed} now={notifications}");
     }
+    // ════════════════════════════════════════════════════════════════
+    //  Version stability and batch atomicity (issue #1262 review)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void NetZeroValueChurnDoesNotAdvanceVersion()
+    {
+        var ctx = new ValidationContext();
+
+        // Two links on one field carrying different values: the current value is
+        // rewritten twice per pass and lands where it started. Changed is already
+        // suppressed for this; Version has to be too, or a UseMemo keyed on it re-runs
+        // forever for a context that never moved.
+        void Pass()
+        {
+            using (ValidationRenderScope.BeginReconcile())
+            {
+                ctx.ApplyValidation("f", "", [new ValidationMessage("f", "required")]);
+                ctx.ApplyValidation("f", "bb", []);
+            }
+        }
+
+        Pass();
+        var settled = ctx.Version;
+        for (var i = 0; i < 5; i++) Pass();
+
+        Assert.Equal(settled, ctx.Version);
+    }
+
+    [Fact]
+    public void RealChangeDuringRenderStillAdvancesVersionOnce()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.ApplyValidation("f", "", [new ValidationMessage("f", "required")]);
+        }
+        var afterFirst = ctx.Version;
+
+        // A pass that genuinely moves the state bumps — exactly once, not once per write.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.ApplyValidation("f", "abc", []);
+            ctx.MarkTouched("f");
+        }
+
+        Assert.True(ctx.Version > afterFirst, $"before={afterFirst} after={ctx.Version}");
+        Assert.Equal(afterFirst + 1, ctx.Version);
+    }
+
+    [Fact]
+    public void RejectedRuleBatchInstallsNothing()
+    {
+        var ctx = new ValidationContext();
+
+        var syncRule = ValidationRuleDsl.ValidationRule(() => false, "sync failed", "form");
+        var asyncRule = ValidationRuleDsl.ValidationRuleAsync(
+            async () => { await Task.Yield(); return false; }, "async failed", "form");
+
+        // The batch is rejected because it contains an async rule. It must be rejected
+        // whole: evaluating rule by rule left the sync verdict installed by a call that
+        // reported failure.
+        Assert.Throws<global::System.InvalidOperationException>(
+            () => ValidationReconciler.EvaluateRules(ctx, syncRule, asyncRule));
+
+        Assert.Empty(ctx.GetMessages("form"));
+        Assert.True(ctx.IsValid());
+    }
 }

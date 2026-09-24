@@ -219,7 +219,11 @@ internal static class CompositeLifecycle
             claimed ? owned.Context : null,
             claimed ? attached!.FieldName : null);
 
-        if (claimed) binding.Adopt(owned.Context, attached!.FieldName, owned.Stamp);
+        if (claimed)
+        {
+            binding.Adopt(owned.Context, attached!.FieldName, owned.Stamp);
+            ValidationRenderScope.MarkAdopted(owned.Context, attached.FieldName);
+        }
     }
 
     /// <summary>

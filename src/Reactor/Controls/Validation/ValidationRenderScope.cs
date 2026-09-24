@@ -35,6 +35,7 @@ internal static class ValidationRenderScope
     [ThreadStatic] private static int t_depth;
     [ThreadStatic] private static List<ValidationContext>? t_deferred;
     [ThreadStatic] private static Dictionary<ValidationAttached, Ownership>? t_owned;
+    [ThreadStatic] private static HashSet<(ValidationContext Context, string Field)>? t_adopted;
 
     /// <summary>
     /// What an eager <c>.Validate()</c> write claimed: the context it actually reached
@@ -84,6 +85,26 @@ internal static class ValidationRenderScope
         if (owned is not null && owned.Remove(attached, out ownership)) return true;
         ownership = default;
         return false;
+    }
+
+    /// <summary>
+    /// Records that a mounted control has taken over a field's synchronous slot, so an
+    /// unconsumed claim on that same slot is not withdrawn at the end of the pass.
+    /// <para>
+    /// Every value-carrying <c>.Validate()</c> on a field shares one producer key, so a
+    /// render that returns one validated element and also builds and drops another
+    /// naming the same field leaves the dropped element holding the newer stamp. Retiring
+    /// it would clear the slot the mounted control is relying on and report an invalid
+    /// field as valid — the exact failure this ownership model exists to prevent
+    /// (issue #1262 review). The dropped element's verdict still wins the slot's
+    /// contents, which is the pre-existing last-writer-wins behaviour for two elements
+    /// naming one field; only the erasure is prevented here.
+    /// </para>
+    /// </summary>
+    internal static void MarkAdopted(ValidationContext context, string field)
+    {
+        if (t_depth == 0) return;
+        (t_adopted ??= new HashSet<(ValidationContext, string)>()).Add((context, field));
     }
 
     /// <summary>
@@ -147,10 +168,13 @@ internal static class ValidationRenderScope
         // would discard every root-level `.Validate()` claim before the controls that
         // inherit them exist (issue #1262 review).
         Dictionary<ValidationAttached, Ownership>? abandoned = null;
+        HashSet<(ValidationContext Context, string Field)>? abandonedAdopted = null;
         if (t_depth == 0 && !isReconcile)
         {
             abandoned = t_owned;
+            abandonedAdopted = t_adopted;
             t_owned = null;
+            t_adopted = null;
         }
 
         var frame = new Frame(t_context, t_pendingProvide, isReconcile);
@@ -163,7 +187,7 @@ internal static class ValidationRenderScope
         // without one. Its verdict is in the context with nothing to own it, so the
         // claims are withdrawn rather than dropped. Done after the frame is open so the
         // retractions defer into this pass instead of announcing inline at depth 0.
-        if (abandoned is not null) RetireClaims(abandoned);
+        if (abandoned is not null) RetireClaims(abandoned, abandonedAdopted);
 
         return frame;
     }
@@ -195,20 +219,32 @@ internal static class ValidationRenderScope
     /// otherwise sit in the context owned by nothing. The withdrawal is stamped, so it
     /// cannot disturb a slot something else has written since.
     /// </para>
+    /// <para>
+    /// A slot a mounted control has already adopted is left alone: the two share one
+    /// producer key, so withdrawing the dropped element's claim would take the mounted
+    /// control's verdict with it. See <see cref="MarkAdopted"/>.
+    /// </para>
     /// </summary>
     private static void RetireUnconsumedClaims()
     {
         var owned = t_owned;
+        var adopted = t_adopted;
         t_owned = null;
-        RetireClaims(owned);
+        t_adopted = null;
+        RetireClaims(owned, adopted);
     }
 
-    private static void RetireClaims(Dictionary<ValidationAttached, Ownership>? claims)
+    private static void RetireClaims(
+        Dictionary<ValidationAttached, Ownership>? claims,
+        HashSet<(ValidationContext Context, string Field)>? adopted)
     {
         if (claims is null || claims.Count == 0) return;
 
         foreach (var (attached, claim) in claims)
         {
+            if (adopted is not null && adopted.Contains((claim.Context, attached.FieldName)))
+                continue;
+
             claim.Context.RetireProducer(
                 attached.FieldName, ValidationContext.SyncProducer, claim.Stamp);
         }
