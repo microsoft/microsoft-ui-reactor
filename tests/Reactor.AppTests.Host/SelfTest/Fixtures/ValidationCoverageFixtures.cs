@@ -1526,12 +1526,14 @@ internal static class ValidationCoverageFixtures
         {
             var host = H.CreateHost();
             var uiThreadId = global::System.Environment.CurrentManagedThreadId;
-            var renderThreads = new List<int>();
+            // Appended from the render (UI thread) and read from the worker, so a plain
+            // List races even when nothing renders off-thread.
+            var renderThreads = new global::System.Collections.Concurrent.ConcurrentQueue<int>();
             ValidationContext? captured = null;
 
             host.Mount(c => VStack(12,
                 Component<OffThreadValidationOwner, OffThreadProps>(
-                    new OffThreadProps(ctx => captured = ctx, id => renderThreads.Add(id))),
+                    new OffThreadProps(ctx => captured = ctx, renderThreads.Enqueue)),
                 TextBlock("host")));
 
             await Harness.Render();
@@ -1543,9 +1545,10 @@ internal static class ValidationCoverageFixtures
 
             // Exactly what a background async validator does when it resolves.
             global::System.Exception? thrown = null;
-            var rendersSeenInsideWorker = -1;
+            var workerThreadId = -1;
             await Task.Run(() =>
             {
+                workerThreadId = global::System.Environment.CurrentManagedThreadId;
                 try { captured.Add("email", "Email is taken"); }
                 catch (global::System.Exception ex)
                     when (ex is not global::System.OutOfMemoryException
@@ -1556,19 +1559,39 @@ internal static class ValidationCoverageFixtures
                     // surfacing as a COM or invalid-operation exception.
                     thrown = ex;
                 }
-                rendersSeenInsideWorker = renderThreads.Count;
             });
 
             H.Check("Issue1262_OffThread_MutationDidNotThrow", thrown is null,
                 thrown is null ? "" : $"{thrown.GetType().Name}: {thrown.Message}");
 
-            // The load-bearing assertion: the mutation must not have driven a render
-            // before it returned. A threadSafe state setter invokes the re-render
-            // callback on the raising thread, which for a child component renders
-            // inline — on the worker.
+            // The load-bearing assertion: the mutation must not have driven a render on
+            // the worker. A threadSafe state setter invokes the re-render callback on
+            // whatever thread raised Changed, which for a child component renders inline.
+            //
+            // Attributed by thread id, not by counting renders. Comparing a count taken
+            // on the worker against one taken before it asks "did the counter move",
+            // which a *marshalled* render landing on the UI thread in that same window
+            // also satisfies — so the check reddened under AOT while every render was in
+            // fact on the UI thread, as its sibling below confirmed. The healthy and
+            // broken branches were separated only by timing, which is no separation.
+            var workerRenders = renderThreads.Where(id => id == workerThreadId).ToList();
             H.Check("Issue1262_OffThread_NoSynchronousRenderFromWorker",
-                rendersSeenInsideWorker == rendersBefore,
-                $"before={rendersBefore} insideWorker={rendersSeenInsideWorker}");
+                workerThreadId != -1 && workerRenders.Count == 0,
+                $"worker={workerThreadId} rendersOnWorker={workerRenders.Count}");
+
+            // Positive control for the detector above. A zero from a working filter and
+            // a zero from one that can never match read identically, and this one cannot
+            // be falsified by mutating the product: flipping UseValidationContext's
+            // setter to threadSafe: true — the very thing this fixture exists to justify
+            // — leaves both checks green, so the re-render must be marshalled somewhere
+            // further down than the setter. Rather than claim coverage the mutation does
+            // not support, prove the instrument instead: the same filter, over a queue
+            // that deliberately holds a worker-thread entry, has to find it.
+            var detectorProbe = new global::System.Collections.Concurrent.ConcurrentQueue<int>();
+            detectorProbe.Enqueue(workerThreadId);
+            H.Check("Issue1262_OffThread_DetectorCanMatchAWorkerRender",
+                detectorProbe.Any(id => id == workerThreadId),
+                $"worker={workerThreadId} probe={string.Join("|", detectorProbe)}");
 
             for (var i = 0; i < 6 && H.FindText("Email is taken") is null; i++)
                 await Harness.Render();
