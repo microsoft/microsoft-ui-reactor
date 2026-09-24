@@ -317,8 +317,16 @@ public static class WinAppSdkTemplates
     internal static string RedactSource(string source)
     {
         if (string.IsNullOrWhiteSpace(source)) return source;
-        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri) || uri.IsFile)
-            return source; // local folder path — nothing secret in it
+        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return source; // plain local path
+
+        // A local *path* has nothing secret in it, but `file://user:pat@host/share`
+        // is also IsFile — returning it unchanged would print the credential. Only
+        // short-circuit when there is demonstrably nothing to mask.
+        if (uri.IsFile &&
+            string.IsNullOrEmpty(uri.UserInfo) &&
+            string.IsNullOrEmpty(uri.Query) &&
+            string.IsNullOrEmpty(uri.Fragment))
+            return source;
 
         var builder = new UriBuilder(uri)
         {

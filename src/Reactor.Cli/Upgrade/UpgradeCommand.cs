@@ -73,7 +73,7 @@ public static class UpgradeCommand
             // Best-effort when it's the routine refresh — a NuGet hiccup shouldn't fail
             // the whole upgrade. But if the user explicitly asked for a specific source
             // or version, silently returning 0 would report success for work not done.
-            if (templateSource is not null || templateVersion is not null)
+            if (templateSource is not null || templateVersion is not null || templateFeed is not null)
             {
                 Console.Error.WriteLine($"mur upgrade: could not install {WinAppSdkTemplates.PackageId} as requested.");
                 return 1;
@@ -90,7 +90,7 @@ public static class UpgradeCommand
                 $"  {WinAppSdkTemplates.PackageId} is installed but does not provide " +
                 $"`dotnet new {WinAppSdkTemplates.BlankShortName}` — that version predates the Reactor " +
                 $"templates. Pin a newer one with `mur templates install --version <version>`.");
-            if (templateSource is not null || templateVersion is not null) return 1;
+            if (templateSource is not null || templateVersion is not null || templateFeed is not null) return 1;
         }
 
         // 3. Refresh Claude plugin (best-effort; not every user has Claude Code).

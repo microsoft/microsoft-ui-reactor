@@ -360,6 +360,20 @@ public sealed class WinAppSdkTemplatesTests
     }
 
     [Fact]
+    public void RedactSource_strips_a_query_from_a_file_uri()
+    {
+        // A file URI is IsFile, so a blanket "local path, nothing to hide" early
+        // return skipped masking entirely. User-info is not constructible on the
+        // file scheme (Uri rejects it), but a query or fragment is — and either can
+        // carry a token.
+        var redacted = WinAppSdkTemplates.RedactSource("file://host/share/pkgs?token=SECRET");
+        Assert.DoesNotContain("SECRET", redacted, StringComparison.Ordinal);
+
+        // A plain local path still passes through untouched.
+        Assert.Equal(@"C:\repo\local-nupkgs", WinAppSdkTemplates.RedactSource(@"C:\repo\local-nupkgs"));
+    }
+
+    [Fact]
     public void RedactSource_strips_a_credential_bearing_fragment()
     {
         // UriBuilder preserves the fragment, so it has to be masked explicitly.
@@ -775,5 +789,85 @@ public sealed class WinAppSdkTemplatesTests
             dir = global::System.IO.Path.GetDirectoryName(dir);
         Assert.NotNull(dir);
         return dir!;
+    }
+}
+
+// ── `mur templates install` argv parsing ──────────────────────────────────
+//
+// Only the branches that return *before* touching the machine are exercised:
+// help, unknown option, missing value, and a bare positional. A real install is
+// a global `dotnet new install`, which these tests must never trigger.
+//
+// Strict parsing is load-bearing: `--sorce ./pkgs` silently ignored would
+// install from the configured feeds instead of the folder the user named, and
+// the install would look successful.
+[Collection("ConsoleTests")]
+public sealed class TemplatesCommandArgvTests
+{
+    static (int ExitCode, string Stdout, string Stderr) Run(params string[] args)
+    {
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var stdout = new global::System.IO.StringWriter();
+        using var stderr = new global::System.IO.StringWriter();
+        try
+        {
+            Console.SetOut(stdout);
+            Console.SetError(stderr);
+            var exitCode = TemplatesCommand.Run(args);
+            return (exitCode, stdout.ToString(), stderr.ToString());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+    }
+
+    [Fact]
+    public void Install_help_succeeds_without_installing_anything()
+    {
+        // `mur templates install --help` used to fall straight through to a real
+        // install, so this asserts the help text *and* the absence of the install
+        // banner rather than just the exit code.
+        var (exitCode, stdout, _) = Run("install", "--help");
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Usage: mur templates install", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("Installing " + WinAppSdkTemplates.PackageId, stdout, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    // A typo must fail loudly, not install from somewhere else.
+    [InlineData(new[] { "install", "--sorce", "./pkgs" }, "unknown option")]
+    [InlineData(new[] { "install", "-x" }, "unknown option")]
+    // A bare positional is never meaningful here.
+    [InlineData(new[] { "install", "0.0.7-alpha" }, "unexpected argument")]
+    // A flag with no value would otherwise silently install the resolved latest.
+    [InlineData(new[] { "install", "--source" }, "requires a value")]
+    [InlineData(new[] { "install", "--version" }, "requires a value")]
+    [InlineData(new[] { "install", "--feed" }, "requires a value")]
+    // A following flag is not a value.
+    [InlineData(new[] { "install", "--source", "--version", "1.0.0" }, "requires a value")]
+    public void Install_rejects_bad_argv(string[] args, string expected)
+    {
+        var (exitCode, stdout, stderr) = Run(args);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains(expected, stderr, StringComparison.Ordinal);
+        // Nothing may have been installed on the way to the error.
+        Assert.DoesNotContain("Installing " + WinAppSdkTemplates.PackageId, stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Unknown_subcommand_and_no_subcommand_both_show_help()
+    {
+        var (missing, missingOut, _) = Run();
+        Assert.Equal(1, missing);
+        Assert.Contains("mur templates", missingOut, StringComparison.Ordinal);
+
+        var (unknown, _, unknownErr) = Run("instal");
+        Assert.Equal(1, unknown);
+        Assert.Contains("instal", unknownErr, StringComparison.Ordinal);
     }
 }
