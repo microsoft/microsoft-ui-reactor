@@ -37,6 +37,13 @@ Conventions for contributors:
   Previously nothing in the framework ever called `MarkTouched`, leaving the
   default unreachable unless the app marked fields by hand (spec 011 §1E.1,
   issue #1262).
+- `Publish docs` now verifies the live site after deploying. The `publish` job stamps the
+  Pages artifact with the run that built it, and a new `verify` job polls
+  <https://microsoft.github.io/microsoft-ui-reactor/> until it is serving *that* run —
+  failing the workflow otherwise. Every probe carries a unique query key so a pass cannot
+  come from cached content, and an already-published version fetched with the same request
+  shape acts as a positive control, so a broken probe is reported as unverified rather than
+  blamed on the deployment. (issue #1268)
 
 ### Changed
 
@@ -50,6 +57,17 @@ Conventions for contributors:
   components no longer require an explicit
   `.Provide(ValidationContexts.Current, ctx)`. An explicit provide still takes
   precedence (issue #1262).
+- A push to `main` and the release tag's own run both deploy the docs, as before. Standing
+  one of them down was tried and removed: every version of that check has to predict that
+  the other run will deploy, and each way the prediction fails (an evicted pending run, a
+  stale or deleted local tag, an unreachable `origin`, or the two runs entering the
+  concurrency group out of event order) skips the deployment *and* its verification, which
+  is worse than a duplicate the new `verify` job catches. (issue #1268)
+- The `Publish docs` concurrency group now sets `queue: max`. The Actions default keeps at
+  most one *pending* run per group and cancels the previous one when a new run queues, so a
+  docs push landing while a release tag's run waited behind `main` would evict the tag run
+  before it started — leaving the release unpublished. Runs now wait in FIFO order.
+  (issue #1268)
 
 ### Deprecated
 
@@ -75,6 +93,21 @@ Conventions for contributors:
   reaches the synchronous path that retires those, so the stale error stayed on
   screen. The async producer is now retracted and its generation retired whenever
   the value changes (issue #1262).
+- Overlapping `EvaluateAsync` runs of the same async `ValidationRule` applied in
+  completion order, so a slow failing check that resolved after a fast passing
+  one reinstated an error the newer run had already cleared. Async passes are now
+  ordered per producer, matching `.ValidateAsync(...)` (issue #1262).
+- A validation change raised between renders — a rule mounting, updating, or
+  retracting during reconciliation — was announced inline, in the middle of the
+  pass that caused it. Reconciliation now holds a deferral frame, so those
+  notifications land once it has finished (issue #1262).
+- A deferred notification with no subscriber yet was dropped. A host flushes root
+  effects only after reconciliation, so a parent whose `UseValidationContext()`
+  subscription had not been created yet never learned that a child had
+  invalidated the shared context (issue #1262).
+- A `FormField` that lost its context and swapped its content control in the same
+  update left the displaced editor's blur binding live, so the pooled control kept
+  marking the old field and kept its `ValidationContext` alive (issue #1262).
 - `ValidationContext.MarkAllTouched` bumped `Version` even when every registered
   field was already touched, and re-running validators over an unchanged value
   bumped it twice per pass; both are now silent when nothing changed (issue #1262).
