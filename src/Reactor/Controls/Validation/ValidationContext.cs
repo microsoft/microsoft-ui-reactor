@@ -495,10 +495,10 @@ public sealed class ValidationContext
     /// Installs the complete result of an async validation pass for a field in one step.
     /// <para>
     /// <paramref name="generation"/> is the token handed out by
-    /// <see cref="BeginAsyncValidation"/> when the pass started. Passes for successive
-    /// values race — an older value's checks can resolve after a newer value's — so a
-    /// result that is no longer the newest is discarded rather than overwriting the
-    /// current verdict with a stale one.
+    /// <see cref="BeginAsyncValidation(string, object?)"/> when the pass started. Passes
+    /// for successive values race — an older value's checks can resolve after a newer
+    /// value's — so a result that is no longer the newest is discarded rather than
+    /// overwriting the current verdict with a stale one.
     /// </para>
     /// </summary>
     internal void ApplyAsyncValidation(string field, int generation, List<ValidationMessage> messages)
@@ -539,6 +539,43 @@ public sealed class ValidationContext
     /// </para>
     /// </summary>
     internal int BeginAsyncValidation(string field) => BeginAsyncProducer(field, AsyncProducer);
+
+    /// <summary>
+    /// Records the value a field is about to be validated against and opens the async
+    /// pass for it, under one lock.
+    /// <para>
+    /// Doing the two as separate calls let concurrent callers interleave as
+    /// <c>old.record</c>, <c>new.record + new.open</c>, <c>old.open</c> — leaving the
+    /// *older* value's pass holding the newest token, free to install a verdict about a
+    /// value that had already been replaced.
+    /// </para>
+    /// </summary>
+    internal int BeginAsyncValidation(string field, object? value)
+    {
+        bool changed;
+        int token;
+        lock (_lock)
+        {
+            _registeredFields.Add(field);
+
+            var known = _currentValues.TryGetValue(field, out var previous);
+            changed = !known || !Equals(previous, value);
+            if (changed)
+            {
+                _currentValues[field] = value;
+                _externalMessages.Remove(field);
+                RetractAsyncProducersLocked(field);
+                BumpVersionLocked(messagesOnly: false);
+            }
+
+            token = unchecked(++_asyncTicket);
+            if (!_asyncGeneration.TryGetValue(field, out var byProducer))
+                _asyncGeneration[field] = byProducer = new Dictionary<string, int>(StringComparer.Ordinal);
+            byProducer[AsyncProducer] = token;
+        }
+        if (changed) RaiseChanged();
+        return token;
+    }
 
     /// <summary>
     /// Opens an async pass for one producer on a field. Overlapping evaluations of the

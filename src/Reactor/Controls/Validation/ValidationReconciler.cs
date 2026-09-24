@@ -61,14 +61,12 @@ public static class ValidationReconciler
         IAsyncValidator[] asyncValidators,
         CancellationToken cancellationToken = default)
     {
-        // Mirror the synchronous path: record the value, which also clears an external
-        // verdict about the old one and retires any async pass still out for it. The
-        // helper is self-contained, so a caller that re-invokes it on a new value does
-        // not have to remember a separate NotifyValueChanged (issue #1262 review).
-        ctx.RegisterField(fieldName);
-        ctx.NotifyValueChanged(fieldName, value);
-
-        var generation = ctx.BeginAsyncValidation(fieldName);
+        // Recording the value and opening the pass happen under one lock: as two calls,
+        // concurrent callers could interleave and leave the older value's pass holding
+        // the newest token (issue #1262 review). Recording also clears an external
+        // verdict about the old value and retires any async pass still out for it, so
+        // the helper is self-contained.
+        var generation = ctx.BeginAsyncValidation(fieldName, value);
 
         var messages = new List<ValidationMessage>(asyncValidators.Length);
         foreach (var validator in asyncValidators)
@@ -179,22 +177,30 @@ public static class ValidationReconciler
         ValidationContext ctx, int generation,
         List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts)
     {
-        if (!IsNewestRuleSet(ctx, generation)) return;
-
-        var applied = new List<(string Field, string Producer)>(verdicts.Count);
-        foreach (var verdict in verdicts)
-            applied.Add((verdict.Field, verdict.Producer));
-
-        var retired = new List<(string Field, string Producer)>();
-        if (_ruleSets.TryGetValue(ctx, out var previous))
+        // The generation check, the recorded-set swap and the context transaction are one
+        // critical section: checking and then acting let a concurrent commit slip between
+        // them. Nothing inside runs caller code, so this cannot be blocked by a predicate.
+        lock (_ruleSetCommitLocks.GetValue(ctx, static _ => new object()))
         {
-            retired.AddRange(previous.Where(entry => !applied.Contains(entry)));
-            _ruleSets.Remove(ctx);
-        }
-        _ruleSets.Add(ctx, applied);
+            if (!IsNewestRuleSet(ctx, generation)) return;
 
-        ctx.ApplyRuleSet(verdicts, retired);
+            var applied = new List<(string Field, string Producer)>(verdicts.Count);
+            foreach (var verdict in verdicts)
+                applied.Add((verdict.Field, verdict.Producer));
+
+            var retired = new List<(string Field, string Producer)>();
+            if (_ruleSets.TryGetValue(ctx, out var previous))
+            {
+                retired.AddRange(previous.Where(entry => !applied.Contains(entry)));
+                _ruleSets.Remove(ctx);
+            }
+            _ruleSets.Add(ctx, applied);
+
+            ctx.ApplyRuleSet(verdicts, retired);
+        }
     }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, object> _ruleSetCommitLocks = new();
 
     private static int NextRuleSetGeneration(ValidationContext ctx)
     {

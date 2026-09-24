@@ -1550,6 +1550,27 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task A_Sync_Evaluation_Retires_An_In_Flight_Async_Pass_For_The_Same_Rule()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var asyncRule = ValidationRuleAsync(() => pending.Task, "Async verdict", "dates");
+        var running = asyncRule.EvaluateAsync(ctx, "rule#3", TestContext.Current.CancellationToken);
+
+        // The same producer is evaluated synchronously while the async pass is out.
+        ValidationRule(() => false, "Sync verdict", "dates").Evaluate(ctx, "rule#3");
+        Assert.Equal("Sync verdict", ctx.GetMessages("dates")[0].Text);
+
+        // The late async result must not overwrite the newer synchronous one.
+        pending.SetResult(false);
+        await running;
+
+        Assert.Single(ctx.GetMessages("dates"));
+        Assert.Equal("Sync verdict", ctx.GetMessages("dates")[0].Text);
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

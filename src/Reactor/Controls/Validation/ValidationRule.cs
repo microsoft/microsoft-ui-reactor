@@ -86,18 +86,17 @@ public static class ValidationRuleDsl
     /// passing verdict without ever running the real check — an invalid field reported
     /// as valid, silently (issue #1262 review).
     /// </para>
+    /// <para>
+    /// The producer's async generation is retired first. Without that, an
+    /// <c>EvaluateAsync</c> still in flight for this same producer would still match its
+    /// token when it resolved, and would overwrite the newer synchronous verdict
+    /// (issue #1262 review).
+    /// </para>
     /// </summary>
     internal static void Evaluate(this ValidationRuleElement rule, ValidationContext ctx, string producer)
     {
-        if (rule.AsyncPredicate is not null)
-        {
-            throw new InvalidOperationException(
-                $"The validation rule for field '{rule.Field}' has an async predicate and cannot be " +
-                "evaluated synchronously. Use EvaluateAsync or ValidationReconciler.EvaluateRulesAsync, " +
-                "or mount the rule in the element tree, which dispatches it asynchronously.");
-        }
-
-        ctx.ApplyOwned(rule.Field, producer, BuildMessages(rule, rule.Predicate()));
+        ctx.ClearAsyncGeneration(rule.Field, producer);
+        ctx.ApplyOwned(rule.Field, producer, rule.ComputeSync());
     }
 
     /// <summary>

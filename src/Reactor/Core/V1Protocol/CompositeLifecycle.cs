@@ -416,11 +416,8 @@ internal static class CompositeLifecycle
         {
             CancelPendingRule(binding);
 
-            // The rule may have just stopped being async on this same placeholder. Its
-            // generation entry has to go, or the next value change would treat this
-            // producer as async and retract the synchronous verdict written below.
-            valCtx.ClearAsyncGeneration(rule.Field, binding.Producer);
-
+            // Evaluate retires the producer's async generation, which matters when the
+            // rule has just stopped being async on this same placeholder.
             rule.Evaluate(valCtx, binding.Producer);
             return;
         }
