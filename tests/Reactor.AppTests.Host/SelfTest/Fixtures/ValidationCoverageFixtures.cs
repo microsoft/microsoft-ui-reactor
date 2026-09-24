@@ -1818,6 +1818,8 @@ internal static class ValidationCoverageFixtures
             await BareAsync(BareValidateShape.Hidden, "Skipped", nudge: true);
             await RootHostAsync();
             await DiscardedElementAsync();
+            await SyncThenAsyncChainAsync();
+            await AbortedRootRenderAsync();
             await BareReplacedAsync();
             await WholeFormFieldAsync();
             await ChainMovesFieldAsync();
@@ -1955,6 +1957,93 @@ internal static class ValidationCoverageFixtures
             H.Check("Issue1262_Unmount_DiscardedWithdrawn", ctx.GetMessages("ghost").Count == 0,
                 $"remaining={string.Join("|", ctx.GetMessages("ghost").Select(m => m.Text))}");
             H.Check("Issue1262_Unmount_DiscardedValid", ctx.IsValid(), $"valid={ctx.IsValid()}");
+        }
+
+        // A chain that ends on an async link. The async validators are attach-only,
+        // but the sync verdict the earlier link installed is live — and the surviving
+        // attachment is the only thing a mounted control can claim ownership through.
+        private async Task SyncThenAsyncChainAsync()
+        {
+            var host = H.CreateHost();
+            Action<bool>? setShow = null;
+            ValidationContext? ctx = null;
+
+            host.Mount(c =>
+            {
+                var (show, set) = c.UseState(true);
+                setShow = set;
+                ctx = c.UseValidationContext();
+
+                return VStack(12,
+                    TextBlock("chain-head"),
+                    show
+                        ? TextBox("")
+                            .Validate("mixed", "", Validate.Required("mixed is required"))
+                            .ValidateAsync("mixed", Validate.MustAsync<string>(
+                                async s => { await Task.Yield(); return true; }, "taken"))
+                        : TextBlock("hidden"));
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_SyncAsync_Resolved", ctx is not null);
+            if (ctx is null) return;
+
+            H.Check("Issue1262_SyncAsync_InitialError", ctx.GetMessages("mixed").Count == 1,
+                $"mixed={string.Join("|", ctx.GetMessages("mixed").Select(m => m.Text))}");
+
+            setShow!(false);
+            await Harness.Render();
+            await Harness.Render();
+            for (var i = 0; i < 20 && ctx.GetMessages("mixed").Count > 0; i++)
+            {
+                await Task.Delay(25);
+                await Harness.Render();
+            }
+
+            H.Check("Issue1262_SyncAsync_Withdrawn", ctx.GetMessages("mixed").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("mixed").Select(m => m.Text))}");
+        }
+
+        // A root render that writes a verdict and then throws never reaches
+        // reconciliation, so nothing consumes or retires the claim it made. The next
+        // pass has to settle it rather than discard it, or the field stays in error
+        // for the lifetime of the context.
+        private async Task AbortedRootRenderAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? ctx = null;
+            var abort = true;
+
+            host.Mount(c =>
+            {
+                ctx = c.UseValidationContext();
+                if (abort)
+                {
+                    _ = TextBox("").Validate("aborted", "", Validate.Required("aborted is required"));
+                    throw new global::System.InvalidOperationException("render aborted on purpose");
+                }
+                return VStack(8, TextBlock("recovered"));
+            });
+
+            var threw = false;
+            try { await Harness.Render(); }
+            catch (global::System.InvalidOperationException) { threw = true; }
+
+            H.Check("Issue1262_Aborted_Resolved", ctx is not null, $"threw={threw}");
+            if (ctx is null) return;
+
+            H.Check("Issue1262_Aborted_VerdictWritten", ctx.GetMessages("aborted").Count == 1,
+                $"aborted={ctx.GetMessages("aborted").Count}");
+
+            // The recovered tree no longer renders the field at all.
+            abort = false;
+            var recovered = H.CreateHost();
+            recovered.Mount(c => TextBlock("after abort"));
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_Aborted_ClaimSettled", ctx.GetMessages("aborted").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("aborted").Select(m => m.Text))}");
         }
 
         // Guard: the outgoing control must not take the incoming one's verdict with

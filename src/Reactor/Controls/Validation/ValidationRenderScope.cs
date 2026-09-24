@@ -139,19 +139,32 @@ internal static class ValidationRenderScope
     private static Frame BeginCore(ValidationContext? inherited, bool isReconcile)
     {
         // A render frame opening at depth 0 starts a new pass, so the previous pass's
-        // claims are dropped here rather than when the last frame closed: the mount that
+        // claims are settled here rather than when the last frame closed: the mount that
         // consumes a claim does not always run inside the frame that made it.
         //
-        // A reconcile frame must NOT clear. It is the *consumer* — a host's root render
-        // closes its own frame before Reconcile opens this one, so clearing here would
-        // discard every root-level `.Validate()` claim before the controls that inherit
-        // them exist (issue #1262 review).
-        if (t_depth == 0 && !isReconcile) t_owned = null;
+        // A reconcile frame must NOT settle them. It is the *consumer* — a host's root
+        // render closes its own frame before Reconcile opens this one, so clearing here
+        // would discard every root-level `.Validate()` claim before the controls that
+        // inherit them exist (issue #1262 review).
+        Dictionary<ValidationAttached, Ownership>? abandoned = null;
+        if (t_depth == 0 && !isReconcile)
+        {
+            abandoned = t_owned;
+            t_owned = null;
+        }
 
         var frame = new Frame(t_context, t_pendingProvide, isReconcile);
         t_context = inherited;
         t_pendingProvide = null;
         t_depth++;
+
+        // Anything still held when a new pass opens belongs to a pass that never
+        // reached reconciliation — a root render that threw, or a host that returned
+        // without one. Its verdict is in the context with nothing to own it, so the
+        // claims are withdrawn rather than dropped. Done after the frame is open so the
+        // retractions defer into this pass instead of announcing inline at depth 0.
+        if (abandoned is not null) RetireClaims(abandoned);
+
         return frame;
     }
 
@@ -187,9 +200,14 @@ internal static class ValidationRenderScope
     {
         var owned = t_owned;
         t_owned = null;
-        if (owned is null || owned.Count == 0) return;
+        RetireClaims(owned);
+    }
 
-        foreach (var (attached, claim) in owned)
+    private static void RetireClaims(Dictionary<ValidationAttached, Ownership>? claims)
+    {
+        if (claims is null || claims.Count == 0) return;
+
+        foreach (var (attached, claim) in claims)
         {
             claim.Context.RetireProducer(
                 attached.FieldName, ValidationContext.SyncProducer, claim.Stamp);

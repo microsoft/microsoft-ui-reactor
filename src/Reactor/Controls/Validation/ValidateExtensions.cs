@@ -117,6 +117,17 @@ public static class ValidateExtensions
             }
             : new ValidationAttached(fieldName, [], asyncValidators);
         SupersedeEarlierLink(existing, fieldName);
+
+        // Attach-only for the async validators themselves — nothing runs those during a
+        // synchronous render. But a chain that already carries a value has a *sync*
+        // verdict in flight whose claim this link just superseded, so the merged
+        // attachment has to re-run those validators and take the claim over. Without it
+        // `.Validate(f, v, …).ValidateAsync(f, …)` published a verdict that no mounted
+        // control owned, and a bare control left it behind on unmount
+        // (issue #1262 review). RunDuringRender is a no-op when there are no sync
+        // validators, so a purely async attachment is unaffected.
+        if (merged.HasValue) RunDuringRender(merged, merged.Value);
+
         return (T)el.SetAttached(merged);
     }
 
@@ -154,6 +165,12 @@ public static class ValidateExtensions
         // still has to be registered or MarkAllTouched() would skip it.
         SupersedeEarlierLink(existing, fieldName);
         ValidationRenderScope.Current?.RegisterField(fieldName);
+
+        // Re-runs only the sync validators a preceding `.Validate(f, v, …)` link
+        // contributed, so the surviving attachment owns their verdict — see the
+        // validator-only overload above. A no-op when the chain carries none.
+        RunDuringRender(merged, value);
+
         return (T)el.SetAttached(merged);
     }
 
