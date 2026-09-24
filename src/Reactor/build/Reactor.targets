@@ -196,17 +196,20 @@
 
     NOT version-gated, so do not wait for an SDK bump to delete this. A first-party fix
     already exists — MSIX.Pri.targets' AddProjectPriToResolvedFileToPublish /
-    AddXbfFilesToResolvedFileToPublish — but it is reachable only via
+    AddXbfFilesToResolvedFileToPublish (the XBF half is new in build tools
+    1.7.260903100; the .pri half predates it) — but both are reachable only via
     EnableMsixTooling -> MsixPackageSupport -> ShouldImportMsixCommonTargets ->
     Packaging.targets -> Pri.targets. With the flag off the build takes the MrtCore
-    branch, which has no publish step. Measured: those targets are present in both the
-    MSIX build tools a current app resolves (1.7.251221100) and the newest published
-    (1.7.260903100); MsixPackageSupport is assigned in exactly one place, conditioned
-    solely on EnableMsixTooling; and no Microsoft.WindowsAppSDK* package sets it. The
-    stock template on the newest stable SDK (2.5.1 / WinUI 2.3.9 / Foundation 2.3.12)
-    still publishes without its .pri and still crashes 0xC000027B when this target is
-    disabled. Delete this only once that fix runs WITHOUT EnableMsixTooling; the
-    opt-out control in PriPackagingTests starts failing when that happens.
+    branch, which has no publish step. Measured on 1.7.260903100 with a -v:detailed
+    publish: without the flag each fix target runs 0 times and no app .pri is
+    published; with EnableMsixTooling=true each runs twice and the .pri appears — the
+    second cell being the control that proves the probe can match. MsixPackageSupport
+    is also assigned in exactly one place, conditioned solely on EnableMsixTooling,
+    and no Microsoft.WindowsAppSDK* package sets it. The stock template on the newest
+    stable SDK (2.5.1 / WinUI 2.3.9 / Foundation 2.3.12) still publishes without its
+    .pri and still crashes 0xC000027B when this target is disabled. Delete this only
+    once that fix runs WITHOUT EnableMsixTooling; the opt-out control in
+    PriPackagingTests starts failing when that happens.
 
     Note the Exclude: $(PublishDir) is nested INSIDE $(OutputPath) by default
     (bin\<cfg>\<tfm>\<rid>\publish\), so globbing $(OutputPath)**\*.xbf without it would
