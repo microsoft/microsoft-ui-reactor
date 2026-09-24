@@ -108,8 +108,9 @@ a first-chance exception in every debugger session.
 ## Search index
 
 `reactor-search-index.json` is generated from this app's source and consumed by the
-external `winui-search` CLI. After adding, renaming, or removing a control — or
-changing its first sample snippet — regenerate it:
+external `winui-search` CLI (`winapp find-ui --source reactor`). After adding, renaming,
+or removing a control — or changing **any** of its sample snippets, since every clean
+`SampleCard` on a page is now emitted — regenerate it:
 
 ```powershell
 dotnet run --project tools/Reactor.SearchIndex
@@ -118,6 +119,15 @@ dotnet run --project tools/Reactor.SearchIndex
 A `Reactor.Tests` gate byte-compares the committed file, so a stale index fails CI.
 Curate keywords and overrides in `tools/Reactor.SearchIndex/editorial.json`, never in
 the generated JSON.
+
+### Fundamentals
+
+The `Fundamentals` category holds framework mechanics rather than controls — hooks,
+element refs, keyboard and pointer input. They are ordinary gallery pages, so an agent
+searching the index for `UseState hook` or `key down event handler` reaches a snippet
+that compiles (issue #1275). Their prose is lifted verbatim from the shipped agent-kit
+skills by `<!-- index:… -->` marker, so the two never drift; see
+[spec 064](../../docs/specs/064-search-index-framework-concepts.md).
 
 ## See also
 

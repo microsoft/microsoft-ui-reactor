@@ -34,18 +34,49 @@ permissions: {}
 
 # Serialises Pages deployments *and* the gh-pages pushes below, so two runs can
 # never race for the same branch.
+#
+# `queue: max` is load-bearing, not a tidiness knob. The default (`single`)
+# keeps at most one *pending* run per group and cancels the previous one when a
+# new run queues. During a release that is reachable and costly: the merge's
+# `main` run holds the group, the release tag's run waits behind it, and any
+# further docs push to `main` would evict the tag run before it ever ran. The
+# release version would then never be written to gh-pages at all, and nothing
+# would fail. Queuing makes the tag run wait its turn instead (FIFO, up to 100
+# pending).
+#
+# `cancel-in-progress` is deliberately absent: it defaults to false, and
+# `queue: max` with `cancel-in-progress: true` is a workflow validation error.
 concurrency:
   group: pages
-  cancel-in-progress: false
+  queue: max
 
 env:
   MIKE_BRANCH: gh-pages
   LATEST_ALIAS: latest
   MAIN_VERSION: main
+  # Every publishing step appends the version it wrote to
+  # "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE", and the artifact step turns that
+  # into a job output. The verify job probes exactly these directories: probing
+  # only the `latest` holder would skip a backported tag (which deliberately
+  # does not move `latest`) and skip `main` on a branch push, so a broken new
+  # directory could pass on the strength of its versions.json entry alone.
+  # Held as a bare filename because workflow-level env cannot expand
+  # $RUNNER_TEMP; every use joins the two.
+  PUBLISHED_VERSIONS_FILE: published-versions.txt
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    outputs:
+      # The exact version list the verify job must find on the live site, and
+      # the subset this run actually wrote. See the artifact step for why each
+      # exists.
+      versions: ${{ steps.artifact.outputs.versions }}
+      published: ${{ steps.artifact.outputs.published }}
+      # The attempt that produced the artifact. `github.run_attempt` read in
+      # the verify job would be wrong: re-running only the failed `deploy` job
+      # reuses this artifact, so its attempt legitimately trails the re-run's.
+      run_attempt: ${{ steps.artifact.outputs.run_attempt }}
     permissions:
       contents: write # mike commits the rendered site to gh-pages
     steps:
@@ -85,6 +116,7 @@ jobs:
         run: |
           mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy \
             --title 'main (development)' "$MAIN_VERSION"
+          echo "$MAIN_VERSION" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
 
           # Until a release version exists there is nothing for the site root to
           # redirect to, which would leave it a 404. Point the root at main for
@@ -112,6 +144,11 @@ jobs:
             echo "$GITHUB_REF_NAME is older than $newest — publishing without moving $LATEST_ALIAS."
             mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy "$version"
           fi
+
+          # Recorded only after mike has actually written the version, so the
+          # list the verify job probes never claims something that was not
+          # published.
+          echo "$version" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
 
       - name: Backfill release versions
         if: inputs.backfill_tags
@@ -161,6 +198,7 @@ jobs:
             else
               mike deploy --branch "$MIKE_BRANCH" --push --alias-type copy "${tag#v}"
             fi
+            echo "${tag#v}" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
             echo "::endgroup::"
           done
 
@@ -184,6 +222,7 @@ jobs:
           fi
 
       - name: Assemble the Pages artifact from every published version
+        id: artifact
         # `git archive` rather than a checkout: it materialises the branch
         # without leaving git metadata in the directory that gets uploaded.
         run: |
@@ -209,12 +248,86 @@ jobs:
           echo "Publishing these versions:"
           cat site/versions.json
 
+          # Stamps the artifact with the run that produced it, so the verify job
+          # can tell *this* deployment from any other one serving the same site.
+          #
+          # Comparing versions.json alone would be vacuous for a main push:
+          # `mike deploy main` republishes an existing version, so the version
+          # set is unchanged and the comparison passes whether or not this run's
+          # deployment ever landed. The run id is what makes the check mean
+          # something on every trigger.
+          #
+          # Written here rather than committed to gh-pages for the same reason
+          # 404.html is: it is a property of a deployment, not of a published
+          # version. Named without a leading `.` or `_` deliberately — Pages has
+          # historically excluded those, and an unservable stamp would fail
+          # every run.
+          jq -n \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg run_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg sha "$GITHUB_SHA" \
+            --arg ref "$GITHUB_REF" \
+            --arg published_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{run_id: $run_id, run_attempt: $run_attempt, run_url: $run_url, sha: $sha, ref: $ref, published_at: $published_at}' \
+            > site/deploy-stamp.json
+          cat site/deploy-stamp.json
+
+          # Compact, because a job output is a single line.
+          echo "versions=$(jq -c . site/versions.json)" >> "$GITHUB_OUTPUT"
+
+          # The versions this run actually wrote, for the verify job to probe.
+          # Every trigger path publishes at least one (main push, release tag,
+          # or backfill), so an empty list means a publishing step stopped
+          # recording and the gate would quietly fall back to probing only the
+          # `latest` holder. Fail instead of verifying less than we think.
+          published_file="$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
+          if [ ! -s "$published_file" ]; then
+            echo "::error::No publishing step recorded a version in $published_file, so the verify job cannot know what to probe. Every trigger path must append the version it published."
+            exit 1
+          fi
+
+          published="$(jq -R -s -c 'split("\n") | map(select(length > 0)) | unique' < "$published_file")"
+
+          # The two lists are produced independently — one by the publishing
+          # steps, one by mike — so a divergence means the run does not actually
+          # know what it published. Fail here rather than letting the verify job
+          # quietly probe fewer directories than it should.
+          missing="$(jq -c --argjson published "$published" \
+            '(map(.version)) as $known | $published - $known' site/versions.json)"
+          if [ "$missing" != "[]" ]; then
+            echo "::error::These versions were recorded as published but are absent from site/versions.json: $missing. The publishing steps and mike disagree, so the verify job cannot be trusted to probe the right directories."
+            exit 1
+          fi
+
+          echo "This run published: $published"
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
+          # Exported so verify compares against the attempt that built these
+          # bytes. `run_id` alone is stable across re-runs, so a full "Re-run
+          # all jobs" would republish under the same identity and a stranded
+          # deployment could still match the previous attempt's live artifact.
+          echo "run_attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
   deploy:
     needs: publish
+    # A release commit produces two runs that hand actions/deploy-pages the
+    # same `pages_build_version` — it is github.sha, with no input to override
+    # it — so both deployments land under one identity and Pages may strand one
+    # of them (issue #1268).
+    #
+    # That duplicate is tolerated rather than avoided. Standing one run down
+    # requires predicting that the other will deploy, and every form of that
+    # prediction fails silently in the direction that matters: a pending tag
+    # run can be evicted, a stale local tag can name a release that no longer
+    # exists, an unreachable `origin` makes the check answer "no tag here", and
+    # the two runs are not guaranteed to enter the concurrency group in event
+    # order. Each of those skips the deployment *and* the verification below,
+    # which is strictly worse than a duplicate that `verify` can catch.
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -222,6 +335,42 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  verify:
+    name: Verify the live deployment
+    needs: [publish, deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      # Only to check out the verifier script. The job then reads a public site
+      # over HTTPS and writes nothing.
+      contents: read
+    # Comfortably above the poll window below, so a hung request surfaces as a
+    # timeout on this job rather than an open-ended run.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.13.0'
+
+      # `deploy` reporting success is not evidence that the site serves what
+      # this run built: a deployment can collide with another under the same
+      # pages_build_version and be stranded while every job stays green
+      # (issue #1268). This is the only step in the pipeline that looks at the
+      # live site, so it is the only one that can catch that.
+      - name: Assert the live site is serving this run's artifact
+        env:
+          DOCS_BASE_URL: ${{ needs.deploy.outputs.page_url }}
+          DOCS_EXPECTED_RUN_ID: ${{ github.run_id }}
+          DOCS_EXPECTED_RUN_ATTEMPT: ${{ needs.publish.outputs.run_attempt }}
+          DOCS_EXPECTED_VERSIONS: ${{ needs.publish.outputs.versions }}
+          DOCS_PUBLISHED_VERSIONS: ${{ needs.publish.outputs.published }}
+          DOCS_VERIFY_TIMEOUT_SECONDS: '600'
+          DOCS_VERIFY_INTERVAL_SECONDS: '15'
+        run: node .github/scripts/verify-docs-deployment.mjs

@@ -16,14 +16,19 @@ class HomePage : Component<Action<string>>
             .OrderBy(g => g.Key)
             .Select(g => new ControlInfo(
                 g.Key,
-                $"{g.Count()} controls",
+                // "9 controls" is wrong for Fundamentals and Design, which hold framework
+                // topics and guidance. One predicate, shared with the shell and the header.
+                $"{g.Count()} {(ControlRegistry.IsControlCategory(g.Key) ? "controls" : "topics")}",
                 g.Key,
                 g.First().IconGlyph,
                 g.Key.ToLowerInvariant().Replace(" ", "-"),
                 g.First().ImageFile))
             .ToArray();
 
-        var recentControls = ControlRegistry.All.Take(8).ToArray();
+        var recentControls = ControlRegistry.All
+            .Where(c => ControlRegistry.IsControlCategory(c.Category))
+            .Take(8)
+            .ToArray();
 
         return (ScrollViewer(
             VStack(0,

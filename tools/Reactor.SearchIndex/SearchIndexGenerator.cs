@@ -38,12 +38,19 @@ public static partial class SearchIndexGenerator
     /// sidecar, which then fails generation because every included control requires curated
     /// keywords — a full run needs a real editorial.json.
     /// </summary>
-    public static SearchIndexResult Generate(string galleryDir, string? editorialPath)
+    /// <param name="agentKitRoot">
+    /// Directory holding the shipped agent kit (<c>SKILL.md</c>, <c>plugins/</c>, <c>skills/</c>)
+    /// — i.e. the repo root. Marked <c>&lt;!-- index:id --&gt;</c> blocks found there become the
+    /// matching control's <c>details</c>. Null/missing means "no markers", which the
+    /// synthetic-gallery tests rely on.
+    /// </param>
+    public static SearchIndexResult Generate(string galleryDir, string? editorialPath, string? agentKitRoot = null)
     {
         var registry = ParseRegistry(Path.Join(galleryDir, "ControlRegistry.cs"));
         var routes = ParseRouter(Path.Join(galleryDir, "PageRouter.cs"));
         var samplesByClass = ParseSamples(Path.Join(galleryDir, "ControlPages"));
         var editorial = LoadEditorial(editorialPath);
+        var details = ParseAgentKitDetails(agentKitRoot);
 
         var registryIds = new HashSet<string>(registry.Select(r => r.Id), StringComparer.Ordinal);
         var orphanKeys = editorial.Keys.Where(k => !registryIds.Contains(k))
@@ -51,6 +58,14 @@ public static partial class SearchIndexGenerator
         if (orphanKeys.Count > 0)
             throw new InvalidOperationException(
                 "editorial.json has key(s) that match no control id (typo?): " + string.Join(", ", orphanKeys));
+
+        // Same no-silent-drops rule for the prose markers: a block whose id does not name a
+        // control is prose nobody will ever read, and is almost always a typo'd id.
+        var orphanMarkers = details.Keys.Where(k => !registryIds.Contains(k))
+            .OrderBy(k => k, StringComparer.Ordinal).ToList();
+        if (orphanMarkers.Count > 0)
+            throw new InvalidOperationException(
+                "agent-kit `<!-- index:id -->` marker(s) match no control id (typo?): " + string.Join(", ", orphanMarkers));
 
         var entries = new List<ControlEntry>();
         var skipped = new List<SkippedControl>();
@@ -73,8 +88,8 @@ public static partial class SearchIndexGenerator
             }
 
             samplesByClass.TryGetValue(pageClass, out var extracted);
-            var sample = ResolveSample(extracted, ed?.SampleOverride);
-            if (sample is null)
+            var samples = ResolveSamples(extracted, ed?.SampleOverride);
+            if (samples.Count == 0)
             {
                 skipped.Add(new SkippedControl(reg.Id, reg.Name, $"no-sample ({pageClass})"));
                 continue;
@@ -90,13 +105,16 @@ public static partial class SearchIndexGenerator
                 Name = reg.Name,
                 Category = reg.Category,
                 Description = reg.Description,
+                Details = details.GetValueOrDefault(reg.Id),
                 Keywords = keywords,
+                CuratedKeywords = NormalizeKeywords(ed?.CuratedKeywords),
                 RelatedControls = NullIfEmpty(ed?.RelatedControls),
                 ApiNamespace = string.IsNullOrWhiteSpace(ed?.ApiNamespace) ? DefaultApiNamespace : ed!.ApiNamespace,
                 NugetPackage = string.IsNullOrWhiteSpace(ed?.NugetPackage) ? DefaultNugetPackage : ed!.NugetPackage,
                 Usings = NullIfEmpty(ed?.Usings),
                 GalleryRoute = reg.Id,
-                Samples = new[] { sample },
+                Docs = ResolveDocs(reg.Id, ed?.Docs),
+                Samples = samples,
             });
         }
 
@@ -127,7 +145,7 @@ public static partial class SearchIndexGenerator
             Controls = entries,
         };
 
-        return new SearchIndexResult(Serialize(root), entries.Count, skipped);
+        return new SearchIndexResult(Serialize(root), entries.Count, skipped, entries.Count(e => e.Details is not null));
     }
 
     // ── Serialization ──────────────────────────────────────────────────────
@@ -250,9 +268,9 @@ public static partial class SearchIndexGenerator
 
     // ── ControlPages/**/*.cs → page class → first qualifying SampleCard ─────
 
-    static IReadOnlyDictionary<string, ExtractedSample> ParseSamples(string controlPagesDir)
+    static IReadOnlyDictionary<string, IReadOnlyList<ExtractedSample>> ParseSamples(string controlPagesDir)
     {
-        var map = new Dictionary<string, ExtractedSample>(StringComparer.Ordinal);
+        var map = new Dictionary<string, IReadOnlyList<ExtractedSample>>(StringComparer.Ordinal);
         if (!Directory.Exists(controlPagesDir)) return map;
 
         var files = Directory.EnumerateFiles(controlPagesDir, "*.cs", SearchOption.AllDirectories)
@@ -266,17 +284,28 @@ public static partial class SearchIndexGenerator
                 var name = cls.Identifier.Text;
                 if (map.ContainsKey(name)) continue; // first (sorted-path) wins; names are unique
 
-                var sample = FirstQualifyingSample(cls);
-                if (sample is not null)
-                    map[name] = sample;
+                var samples = QualifyingSamples(cls);
+                if (samples.Count > 0)
+                    map[name] = samples;
             }
         }
 
         return map;
     }
 
-    static ExtractedSample? FirstQualifyingSample(ClassDeclarationSyntax cls)
+    /// <summary>
+    /// Every complete, real-code <c>SampleCard</c> on the page, in source order. The consumer
+    /// contract's <c>samples</c> is an array and the CLI iterates it, so a page's whole lesson
+    /// travels with the entry rather than only its opening card. Cards that abbreviate with a
+    /// placeholder are still passed over — the REAL-CODE-ONLY invariant is per card, so a page
+    /// keeps its clean cards and loses only the elided ones. A page with no clean card at all
+    /// still fails generation unless an editorial sampleOverride supplies one.
+    /// </summary>
+    static IReadOnlyList<ExtractedSample> QualifyingSamples(ClassDeclarationSyntax cls)
     {
+        var samples = new List<ExtractedSample>();
+        var seenHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var inv in cls.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
             if (InvokedSimpleName(inv) != "SampleCard") continue;
@@ -291,10 +320,15 @@ public static partial class SearchIndexGenerator
             var normalized = NormalizeCode(code);
             if (!HasRealCode(normalized) || HasPlaceholder(normalized)) continue;
 
-            return new ExtractedSample(header.Trim(), normalized);
+            // Headers are the 0.8-weighted BM25 field and the human label for a hit, so two
+            // cards sharing one header would emit an ambiguous duplicate. Keep the first.
+            var trimmedHeader = header.Trim();
+            if (!seenHeaders.Add(trimmedHeader)) continue;
+
+            samples.Add(new ExtractedSample(trimmedHeader, normalized));
         }
 
-        return null;
+        return samples;
     }
 
     static string? FindSourceCodeArgument(SeparatedSyntaxList<ArgumentSyntax> args)
@@ -353,9 +387,31 @@ public static partial class SearchIndexGenerator
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
 
-    // Resolves the representative sample: an editorial sampleOverride can replace the header,
-    // the code, or both — or supply the whole sample when no page card qualifies. Returns null
-    // only when neither the page nor the override yields a header + code.
+    // Resolves the representative samples. An editorial sampleOverride still defines the FIRST
+    // sample — it can replace that card's header, its code, or both, or stand alone when no
+    // page card qualifies — and the page's remaining clean cards follow it. Returns an empty
+    // list only when neither the page nor the override yields a header + code.
+    static IReadOnlyList<Sample> ResolveSamples(IReadOnlyList<ExtractedSample>? extracted, EditorialSampleOverride? ov)
+    {
+        var first = ResolveSample(extracted is { Count: > 0 } ? extracted[0] : null, ov);
+        if (first is null) return Array.Empty<Sample>();
+
+        var samples = new List<Sample> { first };
+        if (extracted is null) return samples;
+
+        // Skip index 0: the override already folded it in (or replaced it outright). A later
+        // card that collides with the override's header would read as a duplicate, so drop it.
+        // Case-insensitive to match the page-level dedupe in QualifyingSamples — otherwise an
+        // override header differing only in case would reintroduce the duplicate it prevents.
+        for (var i = 1; i < extracted.Count; i++)
+        {
+            if (string.Equals(extracted[i].Header, first.Header, StringComparison.OrdinalIgnoreCase)) continue;
+            samples.Add(new Sample { Header = extracted[i].Header, Language = "csharp", Code = extracted[i].Code });
+        }
+
+        return samples;
+    }
+
     static Sample? ResolveSample(ExtractedSample? extracted, EditorialSampleOverride? ov)
     {
         var header = string.IsNullOrWhiteSpace(ov?.Header) ? extracted?.Header : ov!.Header!.Trim();
@@ -365,6 +421,25 @@ public static partial class SearchIndexGenerator
             return null;
 
         return new Sample { Header = header!, Language = "csharp", Code = code! };
+    }
+
+    // `docs` is a display-only field in the consumer contract (it does not feed BM25), so the
+    // only thing worth enforcing is that a half-filled entry can't ship a blank link.
+    static IReadOnlyList<DocLink>? ResolveDocs(string controlId, IReadOnlyList<EditorialDocLink>? raw)
+    {
+        if (raw is not { Count: > 0 }) return null;
+
+        var links = new List<DocLink>();
+        foreach (var link in raw)
+        {
+            if (string.IsNullOrWhiteSpace(link?.Title) || string.IsNullOrWhiteSpace(link.Uri))
+                throw new InvalidOperationException(
+                    $"editorial.json '{controlId}' has a docs entry missing title or uri — both are required.");
+
+            links.Add(new DocLink { Title = link.Title!.Trim(), Uri = link.Uri!.Trim() });
+        }
+
+        return links;
     }
 
     static IReadOnlyList<string>? NullIfEmpty(IReadOnlyList<string>? list) =>
@@ -410,6 +485,217 @@ public static partial class SearchIndexGenerator
         }
     }
 
+    // ── Agent-kit markdown → control id → `details` prose ───────────────────
+
+    /// <summary>
+    /// Lifts the <c>&lt;!-- index:id --&gt; … &lt;!-- /index:id --&gt;</c> blocks out of the shipped
+    /// agent kit so the index and the skills carry the same words by construction rather than by
+    /// discipline. The marker id IS the control id, so there is no second mapping to keep in sync.
+    /// </summary>
+    /// <remarks>
+    /// A concept legitimately spans sections (pointer events and gestures sit either side of the
+    /// keyboard section), so repeating an id is allowed and the blocks concatenate in
+    /// (file path, offset) order — deterministic regardless of enumeration order. What is NOT
+    /// allowed is a marker that silently produces nothing: unclosed, mismatched, or nested
+    /// markers all fail generation, as does an id naming no control (checked by the caller,
+    /// which is the side that knows the registry).
+    /// </remarks>
+    static IReadOnlyDictionary<string, string> ParseAgentKitDetails(string? agentKitRoot)
+    {
+        var blocks = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(agentKitRoot) || !Directory.Exists(agentKitRoot))
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var file in AgentKitMarkdownFiles(agentKitRoot))
+        {
+            var markdown = File.ReadAllText(file).Replace("\r\n", "\n").Replace("\r", "\n");
+            var where = RepoRelative(file, agentKitRoot);
+            foreach (var (id, body) in MarkedBlocks(where, markdown))
+            {
+                var rewritten = RewriteRelativeLinks(file, agentKitRoot, body);
+                if (!blocks.TryGetValue(id, out var list))
+                    blocks[id] = list = new List<string>();
+                list.Add(rewritten);
+            }
+        }
+
+        return blocks.ToDictionary(kv => kv.Key, kv => string.Join("\n\n", kv.Value), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Repo-relative, forward-slashed path for diagnostics. A marker error that names only the
+    /// file name is unactionable — the scanner walks two whole trees, and SKILL.md is not unique.
+    /// </summary>
+    static string RepoRelative(string file, string agentKitRoot)
+    {
+        var relative = Path.GetRelativePath(Path.GetFullPath(agentKitRoot), Path.GetFullPath(file));
+        return relative.Replace('\\', '/');
+    }
+
+    /// <summary>Line number (1-based) of <paramref name="offset"/> in already-LF-normalized text.</summary>
+    static int LineAt(string text, int offset) =>
+        text.AsSpan(0, offset).Count('\n') + 1;
+
+    /// <summary>
+    /// The markdown that ships in the NuGet's <c>agentkit/</c>: the root SKILL.md plus the
+    /// <c>plugins/</c> and <c>skills/</c> trees. Sorted ordinally so concatenation order is a
+    /// pure function of the file names, not of the filesystem.
+    /// </summary>
+    static IReadOnlyList<string> AgentKitMarkdownFiles(string agentKitRoot)
+    {
+        var files = new List<string>();
+
+        var rootSkill = Path.Join(agentKitRoot, "SKILL.md");
+        if (File.Exists(rootSkill)) files.Add(rootSkill);
+
+        foreach (var full in new[] { "plugins", "skills" }
+            .Select(dir => Path.Join(agentKitRoot, dir))
+            .Where(Directory.Exists))
+        {
+            files.AddRange(Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories));
+        }
+
+        files.Sort((a, b) => string.CompareOrdinal(Normalize(a), Normalize(b)));
+        return files;
+
+        static string Normalize(string path) => path.Replace('\\', '/');
+    }
+
+    static IEnumerable<(string Id, string Body)> MarkedBlocks(string where, string markdown)
+    {
+        string? openId = null;
+        var openAt = 0;
+        var bodyStart = 0;
+        var results = new List<(string, string)>();
+
+        foreach (Match m in IndexMarkerRegex().Matches(markdown))
+        {
+            var isClose = m.Groups[1].Value.Length > 0;
+            var id = m.Groups[2].Value;
+            var line = LineAt(markdown, m.Index);
+
+            // A marker id is a control id, which is always lower-kebab. Anything else is a typo
+            // that would otherwise be skipped silently, taking the entry's prose with it.
+            if (!ValidMarkerIdRegex().IsMatch(id))
+                throw new InvalidOperationException(
+                    $"{where}({line}): `<!-- {(isClose ? "/" : "")}index:{id} -->` has an invalid id — " +
+                    "marker ids are control ids: lowercase letters, digits and hyphens only.");
+
+            if (!isClose)
+            {
+                if (openId is not null)
+                    throw new InvalidOperationException(
+                        $"{where}({line}): `<!-- index:{id} -->` opens while `{openId}` (opened at line {LineAt(markdown, openAt)}) is still open — index markers cannot nest or overlap.");
+                openId = id;
+                openAt = m.Index;
+                bodyStart = m.Index + m.Length;
+                continue;
+            }
+
+            if (openId is null)
+                throw new InvalidOperationException(
+                    $"{where}({line}): `<!-- /index:{id} -->` closes a block that was never opened.");
+            if (!string.Equals(openId, id, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"{where}({line}): `<!-- /index:{id} -->` closes the wrong block — `{openId}` (opened at line {LineAt(markdown, openAt)}) is open.");
+
+            // An empty block would emit `"details": ""` — present in the JSON, indistinguishable
+            // from real prose to anything downstream, and carrying nothing. That is precisely the
+            // silent drop this scanner exists to prevent, so it is an error like the rest.
+            var body = markdown[bodyStart..m.Index].Trim();
+            if (body.Length == 0)
+                throw new InvalidOperationException(
+                    $"{where}({LineAt(markdown, openAt)}): `<!-- index:{id} -->` wraps no prose — remove the marker or fill it in.");
+
+            results.Add((id, body));
+            openId = null;
+        }
+
+        if (openId is not null)
+            throw new InvalidOperationException(
+                $"{where}({LineAt(markdown, openAt)}): `<!-- index:{openId} -->` is never closed.");
+
+        return results;
+    }
+
+    /// <summary>
+    /// Rewrites repo-relative markdown links to absolute GitHub URLs. The prose is read far from
+    /// the file it was written in — by an agent holding only the index — so a relative link is
+    /// dead weight there. A target that does not exist, or that escapes the repo, fails
+    /// generation rather than shipping a broken link.
+    /// </summary>
+    static string RewriteRelativeLinks(string file, string agentKitRoot, string body)
+    {
+        var fileDir = Path.GetDirectoryName(file)!;
+        var rootFull = Path.GetFullPath(agentKitRoot);
+        var where = RepoRelative(file, agentKitRoot);
+
+        return MarkdownLinkRegex().Replace(body, m =>
+        {
+            var target = m.Groups["target"].Value;
+            if (target.Length == 0 || target[0] == '#' || target.Contains("://", StringComparison.Ordinal)
+                || target.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+            {
+                return m.Value;
+            }
+
+            var hash = target.IndexOf('#');
+            var pathPart = hash >= 0 ? target[..hash] : target;
+            var anchor = hash >= 0 ? target[hash..] : "";
+            if (pathPart.Length == 0) return m.Value;
+
+            // Reject a rooted target explicitly rather than letting Path.Combine silently drop
+            // fileDir and resolve somewhere else entirely. This covers both a filesystem path
+            // ("C:\x") and a site-absolute markdown link ("/docs/guide/x.md"), neither of which
+            // this rewriter can meaningfully resolve — and says so, instead of surfacing the
+            // downstream "escapes the repo" error for what is really a different mistake.
+            if (Path.IsPathRooted(pathPart))
+                throw new InvalidOperationException(
+                    $"{where}: index-marked link '{target}' is rooted — use a path relative to the file, or an absolute https:// URL.");
+
+            var resolved = Path.GetFullPath(Path.Combine(fileDir, pathPart));
+
+            // Boundary-aware containment. A plain StartsWith would accept a sibling that merely
+            // shares the root's textual prefix (…/repo vs …/repo-sibling); GetRelativePath is
+            // segment-aware, so an escape shows up as a rooted path or a leading "..".
+            var relative = Path.GetRelativePath(rootFull, resolved);
+            if (Path.IsPathRooted(relative)
+                || relative == ".."
+                || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                || relative.StartsWith("../", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"{where}: index-marked link '{target}' escapes the repo and cannot be made absolute.");
+            }
+            if (!File.Exists(resolved) && !Directory.Exists(resolved))
+                throw new InvalidOperationException(
+                    $"{where}: index-marked link '{target}' points at nothing ({relative}).");
+
+            return $"{m.Groups["pre"].Value}(https://github.com/{GeneratedFrom}/blob/main/{relative.Replace('\\', '/')}{anchor})";
+        });
+    }
+
+    // Permissive DETECTION, strict VALIDATION. Matching only well-formed ids would make
+    // `<!-- index:UseState -->`, `<!-- index:use_state -->` or `<!-- index:use state -->`
+    // invisible rather than wrong — the entry would quietly lose its prose, which is the
+    // failure mode this scanner exists to make impossible. So capture the whole payload up to
+    // the first `-->` (lazily, and `.` excludes newlines so a marker cannot span lines) and
+    // reject a bad id by name.
+    [GeneratedRegex(@"<!--\s*(/?)index:(.*?)\s*-->")]
+    private static partial Regex IndexMarkerRegex();
+
+    [GeneratedRegex(@"^[a-z0-9][a-z0-9-]*$")]
+    private static partial Regex ValidMarkerIdRegex();
+
+    // Inline markdown links only — `](target)` with an optional title. Reference-style links and
+    // bare autolinks are left alone; neither appears in the marked blocks.
+    //
+    // Both groups are NAMED deliberately. .NET numbers unnamed groups before named ones, so with
+    // a bare `([^)\s]+)` the target is group 1 even though `(?<pre>\])` is written first — correct,
+    // but it reads like a bug. Naming both removes the trap.
+    [GeneratedRegex(@"(?<pre>\])\((?!\s)(?<target>[^)\s]+)(?:\s+""[^""]*"")?\)")]
+    private static partial Regex MarkdownLinkRegex();
+
     // ── Internal parse models ──────────────────────────────────────────────
 
     sealed record RegistryEntry(string Id, string Name, string Description, string Category);
@@ -433,13 +719,26 @@ public sealed class ControlEntry
     public string Name { get; set; } = "";
     public string Category { get; set; } = "";
     public string Description { get; set; } = "";
+    public string? Details { get; set; }
     public IReadOnlyList<string>? Keywords { get; set; }
+    public IReadOnlyList<string>? CuratedKeywords { get; set; }
     public IReadOnlyList<string>? RelatedControls { get; set; }
     public string? ApiNamespace { get; set; }
     public string? NugetPackage { get; set; }
     public IReadOnlyList<string>? Usings { get; set; }
     public string GalleryRoute { get; set; } = "";
+    public IReadOnlyList<DocLink>? Docs { get; set; }
     public IReadOnlyList<Sample> Samples { get; set; } = Array.Empty<Sample>();
+}
+
+/// <summary>
+/// A reference link surfaced alongside a search hit. Maps to the consumer contract's
+/// control-level <c>docs</c> array (<c>title</c> + <c>uri</c>).
+/// </summary>
+public sealed class DocLink
+{
+    public string Title { get; set; } = "";
+    public string Uri { get; set; } = "";
 }
 
 public sealed class Sample
@@ -449,7 +748,7 @@ public sealed class Sample
     public string Code { get; set; } = "";
 }
 
-public sealed record SearchIndexResult(string Json, int ControlCount, IReadOnlyList<SkippedControl> Skipped);
+public sealed record SearchIndexResult(string Json, int ControlCount, IReadOnlyList<SkippedControl> Skipped, int DetailsCount = 0);
 
 public sealed record SkippedControl(string Id, string Name, string Reason);
 
@@ -459,12 +758,21 @@ public sealed record SkippedControl(string Id, string Name, string Reason);
 internal sealed class EditorialEntry
 {
     public List<string>? Keywords { get; set; }
+    public List<string>? CuratedKeywords { get; set; }
     public List<string>? RelatedControls { get; set; }
     public List<string>? Usings { get; set; }
+    public List<EditorialDocLink>? Docs { get; set; }
     public string? ApiNamespace { get; set; }
     public string? NugetPackage { get; set; }
     public bool Exclude { get; set; }
     public EditorialSampleOverride? SampleOverride { get; set; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed class EditorialDocLink
+{
+    public string? Title { get; set; }
+    public string? Uri { get; set; }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
