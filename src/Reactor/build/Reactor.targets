@@ -194,6 +194,15 @@
 
     Opt out with <ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>.
 
+    Scoped to UNPACKAGED executables on purpose. A packaged (MSIX) app normally sets
+    EnableMsixTooling=true - VS's packaged WinUI template does, as does every MSIX
+    project in this repo - so it already gets the platform's own fix and is excluded
+    here by AppxPackage/WindowsPackageType. The two populations are complementary, not
+    overlapping. samples/ReactorGallery exercises both: unpackaged by default,
+    -p:GalleryPackaged=true flips it to MSIX and sets EnableMsixTooling in the same
+    conditional block (the two settings never co-exist, though reading the raw csproj
+    can suggest they do).
+
     NOT version-gated, so do not wait for an SDK bump to delete this. A first-party fix
     already exists — MSIX.Pri.targets' AddProjectPriToResolvedFileToPublish /
     AddXbfFilesToResolvedFileToPublish (the XBF half is new in build tools
