@@ -1088,18 +1088,13 @@ public sealed class ValidationContext
     {
         if (_ruleSetTickets.Count == 0) return;
 
-        List<string>? affected = null;
-        foreach (var setId in _ruleSetTickets.Keys)
-        {
-            if (field is not null
-                && _ruleSetMembership.TryGetValue(setId, out var members)
-                && !members.Any(m => string.Equals(m.Field, field, StringComparison.Ordinal)))
-                continue;
+        // Materialized because the loop below writes back into the dictionary.
+        var affected = _ruleSetTickets.Keys
+            .Where(setId => field is null
+                || !_ruleSetMembership.TryGetValue(setId, out var members)
+                || members.Any(m => string.Equals(m.Field, field, StringComparison.Ordinal)))
+            .ToList();
 
-            (affected ??= []).Add(setId);
-        }
-
-        if (affected is null) return;
         foreach (var setId in affected)
             _ruleSetTickets[setId] = unchecked(_ruleSetTickets[setId] + 1);
     }
