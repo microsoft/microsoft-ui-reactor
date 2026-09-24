@@ -373,7 +373,7 @@ internal static class CompositeLifecycle
     /// </summary>
     internal static void RetractValidationRule(UIElement placeholder)
     {
-        if (!_ruleBindings.TryGetValue(placeholder, out var binding)) return;
+        if (ReadRuleBinding(placeholder) is not { } binding) return;
 
         // A pass still running would otherwise install a verdict for a rule that has
         // already left the tree.
@@ -478,11 +478,18 @@ internal static class CompositeLifecycle
     }
 
     private static long s_ruleProducerSeed;
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, RuleBinding> _ruleBindings = new();
+    // Bindings live on the native control's attached state, not in a CWT keyed by the
+    // managed wrapper: WinRT can project two RCWs over one DependencyObject, and a
+    // lookup that landed on the other wrapper would mint a fresh producer while the
+    // old one could never be retired (see ChangeEchoSuppressor.cs, issues #86/#114).
+    private static RuleBinding? ReadRuleBinding(UIElement placeholder) =>
+        placeholder is FrameworkElement fe
+            ? Reconciler.GetOrCreateReactorState(fe).ValidationRuleBinding as RuleBinding
+            : null;
 
     private static RuleBinding GetOrCreateRuleBinding(UIElement placeholder)
     {
-        if (_ruleBindings.TryGetValue(placeholder, out var existing)) return existing;
+        if (ReadRuleBinding(placeholder) is { } existing) return existing;
 
         var binding = new RuleBinding
         {
@@ -490,7 +497,8 @@ internal static class CompositeLifecycle
                 .Increment(ref s_ruleProducerSeed)
                 .ToString(global::System.Globalization.CultureInfo.InvariantCulture),
         };
-        _ruleBindings.Add(placeholder, binding);
+        if (placeholder is FrameworkElement fe)
+            Reconciler.GetOrCreateReactorState(fe).ValidationRuleBinding = binding;
         return binding;
     }
 
@@ -535,7 +543,7 @@ internal static class CompositeLifecycle
             return;
         }
 
-        if (_touchBindings.TryGetValue(fe, out var existing))
+        if (Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding is TouchBinding existing)
         {
             existing.Context = valCtx;
             existing.FieldName = fieldName;
@@ -544,7 +552,7 @@ internal static class CompositeLifecycle
         }
 
         var binding = new TouchBinding { Context = valCtx, FieldName = fieldName };
-        _touchBindings.Add(fe, binding);
+        Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding = binding;
         ReplaceRootBinding(formFieldRoot, binding);
         fe.LostFocus += (_, _) =>
         {
@@ -565,16 +573,16 @@ internal static class CompositeLifecycle
     /// </summary>
     private static void ReplaceRootBinding(UIElement formFieldRoot, TouchBinding binding)
     {
-        if (_rootBindings.TryGetValue(formFieldRoot, out var previous))
+        if (ReadRootBinding(formFieldRoot) is { } previous)
         {
             if (ReferenceEquals(previous, binding)) return;
 
             previous.Context = null;
             previous.FieldName = null;
-            _rootBindings.Remove(formFieldRoot);
+            WriteRootBinding(formFieldRoot, null);
         }
 
-        _rootBindings.Add(formFieldRoot, binding);
+        WriteRootBinding(formFieldRoot, binding);
     }
 
     /// <summary>
@@ -594,7 +602,7 @@ internal static class CompositeLifecycle
         // Looked up by root rather than by walking Children: unmount runs while the
         // subtree is being torn down, and reading a panel's visual children at that
         // point is exactly the kind of teardown-state access worth not doing.
-        if (_rootBindings.TryGetValue(formFieldRoot, out var binding))
+        if (ReadRootBinding(formFieldRoot) is { } binding)
         {
             binding.Context = null;
             binding.FieldName = null;
@@ -603,7 +611,8 @@ internal static class CompositeLifecycle
 
     private static void ClearTouchBinding(UIElement contentControl)
     {
-        if (contentControl is FrameworkElement fe && _touchBindings.TryGetValue(fe, out var binding))
+        if (contentControl is FrameworkElement fe
+            && Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding is TouchBinding binding)
         {
             binding.Context = null;
             binding.FieldName = null;
@@ -617,7 +626,7 @@ internal static class CompositeLifecycle
     private static void ReleaseRootBinding(UIElement formFieldRoot)
     {
         ClearFormFieldTouchBinding(formFieldRoot);
-        _rootBindings.Remove(formFieldRoot);
+        WriteRootBinding(formFieldRoot, null);
     }
 
     // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host):
@@ -627,7 +636,7 @@ internal static class CompositeLifecycle
     // which is not deterministic enough to assert on.
     internal static bool HasLiveTouchBindingForTests(UIElement contentControl) =>
         contentControl is FrameworkElement fe
-        && _touchBindings.TryGetValue(fe, out var binding)
+        && Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding is TouchBinding binding
         && binding.Context is not null
         && !string.IsNullOrEmpty(binding.FieldName);
 
@@ -637,11 +646,20 @@ internal static class CompositeLifecycle
         internal string? FieldName;
     }
 
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, TouchBinding> _touchBindings = new();
+    private static TouchBinding? ReadRootBinding(UIElement formFieldRoot) =>
+        formFieldRoot is FrameworkElement fe
+            ? Reconciler.GetOrCreateReactorState(fe).ValidationRootBinding as TouchBinding
+            : null;
+
+    private static void WriteRootBinding(UIElement formFieldRoot, TouchBinding? binding)
+    {
+        if (formFieldRoot is FrameworkElement fe)
+            Reconciler.GetOrCreateReactorState(fe).ValidationRootBinding = binding;
+    }
 
     // FormField root -> the binding of its current content control, so unmount can
     // neutralize it without touching the visual tree mid-teardown.
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, TouchBinding> _rootBindings = new();
+
 
     private static void ApplyFormFieldAutomation(UIElement contentControl, string? label)
     {

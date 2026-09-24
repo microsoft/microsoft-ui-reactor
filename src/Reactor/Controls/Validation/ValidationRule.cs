@@ -187,10 +187,18 @@ public static class ValidationRuleDsl
     /// <para>
     /// The position disambiguates rules that share a predicate — two
     /// <c>ValidationRule(IsRangeValid, …)</c> on one field would otherwise collapse into
-    /// one slot and retract each other. Two rules built at the same call site *and*
-    /// passed in the same position across calls still share a slot; mounting them in the
-    /// element tree gives each a real per-instance identity, which is what to reach for
-    /// when rules are generated in a loop.
+    /// one slot and retract each other.
+    /// </para>
+    /// <para>
+    /// <b>Limit.</b> The predicate's method is the only caller-derived component
+    /// available here: C# cannot supply <c>[CallerFilePath]</c> after a <c>params</c>
+    /// array, and walking the stack is neither cheap nor trimming-safe. For a lambda
+    /// that is enough — each call site compiles to its own method — but two *different*
+    /// callers that pass the same **named method** as the predicate, for the same field
+    /// and position, share a slot and will retract each other. Give those callers a
+    /// <c>setId</c> (<c>EvaluateRules(ctx, "range-rules", …)</c>), which is scoped per
+    /// set, or mount the rules in the element tree, where each gets a real per-instance
+    /// identity.
     /// </para>
     /// </summary>
     internal static string DirectProducerKey(ValidationRuleElement rule, int position)

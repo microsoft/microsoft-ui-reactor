@@ -92,6 +92,12 @@ public static class ValidationReconciler
     /// caller using the same context.
     /// </para>
     /// <para>
+    /// Callers are independent of one another as long as their predicates differ, which
+    /// they do for the ordinary lambda case — each call site compiles to its own method.
+    /// Two callers that pass the same *named method* as the predicate, for the same field
+    /// and position, share a slot; give those a <c>setId</c> instead.
+    /// </para>
+    /// <para>
     /// This overload does not withdraw a rule that disappears from the list — nothing
     /// re-evaluates a rule that no longer exists. Use the
     /// <see cref="EvaluateRules(ValidationContext, string, ValidationRuleElement[])"/>

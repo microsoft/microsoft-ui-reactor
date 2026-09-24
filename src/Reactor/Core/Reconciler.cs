@@ -413,6 +413,18 @@ public sealed partial class Reconciler : IDisposable
         // (pool return / ClearCurrentEventHandlers / DetachReactorState) so a
         // stale arm can't suppress the first real event of a later lifecycle.
         public Func<object?, bool>? PendingEchoMatch;
+        // Issue #1262 — per-native-element validation lifecycle bindings: a mounted
+        // ValidationRule's producer identity, a FormField editor's blur binding, and
+        // the FormField root's pointer at its current editor's binding. Stored here
+        // rather than in a ConditionalWeakTable keyed by UIElement for the same reason
+        // as EchoSuppressCount: WinRT can project two managed RCWs over one native
+        // DependencyObject, and an update that saw a different wrapper would create a
+        // fresh producer while the old one could never be retired — leaving a stale
+        // validation message behind. Typed as object so Core does not depend on the
+        // V1 composite lifecycle's private binding types.
+        public object? ValidationRuleBinding;
+        public object? ValidationTouchBinding;
+        public object? ValidationRootBinding;
         // Issue #986 — the AutomationId a deferred LabeledBy resolution is still
         // waiting to bind. ApplyAccessibilityModifiers can only resolve LabeledBy
         // once the element is in the visual tree, so an unresolved request parks a

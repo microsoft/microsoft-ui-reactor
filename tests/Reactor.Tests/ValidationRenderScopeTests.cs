@@ -1694,6 +1694,32 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void Two_Callers_Sharing_A_Named_Predicate_Need_A_Set_Id()
+    {
+        static bool RangeValid() => false;
+
+        // Same named method, same field, same position: the only caller-derived
+        // component of a direct key is the predicate's method, so these two callers
+        // land in one slot and the second replaces the first.
+        var shared = new ValidationContext();
+        ValidationReconciler.EvaluateRules(shared, ValidationRule(RangeValid, "Caller A", "dates"));
+        ValidationReconciler.EvaluateRules(shared, ValidationRule(RangeValid, "Caller B", "dates"));
+
+        Assert.Single(shared.GetMessages("dates"));
+        Assert.Equal("Caller B", shared.GetMessages("dates")[0].Text);
+
+        // A set id is the documented way to keep them apart.
+        var scoped = new ValidationContext();
+        ValidationReconciler.EvaluateRules(scoped, "caller-a", ValidationRule(RangeValid, "Caller A", "dates"));
+        ValidationReconciler.EvaluateRules(scoped, "caller-b", ValidationRule(RangeValid, "Caller B", "dates"));
+
+        var texts = scoped.GetMessages("dates").Select(m => m.Text).ToList();
+        Assert.Equal(2, texts.Count);
+        Assert.Contains("Caller A", texts);
+        Assert.Contains("Caller B", texts);
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();
