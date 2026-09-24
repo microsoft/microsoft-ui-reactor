@@ -692,6 +692,40 @@ public sealed class WinAppSdkTemplatesTests
             $"'{path}' must let exit {TemplatesCommand.TemplatesUnavailableExit} through to the verification step.");
     }
 
+    [Theory]
+    // Three distinct "cannot scaffold" situations that need different advice:
+    // telling someone their pack "predates the Reactor templates" when it is not
+    // installed at all — or when the probe itself failed — sends them to re-pin a
+    // version that was never the problem.
+    [InlineData(true, null, 0)]      // resolves
+    [InlineData(null, null, 1)]      // template engine unreadable
+    [InlineData(false, true, 2)]     // pack present, short name absent → too old
+    [InlineData(false, false, 3)]    // pack absent
+    [InlineData(false, null, 1)]     // package list unreadable → probe failure, not "too old"
+    public void StatusExitCode_separates_unusable_missing_and_probe_failure(
+        bool? available, bool? packageInstalled, int expected)
+    {
+        Assert.Equal(expected, TemplatesCommand.StatusExitCode(available, packageInstalled));
+    }
+
+    [Fact]
+    public void Bootstrap_gives_different_advice_per_status_outcome()
+    {
+        // Regression: a single warning claiming "installed but too old" fired for
+        // all three, including "not installed" and "probe failed".
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        var normalized = text.Replace("\r\n", "\n");
+        var start = normalized.IndexOf("$templatesVerified = ($statusExit -eq 0)", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"'{path}' must derive $templatesVerified from the status exit code.");
+        var block = normalized[start..];
+
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(block, @"switch \(\$statusExit\)"),
+            $"'{path}' must branch on the status exit code rather than emitting one warning for every failure.");
+        Assert.Contains("is not installed", block, StringComparison.Ordinal);
+        Assert.Contains("Could not enumerate", block, StringComparison.Ordinal);
+    }
+
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
     //
     // Observed live during the de-stale merge: the machine had

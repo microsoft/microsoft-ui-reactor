@@ -801,10 +801,29 @@ if ($SkipTemplates) {
     if ($templatesVerified) {
         Write-Ok '`dotnet new reactor` templates registered'
     } else {
+        # `mur templates status` reports three distinct not-usable situations
+        # (see TemplatesCommand.StatusExit). They need different advice: telling
+        # someone their pack "predates the Reactor templates" when it is not
+        # installed at all — or when the probe itself failed — sends them to
+        # re-pin a version that was never the problem.
         Write-Host ''
-        Write-Host "    [warn] $wasdkTemplatePackageId is installed but does not provide ``dotnet new reactor``." -ForegroundColor Yellow
-        Write-Host "           That version predates the Reactor templates. Re-run with network access, or pin a newer one:"
-        Write-Host "               mur templates install --version <version>"
+        switch ($statusExit) {
+            2 {
+                Write-Host "    [warn] $wasdkTemplatePackageId is installed but does not provide ``dotnet new reactor``." -ForegroundColor Yellow
+                Write-Host "           That version predates the Reactor templates. Re-run with network access, or pin a newer one:"
+                Write-Host "               mur templates install --version <version>"
+            }
+            3 {
+                Write-Host "    [warn] $wasdkTemplatePackageId is not installed, so ``dotnet new reactor`` is unavailable." -ForegroundColor Yellow
+                Write-Host "           Re-run with network access, or install from a local folder of nupkgs:"
+                Write-Host "               mur templates install --source <folder-with-the-nupkg>"
+            }
+            default {
+                Write-Host "    [warn] Could not enumerate ``dotnet new`` templates, so ``dotnet new reactor`` is unverified." -ForegroundColor Yellow
+                Write-Host "           This is a probe failure, not a known-bad install. Check with:"
+                Write-Host "               mur templates status"
+            }
+        }
     }
 }
 

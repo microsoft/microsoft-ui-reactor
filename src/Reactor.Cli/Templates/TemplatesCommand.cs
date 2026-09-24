@@ -139,36 +139,77 @@ public static class TemplatesCommand
     internal static int ExitCodeForAvailability(bool? available) =>
         available == true ? 0 : TemplatesUnavailableExit;
 
+    /// <summary>
+    /// `mur templates status` exit codes. Three distinct situations that all mean
+    /// "cannot scaffold" but call for different remediation, so callers (bootstrap
+    /// especially) must not collapse them into one message.
+    /// </summary>
+    internal static class StatusExit
+    {
+        /// <summary>`dotnet new reactor` resolves.</summary>
+        public const int Available = 0;
+        /// <summary>The template engine could not be enumerated at all.</summary>
+        public const int ProbeFailed = 1;
+        /// <summary>The pack is installed but does not carry the Reactor templates.</summary>
+        public const int InstalledButUnusable = 2;
+        /// <summary>The pack is not installed.</summary>
+        public const int NotInstalled = 3;
+    }
+
+    /// <summary>
+    /// Maps the two probes to a <see cref="StatusExit"/> code. Pure, so the
+    /// distinction bootstrap.ps1 branches on is testable without a machine.
+    /// </summary>
+    /// <param name="available">null when the template engine could not be enumerated.</param>
+    /// <param name="packageInstalled">null when the installed-package list could not be read.</param>
+    internal static int StatusExitCode(bool? available, bool? packageInstalled)
+    {
+        if (available is null) return StatusExit.ProbeFailed;
+        if (available.Value) return StatusExit.Available;
+        // Absent short name: is the pack there at all? "Installed but too old" and
+        // "never installed" need different advice, and an unreadable package list
+        // is a probe failure rather than either.
+        return packageInstalled switch
+        {
+            true => StatusExit.InstalledButUnusable,
+            false => StatusExit.NotInstalled,
+            null => StatusExit.ProbeFailed,
+        };
+    }
+
     static int Status()
     {
         // Report the question that matters — "can I scaffold?" — not merely
         // whether the package id appears in the installed list.
         var available = WinAppSdkTemplates.AreTemplatesAvailable();
-        if (available is null)
+        var packageInstalled = available == false ? WinAppSdkTemplates.IsPackageInstalled() : null;
+        var exitCode = StatusExitCode(available, packageInstalled);
+        var version = exitCode == StatusExit.ProbeFailed ? null : WinAppSdkTemplates.GetInstalledVersion();
+
+        switch (exitCode)
         {
-            Console.Error.WriteLine("mur templates status: could not enumerate `dotnet new` templates.");
-            return 1;
+            case StatusExit.Available:
+                Console.WriteLine(version is null
+                    ? $"`dotnet new {WinAppSdkTemplates.BlankShortName}` is available."
+                    : $"`dotnet new {WinAppSdkTemplates.BlankShortName}` is available ({WinAppSdkTemplates.PackageId} {version}).");
+                break;
+
+            case StatusExit.InstalledButUnusable:
+                Console.WriteLine(
+                    $"{WinAppSdkTemplates.PackageId} {version ?? "(unknown)"} is installed, but it does not provide " +
+                    $"`dotnet new {WinAppSdkTemplates.BlankShortName}`. Update it with `mur templates install`.");
+                break;
+
+            case StatusExit.NotInstalled:
+                Console.WriteLine($"{WinAppSdkTemplates.PackageId} is NOT installed. Run `mur templates install`.");
+                break;
+
+            default:
+                Console.Error.WriteLine("mur templates status: could not enumerate `dotnet new` templates.");
+                break;
         }
 
-        var version = WinAppSdkTemplates.GetInstalledVersion();
-        if (available.Value)
-        {
-            Console.WriteLine(version is null
-                ? $"`dotnet new {WinAppSdkTemplates.BlankShortName}` is available."
-                : $"`dotnet new {WinAppSdkTemplates.BlankShortName}` is available ({WinAppSdkTemplates.PackageId} {version}).");
-            return 0;
-        }
-
-        if (WinAppSdkTemplates.IsPackageInstalled() == true)
-        {
-            Console.WriteLine(
-                $"{WinAppSdkTemplates.PackageId} {version ?? "(unknown)"} is installed, but it does not provide " +
-                $"`dotnet new {WinAppSdkTemplates.BlankShortName}`. Update it with `mur templates install`.");
-            return 1;
-        }
-
-        Console.WriteLine($"{WinAppSdkTemplates.PackageId} is NOT installed. Run `mur templates install`.");
-        return 1;
+        return exitCode;
     }
 
     /// <summary>
