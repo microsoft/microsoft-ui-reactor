@@ -107,7 +107,7 @@ public static class TemplatesCommand
             Console.WriteLine("Scaffold an app with:");
             foreach (var name in WinAppSdkTemplates.ShortNames)
                 Console.WriteLine($"    dotnet new {name} -n MyApp");
-            return 0;
+            return ExitCodeForAvailability(available);
         }
 
         Console.Error.WriteLine();
@@ -117,8 +117,27 @@ public static class TemplatesCommand
             : $"mur templates install: {WinAppSdkTemplates.PackageId} is installed but does not provide " +
               $"`dotnet new {WinAppSdkTemplates.BlankShortName}` — that version predates the Reactor " +
               $"templates. Pin a newer one with `mur templates install --version <version>`.");
-        return 1;
+        return TemplatesUnavailableExit;
     }
+
+    /// <summary>
+    /// Exit code for "the install itself worked, but `dotnet new reactor` still
+    /// doesn't resolve" — distinct from 1, which means the install failed.
+    /// </summary>
+    /// <remarks>
+    /// bootstrap.ps1 needs to tell these apart. A genuine install failure is fatal
+    /// there, but an old-but-installed pack has its own warning path and next-step
+    /// guidance; collapsing both onto 1 makes that path unreachable.
+    /// </remarks>
+    internal const int TemplatesUnavailableExit = 2;
+
+    /// <summary>
+    /// Exit code for an install that ran, given the post-install availability probe
+    /// (<c>null</c> = could not enumerate). Pure, so the contract bootstrap.ps1
+    /// depends on is testable without touching the machine.
+    /// </summary>
+    internal static int ExitCodeForAvailability(bool? available) =>
+        available == true ? 0 : TemplatesUnavailableExit;
 
     static int Status()
     {
@@ -199,6 +218,11 @@ public static class TemplatesCommand
         Console.WriteLine("                        machines that reach a mirror but not nuget.org. Used only");
         Console.WriteLine("                        for version lookup; falls back to nuget.org.");
         Console.WriteLine("  --help, -h            Show this help.");
+        Console.WriteLine();
+        Console.WriteLine("Exit codes:");
+        Console.WriteLine("  0  installed (or already current) and `dotnet new reactor` resolves");
+        Console.WriteLine("  1  the install failed, or the arguments were rejected");
+        Console.WriteLine("  2  the pack is installed but `dotnet new reactor` does not resolve");
     }
 
     /// <summary>

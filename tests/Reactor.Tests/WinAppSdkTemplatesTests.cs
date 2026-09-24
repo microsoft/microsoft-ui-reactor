@@ -664,6 +664,34 @@ public sealed class WinAppSdkTemplatesTests
         Assert.Equal(5, handler.Requested.Count);
     }
 
+    [Theory]
+    // The contract bootstrap.ps1 depends on: 0 = usable, 2 = installed but the
+    // short name does not resolve, which bootstrap must NOT treat as a fatal
+    // install failure (it has its own warning path and adapted next-step
+    // guidance). "Could not enumerate" is also 2 — unverified is not usable.
+    [InlineData(true, 0)]
+    [InlineData(false, 2)]
+    [InlineData(null, 2)]
+    public void Install_exit_code_distinguishes_unusable_from_failed(bool? available, int expected)
+    {
+        Assert.Equal(expected, TemplatesCommand.ExitCodeForAvailability(available));
+        Assert.NotEqual(1, TemplatesCommand.ExitCodeForAvailability(available));
+    }
+
+    [Fact]
+    public void Bootstrap_does_not_treat_an_unusable_pack_as_an_install_failure()
+    {
+        // Regression: `mur templates install` returning non-zero for an installed
+        // but unusable pack made bootstrap Fail before it ever reached the
+        // verification and the gated guidance below it.
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(
+                text.Replace("\r\n", "\n"),
+                @"\$templatesExit -ne 0 -and \$templatesExit -ne " + TemplatesCommand.TemplatesUnavailableExit),
+            $"'{path}' must let exit {TemplatesCommand.TemplatesUnavailableExit} through to the verification step.");
+    }
+
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
     //
     // Observed live during the de-stale merge: the machine had

@@ -757,7 +757,11 @@ if ($SkipTemplates) {
                 -- @murTemplateArgs
         }
     }
-    if ($templatesExit -ne 0) {
+    # Exit 2 is "the pack is installed but `dotnet new reactor` does not resolve"
+    # (see TemplatesCommand.TemplatesUnavailableExit). That is not an install
+    # failure: the verification below reports it, and the closing guidance adapts.
+    # Collapsing it into this Fail would make both of those unreachable.
+    if ($templatesExit -ne 0 -and $templatesExit -ne 2) {
         Fail (@(
             "Installing $wasdkTemplatePackageId failed.",
             "    The Reactor templates ship in the Windows App SDK template pack.",
