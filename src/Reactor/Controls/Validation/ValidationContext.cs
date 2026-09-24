@@ -356,6 +356,7 @@ public sealed class ValidationContext
             // An async pass still in flight would otherwise repopulate what this just
             // cleared: dropping the token makes its result stale on arrival.
             _asyncGeneration.Remove(field);
+            InvalidateRuleSetsLocked(field);
             if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
@@ -374,6 +375,7 @@ public sealed class ValidationContext
             _owned.Remove(field);
             // As in Clear: a pending async pass must not repopulate what this dropped.
             _asyncGeneration.Remove(field);
+            InvalidateRuleSetsLocked(field);
             if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
@@ -683,6 +685,7 @@ public sealed class ValidationContext
             _externalMessages.Clear();
             _owned.Clear();
             _asyncGeneration.Clear();
+            InvalidateRuleSetsLocked(null);
             if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
@@ -1066,6 +1069,37 @@ public sealed class ValidationContext
     private readonly Dictionary<string, List<(string Field, string Producer)>> _ruleSetMembership = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Retires the evaluations of every named rule set that could still write to
+    /// <paramref name="field"/> — or of every set when it is <c>null</c>.
+    /// <para>
+    /// Clearing or resetting state has to invalidate them, or an evaluation that was
+    /// already in flight passes its ticket check afterwards and reinstalls verdicts the
+    /// clear had just removed. A set whose membership is not yet recorded is treated as
+    /// affected: its first evaluation is exactly the one most likely to be in flight
+    /// (issue #1262 review).
+    /// </para>
+    /// </summary>
+    private void InvalidateRuleSetsLocked(string? field)
+    {
+        if (_ruleSetTickets.Count == 0) return;
+
+        List<string>? affected = null;
+        foreach (var setId in _ruleSetTickets.Keys)
+        {
+            if (field is not null
+                && _ruleSetMembership.TryGetValue(setId, out var members)
+                && !members.Any(m => string.Equals(m.Field, field, StringComparison.Ordinal)))
+                continue;
+
+            (affected ??= []).Add(setId);
+        }
+
+        if (affected is null) return;
+        foreach (var setId in affected)
+            _ruleSetTickets[setId] = unchecked(_ruleSetTickets[setId] + 1);
+    }
+
+    /// <summary>
     /// Drops a producer's async generation entry without touching its messages, for a
     /// producer that has stopped being asynchronous.
     /// <para>
@@ -1198,6 +1232,7 @@ public sealed class ValidationContext
             if (_externalMessages.Remove(field)) changed = true;
             _owned.Remove(field);
             _asyncGeneration.Remove(field);
+            InvalidateRuleSetsLocked(field);
 
             _initialValues.TryGetValue(field, out initial);
             // Only rewind a value the context is actually tracking. Creating an entry
@@ -1232,6 +1267,7 @@ public sealed class ValidationContext
             _externalMessages.Clear();
             _owned.Clear();
             _asyncGeneration.Clear();
+            InvalidateRuleSetsLocked(null);
 
             result = new Dictionary<string, object?>();
             foreach (var (field, initial) in _initialValues)

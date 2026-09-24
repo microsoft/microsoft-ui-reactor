@@ -1857,6 +1857,81 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task Clearing_A_Field_Retires_A_Pending_Set_That_Also_Writes_It()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        // First evaluation records the set's membership over both fields.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "form-rules",
+            ValidationRuleAsync(() => Task.FromResult(false), "A failed", "a"),
+            ValidationRule(() => false, "B failed", "b"));
+        Assert.Single(ctx.GetMessages("b"));
+
+        // Second evaluation hangs on field "a".
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "form-rules",
+            ValidationRuleAsync(() => pending.Task, "A failed", "a"),
+            ValidationRule(() => false, "B failed", "b"));
+
+        // Clearing "b" retires no async token — the only one belongs to "a" — so the
+        // ticket is what has to stop this set reinstalling the verdict just removed.
+        ctx.Clear("b");
+        Assert.Empty(ctx.GetMessages("b"));
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Empty(ctx.GetMessages("b"));
+    }
+
+    [Fact]
+    public async Task ClearAll_Retires_A_Pending_Rule_Set_Commit()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules",
+            ValidationRuleAsync(() => pending.Task, "Range is invalid", "dates"),
+            ValidationRule(() => false, "Order is wrong", "dates"));
+
+        ctx.ClearAll();
+
+        pending.SetResult(false);
+        await running;
+
+        // The evaluation was in flight when the context was cleared; it must not
+        // reinstall what the clear removed.
+        Assert.Empty(ctx.GetMessages("dates"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task Clearing_One_Field_Retires_Only_The_Sets_That_Write_It()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        // Establish membership for both sets so the field filter has something to read.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "other-rules", ValidationRuleAsync(() => Task.FromResult(false), "Other failed", "other"));
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "other-rules", ValidationRuleAsync(() => pending.Task, "Other failed again", "other"));
+
+        // A clear on an unrelated field must not stand this evaluation down.
+        ctx.Clear("unrelated");
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Single(ctx.GetMessages("other"));
+        Assert.Equal("Other failed again", ctx.GetMessages("other")[0].Text);
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();
