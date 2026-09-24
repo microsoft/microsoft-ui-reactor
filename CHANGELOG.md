@@ -79,53 +79,24 @@ Conventions for contributors:
   is what actually rejects them. Found by requiring a compiled gallery card for
   every API the skills demonstrate.
 
-- **Reactor packages no longer ship a `.pri`, so a consuming app builds at path depths
-  where it previously failed (issue #1271).** `Microsoft.UI.Reactor`,
-  `.Advanced` and `.Devtools` each packed their generated resource index beside the
-  assembly in `lib/<tfm>/`. `ResolveAssemblyReference` relates a same-base-name `.pri`
-  to its reference, so the Windows App SDK's `AddPriPayloadFilesToCopyToOutputDirectoryItems`
-  ran `makepri.exe Dump` on all three, writing into `$(IntermediateOutputPath)`. Those
-  output paths break past `MAX_PATH`, and `Microsoft.UI.Reactor.Devtools.pri.xml` — the
-  longest of the names — was what tipped a borderline project over, failing the build with
-  `PRI175` / `PRI222` / `APPX0002` at a depth where the equivalent XAML app built fine.
+- **Reactor packages no longer ship a `.pri`, so consuming apps build at path depths where
+  they previously failed (issue #1271).** The index sat beside the assembly in `lib/`, where
+  `ResolveAssemblyReference` treats it as a reference-related file and the Windows App SDK
+  expands it with `makepri.exe Dump` into `$(IntermediateOutputPath)` — a path that breaks
+  past `MAX_PATH` and fails the build with `PRI175` / `PRI222` / `APPX0002`. Nothing is lost:
+  the `.Advanced` and `.Devtools` indexes were empty and the core one only embedded a second
+  copy of `ReactorApplication.xbf`, which still ships loose. `.pri` *generation* is unchanged,
+  so `ProjectReference` consumers are unaffected. The core package now also exposes one
+  `lib/` folder instead of two for the same target framework.
 
-  Nothing was lost: the `.Advanced` and `.Devtools` indexes were entirely empty, and the
-  core one held a single embedded copy of `ReactorApplication.xbf` that also ships loose.
-  Measured on a 261-character output path, the build goes from failing to clean, and a
-  consumer build's `makepri.exe Dump` invocations for Reactor packages drop from six to
-  zero — leaving only the Windows App SDK's own framework indexes, exactly as for a plain
-  WinUI app. `.pri` *generation* is unchanged, so `ProjectReference` consumers are
-  unaffected.
-
-- **`Microsoft.UI.Reactor` no longer ships two `lib/` folders for the same target framework.**
-  `ReactorApplication.xbf` was packed with a literal `lib\$(TargetFramework)\…` path, but
-  `$(TargetFramework)` is `net10.0-windows10.0.22621.0` while NuGet shortens the build-output
-  folder to `net10.0-windows10.0.22621`. The package therefore carried two sibling `lib` groups
-  for one framework — one with the assemblies, one holding nothing but the stray sidecar — and
-  NuGet selected between them by ordering rather than by rule. The sidecar is now emitted as
-  build output with a `TargetPath`, so NuGet places it beside `Reactor.dll` in the single
-  normalized folder. Visible in 0.1.0-preview.16 and earlier.
-
-- **`dotnet pack` from a clean tree no longer silently omits `ReactorApplication.xbf`.**
-  It was packed by a `<None>` item guarded with `Exists()`, which MSBuild evaluates before
-  the build that produces the file — so the sidecar appeared only when a previous build had
-  already left one in `bin/`. It is now resolved at pack time, and its absence is a hard
-  error rather than a silently incomplete package.
-
-- **Published apps no longer start with an empty resource dictionary
-  ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).** The Windows
-  App SDK generates an unpackaged app's `.pri` (and the XAML `.xbf` files) into the build output
-  but never copies them to the publish directory, because the MakePRI publish stage is gated on
-  `AppxPackage=true`. The published app then resolves no theme resources and dies at startup with
-  `0xC000027B` inside native XAML. Reactor now ships
-  `_ReactorCopyWinUIResourcesToPublish` in `build/Microsoft.UI.Reactor.targets`, so every consumer
-  gets the fix automatically — opt out with
-  `<ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>`.
-
-  This replaces the `_CopyWinUIResourcesForAot` snippet that sample and test projects each carried
-  (now removed from all 11 of them). That snippet was gated on `PublishAot=true`, but the gap is
-  **not** AOT-specific — a plain `dotnet publish -c Release` loses the `.pri` too, which is why
-  apps that never opted into AOT were affected as well.
+- **Published unpackaged apps no longer start with an empty resource dictionary
+  ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).** The
+  Windows App SDK leaves an unpackaged app's own `.pri` and `.xbf` out of the publish
+  output, so the app resolved no theme resources and died at startup with `0xC000027B`
+  inside native XAML. Reactor's targets now copy them, for AOT and non-AOT publishes alike
+  — opt out with `<ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>`.
+  Replaces the per-project `_CopyWinUIResourcesForAot` snippet (removed from 11 projects),
+  which only covered `PublishAot=true` builds.
 
 ### Security
 
