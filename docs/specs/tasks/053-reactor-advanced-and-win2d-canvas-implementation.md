@@ -305,8 +305,7 @@ WinUI window — Win2D types that need activation should be mocked or
 asserted via element/handler shape, not control instances.
 
 - [ ] Create `tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj`
-      (xunit + `Microsoft.NET.Test.Sdk` + `ProjectReference` to
-      `src/Reactor.Advanced/`).
+      (xunit + `ProjectReference` to `src/Reactor.Advanced/`).
 - [ ] Register the new project in `Reactor.slnx`.
 - [ ] Add to the unit-test CI job in `.github/workflows/ci.yml` so
       `dotnet test tests/Reactor.Advanced.Tests` runs on every PR.
