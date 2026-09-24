@@ -78,43 +78,16 @@ Conventions for contributors:
   tuple and array rules to the runtime rather than to `REACTOR_HOOKS_004`, which
   is what actually rejects them. Found by requiring a compiled gallery card for
   every API the skills demonstrate.
-- The E2E suite's `winapp ui yield` capability probe measures something again, and the strict
-  gate built on it can now fail. The probe ran `winapp ui yield --help` and read the exit code,
-  but an unrecognized verb is not rejected: measured against winapp 0.6.3-prerelease.92,
-  `ui bogusverbxyz --help` also exits `0` and prints output byte-identical to `ui --help`, so the
-  probe answered "present" for every verb, invented ones included. Nothing misbehaved — builds
-  lacking the verb are old enough to still reject unmatched tokens, so the right answer came back
-  for the wrong reason — but `REACTOR_E2E_REQUIRE_UI_YIELD` exists to turn a missing verb into a
-  failure, and a gate whose oracle cannot say "no" cannot fail. The probe now reads the command
-  set from `winapp ui --cli-schema`, falling back to parsing `winapp ui --help` (by command-entry
-  indentation, so a wrapped description is not mistaken for a verb) on builds predating that flag.
-  Searching the help *text* would have been equally vacuous: the parent listing carries every
-  verb's description, so the word appears either way. The result is a tri-state — `Unreadable` is
-  not folded into `Absent`, because "the probe broke" is not "the feature is missing", and a
-  command set containing none of the long-standing verbs counts as unreadable so a future help
-  reformat cannot read as "yield was removed" forever (PR #1272, winappCli#767).
-- Bounded the probe's subprocesses. It read stdout to EOF *before* its timed wait while leaving
-  stderr undrained, so a winapp that stopped producing output hung the probe for the whole job
-  rather than its 10-second budget; `ui yield` had the mirror-image defect and could be killed as
-  a phantom timeout. Both now drain stdout and stderr asynchronously ahead of the timed wait, as
-  the harness's other process runner already did, and share a single budget across the schema and
-  help attempts instead of each taking its own (PR #1272).
-- CI's winapp capability step and the E2E suite now provably inspect the same binary, and it is
-  the one the job installed. They disagreed inside a single job because the step ran whatever
-  `winapp` PATH resolved while `WinAppUi.ResolveWinAppExe()` prefers `$REACTOR_WINAPP_EXE`, then
-  `%LOCALAPPDATA%\Microsoft\WindowsApps`, and only then PATH. The step now resolves PATH ahead of
-  that alias — `setup-WinAppCli` installs to a tool directory it prepends to PATH and never
-  touches LocalAppData, so mirroring the harness's order would silently test a stale sideloaded
-  build — and exports the winner as `REACTOR_WINAPP_EXE`. It also carries its own
-  `timeout-minutes`, since `continue-on-error` forgives a step that fails but not one that hangs
+- The E2E suite's `winapp ui yield` capability probe measures something again. It ran
+  `winapp ui yield --help` and checked for exit `0`, but an unrecognized verb is not rejected —
+  `ui bogusverbxyz --help` also exits `0` and prints the parent help — so the probe reported
+  every verb as present, invented ones included. It now reads the command set from
+  `winapp ui --cli-schema`, falling back to parsing `winapp ui --help` on builds predating that
+  flag, and distinguishes a command set it could not read from one that genuinely lacks the verb.
+  With winapp v0.7.0 shipping winappCli#767, the E2E job sets `REACTOR_E2E_REQUIRE_UI_YIELD=1`,
+  so the UI-turn continuity tests are enforced rather than skipped — they previously reported
+  `Assert.Inconclusive`, which Microsoft.Testing.Platform prints as "passed, zero skipped"
   (PR #1272).
-- The E2E continuity differential is enforced in CI rather than skipped. winapp v0.7.0
-  (2026-09-24) is the first release carrying winappCli#767, so the E2E job now sets
-  `REACTOR_E2E_REQUIRE_UI_YIELD=1`: an unconfirmed verb fails the job instead of reporting
-  `Assert.Inconclusive`, which Microsoft.Testing.Platform prints as "passed, zero skipped" and is
-  indistinguishable from a real measurement. A companion step proves that gate can actually fire
-  by pointing the resolver at a non-winapp binary and requiring the run to fail with the gate's
-  own message (PR #1272).
 
 ### Security
 
