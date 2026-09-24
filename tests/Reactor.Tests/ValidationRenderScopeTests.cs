@@ -406,6 +406,40 @@ public class ValidationRenderScopeTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
+    public async Task A_Pass_Cleared_Mid_Flight_Cannot_Be_Resurrected_By_A_Later_Pass()
+    {
+        var ctx = new ValidationContext();
+        var older = new global::System.Threading.Tasks.TaskCompletionSource<bool>();
+
+        var staleValidators = new[]
+        {
+            Validate.MustAsync<string>(async _ => await older.Task, "stale verdict"),
+        };
+        var freshValidators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(true), "fresh verdict"),
+        };
+
+        // Pass one is in flight and holds a token.
+        var stale = ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "old", staleValidators, TestContext.Current.CancellationToken);
+
+        // The field is cleared, retiring that token...
+        ctx.Clear("username");
+
+        // ...and a brand new pass opens. With a per-field counter this would have been
+        // handed the same number the in-flight pass is still holding.
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "new", freshValidators, TestContext.Current.CancellationToken);
+
+        older.SetResult(false);
+        await stale;
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("username"));
+    }
+
+    [Fact]
     public void A_Cross_Field_Rule_Does_Not_Erase_Field_Level_Errors()
     {
         var ctx = new ValidationContext();

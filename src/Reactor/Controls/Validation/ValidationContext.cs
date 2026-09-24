@@ -14,6 +14,9 @@ public sealed class ValidationContext
     private readonly Dictionary<string, Dictionary<string, List<ValidationMessage>>> _owned = new();
     // field -> newest async pass token; older passes that resolve late are discarded.
     private readonly Dictionary<string, int> _asyncGeneration = new();
+    // Context-wide token source. Never reset, so a token retired by a clear can never be
+    // handed out again while the pass holding it is still in flight.
+    private int _asyncTicket;
     private readonly HashSet<string> _registeredFields = new();
     private readonly HashSet<string> _touchedFields = new();
     private readonly Dictionary<string, object?> _initialValues = new();
@@ -353,15 +356,21 @@ public sealed class ValidationContext
     /// <summary>
     /// Opens an async validation pass for a field and returns the token that identifies
     /// it. Only the most recently opened pass is allowed to install a result.
+    /// <para>
+    /// Tokens come from a context-wide counter rather than a per-field one. The clearing
+    /// operations drop a field's entry so a pending pass can't repopulate what they just
+    /// removed — with a per-field counter that also reset the sequence, so a pass opened
+    /// after a clear could be handed the same number an older in-flight pass was still
+    /// holding, and the stale result would pass the equality check.
+    /// </para>
     /// </summary>
     internal int BeginAsyncValidation(string field)
     {
         lock (_lock)
         {
-            _asyncGeneration.TryGetValue(field, out var current);
-            var next = unchecked(current + 1);
-            _asyncGeneration[field] = next;
-            return next;
+            var token = unchecked(++_asyncTicket);
+            _asyncGeneration[field] = token;
+            return token;
         }
     }
 
