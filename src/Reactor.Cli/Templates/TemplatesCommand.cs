@@ -169,12 +169,8 @@ public static class TemplatesCommand
         // Absent short name: is the pack there at all? "Installed but too old" and
         // "never installed" need different advice, and an unreadable package list
         // is a probe failure rather than either.
-        return packageInstalled switch
-        {
-            true => StatusExit.InstalledButUnusable,
-            false => StatusExit.NotInstalled,
-            null => StatusExit.ProbeFailed,
-        };
+        if (packageInstalled is null) return StatusExit.ProbeFailed;
+        return packageInstalled.Value ? StatusExit.InstalledButUnusable : StatusExit.NotInstalled;
     }
 
     static int Status()
