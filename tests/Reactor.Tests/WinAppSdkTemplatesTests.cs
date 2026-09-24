@@ -37,10 +37,12 @@ public sealed class WinAppSdkTemplatesTests
     }
 
     [Fact]
-    public void ShortNames_cover_every_reactor_template_in_the_pack()
+    public void ShortNames_are_the_canonical_name_of_each_template_in_the_pack()
     {
-        // The four short names the pack registers (microsoft/WindowsAppSDK#6620).
-        // `reactor` is the blank one users are pointed at first.
+        // One canonical name per template (microsoft/WindowsAppSDK#6620), NOT every
+        // registered short name: the shipped pack also registers a `winui-` alias
+        // for each, plus `reactor-blank`, so nine names cover four templates.
+        // Verified against the published 0.0.7-alpha listing.
         Assert.Equal(
             new[] { "reactor", "reactor-mvu", "reactor-navview", "reactor-tabview" },
             WinAppSdkTemplates.ShortNames);
@@ -325,19 +327,20 @@ public sealed class WinAppSdkTemplatesTests
     [Fact]
     public void InterpretTemplateListOutput_requires_the_exact_short_name()
     {
-        // Two traps in one fixture:
+        // Three traps in one fixture, all from the real listing shape:
         //   • '-' is a word boundary, so `\breactor\b` / Contains("reactor") also
-        //     matches `reactor-mvu` and `winui-reactor`;
+        //     matches `reactor-mvu` and the real `winui-reactor-mvu` alias;
         //   • the Template Name column carries the capitalised prose word
         //     "Reactor" as a standalone token, so a case-insensitive token match
-        //     passes too.
-        // Neither means the blank `reactor` template is installed.
+        //     passes too;
+        //   • so does the Tags column, where "Reactor" is slash-delimited.
+        // None of them means the blank `reactor` template is installed.
         const string withoutBlank = """
             These templates matched your input: 'reactor'
 
-            Template Name                      Short Name                     Language
-            ---------------------------------  -----------------------------  --------
-            Reactor MVU App (Experimental)     reactor-mvu,winui-reactor-mvu  [C#]
+            Template Name                              Short Name                             Language  Tags
+            -----------------------------------------  -------------------------------------  --------  ------------------------------------------
+            Reactor MVU App (Experimental)             reactor-mvu,winui-reactor-mvu          [C#]      Windows/WinUI/Desktop/Reactor/Experimental
             """;
 
         Assert.False(WinAppSdkTemplates.InterpretTemplateListOutput(withoutBlank));
@@ -346,14 +349,17 @@ public sealed class WinAppSdkTemplatesTests
     [Fact]
     public void InterpretTemplateListOutput_accepts_the_short_name_in_a_comma_list()
     {
-        // Real listings put the blank template's aliases in one comma-separated
-        // column, so the token match must survive commas on both sides.
+        // Verbatim from the published 0.0.7-alpha pack, so the fixture is measured
+        // rather than imagined. Three things have to survive: the comma-separated
+        // alias column, the capitalised prose "Reactor" in the Template Name
+        // column, and "Reactor" again inside the slash-delimited Tags column.
         const string withBlank = """
             These templates matched your input: 'reactor'
 
-            Template Name                      Short Name                     Language
-            ---------------------------------  -----------------------------  --------
-            Reactor Blank App (Experimental)   reactor,reactor-blank          [C#]
+            Template Name                              Short Name                             Language  Tags
+            -----------------------------------------  -------------------------------------  --------  ------------------------------------------
+            Reactor Blank App (Experimental)           reactor,reactor-blank,winui-reactor    [C#]      Windows/WinUI/Desktop/Reactor/Experimental
+            Reactor MVU App (Experimental)             reactor-mvu,winui-reactor-mvu          [C#]      Windows/WinUI/Desktop/Reactor/Experimental
             """;
 
         Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(withBlank));

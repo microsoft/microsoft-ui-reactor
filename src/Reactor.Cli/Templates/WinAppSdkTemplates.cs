@@ -46,7 +46,17 @@ public static class WinAppSdkTemplates
     /// <summary>`dotnet new` short name of the blank Reactor template.</summary>
     public const string BlankShortName = "reactor";
 
-    /// <summary>Every Reactor short name the pack registers.</summary>
+    /// <summary>
+    /// The canonical `dotnet new` short name of each Reactor template — one per
+    /// template, for scaffold guidance.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not every registered short name. Each template also carries a
+    /// <c>winui-</c>-prefixed alias (and the blank one a <c>reactor-blank</c>
+    /// alias), so the pack registers nine names for four templates. Listing all
+    /// nine as "scaffold an app with" would be noise; callers that need to
+    /// recognise an arbitrary alias should match the listing, not this array.
+    /// </remarks>
     public static readonly string[] ShortNames =
     [
         "reactor",
