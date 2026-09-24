@@ -579,12 +579,11 @@ public sealed class ValidationContext
                 // A server verdict about the old value says nothing about the new one.
                 _externalMessages.Remove(field);
 
-                // Neither does an async verdict. Retire the in-flight pass so its result
-                // is discarded on arrival, and withdraw whatever the last one installed —
-                // otherwise an error computed for a value the user has already replaced
-                // stays on screen indefinitely.
-                _asyncGeneration.Remove(field);
-                if (ApplyOwnedLocked(field, AsyncProducer, [])) messagesChanged = true;
+                // Neither does an async verdict. Retire the in-flight passes so their
+                // results are discarded on arrival, and withdraw whatever the last ones
+                // installed — otherwise an error computed for a value the user has
+                // already replaced stays on screen indefinitely.
+                if (RetractAsyncProducersLocked(field)) messagesChanged = true;
             }
 
             // Owned rather than wholesale: a cross-field ValidationRule may also be
@@ -867,11 +866,41 @@ public sealed class ValidationContext
 
             _currentValues[field] = value;
             _externalMessages.Remove(field);
-            _asyncGeneration.Remove(field);
-            ApplyOwnedLocked(field, AsyncProducer, []);
-            _version++;
+            RetractAsyncProducersLocked(field);
+            BumpVersionLocked(messagesOnly: false);
         }
         RaiseChanged();
+    }
+
+    /// <summary>
+    /// Withdraws every async contribution to a field and retires its in-flight passes.
+    /// <para>
+    /// Producer-aware rather than just <see cref="AsyncProducer"/>: an async
+    /// <c>ValidationRule</c> installs under its own key — <c>rule#N</c> when mounted, or
+    /// the message-derived fallback when evaluated by hand — so clearing only the field's
+    /// own async slot left a rule's verdict about the previous value on screen, keeping
+    /// <see cref="IsValid"/> false for a value it never examined. The generation map's
+    /// keys are exactly the producers that have run asynchronously on this field.
+    /// </para>
+    /// </summary>
+    private bool RetractAsyncProducersLocked(string field)
+    {
+        var changed = false;
+
+        if (_asyncGeneration.TryGetValue(field, out var byProducer))
+        {
+            foreach (var producer in byProducer.Keys)
+            {
+                if (ApplyOwnedLocked(field, producer, [])) changed = true;
+            }
+            _asyncGeneration.Remove(field);
+        }
+
+        // A verdict can outlive its generation entry — a previous retraction drops the
+        // entry but a later pass may have installed under the plain async slot.
+        if (ApplyOwnedLocked(field, AsyncProducer, [])) changed = true;
+
+        return changed;
     }
 
     /// <summary>

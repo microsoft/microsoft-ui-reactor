@@ -1113,6 +1113,54 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task A_Value_Change_Retracts_An_Async_Rule_Verdict_Too()
+    {
+        var ctx = new ValidationContext();
+
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "End must follow start", "dates");
+        await rule.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("dates"));
+
+        // The rule owns its own producer key, not the field's plain async slot.
+        ctx.ApplyValidation("dates", "2026-01-02", []);
+
+        Assert.Empty(ctx.GetMessages("dates"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task NotifyValueChanged_Retracts_An_Async_Rule_Verdict_Too()
+    {
+        var ctx = new ValidationContext();
+
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "End must follow start", "dates");
+        await rule.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("dates"));
+
+        ctx.NotifyValueChanged("dates", "2026-01-02");
+
+        Assert.Empty(ctx.GetMessages("dates"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task A_Value_Change_Retires_An_In_Flight_Async_Rule_Pass()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var rule = ValidationRuleAsync(() => pending.Task, "End must follow start", "dates");
+        var running = rule.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+
+        ctx.NotifyValueChanged("dates", "2026-01-02");
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Empty(ctx.GetMessages("dates"));
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

@@ -412,7 +412,13 @@ internal static class CompositeLifecycle
     /// </summary>
     private static void WireTouchedOnBlur(UIElement formFieldRoot, UIElement contentControl, ValidationContext? valCtx, string? fieldName)
     {
-        if (contentControl is not FrameworkElement fe) return;
+        if (contentControl is not FrameworkElement fe)
+        {
+            // Nothing to bind to, but the root may still point at the *previous*
+            // content's live binding — and that control is on its way to the pool.
+            ReleaseRootBinding(formFieldRoot);
+            return;
+        }
 
         // No context or field to report to — neutralize any binding this control still
         // carries from a previous FormField rather than leaving it pointed at the old one.
@@ -422,8 +428,7 @@ internal static class CompositeLifecycle
             // The root still points at the old editor's binding, and that editor is on
             // its way to the pool with a live context — so neutralize what the root
             // points at, not just the incoming control.
-            ClearFormFieldTouchBinding(formFieldRoot);
-            _rootBindings.Remove(formFieldRoot);
+            ReleaseRootBinding(formFieldRoot);
             ClearTouchBinding(fe);
             return;
         }
@@ -501,6 +506,16 @@ internal static class CompositeLifecycle
             binding.Context = null;
             binding.FieldName = null;
         }
+    }
+
+    /// <summary>
+    /// Neutralizes whatever binding a <c>FormField</c> root currently points at and stops
+    /// pointing at it, for the paths where no new binding will take its place.
+    /// </summary>
+    private static void ReleaseRootBinding(UIElement formFieldRoot)
+    {
+        ClearFormFieldTouchBinding(formFieldRoot);
+        _rootBindings.Remove(formFieldRoot);
     }
 
     // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host):
